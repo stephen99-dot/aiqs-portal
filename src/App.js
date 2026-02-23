@@ -7,28 +7,20 @@ import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import ChatPage from './pages/ChatPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div><div className="loading-text">Loading...</div></div>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
   if (user) return <Navigate to="/dashboard" replace />;
   return children;
-}
-
-function LoadingScreen() {
-  return (
-    <div className="loading-screen">
-      <div className="loading-mark">QS</div>
-      <div className="loading-text">Loading...</div>
-    </div>
-  );
 }
 
 export default function App() {
@@ -42,6 +34,7 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/new-project" element={<NewProjectPage />} />
             <Route path="/project/:id" element={<ProjectDetailPage />} />
+            <Route path="/chat" element={<ChatPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
