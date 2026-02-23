@@ -9,19 +9,23 @@ export default function Layout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
 
+  const isAdmin = user?.role === 'admin';
+
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/new-project', label: 'New Project', icon: '📤' },
-    { path: '/pipeline', label: 'Pipeline', icon: '⚡' },
-    { path: '/clients', label: 'Clients', icon: '👥' },
-    { path: '/chat', label: 'Chat', icon: '💬' },
-    { path: '/admin', label: 'Admin', icon: '🛡️' },
+    { path: '/dashboard', label: 'Dashboard', icon: '📊', adminOnly: false },
+    { path: '/new-project', label: 'New Project', icon: '📤', adminOnly: false },
+    { path: '/pipeline', label: 'Pipeline', icon: '⚡', adminOnly: true },
+    { path: '/clients', label: 'Clients', icon: '👥', adminOnly: true },
+    { path: '/chat', label: 'Chat', icon: '💬', adminOnly: false },
+    { path: '/admin', label: 'Admin', icon: '🛡️', adminOnly: true },
   ];
+
+  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <div style={{
@@ -57,7 +61,7 @@ export default function Layout() {
         </div>
 
         <nav style={{ flex: 1, padding: collapsed ? '12px 8px' : '12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {navItems.map(item => (
+          {visibleNavItems.map(item => (
             <NavLink key={item.path} to={item.path} style={({ isActive }) => ({
               display: 'flex', alignItems: 'center',
               gap: collapsed ? 0 : 10,
@@ -99,17 +103,19 @@ export default function Layout() {
           }}>
             <div style={{
               width: 30, height: 30, borderRadius: 8,
-              background: t.goldBg || t.accentGlow,
-              border: `1px solid ${t.gold || t.accent}30`,
+              background: isAdmin ? (t.goldBg || t.accentGlow) : t.accentGlow,
+              border: `1px solid ${isAdmin ? (t.gold || t.accent) : t.accent}30`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, color: t.gold || t.accent, flexShrink: 0
+              fontSize: 12, fontWeight: 700,
+              color: isAdmin ? (t.gold || t.accent) : t.accent,
+              flexShrink: 0
             }}>
-              {user?.name?.charAt(0) || user?.email?.charAt(0) || 'S'}
+              {user?.fullName?.charAt(0) || user?.email?.charAt(0) || 'U'}
             </div>
             {!collapsed && (
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{user?.name || user?.email || 'User'}</div>
-                <div style={{ fontSize: 10, color: t.textMuted }}>Admin</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{user?.fullName || user?.email || 'User'}</div>
+                <div style={{ fontSize: 10, color: isAdmin ? t.gold : t.textMuted }}>{isAdmin ? 'Admin' : 'Client'}</div>
               </div>
             )}
           </div>
