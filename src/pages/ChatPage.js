@@ -205,7 +205,7 @@ export default function ChatPage() {
             multiple
             onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
             style={{ display: 'none' }}
-            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+            accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
           />
           <textarea
             value={input}
