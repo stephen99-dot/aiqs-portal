@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
+const { execSync } = require('child_process');
 
 const router = express.Router();
 
@@ -14,7 +15,15 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
 });
-const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, allowed.includes(ext));
+  }
+});
 
 const QS_SYSTEM_PROMPT = `You are an expert UK Quantity Surveyor AI assistant working for AI QS, a professional quantity surveying service covering the UK and Ireland.
 
@@ -73,7 +82,62 @@ COMMUNICATION STYLE:
 
 IMPORTANT: Always clarify that estimates are approximate and subject to detailed measurement and site conditions. Recommend a full BOQ for accurate pricing.`;
 
-router.post('/chat', authMiddleware, upload.array('files', 5), async (req, res) => {
+// Extract PDFs and images from a ZIP file
+function extractFromZip(zipPath) {
+  const extractDir = path.join(uploadsDir, `zip-${uuidv4()}`);
+  fs.mkdirSync(extractDir, { recursive: true });
+
+  try {
+    execSync(`unzip -o -j "${zipPath}" -d "${extractDir}" 2>/dev/null`, { timeout: 30000 });
+  } catch (e) {
+    // unzip might return non-zero for warnings, check if files were extracted
+  }
+
+  const extractedFiles = [];
+  const supportedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+  function scanDir(dir) {
+    if (!fs.existsSync(dir)) return;
+    const items = fs.readdirSync(dir);
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        scanDir(fullPath);
+      } else {
+        const ext = path.extname(item).toLowerCase();
+        if (supportedExts.includes(ext) && !item.startsWith('._') && !item.startsWith('__MACOSX')) {
+          extractedFiles.push({ path: fullPath, name: item, ext });
+        }
+      }
+    }
+  }
+
+  scanDir(extractDir);
+  return extractedFiles;
+}
+
+// Convert a file to Claude API content block
+function fileToContentBlock(filePath, ext) {
+  const fileBuffer = fs.readFileSync(filePath);
+  const base64 = fileBuffer.toString('base64');
+
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+    const mediaType = ext === '.jpg' ? 'image/jpeg' : `image/${ext.slice(1)}`;
+    return {
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: base64 }
+    };
+  } else if (ext === '.pdf') {
+    return {
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: base64 }
+    };
+  }
+  return null;
+}
+
+router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res) => {
   try {
     const { message, history } = req.body;
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -99,40 +163,44 @@ router.post('/chat', authMiddleware, upload.array('files', 5), async (req, res) 
 
     // Build current message content
     const currentContent = [];
+    let fileNames = [];
 
-    // Add uploaded files as images/documents
+    // Process uploaded files
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
-        const fileBuffer = fs.readFileSync(file.path);
-        const base64 = fileBuffer.toString('base64');
 
-        if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
-          const mediaType = ext === '.jpg' ? 'image/jpeg' : `image/${ext.slice(1)}`;
-          currentContent.push({
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: base64
+        if (ext === '.zip') {
+          // Extract ZIP and process contents
+          const extracted = extractFromZip(file.path);
+          for (const ef of extracted) {
+            const block = fileToContentBlock(ef.path, ef.ext);
+            if (block) {
+              currentContent.push(block);
+              fileNames.push(ef.name);
             }
-          });
-        } else if (ext === '.pdf') {
-          currentContent.push({
-            type: 'document',
-            source: {
-              type: 'base64',
-              media_type: 'application/pdf',
-              data: base64
-            }
-          });
+          }
+        } else {
+          // Direct file
+          const block = fileToContentBlock(file.path, ext);
+          if (block) {
+            currentContent.push(block);
+            fileNames.push(file.originalname);
+          }
         }
       }
     }
 
-    // Add text message
-    if (message) {
-      currentContent.push({ type: 'text', text: message });
+    // Add text message (include file names for context)
+    let textMessage = message || '';
+    if (fileNames.length > 0 && !textMessage) {
+      textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
+    } else if (fileNames.length > 0) {
+      textMessage = `[Uploaded files: ${fileNames.join(', ')}]\n\n${textMessage}`;
+    }
+
+    if (textMessage) {
+      currentContent.push({ type: 'text', text: textMessage });
     }
 
     if (currentContent.length === 0) {
