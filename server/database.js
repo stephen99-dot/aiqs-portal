@@ -56,4 +56,7 @@ try {
   console.log('Migration: added role column to users table');
 }
 
+// Migration: ensure admin email has admin role
+db.prepare("UPDATE users SET role = 'admin' WHERE email = 'hello@crmwizardai.com' AND (role IS NULL OR role != 'admin')").run();
+
 module.exports = db;
