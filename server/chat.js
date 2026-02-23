@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
-const { execSync } = require('child_process');
 
 const router = express.Router();
 
@@ -82,39 +81,34 @@ COMMUNICATION STYLE:
 
 IMPORTANT: Always clarify that estimates are approximate and subject to detailed measurement and site conditions. Recommend a full BOQ for accurate pricing.`;
 
-// Extract PDFs and images from a ZIP file
+// Extract PDFs and images from a ZIP file using adm-zip
 function extractFromZip(zipPath) {
-  const extractDir = path.join(uploadsDir, `zip-${uuidv4()}`);
-  fs.mkdirSync(extractDir, { recursive: true });
-
   try {
-    execSync(`unzip -o -j "${zipPath}" -d "${extractDir}" 2>/dev/null`, { timeout: 30000 });
-  } catch (e) {
-    // unzip might return non-zero for warnings, check if files were extracted
-  }
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip(zipPath);
+    const entries = zip.getEntries();
+    const extractedFiles = [];
+    const supportedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
 
-  const extractedFiles = [];
-  const supportedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const name = path.basename(entry.entryName);
+      // Skip Mac OS hidden files
+      if (name.startsWith('._') || entry.entryName.includes('__MACOSX')) continue;
+      
+      const ext = path.extname(name).toLowerCase();
+      if (!supportedExts.includes(ext)) continue;
 
-  function scanDir(dir) {
-    if (!fs.existsSync(dir)) return;
-    const items = fs.readdirSync(dir);
-    for (const item of items) {
-      const fullPath = path.join(dir, item);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        scanDir(fullPath);
-      } else {
-        const ext = path.extname(item).toLowerCase();
-        if (supportedExts.includes(ext) && !item.startsWith('._') && !item.startsWith('__MACOSX')) {
-          extractedFiles.push({ path: fullPath, name: item, ext });
-        }
-      }
+      const outPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
+      fs.writeFileSync(outPath, entry.getData());
+      extractedFiles.push({ path: outPath, name: name, ext: ext });
     }
-  }
 
-  scanDir(extractDir);
-  return extractedFiles;
+    return extractedFiles;
+  } catch (err) {
+    console.error('ZIP extraction error:', err);
+    return [];
+  }
 }
 
 // Convert a file to Claude API content block
@@ -179,6 +173,9 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
               currentContent.push(block);
               fileNames.push(ef.name);
             }
+          }
+          if (extracted.length === 0) {
+            currentContent.push({ type: 'text', text: '[ZIP file uploaded but no supported drawings found inside. Please upload PDF or image files directly.]' });
           }
         } else {
           // Direct file
