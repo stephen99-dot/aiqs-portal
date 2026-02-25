@@ -81,32 +81,94 @@ COMMUNICATION STYLE:
 
 IMPORTANT: Always clarify that estimates are approximate and subject to detailed measurement and site conditions. Recommend a full BOQ for accurate pricing.`;
 
+// File types Claude can see directly (images + PDFs)
+const VISUAL_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+// File types we can extract text from
+const TEXT_EXTS = ['.txt', '.csv', '.json', '.xml', '.html', '.htm', '.md'];
+
+// File types we recognise but can't process (tell user)
+const CAD_EXTS = ['.dwg', '.dxf', '.rvt', '.ifc', '.skp'];
+const OFFICE_EXTS = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt'];
+
 function extractFromZip(zipPath) {
+  const AdmZip = require('adm-zip');
+  const extracted = { visual: [], text: [], skipped: [], cad: [] };
+
   try {
-    const AdmZip = require('adm-zip');
     const zip = new AdmZip(zipPath);
     const entries = zip.getEntries();
-    const extractedFiles = [];
-    const supportedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+    console.log(`[ZIP] Opening ZIP with ${entries.length} entries`);
 
     for (const entry of entries) {
+      // Skip directories
       if (entry.isDirectory) continue;
-      const name = path.basename(entry.entryName);
-      if (name.startsWith('._') || entry.entryName.includes('__MACOSX')) continue;
+
+      // Get just the filename (handles nested subfolders)
+      const fullPath = entry.entryName;
+      const name = path.basename(fullPath);
+
+      // Skip macOS metadata files
+      if (name.startsWith('._') || name.startsWith('.DS_Store') || fullPath.includes('__MACOSX')) {
+        console.log(`[ZIP] Skipping metadata: ${fullPath}`);
+        continue;
+      }
+
+      // Skip hidden files
+      if (name.startsWith('.')) continue;
 
       const ext = path.extname(name).toLowerCase();
-      if (!supportedExts.includes(ext)) continue;
+      console.log(`[ZIP] Found: ${fullPath} (ext: ${ext}, size: ${entry.header.size} bytes)`);
 
-      const outPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
-      fs.writeFileSync(outPath, entry.getData());
-      extractedFiles.push({ path: outPath, name: name, ext: ext });
+      // Visual files - extract and send to Claude
+      if (VISUAL_EXTS.includes(ext)) {
+        try {
+          const outPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
+          fs.writeFileSync(outPath, entry.getData());
+          extracted.visual.push({ path: outPath, name: name, ext: ext });
+          console.log(`[ZIP] Extracted visual: ${name}`);
+        } catch (err) {
+          console.error(`[ZIP] Failed to extract ${name}:`, err.message);
+          extracted.skipped.push(name);
+        }
+      }
+      // Plain text files - read content
+      else if (TEXT_EXTS.includes(ext)) {
+        try {
+          const textContent = entry.getData().toString('utf8');
+          extracted.text.push({ name: name, content: textContent });
+          console.log(`[ZIP] Extracted text: ${name} (${textContent.length} chars)`);
+        } catch (err) {
+          console.error(`[ZIP] Failed to read text from ${name}:`, err.message);
+          extracted.skipped.push(name);
+        }
+      }
+      // CAD files - can't process but tell user
+      else if (CAD_EXTS.includes(ext)) {
+        extracted.cad.push(name);
+        console.log(`[ZIP] CAD file found (cannot process): ${name}`);
+      }
+      // Office files - note them
+      else if (OFFICE_EXTS.includes(ext)) {
+        // We could add xlsx/docx parsing later, for now note them
+        extracted.skipped.push(name);
+        console.log(`[ZIP] Office file found (not yet supported): ${name}`);
+      }
+      // Unknown
+      else {
+        extracted.skipped.push(name);
+        console.log(`[ZIP] Unknown file type skipped: ${name}`);
+      }
     }
 
-    return extractedFiles;
+    console.log(`[ZIP] Summary: ${extracted.visual.length} visual, ${extracted.text.length} text, ${extracted.cad.length} CAD, ${extracted.skipped.length} skipped`);
+
   } catch (err) {
-    console.error('ZIP extraction error:', err);
-    return [];
+    console.error('[ZIP] Extraction error:', err.message);
   }
+
+  return extracted;
 }
 
 function fileToContentBlock(filePath, ext) {
@@ -151,22 +213,50 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     const currentContent = [];
     let fileNames = [];
+    let zipNotes = [];
 
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
+        console.log(`[Upload] File: ${file.originalname}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB, Type: ${ext}`);
 
         if (ext === '.zip') {
+          console.log(`[Upload] Processing ZIP: ${file.originalname}`);
           const extracted = extractFromZip(file.path);
-          for (const ef of extracted) {
+
+          // Add visual files (PDFs + images) as content blocks
+          for (const ef of extracted.visual) {
             const block = fileToContentBlock(ef.path, ef.ext);
             if (block) {
               currentContent.push(block);
               fileNames.push(ef.name);
             }
           }
-          if (extracted.length === 0) {
-            currentContent.push({ type: 'text', text: '[ZIP file uploaded but no supported drawings found inside. Please upload PDF or image files directly.]' });
+
+          // Add text file contents as text blocks
+          for (const tf of extracted.text) {
+            currentContent.push({
+              type: 'text',
+              text: `[Content from ${tf.name}]:\n${tf.content}`
+            });
+            fileNames.push(tf.name);
+          }
+
+          // Build notes about what we found/couldn't process
+          if (extracted.cad.length > 0) {
+            zipNotes.push(`Note: Found ${extracted.cad.length} CAD file(s) in the ZIP (${extracted.cad.join(', ')}) -- these are binary AutoCAD files that I can't read directly. Please export them as PDF from your CAD software and re-upload for analysis.`);
+          }
+
+          if (extracted.skipped.length > 0) {
+            zipNotes.push(`Note: ${extracted.skipped.length} file(s) in the ZIP couldn't be processed: ${extracted.skipped.join(', ')}`);
+          }
+
+          if (extracted.visual.length === 0 && extracted.text.length === 0) {
+            if (extracted.cad.length > 0) {
+              zipNotes.push(`The ZIP file "${file.originalname}" only contains CAD files (${extracted.cad.join(', ')}). I can't read DWG/DXF files directly -- please export them as PDF from AutoCAD, Revit, or your CAD software and upload those PDFs instead.`);
+            } else {
+              zipNotes.push(`No supported files found inside "${file.originalname}". Please upload PDFs or images (JPG, PNG) directly, or ensure your ZIP contains these file types.`);
+            }
           }
         } else {
           const block = fileToContentBlock(file.path, ext);
@@ -179,7 +269,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
 
     let textMessage = message || '';
-    if (fileNames.length > 0 && !textMessage) {
+
+    // Add ZIP processing notes to the message for Claude
+    if (zipNotes.length > 0) {
+      const noteText = zipNotes.join('\n');
+      if (textMessage) {
+        textMessage = `[Uploaded files: ${fileNames.join(', ')}]\n\n${textMessage}\n\n[System note for context: ${noteText}]`;
+      } else if (fileNames.length > 0) {
+        textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}\n\n[System note for context: ${noteText}]`;
+      } else {
+        textMessage = `[System note: ${noteText}]\n\nPlease let the user know about the file issue and suggest how they can get their drawings to you in a usable format.`;
+      }
+    } else if (fileNames.length > 0 && !textMessage) {
       textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
     } else if (fileNames.length > 0) {
       textMessage = `[Uploaded files: ${fileNames.join(', ')}]\n\n${textMessage}`;
@@ -195,14 +296,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // Log file sizes for debugging
-    if (req.files) {
-      for (const file of req.files) {
-        console.log(`File: ${file.originalname}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-      }
-    }
-
-    // Call Claude API with extended thinking enabled
+    // Call Claude API with extended thinking
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -230,7 +324,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     const data = await response.json();
 
-    // Extract thinking blocks and text blocks separately
     let thinking = '';
     let reply = '';
 
