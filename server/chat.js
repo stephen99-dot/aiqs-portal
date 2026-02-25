@@ -4,10 +4,12 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
+const db = require('./database');
 
 const router = express.Router();
 
-const uploadsDir = path.join(__dirname, '..', 'data', 'uploads');
+// Use the persistent uploads directory from database.js
+const uploadsDir = db.UPLOADS_DIR;
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -91,6 +93,47 @@ const TEXT_EXTS = ['.txt', '.csv', '.json', '.xml', '.html', '.htm', '.md'];
 const CAD_EXTS = ['.dwg', '.dxf', '.rvt', '.ifc', '.skp'];
 const OFFICE_EXTS = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt'];
 
+// Detect actual file type from magic bytes (first few bytes of the file)
+function detectFileType(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+
+  // PDF: starts with %PDF
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return { ext: '.pdf', mime: 'application/pdf' };
+  }
+  // JPEG: starts with FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return { ext: '.jpg', mime: 'image/jpeg' };
+  }
+  // PNG: starts with 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return { ext: '.png', mime: 'image/png' };
+  }
+  // GIF: starts with GIF8
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+    return { ext: '.gif', mime: 'image/gif' };
+  }
+  // WebP: starts with RIFF....WEBP
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && buffer.length >= 12 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+    return { ext: '.webp', mime: 'image/webp' };
+  }
+  // ZIP: starts with PK (50 4B)
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B) {
+    return { ext: '.zip', mime: 'application/zip' };
+  }
+  // TIFF: starts with II or MM
+  if ((buffer[0] === 0x49 && buffer[1] === 0x49) || (buffer[0] === 0x4D && buffer[1] === 0x4D)) {
+    return { ext: '.tiff', mime: 'image/tiff' };
+  }
+  // BMP: starts with BM
+  if (buffer[0] === 0x42 && buffer[1] === 0x4D) {
+    return { ext: '.bmp', mime: 'image/bmp' };
+  }
+
+  return null;
+}
+
 function extractFromZip(zipPath) {
   const AdmZip = require('adm-zip');
   const extracted = { visual: [], text: [], skipped: [], cad: [] };
@@ -102,26 +145,20 @@ function extractFromZip(zipPath) {
     console.log(`[ZIP] Opening ZIP with ${entries.length} entries`);
 
     for (const entry of entries) {
-      // Skip directories
       if (entry.isDirectory) continue;
 
-      // Get just the filename (handles nested subfolders)
       const fullPath = entry.entryName;
       const name = path.basename(fullPath);
 
-      // Skip macOS metadata files
-      if (name.startsWith('._') || name.startsWith('.DS_Store') || fullPath.includes('__MACOSX')) {
+      // Skip macOS metadata and hidden files
+      if (name.startsWith('._') || name.startsWith('.DS_Store') || fullPath.includes('__MACOSX') || name.startsWith('.')) {
         console.log(`[ZIP] Skipping metadata: ${fullPath}`);
         continue;
       }
 
-      // Skip hidden files
-      if (name.startsWith('.')) continue;
-
       const ext = path.extname(name).toLowerCase();
       console.log(`[ZIP] Found: ${fullPath} (ext: ${ext}, size: ${entry.header.size} bytes)`);
 
-      // Visual files - extract and send to Claude
       if (VISUAL_EXTS.includes(ext)) {
         try {
           const outPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
@@ -132,9 +169,7 @@ function extractFromZip(zipPath) {
           console.error(`[ZIP] Failed to extract ${name}:`, err.message);
           extracted.skipped.push(name);
         }
-      }
-      // Plain text files - read content
-      else if (TEXT_EXTS.includes(ext)) {
+      } else if (TEXT_EXTS.includes(ext)) {
         try {
           const textContent = entry.getData().toString('utf8');
           extracted.text.push({ name: name, content: textContent });
@@ -143,20 +178,34 @@ function extractFromZip(zipPath) {
           console.error(`[ZIP] Failed to read text from ${name}:`, err.message);
           extracted.skipped.push(name);
         }
-      }
-      // CAD files - can't process but tell user
-      else if (CAD_EXTS.includes(ext)) {
+      } else if (CAD_EXTS.includes(ext)) {
         extracted.cad.push(name);
         console.log(`[ZIP] CAD file found (cannot process): ${name}`);
-      }
-      // Office files - note them
-      else if (OFFICE_EXTS.includes(ext)) {
-        // We could add xlsx/docx parsing later, for now note them
+      } else if (OFFICE_EXTS.includes(ext)) {
         extracted.skipped.push(name);
         console.log(`[ZIP] Office file found (not yet supported): ${name}`);
-      }
-      // Unknown
-      else {
+      } else if (ext === '.bin' || ext === '' || !ext) {
+        // Unknown or .bin file — try to detect actual type from magic bytes
+        try {
+          const fileData = entry.getData();
+          const detected = detectFileType(fileData);
+          if (detected && VISUAL_EXTS.includes(detected.ext)) {
+            const outPath = path.join(uploadsDir, `${uuidv4()}${detected.ext}`);
+            fs.writeFileSync(outPath, fileData);
+            extracted.visual.push({ path: outPath, name: `${name} (detected as ${detected.ext})`, ext: detected.ext });
+            console.log(`[ZIP] Magic byte detection: ${name} is actually a ${detected.ext} file — extracted!`);
+          } else if (detected) {
+            extracted.skipped.push(`${name} (detected as ${detected.ext} — not supported)`);
+            console.log(`[ZIP] Magic byte detection: ${name} is ${detected.ext} — not a supported visual type`);
+          } else {
+            extracted.skipped.push(name);
+            console.log(`[ZIP] Magic byte detection: ${name} — could not identify file type`);
+          }
+        } catch (err) {
+          console.error(`[ZIP] Failed to detect type for ${name}:`, err.message);
+          extracted.skipped.push(name);
+        }
+      } else {
         extracted.skipped.push(name);
         console.log(`[ZIP] Unknown file type skipped: ${name}`);
       }
@@ -224,7 +273,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           console.log(`[Upload] Processing ZIP: ${file.originalname}`);
           const extracted = extractFromZip(file.path);
 
-          // Add visual files (PDFs + images) as content blocks
           for (const ef of extracted.visual) {
             const block = fileToContentBlock(ef.path, ef.ext);
             if (block) {
@@ -233,7 +281,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             }
           }
 
-          // Add text file contents as text blocks
           for (const tf of extracted.text) {
             currentContent.push({
               type: 'text',
@@ -242,7 +289,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             fileNames.push(tf.name);
           }
 
-          // Build notes about what we found/couldn't process
           if (extracted.cad.length > 0) {
             zipNotes.push(`Note: Found ${extracted.cad.length} CAD file(s) in the ZIP (${extracted.cad.join(', ')}) -- these are binary AutoCAD files that I can't read directly. Please export them as PDF from your CAD software and re-upload for analysis.`);
           }
@@ -270,7 +316,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     let textMessage = message || '';
 
-    // Add ZIP processing notes to the message for Claude
     if (zipNotes.length > 0) {
       const noteText = zipNotes.join('\n');
       if (textMessage) {
@@ -296,7 +341,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // Call Claude API with extended thinking
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
