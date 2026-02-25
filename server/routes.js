@@ -9,11 +9,12 @@ const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
 
 const router = express.Router();
 
-// Admin email — ONLY this email gets admin role on registration
+// Admin email -- ONLY this email gets admin role on registration
 const ADMIN_EMAIL = 'hello@crmwizardai.com';
 
-// File upload config — use persistent disk path from database.js
-const uploadsDir = db.UPLOADS_DIR;
+// File upload config -- use persistent disk if available
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const uploadsDir = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -38,7 +39,7 @@ const upload = multer({
   }
 });
 
-// ─── AUTH ROUTES ───
+// --- AUTH ROUTES ---
 
 router.post('/auth/register', async (req, res) => {
   try {
@@ -59,7 +60,6 @@ router.post('/auth/register', async (req, res) => {
 
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
-    // Assign admin role if email matches admin email
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
 
     db.prepare(`
@@ -67,7 +67,6 @@ router.post('/auth/register', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
 
-    // Fetch the full user record so token includes correct role
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
 
@@ -138,7 +137,7 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   });
 });
 
-// ─── ADMIN ROUTES ───
+// --- ADMIN ROUTES ---
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT id, email, full_name, company, phone, role, created_at FROM users ORDER BY created_at DESC').all();
@@ -176,7 +175,7 @@ router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
   })));
 });
 
-// ─── PROJECT ROUTES ───
+// --- PROJECT ROUTES ---
 
 router.get('/projects', authMiddleware, (req, res) => {
   const projects = db.prepare(`
