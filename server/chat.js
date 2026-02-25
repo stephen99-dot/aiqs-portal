@@ -97,36 +97,28 @@ const OFFICE_EXTS = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt'];
 function detectFileType(buffer) {
   if (!buffer || buffer.length < 4) return null;
 
-  // PDF: starts with %PDF
   if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
     return { ext: '.pdf', mime: 'application/pdf' };
   }
-  // JPEG: starts with FF D8 FF
   if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
     return { ext: '.jpg', mime: 'image/jpeg' };
   }
-  // PNG: starts with 89 50 4E 47
   if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
     return { ext: '.png', mime: 'image/png' };
   }
-  // GIF: starts with GIF8
   if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
     return { ext: '.gif', mime: 'image/gif' };
   }
-  // WebP: starts with RIFF....WEBP
   if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && buffer.length >= 12 &&
       buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
     return { ext: '.webp', mime: 'image/webp' };
   }
-  // ZIP: starts with PK (50 4B)
   if (buffer[0] === 0x50 && buffer[1] === 0x4B) {
     return { ext: '.zip', mime: 'application/zip' };
   }
-  // TIFF: starts with II or MM
   if ((buffer[0] === 0x49 && buffer[1] === 0x49) || (buffer[0] === 0x4D && buffer[1] === 0x4D)) {
     return { ext: '.tiff', mime: 'image/tiff' };
   }
-  // BMP: starts with BM
   if (buffer[0] === 0x42 && buffer[1] === 0x4D) {
     return { ext: '.bmp', mime: 'image/bmp' };
   }
@@ -150,7 +142,6 @@ function extractFromZip(zipPath) {
       const fullPath = entry.entryName;
       const name = path.basename(fullPath);
 
-      // Skip macOS metadata and hidden files
       if (name.startsWith('._') || name.startsWith('.DS_Store') || fullPath.includes('__MACOSX') || name.startsWith('.')) {
         console.log(`[ZIP] Skipping metadata: ${fullPath}`);
         continue;
@@ -185,7 +176,6 @@ function extractFromZip(zipPath) {
         extracted.skipped.push(name);
         console.log(`[ZIP] Office file found (not yet supported): ${name}`);
       } else if (ext === '.bin' || ext === '' || !ext) {
-        // Unknown or .bin file -- try to detect actual type from magic bytes
         try {
           const fileData = entry.getData();
           const detected = detectFileType(fileData);
@@ -341,29 +331,44 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+    // Call Claude API with auto-retry on overload (up to 3 attempts)
+    const apiBody = JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 16000,
+      thinking: {
+        type: 'enabled',
+        budget_tokens: 8000
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 16000,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 8000
-        },
-        system: QS_SYSTEM_PROMPT,
-        messages: messages
-      })
+      system: QS_SYSTEM_PROMPT,
+      messages: messages
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.error('Claude API error:', JSON.stringify(err, null, 2));
-      return res.status(500).json({ error: 'AI service error -- please try again' });
+    let response;
+    let lastError;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: apiBody
+      });
+
+      if (response.ok) break;
+
+      lastError = await response.json().catch(() => ({}));
+      const isOverloaded = response.status === 529 || lastError?.error?.type === 'overloaded_error';
+
+      if (isOverloaded && attempt < 3) {
+        const delay = attempt * 3000;
+        console.log(`[API] Overloaded on attempt ${attempt}, retrying in ${delay/1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        console.error(`[API] Error on attempt ${attempt}:`, JSON.stringify(lastError, null, 2));
+        return res.status(500).json({ error: 'AI service error -- please try again' });
+      }
     }
 
     const data = await response.json();
