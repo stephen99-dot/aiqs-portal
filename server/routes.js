@@ -12,8 +12,8 @@ const router = express.Router();
 // Admin email — ONLY this email gets admin role on registration
 const ADMIN_EMAIL = 'hello@crmwizardai.com';
 
-// File upload config
-const uploadsDir = path.join(__dirname, '..', 'data', 'uploads');
+// File upload config — use persistent disk path from database.js
+const uploadsDir = db.UPLOADS_DIR;
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
