@@ -93,7 +93,7 @@ function extractFromZip(zipPath) {
       if (entry.isDirectory) continue;
       const name = path.basename(entry.entryName);
       if (name.startsWith('._') || entry.entryName.includes('__MACOSX')) continue;
-      
+
       const ext = path.extname(name).toLowerCase();
       if (!supportedExts.includes(ext)) continue;
 
@@ -195,13 +195,19 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
+    // Log file sizes for debugging
+    if (req.files) {
+      for (const file of req.files) {
+        console.log(`File: ${file.originalname}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      }
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25'
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -213,7 +219,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      console.error('Claude API error:', err);
+      console.error('Claude API error:', JSON.stringify(err, null, 2));
       return res.status(500).json({ error: 'AI service error — please try again' });
     }
 
