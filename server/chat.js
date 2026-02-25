@@ -331,8 +331,14 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // Call Claude API with auto-retry on overload (up to 3 attempts)
-    const apiBody = JSON.stringify({
+    // Call Claude API with auto-retry on overload (up to 3 attempts with Sonnet)
+    const apiHeaders = {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    };
+
+    const sonnetBody = JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 16000,
       thinking: {
@@ -345,15 +351,13 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     let response;
     let lastError;
+    let usedFallback = false;
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        },
-        body: apiBody
+        headers: apiHeaders,
+        body: sonnetBody
       });
 
       if (response.ok) break;
@@ -365,10 +369,37 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         const delay = attempt * 3000;
         console.log(`[API] Overloaded on attempt ${attempt}, retrying in ${delay/1000}s...`);
         await new Promise(r => setTimeout(r, delay));
-      } else {
-        console.error(`[API] Error on attempt ${attempt}:`, JSON.stringify(lastError, null, 2));
+      } else if (!isOverloaded) {
+        console.error(`[API] Non-overload error on attempt ${attempt}:`, JSON.stringify(lastError, null, 2));
         return res.status(500).json({ error: 'AI service error -- please try again' });
       }
+    }
+
+    // If all 3 Sonnet attempts failed with overload, try Haiku as fallback
+    if (!response.ok) {
+      console.log('[API] Sonnet overloaded after 3 attempts, falling back to Haiku...');
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 16000,
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 5000
+          },
+          system: QS_SYSTEM_PROMPT,
+          messages: messages
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        console.error('[API] Haiku fallback also failed:', JSON.stringify(err, null, 2));
+        return res.status(500).json({ error: 'AI service is currently busy -- please try again in a few minutes' });
+      }
+      console.log('[API] Haiku fallback succeeded');
+      usedFallback = true;
     }
 
     const data = await response.json();
@@ -382,6 +413,10 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       } else if (block.type === 'text') {
         reply += (reply ? '\n' : '') + block.text;
       }
+    }
+
+    if (usedFallback) {
+      reply += '\n\n---\n_Note: This response was generated using a lighter AI model due to high demand. For the most detailed analysis, please try again later._';
     }
 
     res.json({
