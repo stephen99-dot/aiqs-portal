@@ -5,9 +5,12 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
-const { generateToken, authMiddleware } = require('./auth');
+const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
 
 const router = express.Router();
+
+// Admin email — ONLY this email gets admin role on registration
+const ADMIN_EMAIL = 'hello@crmwizardai.com';
 
 // File upload config
 const uploadsDir = path.join(__dirname, '..', 'data', 'uploads');
@@ -23,7 +26,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.dwg', '.dxf', '.png', '.jpg', '.jpeg', '.xlsx', '.docx', '.zip'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -49,7 +52,6 @@ router.post('/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    // Check if user exists
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
@@ -57,16 +59,29 @@ router.post('/auth/register', async (req, res) => {
 
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
+    // Assign admin role if email matches admin email
+    const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
 
     db.prepare(`
-      INSERT INTO users (id, email, password_hash, full_name, company, phone)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null);
+      INSERT INTO users (id, email, password_hash, full_name, company, phone, role)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
 
-    const user = { id, email: email.toLowerCase(), fullName, company };
-    const token = generateToken(user);
+    // Fetch the full user record so token includes correct role
+    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const token = generateToken(newUser);
 
-    res.status(201).json({ token, user: { id, email: email.toLowerCase(), fullName, company, phone } });
+    res.status(201).json({
+      token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        fullName: newUser.full_name,
+        company: newUser.company,
+        phone: newUser.phone,
+        role: newUser.role
+      }
+    });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -100,7 +115,8 @@ router.post('/auth/login', async (req, res) => {
         email: user.email,
         fullName: user.full_name,
         company: user.company,
-        phone: user.phone
+        phone: user.phone,
+        role: user.role
       }
     });
   } catch (err) {
@@ -110,15 +126,54 @@ router.post('/auth/login', async (req, res) => {
 });
 
 router.get('/auth/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, email, full_name, company, phone FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT id, email, full_name, company, phone, role FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({
     id: user.id,
     email: user.email,
     fullName: user.full_name,
     company: user.company,
-    phone: user.phone
+    phone: user.phone,
+    role: user.role
   });
+});
+
+// ─── ADMIN ROUTES ───
+
+router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
+  const users = db.prepare('SELECT id, email, full_name, company, phone, role, created_at FROM users ORDER BY created_at DESC').all();
+  res.json(users.map(u => ({
+    id: u.id,
+    email: u.email,
+    fullName: u.full_name,
+    company: u.company,
+    phone: u.phone,
+    role: u.role,
+    createdAt: u.created_at
+  })));
+});
+
+router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
+  const projects = db.prepare(`
+    SELECT p.*, u.full_name as client_name, u.email as client_email, COUNT(f.id) as file_count
+    FROM projects p
+    LEFT JOIN users u ON u.id = p.user_id
+    LEFT JOIN files f ON f.project_id = p.id
+    GROUP BY p.id
+    ORDER BY p.created_at DESC
+  `).all();
+  res.json(projects.map(p => ({
+    id: p.id,
+    title: p.title,
+    projectType: p.project_type,
+    description: p.description,
+    location: p.location,
+    status: p.status,
+    clientName: p.client_name,
+    clientEmail: p.client_email,
+    fileCount: p.file_count,
+    createdAt: p.created_at
+  })));
 });
 
 // ─── PROJECT ROUTES ───
@@ -167,7 +222,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(projectId, req.user.id, title, projectType, description || null, location || null);
 
-    // Save uploaded files
     if (req.files && req.files.length > 0) {
       const insertFile = db.prepare(`
         INSERT INTO files (id, project_id, filename, original_name, file_type, file_size)
@@ -196,7 +250,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
   }
 });
 
-// Upload additional files to existing project
 router.post('/projects/:id/files', authMiddleware, upload.array('drawings', 10), (req, res) => {
   const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?')
     .get(req.params.id, req.user.id);
