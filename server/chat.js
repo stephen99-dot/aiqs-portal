@@ -4,12 +4,12 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
-const db = require('./database');
 
 const router = express.Router();
 
-// Use the persistent uploads directory from database.js
-const uploadsDir = db.UPLOADS_DIR;
+// Use Render persistent disk if available, otherwise local data folder
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const uploadsDir = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -185,7 +185,7 @@ function extractFromZip(zipPath) {
         extracted.skipped.push(name);
         console.log(`[ZIP] Office file found (not yet supported): ${name}`);
       } else if (ext === '.bin' || ext === '' || !ext) {
-        // Unknown or .bin file — try to detect actual type from magic bytes
+        // Unknown or .bin file -- try to detect actual type from magic bytes
         try {
           const fileData = entry.getData();
           const detected = detectFileType(fileData);
@@ -193,13 +193,13 @@ function extractFromZip(zipPath) {
             const outPath = path.join(uploadsDir, `${uuidv4()}${detected.ext}`);
             fs.writeFileSync(outPath, fileData);
             extracted.visual.push({ path: outPath, name: `${name} (detected as ${detected.ext})`, ext: detected.ext });
-            console.log(`[ZIP] Magic byte detection: ${name} is actually a ${detected.ext} file — extracted!`);
+            console.log(`[ZIP] Magic byte detection: ${name} is actually a ${detected.ext} file -- extracted!`);
           } else if (detected) {
-            extracted.skipped.push(`${name} (detected as ${detected.ext} — not supported)`);
-            console.log(`[ZIP] Magic byte detection: ${name} is ${detected.ext} — not a supported visual type`);
+            extracted.skipped.push(`${name} (detected as ${detected.ext} -- not supported)`);
+            console.log(`[ZIP] Magic byte detection: ${name} is ${detected.ext} -- not a supported visual type`);
           } else {
             extracted.skipped.push(name);
-            console.log(`[ZIP] Magic byte detection: ${name} — could not identify file type`);
+            console.log(`[ZIP] Magic byte detection: ${name} -- could not identify file type`);
           }
         } catch (err) {
           console.error(`[ZIP] Failed to detect type for ${name}:`, err.message);
@@ -236,158 +236,3 @@ function fileToContentBlock(filePath, ext) {
       source: { type: 'base64', media_type: 'application/pdf', data: base64 }
     };
   }
-  return null;
-}
-
-router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res) => {
-  try {
-    const { message, history } = req.body;
-    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
-    if (!ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'Anthropic API key not configured' });
-    }
-
-    let messages = [];
-
-    if (history) {
-      try {
-        const parsed = JSON.parse(history);
-        messages = parsed.map(msg => ({
-          role: msg.role,
-          content: msg.content
-        }));
-      } catch (e) {}
-    }
-
-    const currentContent = [];
-    let fileNames = [];
-    let zipNotes = [];
-
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const ext = path.extname(file.originalname).toLowerCase();
-        console.log(`[Upload] File: ${file.originalname}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB, Type: ${ext}`);
-
-        if (ext === '.zip') {
-          console.log(`[Upload] Processing ZIP: ${file.originalname}`);
-          const extracted = extractFromZip(file.path);
-
-          for (const ef of extracted.visual) {
-            const block = fileToContentBlock(ef.path, ef.ext);
-            if (block) {
-              currentContent.push(block);
-              fileNames.push(ef.name);
-            }
-          }
-
-          for (const tf of extracted.text) {
-            currentContent.push({
-              type: 'text',
-              text: `[Content from ${tf.name}]:\n${tf.content}`
-            });
-            fileNames.push(tf.name);
-          }
-
-          if (extracted.cad.length > 0) {
-            zipNotes.push(`Note: Found ${extracted.cad.length} CAD file(s) in the ZIP (${extracted.cad.join(', ')}) -- these are binary AutoCAD files that I can't read directly. Please export them as PDF from your CAD software and re-upload for analysis.`);
-          }
-
-          if (extracted.skipped.length > 0) {
-            zipNotes.push(`Note: ${extracted.skipped.length} file(s) in the ZIP couldn't be processed: ${extracted.skipped.join(', ')}`);
-          }
-
-          if (extracted.visual.length === 0 && extracted.text.length === 0) {
-            if (extracted.cad.length > 0) {
-              zipNotes.push(`The ZIP file "${file.originalname}" only contains CAD files (${extracted.cad.join(', ')}). I can't read DWG/DXF files directly -- please export them as PDF from AutoCAD, Revit, or your CAD software and upload those PDFs instead.`);
-            } else {
-              zipNotes.push(`No supported files found inside "${file.originalname}". Please upload PDFs or images (JPG, PNG) directly, or ensure your ZIP contains these file types.`);
-            }
-          }
-        } else {
-          const block = fileToContentBlock(file.path, ext);
-          if (block) {
-            currentContent.push(block);
-            fileNames.push(file.originalname);
-          }
-        }
-      }
-    }
-
-    let textMessage = message || '';
-
-    if (zipNotes.length > 0) {
-      const noteText = zipNotes.join('\n');
-      if (textMessage) {
-        textMessage = `[Uploaded files: ${fileNames.join(', ')}]\n\n${textMessage}\n\n[System note for context: ${noteText}]`;
-      } else if (fileNames.length > 0) {
-        textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}\n\n[System note for context: ${noteText}]`;
-      } else {
-        textMessage = `[System note: ${noteText}]\n\nPlease let the user know about the file issue and suggest how they can get their drawings to you in a usable format.`;
-      }
-    } else if (fileNames.length > 0 && !textMessage) {
-      textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
-    } else if (fileNames.length > 0) {
-      textMessage = `[Uploaded files: ${fileNames.join(', ')}]\n\n${textMessage}`;
-    }
-
-    if (textMessage) {
-      currentContent.push({ type: 'text', text: textMessage });
-    }
-
-    if (currentContent.length === 0) {
-      return res.status(400).json({ error: 'Please provide a message or upload a file' });
-    }
-
-    messages.push({ role: 'user', content: currentContent });
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 16000,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 8000
-        },
-        system: QS_SYSTEM_PROMPT,
-        messages: messages
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.error('Claude API error:', JSON.stringify(err, null, 2));
-      return res.status(500).json({ error: 'AI service error -- please try again' });
-    }
-
-    const data = await response.json();
-
-    let thinking = '';
-    let reply = '';
-
-    for (const block of data.content) {
-      if (block.type === 'thinking') {
-        thinking += (thinking ? '\n' : '') + block.thinking;
-      } else if (block.type === 'text') {
-        reply += (reply ? '\n' : '') + block.text;
-      }
-    }
-
-    res.json({
-      reply,
-      thinking: thinking || null
-    });
-
-  } catch (err) {
-    console.error('Chat error:', err);
-    res.status(500).json({ error: 'Something went wrong -- please try again' });
-  }
-});
-
-module.exports = router;
