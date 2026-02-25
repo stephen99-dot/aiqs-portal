@@ -31,35 +31,49 @@ export default function Layout() {
     <div style={{
       display: 'flex', height: '100vh', background: t.bg,
       fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-      color: t.text, overflow: 'hidden'
+      color: t.text, overflow: 'hidden',
+      transition: 'background 0.3s ease, color 0.3s ease'
     }}>
+      {/* Sidebar */}
       <aside style={{
         width: collapsed ? 64 : 220,
         background: t.surface,
         borderRight: `1px solid ${t.border}`,
         display: 'flex', flexDirection: 'column',
-        transition: 'width 0.25s cubic-bezier(0.22,1,0.36,1)',
+        transition: 'width 0.25s cubic-bezier(0.22,1,0.36,1), background 0.3s ease, border-color 0.3s ease',
         flexShrink: 0, overflow: 'hidden'
       }}>
+        {/* Logo / Collapse */}
         <div style={{
           padding: collapsed ? '16px 12px' : '16px 18px',
           borderBottom: `1px solid ${t.border}`,
-          display: 'flex', alignItems: 'center', gap: 10, minHeight: 60
+          display: 'flex', alignItems: 'center', gap: 10, minHeight: 60,
+          transition: 'border-color 0.3s ease'
         }}>
-          <button onClick={() => setCollapsed(!collapsed)} style={{
-            width: 34, height: 34, borderRadius: 8,
-            background: t.accentGlow, border: `1px solid ${t.accent}30`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0, fontSize: 16
-          }}>⚡</button>
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              width: 34, height: 34, borderRadius: 8,
+              background: t.accentGlow, border: `1px solid ${t.accent}30`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', flexShrink: 0, fontSize: 16,
+              transition: 'background 0.2s ease'
+            }}
+          >
+            ⚡
+          </button>
           {!collapsed && (
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.text, letterSpacing: '-0.02em' }}>AI QS</div>
-              <div style={{ fontSize: 10, color: t.accentLight, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Customer Portal</div>
+              <div style={{ fontSize: 10, color: t.accentLight, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                {isAdmin ? 'Admin Portal' : 'Client Portal'}
+              </div>
             </div>
           )}
         </div>
 
+        {/* Navigation */}
         <nav style={{ flex: 1, padding: collapsed ? '12px 8px' : '12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {visibleNavItems.map(item => (
             <NavLink key={item.path} to={item.path} style={({ isActive }) => ({
@@ -72,15 +86,22 @@ export default function Layout() {
               textDecoration: 'none',
               fontSize: 13, fontWeight: isActive ? 600 : 500,
               justifyContent: collapsed ? 'center' : 'flex-start',
-              transition: 'all 0.15s'
+              transition: 'all 0.2s ease'
             })}>
-              <span style={{ fontSize: 16 }}>{item.icon}</span>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
               {!collapsed && <span>{item.label}</span>}
             </NavLink>
           ))}
         </nav>
 
-        <div style={{ padding: collapsed ? '12px 8px' : '12px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Bottom section: theme toggle, user info, logout */}
+        <div style={{
+          padding: collapsed ? '12px 8px' : '12px',
+          borderTop: `1px solid ${t.border}`,
+          display: 'flex', flexDirection: 'column', gap: 8,
+          transition: 'border-color 0.3s ease'
+        }}>
+          {/* Theme toggle */}
           <button onClick={toggle} style={{
             display: 'flex', alignItems: 'center',
             gap: collapsed ? 0 : 10,
@@ -89,12 +110,14 @@ export default function Layout() {
             border: `1px solid ${t.border}`, cursor: 'pointer',
             color: t.textSecondary, fontSize: 12, fontWeight: 500,
             justifyContent: collapsed ? 'center' : 'flex-start',
-            width: '100%'
+            width: '100%',
+            transition: 'all 0.2s ease'
           }}>
-            <span style={{ fontSize: 16 }}>{mode === 'dark' ? '☀️' : '🌙'}</span>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>{mode === 'dark' ? '☀️' : '🌙'}</span>
             {!collapsed && <span>{mode === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
           </button>
 
+          {/* User info */}
           <div style={{
             display: 'flex', alignItems: 'center',
             gap: collapsed ? 0 : 10,
@@ -108,18 +131,22 @@ export default function Layout() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 12, fontWeight: 700,
               color: isAdmin ? (t.gold || t.accent) : t.accent,
-              flexShrink: 0
+              flexShrink: 0,
+              transition: 'all 0.3s ease'
             }}>
               {user?.fullName?.charAt(0) || user?.email?.charAt(0) || 'U'}
             </div>
             {!collapsed && (
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: t.text }}>{user?.fullName || user?.email || 'User'}</div>
-                <div style={{ fontSize: 10, color: isAdmin ? t.gold : t.textMuted }}>{isAdmin ? 'Admin' : 'Client'}</div>
+                <div style={{ fontSize: 10, color: isAdmin ? (t.gold || t.accent) : t.textMuted, fontWeight: isAdmin ? 600 : 400 }}>
+                  {isAdmin ? '🛡️ Admin' : 'Client'}
+                </div>
               </div>
             )}
           </div>
 
+          {/* Logout */}
           <button onClick={handleLogout} style={{
             display: 'flex', alignItems: 'center',
             gap: collapsed ? 0 : 10,
@@ -128,15 +155,20 @@ export default function Layout() {
             border: 'none', cursor: 'pointer',
             color: t.textMuted, fontSize: 12, fontWeight: 500,
             justifyContent: collapsed ? 'center' : 'flex-start',
-            width: '100%'
+            width: '100%',
+            transition: 'color 0.2s ease'
           }}>
-            <span style={{ fontSize: 14 }}>🚪</span>
+            <span style={{ fontSize: 14, flexShrink: 0 }}>🚪</span>
             {!collapsed && <span>Logout</span>}
           </button>
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflow: 'auto', background: t.bg }}>
+      {/* Main content */}
+      <main style={{
+        flex: 1, overflow: 'auto', background: t.bg,
+        transition: 'background 0.3s ease'
+      }}>
         <Outlet />
       </main>
     </div>
