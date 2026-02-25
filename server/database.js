@@ -1,13 +1,26 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const DB_PATH = path.join(__dirname, '..', 'data', 'aiqs.db');
-// Ensure data directory exists
 const fs = require('fs');
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+// Use Render persistent disk if available, otherwise local data folder
+// Render persistent disk is mounted at /data
+// Locally (dev), use the project's data/ folder
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const DB_PATH = path.join(DATA_DIR, 'aiqs.db');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+
+// Ensure directories exist
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+console.log(`[DB] Database path: ${DB_PATH}`);
+console.log(`[DB] Uploads path: ${UPLOADS_DIR}`);
+
 const db = new Database(DB_PATH);
+
 // Enable WAL mode for better performance
 db.pragma('journal_mode = WAL');
+
 // Create tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -58,5 +71,9 @@ try {
 
 // Migration: ensure admin email has admin role
 db.prepare("UPDATE users SET role = 'admin' WHERE email = 'hello@crmwizardai.com' AND (role IS NULL OR role != 'admin')").run();
+
+// Export the data directory path so other files can use it
+db.DATA_DIR = DATA_DIR;
+db.UPLOADS_DIR = UPLOADS_DIR;
 
 module.exports = db;
