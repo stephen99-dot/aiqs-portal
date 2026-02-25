@@ -3,8 +3,6 @@ const path = require('path');
 const fs = require('fs');
 
 // Use Render persistent disk if available, otherwise local data folder
-// Render persistent disk is mounted at /data
-// Locally (dev), use the project's data/ folder
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'aiqs.db');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
@@ -71,9 +69,5 @@ try {
 
 // Migration: ensure admin email has admin role
 db.prepare("UPDATE users SET role = 'admin' WHERE email = 'hello@crmwizardai.com' AND (role IS NULL OR role != 'admin')").run();
-
-// Export the data directory path so other files can use it
-db.DATA_DIR = DATA_DIR;
-db.UPLOADS_DIR = UPLOADS_DIR;
 
 module.exports = db;
