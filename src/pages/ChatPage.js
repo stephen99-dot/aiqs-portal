@@ -4,9 +4,18 @@ import { apiFetch } from '../utils/api';
 
 const STORAGE_KEY = 'aiqs_chat_history';
 
+// -- Thinking stages shown while waiting --
+const THINKING_STAGES = [
+  { icon: '📄', text: 'Reading your input...' },
+  { icon: '🔍', text: 'Analysing project scope...' },
+  { icon: '📐', text: 'Measuring quantities...' },
+  { icon: '💰', text: 'Calculating costs...' },
+  { icon: '📋', text: 'Preparing response...' },
+];
+
 export default function ChatPage() {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  const { t, mode } = useTheme();
+  const isDark = mode === 'dark';
 
   const [messages, setMessages] = useState(() => {
     try {
@@ -17,19 +26,38 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
+  const [thinkingStage, setThinkingStage] = useState(0);
+  const [expandedThinking, setExpandedThinking] = useState({});
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const thinkingInterval = useRef(null);
 
-  // Persist messages to sessionStorage
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
   }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, thinkingStage]);
 
-  // --- Theme styles ---
+  // Cycle through thinking stages while waiting
+  useEffect(() => {
+    if (sending) {
+      setThinkingStage(0);
+      thinkingInterval.current = setInterval(() => {
+        setThinkingStage(prev => {
+          if (prev < THINKING_STAGES.length - 1) return prev + 1;
+          return prev; // Stay on last stage
+        });
+      }, 2200);
+    } else {
+      if (thinkingInterval.current) clearInterval(thinkingInterval.current);
+      setThinkingStage(0);
+    }
+    return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
+  }, [sending]);
+
+  // -- Theme colors --
   const colors = isDark ? {
     pageBg: '#06080F',
     containerBg: '#0D1117',
@@ -57,6 +85,15 @@ export default function ChatPage() {
     errorText: '#F87171',
     avatarBg: '#1E293B',
     scrollThumb: '#334155',
+    thinkingBg: '#111827',
+    thinkingBorder: '#1E293B',
+    thinkingText: '#94A3B8',
+    thinkingAccent: '#F59E0B',
+    thinkingHeaderBg: '#0D1117',
+    stageActiveBg: 'rgba(37, 99, 235, 0.1)',
+    stageActiveText: '#60A5FA',
+    stageDoneText: '#10B981',
+    stageWaitText: '#3B4D66',
   } : {
     pageBg: '#F4F6FA',
     containerBg: '#FFFFFF',
@@ -84,6 +121,15 @@ export default function ChatPage() {
     errorText: '#DC2626',
     avatarBg: '#E2E8F0',
     scrollThumb: '#CBD5E1',
+    thinkingBg: '#F8FAFC',
+    thinkingBorder: '#E2E8F0',
+    thinkingText: '#64748B',
+    thinkingAccent: '#D97706',
+    thinkingHeaderBg: '#F1F5F9',
+    stageActiveBg: 'rgba(37, 99, 235, 0.06)',
+    stageActiveText: '#2563EB',
+    stageDoneText: '#059669',
+    stageWaitText: '#CBD5E1',
   };
 
   const styles = {
@@ -93,259 +139,125 @@ export default function ChatPage() {
       display: 'flex',
       flexDirection: 'column',
       background: colors.pageBg,
+      transition: 'background 0.3s ease',
     },
-    header: {
-      marginBottom: '16px',
-      flexShrink: 0,
-    },
-    title: {
-      fontSize: '24px',
-      fontWeight: 700,
-      color: colors.textPrimary,
-      margin: 0,
-    },
-    subtitle: {
-      fontSize: '14px',
-      color: colors.textSecondary,
-      margin: '4px 0 0 0',
-    },
+    header: { marginBottom: '16px', flexShrink: 0 },
+    title: { fontSize: '24px', fontWeight: 700, color: colors.textPrimary, margin: 0 },
+    subtitle: { fontSize: '14px', color: colors.textSecondary, margin: '4px 0 0 0' },
     container: {
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      background: colors.containerBg,
-      border: `1px solid ${colors.containerBorder}`,
-      borderRadius: '16px',
-      overflow: 'hidden',
-      minHeight: 0,
+      flex: 1, display: 'flex', flexDirection: 'column',
+      background: colors.containerBg, border: `1px solid ${colors.containerBorder}`,
+      borderRadius: '16px', overflow: 'hidden', minHeight: 0,
+      transition: 'background 0.3s ease, border-color 0.3s ease',
     },
     messagesArea: {
-      flex: 1,
-      overflowY: 'auto',
-      padding: '20px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '16px',
+      flex: 1, overflowY: 'auto', padding: '20px',
+      display: 'flex', flexDirection: 'column', gap: '16px',
     },
-    // Welcome
     welcome: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '48px 24px',
-      textAlign: 'center',
-      flex: 1,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', padding: '48px 24px', textAlign: 'center', flex: 1,
     },
     welcomeIcon: {
-      fontSize: '48px',
-      marginBottom: '16px',
-      background: colors.welcomeBg,
-      border: `1px solid ${colors.welcomeBorder}`,
-      borderRadius: '20px',
-      width: '80px',
-      height: '80px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      fontSize: '48px', marginBottom: '16px', background: colors.welcomeBg,
+      border: `1px solid ${colors.welcomeBorder}`, borderRadius: '20px',
+      width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center',
     },
-    welcomeTitle: {
-      fontSize: '20px',
-      fontWeight: 600,
-      color: colors.textPrimary,
-      margin: '0 0 8px 0',
-    },
-    welcomeText: {
-      fontSize: '14px',
-      color: colors.textSecondary,
-      margin: '0 0 24px 0',
-      maxWidth: '480px',
-    },
-    suggestions: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: '8px',
-      justifyContent: 'center',
-    },
+    welcomeTitle: { fontSize: '20px', fontWeight: 600, color: colors.textPrimary, margin: '0 0 8px 0' },
+    welcomeText: { fontSize: '14px', color: colors.textSecondary, margin: '0 0 24px 0', maxWidth: '480px' },
+    suggestions: { display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' },
     suggestionBtn: {
-      background: colors.suggestionBg,
-      border: `1px solid ${colors.suggestionBorder}`,
-      borderRadius: '12px',
-      padding: '10px 16px',
-      fontSize: '13px',
-      color: colors.textPrimary,
-      cursor: 'pointer',
-      transition: 'all 0.15s',
+      background: colors.suggestionBg, border: `1px solid ${colors.suggestionBorder}`,
+      borderRadius: '12px', padding: '10px 16px', fontSize: '13px',
+      color: colors.textPrimary, cursor: 'pointer', transition: 'all 0.15s',
     },
-    // Messages
     msgRow: (role) => ({
-      display: 'flex',
-      gap: '12px',
-      alignItems: 'flex-start',
+      display: 'flex', gap: '12px', alignItems: 'flex-start',
       flexDirection: role === 'user' ? 'row-reverse' : 'row',
     }),
     avatar: {
-      width: '36px',
-      height: '36px',
-      borderRadius: '12px',
-      background: colors.avatarBg,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '18px',
-      flexShrink: 0,
+      width: '36px', height: '36px', borderRadius: '12px',
+      background: colors.avatarBg, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0,
     },
     msgBubble: (role, isError) => ({
-      maxWidth: '70%',
-      padding: '12px 16px',
+      maxWidth: '70%', padding: '12px 16px',
       borderRadius: role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
       background: role === 'user' ? colors.userBubble : colors.assistantBubble,
       color: role === 'user' && isDark ? '#F1F5F9' : role === 'user' && !isDark ? '#FFFFFF' : isError ? colors.errorText : colors.textPrimary,
-      fontSize: '14px',
-      lineHeight: '1.6',
-      wordBreak: 'break-word',
+      fontSize: '14px', lineHeight: '1.6', wordBreak: 'break-word',
     }),
-    msgFiles: {
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: '6px',
-      marginBottom: '8px',
-    },
+    msgFiles: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' },
     fileBadge: {
       background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)',
-      borderRadius: '8px',
-      padding: '4px 10px',
-      fontSize: '12px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '4px',
+      borderRadius: '8px', padding: '4px 10px', fontSize: '12px',
+      display: 'flex', alignItems: 'center', gap: '4px',
     },
-    // Typing indicator
-    typing: {
-      display: 'flex',
-      gap: '4px',
-      padding: '4px 0',
-    },
-    typingDot: (i) => ({
-      width: '8px',
-      height: '8px',
-      borderRadius: '50%',
-      background: colors.accent,
-      animation: 'typingPulse 1.4s infinite',
-      animationDelay: `${i * 0.2}s`,
-    }),
-    // File bar
     fileBar: {
-      display: 'flex',
-      gap: '8px',
-      padding: '10px 16px',
-      background: colors.fileBarBg,
-      borderTop: `1px solid ${colors.containerBorder}`,
-      overflowX: 'auto',
+      display: 'flex', gap: '8px', padding: '10px 16px',
+      background: colors.fileBarBg, borderTop: `1px solid ${colors.containerBorder}`, overflowX: 'auto',
     },
     chip: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      background: colors.chipBg,
-      border: `1px solid ${colors.chipBorder}`,
-      borderRadius: '10px',
-      padding: '6px 10px',
-      fontSize: '12px',
-      color: colors.textPrimary,
-      whiteSpace: 'nowrap',
+      display: 'flex', alignItems: 'center', gap: '6px',
+      background: colors.chipBg, border: `1px solid ${colors.chipBorder}`,
+      borderRadius: '10px', padding: '6px 10px', fontSize: '12px',
+      color: colors.textPrimary, whiteSpace: 'nowrap',
     },
     chipRemove: {
-      background: 'none',
-      border: 'none',
-      color: colors.textMuted,
-      cursor: 'pointer',
-      fontSize: '16px',
-      padding: '0 0 0 4px',
-      lineHeight: 1,
+      background: 'none', border: 'none', color: colors.textMuted,
+      cursor: 'pointer', fontSize: '16px', padding: '0 0 0 4px', lineHeight: 1,
     },
-    // Input bar
     inputBar: {
-      display: 'flex',
-      alignItems: 'flex-end',
-      gap: '8px',
-      padding: '12px 16px',
-      borderTop: `1px solid ${colors.containerBorder}`,
+      display: 'flex', alignItems: 'flex-end', gap: '8px',
+      padding: '12px 16px', borderTop: `1px solid ${colors.containerBorder}`,
       background: colors.containerBg,
     },
     attachBtn: {
-      background: 'none',
-      border: 'none',
-      color: colors.textMuted,
-      cursor: 'pointer',
-      padding: '8px',
-      borderRadius: '10px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
+      background: 'none', border: 'none', color: colors.textMuted,
+      cursor: 'pointer', padding: '8px', borderRadius: '10px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     },
     textarea: {
-      flex: 1,
-      background: colors.inputBg,
-      border: `1px solid ${colors.inputBorder}`,
-      borderRadius: '12px',
-      padding: '10px 14px',
-      fontSize: '14px',
-      color: colors.inputText,
-      resize: 'none',
-      outline: 'none',
-      fontFamily: 'inherit',
-      lineHeight: '1.5',
-      maxHeight: '120px',
+      flex: 1, background: colors.inputBg, border: `1px solid ${colors.inputBorder}`,
+      borderRadius: '12px', padding: '10px 14px', fontSize: '14px',
+      color: colors.inputText, resize: 'none', outline: 'none',
+      fontFamily: 'inherit', lineHeight: '1.5', maxHeight: '120px',
     },
     sendBtn: {
-      background: colors.accent,
-      border: 'none',
-      borderRadius: '10px',
-      padding: '10px',
-      cursor: 'pointer',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
+      background: colors.accent, border: 'none', borderRadius: '10px',
+      padding: '10px', cursor: 'pointer', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       opacity: sending || (!input.trim() && files.length === 0) ? 0.4 : 1,
     },
     clearBtn: {
-      background: 'none',
-      border: `1px solid ${colors.containerBorder}`,
-      borderRadius: '8px',
-      padding: '6px 12px',
-      fontSize: '12px',
-      color: colors.textMuted,
-      cursor: 'pointer',
-      marginLeft: 'auto',
+      background: 'none', border: `1px solid ${colors.containerBorder}`,
+      borderRadius: '8px', padding: '6px 12px', fontSize: '12px',
+      color: colors.textMuted, cursor: 'pointer', marginLeft: 'auto',
     },
   };
 
+  // -- Helper functions --
   function addFiles(fileList) {
     const newFiles = Array.from(fileList).slice(0, 5);
     setFiles(prev => [...prev, ...newFiles].slice(0, 5));
   }
-
-  function removeFile(i) {
-    setFiles(prev => prev.filter((_, idx) => idx !== i));
-  }
-
+  function removeFile(i) { setFiles(prev => prev.filter((_, idx) => idx !== i)); }
   function fileIcon(name) {
     const ext = name.split('.').pop().toLowerCase();
     return { pdf: '📄', png: '🖼️', jpg: '🖼️', jpeg: '🖼️', dwg: '📐', dxf: '📐', zip: '📦' }[ext] || '📎';
   }
-
   function formatSize(b) {
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(1) + ' MB';
   }
-
   function clearChat() {
     setMessages([]);
+    setExpandedThinking({});
     sessionStorage.removeItem(STORAGE_KEY);
+  }
+  function toggleThinking(idx) {
+    setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] }));
   }
 
   async function handleSend(e) {
@@ -369,10 +281,7 @@ export default function ChatPage() {
     try {
       const history = messages
         .filter(m => m.content)
-        .map(m => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? m.content : m.content
-        }));
+        .map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : m.content }));
 
       const formData = new FormData();
       formData.append('message', currentInput);
@@ -387,6 +296,7 @@ export default function ChatPage() {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: data.reply,
+        thinking: data.thinking || null,
         timestamp: new Date().toISOString()
       }]);
     } catch (err) {
@@ -402,16 +312,137 @@ export default function ChatPage() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend(e);
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); }
   }
-
   function handleDragOver(e) { e.preventDefault(); }
   function handleDrop(e) {
     e.preventDefault();
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+  }
+
+  // -- Thinking stages component --
+  function ThinkingIndicator() {
+    return (
+      <div style={styles.msgRow('assistant')}>
+        <div style={styles.avatar}>📐</div>
+        <div style={{
+          maxWidth: '70%', borderRadius: '4px 16px 16px 16px',
+          background: colors.assistantBubble, padding: '16px 20px',
+          display: 'flex', flexDirection: 'column', gap: '10px',
+        }}>
+          <div style={{
+            fontSize: '11px', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.08em', color: colors.thinkingAccent,
+            display: 'flex', alignItems: 'center', gap: '8px',
+          }}>
+            <span style={{
+              display: 'inline-block', width: '8px', height: '8px',
+              borderRadius: '50%', background: colors.thinkingAccent,
+              animation: 'thinkPulse 1.5s ease-in-out infinite',
+            }} />
+            AI is thinking...
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {THINKING_STAGES.map((stage, i) => {
+              const isDone = i < thinkingStage;
+              const isActive = i === thinkingStage;
+              const isWaiting = i > thinkingStage;
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '6px 10px', borderRadius: '8px',
+                  background: isActive ? colors.stageActiveBg : 'transparent',
+                  transition: 'all 0.4s ease',
+                  opacity: isWaiting ? 0.35 : 1,
+                }}>
+                  <span style={{ fontSize: '14px', flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>
+                    {isDone ? '✅' : stage.icon}
+                  </span>
+                  <span style={{
+                    fontSize: '13px', fontWeight: isActive ? 600 : 400,
+                    color: isDone ? colors.stageDoneText : isActive ? colors.stageActiveText : colors.stageWaitText,
+                    transition: 'color 0.3s ease',
+                  }}>
+                    {stage.text}
+                  </span>
+                  {isActive && (
+                    <span style={{
+                      marginLeft: 'auto', display: 'flex', gap: '3px',
+                    }}>
+                      {[0, 1, 2].map(d => (
+                        <span key={d} style={{
+                          width: '4px', height: '4px', borderRadius: '50%',
+                          background: colors.stageActiveText,
+                          animation: 'typingPulse 1.4s infinite',
+                          animationDelay: `${d * 0.2}s`,
+                        }} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // -- Collapsible thinking block --
+  function ThinkingBlock({ thinking, index }) {
+    if (!thinking) return null;
+    const isExpanded = expandedThinking[index];
+
+    return (
+      <div style={{
+        marginBottom: '8px', borderRadius: '10px',
+        border: `1px solid ${colors.thinkingBorder}`,
+        overflow: 'hidden',
+        transition: 'all 0.3s ease',
+      }}>
+        <button
+          onClick={() => toggleThinking(index)}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 12px', background: colors.thinkingHeaderBg,
+            border: 'none', cursor: 'pointer',
+            fontSize: '12px', fontWeight: 600, color: colors.thinkingAccent,
+            transition: 'background 0.2s ease',
+          }}
+        >
+          <span style={{
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease', display: 'inline-block',
+            fontSize: '10px',
+          }}>
+            ▶
+          </span>
+          <span>🧠</span>
+          <span>View AI reasoning</span>
+          <span style={{
+            marginLeft: 'auto', fontSize: '11px', fontWeight: 400,
+            color: colors.textMuted,
+          }}>
+            {isExpanded ? 'Click to collapse' : 'Click to expand'}
+          </span>
+        </button>
+        {isExpanded && (
+          <div style={{
+            padding: '12px 16px', background: colors.thinkingBg,
+            borderTop: `1px solid ${colors.thinkingBorder}`,
+            maxHeight: '300px', overflowY: 'auto',
+          }}>
+            <pre style={{
+              margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              fontSize: '12px', lineHeight: '1.7', color: colors.thinkingText,
+              fontFamily: "'JetBrains Mono', 'Courier New', monospace",
+            }}>
+              {thinking}
+            </pre>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -420,6 +451,10 @@ export default function ChatPage() {
         @keyframes typingPulse {
           0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
           40% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes thinkPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
         }
         .aiqs-messages-area::-webkit-scrollbar { width: 6px; }
         .aiqs-messages-area::-webkit-scrollbar-track { background: transparent; }
@@ -431,7 +466,7 @@ export default function ChatPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h1 style={styles.title}>AI Quantity Surveyor</h1>
-            <p style={styles.subtitle}>Upload drawings and chat about your project — get instant estimates and QS advice</p>
+            <p style={styles.subtitle}>Upload drawings and chat about your project -- get instant estimates and QS advice</p>
           </div>
           {messages.length > 0 && (
             <button style={styles.clearBtn} onClick={clearChat}>Clear chat</button>
@@ -445,7 +480,7 @@ export default function ChatPage() {
             <div style={styles.welcome}>
               <div style={styles.welcomeIcon}>📐</div>
               <h3 style={styles.welcomeTitle}>Ready to analyse your project</h3>
-              <p style={styles.welcomeText}>Upload your drawings (PDF, images, or ZIP) and ask me anything — rough costs, spec advice, quantities, building regs, risks to watch for.</p>
+              <p style={styles.welcomeText}>Upload your drawings (PDF, images, or ZIP) and ask me anything -- rough costs, spec advice, quantities, building regs, risks to watch for.</p>
               <div style={styles.suggestions}>
                 {[
                   ['💰', 'Rough cost estimate', 'Can you give me a rough cost estimate for this project?'],
@@ -468,42 +503,45 @@ export default function ChatPage() {
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} style={styles.msgRow(msg.role)}>
-              <div style={styles.avatar}>
-                {msg.role === 'user' ? '👤' : '📐'}
-              </div>
-              <div style={styles.msgBubble(msg.role, msg.error)}>
-                {msg.role === 'user' && msg.files?.length > 0 && (
-                  <div style={styles.msgFiles}>
-                    {msg.files.map((f, j) => (
-                      <span key={j} style={styles.fileBadge}>
-                        {fileIcon(f.name)} {f.name}
-                      </span>
+            <React.Fragment key={i}>
+              {/* Show thinking block above assistant messages */}
+              {msg.role === 'assistant' && msg.thinking && (
+                <div style={{ ...styles.msgRow('assistant'), marginBottom: '-8px' }}>
+                  <div style={{ width: '36px', flexShrink: 0 }} />
+                  <div style={{ maxWidth: '70%' }}>
+                    <ThinkingBlock thinking={msg.thinking} index={i} />
+                  </div>
+                </div>
+              )}
+              <div style={styles.msgRow(msg.role)}>
+                <div style={styles.avatar}>
+                  {msg.role === 'user' ? '👤' : '📐'}
+                </div>
+                <div style={styles.msgBubble(msg.role, msg.error)}>
+                  {msg.role === 'user' && msg.files?.length > 0 && (
+                    <div style={styles.msgFiles}>
+                      {msg.files.map((f, j) => (
+                        <span key={j} style={styles.fileBadge}>
+                          {fileIcon(f.name)} {f.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    {msg.content.split('\n').map((line, j) => (
+                      <React.Fragment key={j}>
+                        {line}
+                        {j < msg.content.split('\n').length - 1 && <br />}
+                      </React.Fragment>
                     ))}
                   </div>
-                )}
-                <div>
-                  {msg.content.split('\n').map((line, j) => (
-                    <React.Fragment key={j}>
-                      {line}
-                      {j < msg.content.split('\n').length - 1 && <br />}
-                    </React.Fragment>
-                  ))}
                 </div>
               </div>
-            </div>
+            </React.Fragment>
           ))}
 
-          {sending && (
-            <div style={styles.msgRow('assistant')}>
-              <div style={styles.avatar}>📐</div>
-              <div style={styles.msgBubble('assistant', false)}>
-                <div style={styles.typing}>
-                  <span style={styles.typingDot(0)} /><span style={styles.typingDot(1)} /><span style={styles.typingDot(2)} />
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Show thinking stages while waiting */}
+          {sending && <ThinkingIndicator />}
           <div ref={messagesEndRef} />
         </div>
 
@@ -514,7 +552,7 @@ export default function ChatPage() {
                 <span>{fileIcon(f.name)}</span>
                 <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
                 <span style={{ color: colors.textMuted }}>{formatSize(f.size)}</span>
-                <button onClick={() => removeFile(i)} style={styles.chipRemove}>×</button>
+                <button onClick={() => removeFile(i)} style={styles.chipRemove}>x</button>
               </div>
             ))}
           </div>
@@ -522,8 +560,7 @@ export default function ChatPage() {
 
         <form onSubmit={handleSend} style={styles.inputBar}>
           <button
-            type="button"
-            style={styles.attachBtn}
+            type="button" style={styles.attachBtn}
             onClick={() => fileInputRef.current?.click()}
             title="Upload drawings (PDF, images, ZIP)"
           >
@@ -532,26 +569,20 @@ export default function ChatPage() {
             </svg>
           </button>
           <input
-            ref={fileInputRef}
-            type="file"
-            multiple
+            ref={fileInputRef} type="file" multiple
             onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
             style={{ display: 'none' }}
             accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
           />
           <textarea
             className="aiqs-chat-textarea"
-            value={input}
-            onChange={e => setInput(e.target.value)}
+            value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={files.length > 0 ? "Ask about these drawings..." : "Upload drawings or ask a QS question..."}
-            rows={1}
-            disabled={sending}
-            style={styles.textarea}
+            rows={1} disabled={sending} style={styles.textarea}
           />
           <button
-            type="submit"
-            style={styles.sendBtn}
+            type="submit" style={styles.sendBtn}
             disabled={sending || (!input.trim() && files.length === 0)}
           >
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2">
