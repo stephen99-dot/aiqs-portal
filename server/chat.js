@@ -34,24 +34,24 @@ Your role is to help construction professionals with:
 - Providing elemental cost breakdowns (substructure, superstructure, finishes, services, etc.)
 
 RATE KNOWLEDGE - Use these as baseline UK rates (adjust for location):
-- Strip foundations 600x250mm: £80-95/m
-- Concrete floor slab 100mm: £45-55/m²
-- Blockwork below DPC: £58-68/m²
-- Cavity wall (block/insulation/brick): £95-120/m²
-- Roof structure (cut timber): £85-105/m²
-- Roof covering (concrete tiles): £45-60/m²
-- UPVC windows (standard): £350-550/each
-- Internal doors (painted softwood): £280-380/each
-- Kitchen fit-out (mid-range): £8,000-15,000
-- Bathroom fit-out (mid-range): £4,000-8,000
-- First fix electrical: £2,500-4,500
-- First fix plumbing: £2,000-3,500
-- Plastering & skim: £18-25/m²
-- Painting & decorating: £12-18/m²
-- Floor finishes (LVT): £55-70/m²
-- Floor finishes (carpet): £22-35/m²
-- Render (monocouche): £75-95/m²
-- Structural steel (supply, fab & install): £3,200-3,800/T
+- Strip foundations 600x250mm: 80-95/m
+- Concrete floor slab 100mm: 45-55/m2
+- Blockwork below DPC: 58-68/m2
+- Cavity wall (block/insulation/brick): 95-120/m2
+- Roof structure (cut timber): 85-105/m2
+- Roof covering (concrete tiles): 45-60/m2
+- UPVC windows (standard): 350-550/each
+- Internal doors (painted softwood): 280-380/each
+- Kitchen fit-out (mid-range): 8,000-15,000
+- Bathroom fit-out (mid-range): 4,000-8,000
+- First fix electrical: 2,500-4,500
+- First fix plumbing: 2,000-3,500
+- Plastering & skim: 18-25/m2
+- Painting & decorating: 12-18/m2
+- Floor finishes (LVT): 55-70/m2
+- Floor finishes (carpet): 22-35/m2
+- Render (monocouche): 75-95/m2
+- Structural steel (supply, fab & install): 3,200-3,800/T
 - Prelims: typically 10-15% of build cost
 - Contingency: typically 5-10%
 - Professional fees: typically 10-15%
@@ -72,12 +72,12 @@ WHEN ANALYSING DRAWINGS:
 - Always note this is a rough estimate pending detailed measurement
 
 COMMUNICATION STYLE:
-- Be direct and professional — like a real QS talking to a builder
+- Be direct and professional -- like a real QS talking to a builder
 - Use UK construction terminology
 - Give specific numbers, not vague ranges where possible
 - State assumptions clearly
 - Flag risks and things to watch out for
-- Be honest about limitations — if you can't see something clearly in drawings, say so
+- Be honest about limitations -- if you can't see something clearly in drawings, say so
 
 IMPORTANT: Always clarify that estimates are approximate and subject to detailed measurement and site conditions. Recommend a full BOQ for accurate pricing.`;
 
@@ -202,6 +202,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     }
 
+    // Call Claude API with extended thinking enabled
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -211,7 +212,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 16000,
+        thinking: {
+          type: 'enabled',
+          budget_tokens: 8000
+        },
         system: QS_SYSTEM_PROMPT,
         messages: messages
       })
@@ -220,20 +225,31 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
       console.error('Claude API error:', JSON.stringify(err, null, 2));
-      return res.status(500).json({ error: 'AI service error — please try again' });
+      return res.status(500).json({ error: 'AI service error -- please try again' });
     }
 
     const data = await response.json();
-    const reply = data.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('\n');
 
-    res.json({ reply });
+    // Extract thinking blocks and text blocks separately
+    let thinking = '';
+    let reply = '';
+
+    for (const block of data.content) {
+      if (block.type === 'thinking') {
+        thinking += (thinking ? '\n' : '') + block.thinking;
+      } else if (block.type === 'text') {
+        reply += (reply ? '\n' : '') + block.text;
+      }
+    }
+
+    res.json({
+      reply,
+      thinking: thinking || null
+    });
 
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: 'Something went wrong — please try again' });
+    res.status(500).json({ error: 'Something went wrong -- please try again' });
   }
 });
 
