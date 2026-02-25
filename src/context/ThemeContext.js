@@ -5,6 +5,26 @@ const ThemeContext = createContext();
 const themes = {
   dark: {
     name: 'dark',
+    // CSS variable overrides
+    '--bg-primary': '#0A0F1C',
+    '--bg-secondary': '#111827',
+    '--bg-card': '#161E2E',
+    '--bg-card-hover': '#1C2640',
+    '--bg-input': '#0D1323',
+    '--accent': '#F59E0B',
+    '--accent-bright': '#FBBF24',
+    '--accent-dim': '#D97706',
+    '--text-primary': '#F8FAFC',
+    '--text-secondary': '#94A3B8',
+    '--text-muted': '#64748B',
+    '--border': 'rgba(248,250,252,0.08)',
+    '--border-accent': 'rgba(245,158,11,0.3)',
+    '--border-input': 'rgba(248,250,252,0.12)',
+    '--danger': '#EF4444',
+    '--success': '#10B981',
+    '--gradient-amber': 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    '--shadow-glow': '0 0 60px rgba(245,158,11,0.06)',
+    // Sidebar theme tokens (used by Layout.js inline styles)
     bg: '#06080F',
     bgAlt: '#0C1019',
     surface: '#111827',
@@ -37,6 +57,26 @@ const themes = {
   },
   light: {
     name: 'light',
+    // CSS variable overrides
+    '--bg-primary': '#F4F6FA',
+    '--bg-secondary': '#FFFFFF',
+    '--bg-card': '#FFFFFF',
+    '--bg-card-hover': '#F8FAFD',
+    '--bg-input': '#F1F5F9',
+    '--accent': '#D97706',
+    '--accent-bright': '#F59E0B',
+    '--accent-dim': '#B45309',
+    '--text-primary': '#0F172A',
+    '--text-secondary': '#475569',
+    '--text-muted': '#94A3B8',
+    '--border': 'rgba(15,23,42,0.08)',
+    '--border-accent': 'rgba(217,119,6,0.3)',
+    '--border-input': 'rgba(15,23,42,0.12)',
+    '--danger': '#DC2626',
+    '--success': '#059669',
+    '--gradient-amber': 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+    '--shadow-glow': '0 0 60px rgba(245,158,11,0.04)',
+    // Sidebar theme tokens
     bg: '#F4F6FA',
     bgAlt: '#EDF0F7',
     surface: '#FFFFFF',
@@ -76,8 +116,21 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     try { localStorage.setItem('aiqs-theme', mode); } catch {}
-    document.body.style.background = themes[mode].bg;
-    document.body.style.color = themes[mode].text;
+
+    const theme = themes[mode];
+    const root = document.documentElement;
+
+    // Inject all CSS variables onto :root so styles.css picks them up
+    Object.keys(theme).forEach(key => {
+      if (key.startsWith('--')) {
+        root.style.setProperty(key, theme[key]);
+      }
+    });
+
+    // Also set body background/color directly for immediate feedback
+    document.body.style.background = theme['--bg-primary'];
+    document.body.style.color = theme['--text-primary'];
+    document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
   }, [mode]);
 
   const toggle = () => setMode(m => m === 'dark' ? 'light' : 'dark');
