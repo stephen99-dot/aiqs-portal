@@ -81,7 +81,6 @@ COMMUNICATION STYLE:
 
 IMPORTANT: Always clarify that estimates are approximate and subject to detailed measurement and site conditions. Recommend a full BOQ for accurate pricing.`;
 
-// Extract PDFs and images from a ZIP file using adm-zip
 function extractFromZip(zipPath) {
   try {
     const AdmZip = require('adm-zip');
@@ -93,7 +92,6 @@ function extractFromZip(zipPath) {
     for (const entry of entries) {
       if (entry.isDirectory) continue;
       const name = path.basename(entry.entryName);
-      // Skip Mac OS hidden files
       if (name.startsWith('._') || entry.entryName.includes('__MACOSX')) continue;
       
       const ext = path.extname(name).toLowerCase();
@@ -111,7 +109,6 @@ function extractFromZip(zipPath) {
   }
 }
 
-// Convert a file to Claude API content block
 function fileToContentBlock(filePath, ext) {
   const fileBuffer = fs.readFileSync(filePath);
   const base64 = fileBuffer.toString('base64');
@@ -140,7 +137,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       return res.status(500).json({ error: 'Anthropic API key not configured' });
     }
 
-    // Build messages array from history
     let messages = [];
 
     if (history) {
@@ -150,22 +146,17 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           role: msg.role,
           content: msg.content
         }));
-      } catch (e) {
-        // ignore parse errors
-      }
+      } catch (e) {}
     }
 
-    // Build current message content
     const currentContent = [];
     let fileNames = [];
 
-    // Process uploaded files
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
 
         if (ext === '.zip') {
-          // Extract ZIP and process contents
           const extracted = extractFromZip(file.path);
           for (const ef of extracted) {
             const block = fileToContentBlock(ef.path, ef.ext);
@@ -178,7 +169,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             currentContent.push({ type: 'text', text: '[ZIP file uploaded but no supported drawings found inside. Please upload PDF or image files directly.]' });
           }
         } else {
-          // Direct file
           const block = fileToContentBlock(file.path, ext);
           if (block) {
             currentContent.push(block);
@@ -188,7 +178,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     }
 
-    // Add text message (include file names for context)
     let textMessage = message || '';
     if (fileNames.length > 0 && !textMessage) {
       textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
@@ -206,13 +195,13 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // Call Claude API
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'pdfs-2024-09-25'
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
