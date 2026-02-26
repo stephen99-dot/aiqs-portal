@@ -12,6 +12,14 @@ const router = express.Router();
 // Admin email -- ONLY this email gets admin role on registration
 const ADMIN_EMAIL = 'hello@crmwizardai.com';
 
+// Plan definitions
+const PLANS = {
+  starter:      { label: 'Starter (PAYG)', quota: 0, price: 99 },
+  professional: { label: 'Professional',   quota: 10, price: 347 },
+  premium:      { label: 'Premium',        quota: 20, price: 447 },
+  custom:       { label: 'Custom',         quota: 999, price: 0 },
+};
+
 // File upload config -- use persistent disk if available
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -39,6 +47,38 @@ const upload = multer({
   }
 });
 
+// --- HELPER: Get user's monthly usage ---
+function getMonthlyUsage(userId) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+
+  const result = db.prepare(`
+    SELECT COUNT(*) as count FROM projects
+    WHERE user_id = ? AND created_at >= ? AND created_at < ?
+  `).get(userId, monthStart, monthEnd);
+
+  return result.count;
+}
+
+// --- HELPER: Get user's plan info with usage ---
+function getUserPlanInfo(user) {
+  const plan = user.plan || 'starter';
+  const planDef = PLANS[plan] || PLANS.starter;
+  const quota = user.monthly_quota > 0 ? user.monthly_quota : planDef.quota;
+  const used = getMonthlyUsage(user.id);
+
+  return {
+    plan,
+    planLabel: planDef.label,
+    quota,
+    used,
+    remaining: quota > 0 ? Math.max(0, quota - used) : (plan === 'starter' ? null : 0),
+    isPayg: plan === 'starter',
+    atLimit: quota > 0 && used >= quota,
+  };
+}
+
 // --- AUTH ROUTES ---
 
 router.post('/auth/register', async (req, res) => {
@@ -63,12 +103,13 @@ router.post('/auth/register', async (req, res) => {
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
 
     db.prepare(`
-      INSERT INTO users (id, email, password_hash, full_name, company, phone, role)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0)
     `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
+    const planInfo = getUserPlanInfo(newUser);
 
     res.status(201).json({
       token,
@@ -78,7 +119,14 @@ router.post('/auth/register', async (req, res) => {
         fullName: newUser.full_name,
         company: newUser.company,
         phone: newUser.phone,
-        role: newUser.role
+        role: newUser.role,
+        plan: planInfo.plan,
+        planLabel: planInfo.planLabel,
+        quota: planInfo.quota,
+        used: planInfo.used,
+        remaining: planInfo.remaining,
+        isPayg: planInfo.isPayg,
+        atLimit: planInfo.atLimit,
       }
     });
   } catch (err) {
@@ -106,6 +154,7 @@ router.post('/auth/login', async (req, res) => {
     }
 
     const token = generateToken(user);
+    const planInfo = getUserPlanInfo(user);
 
     res.json({
       token,
@@ -115,7 +164,14 @@ router.post('/auth/login', async (req, res) => {
         fullName: user.full_name,
         company: user.company,
         phone: user.phone,
-        role: user.role
+        role: user.role,
+        plan: planInfo.plan,
+        planLabel: planInfo.planLabel,
+        quota: planInfo.quota,
+        used: planInfo.used,
+        remaining: planInfo.remaining,
+        isPayg: planInfo.isPayg,
+        atLimit: planInfo.atLimit,
       }
     });
   } catch (err) {
@@ -125,31 +181,113 @@ router.post('/auth/login', async (req, res) => {
 });
 
 router.get('/auth/me', authMiddleware, (req, res) => {
-  const user = db.prepare('SELECT id, email, full_name, company, phone, role FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const planInfo = getUserPlanInfo(user);
+
   res.json({
     id: user.id,
     email: user.email,
     fullName: user.full_name,
     company: user.company,
     phone: user.phone,
-    role: user.role
+    role: user.role,
+    plan: planInfo.plan,
+    planLabel: planInfo.planLabel,
+    quota: planInfo.quota,
+    used: planInfo.used,
+    remaining: planInfo.remaining,
+    isPayg: planInfo.isPayg,
+    atLimit: planInfo.atLimit,
+  });
+});
+
+// --- USAGE ENDPOINT ---
+
+router.get('/usage', authMiddleware, (req, res) => {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const planInfo = getUserPlanInfo(user);
+
+  // Get this month's projects for the usage list
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+
+  const monthProjects = db.prepare(`
+    SELECT id, title, project_type, status, created_at FROM projects
+    WHERE user_id = ? AND created_at >= ? AND created_at < ?
+    ORDER BY created_at DESC
+  `).all(req.user.id, monthStart, monthEnd);
+
+  res.json({
+    ...planInfo,
+    monthProjects,
+    monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
   });
 });
 
 // --- ADMIN ROUTES ---
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
-  const users = db.prepare('SELECT id, email, full_name, company, phone, role, created_at FROM users ORDER BY created_at DESC').all();
-  res.json(users.map(u => ({
-    id: u.id,
-    email: u.email,
-    fullName: u.full_name,
-    company: u.company,
-    phone: u.phone,
-    role: u.role,
-    createdAt: u.created_at
-  })));
+  const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
+  res.json(users.map(u => {
+    const planInfo = getUserPlanInfo(u);
+    return {
+      id: u.id,
+      email: u.email,
+      fullName: u.full_name,
+      company: u.company,
+      phone: u.phone,
+      role: u.role,
+      plan: planInfo.plan,
+      planLabel: planInfo.planLabel,
+      quota: planInfo.quota,
+      used: planInfo.used,
+      remaining: planInfo.remaining,
+      atLimit: planInfo.atLimit,
+      createdAt: u.created_at,
+    };
+  }));
+});
+
+// Admin: Update a user's plan
+router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { plan, monthlyQuota } = req.body;
+
+    if (!plan || !PLANS[plan]) {
+      return res.status(400).json({ error: 'Invalid plan. Must be: starter, professional, premium, or custom' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Use provided quota or default from plan
+    const quota = monthlyQuota !== undefined ? monthlyQuota : PLANS[plan].quota;
+
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(plan, quota, req.params.id);
+
+    const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    const planInfo = getUserPlanInfo(updated);
+
+    res.json({
+      id: updated.id,
+      email: updated.email,
+      fullName: updated.full_name,
+      plan: planInfo.plan,
+      planLabel: planInfo.planLabel,
+      quota: planInfo.quota,
+      used: planInfo.used,
+      remaining: planInfo.remaining,
+    });
+  } catch (err) {
+    console.error('Update plan error:', err);
+    res.status(500).json({ error: 'Failed to update plan' });
+  }
 });
 
 router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
@@ -214,6 +352,43 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       return res.status(400).json({ error: 'Project title and type are required' });
     }
 
+    // --- USAGE LIMIT CHECK ---
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const planInfo = getUserPlanInfo(user);
+
+    if (planInfo.atLimit) {
+      return res.status(403).json({
+        error: 'Monthly project limit reached',
+        code: 'LIMIT_REACHED',
+        usage: planInfo,
+        upsell: {
+          message: `You've used all ${planInfo.quota} projects included in your ${planInfo.planLabel} plan this month.`,
+          options: [
+            planInfo.plan === 'professional' ? {
+              type: 'upgrade',
+              label: 'Upgrade to Premium',
+              description: '20 projects/month + dedicated support',
+              price: '£447/month',
+              link: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',
+            } : null,
+            planInfo.plan !== 'custom' ? {
+              type: 'payg',
+              label: 'Buy Extra Project',
+              description: 'One-off PAYG project at discounted rate',
+              price: '£79',
+              link: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
+            } : null,
+            {
+              type: 'contact',
+              label: 'Contact Us',
+              description: 'Need a custom arrangement? Let\'s talk.',
+              link: 'mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects',
+            },
+          ].filter(Boolean),
+        },
+      });
+    }
+
     const projectId = uuidv4();
 
     db.prepare(`
@@ -242,7 +417,10 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
 
-    res.status(201).json({ ...project, files });
+    // Return updated usage info with the project
+    const updatedPlanInfo = getUserPlanInfo(user);
+
+    res.status(201).json({ ...project, files, usage: updatedPlanInfo });
   } catch (err) {
     console.error('Create project error:', err);
     res.status(500).json({ error: 'Failed to create project' });
