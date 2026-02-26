@@ -15,7 +15,7 @@ const PROJECT_TYPES = [
   'Other',
 ];
 
-const STRIPE_PAYG_LINK = 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01';
+const STRIPE_PAYG_LINK = 'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06';
 
 function LimitReachedModal({ usage, t, onClose }) {
   return (
