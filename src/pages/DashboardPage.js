@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
 const STATUS_MAP = {
@@ -11,14 +12,149 @@ const STATUS_MAP = {
   delivered: { label: 'Delivered', color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
 };
 
+function UsageBar({ usage, t }) {
+  if (!usage) return null;
+
+  const { plan, planLabel, quota, used, remaining, isPayg, atLimit } = usage;
+
+  // PAYG users don't have a bar, just a label
+  if (isPayg) {
+    return (
+      <div style={{
+        background: t.card, border: `1px solid ${t.border}`,
+        borderRadius: 14, padding: '18px 22px',
+        marginBottom: 20, boxShadow: t.shadowSm,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 12px', borderRadius: 8,
+            background: t.warningBg, color: t.warning,
+            fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            ⚡ Pay As You Go
+          </span>
+          <span style={{ fontSize: 13, color: t.textSecondary }}>
+            {used} project{used !== 1 ? 's' : ''} this month
+          </span>
+        </div>
+        <Link to="/pricing" style={{
+          fontSize: 12, fontWeight: 600, color: t.accent,
+          textDecoration: 'none',
+        }}>
+          Upgrade & Save →
+        </Link>
+      </div>
+    );
+  }
+
+  // Subscription users get a progress bar
+  const pct = quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
+  const barColor = atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
+
+  return (
+    <div style={{
+      background: t.card, border: `1px solid ${atLimit ? 'rgba(239,68,68,0.3)' : t.border}`,
+      borderRadius: 14, padding: '18px 22px',
+      marginBottom: 20, boxShadow: t.shadowSm,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 12px', borderRadius: 8,
+            background: plan === 'premium' ? 'rgba(124,58,237,0.1)' : t.accentGlow,
+            color: plan === 'premium' ? '#A78BFA' : t.accentLight,
+            fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            {plan === 'premium' ? '👑' : '⭐'} {planLabel}
+          </span>
+          <span style={{ fontSize: 13, color: t.textSecondary }}>
+            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> projects used this month
+          </span>
+        </div>
+        <span style={{
+          fontSize: 12, fontWeight: 600,
+          color: atLimit ? '#EF4444' : remaining <= 2 ? '#F59E0B' : t.textMuted,
+        }}>
+          {atLimit ? '🚫 Limit reached' : `${remaining} remaining`}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{
+        width: '100%', height: 8, borderRadius: 6,
+        background: t.surfaceHover,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`, height: '100%', borderRadius: 6,
+          background: barColor,
+          transition: 'width 0.5s ease, background 0.3s ease',
+        }} />
+      </div>
+
+      {atLimit && (
+        <div style={{
+          marginTop: 14, padding: '14px 18px',
+          background: 'rgba(239,68,68,0.06)',
+          border: '1px solid rgba(239,68,68,0.15)',
+          borderRadius: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 2 }}>
+              You've used all {quota} projects this month
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>
+              Upgrade your plan or buy extra projects to continue
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {plan === 'professional' && (
+              <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
+                padding: '8px 16px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+                color: '#fff', fontSize: 12, fontWeight: 600,
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}>
+                Upgrade to Premium
+              </a>
+            )}
+            <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{
+              padding: '8px 16px', borderRadius: 8,
+              background: t.surfaceHover, border: `1px solid ${t.border}`,
+              color: t.text, fontSize: 12, fontWeight: 600,
+              textDecoration: 'none', whiteSpace: 'nowrap',
+            }}>
+              Buy Extra Project — £79
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { t } = useTheme();
   const [projects, setProjects] = useState([]);
+  const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch('/projects')
-      .then(setProjects)
+    Promise.all([
+      apiFetch('/projects'),
+      apiFetch('/usage'),
+    ])
+      .then(([proj, usg]) => {
+        setProjects(proj);
+        setUsage(usg);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -37,6 +173,9 @@ export default function DashboardPage() {
           New Project
         </Link>
       </div>
+
+      {/* Usage Bar */}
+      <UsageBar usage={usage} t={t} />
 
       {/* Stats row */}
       <div className="stats-row">
