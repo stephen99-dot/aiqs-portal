@@ -12,6 +12,12 @@ const router = express.Router();
 // Admin email -- ONLY this email gets admin role on registration
 const ADMIN_EMAIL = 'hello@crmwizardai.com';
 
+// Pipedream webhook URL
+const PIPEDREAM_WEBHOOK = process.env.PIPEDREAM_WEBHOOK_URL || 'https://eojsrx5dgazyle8.m.pipedream.net';
+
+// Portal base URL for file serving
+const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://aiqs-portal.onrender.com';
+
 // Plan definitions
 const PLANS = {
   starter:      { label: 'Starter (PAYG)', quota: 0, price: 99 },
@@ -78,6 +84,93 @@ function getUserPlanInfo(user) {
     atLimit: quota > 0 && used >= quota,
   };
 }
+
+// --- HELPER: Trigger Pipedream BOQ pipeline ---
+async function triggerPipedream(project, user, files) {
+  try {
+    // Build file URLs that Pipedream can download from
+    const fileUrls = files.map(f => ({
+      url: `${PORTAL_BASE_URL}/api/files/download/${f.filename}`,
+      name: f.original_name,
+      fieldName: 'file'
+    }));
+
+    const payload = {
+      // Source identifier
+      source: 'portal',
+      projectId: project.id,
+
+      // Fields the normalize step / Generate_Boq reads
+      fullName: user.full_name,
+      clientEmail: user.email,
+      email: user.email,
+      projectDetails: project.description || project.title,
+      projectType: project.project_type,
+      address: project.location || '',
+      location: project.location || '',
+      company: user.company || '',
+
+      // File data for upload_files_to_drive step
+      drawings_urls: fileUrls.map(f => f.url),
+      file_urls: fileUrls,
+      fileCount: files.length,
+
+      // Metadata
+      plan: user.plan || 'starter',
+      submittedAt: new Date().toISOString(),
+    };
+
+    console.log(`[Pipedream] Triggering pipeline for project: ${project.title} (${files.length} files)`);
+
+    const resp = await fetch(PIPEDREAM_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      console.error(`[Pipedream] Webhook returned ${resp.status}`);
+      return false;
+    }
+
+    console.log(`[Pipedream] Pipeline triggered successfully`);
+
+    // Update project status to in_progress
+    db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run('in_progress', project.id);
+
+    return true;
+  } catch (err) {
+    console.error('[Pipedream] Failed to trigger pipeline:', err.message);
+    return false;
+  }
+}
+
+// --- FILE DOWNLOAD ROUTE (public - used by Pipedream to fetch files) ---
+router.get('/files/download/:filename', (req, res) => {
+  const filePath = path.join(uploadsDir, req.params.filename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  // Determine content type
+  const ext = path.extname(req.params.filename).toLowerCase();
+  const mimeTypes = {
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.dwg': 'application/octet-stream',
+    '.dxf': 'application/octet-stream',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.zip': 'application/zip',
+  };
+
+  res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+  res.sendFile(filePath);
+});
 
 // --- AUTH ROUTES ---
 
@@ -396,6 +489,11 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
 
+    // Trigger Pipedream pipeline for subscription users (not PAYG - they trigger after payment)
+    if (!isPayg && files.length > 0) {
+      triggerPipedream(project, user, files);
+    }
+
     // Return updated usage info with the project
     const updatedPlanInfo = getUserPlanInfo(user);
 
@@ -453,6 +551,12 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
 
     const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(project.id);
+
+    // Trigger Pipedream pipeline now that payment is confirmed
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (files.length > 0) {
+      triggerPipedream(updated, user, files);
+    }
 
     res.json({ ...updated, files });
   } catch (err) {
