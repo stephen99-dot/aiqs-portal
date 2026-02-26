@@ -125,13 +125,13 @@ function UsageBar({ usage, t }) {
                 Upgrade to Premium
               </a>
             )}
-            <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{
+            <a href={plan === 'starter' ? "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" : "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06"} target="_blank" rel="noopener noreferrer"
               padding: '8px 16px', borderRadius: 8,
               background: t.surfaceHover, border: `1px solid ${t.border}`,
               color: t.text, fontSize: 12, fontWeight: 600,
               textDecoration: 'none', whiteSpace: 'nowrap',
             }}>
-              Buy Extra Project — £79
+              Buy Extra Project — {plan === 'starter' ? '£99' : '£79'}
             </a>
           </div>
         </div>
