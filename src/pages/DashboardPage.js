@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
 const STATUS_MAP = {
+  awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
   in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
@@ -232,6 +233,21 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="project-right">
+                    {project.status === 'awaiting_payment' ? (
+                      <span className="status-badge" style={{
+                        color: '#EF4444', background: 'rgba(239,68,68,0.1)',
+                        fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.03em',
+                      }}>
+                        NOT PAID
+                      </span>
+                    ) : (
+                      <span className="status-badge" style={{
+                        color: '#10B981', background: 'rgba(16,185,129,0.1)',
+                        fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.03em',
+                      }}>
+                        PAID
+                      </span>
+                    )}
                     <span className="status-badge" style={{ color: status.color, background: status.bg }}>
                       {status.label}
                     </span>
