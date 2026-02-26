@@ -361,40 +361,19 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
         error: 'Monthly project limit reached',
         code: 'LIMIT_REACHED',
         usage: planInfo,
-        upsell: {
-          message: `You've used all ${planInfo.quota} projects included in your ${planInfo.planLabel} plan this month.`,
-          options: [
-            planInfo.plan === 'professional' ? {
-              type: 'upgrade',
-              label: 'Upgrade to Premium',
-              description: '20 projects/month + dedicated support',
-              price: '£447/month',
-              link: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',
-            } : null,
-            planInfo.plan !== 'custom' ? {
-              type: 'payg',
-              label: 'Buy Extra Project',
-              description: 'One-off PAYG project at discounted rate',
-              price: '£79',
-              link: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
-            } : null,
-            {
-              type: 'contact',
-              label: 'Contact Us',
-              description: 'Need a custom arrangement? Let\'s talk.',
-              link: 'mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects',
-            },
-          ].filter(Boolean),
-        },
       });
     }
+
+    // Determine if this is a PAYG submission
+    const isPayg = req.body.payg === 'true' || planInfo.isPayg;
+    const initialStatus = isPayg ? 'awaiting_payment' : 'submitted';
 
     const projectId = uuidv4();
 
     db.prepare(`
-      INSERT INTO projects (id, user_id, title, project_type, description, location)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(projectId, req.user.id, title, projectType, description || null, location || null);
+      INSERT INTO projects (id, user_id, title, project_type, description, location, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(projectId, req.user.id, title, projectType, description || null, location || null, initialStatus);
 
     if (req.files && req.files.length > 0) {
       const insertFile = db.prepare(`
@@ -451,6 +430,35 @@ router.post('/projects/:id/files', authMiddleware, upload.array('drawings', 10),
   }
 
   res.status(201).json({ files: newFiles });
+});
+
+// --- ACTIVATE PROJECT (after PAYG payment) ---
+router.post('/projects/:id/activate', authMiddleware, (req, res) => {
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?')
+      .get(req.params.id, req.user.id);
+
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    if (project.status !== 'awaiting_payment') {
+      // Already activated or in another state — just return it
+      return res.json(project);
+    }
+
+    // Mark as submitted (paid)
+    db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run('submitted', project.id);
+
+    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id);
+    const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(project.id);
+
+    res.json({ ...updated, files });
+  } catch (err) {
+    console.error('Activate project error:', err);
+    res.status(500).json({ error: 'Failed to activate project' });
+  }
 });
 
 module.exports = router;
