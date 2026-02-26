@@ -41,12 +41,12 @@ function UsageBar({ usage, t }) {
             {used} project{used !== 1 ? 's' : ''} this month
           </span>
         </div>
-        <Link to="/pricing" style={{
-          fontSize: 12, fontWeight: 600, color: t.accent,
-          textDecoration: 'none',
-        }}>
-          Upgrade & Save →
-        </Link>
+        <a href="https://theaiqs.co.uk/#pricing" target="_blank" rel="noopener noreferrer" style={{
+  fontSize: 12, fontWeight: 600, color: t.accent,
+  textDecoration: 'none',
+}}>
+  Upgrade & Save →
+</a>
       </div>
     );
   }
