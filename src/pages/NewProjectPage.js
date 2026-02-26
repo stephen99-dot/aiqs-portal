@@ -15,9 +15,13 @@ const PROJECT_TYPES = [
   'Other',
 ];
 
-const STRIPE_PAYG_LINK = 'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06';
+const STRIPE_PAYG_LINK = 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01';
 
 function LimitReachedModal({ usage, t, onClose }) {
+  const isStarter = usage.plan === 'starter';
+  const isProfessional = usage.plan === 'professional';
+  const isPremiumOrCustom = usage.plan === 'premium' || usage.plan === 'custom';
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
@@ -39,6 +43,7 @@ function LimitReachedModal({ usage, t, onClose }) {
             included in your <strong style={{ color: t.text }}>{usage.planLabel}</strong> plan this month.
           </p>
         </div>
+
         <div style={{ background: t.surfaceHover, borderRadius: 10, padding: '14px 18px', marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: t.textMuted }}>Usage this month</span>
@@ -48,37 +53,89 @@ function LimitReachedModal({ usage, t, onClose }) {
             <div style={{ width: '100%', height: '100%', borderRadius: 6, background: '#EF4444' }} />
           </div>
         </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-          {usage.plan === 'professional' && (
-            <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(124,58,237,0.05))',
-              border: '1px solid rgba(124,58,237,0.25)', textDecoration: 'none',
+
+          {/* Buy Extra Project — always shown */}
+          <a
+            href={isStarter ? "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" : "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06"}
+            target="_blank" rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', borderRadius: 12,
+              background: 'rgba(16,185,129,0.06)',
+              border: '1px solid rgba(16,185,129,0.25)',
+              textDecoration: 'none',
+            }}
+          >
+            <span style={{ fontSize: 28 }}>⚡</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Buy Extra Project</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>One-off project — processed within 2 hours</div>
+            </div>
+            <span style={{
+              padding: '6px 14px', borderRadius: 8,
+              background: 'linear-gradient(135deg, #10B981, #059669)',
+              color: '#fff', fontSize: 13, fontWeight: 700,
+              whiteSpace: 'nowrap',
             }}>
-              <span style={{ fontSize: 28 }}>👑</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Upgrade to Premium</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>20 projects/month + dedicated support</div>
-              </div>
-              <span style={{ padding: '6px 14px', borderRadius: 8, background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', color: '#fff', fontSize: 13, fontWeight: 700 }}>£447/mo</span>
-            </a>
-          )}
-          {usage.plan === 'starter' && (
+              {isStarter ? '£99' : '£79'}
+            </span>
+          </a>
+
+          {/* Go Professional — show for starter users */}
+          {(isStarter || isPremiumOrCustom) && (
             <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', borderRadius: 12,
-              background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', borderRadius: 12,
+              background: 'rgba(245,158,11,0.06)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              textDecoration: 'none',
             }}>
               <span style={{ fontSize: 28 }}>⭐</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Go Professional</div>
                 <div style={{ fontSize: 12, color: t.textMuted }}>10 projects/month — save up to 65%</div>
               </div>
-              <span style={{ padding: '6px 14px', borderRadius: 8, background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#0A0F1C', fontSize: 13, fontWeight: 700 }}>£347/mo</span>
+              <span style={{
+                padding: '6px 14px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C', fontSize: 13, fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}>£347/mo</span>
             </a>
           )}
+
+          {/* Upgrade to Premium — show for professional users */}
+          {isProfessional && (
+            <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(124,58,237,0.05))',
+              border: '1px solid rgba(124,58,237,0.25)',
+              textDecoration: 'none',
+            }}>
+              <span style={{ fontSize: 28 }}>👑</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Upgrade to Premium</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>20 projects/month + dedicated support</div>
+              </div>
+              <span style={{
+                padding: '6px 14px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+                color: '#fff', fontSize: 13, fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}>£447/mo</span>
+            </a>
+          )}
+
+          {/* Contact */}
           <a href="mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects" style={{
-            display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderRadius: 12,
-            background: 'transparent', border: `1px solid ${t.border}`, textDecoration: 'none',
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 18px', borderRadius: 12,
+            background: 'transparent',
+            border: `1px solid ${t.border}`,
+            textDecoration: 'none',
           }}>
             <span style={{ fontSize: 28 }}>💬</span>
             <div style={{ flex: 1 }}>
@@ -87,6 +144,7 @@ function LimitReachedModal({ usage, t, onClose }) {
             </div>
           </a>
         </div>
+
         <button onClick={onClose} style={{
           width: '100%', padding: '12px 20px', borderRadius: 10,
           background: 'transparent', border: `1px solid ${t.border}`,
