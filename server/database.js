@@ -85,6 +85,14 @@ try {
   console.log('Migration: added monthly_quota column to users table');
 }
 
+// Migration: add stripe_subscription_id column if it doesn't exist
+try {
+  db.prepare("SELECT stripe_subscription_id FROM users LIMIT 1").get();
+} catch (e) {
+  db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT");
+  console.log('Migration: added stripe_subscription_id column to users table');
+}
+
 // Migration: ensure admin email has admin role
 db.prepare("UPDATE users SET role = 'admin' WHERE email = 'hello@crmwizardai.com' AND (role IS NULL OR role != 'admin')").run();
 
