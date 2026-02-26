@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { apiFetch } from '../utils/api';
 
 const RATE_LIBRARIES = [
   { name: 'UK Residential', version: 'v3.2', items: 847, lastUpdated: '2026-02-15', regions: 'England, Wales, Scotland', custom: false },
@@ -25,6 +26,13 @@ const SYSTEM_SERVICES = [
   { label: 'Claude API (Anthropic)', status: 'operational', uptime: '99.5%' },
   { label: 'Google Drive Sync', status: 'operational', uptime: '100%' },
   { label: 'Rate Library', status: 'warning', uptime: '97.2%', note: '3 unmapped rate codes' },
+];
+
+const PLAN_OPTIONS = [
+  { value: 'starter', label: 'Starter (PAYG)', quota: 0 },
+  { value: 'professional', label: 'Professional', quota: 10 },
+  { value: 'premium', label: 'Premium', quota: 20 },
+  { value: 'custom', label: 'Custom', quota: 999 },
 ];
 
 function StatCard({ label, value, sub, emoji, t }) {
@@ -71,6 +79,187 @@ function OverviewTab({ t }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ClientsTab({ t }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
+  const [editPlan, setEditPlan] = useState('');
+  const [editQuota, setEditQuota] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiFetch('/admin/users')
+      .then(setUsers)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  function startEdit(user) {
+    setEditingId(user.id);
+    setEditPlan(user.plan || 'starter');
+    setEditQuota(user.quota || 0);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditPlan('');
+    setEditQuota('');
+  }
+
+  async function savePlan(userId) {
+    setSaving(true);
+    try {
+      const result = await apiFetch(`/admin/users/${userId}/plan`, {
+        method: 'PUT',
+        body: JSON.stringify({ plan: editPlan, monthlyQuota: parseInt(editQuota) || 0 }),
+      });
+      // Update the user in the local list
+      setUsers(prev => prev.map(u => u.id === userId ? {
+        ...u,
+        plan: result.plan,
+        planLabel: result.planLabel,
+        quota: result.quota,
+        used: result.used,
+        remaining: result.remaining,
+      } : u));
+      setEditingId(null);
+    } catch (err) {
+      alert('Failed to update plan: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handlePlanChange(value) {
+    setEditPlan(value);
+    const planDef = PLAN_OPTIONS.find(p => p.value === value);
+    if (planDef) setEditQuota(planDef.quota);
+  }
+
+  const planBadge = (plan) => {
+    const styles = {
+      starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' },
+      professional: { bg: t.warningBg, color: t.warning, label: 'Pro' },
+      premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' },
+      custom: { bg: t.goldBg, color: t.gold, label: 'Custom' },
+    };
+    const s = styles[plan] || styles.starter;
+    return (
+      <span style={{
+        padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+        background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em',
+      }}>{s.label}</span>
+    );
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
+  }
+
+  return (
+    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+      <div style={{ padding: '18px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
+        <span style={{ fontSize: 12, color: t.textMuted }}>{users.length} clients</span>
+      </div>
+
+      {users.map((user, i) => {
+        const isEditing = editingId === user.id;
+        const pct = user.quota > 0 ? Math.min(100, (user.used / user.quota) * 100) : 0;
+        const barColor = user.atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
+
+        return (
+          <div key={user.id} style={{
+            padding: '16px 20px',
+            borderBottom: i < users.length - 1 ? `1px solid ${t.border}` : 'none',
+            background: isEditing ? t.surfaceHover : 'transparent',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              {/* Left: user info */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: t.accentGlow, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 14, fontWeight: 700, color: t.accentLight, flexShrink: 0,
+                }}>
+                  {(user.fullName || '?')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{user.fullName}</div>
+                  <div style={{ fontSize: 12, color: t.textMuted }}>{user.email}</div>
+                </div>
+              </div>
+
+              {/* Middle: plan + usage */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 260 }}>
+                {isEditing ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <select value={editPlan} onChange={e => handlePlanChange(e.target.value)} style={{
+                      padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                      background: t.inputBg, border: `1px solid ${t.border}`, color: t.text,
+                    }}>
+                      {PLAN_OPTIONS.map(p => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number" value={editQuota}
+                      onChange={e => setEditQuota(e.target.value)}
+                      style={{
+                        width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12,
+                        background: t.inputBg, border: `1px solid ${t.border}`, color: t.text, textAlign: 'center',
+                      }}
+                      placeholder="Quota"
+                    />
+                    <span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
+                  </div>
+                ) : (
+                  <>
+                    {planBadge(user.plan)}
+                    {user.quota > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
+                        <div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: barColor }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>
+                          {user.used}/{user.quota}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: 11, color: t.textMuted }}>{user.used} projects this month</span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right: actions */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {isEditing ? (
+                  <>
+                    <button onClick={() => savePlan(user.id)} disabled={saving} style={{
+                      padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      background: t.success, color: '#fff', border: 'none', cursor: 'pointer',
+                    }}>{saving ? '...' : 'Save'}</button>
+                    <button onClick={cancelEdit} style={{
+                      padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                      background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                    }}>Cancel</button>
+                  </>
+                ) : (
+                  <button onClick={() => startEdit(user)} style={{
+                    padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                    background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                  }}>Edit Plan</button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -202,6 +391,7 @@ export default function AdminPage() {
 
   const tabs = [
     { key: 'overview', label: '📊 Overview' },
+    { key: 'clients', label: '👥 Clients' },
     { key: 'rates', label: '📚 Rate Libraries' },
     { key: 'logs', label: '📋 Activity Log' },
     { key: 'settings', label: '⚙️ Settings' },
@@ -216,7 +406,8 @@ export default function AdminPage() {
 
       <div style={{
         display: 'flex', gap: 4, padding: 4, marginBottom: 24,
-        background: t.surface, borderRadius: 12, border: `1px solid ${t.border}`
+        background: t.surface, borderRadius: 12, border: `1px solid ${t.border}`,
+        overflowX: 'auto',
       }}>
         {tabs.map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)} style={{
@@ -226,7 +417,8 @@ export default function AdminPage() {
             border: tab === tb.key ? `1px solid ${t.border}` : '1px solid transparent',
             cursor: 'pointer', fontSize: 13,
             fontWeight: tab === tb.key ? 600 : 400,
-            boxShadow: tab === tb.key ? t.shadowSm : 'none'
+            boxShadow: tab === tb.key ? t.shadowSm : 'none',
+            whiteSpace: 'nowrap',
           }}>
             {tb.label}
           </button>
@@ -234,6 +426,7 @@ export default function AdminPage() {
       </div>
 
       {tab === 'overview' && <OverviewTab t={t} />}
+      {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'settings' && <SettingsTab t={t} />}
