@@ -5,11 +5,16 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const routes = require('./routes');
 const chatRoutes = require('./chat');
+const stripeWebhook = require('./stripe-webhook');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: true, credentials: true }));
+
+// Stripe webhook needs raw body — must come BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
+
 app.use(express.json());
 app.use(cookieParser());
 app.use('/api', routes);
