@@ -30,7 +30,7 @@ db.exec(`
     phone TEXT,
     role TEXT DEFAULT 'client',
     plan TEXT DEFAULT 'starter',
-    monthly_quota INTEGER DEFAULT 0,
+    monthly_quota INTEGER DEFAULT 2,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
