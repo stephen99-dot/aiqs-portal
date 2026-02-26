@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
 const STATUS_MAP = {
-  awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+  awaiting_payment: { label: 'Awaiting Payment', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
   submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
   in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
   in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
@@ -42,16 +42,16 @@ function UsageBar({ usage, t }) {
           </span>
         </div>
         <a href="https://theaiqs.co.uk/#pricing" target="_blank" rel="noopener noreferrer" style={{
-  fontSize: 12, fontWeight: 600, color: t.accent,
-  textDecoration: 'none',
-}}>
-  Upgrade & Save →
-</a>
+          fontSize: 12, fontWeight: 600, color: t.accent,
+          textDecoration: 'none',
+        }}>
+          Upgrade & Save →
+        </a>
       </div>
     );
   }
 
-  // Subscription users get a progress bar
+  // Subscription / free trial users get a progress bar
   const pct = quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
   const barColor = atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
 
@@ -125,13 +125,17 @@ function UsageBar({ usage, t }) {
                 Upgrade to Premium
               </a>
             )}
-            <a href={plan === 'starter' ? "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" : "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06"} target="_blank" rel="noopener noreferrer"
-              padding: '8px 16px', borderRadius: 8,
-              background: t.surfaceHover, border: `1px solid ${t.border}`,
-              color: t.text, fontSize: 12, fontWeight: 600,
-              textDecoration: 'none', whiteSpace: 'nowrap',
-            }}>
-              Buy Extra Project — {plan === 'starter' ? '£99' : '£79'}
+            <a
+              href={plan === 'starter' ? "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" : "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06"}
+              target="_blank" rel="noopener noreferrer"
+              style={{
+                padding: '8px 16px', borderRadius: 8,
+                background: t.surfaceHover, border: `1px solid ${t.border}`,
+                color: t.text, fontSize: 12, fontWeight: 600,
+                textDecoration: 'none', whiteSpace: 'nowrap',
+              }}
+            >
+              {'Buy Extra Project — ' + (plan === 'starter' ? '£99' : '£79')}
             </a>
           </div>
         </div>
@@ -222,6 +226,7 @@ export default function DashboardPage() {
           <div className="projects-list">
             {projects.map(project => {
               const status = STATUS_MAP[project.status] || STATUS_MAP.submitted;
+              const isPaid = project.status !== 'awaiting_payment';
               return (
                 <Link to={`/project/${project.id}`} key={project.id} className="project-row">
                   <div className="project-info">
@@ -233,21 +238,13 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="project-right">
-                    {project.status === 'awaiting_payment' ? (
-                      <span className="status-badge" style={{
-                        color: '#EF4444', background: 'rgba(239,68,68,0.1)',
-                        fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.03em',
-                      }}>
-                        NOT PAID
-                      </span>
-                    ) : (
-                      <span className="status-badge" style={{
-                        color: '#10B981', background: 'rgba(16,185,129,0.1)',
-                        fontWeight: 700, fontSize: '0.7rem', letterSpacing: '0.03em',
-                      }}>
-                        PAID
-                      </span>
-                    )}
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                      background: isPaid ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: isPaid ? '#10B981' : '#EF4444',
+                    }}>
+                      {isPaid ? '🟢 PAID' : '🔴 NOT PAID'}
+                    </span>
                     <span className="status-badge" style={{ color: status.color, background: status.bg }}>
                       {status.label}
                     </span>
