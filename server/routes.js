@@ -80,7 +80,7 @@ function getUserPlanInfo(user) {
     quota,
     used,
     remaining: quota > 0 ? Math.max(0, quota - used) : (plan === 'starter' ? null : 0),
-    isPayg: plan === 'starter',
+    isPayg: plan === 'starter' && quota === 0,
     atLimit: quota > 0 && used >= quota,
   };
 }
@@ -197,7 +197,7 @@ router.post('/auth/register', async (req, res) => {
 
     db.prepare(`
       INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)
     `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -489,7 +489,7 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
 
-    // Trigger Pipedream pipeline for subscription users (not PAYG - they trigger after payment)
+    // Trigger Pipedream pipeline for subscription/free-trial users (not PAYG - they trigger after payment)
     if (!isPayg && files.length > 0) {
       triggerPipedream(project, user, files);
     }
