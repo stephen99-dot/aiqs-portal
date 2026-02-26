@@ -12,6 +12,7 @@ import ChatPage from './pages/ChatPage';
 import PipelinePage from './pages/PipelinePage';
 import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/pipeline" element={<PipelinePage />} />
               <Route path="/clients" element={<ClientsPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/payment-success" element={<PaymentSuccessPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
