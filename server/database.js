@@ -29,6 +29,8 @@ db.exec(`
     company TEXT,
     phone TEXT,
     role TEXT DEFAULT 'client',
+    plan TEXT DEFAULT 'starter',
+    monthly_quota INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -65,6 +67,22 @@ try {
 } catch (e) {
   db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client'");
   console.log('Migration: added role column to users table');
+}
+
+// Migration: add plan column if it doesn't exist
+try {
+  db.prepare("SELECT plan FROM users LIMIT 1").get();
+} catch (e) {
+  db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'starter'");
+  console.log('Migration: added plan column to users table');
+}
+
+// Migration: add monthly_quota column if it doesn't exist
+try {
+  db.prepare("SELECT monthly_quota FROM users LIMIT 1").get();
+} catch (e) {
+  db.exec("ALTER TABLE users ADD COLUMN monthly_quota INTEGER DEFAULT 0");
+  console.log('Migration: added monthly_quota column to users table');
 }
 
 // Migration: ensure admin email has admin role
