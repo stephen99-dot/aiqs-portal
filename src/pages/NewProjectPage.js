@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
 const PROJECT_TYPES = [
@@ -14,8 +15,153 @@ const PROJECT_TYPES = [
   'Other',
 ];
 
+function LimitReachedModal({ usage, t, onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24,
+    }} onClick={onClose}>
+      <div style={{
+        background: t.card, border: `1px solid ${t.border}`,
+        borderRadius: 20, padding: '36px 32px',
+        maxWidth: 520, width: '100%',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🚫</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
+            Monthly Limit Reached
+          </h2>
+          <p style={{ fontSize: 14, color: t.textMuted, margin: 0, lineHeight: 1.6 }}>
+            You've used all <strong style={{ color: t.text }}>{usage.quota}</strong> projects
+            included in your <strong style={{ color: t.text }}>{usage.planLabel}</strong> plan this month.
+            Upgrade or buy extra projects to continue.
+          </p>
+        </div>
+
+        {/* Usage bar */}
+        <div style={{
+          background: t.surfaceHover, borderRadius: 10,
+          padding: '14px 18px', marginBottom: 24,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: t.textMuted }}>Usage this month</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#EF4444' }}>{usage.used} / {usage.quota}</span>
+          </div>
+          <div style={{
+            width: '100%', height: 8, borderRadius: 6,
+            background: t.border,
+          }}>
+            <div style={{
+              width: '100%', height: '100%', borderRadius: 6,
+              background: '#EF4444',
+            }} />
+          </div>
+        </div>
+
+        {/* Options */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+          {/* Upgrade option (if not already premium/custom) */}
+          {usage.plan === 'professional' && (
+            <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(124,58,237,0.05))',
+              border: '1px solid rgba(124,58,237,0.25)',
+              textDecoration: 'none', transition: 'all 0.2s',
+            }}>
+              <span style={{ fontSize: 28 }}>👑</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Upgrade to Premium</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>20 projects/month + dedicated support</div>
+              </div>
+              <span style={{
+                padding: '6px 14px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+                color: '#fff', fontSize: 13, fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}>£447/mo</span>
+            </a>
+          )}
+
+          {usage.plan === 'starter' && (
+            <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', borderRadius: 12,
+              background: 'rgba(245,158,11,0.06)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              textDecoration: 'none', transition: 'all 0.2s',
+            }}>
+              <span style={{ fontSize: 28 }}>⭐</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Go Professional</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>10 projects/month — save up to 65%</div>
+              </div>
+              <span style={{
+                padding: '6px 14px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C', fontSize: 13, fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}>£347/mo</span>
+            </a>
+          )}
+
+          {/* Buy extra PAYG */}
+          <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '16px 18px', borderRadius: 12,
+            background: t.surfaceHover,
+            border: `1px solid ${t.border}`,
+            textDecoration: 'none', transition: 'all 0.2s',
+          }}>
+            <span style={{ fontSize: 28 }}>⚡</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Buy Extra Project</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>One-off project at discounted PAYG rate</div>
+            </div>
+            <span style={{
+              padding: '6px 14px', borderRadius: 8,
+              background: t.surface, border: `1px solid ${t.border}`,
+              color: t.text, fontSize: 13, fontWeight: 700,
+              whiteSpace: 'nowrap',
+            }}>£79</span>
+          </a>
+
+          {/* Contact */}
+          <a href="mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects" style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '14px 18px', borderRadius: 12,
+            background: 'transparent',
+            border: `1px solid ${t.border}`,
+            textDecoration: 'none',
+          }}>
+            <span style={{ fontSize: 28 }}>💬</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Need a Custom Arrangement?</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>Get in touch — we'll sort something out</div>
+            </div>
+          </a>
+        </div>
+
+        <button onClick={onClose} style={{
+          width: '100%', padding: '12px 20px', borderRadius: 10,
+          background: 'transparent', border: `1px solid ${t.border}`,
+          color: t.textSecondary, fontSize: 13, fontWeight: 500,
+          cursor: 'pointer',
+        }}>
+          Go Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function NewProjectPage() {
   const navigate = useNavigate();
+  const { t } = useTheme();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState({
     title: '',
@@ -27,6 +173,22 @@ export default function NewProjectPage() {
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [usage, setUsage] = useState(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [loadingUsage, setLoadingUsage] = useState(true);
+
+  // Fetch usage on load
+  useEffect(() => {
+    apiFetch('/usage')
+      .then(data => {
+        setUsage(data);
+        if (data.atLimit) {
+          setShowLimitModal(true);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingUsage(false));
+  }, []);
 
   function updateField(field, value) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -75,6 +237,12 @@ export default function NewProjectPage() {
     e.preventDefault();
     setError('');
 
+    // Check limit before submit
+    if (usage && usage.atLimit) {
+      setShowLimitModal(true);
+      return;
+    }
+
     if (!form.title || !form.projectType) {
       setError('Please fill in the project title and type.');
       return;
@@ -102,7 +270,17 @@ export default function NewProjectPage() {
 
       navigate(`/project/${project.id}`);
     } catch (err) {
-      setError(err.message);
+      // Check if this is a limit error from the server
+      if (err.message === 'Monthly project limit reached') {
+        // Re-fetch usage to get upsell data
+        try {
+          const freshUsage = await apiFetch('/usage');
+          setUsage(freshUsage);
+        } catch (_) {}
+        setShowLimitModal(true);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -110,12 +288,42 @@ export default function NewProjectPage() {
 
   return (
     <div className="page">
+      {showLimitModal && usage && (
+        <LimitReachedModal
+          usage={usage}
+          t={t}
+          onClose={() => {
+            setShowLimitModal(false);
+            if (usage.atLimit) navigate('/dashboard');
+          }}
+        />
+      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">New Project</h1>
           <p className="page-subtitle">Upload your drawings and tell us about the job</p>
         </div>
       </div>
+
+      {/* Usage hint */}
+      {usage && !usage.isPayg && !usage.atLimit && (
+        <div style={{
+          background: t.card, border: `1px solid ${t.border}`,
+          borderRadius: 10, padding: '12px 18px',
+          marginBottom: 20, fontSize: 13, color: t.textSecondary,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>📊</span>
+          <span>
+            <strong style={{ color: t.text }}>{usage.used}</strong> of{' '}
+            <strong style={{ color: t.text }}>{usage.quota}</strong> projects used this month
+            — <strong style={{ color: usage.remaining <= 2 ? '#F59E0B' : '#10B981' }}>
+              {usage.remaining} remaining
+            </strong>
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         {error && <div className="form-error">{error}</div>}
@@ -215,11 +423,15 @@ export default function NewProjectPage() {
           <button type="button" className="btn-secondary" onClick={() => navigate('/dashboard')}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={submitting}>
+          <button type="submit" className="btn-primary" disabled={submitting || (usage && usage.atLimit)}>
             {submitting ? (
               <>
                 <span className="loading-spinner small" />
                 Uploading...
+              </>
+            ) : usage && usage.atLimit ? (
+              <>
+                🚫 Limit Reached
               </>
             ) : (
               <>
