@@ -114,7 +114,7 @@ function getTooltipStyle(rect, position, windowSize) {
   const m = 16;
 
   if (position === 'center' || !rect) {
-    return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    return { position: 'fixed', top: '50%', left: '50%', width: w, transform: 'translate(-50%, -50%)' };
   }
 
   let top, left;
@@ -251,7 +251,7 @@ export default function OnboardingTour({ onComplete }) {
       <div style={{
         ...getTooltipStyle(targetRect, currentStep.position, windowSize),
         zIndex: 10003,
-        animation: 'tourSlideIn 0.35s cubic-bezier(0.22,1,0.36,1) forwards',
+        animation: currentStep.position === 'center' ? 'tourFadeInTooltip 0.4s ease forwards' : 'tourSlideIn 0.35s cubic-bezier(0.22,1,0.36,1) forwards',
       }}>
         <div style={{
           background: '#141920', border: '1px solid rgba(255,255,255,0.08)',
@@ -347,6 +347,7 @@ export default function OnboardingTour({ onComplete }) {
 
       <style>{`
         @keyframes tourFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes tourFadeInTooltip { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
         @keyframes tourSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes tourPulseRing {
           0%, 100% { opacity: 1; transform: scale(1); }
