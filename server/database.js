@@ -1,10 +1,12 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const DB_PATH = path.join(__dirname, '..', 'data', 'aiqs.db');
-
 const fs = require('fs');
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+// Use persistent disk if available, otherwise fall back to local
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const DB_PATH = path.join(DATA_DIR, 'aiqs.db');
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
@@ -49,8 +51,29 @@ db.exec(`
     FOREIGN KEY (project_id) REFERENCES projects(id)
   );
 
+  CREATE TABLE IF NOT EXISTS magic_links (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    project_id TEXT,
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
+    used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_data (
+    project_id TEXT NOT NULL,
+    data_type TEXT NOT NULL,
+    data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, data_type),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
   CREATE INDEX IF NOT EXISTS idx_files_project ON files(project_id);
+  CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
 `);
 
 // ─── Migrations for existing databases ──────────────────────────────────────
@@ -58,6 +81,7 @@ const migrations = [
   { column: 'role', table: 'users', sql: "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client'" },
   { column: 'plan', table: 'users', sql: "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'starter'" },
   { column: 'monthly_quota', table: 'users', sql: "ALTER TABLE users ADD COLUMN monthly_quota INTEGER DEFAULT 2" },
+  { column: 'source', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN source TEXT DEFAULT 'portal'" },
 ];
 
 for (const { column, table, sql } of migrations) {
