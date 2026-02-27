@@ -21,7 +21,7 @@ function requireAdmin(req, res, next) {
 }
 
 // ─── GET /api/admin/users — List all users ──────────────────────────────────
-router.get('/admin/users', requireAdmin, (req, res) => {
+router.get('/users', requireAdmin, (req, res) => {
   try {
     const users = db.prepare(`
       SELECT 
@@ -41,7 +41,7 @@ router.get('/admin/users', requireAdmin, (req, res) => {
 });
 
 // ─── POST /api/admin/users — Create a new user ─────────────────────────────
-router.post('/admin/users', requireAdmin, async (req, res) => {
+router.post('/users', requireAdmin, async (req, res) => {
   try {
     const { email, password, fullName, company, phone, role } = req.body;
 
@@ -77,7 +77,7 @@ router.post('/admin/users', requireAdmin, async (req, res) => {
 });
 
 // ─── PUT /api/admin/users/:id — Update a user ──────────────────────────────
-router.put('/admin/users/:id', requireAdmin, async (req, res) => {
+router.put('/users/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { fullName, company, phone, role, password } = req.body;
@@ -124,7 +124,7 @@ router.put('/admin/users/:id', requireAdmin, async (req, res) => {
 });
 
 // ─── DELETE /api/admin/users/:id — Delete a user ────────────────────────────
-router.delete('/admin/users/:id', requireAdmin, (req, res) => {
+router.delete('/users/:id', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
 
@@ -158,7 +158,7 @@ router.delete('/admin/users/:id', requireAdmin, (req, res) => {
 });
 
 // ─── PUT /api/admin/users/:id/role — Quick role change ─────────────────────
-router.put('/admin/users/:id/role', requireAdmin, (req, res) => {
+router.put('/users/:id/role', requireAdmin, (req, res) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
