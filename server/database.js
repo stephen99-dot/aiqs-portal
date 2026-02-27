@@ -1,25 +1,20 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// UPDATED database.js — with magic links, credits, project data tables
+// Replace your existing server/database.js with this
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const Database = require('better-sqlite3');
 const path = require('path');
+const DB_PATH = path.join(__dirname, '..', 'data', 'aiqs.db');
+
 const fs = require('fs');
-
-// Use Render persistent disk if available, otherwise local data folder
-const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
-const DB_PATH = path.join(DATA_DIR, 'aiqs.db');
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-
-// Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-console.log(`[DB] Database path: ${DB_PATH}`);
-console.log(`[DB] Uploads path: ${UPLOADS_DIR}`);
+const dataDir = path.join(__dirname, '..', 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(DB_PATH);
-
-// Enable WAL mode for better performance
 db.pragma('journal_mode = WAL');
 
-// Create tables
+// ─── Core tables ────────────────────────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -29,11 +24,13 @@ db.exec(`
     company TEXT,
     phone TEXT,
     role TEXT DEFAULT 'client',
-    plan TEXT DEFAULT 'starter',
-    monthly_quota INTEGER DEFAULT 2,
+    free_credits INTEGER DEFAULT 0,
+    total_projects INTEGER DEFAULT 0,
+    whatsapp_number TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -42,10 +39,12 @@ db.exec(`
     description TEXT,
     location TEXT,
     status TEXT DEFAULT 'submitted',
+    source TEXT DEFAULT 'portal',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
   CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -57,43 +56,52 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id)
   );
+
+  CREATE TABLE IF NOT EXISTS magic_links (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    project_id TEXT,
+    expires_at DATETIME NOT NULL,
+    used INTEGER DEFAULT 0,
+    used_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS project_data (
+    project_id TEXT NOT NULL,
+    data_type TEXT NOT NULL,
+    data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, data_type),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
   CREATE INDEX IF NOT EXISTS idx_files_project ON files(project_id);
+  CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
+  CREATE INDEX IF NOT EXISTS idx_magic_links_user ON magic_links(user_id);
 `);
 
-// Migration: add role column if it doesn't exist (for existing databases)
-try {
-  db.prepare("SELECT role FROM users LIMIT 1").get();
-} catch (e) {
-  db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client'");
-  console.log('Migration: added role column to users table');
-}
+// ─── Migrations for existing databases ──────────────────────────────────────
+const migrations = [
+  { column: 'role', table: 'users', sql: "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client'" },
+  { column: 'free_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN free_credits INTEGER DEFAULT 0" },
+  { column: 'total_projects', table: 'users', sql: "ALTER TABLE users ADD COLUMN total_projects INTEGER DEFAULT 0" },
+  { column: 'whatsapp_number', table: 'users', sql: "ALTER TABLE users ADD COLUMN whatsapp_number TEXT" },
+  { column: 'source', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN source TEXT DEFAULT 'portal'" },
+];
 
-// Migration: add plan column if it doesn't exist
-try {
-  db.prepare("SELECT plan FROM users LIMIT 1").get();
-} catch (e) {
-  db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'starter'");
-  console.log('Migration: added plan column to users table');
+for (const { column, table, sql } of migrations) {
+  try {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!columns.some(col => col.name === column)) {
+      db.exec(sql);
+      console.log(`✅ Added ${column} column to ${table} table`);
+    }
+  } catch (err) {
+    console.log(`Migration ${column}:`, err.message);
+  }
 }
-
-// Migration: add monthly_quota column if it doesn't exist
-try {
-  db.prepare("SELECT monthly_quota FROM users LIMIT 1").get();
-} catch (e) {
-  db.exec("ALTER TABLE users ADD COLUMN monthly_quota INTEGER DEFAULT 0");
-  console.log('Migration: added monthly_quota column to users table');
-}
-
-// Migration: add stripe_subscription_id column if it doesn't exist
-try {
-  db.prepare("SELECT stripe_subscription_id FROM users LIMIT 1").get();
-} catch (e) {
-  db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT");
-  console.log('Migration: added stripe_subscription_id column to users table');
-}
-
-// Migration: ensure admin email has admin role
-db.prepare("UPDATE users SET role = 'admin' WHERE email = 'hello@crmwizardai.com' AND (role IS NULL OR role != 'admin')").run();
 
 module.exports = db;
