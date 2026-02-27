@@ -31,6 +31,8 @@ export default function Layout() {
     { path: '/clients', label: 'Clients', Icon: ClientsIcon, adminOnly: true },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/admin', label: 'Admin', Icon: AdminIcon, adminOnly: true },
+    { path: '/admin/users', label: 'User Management', Icon: ClientsIcon, adminOnly: true },
+    { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
   ];
 
   const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
@@ -118,7 +120,7 @@ export default function Layout() {
           {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => (
-              <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
+              <NavLink key={item.path} to={item.path} end={item.path === '/admin'} style={{ textDecoration: 'none' }}>
                 {({ isActive }) => (
                   <div className="sidebar-nav-item" style={{
                     display: 'flex', alignItems: 'center', gap: 10,
