@@ -49,6 +49,13 @@ export default function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
+  ```javascript
+import MagicLinkPage from './pages/MagicLinkPage';
+import PricingPage from './pages/PricingPage';
+import UserManagementPage from './pages/UserManagementPage';
+import WhatsAppWidget from './components/WhatsAppWidget';
+import CreditBanner from './components/CreditBanner';
+```
       </ThemeProvider>
     </AuthProvider>
   );
