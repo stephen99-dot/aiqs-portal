@@ -8,7 +8,6 @@ const chatRoutes = require('./chat');
 const stripeWebhook = require('./stripe-webhook');
 const webhookRoutes = require('./webhookRoutes');
 const creditRoutes = require('./creditRoutes');
-const userRoutes = require('./userRoutes');
 const { authMiddleware } = require('./auth');
 
 const app = express();
@@ -21,7 +20,6 @@ app.use('/api', routes);
 app.use('/api', chatRoutes);
 app.use('/api', webhookRoutes);
 app.use('/api/credits', authMiddleware, creditRoutes);
-app.use('/api/admin', authMiddleware, userRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
