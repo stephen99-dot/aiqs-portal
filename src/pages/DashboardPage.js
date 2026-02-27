@@ -236,7 +236,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!loading) {
-      try { if (!localStorage.getItem('aiqs_tour_complete')) setShowTour(true); } catch {}
+      try { if (!localStorage.getItem(`aiqs_tour_complete_${user?.id}`)) setShowTour(true); } catch {}
     }
   }, [loading]);
 
