@@ -236,7 +236,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!loading) {
-      try { if (!localStorage.getItem(`aiqs_tour_complete_${user?.id}`)) setShowTour(true); } catch {}
+      const key = `aiqs_tour_complete_${user?.id || 'default'}`;
+      try { if (!localStorage.getItem(key)) setShowTour(true); } catch {}
     }
   }, [loading]);
 
@@ -244,7 +245,7 @@ export default function DashboardPage() {
 
   return (
     <div className="page" data-tour="welcome">
-      {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
+      {showTour && <OnboardingTour userId={user?.id} onComplete={() => setShowTour(false)} />}
       <div className="page-header">
         <div>
           <h1 className="page-title">Welcome back, {firstName}</h1>
