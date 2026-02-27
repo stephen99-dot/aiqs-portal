@@ -1,3 +1,9 @@
+```javascript
+const webhookRoutes = require('./webhookRoutes');
+const creditRoutes = require('./creditRoutes');
+const userRoutes = require('./userRoutes');
+const { authMiddleware } = require('./auth');
+```
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
