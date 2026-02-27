@@ -17,7 +17,7 @@ export default function CreditBanner({ theme }) {
   const isDark = theme?.bg === '#06080F' || (theme?.bg && theme?.bg.includes('0'));
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('aiqs_token');
     if (!token) return;
 
     fetch(`${API_BASE}/credits`, {
