@@ -27,8 +27,3 @@ function adminMiddleware(req, res, next) {
   next();
 }
 module.exports = { generateToken, authMiddleware, adminMiddleware };
-```
-
-Then I also need to fix the import in `server/index.js`. The line that says:
-```
-const { authMiddleware } = require('./auth');
