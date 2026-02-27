@@ -8,7 +8,7 @@ const router = express.Router();
 const db = require('./database');
 
 // ─── GET /api/credits — Get current user's credit info ──────────────────────
-router.get('/credits', (req, res) => {
+router.get('/', (req, res) => {
   try {
     const user = db.prepare(`
       SELECT free_credits, total_projects, role FROM users WHERE id = ?
@@ -41,7 +41,7 @@ router.get('/credits', (req, res) => {
 });
 
 // ─── POST /api/credits/use — Consume 1 credit (called when submitting a project)
-router.post('/credits/use', (req, res) => {
+router.post('/use', (req, res) => {
   try {
     const user = db.prepare('SELECT free_credits, role FROM users WHERE id = ?').get(req.user.id);
 
@@ -80,7 +80,7 @@ router.post('/credits/use', (req, res) => {
 });
 
 // ─── POST /api/admin/credits/grant — Admin: give credits to a user ──────────
-router.post('/admin/credits/grant', (req, res) => {
+router.post('/grant', (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
