@@ -566,3 +566,73 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
 });
 
 module.exports = router;
+// --- ADMIN: Add new user ---
+router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { email, fullName, company, phone, role, password } = req.body;
+    if (!email || !fullName) {
+      return res.status(400).json({ error: 'Email and full name are required' });
+    }
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+    if (existing) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+    const id = uuidv4();
+    const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
+    db.prepare(`
+      INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)
+    `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
+    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    res.status(201).json({
+      id: newUser.id,
+      email: newUser.email,
+      fullName: newUser.full_name,
+      company: newUser.company,
+      phone: newUser.phone,
+      role: newUser.role,
+      createdAt: newUser.created_at,
+    });
+  } catch (err) {
+    console.error('Add user error:', err);
+    res.status(500).json({ error: 'Failed to add user' });
+  }
+});
+
+// --- ADMIN: Delete user ---
+router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(req.params.id);
+    db.prepare('DELETE FROM projects WHERE user_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// --- ADMIN: Update user role ---
+router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!['admin', 'client'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be admin or client' });
+    }
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot change your own role' });
+    }
+    db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(role, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update role error:', err);
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
