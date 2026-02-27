@@ -37,7 +37,7 @@ function GuestRoute({ children }) {
 // ─── Inner app wrapper so we can access auth + theme context ────────────────
 function AppInner() {
   const { user } = useAuth();
-  const { theme } = useTheme();
+  const { t, mode } = useTheme();
 
   return (
     <BrowserRouter>
@@ -58,8 +58,8 @@ function AppInner() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/users" element={<UserManagementPage theme={theme} />} />
-          <Route path="/pricing" element={<PricingPage theme={theme} />} />
+          <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
 
@@ -67,7 +67,7 @@ function AppInner() {
       </Routes>
 
       {/* WhatsApp widget — shows on every page when logged in */}
-      {user && <WhatsAppWidget theme={theme} userName={user?.fullName} />}
+      {user && <WhatsAppWidget theme={t} userName={user?.fullName} />}
     </BrowserRouter>
   );
 }
