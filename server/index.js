@@ -26,16 +26,17 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), strip
 app.use(express.json());
 app.use(cookieParser());
 
-// ─── Webhook routes — NO auth (Pipedream calls these) ───────────────────────
-app.use('/api', webhookRoutes);
-
-// ─── Existing routes ────────────────────────────────────────────────────────
+// ─── Existing routes (handle their own auth internally) ─────────────────────
 app.use('/api', routes);
 app.use('/api', chatRoutes);
 
-// ─── Authenticated routes ───────────────────────────────────────────────────
-app.use('/api', authMiddleware, creditRoutes);
-app.use('/api', authMiddleware, userRoutes);
+// ─── Webhook routes — NO auth (Pipedream calls these) ───────────────────────
+app.use('/api', webhookRoutes);
+
+// ─── New authenticated routes ───────────────────────────────────────────────
+// Mounted at specific prefixes so they NEVER intercept /api/auth/*
+app.use('/api/credits', authMiddleware, creditRoutes);
+app.use('/api/admin', authMiddleware, userRoutes);
 
 // ─── Serve frontend in production ───────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
