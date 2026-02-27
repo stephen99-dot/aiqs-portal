@@ -4,6 +4,9 @@ const creditRoutes = require('./creditRoutes');
 const userRoutes = require('./userRoutes');
 const { authMiddleware } = require('./auth');
 ```
+```javascript
+// Webhook routes — NO auth (Pipedream calls these)
+app.use('/api', webhookRoutes);
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -12,7 +15,10 @@ const path = require('path');
 const routes = require('./routes');
 const chatRoutes = require('./chat');
 const stripeWebhook = require('./stripe-webhook');
-
+// Authenticated routes
+app.use('/api', authMiddleware, creditRoutes);
+app.use('/api', authMiddleware, userRoutes);
+```
 const app = express();
 const PORT = process.env.PORT || 3001;
 
