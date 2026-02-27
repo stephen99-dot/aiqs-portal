@@ -150,7 +150,7 @@ function getTooltipStyle(rect, position, windowSize) {
   };
 }
 
-export default function OnboardingTour({ onComplete }) {
+export default function OnboardingTour({ userId, onComplete }) {
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -204,7 +204,7 @@ export default function OnboardingTour({ onComplete }) {
   const prev = () => { if (step > 0) setStep(s => s - 1); };
   const finish = () => {
     setVisible(false);
-    try { localStorage.setItem('aiqs_tour_complete', 'true'); } catch {}
+    try { localStorage.setItem(`aiqs_tour_complete_${userId || 'default'}`, 'true'); } catch {}
     setTimeout(() => onComplete?.(), 300);
   };
 
