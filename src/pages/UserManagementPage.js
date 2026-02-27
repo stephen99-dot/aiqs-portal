@@ -8,7 +8,7 @@ import { Users, UserPlus, Trash2, Edit3, Shield, Search, X, Check, AlertTriangle
 const API_BASE = '/api';
 
 function getToken() {
-  return localStorage.getItem('token');
+  return localStorage.getItem('aiqs_token');
 }
 
 function apiFetch(endpoint, options = {}) {
