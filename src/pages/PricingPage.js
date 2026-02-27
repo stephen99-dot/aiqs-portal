@@ -6,7 +6,7 @@ import { Zap, Check, MessageCircle, Phone, Mail, ArrowRight, Star, Shield, Clock
 // Shown when clients run out of free credits
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const WHATSAPP_NUMBER = '447XXXXXXXXX'; // UPDATE THIS
+const WHATSAPP_NUMBER = '447534808399'; // UPDATE THIS
 
 const plans = [
   {
