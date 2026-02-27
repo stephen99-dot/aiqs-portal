@@ -7,8 +7,8 @@ import { MessageCircle, X, Send, Phone, FileText, HelpCircle, Clock, ChevronRigh
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── UPDATE THIS with your actual WhatsApp number (no + or spaces) ──────────
-const WHATSAPP_NUMBER = '447XXXXXXXXX'; // e.g. '447912345678'
-const WHATSAPP_DISPLAY = '+44 7XXX XXX XXX';
+const WHATSAPP_NUMBER = '447534808399'; // e.g. '447912345678'
+const WHATSAPP_DISPLAY = '+44 7534808399';
 
 const QUICK_ACTIONS = [
   {
