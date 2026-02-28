@@ -564,6 +564,76 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
     res.status(500).json({ error: 'Failed to activate project' });
   }
 });
+// --- ADMIN: Reset user password ---
+router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password, 12);
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(passwordHash, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// --- ADMIN: Send magic link to user ---
+router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+
+    // Store magic link token (create table if needed)
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS magic_links (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `).run();
+
+    const { v4: uuidv4 } = require('uuid');
+    db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)')
+      .run(uuidv4(), user.id, token, expiresAt);
+
+    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+    const magicUrl = `${portalUrl}/magic?token=${token}`;
+
+    // Try to send email via your email service, or just return the link
+    // For now, return the link so admin can share it manually
+    console.log(`Magic link for ${user.email}: ${magicUrl}`);
+
+    res.json({
+      success: true,
+      email: user.email,
+      magicUrl: magicUrl,
+      message: `Magic link generated for ${user.full_name || user.email}. Link valid for 24 hours.`,
+    });
+  } catch (err) {
+    console.error('Magic link error:', err);
+    res.status(500).json({ error: 'Failed to generate magic link' });
+  }
+});
+
+// module.exports = router;  <-- this should already exist at end of file
 
 module.exports = router;
 // --- ADMIN: Add new user ---
