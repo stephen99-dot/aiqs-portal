@@ -494,9 +494,6 @@ So your code should look like:
     db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)')
       .run(uuidv4(), user.id, token, expiresAt);
 
-    db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)')
-      .run(uuidv4(), user.id, token, expiresAt);
-
     const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
     const magicUrl = `${portalUrl}/magic?token=${token}`;
 
