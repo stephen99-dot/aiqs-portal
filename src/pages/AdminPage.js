@@ -179,8 +179,22 @@ function ClientsTab({ t }) {
   // ─── Send Magic Link ──────────────────────────────────────────────
   async function handleSendMagicLink(user) {
     try {
-      await apiFetch(`/admin/users/${user.id}/magic-link`, { method: 'POST' });
-      showMsg(`Magic link sent to ${user.email}`);
+      const result = await apiFetch(`/admin/users/${user.id}/magic-link`, { method: 'POST' });
+      if (result.emailSent) {
+        showMsg(`Magic link emailed to ${user.email}`);
+      } else {
+        const magicUrl = result.magicUrl;
+        if (magicUrl) {
+          const copied = await navigator.clipboard.writeText(magicUrl).then(() => true).catch(() => false);
+          if (copied) {
+            showMsg(`Email not configured — magic link copied to clipboard for ${user.fullName || user.email}`);
+          } else {
+            prompt(`Magic link for ${user.fullName || user.email} (copy this):`, magicUrl);
+          }
+        } else {
+          showMsg(`Magic link generated for ${user.email}`);
+        }
+      }
     } catch (err) {
       alert('Failed to send magic link: ' + err.message);
     }
