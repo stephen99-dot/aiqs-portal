@@ -29,6 +29,12 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
+  // Used by magic link flow — token is already stored, just set the user in context
+  function loginWithToken(token, userData) {
+    setToken(token);
+    setUser(userData);
+  }
+
   async function register(fields) {
     const data = await apiFetch('/auth/register', {
       method: 'POST',
@@ -45,7 +51,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithToken, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
