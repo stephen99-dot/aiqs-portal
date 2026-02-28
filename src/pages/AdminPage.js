@@ -90,14 +90,103 @@ function ClientsTab({ t }) {
   const [editPlan, setEditPlan] = useState('');
   const [editQuota, setEditQuota] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({ email: '', fullName: '', company: '', phone: '', password: '' });
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionMsg, setActionMsg] = useState(null);
 
   useEffect(() => {
+    loadUsers();
+  }, []);
+
+  function loadUsers() {
+    setLoading(true);
     apiFetch('/admin/users')
       .then(setUsers)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }
 
+  function showMsg(text, type = 'success') {
+    setActionMsg({ text, type });
+    setTimeout(() => setActionMsg(null), 4000);
+  }
+
+  // ─── Add User ─────────────────────────────────────────────────────
+  async function handleAddUser(e) {
+    e.preventDefault();
+    setAddError('');
+    if (!addForm.email || !addForm.fullName) {
+      setAddError('Email and full name are required');
+      return;
+    }
+    setAdding(true);
+    try {
+      const newUser = await apiFetch('/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: addForm.email,
+          fullName: addForm.fullName,
+          company: addForm.company,
+          phone: addForm.phone,
+          password: addForm.password || 'Welcome123!',
+        }),
+      });
+      setUsers(prev => [...prev, { ...newUser, plan: 'starter', planLabel: 'PAYG', quota: 0, used: 0, remaining: 0, atLimit: false }]);
+      setShowAddForm(false);
+      setAddForm({ email: '', fullName: '', company: '', phone: '', password: '' });
+      showMsg(`${newUser.fullName || newUser.email} added successfully`);
+    } catch (err) {
+      setAddError(err.message || 'Failed to add user');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  // ─── Delete User ──────────────────────────────────────────────────
+  async function handleDelete(userId) {
+    setDeleting(true);
+    try {
+      await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setConfirmDelete(null);
+      showMsg('User deleted');
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // ─── Reset Password ───────────────────────────────────────────────
+  async function handleResetPassword(user) {
+    const newPw = prompt(`Set a new password for ${user.fullName || user.email}:`, 'Welcome123!');
+    if (!newPw) return;
+    try {
+      await apiFetch(`/admin/users/${user.id}/password`, {
+        method: 'PUT',
+        body: JSON.stringify({ password: newPw }),
+      });
+      showMsg(`Password reset for ${user.fullName || user.email}`);
+    } catch (err) {
+      alert('Failed to reset password: ' + err.message);
+    }
+  }
+
+  // ─── Send Magic Link ──────────────────────────────────────────────
+  async function handleSendMagicLink(user) {
+    try {
+      await apiFetch(`/admin/users/${user.id}/magic-link`, { method: 'POST' });
+      showMsg(`Magic link sent to ${user.email}`);
+    } catch (err) {
+      alert('Failed to send magic link: ' + err.message);
+    }
+  }
+
+  // ─── Edit Plan ────────────────────────────────────────────────────
   function startEdit(user) {
     setEditingId(user.id);
     setEditPlan(user.plan || 'starter');
@@ -117,7 +206,6 @@ function ClientsTab({ t }) {
         method: 'PUT',
         body: JSON.stringify({ plan: editPlan, monthlyQuota: parseInt(editQuota) || 0 }),
       });
-      // Update the user in the local list
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         plan: result.plan,
@@ -127,6 +215,7 @@ function ClientsTab({ t }) {
         remaining: result.remaining,
       } : u));
       setEditingId(null);
+      showMsg('Plan updated');
     } catch (err) {
       alert('Failed to update plan: ' + err.message);
     } finally {
@@ -156,110 +245,241 @@ function ClientsTab({ t }) {
     );
   };
 
+  const inputStyle = {
+    padding: '9px 12px', borderRadius: 8, fontSize: 13,
+    background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text,
+    outline: 'none', width: '100%',
+  };
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
   }
 
   return (
-    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
-      <div style={{ padding: '18px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
-        <span style={{ fontSize: 12, color: t.textMuted }}>{users.length} clients</span>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Success/Error message toast */}
+      {actionMsg && (
+        <div style={{
+          padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+          background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'),
+          color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444',
+          border: `1px solid ${actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430'}`,
+        }}>
+          {actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}
+        </div>
+      )}
 
-      {users.map((user, i) => {
-        const isEditing = editingId === user.id;
-        const pct = user.quota > 0 ? Math.min(100, (user.used / user.quota) * 100) : 0;
-        const barColor = user.atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
+      {/* Header with Add button */}
+      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: t.textMuted }}>{users.length} clients</span>
+            <button onClick={() => setShowAddForm(!showAddForm)} style={{
+              padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'),
+              color: showAddForm ? t.textSecondary : '#fff',
+              border: showAddForm ? `1px solid ${t.border}` : 'none',
+              cursor: 'pointer',
+            }}>
+              {showAddForm ? '✕ Cancel' : '+ Add Client'}
+            </button>
+          </div>
+        </div>
 
-        return (
-          <div key={user.id} style={{
-            padding: '16px 20px',
-            borderBottom: i < users.length - 1 ? `1px solid ${t.border}` : 'none',
-            background: isEditing ? t.surfaceHover : 'transparent',
+        {/* ─── Add User Form ──────────────────────────────────────────── */}
+        {showAddForm && (
+          <form onSubmit={handleAddUser} style={{
+            padding: '16px 20px', borderBottom: `1px solid ${t.border}`,
+            background: t.surfaceHover || t.surface,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              {/* Left: user info */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: t.accentGlow, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, fontWeight: 700, color: t.accentLight, flexShrink: 0,
-                }}>
-                  {(user.fullName || '?')[0].toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{user.fullName}</div>
-                  <div style={{ fontSize: 12, color: t.textMuted }}>{user.email}</div>
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Full Name *</label>
+                <input
+                  style={inputStyle} placeholder="e.g. John Smith"
+                  value={addForm.fullName} onChange={e => setAddForm(p => ({ ...p, fullName: e.target.value }))}
+                />
               </div>
-
-              {/* Middle: plan + usage */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 260 }}>
-                {isEditing ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <select value={editPlan} onChange={e => handlePlanChange(e.target.value)} style={{
-                      padding: '6px 10px', borderRadius: 6, fontSize: 12,
-                      background: t.inputBg, border: `1px solid ${t.border}`, color: t.text,
-                    }}>
-                      {PLAN_OPTIONS.map(p => (
-                        <option key={p.value} value={p.value}>{p.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number" value={editQuota}
-                      onChange={e => setEditQuota(e.target.value)}
-                      style={{
-                        width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12,
-                        background: t.inputBg, border: `1px solid ${t.border}`, color: t.text, textAlign: 'center',
-                      }}
-                      placeholder="Quota"
-                    />
-                    <span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
-                  </div>
-                ) : (
-                  <>
-                    {planBadge(user.plan)}
-                    {user.quota > 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
-                        <div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: barColor }} />
-                        </div>
-                        <span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>
-                          {user.used}/{user.quota}
-                        </span>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: 11, color: t.textMuted }}>{user.used} projects this month</span>
-                    )}
-                  </>
-                )}
+              <div>
+                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Email *</label>
+                <input
+                  style={inputStyle} type="email" placeholder="john@example.com"
+                  value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
+                />
               </div>
-
-              {/* Right: actions */}
-              <div style={{ display: 'flex', gap: 6 }}>
-                {isEditing ? (
-                  <>
-                    <button onClick={() => savePlan(user.id)} disabled={saving} style={{
-                      padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                      background: t.success, color: '#fff', border: 'none', cursor: 'pointer',
-                    }}>{saving ? '...' : 'Save'}</button>
-                    <button onClick={cancelEdit} style={{
-                      padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                      background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                    }}>Cancel</button>
-                  </>
-                ) : (
-                  <button onClick={() => startEdit(user)} style={{
-                    padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                    background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                  }}>Edit Plan</button>
-                )}
+              <div>
+                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Company</label>
+                <input
+                  style={inputStyle} placeholder="Company name"
+                  value={addForm.company} onChange={e => setAddForm(p => ({ ...p, company: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Phone</label>
+                <input
+                  style={inputStyle} placeholder="+44 7..."
+                  value={addForm.phone} onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))}
+                />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>
+                  Password <span style={{ color: t.textDim }}>(default: Welcome123!)</span>
+                </label>
+                <input
+                  style={inputStyle} type="text" placeholder="Welcome123!"
+                  value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
+                />
               </div>
             </div>
-          </div>
-        );
-      })}
+            {addError && (
+              <div style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>⚠️ {addError}</div>
+            )}
+            <button type="submit" disabled={adding} style={{
+              padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer',
+              opacity: adding ? 0.6 : 1,
+            }}>
+              {adding ? 'Adding...' : 'Add Client'}
+            </button>
+          </form>
+        )}
+
+        {/* ─── User List ──────────────────────────────────────────────── */}
+        {users.map((user, i) => {
+          const isEditing = editingId === user.id;
+          const isDeleting = confirmDelete === user.id;
+          const pct = user.quota > 0 ? Math.min(100, (user.used / user.quota) * 100) : 0;
+          const barColor = user.atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
+
+          return (
+            <div key={user.id} style={{
+              padding: '16px 20px',
+              borderBottom: i < users.length - 1 ? `1px solid ${t.border}` : 'none',
+              background: isEditing ? (t.surfaceHover || t.surface) : isDeleting ? 'rgba(239,68,68,0.05)' : 'transparent',
+            }}>
+              {/* Delete Confirmation */}
+              {isDeleting && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 14px', marginBottom: 10, borderRadius: 8,
+                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                }}>
+                  <span style={{ fontSize: 13, color: '#EF4444' }}>
+                    ⚠️ Delete <strong>{user.fullName || user.email}</strong> and all their projects?
+                  </span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{
+                      padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer',
+                      opacity: deleting ? 0.6 : 1,
+                    }}>{deleting ? '...' : 'Yes, Delete'}</button>
+                    <button onClick={() => setConfirmDelete(null)} style={{
+                      padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                      background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                    }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                {/* Left: user info */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10,
+                    background: t.accentGlow, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, fontWeight: 700, color: t.accentLight, flexShrink: 0,
+                  }}>
+                    {(user.fullName || '?')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{user.fullName}</div>
+                    <div style={{ fontSize: 12, color: t.textMuted }}>{user.email}</div>
+                    {user.company && <div style={{ fontSize: 11, color: t.textDim }}>{user.company}</div>}
+                  </div>
+                </div>
+
+                {/* Middle: plan + usage */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 260 }}>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <select value={editPlan} onChange={e => handlePlanChange(e.target.value)} style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 12,
+                        background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text,
+                      }}>
+                        {PLAN_OPTIONS.map(p => (
+                          <option key={p.value} value={p.value}>{p.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number" value={editQuota}
+                        onChange={e => setEditQuota(e.target.value)}
+                        style={{
+                          width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12,
+                          background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text, textAlign: 'center',
+                        }}
+                        placeholder="Quota"
+                      />
+                      <span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
+                    </div>
+                  ) : (
+                    <>
+                      {planBadge(user.plan)}
+                      {user.quota > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
+                          <div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: barColor }} />
+                          </div>
+                          <span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>
+                            {user.used}/{user.quota}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 11, color: t.textMuted }}>{user.used || 0} projects this month</span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Right: actions */}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {isEditing ? (
+                    <>
+                      <button onClick={() => savePlan(user.id)} disabled={saving} style={{
+                        padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                        background: t.success, color: '#fff', border: 'none', cursor: 'pointer',
+                      }}>{saving ? '...' : 'Save'}</button>
+                      <button onClick={cancelEdit} style={{
+                        padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                      }}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => startEdit(user)} title="Edit plan" style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                      }}>✏️ Plan</button>
+                      <button onClick={() => handleResetPassword(user)} title="Reset password" style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
+                      }}>🔑 Reset</button>
+                      <button onClick={() => handleSendMagicLink(user)} title="Send magic link" style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer',
+                      }}>✉️ Magic Link</button>
+                      <button onClick={() => setConfirmDelete(user.id)} title="Delete user" style={{
+                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                        background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer',
+                      }}>🗑️</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
