@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const multer = require('multer');
+const nodemailer = require('nodemailer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -21,6 +22,38 @@ const PLANS = {
   custom:       { label: 'Custom',         quota: 999, price: 0 },
 };
 
+// --- SMTP Email Setup (Hostinger) ---
+const smtpTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+  port: parseInt(process.env.SMTP_PORT || '465'),
+  secure: true,
+  auth: {
+    user: process.env.SMTP_EMAIL || 'hello@crmwizardai.com',
+    pass: process.env.SMTP_PASSWORD || '',
+  },
+});
+
+async function sendEmail({ to, subject, html }) {
+  if (!process.env.SMTP_PASSWORD) {
+    console.log(`[Email] SMTP_PASSWORD not set, skipping email to ${to}`);
+    return false;
+  }
+  try {
+    await smtpTransporter.sendMail({
+      from: `"AI QS" <${process.env.SMTP_EMAIL || 'hello@crmwizardai.com'}>`,
+      to,
+      subject,
+      html,
+    });
+    console.log(`[Email] Sent to ${to}: ${subject}`);
+    return true;
+  } catch (err) {
+    console.error(`[Email] Failed to send to ${to}:`, err.message);
+    return false;
+  }
+}
+
+// --- File Upload Config ---
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -184,6 +217,47 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit });
 });
 
+// --- Magic Link Login (public - used by clients clicking the link) ---
+router.get('/auth/magic', (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    // Check table exists
+    try {
+      db.prepare('SELECT 1 FROM magic_links LIMIT 1').get();
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid or expired magic link' });
+    }
+
+    const link = db.prepare('SELECT * FROM magic_links WHERE token = ? AND used = 0').get(token);
+    if (!link) return res.status(400).json({ error: 'Invalid or expired magic link' });
+
+    const now = new Date().toISOString();
+    if (now > link.expires_at) {
+      return res.status(400).json({ error: 'Magic link has expired' });
+    }
+
+    // Mark as used
+    db.prepare('UPDATE magic_links SET used = 1 WHERE id = ?').run(link.id);
+
+    // Get user and generate token
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(link.user_id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const authToken = generateToken(user);
+    const planInfo = getUserPlanInfo(user);
+
+    res.json({
+      token: authToken,
+      user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
+    });
+  } catch (err) {
+    console.error('Magic link login error:', err);
+    res.status(500).json({ error: 'Failed to process magic link' });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // USAGE
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -299,7 +373,48 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
     const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
     const magicUrl = `${portalUrl}/magic?token=${token}`;
     console.log(`Magic link for ${user.email}: ${magicUrl}`);
-    res.json({ success: true, email: user.email, magicUrl: magicUrl, message: `Magic link generated for ${user.full_name || user.email}. Link valid for 24 hours.` });
+
+    // Send email with magic link
+    const firstName = (user.full_name || 'there').split(' ')[0];
+    const emailSent = await sendEmail({
+      to: user.email,
+      subject: 'Your AI QS Portal Login Link',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
+          <div style="text-align: center; margin-bottom: 32px;">
+            <div style="font-size: 28px; font-weight: 800; color: #0F172A;">AI <span style="color: #F59E0B;">QS</span></div>
+            <div style="font-size: 10px; letter-spacing: 3px; color: #94A3B8; text-transform: uppercase; margin-top: 2px;">Quantity Surveying</div>
+          </div>
+          <h2 style="font-size: 20px; color: #0F172A; margin: 0 0 12px;">Hi ${firstName},</h2>
+          <p style="font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px;">
+            You've been invited to access the AI QS Portal. Click the button below to log in instantly — no password needed.
+          </p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${magicUrl}" style="display: inline-block; padding: 14px 36px; background: #F59E0B; color: #0F172A; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px;">
+              Log In to AI QS Portal
+            </a>
+          </div>
+          <p style="font-size: 13px; color: #94A3B8; line-height: 1.5;">
+            This link expires in 24 hours and can only be used once. If you didn't request this, you can safely ignore this email.
+          </p>
+          <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 28px 0 16px;" />
+          <p style="font-size: 11px; color: #CBD5E1; text-align: center;">
+            AI QS — Automated Quantity Surveying<br />
+            <a href="https://theaiqs.co.uk" style="color: #94A3B8;">theaiqs.co.uk</a> · <a href="https://wa.me/447534808399" style="color: #94A3B8;">WhatsApp</a>
+          </p>
+        </div>
+      `,
+    });
+
+    res.json({
+      success: true,
+      email: user.email,
+      magicUrl: magicUrl,
+      emailSent: emailSent,
+      message: emailSent
+        ? `Magic link emailed to ${user.email}`
+        : `Magic link generated for ${user.full_name || user.email} (email not configured — link returned).`,
+    });
   } catch (err) {
     console.error('Magic link error:', err);
     res.status(500).json({ error: 'Failed to generate magic link' });
