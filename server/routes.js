@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -88,7 +89,6 @@ function getUserPlanInfo(user) {
 // --- HELPER: Trigger Pipedream BOQ pipeline ---
 async function triggerPipedream(project, user, files) {
   try {
-    // Build file URLs that Pipedream can download from
     const fileUrls = files.map(f => ({
       url: `${PORTAL_BASE_URL}/api/files/download/${f.filename}`,
       name: f.original_name,
@@ -96,11 +96,8 @@ async function triggerPipedream(project, user, files) {
     }));
 
     const payload = {
-      // Source identifier
       source: 'portal',
       projectId: project.id,
-
-      // Fields the normalize step / Generate_Boq reads
       fullName: user.full_name,
       clientEmail: user.email,
       email: user.email,
@@ -109,13 +106,9 @@ async function triggerPipedream(project, user, files) {
       address: project.location || '',
       location: project.location || '',
       company: user.company || '',
-
-      // File data for upload_files_to_drive step
       drawings_urls: fileUrls.map(f => f.url),
       file_urls: fileUrls,
       fileCount: files.length,
-
-      // Metadata
       plan: user.plan || 'starter',
       submittedAt: new Date().toISOString(),
     };
@@ -135,7 +128,6 @@ async function triggerPipedream(project, user, files) {
 
     console.log(`[Pipedream] Pipeline triggered successfully`);
 
-    // Update project status to in_progress
     db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run('in_progress', project.id);
 
@@ -154,7 +146,6 @@ router.get('/files/download/:filename', (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
 
-  // Determine content type
   const ext = path.extname(req.params.filename).toLowerCase();
   const mimeTypes = {
     '.pdf': 'application/pdf',
@@ -172,7 +163,9 @@ router.get('/files/download/:filename', (req, res) => {
   res.sendFile(filePath);
 });
 
-// --- AUTH ROUTES ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTH ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 router.post('/auth/register', async (req, res) => {
   try {
@@ -296,7 +289,9 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   });
 });
 
-// --- USAGE ENDPOINT ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// USAGE ENDPOINT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/usage', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -304,7 +299,6 @@ router.get('/usage', authMiddleware, (req, res) => {
 
   const planInfo = getUserPlanInfo(user);
 
-  // Get this month's projects for the usage list
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
@@ -322,8 +316,11 @@ router.get('/usage', authMiddleware, (req, res) => {
   });
 });
 
-// --- ADMIN ROUTES ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// ADMIN ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
 
+// --- List all users ---
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
   res.json(users.map(u => {
@@ -346,7 +343,60 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   }));
 });
 
-// Admin: Update a user's plan
+// --- Add new user ---
+router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { email, fullName, company, phone, role, password } = req.body;
+    if (!email || !fullName) {
+      return res.status(400).json({ error: 'Email and full name are required' });
+    }
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+    if (existing) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+    const id = uuidv4();
+    const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
+    db.prepare(`
+      INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)
+    `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
+    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    res.status(201).json({
+      id: newUser.id,
+      email: newUser.email,
+      fullName: newUser.full_name,
+      company: newUser.company,
+      phone: newUser.phone,
+      role: newUser.role,
+      createdAt: newUser.created_at,
+    });
+  } catch (err) {
+    console.error('Add user error:', err);
+    res.status(500).json({ error: 'Failed to add user' });
+  }
+});
+
+// --- Delete user ---
+router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(req.params.id);
+    db.prepare('DELETE FROM projects WHERE user_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// --- Update user plan ---
 router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { plan, monthlyQuota } = req.body;
@@ -358,7 +408,6 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Use provided quota or default from plan
     const quota = monthlyQuota !== undefined ? monthlyQuota : PLANS[plan].quota;
 
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -383,6 +432,89 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
+// --- Update user role ---
+router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!['admin', 'client'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be admin or client' });
+    }
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'Cannot change your own role' });
+    }
+    db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(role, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update role error:', err);
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+// --- Reset user password ---
+router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const passwordHash = await bcrypt.hash(password, 12);
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(passwordHash, req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// --- Send magic link to user ---
+router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    // Create magic_links table if it doesn't exist
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS magic_links (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `).run();
+
+    db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)')
+      .run(uuidv4(), user.id, token, expiresAt);
+
+    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+    const magicUrl = `${portalUrl}/magic?token=${token}`;
+
+    console.log(`Magic link for ${user.email}: ${magicUrl}`);
+
+    res.json({
+      success: true,
+      email: user.email,
+      magicUrl: magicUrl,
+      message: `Magic link generated for ${user.full_name || user.email}. Link valid for 24 hours.`,
+    });
+  } catch (err) {
+    console.error('Magic link error:', err);
+    res.status(500).json({ error: 'Failed to generate magic link' });
+  }
+});
+
+// --- Admin: List all projects ---
 router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
   const projects = db.prepare(`
     SELECT p.*, u.full_name as client_name, u.email as client_email, COUNT(f.id) as file_count
@@ -406,7 +538,9 @@ router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
   })));
 });
 
-// --- PROJECT ROUTES ---
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROJECT ROUTES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/projects', authMiddleware, (req, res) => {
   const projects = db.prepare(`
@@ -445,7 +579,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       return res.status(400).json({ error: 'Project title and type are required' });
     }
 
-    // --- USAGE LIMIT CHECK ---
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const planInfo = getUserPlanInfo(user);
 
@@ -457,7 +590,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       });
     }
 
-    // Determine if this is a PAYG submission
     const isPayg = req.body.payg === 'true' || planInfo.isPayg;
     const initialStatus = isPayg ? 'awaiting_payment' : 'submitted';
 
@@ -489,12 +621,10 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
 
-    // Trigger Pipedream pipeline for subscription/free-trial users (not PAYG - they trigger after payment)
     if (!isPayg && files.length > 0) {
       triggerPipedream(project, user, files);
     }
 
-    // Return updated usage info with the project
     const updatedPlanInfo = getUserPlanInfo(user);
 
     res.status(201).json({ ...project, files, usage: updatedPlanInfo });
@@ -541,18 +671,15 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
     }
 
     if (project.status !== 'awaiting_payment') {
-      // Already activated or in another state — just return it
       return res.json(project);
     }
 
-    // Mark as submitted (paid)
     db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run('submitted', project.id);
 
     const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(project.id);
 
-    // Trigger Pipedream pipeline now that payment is confirmed
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     if (files.length > 0) {
       triggerPipedream(updated, user, files);
@@ -564,145 +691,8 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
     res.status(500).json({ error: 'Failed to activate project' });
   }
 });
-// --- ADMIN: Reset user password ---
-router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const { password } = req.body;
-    if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const bcrypt = require('bcryptjs');
-    const passwordHash = await bcrypt.hash(password, 12);
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(passwordHash, req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Reset password error:', err);
-    res.status(500).json({ error: 'Failed to reset password' });
-  }
-});
 
-// --- ADMIN: Send magic link to user ---
-router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const crypto = require('crypto');
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
-
-    // Store magic link token (create table if needed)
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS magic_links (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        token TEXT NOT NULL UNIQUE,
-        expires_at TEXT NOT NULL,
-        used INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `).run();
-
-    const { v4: uuidv4 } = require('uuid');
-    db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)')
-      .run(uuidv4(), user.id, token, expiresAt);
-
-    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
-    const magicUrl = `${portalUrl}/magic?token=${token}`;
-
-    // Try to send email via your email service, or just return the link
-    // For now, return the link so admin can share it manually
-    console.log(`Magic link for ${user.email}: ${magicUrl}`);
-
-    res.json({
-      success: true,
-      email: user.email,
-      magicUrl: magicUrl,
-      message: `Magic link generated for ${user.full_name || user.email}. Link valid for 24 hours.`,
-    });
-  } catch (err) {
-    console.error('Magic link error:', err);
-    res.status(500).json({ error: 'Failed to generate magic link' });
-  }
-});
-
-// module.exports = router;  <-- this should already exist at end of file
-
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPORT — THIS MUST BE THE VERY LAST LINE
+// ═══════════════════════════════════════════════════════════════════════════════
 module.exports = router;
-// --- ADMIN: Add new user ---
-router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const { email, fullName, company, phone, role, password } = req.body;
-    if (!email || !fullName) {
-      return res.status(400).json({ error: 'Email and full name are required' });
-    }
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
-    if (existing) {
-      return res.status(409).json({ error: 'A user with this email already exists' });
-    }
-    const id = uuidv4();
-    const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)
-    `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
-    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-    res.status(201).json({
-      id: newUser.id,
-      email: newUser.email,
-      fullName: newUser.full_name,
-      company: newUser.company,
-      phone: newUser.phone,
-      role: newUser.role,
-      createdAt: newUser.created_at,
-    });
-  } catch (err) {
-    console.error('Add user error:', err);
-    res.status(500).json({ error: 'Failed to add user' });
-  }
-});
-
-// --- ADMIN: Delete user ---
-router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
-  try {
-    if (req.params.id === req.user.id) {
-      return res.status(400).json({ error: 'Cannot delete your own account' });
-    }
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(req.params.id);
-    db.prepare('DELETE FROM projects WHERE user_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Delete user error:', err);
-    res.status(500).json({ error: 'Failed to delete user' });
-  }
-});
-
-// --- ADMIN: Update user role ---
-router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res) => {
-  try {
-    const { role } = req.body;
-    if (!['admin', 'client'].includes(role)) {
-      return res.status(400).json({ error: 'Role must be admin or client' });
-    }
-    if (req.params.id === req.user.id) {
-      return res.status(400).json({ error: 'Cannot change your own role' });
-    }
-    db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(role, req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Update role error:', err);
-    res.status(500).json({ error: 'Failed to update role' });
-  }
-});
