@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiFetch, setToken } from '../utils/api';
+import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function MagicLinkPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { loginWithToken, logout } = useAuth();
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,12 +36,12 @@ export default function MagicLinkPage() {
           throw new Error(data.error || 'Invalid or expired link');
         }
 
-        // Store the JWT token using the app's standard method
-        setToken(data.token);
-        setUser(data.user);
+        // Log user in via AuthContext — sets token AND user state
+        loginWithToken(data.token, data.user);
+        setUserData(data.user);
         setStatus('success');
 
-        // Show password change prompt
+        // Show password change prompt after a moment
         setTimeout(() => setShowPasswordForm(true), 1000);
 
       } catch (err) {
@@ -72,6 +72,7 @@ export default function MagicLinkPage() {
         method: 'PUT',
         body: JSON.stringify({ password: newPassword }),
       });
+      // Already logged in via loginWithToken — just go to dashboard
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setPwError(err.message || 'Failed to set password');
@@ -81,6 +82,7 @@ export default function MagicLinkPage() {
   }
 
   function handleSkip() {
+    // Already logged in via loginWithToken — just go to dashboard
     navigate('/dashboard', { replace: true });
   }
 
@@ -146,7 +148,7 @@ export default function MagicLinkPage() {
               </svg>
             </div>
             <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: '#E8EDF5' }}>
-              Welcome{user ? `, ${user.fullName.split(' ')[0]}` : ''}!
+              Welcome{userData ? `, ${userData.fullName.split(' ')[0]}` : ''}!
             </h2>
             <p style={{ margin: 0, fontSize: 14, color: '#5A6E87' }}>
               Setting up your account...
