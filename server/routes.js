@@ -9,6 +9,7 @@ const fs = require('fs');
 const db = require('./database');
 const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
 const { logActivity } = require('./activityRoutes');
+const { startPipelineRun } = require('./pipelineRoutes');
 
 const router = express.Router();
 
@@ -130,6 +131,15 @@ async function triggerPipedream(project, user, files) {
       submittedAt: new Date().toISOString(),
     };
     console.log(`[Pipedream] Triggering pipeline for project: ${project.title} (${files.length} files)`);
+    
+    // Start tracking this run in the pipeline tracker
+    startPipelineRun({
+      project_id: project.id,
+      project_title: project.title,
+      client_name: user.full_name,
+      client_email: user.email,
+    });
+
     const resp = await fetch(PIPEDREAM_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
