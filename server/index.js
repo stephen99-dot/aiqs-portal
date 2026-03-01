@@ -10,6 +10,7 @@ const webhookRoutes = require('./webhookRoutes');
 const creditRoutes = require('./creditRoutes');
 const rateRoutes = require('./rateRoutes');
 const { router: activityRoutes } = require('./activityRoutes');
+const { router: pipelineRoutes } = require('./pipelineRoutes');
 const { authMiddleware } = require('./auth');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api', webhookRoutes);
 app.use('/api/credits', authMiddleware, creditRoutes);
 app.use('/api', rateRoutes);
 app.use('/api', activityRoutes);
+app.use('/api', pipelineRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
