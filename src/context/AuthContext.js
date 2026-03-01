@@ -19,6 +19,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  async function refreshUser() {
+    try {
+      const freshUser = await apiFetch('/auth/me');
+      setUser(freshUser);
+      return freshUser;
+    } catch (err) {
+      console.error('Failed to refresh user:', err);
+      return null;
+    }
+  }
+
   async function login(email, password) {
     const data = await apiFetch('/auth/login', {
       method: 'POST',
@@ -29,7 +40,6 @@ export function AuthProvider({ children }) {
     return data.user;
   }
 
-  // Used by magic link flow — token is already stored, just set the user in context
   function loginWithToken(token, userData) {
     setToken(token);
     setUser(userData);
@@ -51,7 +61,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithToken, register, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, loginWithToken, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
