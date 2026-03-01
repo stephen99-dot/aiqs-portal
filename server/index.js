@@ -1,4 +1,5 @@
 require('dotenv').config();
+const rateRoutes = require('./rateRoutes');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -20,6 +21,7 @@ app.use('/api', routes);
 app.use('/api', chatRoutes);
 app.use('/api', webhookRoutes);
 app.use('/api/credits', authMiddleware, creditRoutes);
+app.use('/api', rateRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
