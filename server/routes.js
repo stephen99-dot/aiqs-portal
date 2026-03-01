@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./database');
 const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
+const { logActivity } = require('./activityRoutes');
 
 const router = express.Router();
 
@@ -180,6 +181,17 @@ router.post('/auth/register', async (req, res) => {
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
+
+    // ─── LOG: New signup ───
+    logActivity({
+      event_type: 'signup',
+      title: fullName + ' signed up',
+      detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(),
+      user_id: id,
+      user_name: fullName,
+      user_email: email.toLowerCase(),
+    });
+
     res.status(201).json({
       token,
       user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
@@ -200,6 +212,16 @@ router.post('/auth/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
+
+    // ─── LOG: Login ───
+    logActivity({
+      event_type: 'login',
+      title: (user.full_name || email) + ' logged in',
+      user_id: user.id,
+      user_name: user.full_name,
+      user_email: user.email,
+    });
+
     res.json({
       token,
       user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
@@ -230,36 +252,34 @@ router.put('/auth/change-password', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Magic Link Login (public - used by clients clicking the link) ---
+// --- Magic Link Login ---
 router.get('/auth/magic', (req, res) => {
   try {
     const { token } = req.query;
     if (!token) return res.status(400).json({ error: 'Token is required' });
-
-    // Check table exists
     try {
       db.prepare('SELECT 1 FROM magic_links LIMIT 1').get();
     } catch (e) {
       return res.status(400).json({ error: 'Invalid or expired magic link' });
     }
-
     const link = db.prepare('SELECT * FROM magic_links WHERE token = ? AND used = 0').get(token);
     if (!link) return res.status(400).json({ error: 'Invalid or expired magic link' });
-
     const now = new Date().toISOString();
-    if (now > link.expires_at) {
-      return res.status(400).json({ error: 'Magic link has expired' });
-    }
-
-    // Mark as used
+    if (now > link.expires_at) return res.status(400).json({ error: 'Magic link has expired' });
     db.prepare('UPDATE magic_links SET used = 1 WHERE id = ?').run(link.id);
-
-    // Get user and generate token
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(link.user_id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
+
+    // ─── LOG: Magic link login ───
+    logActivity({
+      event_type: 'login',
+      title: (user.full_name || user.email) + ' logged in via magic link',
+      user_id: user.id,
+      user_name: user.full_name,
+      user_email: user.email,
+    });
 
     res.json({
       token: authToken,
@@ -308,6 +328,17 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
     db.prepare('INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, \'starter\', 2)').run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+
+    // ─── LOG: Admin added a user ───
+    logActivity({
+      event_type: 'signup',
+      title: fullName + ' added by admin',
+      detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(),
+      user_id: id,
+      user_name: fullName,
+      user_email: email.toLowerCase(),
+    });
+
     res.status(201).json({ id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, createdAt: newUser.created_at });
   } catch (err) {
     console.error('Add user error:', err);
@@ -318,7 +349,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
 router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account' });
-    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    const user = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(req.params.id);
     db.prepare('DELETE FROM projects WHERE user_id = ?').run(req.params.id);
@@ -340,6 +371,17 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(plan, quota, req.params.id);
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     const planInfo = getUserPlanInfo(updated);
+
+    // ─── LOG: Plan changed ───
+    logActivity({
+      event_type: 'plan_changed',
+      title: (user.full_name || user.email) + ' plan changed to ' + PLANS[plan].label,
+      detail: 'Quota: ' + quota + '/month',
+      user_id: user.id,
+      user_name: user.full_name,
+      user_email: user.email,
+    });
+
     res.json({ id: updated.id, email: updated.email, fullName: updated.full_name, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining });
   } catch (err) {
     console.error('Update plan error:', err);
@@ -387,7 +429,6 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
     const magicUrl = `${portalUrl}/magic?token=${token}`;
     console.log(`Magic link for ${user.email}: ${magicUrl}`);
 
-    // Send email with magic link
     const firstName = (user.full_name || 'there').split(' ')[0];
     const emailSent = await sendEmail({
       to: user.email,
@@ -476,6 +517,17 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
     if (!isPayg && files.length > 0) triggerPipedream(project, user, files);
     const updatedPlanInfo = getUserPlanInfo(user);
+
+    // ─── LOG: Project submitted ───
+    logActivity({
+      event_type: 'project_created',
+      title: (user.full_name || user.email) + ' submitted a project',
+      detail: title + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)',
+      user_id: user.id,
+      user_name: user.full_name,
+      user_email: user.email,
+    });
+
     res.status(201).json({ ...project, files, usage: updatedPlanInfo });
   } catch (err) {
     console.error('Create project error:', err);
