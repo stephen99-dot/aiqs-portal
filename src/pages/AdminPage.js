@@ -1,32 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-
-const RATE_LIBRARIES = [
-  { name: 'UK Residential', version: 'v3.2', items: 847, lastUpdated: '2026-02-15', regions: 'England, Wales, Scotland', custom: false },
-  { name: 'Ireland Residential', version: 'v2.1', items: 623, lastUpdated: '2026-01-28', regions: 'Republic of Ireland, NI', custom: false },
-  { name: 'UK Commercial', version: 'v2.8', items: 1042, lastUpdated: '2026-02-10', regions: 'England, Wales, Scotland', custom: false },
-  { name: 'Metalwork v2 (Paul)', version: 'v2.0', items: 156, lastUpdated: '2026-02-12', regions: 'UK-wide', custom: true },
-  { name: 'S Sira Custom (Sandeep)', version: 'v1.0', items: 89, lastUpdated: '2026-02-20', regions: 'London, SE England', custom: true },
-];
-
-const ACTIVITY_LOG = [
-  { time: '10:42', action: 'BOQ generated', detail: 'Richmond Mews Coping — £61,503 total, 4 sheets', type: 'success' },
-  { time: '10:30', action: 'Pipeline started', detail: 'Barge & Barrel Conversion — 5 drawings queued', type: 'info' },
-  { time: '09:45', action: 'Rate mismatch flagged', detail: "Turnkey Build — Joe: 'acoustic board' not found in rate library", type: 'warning' },
-  { time: '09:15', action: 'Pipeline started', detail: 'Turnkey Build — Joe — 12 drawings queued', type: 'info' },
-  { time: 'Yesterday', action: 'Client signup', detail: 'YDS (Leeds) registered — Pro plan', type: 'success' },
-  { time: 'Yesterday', action: 'Drawings uploaded', detail: 'Parkgate Avenue Extension — 5 files received from Penn Contracting', type: 'info' },
-  { time: '2 days ago', action: 'Pipeline error', detail: 'Clive — Rear Extension: PDF extraction failed on page 3 (corrupt)', type: 'danger' },
-  { time: '2 days ago', action: 'BOQ approved', detail: 'Portrack House Carport — client downloaded BOQ', type: 'success' },
-];
-
-const SYSTEM_SERVICES = [
-  { label: 'Pipedream API', status: 'operational', uptime: '99.8%' },
-  { label: 'Claude API (Anthropic)', status: 'operational', uptime: '99.5%' },
-  { label: 'Google Drive Sync', status: 'operational', uptime: '100%' },
-  { label: 'Rate Library', status: 'warning', uptime: '97.2%', note: '3 unmapped rate codes' },
-];
 
 const PLAN_OPTIONS = [
   { value: 'starter', label: 'Starter (PAYG)', quota: 0 },
@@ -35,12 +9,27 @@ const PLAN_OPTIONS = [
   { value: 'custom', label: 'Custom', quota: 999 },
 ];
 
+const ACTIVITY_LOG = [
+  { time: '10:42', action: 'BOQ generated', detail: 'Richmond Mews Coping — £61,503 total, 4 sheets', type: 'success' },
+  { time: '10:30', action: 'Pipeline started', detail: 'Barge & Barrel Conversion — 5 drawings queued', type: 'info' },
+  { time: '09:45', action: 'Rate mismatch flagged', detail: "Turnkey Build — Joe: 'acoustic board' not found in rate library", type: 'warning' },
+  { time: '09:15', action: 'Pipeline started', detail: 'Turnkey Build — Joe — 12 drawings queued', type: 'info' },
+  { time: 'Yesterday', action: 'Client signup', detail: 'YDS (Leeds) registered — Pro plan', type: 'success' },
+  { time: 'Yesterday', action: 'Drawings uploaded', detail: 'Parkgate Avenue Extension — 5 files from Penn Contracting', type: 'info' },
+  { time: '2 days ago', action: 'Pipeline error', detail: 'Clive — Rear Extension: PDF extraction failed on page 3 (corrupt)', type: 'danger' },
+  { time: '2 days ago', action: 'BOQ approved', detail: 'Portrack House Carport — client downloaded BOQ', type: 'success' },
+];
+
+const SYSTEM_SERVICES = [
+  { label: 'Pipedream API', status: 'operational', uptime: '99.8%' },
+  { label: 'Claude API (Anthropic)', status: 'operational', uptime: '99.5%' },
+  { label: 'Google Drive Sync', status: 'operational', uptime: '100%' },
+  { label: 'Rate Library', status: 'operational', uptime: '100%' },
+];
+
 function StatCard({ label, value, sub, emoji, t }) {
   return (
-    <div style={{
-      background: t.card, border: `1px solid ${t.border}`,
-      borderRadius: 14, padding: '22px 18px', boxShadow: t.shadowSm
-    }}>
+    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '22px 18px', boxShadow: t.shadowSm }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 24 }}>{emoji}</span>
         {sub && <span style={{ fontSize: 11, color: t.textMuted }}>{sub}</span>}
@@ -60,20 +49,14 @@ function OverviewTab({ t }) {
         <StatCard emoji="💷" label="Revenue" value="£14,400" sub="all time" t={t} />
         <StatCard emoji="⚡" label="Avg Processing" value="4.2 min" sub="per drawing" t={t} />
       </div>
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 14px' }}>System Health</h3>
         {SYSTEM_SERVICES.map((svc, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 0',
-            borderBottom: i < SYSTEM_SERVICES.length - 1 ? `1px solid ${t.border}` : 'none'
-          }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: i < SYSTEM_SERVICES.length - 1 ? '1px solid ' + t.border : 'none' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: svc.status === 'operational' ? t.success : t.warning }} />
               <span style={{ fontSize: 13, color: t.text }}>{svc.label}</span>
-              {svc.note && (
-                <span style={{ fontSize: 11, color: t.warning, background: t.warningBg, padding: '2px 8px', borderRadius: 6 }}>{svc.note}</span>
-              )}
+              {svc.note && <span style={{ fontSize: 11, color: t.warning, background: t.warningBg, padding: '2px 8px', borderRadius: 6 }}>{svc.note}</span>}
             </div>
             <span style={{ fontSize: 12, color: t.textMuted }}>{svc.uptime} uptime</span>
           </div>
@@ -98,395 +81,124 @@ function ClientsTab({ t }) {
   const [deleting, setDeleting] = useState(false);
   const [actionMsg, setActionMsg] = useState(null);
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useEffect(() => { loadUsers(); }, []);
+  function loadUsers() { setLoading(true); apiFetch('/admin/users').then(setUsers).catch(console.error).finally(() => setLoading(false)); }
+  function showMsg(text, type = 'success') { setActionMsg({ text, type }); setTimeout(() => setActionMsg(null), 4000); }
 
-  function loadUsers() {
-    setLoading(true);
-    apiFetch('/admin/users')
-      .then(setUsers)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }
-
-  function showMsg(text, type = 'success') {
-    setActionMsg({ text, type });
-    setTimeout(() => setActionMsg(null), 4000);
-  }
-
-  // ─── Add User ─────────────────────────────────────────────────────
   async function handleAddUser(e) {
-    e.preventDefault();
-    setAddError('');
-    if (!addForm.email || !addForm.fullName) {
-      setAddError('Email and full name are required');
-      return;
-    }
+    e.preventDefault(); setAddError('');
+    if (!addForm.email || !addForm.fullName) { setAddError('Email and full name are required'); return; }
     setAdding(true);
     try {
-      const newUser = await apiFetch('/admin/users', {
-        method: 'POST',
-        body: JSON.stringify({
-          email: addForm.email,
-          fullName: addForm.fullName,
-          company: addForm.company,
-          phone: addForm.phone,
-          password: addForm.password || 'Welcome123!',
-        }),
-      });
+      const newUser = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify({ email: addForm.email, fullName: addForm.fullName, company: addForm.company, phone: addForm.phone, password: addForm.password || 'Welcome123!' }) });
       setUsers(prev => [...prev, { ...newUser, plan: 'starter', planLabel: 'PAYG', quota: 0, used: 0, remaining: 0, atLimit: false }]);
-      setShowAddForm(false);
-      setAddForm({ email: '', fullName: '', company: '', phone: '', password: '' });
-      showMsg(`${newUser.fullName || newUser.email} added successfully`);
-    } catch (err) {
-      setAddError(err.message || 'Failed to add user');
-    } finally {
-      setAdding(false);
-    }
+      setShowAddForm(false); setAddForm({ email: '', fullName: '', company: '', phone: '', password: '' });
+      showMsg((newUser.fullName || newUser.email) + ' added successfully');
+    } catch (err) { setAddError(err.message || 'Failed to add user'); } finally { setAdding(false); }
   }
-
-  // ─── Delete User ──────────────────────────────────────────────────
   async function handleDelete(userId) {
     setDeleting(true);
-    try {
-      await apiFetch(`/admin/users/${userId}`, { method: 'DELETE' });
-      setUsers(prev => prev.filter(u => u.id !== userId));
-      setConfirmDelete(null);
-      showMsg('User deleted');
-    } catch (err) {
-      alert('Failed to delete: ' + err.message);
-    } finally {
-      setDeleting(false);
-    }
+    try { await apiFetch('/admin/users/' + userId, { method: 'DELETE' }); setUsers(prev => prev.filter(u => u.id !== userId)); setConfirmDelete(null); showMsg('User deleted'); }
+    catch (err) { alert('Failed to delete: ' + err.message); } finally { setDeleting(false); }
   }
-
-  // ─── Reset Password ───────────────────────────────────────────────
   async function handleResetPassword(user) {
-    const newPw = prompt(`Set a new password for ${user.fullName || user.email}:`, 'Welcome123!');
+    const newPw = prompt('Set a new password for ' + (user.fullName || user.email) + ':', 'Welcome123!');
     if (!newPw) return;
-    try {
-      await apiFetch(`/admin/users/${user.id}/password`, {
-        method: 'PUT',
-        body: JSON.stringify({ password: newPw }),
-      });
-      showMsg(`Password reset for ${user.fullName || user.email}`);
-    } catch (err) {
-      alert('Failed to reset password: ' + err.message);
-    }
+    try { await apiFetch('/admin/users/' + user.id + '/password', { method: 'PUT', body: JSON.stringify({ password: newPw }) }); showMsg('Password reset for ' + (user.fullName || user.email)); }
+    catch (err) { alert('Failed to reset password: ' + err.message); }
   }
-
-  // ─── Send Magic Link ──────────────────────────────────────────────
   async function handleSendMagicLink(user) {
     try {
-      const result = await apiFetch(`/admin/users/${user.id}/magic-link`, { method: 'POST' });
-      if (result.emailSent) {
-        showMsg(`Magic link emailed to ${user.email}`);
-      } else {
-        const magicUrl = result.magicUrl;
-        if (magicUrl) {
-          const copied = await navigator.clipboard.writeText(magicUrl).then(() => true).catch(() => false);
-          if (copied) {
-            showMsg(`Email not configured — magic link copied to clipboard for ${user.fullName || user.email}`);
-          } else {
-            prompt(`Magic link for ${user.fullName || user.email} (copy this):`, magicUrl);
-          }
-        } else {
-          showMsg(`Magic link generated for ${user.email}`);
-        }
-      }
-    } catch (err) {
-      alert('Failed to send magic link: ' + err.message);
-    }
+      const result = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
+      if (result.emailSent) { showMsg('Magic link emailed to ' + user.email); }
+      else if (result.magicUrl) {
+        const copied = await navigator.clipboard.writeText(result.magicUrl).then(() => true).catch(() => false);
+        if (copied) showMsg('Magic link copied to clipboard for ' + (user.fullName || user.email));
+        else prompt('Magic link (copy this):', result.magicUrl);
+      } else { showMsg('Magic link generated for ' + user.email); }
+    } catch (err) { alert('Failed to send magic link: ' + err.message); }
   }
-
-  // ─── Edit Plan ────────────────────────────────────────────────────
-  function startEdit(user) {
-    setEditingId(user.id);
-    setEditPlan(user.plan || 'starter');
-    setEditQuota(user.quota || 0);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditPlan('');
-    setEditQuota('');
-  }
-
+  function startEdit(user) { setEditingId(user.id); setEditPlan(user.plan || 'starter'); setEditQuota(user.quota || 0); }
+  function cancelEdit() { setEditingId(null); }
   async function savePlan(userId) {
     setSaving(true);
     try {
-      const result = await apiFetch(`/admin/users/${userId}/plan`, {
-        method: 'PUT',
-        body: JSON.stringify({ plan: editPlan, monthlyQuota: parseInt(editQuota) || 0 }),
-      });
-      setUsers(prev => prev.map(u => u.id === userId ? {
-        ...u,
-        plan: result.plan,
-        planLabel: result.planLabel,
-        quota: result.quota,
-        used: result.used,
-        remaining: result.remaining,
-      } : u));
-      setEditingId(null);
-      showMsg('Plan updated');
-    } catch (err) {
-      alert('Failed to update plan: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
+      const result = await apiFetch('/admin/users/' + userId + '/plan', { method: 'PUT', body: JSON.stringify({ plan: editPlan, monthlyQuota: parseInt(editQuota) || 0 }) });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: result.plan, planLabel: result.planLabel, quota: result.quota, used: result.used, remaining: result.remaining } : u));
+      setEditingId(null); showMsg('Plan updated');
+    } catch (err) { alert('Failed to update plan: ' + err.message); } finally { setSaving(false); }
   }
-
-  function handlePlanChange(value) {
-    setEditPlan(value);
-    const planDef = PLAN_OPTIONS.find(p => p.value === value);
-    if (planDef) setEditQuota(planDef.quota);
-  }
-
+  function handlePlanChange(value) { setEditPlan(value); const p = PLAN_OPTIONS.find(p => p.value === value); if (p) setEditQuota(p.quota); }
   const planBadge = (plan) => {
-    const styles = {
-      starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' },
-      professional: { bg: t.warningBg, color: t.warning, label: 'Pro' },
-      premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' },
-      custom: { bg: t.goldBg, color: t.gold, label: 'Custom' },
-    };
-    const s = styles[plan] || styles.starter;
-    return (
-      <span style={{
-        padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-        background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em',
-      }}>{s.label}</span>
-    );
+    const s = { starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' }, professional: { bg: t.warningBg, color: t.warning, label: 'Pro' }, premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' }, custom: { bg: t.goldBg, color: t.gold, label: 'Custom' } }[plan] || { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' };
+    return <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>;
   };
-
-  const inputStyle = {
-    padding: '9px 12px', borderRadius: 8, fontSize: 13,
-    background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text,
-    outline: 'none', width: '100%',
-  };
-
-  if (loading) {
-    return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
-  }
+  const inputStyle = { padding: '9px 12px', borderRadius: 8, fontSize: 13, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, outline: 'none', width: '100%' };
+  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Success/Error message toast */}
-      {actionMsg && (
-        <div style={{
-          padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500,
-          background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'),
-          color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444',
-          border: `1px solid ${actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430'}`,
-        }}>
-          {actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}
-        </div>
-      )}
-
-      {/* Header with Add button */}
-      <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
-        <div style={{ padding: '18px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'), color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}</div>}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12, color: t.textMuted }}>{users.length} clients</span>
-            <button onClick={() => setShowAddForm(!showAddForm)} style={{
-              padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-              background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'),
-              color: showAddForm ? t.textSecondary : '#fff',
-              border: showAddForm ? `1px solid ${t.border}` : 'none',
-              cursor: 'pointer',
-            }}>
-              {showAddForm ? '✕ Cancel' : '+ Add Client'}
-            </button>
+            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAddForm ? t.textSecondary : '#fff', border: showAddForm ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAddForm ? '✕ Cancel' : '+ Add Client'}</button>
           </div>
         </div>
-
-        {/* ─── Add User Form ──────────────────────────────────────────── */}
         {showAddForm && (
-          <form onSubmit={handleAddUser} style={{
-            padding: '16px 20px', borderBottom: `1px solid ${t.border}`,
-            background: t.surfaceHover || t.surface,
-          }}>
+          <form onSubmit={handleAddUser} style={{ padding: '16px 20px', borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div>
-                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Full Name *</label>
-                <input
-                  style={inputStyle} placeholder="e.g. John Smith"
-                  value={addForm.fullName} onChange={e => setAddForm(p => ({ ...p, fullName: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Email *</label>
-                <input
-                  style={inputStyle} type="email" placeholder="john@example.com"
-                  value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Company</label>
-                <input
-                  style={inputStyle} placeholder="Company name"
-                  value={addForm.company} onChange={e => setAddForm(p => ({ ...p, company: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Phone</label>
-                <input
-                  style={inputStyle} placeholder="+44 7..."
-                  value={addForm.phone} onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))}
-                />
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>
-                  Password <span style={{ color: t.textDim }}>(default: Welcome123!)</span>
-                </label>
-                <input
-                  style={inputStyle} type="text" placeholder="Welcome123!"
-                  value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
-                />
-              </div>
+              <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Full Name *</label><input style={inputStyle} placeholder="e.g. John Smith" value={addForm.fullName} onChange={e => setAddForm(p => ({ ...p, fullName: e.target.value }))} /></div>
+              <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Email *</label><input style={inputStyle} type="email" placeholder="john@example.com" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} /></div>
+              <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Company</label><input style={inputStyle} placeholder="Company name" value={addForm.company} onChange={e => setAddForm(p => ({ ...p, company: e.target.value }))} /></div>
+              <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Phone</label><input style={inputStyle} placeholder="+44 7..." value={addForm.phone} onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))} /></div>
+              <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Password <span style={{ color: t.textDim }}>(default: Welcome123!)</span></label><input style={inputStyle} type="text" placeholder="Welcome123!" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} /></div>
             </div>
-            {addError && (
-              <div style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>⚠️ {addError}</div>
-            )}
-            <button type="submit" disabled={adding} style={{
-              padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-              background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer',
-              opacity: adding ? 0.6 : 1,
-            }}>
-              {adding ? 'Adding...' : 'Add Client'}
-            </button>
+            {addError && <div style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>⚠️ {addError}</div>}
+            <button type="submit" disabled={adding} style={{ padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer', opacity: adding ? 0.6 : 1 }}>{adding ? 'Adding...' : 'Add Client'}</button>
           </form>
         )}
-
-        {/* ─── User List ──────────────────────────────────────────────── */}
         {users.map((user, i) => {
-          const isEditing = editingId === user.id;
-          const isDeleting = confirmDelete === user.id;
+          const isEditing = editingId === user.id; const isDeleting = confirmDelete === user.id;
           const pct = user.quota > 0 ? Math.min(100, (user.used / user.quota) * 100) : 0;
           const barColor = user.atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
-
           return (
-            <div key={user.id} style={{
-              padding: '16px 20px',
-              borderBottom: i < users.length - 1 ? `1px solid ${t.border}` : 'none',
-              background: isEditing ? (t.surfaceHover || t.surface) : isDeleting ? 'rgba(239,68,68,0.05)' : 'transparent',
-            }}>
-              {/* Delete Confirmation */}
+            <div key={user.id} style={{ padding: '16px 20px', borderBottom: i < users.length - 1 ? '1px solid ' + t.border : 'none', background: isEditing ? (t.surfaceHover || t.surface) : isDeleting ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
               {isDeleting && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px', marginBottom: 10, borderRadius: 8,
-                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-                }}>
-                  <span style={{ fontSize: 13, color: '#EF4444' }}>
-                    ⚠️ Delete <strong>{user.fullName || user.email}</strong> and all their projects?
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', marginBottom: 10, borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  <span style={{ fontSize: 13, color: '#EF4444' }}>⚠️ Delete <strong>{user.fullName || user.email}</strong> and all their projects?</span>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{
-                      padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                      background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer',
-                      opacity: deleting ? 0.6 : 1,
-                    }}>{deleting ? '...' : 'Yes, Delete'}</button>
-                    <button onClick={() => setConfirmDelete(null)} style={{
-                      padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                      background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                    }}>Cancel</button>
+                    <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer', opacity: deleting ? 0.6 : 1 }}>{deleting ? '...' : 'Yes, Delete'}</button>
+                    <button onClick={() => setConfirmDelete(null)} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button>
                   </div>
                 </div>
               )}
-
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                {/* Left: user info */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 200 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: t.accentGlow, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, fontWeight: 700, color: t.accentLight, flexShrink: 0,
-                  }}>
-                    {(user.fullName || '?')[0].toUpperCase()}
-                  </div>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: t.accentGlow, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: t.accentLight, flexShrink: 0 }}>{(user.fullName || '?')[0].toUpperCase()}</div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{user.fullName}</div>
                     <div style={{ fontSize: 12, color: t.textMuted }}>{user.email}</div>
                     {user.company && <div style={{ fontSize: 11, color: t.textDim }}>{user.company}</div>}
                   </div>
                 </div>
-
-                {/* Middle: plan + usage */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 260 }}>
                   {isEditing ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <select value={editPlan} onChange={e => handlePlanChange(e.target.value)} style={{
-                        padding: '6px 10px', borderRadius: 6, fontSize: 12,
-                        background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text,
-                      }}>
-                        {PLAN_OPTIONS.map(p => (
-                          <option key={p.value} value={p.value}>{p.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number" value={editQuota}
-                        onChange={e => setEditQuota(e.target.value)}
-                        style={{
-                          width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12,
-                          background: t.inputBg || t.surface, border: `1px solid ${t.border}`, color: t.text, textAlign: 'center',
-                        }}
-                        placeholder="Quota"
-                      />
-                      <span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
+                      <select value={editPlan} onChange={e => handlePlanChange(e.target.value)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text }}>{PLAN_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select>
+                      <input type="number" value={editQuota} onChange={e => setEditQuota(e.target.value)} style={{ width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, textAlign: 'center' }} /><span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
                     </div>
                   ) : (
-                    <>
-                      {planBadge(user.plan)}
-                      {user.quota > 0 ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}>
-                          <div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: barColor }} />
-                          </div>
-                          <span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>
-                            {user.used}/{user.quota}
-                          </span>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: 11, color: t.textMuted }}>{user.used || 0} projects this month</span>
-                      )}
-                    </>
+                    <>{planBadge(user.plan)}{user.quota > 0 ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}><div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}><div style={{ width: pct + '%', height: '100%', borderRadius: 4, background: barColor }} /></div><span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>{user.used}/{user.quota}</span></div> : <span style={{ fontSize: 11, color: t.textMuted }}>{user.used || 0} projects this month</span>}</>
                   )}
                 </div>
-
-                {/* Right: actions */}
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {isEditing ? (
-                    <>
-                      <button onClick={() => savePlan(user.id)} disabled={saving} style={{
-                        padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                        background: t.success, color: '#fff', border: 'none', cursor: 'pointer',
-                      }}>{saving ? '...' : 'Save'}</button>
-                      <button onClick={cancelEdit} style={{
-                        padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                      }}>Cancel</button>
-                    </>
+                    <><button onClick={() => savePlan(user.id)} disabled={saving} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: t.success, color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button><button onClick={cancelEdit} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button></>
                   ) : (
-                    <>
-                      <button onClick={() => startEdit(user)} title="Edit plan" style={{
-                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                      }}>✏️ Plan</button>
-                      <button onClick={() => handleResetPassword(user)} title="Reset password" style={{
-                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: t.surfaceHover, color: t.textSecondary, border: `1px solid ${t.border}`, cursor: 'pointer',
-                      }}>🔑 Reset</button>
-                      <button onClick={() => handleSendMagicLink(user)} title="Send magic link" style={{
-                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer',
-                      }}>✉️ Magic Link</button>
-                      <button onClick={() => setConfirmDelete(user.id)} title="Delete user" style={{
-                        padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                        background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer',
-                      }}>🗑️</button>
-                    </>
+                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
                   )}
                 </div>
               </div>
@@ -499,118 +211,177 @@ function ClientsTab({ t }) {
 }
 
 function RatesTab({ t }) {
+  const [libraries, setLibraries] = useState([]);
+  const [rates, setRates] = useState([]);
+  const [trades, setTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [selectedLib, setSelectedLib] = useState('');
+  const [selectedTrade, setSelectedTrade] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [editingId, setEditingId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addData, setAddData] = useState({ code: '', trade: '', description: '', unit: '', labour_rate: '', material_rate: '', notes: '' });
+  const [addError, setAddError] = useState('');
+  const [msg, setMsg] = useState(null);
+
+  function flash(text, type) { setMsg({ text, type: type || 'success' }); setTimeout(() => setMsg(null), 3500); }
+
+  useEffect(() => {
+    apiFetch('/admin/rate-libraries').then(libs => { setLibraries(libs); if (libs.length > 0) setSelectedLib(libs[0].id); }).catch(console.error).finally(() => setLoading(false));
+  }, []);
+
+  const loadRates = useCallback(() => {
+    if (!selectedLib) return;
+    setLoadingRates(true);
+    const params = new URLSearchParams({ library_id: selectedLib, page: page, limit: 50 });
+    if (selectedTrade) params.set('trade', selectedTrade);
+    if (search) params.set('search', search);
+    apiFetch('/admin/rates?' + params).then(data => { setRates(data.rates || []); setTrades(data.trades || []); setTotalPages(data.pages || 1); setTotalCount(data.total || 0); }).catch(console.error).finally(() => setLoadingRates(false));
+  }, [selectedLib, selectedTrade, search, page]);
+
+  useEffect(() => { loadRates(); }, [loadRates]);
+
+  function startEdit(rate) { setEditingId(rate.id); setEditData({ code: rate.code, trade: rate.trade, description: rate.description, unit: rate.unit, labour_rate: rate.labour_rate, material_rate: rate.material_rate, notes: rate.notes || '' }); }
+  async function saveEdit(id) { setSaving(true); try { const u = await apiFetch('/admin/rates/' + id, { method: 'PUT', body: JSON.stringify(editData) }); setRates(prev => prev.map(r => r.id === id ? { ...r, ...u } : r)); setEditingId(null); flash('Rate updated'); } catch (err) { alert('Save failed: ' + err.message); } finally { setSaving(false); } }
+  async function deleteRate(id) { if (!window.confirm('Delete this rate?')) return; try { await apiFetch('/admin/rates/' + id, { method: 'DELETE' }); setRates(prev => prev.filter(r => r.id !== id)); flash('Rate deleted'); } catch (err) { alert('Delete failed: ' + err.message); } }
+  async function handleAddRate() {
+    setAddError(''); if (!addData.code || !addData.trade || !addData.description || !addData.unit) { setAddError('Code, trade, description and unit required'); return; }
+    try { const nr = await apiFetch('/admin/rates', { method: 'POST', body: JSON.stringify({ ...addData, library_id: selectedLib }) }); setRates(prev => [nr, ...prev]); setShowAdd(false); setAddData({ code: '', trade: '', description: '', unit: '', labour_rate: '', material_rate: '', notes: '' }); flash('Rate added'); } catch (err) { setAddError(err.message); }
+  }
+  async function handleExport() {
+    try { const data = await apiFetch('/admin/rates/export/' + selectedLib); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'rate-library-' + (data.library ? data.library.name : 'export') + '.json'; a.click(); URL.revokeObjectURL(url); flash('Exported ' + data.count + ' rates'); } catch (err) { alert('Export failed: ' + err.message); }
+  }
+  function handleImport() {
+    const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+    input.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; try { const text = await file.text(); const parsed = JSON.parse(text); const arr = parsed.rates || parsed; if (!Array.isArray(arr)) { alert('Invalid format'); return; } const result = await apiFetch('/admin/rates/import', { method: 'POST', body: JSON.stringify({ library_id: selectedLib, rates: arr }) }); flash('Imported ' + result.imported + ' rates' + (result.errors.length > 0 ? ' (' + result.errors.length + ' errors)' : '')); loadRates(); } catch (err) { alert('Import failed: ' + err.message); } };
+    input.click();
+  }
+
+  const iS = { padding: '7px 10px', borderRadius: 6, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, outline: 'none' };
+  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading rate libraries...</div>;
+  const selLib = libraries.find(l => l.id === selectedLib);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Rate Libraries</h3>
-        <button style={{ padding: '8px 14px', borderRadius: 8, background: t.accent, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ New Library</button>
-      </div>
-      {RATE_LIBRARIES.map((lib, i) => (
-        <div key={i} style={{
-          background: t.card, border: `1px solid ${lib.custom ? t.gold + '30' : t.border}`,
-          borderRadius: 12, padding: '16px 20px', boxShadow: t.shadowSm,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 10,
-              background: lib.custom ? t.goldBg : t.accentGlow,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
-            }}>{lib.custom ? '⭐' : '📚'}</div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{lib.name}</span>
-                {lib.custom && (
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: t.goldBg, color: t.gold, fontWeight: 600 }}>Custom</span>
-                )}
-                <span style={{ fontSize: 11, color: t.textDim }}>{lib.version}</span>
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{lib.items} items • {lib.regions} • Updated {lib.lastUpdated}</div>
-            </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'), color: msg.type === 'success' ? (t.success || '#10B981') : '#EF4444' }}>{msg.type === 'success' ? '✅' : '❌'} {msg.text}</div>}
+
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>📚</span>
+            <select value={selectedLib} onChange={e => { setSelectedLib(e.target.value); setPage(1); }} style={{ ...iS, fontSize: 13, fontWeight: 600, minWidth: 200 }}>{libraries.map(lib => <option key={lib.id} value={lib.id}>{lib.name} ({lib.item_count} items)</option>)}</select>
+            {selLib && <span style={{ fontSize: 11, color: t.textMuted }}>{selLib.version} • {selLib.region}</span>}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button style={{ padding: '6px 12px', borderRadius: 6, background: t.surfaceHover, border: `1px solid ${t.border}`, color: t.textSecondary, cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Edit</button>
-            <button style={{ padding: '6px 12px', borderRadius: 6, background: t.surfaceHover, border: `1px solid ${t.border}`, color: t.textSecondary, cursor: 'pointer', fontSize: 11, fontWeight: 500 }}>Export</button>
+            <button onClick={handleExport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>📥 Export</button>
+            <button onClick={handleImport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>📤 Import</button>
+            <button onClick={() => setShowAdd(!showAdd)} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: showAdd ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAdd ? t.textSecondary : '#fff', border: showAdd ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAdd ? '✕ Cancel' : '+ Add Rate'}</button>
           </div>
         </div>
-      ))}
+      </div>
+
+      {showAdd && (
+        <div style={{ background: t.card, border: '1px solid ' + (t.accent || '#F59E0B') + '40', borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: t.text, margin: '0 0 12px' }}>Add New Rate</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 160px 60px 90px 90px', gap: 8, alignItems: 'end' }}>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Code</label><input style={{ ...iS, width: '100%' }} placeholder="GW-039" value={addData.code} onChange={e => setAddData(p => ({ ...p, code: e.target.value }))} /></div>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Description</label><input style={{ ...iS, width: '100%' }} placeholder="Description..." value={addData.description} onChange={e => setAddData(p => ({ ...p, description: e.target.value }))} /></div>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Trade</label><select style={{ ...iS, width: '100%' }} value={addData.trade} onChange={e => setAddData(p => ({ ...p, trade: e.target.value }))}><option value="">Select...</option>{trades.map(tr => <option key={tr} value={tr}>{tr}</option>)}</select></div>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Unit</label><input style={{ ...iS, width: '100%' }} placeholder="m²" value={addData.unit} onChange={e => setAddData(p => ({ ...p, unit: e.target.value }))} /></div>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Labour £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.labour_rate} onChange={e => setAddData(p => ({ ...p, labour_rate: e.target.value }))} /></div>
+            <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Material £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.material_rate} onChange={e => setAddData(p => ({ ...p, material_rate: e.target.value }))} /></div>
+          </div>
+          <div style={{ marginTop: 8 }}><input style={{ ...iS, width: '100%' }} placeholder="Notes (optional)" value={addData.notes} onChange={e => setAddData(p => ({ ...p, notes: e.target.value }))} /></div>
+          {addError && <div style={{ fontSize: 12, color: '#EF4444', marginTop: 6 }}>⚠️ {addError}</div>}
+          <button onClick={handleAddRate} style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer' }}>Add Rate</button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="🔍  Search rates by code, description, notes..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        <select value={selectedTrade} onChange={e => { setSelectedTrade(e.target.value); setPage(1); }} style={{ ...iS, minWidth: 180, fontSize: 13, padding: '9px 12px' }}><option value="">All Trades ({totalCount})</option>{trades.map(tr => <option key={tr} value={tr}>{tr}</option>)}</select>
+        <span style={{ fontSize: 12, color: t.textMuted, whiteSpace: 'nowrap' }}>{totalCount} rates • Page {page}/{totalPages}</span>
+      </div>
+
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px 55px 80px 80px 90px 70px', padding: '10px 16px', borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
+          {['Code', 'Description', 'Trade', 'Unit', 'Labour', 'Material', 'Total', ''].map((h, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>)}
+        </div>
+        {loadingRates ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>Loading rates...</div> : rates.length === 0 ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>No rates found</div> : rates.map((rate, i) => {
+          const isE = editingId === rate.id;
+          return (
+            <div key={rate.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px 55px 80px 80px 90px 70px', padding: '10px 16px', alignItems: 'center', borderBottom: i < rates.length - 1 ? '1px solid ' + t.border : 'none', background: isE ? (t.surfaceHover || t.surface) : 'transparent' }}>
+              {isE ? (<>
+                <input style={{ ...iS, width: 70 }} value={editData.code} onChange={e => setEditData(p => ({ ...p, code: e.target.value }))} />
+                <input style={{ ...iS, width: '100%' }} value={editData.description} onChange={e => setEditData(p => ({ ...p, description: e.target.value }))} />
+                <input style={{ ...iS, width: 120 }} value={editData.trade} onChange={e => setEditData(p => ({ ...p, trade: e.target.value }))} />
+                <input style={{ ...iS, width: 45 }} value={editData.unit} onChange={e => setEditData(p => ({ ...p, unit: e.target.value }))} />
+                <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.labour_rate} onChange={e => setEditData(p => ({ ...p, labour_rate: e.target.value }))} />
+                <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.material_rate} onChange={e => setEditData(p => ({ ...p, material_rate: e.target.value }))} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: t.accent || '#F59E0B', fontFamily: 'monospace' }}>£{((parseFloat(editData.labour_rate) || 0) + (parseFloat(editData.material_rate) || 0)).toFixed(2)}</span>
+                <div style={{ display: 'flex', gap: 3 }}><button onClick={() => saveEdit(rate.id)} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, background: t.success || '#10B981', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '..' : '✓'}</button><button onClick={() => setEditingId(null)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}>✕</button></div>
+              </>) : (<>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.accent || '#F59E0B', fontWeight: 600 }}>{rate.code}</span>
+                <div><span style={{ fontSize: 12, color: t.text }}>{rate.description}</span>{rate.notes && <span style={{ fontSize: 10, color: t.textDim, marginLeft: 6 }}>({rate.notes})</span>}</div>
+                <span style={{ fontSize: 11, color: t.textMuted }}>{rate.trade}</span>
+                <span style={{ fontSize: 11, color: t.textMuted }}>{rate.unit}</span>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.labour_rate || 0).toFixed(2)}</span>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.material_rate || 0).toFixed(2)}</span>
+                <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: t.text }}>£{(rate.total_rate || 0).toFixed(2)}</span>
+                <div style={{ display: 'flex', gap: 3 }}><button onClick={() => startEdit(rate)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️</button><button onClick={() => deleteRate(rate.id)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></div>
+              </>)}
+            </div>
+          );
+        })}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '14px 16px', borderTop: '1px solid ' + t.border }}>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: page <= 1 ? t.textDim : t.textSecondary, border: '1px solid ' + t.border, cursor: page <= 1 ? 'default' : 'pointer' }}>← Prev</button>
+            <span style={{ fontSize: 12, color: t.textMuted }}>Page {page} of {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: page >= totalPages ? t.textDim : t.textSecondary, border: '1px solid ' + t.border, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next →</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function LogsTab({ t }) {
-  const typeStyle = (type) => {
-    if (type === 'success') return { bg: t.successBg, icon: '✅' };
-    if (type === 'warning') return { bg: t.warningBg, icon: '⚠️' };
-    if (type === 'danger') return { bg: t.dangerBg, icon: '❌' };
-    return { bg: t.accentGlow, icon: 'ℹ️' };
-  };
-
+  const typeStyle = (type) => ({ success: { bg: t.successBg, icon: '✅' }, warning: { bg: t.warningBg, icon: '⚠️' }, danger: { bg: t.dangerBg, icon: '❌' } }[type] || { bg: t.accentGlow, icon: 'ℹ️' });
   return (
-    <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
+    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
       <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 14px' }}>Activity Log</h3>
-      {ACTIVITY_LOG.map((item, i) => {
-        const s = typeStyle(item.type);
-        return (
-          <div key={i} style={{
-            display: 'flex', gap: 12, padding: '12px 0',
-            borderBottom: i < ACTIVITY_LOG.length - 1 ? `1px solid ${t.border}` : 'none'
-          }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 7, background: s.bg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, marginTop: 2, fontSize: 13
-            }}>{s.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{item.action}</div>
-              <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{item.detail}</div>
-            </div>
-            <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap' }}>{item.time}</span>
-          </div>
-        );
-      })}
+      {ACTIVITY_LOG.map((item, i) => { const s = typeStyle(item.type); return (
+        <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: i < ACTIVITY_LOG.length - 1 ? '1px solid ' + t.border : 'none' }}>
+          <div style={{ width: 28, height: 28, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, fontSize: 13 }}>{s.icon}</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{item.action}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{item.detail}</div></div>
+          <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap' }}>{item.time}</span>
+        </div>
+      ); })}
     </div>
   );
 }
 
 function SettingsTab({ t }) {
   const sections = [
-    { title: 'API Configuration', items: [
-      { label: 'Anthropic API Key', value: 'sk-...7xQ4', type: 'secret' },
-      { label: 'Pipedream Webhook URL', value: 'https://eo...pipedream.net/...', type: 'url' },
-      { label: 'Google Drive Folder ID', value: '1abc...xyz', type: 'text' },
-    ]},
-    { title: 'Processing Defaults', items: [
-      { label: 'Default Rate Library', value: 'UK Residential v3.2' },
-      { label: 'Location Factor Auto-Adjust', value: 'Enabled' },
-      { label: 'QA Review Required', value: 'Enabled' },
-      { label: 'Auto-Email BOQ on Complete', value: 'Disabled' },
-    ]},
-    { title: 'Branding', items: [
-      { label: 'Company Name', value: 'CRM Wizard AI' },
-      { label: 'Report Header Logo', value: 'crm-wizard-logo.png' },
-      { label: 'BOQ Excel Template', value: 'Dark navy + light blue style' },
-    ]},
+    { title: 'API Configuration', items: [{ label: 'Anthropic API Key', value: 'sk-...7xQ4', type: 'secret' }, { label: 'Pipedream Webhook URL', value: 'https://eo...pipedream.net/...', type: 'url' }, { label: 'Google Drive Folder ID', value: '1abc...xyz', type: 'text' }] },
+    { title: 'Processing Defaults', items: [{ label: 'Default Rate Library', value: 'UK Master Rates v4.0' }, { label: 'Location Factor Auto-Adjust', value: 'Enabled' }, { label: 'QA Review Required', value: 'Enabled' }, { label: 'Auto-Email BOQ on Complete', value: 'Disabled' }] },
+    { title: 'Branding', items: [{ label: 'Company Name', value: 'CRM Wizard AI' }, { label: 'Report Header Logo', value: 'crm-wizard-logo.png' }, { label: 'BOQ Excel Template', value: 'Dark navy + light blue style' }] },
   ];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {sections.map((section, i) => (
-        <div key={i} style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
+        <div key={i} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 14px' }}>{section.title}</h3>
           {section.items.map((item, j) => (
-            <div key={j} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '12px 0',
-              borderBottom: j < section.items.length - 1 ? `1px solid ${t.border}` : 'none'
-            }}>
+            <div key={j} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: j < section.items.length - 1 ? '1px solid ' + t.border : 'none' }}>
               <span style={{ fontSize: 13, color: t.textSecondary }}>{item.label}</span>
-              <span style={{
-                fontSize: 13, color: t.text, fontWeight: 500, fontFamily: 'monospace',
-                background: t.surfaceHover, padding: '4px 10px', borderRadius: 6
-              }}>
-                {item.type === 'secret' ? '••••••••' + item.value.slice(-4) : item.value}
-              </span>
+              <span style={{ fontSize: 13, color: t.text, fontWeight: 500, fontFamily: 'monospace', background: t.surfaceHover, padding: '4px 10px', borderRadius: 6 }}>{item.type === 'secret' ? '••••••••' + item.value.slice(-4) : item.value}</span>
             </div>
           ))}
         </div>
@@ -622,14 +393,7 @@ function SettingsTab({ t }) {
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-
-  const tabs = [
-    { key: 'overview', label: '📊 Overview' },
-    { key: 'clients', label: '👥 Clients' },
-    { key: 'rates', label: '📚 Rate Libraries' },
-    { key: 'logs', label: '📋 Activity Log' },
-    { key: 'settings', label: '⚙️ Settings' },
-  ];
+  const tabs = [{ key: 'overview', label: '📊 Overview' }, { key: 'clients', label: '👥 Clients' }, { key: 'rates', label: '📚 Rate Libraries' }, { key: 'logs', label: '📋 Activity Log' }, { key: 'settings', label: '⚙️ Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -637,28 +401,9 @@ export default function AdminPage() {
         <h1 style={{ fontSize: 26, fontWeight: 700, color: t.text, margin: 0 }}>Admin Panel</h1>
         <p style={{ fontSize: 13, color: t.textMuted, margin: '4px 0 0' }}>System configuration, rate management, and monitoring</p>
       </div>
-
-      <div style={{
-        display: 'flex', gap: 4, padding: 4, marginBottom: 24,
-        background: t.surface, borderRadius: 12, border: `1px solid ${t.border}`,
-        overflowX: 'auto',
-      }}>
-        {tabs.map(tb => (
-          <button key={tb.key} onClick={() => setTab(tb.key)} style={{
-            flex: 1, padding: '10px 14px', borderRadius: 9,
-            background: tab === tb.key ? t.card : 'transparent',
-            color: tab === tb.key ? t.text : t.textMuted,
-            border: tab === tb.key ? `1px solid ${t.border}` : '1px solid transparent',
-            cursor: 'pointer', fontSize: 13,
-            fontWeight: tab === tb.key ? 600 : 400,
-            boxShadow: tab === tb.key ? t.shadowSm : 'none',
-            whiteSpace: 'nowrap',
-          }}>
-            {tb.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: 4, padding: 4, marginBottom: 24, background: t.surface, borderRadius: 12, border: '1px solid ' + t.border, overflowX: 'auto' }}>
+        {tabs.map(tb => <button key={tb.key} onClick={() => setTab(tb.key)} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: tab === tb.key ? t.card : 'transparent', color: tab === tb.key ? t.text : t.textMuted, border: tab === tb.key ? '1px solid ' + t.border : '1px solid transparent', cursor: 'pointer', fontSize: 13, fontWeight: tab === tb.key ? 600 : 400, boxShadow: tab === tb.key ? t.shadowSm : 'none', whiteSpace: 'nowrap' }}>{tb.label}</button>)}
       </div>
-
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
