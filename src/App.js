@@ -17,6 +17,7 @@ import MagicLinkPage from './pages/MagicLinkPage';
 import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
+import AdminNotifications from './components/AdminNotifications';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -59,6 +60,7 @@ function AppInner() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       {user && <WhatsAppWidget theme={t} userName={user?.fullName} />}
+      <AdminNotifications />
     </BrowserRouter>
   );
 }
