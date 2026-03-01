@@ -9,17 +9,6 @@ const PLAN_OPTIONS = [
   { value: 'custom', label: 'Custom', quota: 999 },
 ];
 
-const ACTIVITY_LOG = [
-  { time: '10:42', action: 'BOQ generated', detail: 'Richmond Mews Coping — £61,503 total, 4 sheets', type: 'success' },
-  { time: '10:30', action: 'Pipeline started', detail: 'Barge & Barrel Conversion — 5 drawings queued', type: 'info' },
-  { time: '09:45', action: 'Rate mismatch flagged', detail: "Turnkey Build — Joe: 'acoustic board' not found in rate library", type: 'warning' },
-  { time: '09:15', action: 'Pipeline started', detail: 'Turnkey Build — Joe — 12 drawings queued', type: 'info' },
-  { time: 'Yesterday', action: 'Client signup', detail: 'YDS (Leeds) registered — Pro plan', type: 'success' },
-  { time: 'Yesterday', action: 'Drawings uploaded', detail: 'Parkgate Avenue Extension — 5 files from Penn Contracting', type: 'info' },
-  { time: '2 days ago', action: 'Pipeline error', detail: 'Clive — Rear Extension: PDF extraction failed on page 3 (corrupt)', type: 'danger' },
-  { time: '2 days ago', action: 'BOQ approved', detail: 'Portrack House Carport — client downloaded BOQ', type: 'success' },
-];
-
 const SYSTEM_SERVICES = [
   { label: 'Pipedream API', status: 'operational', uptime: '99.8%' },
   { label: 'Claude API (Anthropic)', status: 'operational', uptime: '99.5%' },
@@ -40,6 +29,10 @@ function StatCard({ label, value, sub, emoji, t }) {
   );
 }
 
+// ═══════════════════════════════════════════════════
+// OVERVIEW TAB
+// ═══════════════════════════════════════════════════
+
 function OverviewTab({ t }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -56,7 +49,6 @@ function OverviewTab({ t }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: svc.status === 'operational' ? t.success : t.warning }} />
               <span style={{ fontSize: 13, color: t.text }}>{svc.label}</span>
-              {svc.note && <span style={{ fontSize: 11, color: t.warning, background: t.warningBg, padding: '2px 8px', borderRadius: 6 }}>{svc.note}</span>}
             </div>
             <span style={{ fontSize: 12, color: t.textMuted }}>{svc.uptime} uptime</span>
           </div>
@@ -65,6 +57,10 @@ function OverviewTab({ t }) {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════
+// CLIENTS TAB
+// ═══════════════════════════════════════════════════
 
 function ClientsTab({ t }) {
   const [users, setUsers] = useState([]);
@@ -105,7 +101,7 @@ function ClientsTab({ t }) {
     const newPw = prompt('Set a new password for ' + (user.fullName || user.email) + ':', 'Welcome123!');
     if (!newPw) return;
     try { await apiFetch('/admin/users/' + user.id + '/password', { method: 'PUT', body: JSON.stringify({ password: newPw }) }); showMsg('Password reset for ' + (user.fullName || user.email)); }
-    catch (err) { alert('Failed to reset password: ' + err.message); }
+    catch (err) { alert('Failed: ' + err.message); }
   }
   async function handleSendMagicLink(user) {
     try {
@@ -113,10 +109,10 @@ function ClientsTab({ t }) {
       if (result.emailSent) { showMsg('Magic link emailed to ' + user.email); }
       else if (result.magicUrl) {
         const copied = await navigator.clipboard.writeText(result.magicUrl).then(() => true).catch(() => false);
-        if (copied) showMsg('Magic link copied to clipboard for ' + (user.fullName || user.email));
+        if (copied) showMsg('Magic link copied to clipboard');
         else prompt('Magic link (copy this):', result.magicUrl);
-      } else { showMsg('Magic link generated for ' + user.email); }
-    } catch (err) { alert('Failed to send magic link: ' + err.message); }
+      }
+    } catch (err) { alert('Failed: ' + err.message); }
   }
   function startEdit(user) { setEditingId(user.id); setEditPlan(user.plan || 'starter'); setEditQuota(user.quota || 0); }
   function cancelEdit() { setEditingId(null); }
@@ -126,7 +122,7 @@ function ClientsTab({ t }) {
       const result = await apiFetch('/admin/users/' + userId + '/plan', { method: 'PUT', body: JSON.stringify({ plan: editPlan, monthlyQuota: parseInt(editQuota) || 0 }) });
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: result.plan, planLabel: result.planLabel, quota: result.quota, used: result.used, remaining: result.remaining } : u));
       setEditingId(null); showMsg('Plan updated');
-    } catch (err) { alert('Failed to update plan: ' + err.message); } finally { setSaving(false); }
+    } catch (err) { alert('Failed: ' + err.message); } finally { setSaving(false); }
   }
   function handlePlanChange(value) { setEditPlan(value); const p = PLAN_OPTIONS.find(p => p.value === value); if (p) setEditQuota(p.quota); }
   const planBadge = (plan) => {
@@ -138,7 +134,7 @@ function ClientsTab({ t }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'), color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}</div>}
+      {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : 'rgba(239,68,68,0.1)', color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}</div>}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
@@ -168,10 +164,10 @@ function ClientsTab({ t }) {
             <div key={user.id} style={{ padding: '16px 20px', borderBottom: i < users.length - 1 ? '1px solid ' + t.border : 'none', background: isEditing ? (t.surfaceHover || t.surface) : isDeleting ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
               {isDeleting && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', marginBottom: 10, borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  <span style={{ fontSize: 13, color: '#EF4444' }}>⚠️ Delete <strong>{user.fullName || user.email}</strong> and all their projects?</span>
+                  <span style={{ fontSize: 13, color: '#EF4444' }}>⚠️ Delete <strong>{user.fullName || user.email}</strong>?</span>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer', opacity: deleting ? 0.6 : 1 }}>{deleting ? '...' : 'Yes, Delete'}</button>
-                    <button onClick={() => setConfirmDelete(null)} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer' }}>{deleting ? '...' : 'Yes, Delete'}</button>
+                    <button onClick={() => setConfirmDelete(null)} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button>
                   </div>
                 </div>
               )}
@@ -196,9 +192,9 @@ function ClientsTab({ t }) {
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {isEditing ? (
-                    <><button onClick={() => savePlan(user.id)} disabled={saving} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: t.success, color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button><button onClick={cancelEdit} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button></>
+                    <><button onClick={() => savePlan(user.id)} disabled={saving} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: t.success, color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button><button onClick={cancelEdit} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button></>
                   ) : (
-                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
+                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
                   )}
                 </div>
               </div>
@@ -210,6 +206,10 @@ function ClientsTab({ t }) {
   );
 }
 
+// ═══════════════════════════════════════════════════
+// RATES TAB — COLLAPSIBLE TRADE ACCORDION
+// ═══════════════════════════════════════════════════
+
 function RatesTab({ t }) {
   const [libraries, setLibraries] = useState([]);
   const [rates, setRates] = useState([]);
@@ -217,11 +217,8 @@ function RatesTab({ t }) {
   const [loading, setLoading] = useState(true);
   const [loadingRates, setLoadingRates] = useState(false);
   const [selectedLib, setSelectedLib] = useState('');
-  const [selectedTrade, setSelectedTrade] = useState('');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [openTrades, setOpenTrades] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [saving, setSaving] = useState(false);
@@ -236,16 +233,33 @@ function RatesTab({ t }) {
     apiFetch('/admin/rate-libraries').then(libs => { setLibraries(libs); if (libs.length > 0) setSelectedLib(libs[0].id); }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
+  // Load ALL rates for this library (no pagination — grouped by trade instead)
   const loadRates = useCallback(() => {
     if (!selectedLib) return;
     setLoadingRates(true);
-    const params = new URLSearchParams({ library_id: selectedLib, page: page, limit: 50 });
-    if (selectedTrade) params.set('trade', selectedTrade);
+    const params = new URLSearchParams({ library_id: selectedLib, page: 1, limit: 9999 });
     if (search) params.set('search', search);
-    apiFetch('/admin/rates?' + params).then(data => { setRates(data.rates || []); setTrades(data.trades || []); setTotalPages(data.pages || 1); setTotalCount(data.total || 0); }).catch(console.error).finally(() => setLoadingRates(false));
-  }, [selectedLib, selectedTrade, search, page]);
+    apiFetch('/admin/rates?' + params).then(data => {
+      setRates(data.rates || []);
+      setTrades(data.trades || []);
+    }).catch(console.error).finally(() => setLoadingRates(false));
+  }, [selectedLib, search]);
 
   useEffect(() => { loadRates(); }, [loadRates]);
+
+  function toggleTrade(trade) {
+    setOpenTrades(prev => ({ ...prev, [trade]: !prev[trade] }));
+  }
+  function expandAll() { const all = {}; trades.forEach(tr => { all[tr] = true; }); setOpenTrades(all); }
+  function collapseAll() { setOpenTrades({}); }
+
+  // Group rates by trade
+  const grouped = {};
+  rates.forEach(r => {
+    if (!grouped[r.trade]) grouped[r.trade] = [];
+    grouped[r.trade].push(r);
+  });
+  const tradeKeys = Object.keys(grouped).sort();
 
   function startEdit(rate) { setEditingId(rate.id); setEditData({ code: rate.code, trade: rate.trade, description: rate.description, unit: rate.unit, labour_rate: rate.labour_rate, material_rate: rate.material_rate, notes: rate.notes || '' }); }
   async function saveEdit(id) { setSaving(true); try { const u = await apiFetch('/admin/rates/' + id, { method: 'PUT', body: JSON.stringify(editData) }); setRates(prev => prev.map(r => r.id === id ? { ...r, ...u } : r)); setEditingId(null); flash('Rate updated'); } catch (err) { alert('Save failed: ' + err.message); } finally { setSaving(false); } }
@@ -255,11 +269,11 @@ function RatesTab({ t }) {
     try { const nr = await apiFetch('/admin/rates', { method: 'POST', body: JSON.stringify({ ...addData, library_id: selectedLib }) }); setRates(prev => [nr, ...prev]); setShowAdd(false); setAddData({ code: '', trade: '', description: '', unit: '', labour_rate: '', material_rate: '', notes: '' }); flash('Rate added'); } catch (err) { setAddError(err.message); }
   }
   async function handleExport() {
-    try { const data = await apiFetch('/admin/rates/export/' + selectedLib); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'rate-library-' + (data.library ? data.library.name : 'export') + '.json'; a.click(); URL.revokeObjectURL(url); flash('Exported ' + data.count + ' rates'); } catch (err) { alert('Export failed: ' + err.message); }
+    try { const data = await apiFetch('/admin/rates/export/' + selectedLib); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'rate-library-export.json'; a.click(); URL.revokeObjectURL(url); flash('Exported ' + data.count + ' rates'); } catch (err) { alert('Export failed: ' + err.message); }
   }
   function handleImport() {
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
-    input.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; try { const text = await file.text(); const parsed = JSON.parse(text); const arr = parsed.rates || parsed; if (!Array.isArray(arr)) { alert('Invalid format'); return; } const result = await apiFetch('/admin/rates/import', { method: 'POST', body: JSON.stringify({ library_id: selectedLib, rates: arr }) }); flash('Imported ' + result.imported + ' rates' + (result.errors.length > 0 ? ' (' + result.errors.length + ' errors)' : '')); loadRates(); } catch (err) { alert('Import failed: ' + err.message); } };
+    input.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; try { const text = await file.text(); const parsed = JSON.parse(text); const arr = parsed.rates || parsed; if (!Array.isArray(arr)) { alert('Invalid format'); return; } const result = await apiFetch('/admin/rates/import', { method: 'POST', body: JSON.stringify({ library_id: selectedLib, rates: arr }) }); flash('Imported ' + result.imported + ' rates'); loadRates(); } catch (err) { alert('Import failed: ' + err.message); } };
     input.click();
   }
 
@@ -269,13 +283,14 @@ function RatesTab({ t }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : (t.dangerBg || 'rgba(239,68,68,0.1)'), color: msg.type === 'success' ? (t.success || '#10B981') : '#EF4444' }}>{msg.type === 'success' ? '✅' : '❌'} {msg.text}</div>}
+      {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.type === 'success' ? '#10B981' : '#EF4444' }}>{msg.type === 'success' ? '✅' : '❌'} {msg.text}</div>}
 
+      {/* Library selector */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 18 }}>📚</span>
-            <select value={selectedLib} onChange={e => { setSelectedLib(e.target.value); setPage(1); }} style={{ ...iS, fontSize: 13, fontWeight: 600, minWidth: 200 }}>{libraries.map(lib => <option key={lib.id} value={lib.id}>{lib.name} ({lib.item_count} items)</option>)}</select>
+            <select value={selectedLib} onChange={e => { setSelectedLib(e.target.value); }} style={{ ...iS, fontSize: 13, fontWeight: 600, minWidth: 200 }}>{libraries.map(lib => <option key={lib.id} value={lib.id}>{lib.name} ({lib.item_count} items)</option>)}</select>
             {selLib && <span style={{ fontSize: 11, color: t.textMuted }}>{selLib.version} • {selLib.region}</span>}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -286,8 +301,9 @@ function RatesTab({ t }) {
         </div>
       </div>
 
+      {/* Add rate form */}
       {showAdd && (
-        <div style={{ background: t.card, border: '1px solid ' + (t.accent || '#F59E0B') + '40', borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
+        <div style={{ background: t.card, border: '1px solid ' + (t.accent || '#F59E0B') + '40', borderRadius: 14, padding: '16px 20px' }}>
           <h4 style={{ fontSize: 13, fontWeight: 600, color: t.text, margin: '0 0 12px' }}>Add New Rate</h4>
           <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 160px 60px 90px 90px', gap: 8, alignItems: 'end' }}>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Code</label><input style={{ ...iS, width: '100%' }} placeholder="GW-039" value={addData.code} onChange={e => setAddData(p => ({ ...p, code: e.target.value }))} /></div>
@@ -297,75 +313,189 @@ function RatesTab({ t }) {
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Labour £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.labour_rate} onChange={e => setAddData(p => ({ ...p, labour_rate: e.target.value }))} /></div>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Material £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.material_rate} onChange={e => setAddData(p => ({ ...p, material_rate: e.target.value }))} /></div>
           </div>
-          <div style={{ marginTop: 8 }}><input style={{ ...iS, width: '100%' }} placeholder="Notes (optional)" value={addData.notes} onChange={e => setAddData(p => ({ ...p, notes: e.target.value }))} /></div>
           {addError && <div style={{ fontSize: 12, color: '#EF4444', marginTop: 6 }}>⚠️ {addError}</div>}
           <button onClick={handleAddRate} style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer' }}>Add Rate</button>
         </div>
       )}
 
+      {/* Search + expand/collapse */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="🔍  Search rates by code, description, notes..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
-        <select value={selectedTrade} onChange={e => { setSelectedTrade(e.target.value); setPage(1); }} style={{ ...iS, minWidth: 180, fontSize: 13, padding: '9px 12px' }}><option value="">All Trades ({totalCount})</option>{trades.map(tr => <option key={tr} value={tr}>{tr}</option>)}</select>
-        <span style={{ fontSize: 12, color: t.textMuted, whiteSpace: 'nowrap' }}>{totalCount} rates • Page {page}/{totalPages}</span>
+        <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="🔍  Search rates..." value={search} onChange={e => setSearch(e.target.value)} />
+        <span style={{ fontSize: 12, color: t.textMuted }}>{rates.length} rates across {tradeKeys.length} trades</span>
+        <button onClick={expandAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Expand All</button>
+        <button onClick={collapseAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Collapse All</button>
+      </div>
+
+      {/* Trade accordion */}
+      {loadingRates ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>Loading rates...</div> : tradeKeys.length === 0 ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>No rates found</div> : tradeKeys.map(trade => {
+        const tradeRates = grouped[trade];
+        const isOpen = openTrades[trade];
+        return (
+          <div key={trade} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+            {/* Trade header — click to toggle */}
+            <div onClick={() => toggleTrade(trade)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', cursor: 'pointer', background: isOpen ? (t.surfaceHover || t.surface) : 'transparent', transition: 'background 0.15s', userSelect: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16, transition: 'transform 0.2s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{trade}</span>
+                <span style={{ fontSize: 11, color: t.textMuted, background: t.surfaceHover, padding: '2px 8px', borderRadius: 10 }}>{tradeRates.length} items</span>
+              </div>
+              <span style={{ fontSize: 11, color: t.textDim }}>
+                £{tradeRates.reduce((sum, r) => sum + (r.total_rate || 0), 0).toFixed(0)} total value
+              </span>
+            </div>
+
+            {/* Rates table — shown when open */}
+            {isOpen && (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', padding: '8px 20px', borderTop: '1px solid ' + t.border, borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
+                  {['Code', 'Description', 'Unit', 'Labour', 'Material', 'Total', ''].map((h, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>)}
+                </div>
+                {tradeRates.map((rate, i) => {
+                  const isE = editingId === rate.id;
+                  return (
+                    <div key={rate.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', padding: '9px 20px', alignItems: 'center', borderBottom: i < tradeRates.length - 1 ? '1px solid ' + t.border : 'none', background: isE ? (t.surfaceHover || t.surface) : 'transparent' }}>
+                      {isE ? (<>
+                        <input style={{ ...iS, width: 70 }} value={editData.code} onChange={e => setEditData(p => ({ ...p, code: e.target.value }))} />
+                        <input style={{ ...iS, width: '100%' }} value={editData.description} onChange={e => setEditData(p => ({ ...p, description: e.target.value }))} />
+                        <input style={{ ...iS, width: 45 }} value={editData.unit} onChange={e => setEditData(p => ({ ...p, unit: e.target.value }))} />
+                        <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.labour_rate} onChange={e => setEditData(p => ({ ...p, labour_rate: e.target.value }))} />
+                        <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.material_rate} onChange={e => setEditData(p => ({ ...p, material_rate: e.target.value }))} />
+                        <span style={{ fontSize: 12, fontWeight: 700, color: t.accent || '#F59E0B', fontFamily: 'monospace' }}>£{((parseFloat(editData.labour_rate) || 0) + (parseFloat(editData.material_rate) || 0)).toFixed(2)}</span>
+                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => saveEdit(rate.id)} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, background: t.success || '#10B981', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '..' : '✓'}</button><button onClick={() => setEditingId(null)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}>✕</button></div>
+                      </>) : (<>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.accent || '#F59E0B', fontWeight: 600 }}>{rate.code}</span>
+                        <div><span style={{ fontSize: 12, color: t.text }}>{rate.description}</span>{rate.notes && <span style={{ fontSize: 10, color: t.textDim, marginLeft: 6 }}>({rate.notes})</span>}</div>
+                        <span style={{ fontSize: 11, color: t.textMuted }}>{rate.unit}</span>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.labour_rate || 0).toFixed(2)}</span>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.material_rate || 0).toFixed(2)}</span>
+                        <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: t.text }}>£{(rate.total_rate || 0).toFixed(2)}</span>
+                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => startEdit(rate)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️</button><button onClick={() => deleteRate(rate.id)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></div>
+                      </>)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// ACTIVITY LOG TAB — REAL DATA FROM API
+// ═══════════════════════════════════════════════════
+
+function LogsTab({ t }) {
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => { loadActivity(); }, [filter]);
+
+  function loadActivity() {
+    setLoading(true);
+    const params = new URLSearchParams({ limit: 100 });
+    if (filter) params.set('type', filter);
+    apiFetch('/admin/activity?' + params)
+      .then(data => {
+        setActivities(data.activities || []);
+        setTotal(data.total || 0);
+      })
+      .catch(err => {
+        console.error('Failed to load activity:', err);
+        // Fallback to empty if endpoint not yet deployed
+        setActivities([]);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  const eventStyles = {
+    signup: { icon: '👤', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    login: { icon: '🔑', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+    project_created: { icon: '📋', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+    project_completed: { icon: '✅', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    plan_changed: { icon: '💳', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
+    file_uploaded: { icon: '📎', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+    boq_generated: { icon: '📊', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    error: { icon: '❌', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  };
+  const defaultStyle = { icon: 'ℹ️', color: '#94A3B8', bg: 'rgba(148,163,184,0.1)' };
+
+  function timeAgo(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return days + 'd ago';
+    return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  const eventTypes = [...new Set(activities.map(a => a.event_type))];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, minWidth: 160 }}>
+          <option value="">All Events ({total})</option>
+          <option value="signup">Signups</option>
+          <option value="project_created">Project Submissions</option>
+          <option value="project_completed">Completions</option>
+          <option value="login">Logins</option>
+          <option value="plan_changed">Plan Changes</option>
+          <option value="error">Errors</option>
+        </select>
+        <button onClick={loadActivity} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔄 Refresh</button>
+        <span style={{ fontSize: 12, color: t.textMuted }}>{activities.length} events</span>
       </div>
 
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px 55px 80px 80px 90px 70px', padding: '10px 16px', borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
-          {['Code', 'Description', 'Trade', 'Unit', 'Labour', 'Material', 'Total', ''].map((h, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>)}
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Activity Log</h3>
+          <p style={{ fontSize: 12, color: t.textMuted, margin: '4px 0 0' }}>Real-time tracking of signups, projects, and system events</p>
         </div>
-        {loadingRates ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>Loading rates...</div> : rates.length === 0 ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>No rates found</div> : rates.map((rate, i) => {
-          const isE = editingId === rate.id;
-          return (
-            <div key={rate.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px 55px 80px 80px 90px 70px', padding: '10px 16px', alignItems: 'center', borderBottom: i < rates.length - 1 ? '1px solid ' + t.border : 'none', background: isE ? (t.surfaceHover || t.surface) : 'transparent' }}>
-              {isE ? (<>
-                <input style={{ ...iS, width: 70 }} value={editData.code} onChange={e => setEditData(p => ({ ...p, code: e.target.value }))} />
-                <input style={{ ...iS, width: '100%' }} value={editData.description} onChange={e => setEditData(p => ({ ...p, description: e.target.value }))} />
-                <input style={{ ...iS, width: 120 }} value={editData.trade} onChange={e => setEditData(p => ({ ...p, trade: e.target.value }))} />
-                <input style={{ ...iS, width: 45 }} value={editData.unit} onChange={e => setEditData(p => ({ ...p, unit: e.target.value }))} />
-                <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.labour_rate} onChange={e => setEditData(p => ({ ...p, labour_rate: e.target.value }))} />
-                <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.material_rate} onChange={e => setEditData(p => ({ ...p, material_rate: e.target.value }))} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: t.accent || '#F59E0B', fontFamily: 'monospace' }}>£{((parseFloat(editData.labour_rate) || 0) + (parseFloat(editData.material_rate) || 0)).toFixed(2)}</span>
-                <div style={{ display: 'flex', gap: 3 }}><button onClick={() => saveEdit(rate.id)} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, background: t.success || '#10B981', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '..' : '✓'}</button><button onClick={() => setEditingId(null)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}>✕</button></div>
-              </>) : (<>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.accent || '#F59E0B', fontWeight: 600 }}>{rate.code}</span>
-                <div><span style={{ fontSize: 12, color: t.text }}>{rate.description}</span>{rate.notes && <span style={{ fontSize: 10, color: t.textDim, marginLeft: 6 }}>({rate.notes})</span>}</div>
-                <span style={{ fontSize: 11, color: t.textMuted }}>{rate.trade}</span>
-                <span style={{ fontSize: 11, color: t.textMuted }}>{rate.unit}</span>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.labour_rate || 0).toFixed(2)}</span>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.material_rate || 0).toFixed(2)}</span>
-                <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: t.text }}>£{(rate.total_rate || 0).toFixed(2)}</span>
-                <div style={{ display: 'flex', gap: 3 }}><button onClick={() => startEdit(rate)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️</button><button onClick={() => deleteRate(rate.id)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></div>
-              </>)}
-            </div>
-          );
-        })}
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '14px 16px', borderTop: '1px solid ' + t.border }}>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: page <= 1 ? t.textDim : t.textSecondary, border: '1px solid ' + t.border, cursor: page <= 1 ? 'default' : 'pointer' }}>← Prev</button>
-            <span style={{ fontSize: 12, color: t.textMuted }}>Page {page} of {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 500, background: t.surfaceHover, color: page >= totalPages ? t.textDim : t.textSecondary, border: '1px solid ' + t.border, cursor: page >= totalPages ? 'default' : 'pointer' }}>Next →</button>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: t.textMuted }}>Loading activity...</div>
+        ) : activities.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+            <div style={{ fontSize: 14, color: t.textMuted }}>No activity yet</div>
+            <div style={{ fontSize: 12, color: t.textDim, marginTop: 4 }}>Events will appear here when users sign up or submit projects</div>
           </div>
+        ) : (
+          activities.map((item, i) => {
+            const style = eventStyles[item.event_type] || defaultStyle;
+            return (
+              <div key={item.id} style={{ display: 'flex', gap: 14, padding: '14px 20px', borderBottom: i < activities.length - 1 ? '1px solid ' + t.border : 'none', alignItems: 'flex-start' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: style.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>{style.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.title}</span>
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: style.bg, color: style.color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{item.event_type.replace(/_/g, ' ')}</span>
+                  </div>
+                  {item.detail && <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{item.detail}</div>}
+                  {item.user_name && <div style={{ fontSize: 11, color: t.textDim, marginTop: 2 }}>by {item.user_name} ({item.user_email})</div>}
+                </div>
+                <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeAgo(item.created_at)}</span>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function LogsTab({ t }) {
-  const typeStyle = (type) => ({ success: { bg: t.successBg, icon: '✅' }, warning: { bg: t.warningBg, icon: '⚠️' }, danger: { bg: t.dangerBg, icon: '❌' } }[type] || { bg: t.accentGlow, icon: 'ℹ️' });
-  return (
-    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 14px' }}>Activity Log</h3>
-      {ACTIVITY_LOG.map((item, i) => { const s = typeStyle(item.type); return (
-        <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: i < ACTIVITY_LOG.length - 1 ? '1px solid ' + t.border : 'none' }}>
-          <div style={{ width: 28, height: 28, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, fontSize: 13 }}>{s.icon}</div>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 500, color: t.text }}>{item.action}</div><div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{item.detail}</div></div>
-          <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap' }}>{item.time}</span>
-        </div>
-      ); })}
-    </div>
-  );
-}
+// ═══════════════════════════════════════════════════
+// SETTINGS TAB
+// ═══════════════════════════════════════════════════
 
 function SettingsTab({ t }) {
   const sections = [
@@ -389,6 +519,10 @@ function SettingsTab({ t }) {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════
+// MAIN ADMIN PAGE
+// ═══════════════════════════════════════════════════
 
 export default function AdminPage() {
   const { t } = useTheme();
