@@ -2,28 +2,156 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
+// Toast notification that auto-appears when new notifications arrive
+function NotificationToast({ notification, onClose, theme }) {
+  const isDark = theme === 'dark';
+
+  useEffect(() => {
+    const timer = setTimeout(onClose, 6000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const iconMap = {
+    'user-plus': (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+      </svg>
+    ),
+    'folder-plus': (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+      </svg>
+    ),
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: '20px', right: '20px', zIndex: 99999,
+      width: '340px',
+      background: isDark ? '#131A2B' : '#FFFFFF',
+      border: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
+      borderLeft: '3px solid #F59E0B',
+      borderRadius: '12px',
+      boxShadow: isDark
+        ? '0 16px 48px rgba(0,0,0,0.5)'
+        : '0 16px 48px rgba(0,0,0,0.12)',
+      padding: '14px 16px',
+      display: 'flex', gap: '12px', alignItems: 'flex-start',
+      animation: 'toastSlideIn 0.35s cubic-bezier(0.22,1,0.36,1)',
+      cursor: 'pointer',
+    }} onClick={onClose}>
+      {/* Icon */}
+      <div style={{
+        width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
+        background: notification.icon === 'user-plus' ? 'rgba(245,158,11,0.1)' : 'rgba(56,189,248,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {iconMap[notification.icon] || iconMap['user-plus']}
+      </div>
+      {/* Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '12.5px', fontWeight: 700,
+          color: isDark ? '#F1F5F9' : '#0F172A',
+          lineHeight: 1.35, marginBottom: '3px',
+        }}>
+          {notification.title}
+        </div>
+        {notification.detail && (
+          <div style={{
+            fontSize: '11.5px', color: isDark ? '#94A3B8' : '#64748B',
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {notification.detail}
+          </div>
+        )}
+        <div style={{ fontSize: '10px', color: isDark ? '#475569' : '#94A3B8', marginTop: '4px' }}>
+          Just now
+        </div>
+      </div>
+      {/* Close X */}
+      <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: isDark ? '#475569' : '#94A3B8', padding: '2px', flexShrink: 0,
+        marginTop: '-2px',
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      {/* Auto-dismiss progress bar */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        height: '2px', borderRadius: '0 0 12px 12px', overflow: 'hidden',
+      }}>
+        <div style={{
+          height: '100%', background: '#F59E0B',
+          animation: 'toastProgress 6s linear forwards',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// Play a subtle notification sound
+function playNotificationSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) {
+    // silently fail if audio not supported
+  }
+}
+
 export default function NotificationBell() {
   const { t, mode } = useTheme();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
   const ref = useRef(null);
+  const prevUnreadRef = useRef(0);
+  const initialLoadRef = useRef(true);
 
   const fetchNotifications = useCallback(async () => {
     try {
       const data = await apiFetch('/notifications');
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
+      const newNotifications = data.notifications || [];
+      const newUnread = data.unreadCount || 0;
+
+      // Show toast if unread count increased (skip on first load)
+      if (!initialLoadRef.current && newUnread > prevUnreadRef.current) {
+        const newest = newNotifications.find(n => !n.read);
+        if (newest) {
+          setToast(newest);
+          playNotificationSound();
+        }
+      }
+
+      initialLoadRef.current = false;
+      prevUnreadRef.current = newUnread;
+      setNotifications(newNotifications);
+      setUnreadCount(newUnread);
     } catch (err) {
-      // silently fail — admin-only feature
+      // silently fail
     }
   }, []);
 
-  // Poll every 30 seconds
+  // Poll every 15 seconds
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
@@ -42,6 +170,7 @@ export default function NotificationBell() {
       await apiFetch('/notifications/read-all', { method: 'PUT' });
       setNotifications(prev => prev.map(n => ({ ...n, read: 1 })));
       setUnreadCount(0);
+      prevUnreadRef.current = 0;
     } catch (err) {
       console.error('Failed to mark all read:', err);
     } finally {
@@ -53,7 +182,9 @@ export default function NotificationBell() {
     try {
       await apiFetch(`/notifications/${id}/read`, { method: 'PUT' });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: 1 } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      const newCount = Math.max(0, unreadCount - 1);
+      setUnreadCount(newCount);
+      prevUnreadRef.current = newCount;
     } catch (err) {
       console.error('Failed to mark read:', err);
     }
@@ -93,7 +224,16 @@ export default function NotificationBell() {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      {/* Bell button — subtle, matches sidebar style */}
+      {/* Toast popup — appears top-right of screen */}
+      {toast && (
+        <NotificationToast
+          notification={toast}
+          onClose={() => setToast(null)}
+          theme={mode}
+        />
+      )}
+
+      {/* Bell button */}
       <button
         onClick={() => setOpen(!open)}
         style={{
@@ -134,7 +274,7 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown — opens to the RIGHT of the bell, not left */}
+      {/* Dropdown */}
       {open && (
         <div style={{
           position: 'fixed',
@@ -223,7 +363,6 @@ export default function NotificationBell() {
                       : (isDark ? 'rgba(245,158,11,0.03)' : 'rgba(245,158,11,0.04)');
                   }}
                 >
-                  {/* Icon */}
                   <div style={{
                     width: '30px', height: '30px', borderRadius: '8px', flexShrink: 0,
                     background: n.icon === 'user-plus'
@@ -235,8 +374,6 @@ export default function NotificationBell() {
                   }}>
                     {iconMap[n.icon] || iconMap['user']}
                   </div>
-
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                       fontSize: '12.5px', fontWeight: n.read ? 400 : 600,
@@ -261,8 +398,6 @@ export default function NotificationBell() {
                       {timeAgo(n.created_at)}
                     </div>
                   </div>
-
-                  {/* Unread dot */}
                   {!n.read && (
                     <div style={{
                       width: '7px', height: '7px', borderRadius: '50%',
@@ -285,6 +420,14 @@ export default function NotificationBell() {
         @keyframes notifSlide {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes toastSlideIn {
+          from { opacity: 0; transform: translateX(40px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes toastProgress {
+          from { width: 100%; }
+          to { width: 0%; }
         }
       `}</style>
     </div>
