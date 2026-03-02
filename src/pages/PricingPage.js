@@ -51,7 +51,7 @@ const plans = [
       'Value engineering notes',
       'Professional PDF report',
     ],
-    cta: 'Start Get Professional',
+    cta: 'Get Professional',
     stripeLink: 'https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04',
     popular: true,
   },
