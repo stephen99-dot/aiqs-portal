@@ -251,6 +251,31 @@ router.post('/auth/register', async (req, res) => {
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
+    // --- One account per company domain (skip free email providers) ---
+const emailDomain = email.toLowerCase().split('@')[1];
+const freeProviders = [
+  'gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk',
+  'live.com','live.co.uk','yahoo.com','yahoo.co.uk','icloud.com','me.com',
+  'aol.com','protonmail.com','proton.me','btinternet.com','sky.com',
+  'virginmedia.com','talktalk.net','mail.com','zoho.com','gmx.com',
+];
+if (!freeProviders.includes(emailDomain)) {
+  const domainUser = db.prepare(
+    "SELECT id, full_name, email FROM users WHERE LOWER(email) LIKE ? LIMIT 1"
+  ).get(`%@${emailDomain}`);
+  if (domainUser) {
+    // Notify admin about the blocked attempt
+    notifyAdmin({
+      type: 'blocked_signup',
+      title: `Blocked signup: ${fullName}`,
+      detail: `${email.toLowerCase()} — domain already registered by ${domainUser.full_name} (${domainUser.email})`,
+      icon: 'user-blocked',
+    });
+    return res.status(409).json({
+      error: 'An account already exists for your organisation. Please contact your colleague or reach out to us for access.'
+    });
+  }
+}
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
