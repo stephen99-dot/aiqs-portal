@@ -214,4 +214,30 @@ router.get('/pipeline/runs', authMiddleware, adminMiddleware, (req, res) => {
   }
 });
 
+// ─── DELETE /api/pipeline/runs/:id — admin deletes a pipeline run ───
+router.delete('/pipeline/runs/:id', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const run = db.prepare('SELECT * FROM pipeline_runs WHERE id = ?').get(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    db.prepare('DELETE FROM pipeline_steps WHERE run_id = ?').run(run.id);
+    db.prepare('DELETE FROM pipeline_runs WHERE id = ?').run(run.id);
+    res.json({ ok: true, deleted: run.id });
+  } catch (err) {
+    console.error('Failed to delete pipeline run:', err);
+    res.status(500).json({ error: 'Failed to delete pipeline run' });
+  }
+});
+
+// ─── DELETE /api/pipeline/runs — admin clears all pipeline runs ───
+router.delete('/pipeline/runs', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    db.prepare('DELETE FROM pipeline_steps').run();
+    db.prepare('DELETE FROM pipeline_runs').run();
+    res.json({ ok: true, message: 'All pipeline runs cleared' });
+  } catch (err) {
+    console.error('Failed to clear pipeline runs:', err);
+    res.status(500).json({ error: 'Failed to clear pipeline runs' });
+  }
+});
+
 module.exports = { router, startPipelineRun };
