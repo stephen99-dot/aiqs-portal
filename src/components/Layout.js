@@ -6,6 +6,7 @@ import {
   DashboardIcon, NewProjectIcon, PipelineIcon, ClientsIcon,
   ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
 } from './Icons';
+import NotificationBell from './NotificationBell';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -68,7 +69,8 @@ export default function Layout() {
           </div>
           <span style={{ fontWeight: 700, fontSize: 14, color: t.text }}>AI QS</span>
         </div>
-        <div style={{ width: 30 }} />
+        {/* Mobile notification bell for admin */}
+        {isAdmin ? <NotificationBell /> : <div style={{ width: 30 }} />}
       </header>
 
       {mobileOpen && (
@@ -88,33 +90,37 @@ export default function Layout() {
         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
       }}>
         <div style={{ padding: '20px 12px 16px' }}>
-          {/* Logo */}
+          {/* Logo + Notification Bell */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            marginBottom: 28, padding: '2px 6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 28, padding: '2px 6px 2px 6px',
           }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(245,158,11,0.18)',
-            }}>
-              <ZapIcon size={15} color="#0A0F1C" />
-            </div>
-            <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
-                fontWeight: 800, fontSize: 14.5, color: t.text,
-                lineHeight: 1.15, letterSpacing: '-0.02em',
-              }}>AI QS</div>
-              <div style={{
-                fontSize: 9.5, fontWeight: 600, letterSpacing: '0.05em',
-                color: isAdmin ? (t.gold || '#D4A853') : t.textMuted,
-                textTransform: 'uppercase', marginTop: 1,
+                width: 32, height: 32, borderRadius: 8,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(245,158,11,0.18)',
               }}>
-                {isAdmin ? 'Admin Portal' : 'Client Portal'}
+                <ZapIcon size={15} color="#0A0F1C" />
+              </div>
+              <div>
+                <div style={{
+                  fontWeight: 800, fontSize: 14.5, color: t.text,
+                  lineHeight: 1.15, letterSpacing: '-0.02em',
+                }}>AI QS</div>
+                <div style={{
+                  fontSize: 9.5, fontWeight: 600, letterSpacing: '0.05em',
+                  color: isAdmin ? (t.gold || '#D4A853') : t.textMuted,
+                  textTransform: 'uppercase', marginTop: 1,
+                }}>
+                  {isAdmin ? 'Admin Portal' : 'Client Portal'}
+                </div>
               </div>
             </div>
+            {/* Notification Bell — admin only, desktop sidebar */}
+            {isAdmin && <NotificationBell />}
           </div>
 
           {/* Nav items */}
