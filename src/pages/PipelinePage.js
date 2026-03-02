@@ -64,7 +64,7 @@ function formatDuration(ms) {
   return mins + 'm ' + remSecs + 's';
 }
 
-function RunCard({ run, t, expanded, onToggle }) {
+function RunCard({ run, t, expanded, onToggle, onDelete }) {
   const completedSteps = run.steps.filter(s => s.status === 'complete').length;
   const totalSteps = run.steps.length;
   const pct = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
@@ -96,6 +96,9 @@ function RunCard({ run, t, expanded, onToggle }) {
             </div>
           </div>
           <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap' }}>{timeAgo(run.started_at)}</span>
+          <span onClick={(e) => onDelete(run.id, e)} style={{ cursor: 'pointer', opacity: 0.4, transition: 'opacity 0.2s' }} onMouseEnter={e => e.target.style.opacity = 1} onMouseLeave={e => e.target.style.opacity = 0.4} title="Delete run">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>
+          </span>
           <span style={{ fontSize: 16, color: t.textMuted, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
         </div>
       </div>
@@ -163,6 +166,21 @@ export default function PipelinePage() {
     return () => clearInterval(interval);
   }, [runs, loadRuns]);
 
+  function deleteRun(id, e) {
+    e.stopPropagation();
+    if (!window.confirm('Delete this pipeline run?')) return;
+    apiFetch('/pipeline/runs/' + id, { method: 'DELETE' })
+      .then(() => { setRuns(prev => prev.filter(r => r.id !== id)); })
+      .catch(err => console.error('Delete failed:', err));
+  }
+
+  function clearAll() {
+    if (!window.confirm('Clear ALL pipeline runs? This cannot be undone.')) return;
+    apiFetch('/pipeline/runs', { method: 'DELETE' })
+      .then(() => { setRuns([]); })
+      .catch(err => console.error('Clear failed:', err));
+  }
+
   const runningCount = runs.filter(r => r.status === 'running').length;
   const completeCount = runs.filter(r => r.status === 'complete').length;
   const errorCount = runs.filter(r => r.status === 'error').length;
@@ -199,6 +217,10 @@ export default function PipelinePage() {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
           Refresh
         </button>
+        {runs.length > 0 && <button onClick={clearAll} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg>
+          Clear All
+        </button>}
         {runningCount > 0 && <span style={{ fontSize: 11, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 5 }}>{icons.running('#F59E0B')} Auto-refreshing every 10s</span>}
       </div>
 
@@ -215,7 +237,7 @@ export default function PipelinePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {runs.map(run => (
-            <RunCard key={run.id} run={run} t={t} expanded={!!expanded[run.id]} onToggle={() => setExpanded(prev => ({ ...prev, [run.id]: !prev[run.id] }))} />
+            <RunCard key={run.id} run={run} t={t} expanded={!!expanded[run.id]} onToggle={() => setExpanded(prev => ({ ...prev, [run.id]: !prev[run.id] }))} onDelete={deleteRun} />
           ))}
         </div>
       )}
