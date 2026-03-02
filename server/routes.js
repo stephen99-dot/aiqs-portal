@@ -55,6 +55,74 @@ async function sendEmail({ to, subject, html }) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Create notifications table if it doesn't exist
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      detail TEXT,
+      icon TEXT DEFAULT 'user',
+      read INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  console.log('[Notifications] Table ready');
+} catch (err) {
+  console.error('[Notifications] Failed to create table:', err.message);
+}
+
+// Helper: create a notification + email the admin
+async function notifyAdmin({ type, title, detail, icon }) {
+  try {
+    const id = uuidv4();
+    db.prepare(
+      'INSERT INTO notifications (id, type, title, detail, icon) VALUES (?, ?, ?, ?, ?)'
+    ).run(id, type, title, detail || null, icon || 'user');
+    console.log(`[Notification] Created: ${title}`);
+  } catch (err) {
+    console.error('[Notification] Failed to create:', err.message);
+  }
+}
+
+async function sendAdminSignupEmail({ fullName, email, company, phone }) {
+  const companyLine = company ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Company</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${company}</td></tr>` : '';
+  const phoneLine = phone ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Phone</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${phone}</td></tr>` : '';
+
+  await sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `🆕 New Signup: ${fullName}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#0F172A;border-radius:16px;">
+        <div style="text-align:center;margin-bottom:28px;">
+          <div style="font-size:28px;font-weight:800;color:#F1F5F9;">AI <span style="color:#F59E0B;">QS</span></div>
+          <div style="font-size:10px;letter-spacing:3px;color:#64748B;text-transform:uppercase;margin-top:2px;">New Account Alert</div>
+        </div>
+        <div style="background:#1E293B;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:20px;">
+          <div style="font-size:16px;font-weight:700;color:#F59E0B;margin-bottom:16px;">📬 Someone just signed up</div>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Name</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${fullName}</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Email</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;"><a href="mailto:${email}" style="color:#38BDF8;text-decoration:none;">${email}</a></td></tr>
+            ${companyLine}
+            ${phoneLine}
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Plan</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#10B981;">Free Trial (2 projects)</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Time</td><td style="padding:6px 12px;font-size:14px;color:#F1F5F9;">${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td></tr>
+          </table>
+        </div>
+        <div style="text-align:center;">
+          <a href="https://aiqs-portal.onrender.com/admin" style="display:inline-block;padding:12px 28px;background:#F59E0B;color:#0F172A;font-size:14px;font-weight:700;text-decoration:none;border-radius:8px;">View in Admin Panel</a>
+        </div>
+        <p style="font-size:11px;color:#475569;text-align:center;margin-top:24px;">AI QS Portal — Automated Quantity Surveying</p>
+      </div>
+    `,
+  });
+}
+
 // --- File Upload Config ---
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -132,7 +200,6 @@ async function triggerPipedream(project, user, files) {
     };
     console.log(`[Pipedream] Triggering pipeline for project: ${project.title} (${files.length} files)`);
     
-    // Start tracking this run in the pipeline tracker
     startPipelineRun({
       project_id: project.id,
       project_title: project.title,
@@ -201,6 +268,17 @@ router.post('/auth/register', async (req, res) => {
       user_name: fullName,
       user_email: email.toLowerCase(),
     });
+
+    // ─── NOTIFY ADMIN: New signup (skip if admin is registering themselves) ───
+    if (role !== 'admin') {
+      notifyAdmin({
+        type: 'new_signup',
+        title: `New signup: ${fullName}`,
+        detail: [email.toLowerCase(), company, phone].filter(Boolean).join(' · '),
+        icon: 'user-plus',
+      });
+      sendAdminSignupEmail({ fullName, email: email.toLowerCase(), company, phone });
+    }
 
     res.status(201).json({
       token,
@@ -298,6 +376,48 @@ router.get('/auth/magic', (req, res) => {
   } catch (err) {
     console.error('Magic link login error:', err);
     res.status(500).json({ error: 'Failed to process magic link' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS API (Admin only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Get all notifications (admin only)
+router.get('/notifications', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const notifications = db.prepare(
+      'SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50'
+    ).all();
+    const unreadCount = db.prepare(
+      'SELECT COUNT(*) as count FROM notifications WHERE read = 0'
+    ).get().count;
+    res.json({ notifications, unreadCount });
+  } catch (err) {
+    console.error('Get notifications error:', err);
+    res.json({ notifications: [], unreadCount: 0 });
+  }
+});
+
+// Mark one notification as read
+router.put('/notifications/:id/read', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark notification read error:', err);
+    res.status(500).json({ error: 'Failed to mark as read' });
+  }
+});
+
+// Mark all notifications as read
+router.put('/notifications/read-all', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    db.prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Mark all read error:', err);
+    res.status(500).json({ error: 'Failed to mark all as read' });
   }
 });
 
@@ -536,6 +656,14 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       user_id: user.id,
       user_name: user.full_name,
       user_email: user.email,
+    });
+
+    // ─── NOTIFY ADMIN: New project submitted ───
+    notifyAdmin({
+      type: 'new_project',
+      title: `New project: ${title}`,
+      detail: (user.full_name || user.email) + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)',
+      icon: 'folder-plus',
     });
 
     res.status(201).json({ ...project, files, usage: updatedPlanInfo });
