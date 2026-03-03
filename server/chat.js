@@ -1,4 +1,4 @@
-const express = require('express');
+vconst express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -142,6 +142,8 @@ WHEN ANALYSING DRAWINGS:
 IMPORTANT CAPABILITY: This system CAN and DOES generate real downloadable Excel BOQ (.xlsx) and Word Findings Report (.docx) files. When a client asks you to "generate documents", "create the BOQ", or "download the report", the system will automatically produce these files and provide download buttons. Do NOT tell clients you cannot create files — you absolutely can. After providing your analysis, tell the client: "Want downloadable documents? Just say **generate documents** and I'll create an Excel BOQ and Word Findings Report for you."
 
 COMMUNICATION STYLE: Direct, professional, UK construction terminology. Specific numbers. State assumptions. Flag risks. Honest about limitations.
+
+RATE LEARNING: If a client corrects a rate or provides their own pricing (e.g. "we charge £55/hr", "fabrication is 14 hrs/T", "that should be £3,800/T"), acknowledge the correction and confirm the updated rate. The system will automatically learn from these corrections. Encourage clients to correct any rates that don't match their costs.
 
 IMPORTANT: Estimates are approximate, subject to detailed measurement and site conditions.`;
 }
@@ -467,6 +469,63 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     } else if (hasDrawings && !wantsDocuments) {
       reply += '\n\n---\n💡 _Want downloadable documents? Just say **"generate documents"** and I\'ll create an Excel BOQ and Word Findings Report._';
+    }
+
+    // ─── Auto-learning: extract rates from user corrections ──────
+    try {
+      const userMsg = (message || '');
+      const userLower = userMsg.toLowerCase();
+
+      // Detect if user is correcting a rate
+      const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|it'?s|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong)/i.test(userLower);
+
+      if (isCorrection) {
+        // Try to extract rate values with units
+        const ratePatterns = [
+          /(?:£|€)?\s*(\d[\d,.]*)\s*(?:\/|per\s+)(hr|hour|day|week|m|m2|m²|m3|m³|tonne|T|kg|no|nr|item|each|flight|load)/gi,
+          /(\d[\d,.]*)\s*(?:hours?|hrs?)\s*(?:\/|per\s+)(tonne|T)/gi,
+          /(?:should be|actually|it'?s|rate is|cost is|price is)\s*(?:£|€)?\s*(\d[\d,.]*)/gi,
+        ];
+
+        const corrections = [];
+        for (const pat of ratePatterns) {
+          let match;
+          while ((match = pat.exec(userMsg)) !== null) {
+            const val = parseFloat((match[1] || match[2] || '').replace(/,/g, ''));
+            const unit = (match[2] || match[3] || 'unit').replace(/hour/i, 'hr');
+            if (val > 0 && val < 100000) {
+              corrections.push({ value: val, unit, raw: match[0].trim() });
+            }
+          }
+        }
+
+        if (corrections.length > 0) {
+          console.log(`[AutoLearn] Detected ${corrections.length} rate correction(s) in user message`);
+
+          // Try to match corrections to existing rates using context from Claude's reply
+          const existingRates = db.prepare(`SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1`).all(userId);
+
+          for (const corr of corrections) {
+            console.log(`[AutoLearn] Rate value: ${corr.value} ${corr.unit} (from: "${corr.raw}")`);
+
+            // Find the closest matching existing rate by unit
+            const unitMatch = existingRates.find(r =>
+              r.unit && r.unit.toLowerCase().replace(/[£€\/]/g, '').trim() === corr.unit.toLowerCase()
+            );
+
+            if (unitMatch) {
+              // Update existing rate
+              db.prepare(`UPDATE client_rate_library SET value = ?, confidence = MIN(confidence + 0.05, 0.95), times_confirmed = times_confirmed + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+                .run(corr.value, unitMatch.id);
+              db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'auto_chat', ?)`)
+                .run('rc_' + require('uuid').v4().slice(0, 8), unitMatch.id, userId, unitMatch.value, corr.value, userMsg.substring(0, 500));
+              console.log(`[AutoLearn] Updated ${unitMatch.display_name}: ${unitMatch.value} -> ${corr.value}`);
+            }
+          }
+        }
+      }
+    } catch (autoErr) {
+      console.error('[AutoLearn] Error:', autoErr.message);
     }
 
     // ─── Rate stats ──────────────────────────────────────────────
