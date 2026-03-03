@@ -50,6 +50,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'The AI QS';
+  wb.calcProperties = { fullCalcOnLoad: true };
   const ws = wb.addWorksheet('BOQ', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
   });
@@ -118,11 +119,19 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
     const lastData = ws.lastRow.number;
     if (items.length > 0) {
+      // Calculate actual totals for cached values
+      let labourSum = 0, matSum = 0, totalSum = 0;
+      for (const item of items) {
+        labourSum += parseFloat(item.labour) || 0;
+        matSum += parseFloat(item.materials) || 0;
+        totalSum += parseFloat(item.total) || (parseFloat(item.labour) || 0) + (parseFloat(item.materials) || 0) || ((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0));
+      }
+
       const sub = ws.addRow([
         '', `${section.title} — Subtotal`, '', '', '',
-        { formula: `SUM(F${firstData}:F${lastData})` },
-        { formula: `SUM(G${firstData}:G${lastData})` },
-        { formula: `SUM(H${firstData}:H${lastData})` },
+        { formula: `SUM(F${firstData}:F${lastData})`, result: labourSum },
+        { formula: `SUM(G${firstData}:G${lastData})`, result: matSum },
+        { formula: `SUM(H${firstData}:H${lastData})`, result: totalSum },
         ''
       ]);
       styleRow(sub, YELLOW, true);
@@ -132,36 +141,50 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     ws.addRow([]);
   }
 
-  // Summary
+  // Summary — calculate cached values so they display without recalc
   ws.addRow([]);
   const sumHdr = ws.addRow(['', 'PROJECT SUMMARY', '', '', '', '', '', '', '']);
   ws.mergeCells(sumHdr.number, 2, sumHdr.number, 9);
   styleRow(sumHdr, LIGHT_BLUE, true);
 
+  // Calculate net total from all section items
+  let netTotal = 0;
+  for (const section of sections) {
+    for (const item of (section.items || [])) {
+      netTotal += parseFloat(item.total) || ((parseFloat(item.labour) || 0) + (parseFloat(item.materials) || 0)) || ((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0));
+    }
+  }
+
+  const contAmt = netTotal * (contingencyPct / 100);
+  const ohpAmt = netTotal * (ohpPct / 100);
+  const grandTotal = netTotal + contAmt + ohpAmt;
+  const vatAmt = grandTotal * (vatRate / 100);
+  const inclVat = grandTotal + vatAmt;
+
   const netFormula = subtotalRows.map(r => `H${r}`).join('+');
-  const netRow = ws.addRow(['', 'Net Construction Cost', '', '', '', '', '', { formula: netFormula }, '']);
+  const netRow = ws.addRow(['', 'Net Construction Cost', '', '', '', '', '', { formula: netFormula, result: netTotal }, '']);
   netRow.eachCell(c => { c.font = stdFont(true); c.border = borders; });
   netRow.getCell(8).numFmt = currFmt();
   const nrn = netRow.number;
 
-  const contRow = ws.addRow(['', `Contingency (${contingencyPct}%)`, '', '', '', '', '', { formula: `H${nrn}*${contingencyPct/100}` }, '']);
+  const contRow = ws.addRow(['', `Contingency (${contingencyPct}%)`, '', '', '', '', '', { formula: `H${nrn}*${contingencyPct/100}`, result: contAmt }, '']);
   contRow.eachCell(c => { c.font = stdFont(false); c.border = borders; });
   contRow.getCell(8).numFmt = currFmt();
 
-  const ohpRow = ws.addRow(['', `Overheads & Profit (${ohpPct}%)`, '', '', '', '', '', { formula: `H${nrn}*${ohpPct/100}` }, '']);
+  const ohpRow = ws.addRow(['', `Overheads & Profit (${ohpPct}%)`, '', '', '', '', '', { formula: `H${nrn}*${ohpPct/100}`, result: ohpAmt }, '']);
   ohpRow.eachCell(c => { c.font = stdFont(false); c.border = borders; });
   ohpRow.getCell(8).numFmt = currFmt();
 
-  const gtRow = ws.addRow(['', 'GRAND TOTAL (Excl. VAT)', '', '', '', '', '', { formula: `H${nrn}+H${contRow.number}+H${ohpRow.number}` }, '']);
+  const gtRow = ws.addRow(['', 'GRAND TOTAL (Excl. VAT)', '', '', '', '', '', { formula: `H${nrn}+H${contRow.number}+H${ohpRow.number}`, result: grandTotal }, '']);
   styleRow(gtRow, YELLOW, true);
   gtRow.getCell(8).numFmt = currFmt();
   gtRow.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: NAVY.slice(2) } };
 
-  const vatRow = ws.addRow(['', `VAT (${vatRate}%)`, '', '', '', '', '', { formula: `H${gtRow.number}*${vatRate/100}` }, '']);
+  const vatRow = ws.addRow(['', `VAT (${vatRate}%)`, '', '', '', '', '', { formula: `H${gtRow.number}*${vatRate/100}`, result: vatAmt }, '']);
   vatRow.eachCell(c => { c.font = stdFont(false); c.border = borders; });
   vatRow.getCell(8).numFmt = currFmt();
 
-  const inclRow = ws.addRow(['', 'TOTAL (Incl. VAT)', '', '', '', '', '', { formula: `H${gtRow.number}+H${vatRow.number}` }, '']);
+  const inclRow = ws.addRow(['', 'TOTAL (Incl. VAT)', '', '', '', '', '', { formula: `H${gtRow.number}+H${vatRow.number}`, result: inclVat }, '']);
   styleRow(inclRow, YELLOW, true);
   inclRow.getCell(8).numFmt = currFmt();
   inclRow.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: NAVY.slice(2) } };
