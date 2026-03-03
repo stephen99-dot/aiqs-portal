@@ -467,10 +467,10 @@ router.get('/usage', authMiddleware, (req, res) => {
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
-  res.json(users.map(u => {
+  res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
-    return { id: u.id, email: u.email, fullName: u.full_name, company: u.company, phone: u.phone, role: u.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, atLimit: planInfo.atLimit, createdAt: u.created_at };
-  }));
+    return { id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name, company: u.company, phone: u.phone, role: u.role, plan: u.plan || 'starter', planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, atLimit: planInfo.atLimit, suspended: u.suspended || 0, suspended_reason: u.suspended_reason, bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0, created_at: u.created_at, project_count: 0 };
+  }) });
 });
 
 router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
