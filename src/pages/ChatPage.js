@@ -2,7 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
-const STORAGE_KEY = 'aiqs_chat_history';
+// Get user-specific storage key to prevent chat leaking between accounts
+function getStorageKey() {
+  try {
+    const token = localStorage.getItem('aiqs_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return `aiqs_chat_${payload.id}`;
+    }
+  } catch {}
+  return 'aiqs_chat_guest';
+}
 
 // -- Thinking stages shown while waiting --
 const THINKING_STAGES = [
@@ -17,9 +27,10 @@ export default function ChatPage() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
 
+  const storageKey = getStorageKey();
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const saved = sessionStorage.getItem(storageKey);
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -41,7 +52,7 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
+    try { sessionStorage.setItem(storageKey, JSON.stringify(messages)); } catch {}
   }, [messages]);
 
   useEffect(() => {
@@ -262,7 +273,7 @@ export default function ChatPage() {
   function clearChat() {
     setMessages([]);
     setExpandedThinking({});
-    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(storageKey);
   }
   function toggleThinking(idx) {
     setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] }));
