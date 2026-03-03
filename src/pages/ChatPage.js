@@ -572,10 +572,26 @@ export default function ChatPage() {
                   {msg.role === 'assistant' && msg.files && msg.files.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}>
                       {msg.files.map((f, j) => (
-                        <a
+                        <button
                           key={j}
-                          href={f.url}
-                          download={f.name}
+                          onClick={async () => {
+                            try {
+                              const token = localStorage.getItem('aiqs_token');
+                              const resp = await fetch(f.url, { headers: { 'Authorization': `Bearer ${token}` } });
+                              if (!resp.ok) throw new Error('Download failed');
+                              const blob = await resp.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = f.name;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              document.body.removeChild(a);
+                            } catch (err) {
+                              alert('Download failed — please try again.');
+                            }
+                          }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '8px',
                             background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
@@ -583,8 +599,7 @@ export default function ChatPage() {
                             borderRadius: '10px', padding: '8px 14px',
                             color: isDark ? '#60A5FA' : '#2563EB',
                             fontSize: '13px', fontWeight: 600,
-                            textDecoration: 'none', cursor: 'pointer',
-                            transition: 'all 0.15s',
+                            cursor: 'pointer', transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.15)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)'; }}
@@ -592,7 +607,7 @@ export default function ChatPage() {
                           <span style={{ fontSize: '16px' }}>{f.type === 'xlsx' ? '📊' : '📄'}</span>
                           <span>Download {f.type === 'xlsx' ? 'Excel BOQ' : 'Findings Report'}</span>
                           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}
