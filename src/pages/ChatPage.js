@@ -4,6 +4,15 @@ import { apiFetch } from '../utils/api';
 
 const STORAGE_KEY = 'aiqs_chat_history';
 
+// -- Thinking stages shown while waiting --
+const THINKING_STAGES = [
+  { icon: '📄', text: 'Reading your input...' },
+  { icon: '🔍', text: 'Analysing project scope...' },
+  { icon: '📐', text: 'Measuring quantities...' },
+  { icon: '💰', text: 'Calculating costs...' },
+  { icon: '📋', text: 'Preparing response...' },
+];
+
 export default function ChatPage() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
@@ -17,12 +26,12 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
-  const [liveProgress, setLiveProgress] = useState(null); // SSE progress: { stage, message }
-  const [progressHistory, setProgressHistory] = useState([]); // completed stages
+  const [thinkingStage, setThinkingStage] = useState(0);
   const [expandedThinking, setExpandedThinking] = useState({});
   const [rateStats, setRateStats] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const thinkingInterval = useRef(null);
 
   // Fetch rate library stats on mount
   useEffect(() => {
@@ -37,7 +46,24 @@ export default function ChatPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, liveProgress, progressHistory]);
+  }, [messages, thinkingStage]);
+
+  // Cycle through thinking stages while waiting
+  useEffect(() => {
+    if (sending) {
+      setThinkingStage(0);
+      thinkingInterval.current = setInterval(() => {
+        setThinkingStage(prev => {
+          if (prev < THINKING_STAGES.length - 1) return prev + 1;
+          return prev; // Stay on last stage
+        });
+      }, 2200);
+    } else {
+      if (thinkingInterval.current) clearInterval(thinkingInterval.current);
+      setThinkingStage(0);
+    }
+    return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
+  }, [sending]);
 
   // -- Theme colors --
   const colors = isDark ? {
@@ -259,8 +285,6 @@ export default function ChatPage() {
     setInput('');
     setFiles([]);
     setSending(true);
-    setLiveProgress(null);
-    setProgressHistory([]);
 
     try {
       const history = messages
@@ -272,77 +296,19 @@ export default function ChatPage() {
       formData.append('history', JSON.stringify(history));
       currentFiles.forEach(f => formData.append('files', f));
 
-      const token = localStorage.getItem('aiqs_token');
-      const response = await fetch('/api/chat', {
+      const data = await apiFetch('/chat', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Request failed');
-      }
-
-      // Parse SSE stream
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parse complete SSE events from buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        let eventType = '';
-        let eventData = '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7);
-          } else if (line.startsWith('data: ')) {
-            eventData = line.slice(6);
-          } else if (line === '' && eventType && eventData) {
-            // Complete event received
-            try {
-              const parsed = JSON.parse(eventData);
-
-              if (eventType === 'progress') {
-                setProgressHistory(prev => {
-                  const exists = prev.some(p => p.stage === parsed.stage);
-                  if (exists) return prev;
-                  return [...prev, { ...parsed, done: false }];
-                });
-                setLiveProgress(parsed);
-              } else if (eventType === 'complete') {
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  content: parsed.reply,
-                  thinking: parsed.thinking || null,
-                  rateStats: parsed.rateStats || null,
-                  files: parsed.files || null,
-                  timestamp: new Date().toISOString()
-                }]);
-                if (parsed.rateStats) setRateStats(parsed.rateStats);
-              } else if (eventType === 'error') {
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  content: parsed.error || 'Something went wrong.',
-                  timestamp: new Date().toISOString(),
-                  error: true
-                }]);
-              }
-            } catch (parseErr) {
-              console.error('SSE parse error:', parseErr);
-            }
-            eventType = '';
-            eventData = '';
-          }
-        }
-      }
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.reply,
+        thinking: data.thinking || null,
+        files: data.files || null,
+        timestamp: new Date().toISOString()
+      }]);
+      if (data.rateStats) setRateStats(data.rateStats);
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -352,8 +318,6 @@ export default function ChatPage() {
       }]);
     } finally {
       setSending(false);
-      setLiveProgress(null);
-      setProgressHistory([]);
     }
   }
 
@@ -366,15 +330,8 @@ export default function ChatPage() {
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   }
 
-  // -- Live progress indicator (driven by SSE events) --
-  const STAGE_ICONS = {
-    processing: '📄', uploading: '📤', analysing: '🔍', retrying: '🔄',
-    fallback: '⚡', preparing: '📋', structuring: '📐', building_boq: '📊',
-    building_report: '📄', thinking: '🧠',
-  };
-
+  // -- Thinking stages component --
   function ThinkingIndicator() {
-    const allStages = progressHistory.length > 0 ? progressHistory : [{ stage: 'processing', message: 'Processing your request...', done: false }];
     return (
       <div style={styles.msgRow('assistant')}>
         <div style={styles.avatar}>📐</div>
@@ -393,31 +350,35 @@ export default function ChatPage() {
               borderRadius: '50%', background: colors.thinkingAccent,
               animation: 'thinkPulse 1.5s ease-in-out infinite',
             }} />
-            AI is working...
+            AI is thinking...
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {allStages.map((s, i) => {
-              const isLast = i === allStages.length - 1;
-              const isDone = !isLast;
+            {THINKING_STAGES.map((stage, i) => {
+              const isDone = i < thinkingStage;
+              const isActive = i === thinkingStage;
+              const isWaiting = i > thinkingStage;
               return (
-                <div key={s.stage} style={{
+                <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
                   padding: '6px 10px', borderRadius: '8px',
-                  background: isLast ? colors.stageActiveBg : 'transparent',
+                  background: isActive ? colors.stageActiveBg : 'transparent',
                   transition: 'all 0.4s ease',
+                  opacity: isWaiting ? 0.35 : 1,
                 }}>
-                  <span style={{ fontSize: '14px', flexShrink: 0 }}>
-                    {isDone ? '✅' : (STAGE_ICONS[s.stage] || '⏳')}
+                  <span style={{ fontSize: '14px', flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>
+                    {isDone ? '✅' : stage.icon}
                   </span>
                   <span style={{
-                    fontSize: '13px', fontWeight: isLast ? 600 : 400,
-                    color: isDone ? colors.stageDoneText : colors.stageActiveText,
+                    fontSize: '13px', fontWeight: isActive ? 600 : 400,
+                    color: isDone ? colors.stageDoneText : isActive ? colors.stageActiveText : colors.stageWaitText,
                     transition: 'color 0.3s ease',
                   }}>
-                    {s.message}
+                    {stage.text}
                   </span>
-                  {isLast && (
-                    <span style={{ marginLeft: 'auto', display: 'flex', gap: '3px' }}>
+                  {isActive && (
+                    <span style={{
+                      marginLeft: 'auto', display: 'flex', gap: '3px',
+                    }}>
                       {[0, 1, 2].map(d => (
                         <span key={d} style={{
                           width: '4px', height: '4px', borderRadius: '50%',
@@ -436,7 +397,6 @@ export default function ChatPage() {
       </div>
     );
   }
-
 
   // -- Collapsible thinking block --
   function ThinkingBlock({ thinking, index }) {
@@ -546,8 +506,8 @@ export default function ChatPage() {
               <div style={styles.welcomeIcon}>📐</div>
               <h3 style={styles.welcomeTitle}>Ready to analyse your project</h3>
               <p style={styles.welcomeText}>
-                Upload your drawings (PDF, images, or ZIP) and ask me anything. 
-                {rateStats 
+                Upload your drawings (PDF, images, or ZIP) and ask me anything.
+                {rateStats
                   ? ` I'm using your ${rateStats.total} trained rates for accurate pricing. Correct anything that's off and I'll learn for next time.`
                   : ' I\'ll use standard UK rates to start — correct anything that\'s off and I\'ll remember your rates for future projects.'
                 }
@@ -619,15 +579,11 @@ export default function ChatPage() {
                               const blob = await resp.blob();
                               const url = window.URL.createObjectURL(blob);
                               const a = document.createElement('a');
-                              a.href = url;
-                              a.download = f.name;
-                              document.body.appendChild(a);
-                              a.click();
+                              a.href = url; a.download = f.name;
+                              document.body.appendChild(a); a.click();
                               window.URL.revokeObjectURL(url);
                               document.body.removeChild(a);
-                            } catch (err) {
-                              alert('Download failed — please try again.');
-                            }
+                            } catch (err) { alert('Download failed — please try again.'); }
                           }}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '8px',
@@ -635,15 +591,11 @@ export default function ChatPage() {
                             border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : 'rgba(37,99,235,0.2)'}`,
                             borderRadius: '10px', padding: '8px 14px',
                             color: isDark ? '#60A5FA' : '#2563EB',
-                            fontSize: '13px', fontWeight: 600,
-                            cursor: 'pointer', transition: 'all 0.15s',
+                            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                           }}
-                          onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.25)' : 'rgba(37,99,235,0.15)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)'; }}
                         >
                           <span style={{ fontSize: '16px' }}>{f.type === 'xlsx' ? '📊' : '📄'}</span>
                           <span>Download {f.type === 'xlsx' ? 'Excel BOQ' : 'Findings Report'}</span>
-                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
                         </button>
                       ))}
                     </div>
