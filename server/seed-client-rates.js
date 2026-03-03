@@ -20,7 +20,7 @@ const { v4: uuidv4 } = require('uuid');
 const CLIENT_EMAILS = {
   paul:    'paul@metalworksolutionsuk.com',
   sandeep: 'ssira@sirabuilding.com',
-  penn:    '	simon.bayton@penncontracting.co.uk',      // Brian Scully or Simon Bayton
+  penn:    'simon.bayton@penncontracting.co.uk',      // Brian Scully or Simon Bayton
   jbp:     'James@jbpdevelopments.com',        // James Beare or Justin Shee
   andy:    'a.craig@abbeygroup.co.uk',       // Andy Craig
 };
