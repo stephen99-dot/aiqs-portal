@@ -27,7 +27,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', Icon: DashboardIcon },
-    { path: '/new-project', label: 'New Project', Icon: NewProjectIcon },
+    { path: '/projects', label: 'Projects', Icon: NewProjectIcon },
     { path: '/pipeline', label: 'Pipeline', Icon: PipelineIcon, adminOnly: true },
     { path: '/clients', label: 'Clients', Icon: ClientsIcon, adminOnly: true },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
