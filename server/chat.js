@@ -6,6 +6,10 @@ const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
 
+let boqGen, findingsGen;
+try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
+try { findingsGen = require('./findingsGenerator'); } catch (e) { console.log('[Chat] docx not installed — Findings generation disabled. Run: npm install docx'); }
+
 const router = express.Router();
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
@@ -23,25 +27,18 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, allowed.includes(ext));
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
   }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// DYNAMIC SYSTEM PROMPT — injects client rate library
+// DYNAMIC SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════════════
 
-function buildSystemPrompt(userId) {
+function buildSystemPrompt(userId, forDocGen) {
   let clientRateSection = '';
   try {
-    const rates = db.prepare(`
-      SELECT category, item_key, display_name, value, unit, confidence
-      FROM client_rate_library
-      WHERE user_id = ? AND is_active = 1
-      ORDER BY category, confidence DESC
-    `).all(userId);
-
+    const rates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, confidence DESC`).all(userId);
     if (rates.length > 0) {
       const grouped = {};
       for (const r of rates) {
@@ -49,24 +46,54 @@ function buildSystemPrompt(userId) {
         const conf = r.confidence >= 0.85 ? 'VERIFIED' : r.confidence >= 0.7 ? 'EMERGING' : 'NEW';
         grouped[r.category].push(`  - ${r.display_name}: ${r.value} ${r.unit} [${conf}]`);
       }
-      clientRateSection = `
-
-=== CLIENT-SPECIFIC TRAINED RATES ===
-This client has their own rate library built from previous project feedback.
-USE THESE RATES wherever applicable instead of the generic rates above.
-
-${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}
-
-RATE SOURCE TAGGING: For every cost item in your response, tag where the rate came from:
-- Client rate [VERIFIED]: tag as "(your verified rate)"
-- Client rate [EMERGING]: tag as "(your rate - calibrating)"  
-- Generic/estimated rate: tag as "(generic rate)"
-This helps the client see what to review and correct.
-=== END CLIENT RATES ===
-`;
+      clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
     }
-  } catch (err) {
-    console.error('[Chat] Error loading client rates:', err.message);
+  } catch (err) { console.error('[Chat] Rate load error:', err.message); }
+
+  // For document generation, we need structured JSON output
+  if (forDocGen) {
+    return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
+
+GENERIC UK RATES (baseline):
+Strip foundations: 85/m | Concrete slab 100mm: 50/m2 | Blockwork below DPC: 62/m2
+Cavity wall: 108/m2 | Roof structure: 95/m2 | Roof covering: 52/m2
+UPVC windows: 450/ea | Internal doors: 330/ea | Kitchen mid: 11000/ea
+Bathroom mid: 6000/ea | Electrical 1st fix: 3500 | Plumbing 1st fix: 2800
+Plaster & skim: 22/m2 | Painting: 15/m2 | LVT: 62/m2 | Carpet: 28/m2
+Render: 85/m2 | Structural steel S&F: 3500/T
+Location: London +20%, Midlands +7%, North -3%, Scotland +3%, Ireland +10% (EUR)
+${clientRateSection}
+Respond with this JSON structure:
+{
+  "sections": [
+    {
+      "number": "1",
+      "title": "Section Name",
+      "items": [
+        { "item": "1.1", "description": "Work item", "unit": "m2", "qty": 24, "rate": 50, "labour": 600, "materials": 600, "total": 1200, "rate_source": "verified|emerging|generic" }
+      ]
+    }
+  ],
+  "findings": {
+    "reference": "AI-QS-XXXXX",
+    "project_type": "e.g. Single Storey Extension",
+    "location": "Location",
+    "description": "Project description paragraph",
+    "scope_summary": "Scope summary paragraph",
+    "key_findings": [{ "title": "Category", "detail": "Detail text", "items": ["bullet1"] }],
+    "assumptions": ["Assumption 1"],
+    "exclusions": ["Exclusion 1"],
+    "cost_summary": {
+      "sections": [{ "name": "Section Name", "total": 12345.00 }],
+      "net_total": 50000.00,
+      "contingency_pct": 7.5, "contingency": 3750.00,
+      "ohp_pct": 12, "ohp": 6000.00,
+      "grand_total": 59750.00
+    },
+    "recommendations": ["Recommendation 1"]
+  }
+}
+Include ALL measurable items. Be thorough. Every item needs rate_source.`;
   }
 
   return `You are an expert UK Quantity Surveyor AI assistant working for The AI QS (theaiqs.co.uk), a professional AI-powered quantity surveying service covering the UK and Ireland.
@@ -101,41 +128,27 @@ GENERIC UK RATES (baseline — adjust for location):
 - Contingency: typically 5-10%
 
 LOCATION FACTORS:
-- London/SE: +15-25%
-- South Wales: baseline
-- Midlands: +5-10%
-- North England: -5% to baseline
-- Scotland: baseline to +5%
+- London/SE: +15-25%  |  South Wales: baseline  |  Midlands: +5-10%
+- North England: -5% to baseline  |  Scotland: baseline to +5%
 - Ireland: +5-15% (use EUR)
 ${clientRateSection}
 WHEN ANALYSING DRAWINGS:
-- Identify all visible elements and measure/estimate quantities
-- List items by elemental breakdown
-- Apply rates and state assumptions clearly
+- Identify all visible elements, measure/estimate quantities
+- List by elemental breakdown
+- Apply rates, state assumptions clearly
 - Flag anything unclear or missing
 - Include section subtotals, contingency (7.5-10%), OH&P (12-15%), VAT
-- Tag rate sources if client rates are available
+- Tag rate sources where client rates available: "(your verified rate)", "(your rate - calibrating)", "(generic rate)"
 
-WHEN THE CLIENT CORRECTS A RATE:
-If they say things like "fabrication should be 14 not 12.5" or "install rate is too low":
-1. Acknowledge the correction clearly
-2. List what changed (old -> new value with units)
-3. Confirm these will be saved to their rate library for future projects
-4. Offer to recalculate with corrected rates
+After providing your analysis, tell the client you can generate downloadable Excel BOQ and Word Findings Report if they want — just say "generate documents" or "create BOQ".
 
-COMMUNICATION STYLE:
-- Direct and professional, like a real QS talking to a builder
-- UK construction terminology
-- Specific numbers, not vague ranges
-- State assumptions clearly
-- Flag risks
-- Honest about limitations
+COMMUNICATION STYLE: Direct, professional, UK construction terminology. Specific numbers. State assumptions. Flag risks. Honest about limitations.
 
 IMPORTANT: Estimates are approximate, subject to detailed measurement and site conditions.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// FILE PROCESSING (same as original)
+// FILE PROCESSING
 // ═══════════════════════════════════════════════════════════════════════
 
 const VISUAL_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
@@ -145,101 +158,155 @@ const OFFICE_EXTS = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt'];
 
 function detectFileType(buffer) {
   if (!buffer || buffer.length < 4) return null;
-  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) return { ext: '.pdf', mime: 'application/pdf' };
-  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return { ext: '.jpg', mime: 'image/jpeg' };
-  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return { ext: '.png', mime: 'image/png' };
-  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) return { ext: '.gif', mime: 'image/gif' };
-  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && buffer.length >= 12 &&
-      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return { ext: '.webp', mime: 'image/webp' };
-  if (buffer[0] === 0x50 && buffer[1] === 0x4B) return { ext: '.zip', mime: 'application/zip' };
+  if (buffer[0]===0x25&&buffer[1]===0x50&&buffer[2]===0x44&&buffer[3]===0x46) return {ext:'.pdf',mime:'application/pdf'};
+  if (buffer[0]===0xFF&&buffer[1]===0xD8&&buffer[2]===0xFF) return {ext:'.jpg',mime:'image/jpeg'};
+  if (buffer[0]===0x89&&buffer[1]===0x50&&buffer[2]===0x4E&&buffer[3]===0x47) return {ext:'.png',mime:'image/png'};
+  if (buffer[0]===0x47&&buffer[1]===0x49&&buffer[2]===0x46&&buffer[3]===0x38) return {ext:'.gif',mime:'image/gif'};
+  if (buffer[0]===0x52&&buffer[1]===0x49&&buffer[2]===0x46&&buffer[3]===0x46&&buffer.length>=12&&buffer[8]===0x57&&buffer[9]===0x45&&buffer[10]===0x42&&buffer[11]===0x50) return {ext:'.webp',mime:'image/webp'};
+  if (buffer[0]===0x50&&buffer[1]===0x4B) return {ext:'.zip',mime:'application/zip'};
   return null;
 }
 
 function extractFromZip(zipPath) {
   const AdmZip = require('adm-zip');
-  const extracted = { visual: [], text: [], skipped: [], cad: [] };
+  const extracted = { visual:[], text:[], skipped:[], cad:[] };
   try {
     const zip = new AdmZip(zipPath);
     for (const entry of zip.getEntries()) {
       if (entry.isDirectory) continue;
       const name = path.basename(entry.entryName);
-      if (name.startsWith('._') || name.startsWith('.DS_Store') || entry.entryName.includes('__MACOSX') || name.startsWith('.')) continue;
+      if (name.startsWith('._')||name.startsWith('.DS_Store')||entry.entryName.includes('__MACOSX')||name.startsWith('.')) continue;
       const ext = path.extname(name).toLowerCase();
-
       if (VISUAL_EXTS.includes(ext)) {
-        try {
-          const outPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
-          fs.writeFileSync(outPath, entry.getData());
-          extracted.visual.push({ path: outPath, name, ext });
-        } catch (err) { extracted.skipped.push(name); }
+        try { const op=path.join(uploadsDir,`${uuidv4()}${ext}`); fs.writeFileSync(op,entry.getData()); extracted.visual.push({path:op,name,ext}); }
+        catch(e){ extracted.skipped.push(name); }
       } else if (TEXT_EXTS.includes(ext)) {
-        try { extracted.text.push({ name, content: entry.getData().toString('utf8') }); }
-        catch (err) { extracted.skipped.push(name); }
+        try { extracted.text.push({name,content:entry.getData().toString('utf8')}); }
+        catch(e){ extracted.skipped.push(name); }
       } else if (CAD_EXTS.includes(ext)) { extracted.cad.push(name); }
       else if (OFFICE_EXTS.includes(ext)) { extracted.skipped.push(name); }
       else {
-        try {
-          const fileData = entry.getData();
-          const detected = detectFileType(fileData);
-          if (detected && VISUAL_EXTS.includes(detected.ext)) {
-            const outPath = path.join(uploadsDir, `${uuidv4()}${detected.ext}`);
-            fs.writeFileSync(outPath, fileData);
-            extracted.visual.push({ path: outPath, name: `${name} (detected as ${detected.ext})`, ext: detected.ext });
-          } else { extracted.skipped.push(name); }
-        } catch (err) { extracted.skipped.push(name); }
+        try { const fd=entry.getData(); const dt=detectFileType(fd); if(dt&&VISUAL_EXTS.includes(dt.ext)){const op=path.join(uploadsDir,`${uuidv4()}${dt.ext}`);fs.writeFileSync(op,fd);extracted.visual.push({path:op,name:`${name}(${dt.ext})`,ext:dt.ext});}else{extracted.skipped.push(name);}}
+        catch(e){extracted.skipped.push(name);}
       }
     }
-  } catch (err) { console.error('[ZIP] Failed:', err.message); }
+  } catch(e){ console.error('[ZIP] Failed:',e.message); }
   return extracted;
 }
 
 function fileToContentBlock(filePath, ext) {
   try {
     const data = fs.readFileSync(filePath);
-    const base64 = data.toString('base64');
-    if (ext === '.pdf') {
-      if (data.length > 30 * 1024 * 1024) return null;
-      return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } };
-    }
-    const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
-    if (mimeMap[ext]) return { type: 'image', source: { type: 'base64', media_type: mimeMap[ext], data: base64 } };
-  } catch (err) { console.error(`[File] Error reading ${filePath}:`, err.message); }
+    const b64 = data.toString('base64');
+    if (ext==='.pdf') { if(data.length>30*1024*1024) return null; return {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}; }
+    const mm={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp'};
+    if (mm[ext]) return {type:'image',source:{type:'base64',media_type:mm[ext],data:b64}};
+  } catch(e){}
   return null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// FILE DOWNLOAD ENDPOINT
+// DOCUMENT GENERATION
 // ═══════════════════════════════════════════════════════════════════════
 
+async function generateDocuments(userId, conversationMessages, projectName, clientName, apiKey) {
+  if (!boqGen || !findingsGen) {
+    console.log('[Docs] Generators not available — missing exceljs or docx');
+    return null;
+  }
+
+  console.log('[Docs] Generating structured BOQ data via Claude...');
+
+  const docPrompt = buildSystemPrompt(userId, true);
+
+  // Ask Claude to produce structured JSON from the conversation
+  const structuredMessages = [
+    ...conversationMessages,
+    { role: 'user', content: 'Based on everything discussed above, produce the complete structured JSON for the BOQ and findings report. Include every line item with quantities, rates, labour/materials split, and rate sources. Be thorough.' }
+  ];
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514', max_tokens: 16000,
+      system: docPrompt, messages: structuredMessages
+    })
+  });
+
+  if (!resp.ok) {
+    console.error('[Docs] Claude API error:', resp.status);
+    return null;
+  }
+
+  const data = await resp.json();
+  const rawText = data.content.filter(c => c.type === 'text').map(c => c.text).join('');
+
+  let parsed;
+  try {
+    const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    console.error('[Docs] Failed to parse JSON from Claude:', e.message);
+    console.error('[Docs] Raw output (first 500 chars):', rawText.substring(0, 500));
+    return null;
+  }
+
+  const files = [];
+  const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50);
+  const ts = Date.now();
+
+  // Generate Excel BOQ
+  try {
+    const sections = parsed.sections || parsed.boq?.sections || [];
+    if (sections.length > 0) {
+      const excelBuf = await boqGen.generateBOQExcel(sections, projectName, clientName, {
+        contingency_pct: parsed.findings?.cost_summary?.contingency_pct || 7.5,
+        ohp_pct: parsed.findings?.cost_summary?.ohp_pct || 12,
+        vat_rate: parsed.findings?.cost_summary?.vat_rate || 20,
+      });
+      const excelName = `BOQ-${safeName}-${ts}.xlsx`;
+      fs.writeFileSync(path.join(outputsDir, excelName), excelBuf);
+      files.push({ name: excelName, type: 'xlsx', url: `/api/downloads/${excelName}` });
+      console.log(`[Docs] Excel BOQ generated: ${excelName} (${(excelBuf.length/1024).toFixed(1)}KB)`);
+    }
+  } catch (e) { console.error('[Docs] Excel generation failed:', e.message); }
+
+  // Generate Word Findings Report
+  try {
+    const findings = parsed.findings || {};
+    const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
+    const docName = `Findings-${safeName}-${ts}.docx`;
+    fs.writeFileSync(path.join(outputsDir, docName), docBuf);
+    files.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
+    console.log(`[Docs] Word report generated: ${docName} (${(docBuf.length/1024).toFixed(1)}KB)`);
+  } catch (e) { console.error('[Docs] Word generation failed:', e.message); }
+
+  return files.length > 0 ? files : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════
+
+// File downloads
 router.get('/downloads/:filename', authMiddleware, (req, res) => {
-  const filePath = path.join(outputsDir, req.params.filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  const fp = path.join(outputsDir, req.params.filename);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
   const ext = path.extname(req.params.filename).toLowerCase();
-  const mimeTypes = {
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.pdf': 'application/pdf',
-  };
-  res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+  const mt = { '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.pdf':'application/pdf' };
+  res.setHeader('Content-Type', mt[ext] || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
-  res.sendFile(filePath);
+  res.sendFile(fp);
 });
 
-// ═══════════════════════════════════════════════════════════════════════
-// CLIENT RATE LIBRARY ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════
-
+// Client rate library
 router.get('/my-rates', authMiddleware, (req, res) => {
   try {
-    const rates = db.prepare(`
-      SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, item_key
-    `).all(req.user.id);
-    const stats = db.prepare(`
-      SELECT COUNT(*) as total, ROUND(AVG(confidence), 2) as avg_confidence, SUM(times_applied) as total_uses
-      FROM client_rate_library WHERE user_id = ? AND is_active = 1
-    `).get(req.user.id);
+    const rates = db.prepare(`SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, item_key`).all(req.user.id);
+    const stats = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence, SUM(times_applied) as total_uses FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(req.user.id);
     res.json({ rates, stats });
-  } catch (err) { res.status(500).json({ error: 'Failed to load rate library' }); }
+  } catch(e) { res.status(500).json({ error: 'Failed to load rate library' }); }
 });
 
 router.post('/my-rates/corrections', authMiddleware, (req, res) => {
@@ -247,36 +314,25 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
     const userId = req.user.id;
     const { corrections, raw_message } = req.body;
     if (!corrections || !Array.isArray(corrections)) return res.status(400).json({ error: 'corrections array required' });
-
     const results = [];
     const tx = db.transaction(() => {
       for (const corr of corrections) {
-        const existing = db.prepare(
-          `SELECT id, value FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ?`
-        ).get(userId, corr.category, corr.item_key);
-
+        const existing = db.prepare(`SELECT id, value FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ?`).get(userId, corr.category, corr.item_key);
         if (existing) {
-          db.prepare(`UPDATE client_rate_library SET value = ?, client_note = ?, confidence = MIN(confidence + 0.1, 0.95), updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-            .run(corr.value, corr.note, existing.id);
-          db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'chat', ?)`)
-            .run('rc_' + uuidv4().slice(0, 8), existing.id, userId, existing.value, corr.value, raw_message);
+          db.prepare(`UPDATE client_rate_library SET value = ?, client_note = ?, confidence = MIN(confidence + 0.1, 0.95), updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(corr.value, corr.note, existing.id);
+          db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'chat', ?)`).run('rc_'+uuidv4().slice(0,8), existing.id, userId, existing.value, corr.value, raw_message);
           results.push({ display_name: corr.display_name, old: existing.value, new: corr.value, unit: corr.unit, action: 'updated' });
         } else {
-          const id = 'rl_' + uuidv4().slice(0, 8);
-          db.prepare(`INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, original_value, client_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, userId, corr.category, corr.item_key, corr.display_name || corr.item_key, corr.value, corr.unit, corr.original_value, corr.note);
-          db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'chat', ?)`)
-            .run('rc_' + uuidv4().slice(0, 8), id, userId, corr.original_value, corr.value, raw_message);
+          const id = 'rl_'+uuidv4().slice(0,8);
+          db.prepare(`INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, original_value, client_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, userId, corr.category, corr.item_key, corr.display_name||corr.item_key, corr.value, corr.unit, corr.original_value, corr.note);
+          db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'chat', ?)`).run('rc_'+uuidv4().slice(0,8), id, userId, corr.original_value, corr.value, raw_message);
           results.push({ display_name: corr.display_name, value: corr.value, unit: corr.unit, action: 'created' });
         }
       }
     });
     tx();
     res.json({ results, saved: results.length });
-  } catch (err) {
-    console.error('[Rates] Correction save error:', err);
-    res.status(500).json({ error: 'Failed to save corrections' });
-  }
+  } catch(e) { console.error('[Rates] Error:', e); res.status(500).json({ error: 'Failed to save corrections' }); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -288,53 +344,38 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     const { message, history } = req.body;
     const userId = req.user.id;
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
     let messages = [];
-    if (history) {
-      try { messages = JSON.parse(history).map(msg => ({ role: msg.role, content: msg.content })); } catch (e) {}
-    }
+    if (history) { try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){} }
 
     const currentContent = [];
-    let fileNames = [];
-    let zipNotes = [];
+    let fileNames = [], zipNotes = [];
 
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
-        console.log(`[Upload] File: ${file.originalname}, Size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
+        console.log(`[Upload] ${file.originalname} (${(file.size/1024/1024).toFixed(2)}MB)`);
         if (ext === '.zip') {
-          const extracted = extractFromZip(file.path);
-          for (const ef of extracted.visual) {
-            const block = fileToContentBlock(ef.path, ef.ext);
-            if (block) { currentContent.push(block); fileNames.push(ef.name); }
-          }
-          for (const tf of extracted.text) {
-            currentContent.push({ type: 'text', text: `[Content from ${tf.name}]:\n${tf.content}` });
-            fileNames.push(tf.name);
-          }
-          if (extracted.cad.length > 0) zipNotes.push(`Found ${extracted.cad.length} CAD file(s) (${extracted.cad.join(', ')}) -- export as PDF and re-upload.`);
-          if (extracted.skipped.length > 0) zipNotes.push(`${extracted.skipped.length} file(s) couldn't be processed: ${extracted.skipped.join(', ')}`);
-          if (extracted.visual.length === 0 && extracted.text.length === 0) {
-            zipNotes.push(extracted.cad.length > 0
-              ? `ZIP only contains CAD files -- export as PDF and upload those instead.`
-              : `No supported files in ZIP. Upload PDFs or images directly.`);
-          }
+          const ex = extractFromZip(file.path);
+          for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
+          for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`});fileNames.push(tf.name); }
+          if (ex.cad.length>0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
+          if (ex.skipped.length>0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
+          if (ex.visual.length===0&&ex.text.length===0) zipNotes.push(ex.cad.length>0?'ZIP only contains CAD files -- export as PDF.':'No supported files in ZIP.');
         } else {
-          const block = fileToContentBlock(file.path, ext);
-          if (block) { currentContent.push(block); fileNames.push(file.originalname); }
+          const b = fileToContentBlock(file.path, ext);
+          if (b) { currentContent.push(b); fileNames.push(file.originalname); }
         }
       }
     }
 
     let textMessage = message || '';
     if (zipNotes.length > 0) {
-      const noteText = zipNotes.join('\n');
-      if (textMessage) textMessage = `[Uploaded: ${fileNames.join(', ')}]\n\n${textMessage}\n\n[System: ${noteText}]`;
-      else if (fileNames.length > 0) textMessage = `Please analyse these drawings: ${fileNames.join(', ')}\n\n[System: ${noteText}]`;
-      else textMessage = `[System: ${noteText}]\n\nLet the user know about the file issue.`;
+      const n = zipNotes.join('\n');
+      if (textMessage) textMessage = `[Uploaded: ${fileNames.join(', ')}]\n\n${textMessage}\n\n[System: ${n}]`;
+      else if (fileNames.length > 0) textMessage = `Please analyse these drawings: ${fileNames.join(', ')}\n\n[System: ${n}]`;
+      else textMessage = `[System: ${n}]\n\nLet the user know about the file issue.`;
     } else if (fileNames.length > 0 && !textMessage) {
       textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
     } else if (fileNames.length > 0) {
@@ -346,52 +387,38 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // ─── Build dynamic system prompt with client rates ───────────
-    const systemPrompt = buildSystemPrompt(userId);
-
-    // ─── Smart model routing: Sonnet for drawings, Haiku for text chat ───
+    // ─── Build prompt & choose model ─────────────────────────────
+    const systemPrompt = buildSystemPrompt(userId, false);
     const hasDrawings = fileNames.length > 0;
     const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
     const primaryBudget = hasDrawings ? 8000 : 5000;
-    const fallbackModel = 'claude-haiku-4-5-20251001';
-    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings detected)' : 'Haiku (text-only chat)'}`);
+    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings)' : 'Haiku (text chat)'}`);
 
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
-    const primaryBody = JSON.stringify({
-      model: primaryModel, max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: primaryBudget },
-      system: systemPrompt, messages
-    });
 
-    let response, lastError, usedFallback = false;
-
+    let response, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: apiHeaders, body: primaryBody });
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: apiHeaders,
+        body: JSON.stringify({ model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages })
+      });
       if (response.ok) break;
-      lastError = await response.json().catch(() => ({}));
-      const isOverloaded = response.status === 529 || lastError?.error?.type === 'overloaded_error';
-      if (isOverloaded && attempt < 3) {
+      const err = await response.json().catch(() => ({}));
+      if ((response.status === 529 || err?.error?.type === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
-      } else if (!isOverloaded) {
+      } else if (response.status !== 529) {
         return res.status(500).json({ error: 'AI service error -- please try again' });
       }
     }
-
-    // If primary model failed and it was Sonnet, fall back to Haiku
-    if (!response.ok && primaryModel !== fallbackModel) {
-      console.log('[API] Sonnet overloaded, falling back to Haiku...');
+    if (!response.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
       response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: apiHeaders,
-        body: JSON.stringify({
-          model: fallbackModel, max_tokens: 16000,
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-          system: systemPrompt, messages
-        })
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages })
       });
-      if (!response.ok) return res.status(500).json({ error: 'AI service is currently busy -- try again in a few minutes' });
+      if (!response.ok) return res.status(500).json({ error: 'AI service busy -- try again shortly' });
       usedFallback = true;
     } else if (!response.ok) {
-      return res.status(500).json({ error: 'AI service is currently busy -- try again in a few minutes' });
+      return res.status(500).json({ error: 'AI service busy -- try again shortly' });
     }
 
     const data = await response.json();
@@ -400,21 +427,53 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       if (block.type === 'thinking') thinking += (thinking ? '\n' : '') + block.thinking;
       else if (block.type === 'text') reply += (reply ? '\n' : '') + block.text;
     }
+    if (usedFallback) reply += '\n\n---\n_Response from lighter model due to high demand._';
 
-    if (usedFallback) reply += '\n\n---\n_Note: Response from lighter model due to high demand. Try again later for full analysis._';
+    // ─── Check if user asked for document generation ─────────────
+    const wantsDocuments = /generat|create|produce|download|excel|boq|xlsx|docx|findings report|make.*report|make.*boq|give.*me.*the.*documents/i.test(message || '');
+    let downloadFiles = null;
 
-    // ─── Get rate library stats ──────────────────────────────────
+    if (wantsDocuments && (boqGen && findingsGen)) {
+      const clientName = req.user.full_name || req.user.email;
+      // Extract project name from conversation
+      let projectName = 'Project';
+      const nameMatch = reply.match(/(?:project|extension|conversion|renovation|build|works?)\s*(?:at|for|:)?\s*([A-Z][^\n,]{3,40})/i) || reply.match(/#+\s*.*?(?:ESTIMATE|BOQ|COST).*?:\s*(.+)/i);
+      if (nameMatch) projectName = nameMatch[1].trim();
+
+      // Build conversation context for document generation
+      const convMessages = messages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : m.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+      })).filter(m => m.content);
+
+      // Add the analysis reply as context
+      convMessages.push({ role: 'assistant', content: reply });
+
+      try {
+        downloadFiles = await generateDocuments(userId, convMessages, projectName, clientName, ANTHROPIC_API_KEY);
+        if (downloadFiles) {
+          reply += '\n\n---\n📥 **Your documents are ready for download:**';
+          for (const f of downloadFiles) {
+            const icon = f.type === 'xlsx' ? '📊' : '📄';
+            reply += `\n${icon} ${f.name}`;
+          }
+        }
+      } catch (e) {
+        console.error('[Docs] Generation error:', e);
+      }
+    } else if (hasDrawings && !wantsDocuments) {
+      // They uploaded drawings but didn't explicitly ask for docs — hint at it
+      reply += '\n\n---\n💡 _Want downloadable documents? Just say **"generate documents"** and I\'ll create an Excel BOQ and Word Findings Report from this analysis._';
+    }
+
+    // ─── Rate stats ──────────────────────────────────────────────
     let rateStats = null;
     try {
       const s = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(userId);
       if (s && s.total > 0) rateStats = s;
-    } catch (e) {}
+    } catch(e) {}
 
-    res.json({
-      reply,
-      thinking: thinking || null,
-      rateStats,
-    });
+    res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles });
 
   } catch (err) {
     console.error('Chat error:', err);
