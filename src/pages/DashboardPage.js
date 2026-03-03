@@ -10,15 +10,6 @@ import {
   NewProjectIcon, UploadIcon, DownloadIcon, DotIcon,
 } from '../components/Icons';
 
-const STATUS_MAP = {
-  awaiting_payment: { label: 'Awaiting Payment', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
-  submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-  in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-  in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
-  completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  delivered: { label: 'Delivered', color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
-};
-
 function UsageBar({ usage, t }) {
   if (!usage) return null;
   const { plan, planLabel, quota, used, remaining, isPayg, atLimit } = usage;
@@ -126,7 +117,7 @@ function UsageBar({ usage, t }) {
                 textDecoration: 'none', whiteSpace: 'nowrap',
               }}
             >
-              {'Buy Extra Project — ' + ((plan === 'professional' || plan === 'premium') ? '£79' : '£99')}
+              {'Buy Extra Project \u2014 ' + ((plan === 'professional' || plan === 'premium') ? '\u00a379' : '\u00a399')}
             </a>
           </div>
         </div>
@@ -138,8 +129,8 @@ function UsageBar({ usage, t }) {
 function GettingStarted({ projects, t }) {
   const steps = [
     { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
-    { key: 'first', label: 'Submit your first project', done: projects.length > 0, icon: UploadIcon },
-    { key: 'boq', label: 'Receive your BOQ', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
+    { key: 'chat', label: 'Start a chat and upload your drawings', done: projects.length > 0, icon: UploadIcon },
+    { key: 'boq', label: 'Generate your first BOQ', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
   ];
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => { try { if (localStorage.getItem('aiqs_checklist_dismissed') === 'true') setDismissed(true); } catch {} }, []);
@@ -190,14 +181,14 @@ function GettingStarted({ projects, t }) {
         ))}
       </div>
       {projects.length === 0 && (
-        <Link to="/new-project" style={{
+        <Link to="/chat" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           marginTop: 12, padding: '9px 18px', borderRadius: 8,
           background: 'linear-gradient(135deg, #F59E0B, #D97706)',
           color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
           boxShadow: '0 2px 10px rgba(245,158,11,0.18)', transition: 'all 0.2s',
         }}>
-          Submit Your First Project <ArrowRightIcon size={13} color="#0A0F1C" />
+          Start Your First Project <ArrowRightIcon size={13} color="#0A0F1C" />
         </Link>
       )}
     </div>
@@ -229,7 +220,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null)])
-      .then(([proj, usg]) => { setProjects(proj); setUsage(usg); })
+      .then(([proj, usg]) => { setProjects(proj.projects || proj || []); setUsage(usg); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -239,9 +230,9 @@ export default function DashboardPage() {
       const key = `aiqs_tour_complete_${user?.id || 'default'}`;
       try { if (!localStorage.getItem(key)) setShowTour(true); } catch {}
     }
-  }, [loading]);
+  }, [loading, user?.id]);
 
-  const firstName = user?.fullName?.split(' ')[0] || 'there';
+  const firstName = user?.fullName?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
 
   return (
     <div className="page" data-tour="welcome">
@@ -251,24 +242,24 @@ export default function DashboardPage() {
           <h1 className="page-title">Welcome back, {firstName}</h1>
           <p className="page-subtitle">Here's an overview of your projects</p>
         </div>
-        <Link to="/new-project" className="btn-primary" data-tour="new-project">
+        <Link to="/chat" className="btn-primary" data-tour="start-chat">
           <NewProjectIcon size={15} color="#0A0F1C" />
-          New Project
+          Start Chat
         </Link>
       </div>
       <UsageBar usage={usage} t={t} />
-      <GettingStarted projects={projects} t={t} />
+      <GettingStarted projects={Array.isArray(projects) ? projects : []} t={t} />
       <div className="stats-row" data-tour="stats">
-        <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow} value={projects.length} label="Total Projects" t={t} />
-        <StatCard icon={ClockIcon} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.06)" value={projects.filter(p => p.status === 'submitted' || p.status === 'in_review').length} label="In Queue" t={t} />
-        <StatCard icon={PipelineIcon} iconColor="#A855F7" iconBg="rgba(168,85,247,0.06)" value={projects.filter(p => p.status === 'in_progress').length} label="In Progress" t={t} />
-        <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)" value={projects.filter(p => p.status === 'completed' || p.status === 'delivered').length} label="Completed" t={t} accent />
+        <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow} value={Array.isArray(projects) ? projects.length : 0} label="Total Projects" t={t} />
+        <StatCard icon={ClockIcon} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'submitted' || p.status === 'in_review').length : 0} label="In Queue" t={t} />
+        <StatCard icon={PipelineIcon} iconColor="#A855F7" iconBg="rgba(168,85,247,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'in_progress').length : 0} label="In Progress" t={t} />
+        <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'completed' || p.status === 'delivered').length : 0} label="Completed" t={t} accent />
       </div>
       <div className="section-card" data-tour="projects-list">
-        <div className="section-card-header"><h2>Your Projects</h2></div>
+        <div className="section-card-header"><h2>Recent Projects</h2></div>
         {loading ? (
           <div className="empty-state"><div className="loading-spinner" /><p>Loading your projects...</p></div>
-        ) : projects.length === 0 ? (
+        ) : !Array.isArray(projects) || projects.length === 0 ? (
           <div className="empty-state">
             <div style={{
               width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
@@ -276,40 +267,29 @@ export default function DashboardPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}><FolderIcon size={24} color="#F59E0B" /></div>
             <h3>No projects yet</h3>
-            <p>Upload your first set of drawings and we'll get your BOQ started.</p>
-            <Link to="/new-project" className="btn-primary" style={{ marginTop: 16 }}>Submit Your First Project</Link>
+            <p>Head to the chat, upload your drawings, and generate your first BOQ.</p>
+            <Link to="/chat" className="btn-primary" style={{ marginTop: 16 }}>Start Your First Project</Link>
           </div>
         ) : (
           <div className="projects-list">
-            {projects.map(project => {
-              const status = STATUS_MAP[project.status] || STATUS_MAP.submitted;
-              const isPaid = project.status !== 'awaiting_payment';
+            {projects.slice(0, 10).map(project => {
+              const status = { submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' }, completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)' } };
+              const st = status[project.status] || status.submitted;
               return (
-                <Link to={`/project/${project.id}`} key={project.id} className="project-row">
+                <div key={project.id} className="project-row" style={{ cursor: 'default' }}>
                   <div className="project-info">
                     <div className="project-title">{project.title}</div>
                     <div className="project-meta">
-                      <span className="project-type">{project.project_type}</span>
-                      {project.location && <span className="project-location">&middot; {project.location}</span>}
-                      <span className="project-files">&middot; {project.file_count || 0} file{(project.file_count || 0) !== 1 ? 's' : ''}</span>
+                      {project.item_count > 0 && <span>{project.item_count} items</span>}
+                      {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '\u20ac' : '\u00a3'}{Math.round(project.total_value).toLocaleString()}</span>}
                     </div>
                   </div>
                   <div className="project-right">
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 10.5, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
-                      background: isPaid ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
-                      color: isPaid ? '#10B981' : '#EF4444',
-                    }}>
-                      <DotIcon size={5} color={isPaid ? '#10B981' : '#EF4444'} />
-                      {isPaid ? 'PAID' : 'UNPAID'}
-                    </span>
-                    <span className="status-badge" style={{ color: status.color, background: status.bg }}>{status.label}</span>
                     <span className="project-date">
                       {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
