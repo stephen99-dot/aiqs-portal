@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   DashboardIcon, NewProjectIcon, PipelineIcon, ClientsIcon,
-  ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
+  ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 
@@ -31,6 +31,7 @@ export default function Layout() {
     { path: '/pipeline', label: 'Pipeline', Icon: PipelineIcon, adminOnly: true },
     { path: '/clients', label: 'Clients', Icon: ClientsIcon, adminOnly: true },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
+    { path: '/my-rates', label: 'My Rates', Icon: RatesIcon },
     { path: '/admin', label: 'Admin', Icon: AdminIcon, adminOnly: true },
     { path: '/admin/users', label: 'User Management', Icon: ClientsIcon, adminOnly: true },
     { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
@@ -45,7 +46,6 @@ export default function Layout() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
 
-      {/* MOBILE HEADER */}
       <header className="mobile-header-bar" style={{
         display: 'none',
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -69,7 +69,6 @@ export default function Layout() {
           </div>
           <span style={{ fontWeight: 700, fontSize: 14, color: t.text }}>AI QS</span>
         </div>
-        {/* Mobile notification bell for admin */}
         {isAdmin ? <NotificationBell /> : <div style={{ width: 30 }} />}
       </header>
 
@@ -80,7 +79,6 @@ export default function Layout() {
         }} />
       )}
 
-      {/* SIDEBAR */}
       <aside className={`sidebar-panel ${mobileOpen ? 'open' : ''}`} data-tour="sidebar-nav" style={{
         position: 'fixed', top: 0, left: 0, bottom: 0, width: 240,
         background: sidebarBg,
@@ -90,7 +88,6 @@ export default function Layout() {
         transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
       }}>
         <div style={{ padding: '20px 12px 16px' }}>
-          {/* Logo + Notification Bell */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 28, padding: '2px 6px 2px 6px',
@@ -119,11 +116,9 @@ export default function Layout() {
                 </div>
               </div>
             </div>
-            {/* Notification Bell — admin only, desktop sidebar */}
             {isAdmin && <NotificationBell />}
           </div>
 
-          {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => (
               <NavLink key={item.path} to={item.path} end={item.path === '/admin'} style={{ textDecoration: 'none' }}>
@@ -160,7 +155,6 @@ export default function Layout() {
           </nav>
         </div>
 
-        {/* Bottom section */}
         <div style={{ padding: '10px 12px 14px', borderTop: `1px solid ${t.border}` }}>
           <button onClick={toggle} className="sidebar-btn" style={{
             display: 'flex', alignItems: 'center', gap: 9,
@@ -218,7 +212,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
       <main className="main-panel" style={{
         flex: 1, marginLeft: 240,
         minHeight: '100vh', overflow: 'auto', background: t.bg,
