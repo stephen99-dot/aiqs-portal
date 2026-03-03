@@ -71,17 +71,51 @@ db.exec(`
     FOREIGN KEY (project_id) REFERENCES projects(id)
   );
 
+  CREATE TABLE IF NOT EXISTS usage_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT,
+    model_used TEXT,
+    tokens_in INTEGER DEFAULT 0,
+    tokens_out INTEGER DEFAULT 0,
+    cost_estimate REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_projects (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    total_value REAL,
+    currency TEXT DEFAULT 'GBP',
+    boq_filename TEXT,
+    findings_filename TEXT,
+    summary TEXT,
+    item_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
   CREATE INDEX IF NOT EXISTS idx_files_project ON files(project_id);
   CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
+  CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id);
+  CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_chat_projects_user ON chat_projects(user_id);
 `);
 
-// ─── Migrations for existing databases ──────────────────────────────────────
+// Migrations for existing databases
 const migrations = [
   { column: 'role', table: 'users', sql: "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'client'" },
   { column: 'plan', table: 'users', sql: "ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'starter'" },
   { column: 'monthly_quota', table: 'users', sql: "ALTER TABLE users ADD COLUMN monthly_quota INTEGER DEFAULT 2" },
   { column: 'source', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN source TEXT DEFAULT 'portal'" },
+  { column: 'suspended', table: 'users', sql: "ALTER TABLE users ADD COLUMN suspended INTEGER DEFAULT 0" },
+  { column: 'suspended_reason', table: 'users', sql: "ALTER TABLE users ADD COLUMN suspended_reason TEXT" },
+  { column: 'bonus_messages', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_messages INTEGER DEFAULT 0" },
+  { column: 'bonus_docs', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_docs INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
@@ -89,54 +123,11 @@ for (const { column, table, sql } of migrations) {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all();
     if (!columns.some(col => col.name === column)) {
       db.exec(sql);
-      console.log(`✅ Added ${column} column to ${table} table`);
+      console.log(`Added ${column} column to ${table} table`);
     }
   } catch (err) {
     console.log(`Migration ${column}:`, err.message);
   }
 }
-
-// ─── Client Rate Training Tables ──────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS client_rate_library (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    category TEXT NOT NULL,
-    item_key TEXT NOT NULL,
-    display_name TEXT NOT NULL,
-    value REAL NOT NULL,
-    unit TEXT NOT NULL,
-    original_value REAL,
-    source_project_id TEXT,
-    client_note TEXT,
-    confidence REAL DEFAULT 0.5,
-    times_applied INTEGER DEFAULT 0,
-    times_confirmed INTEGER DEFAULT 0,
-    is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE(user_id, category, item_key)
-  );
-
-  CREATE TABLE IF NOT EXISTS rate_corrections_log (
-    id TEXT PRIMARY KEY,
-    rate_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    project_id TEXT,
-    old_value REAL,
-    new_value REAL NOT NULL,
-    correction_source TEXT DEFAULT 'chat',
-    raw_message TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (rate_id) REFERENCES client_rate_library(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_client_rates_user ON client_rate_library(user_id);
-  CREATE INDEX IF NOT EXISTS idx_client_rates_active ON client_rate_library(user_id, is_active);
-  CREATE INDEX IF NOT EXISTS idx_corrections_user ON rate_corrections_log(user_id);
-  CREATE INDEX IF NOT EXISTS idx_corrections_rate ON rate_corrections_log(rate_id);
-`);
 
 module.exports = db;
