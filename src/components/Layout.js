@@ -28,12 +28,9 @@ export default function Layout() {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', Icon: DashboardIcon },
     { path: '/projects', label: 'Projects', Icon: NewProjectIcon },
-    { path: '/pipeline', label: 'Pipeline', Icon: PipelineIcon, adminOnly: true },
-    { path: '/clients', label: 'Clients', Icon: ClientsIcon, adminOnly: true },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/my-rates', label: 'My Rates', Icon: RatesIcon },
-    { path: '/admin', label: 'Admin', Icon: AdminIcon, adminOnly: true },
-    { path: '/admin/users', label: 'User Management', Icon: ClientsIcon, adminOnly: true },
+    { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
     { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
   ];
 
