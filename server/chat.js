@@ -471,62 +471,38 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       reply += '\n\n---\n💡 _Want downloadable documents? Just say **"generate documents"** and I\'ll create an Excel BOQ and Word Findings Report._';
     }
 
-    // ─── Auto-learning: extract rates from user corrections ──────
+    // --- Auto-learning: extract rates from user corrections ---
     try {
       const userMsg = (message || '');
       const userLower = userMsg.toLowerCase();
-
-      // Detect if user is correcting a rate
-      const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|it'?s|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong)/i.test(userLower);
-
+      const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong|instead of|changed to|now \d|is \d+\s*(?:not|instead))/i.test(userLower);
       if (isCorrection) {
-        // Try to extract rate values with units
-        const ratePatterns = [
-          /(?:£|€)?\s*(\d[\d,.]*)\s*(?:\/|per\s+)(hr|hour|day|week|m|m2|m²|m3|m³|tonne|T|kg|no|nr|item|each|flight|load)/gi,
-          /(\d[\d,.]*)\s*(?:hours?|hrs?)\s*(?:\/|per\s+)(tonne|T)/gi,
-          /(?:should be|actually|it'?s|rate is|cost is|price is)\s*(?:£|€)?\s*(\d[\d,.]*)/gi,
-        ];
-
-        const corrections = [];
-        for (const pat of ratePatterns) {
-          let match;
-          while ((match = pat.exec(userMsg)) !== null) {
-            const val = parseFloat((match[1] || match[2] || '').replace(/,/g, ''));
-            const unit = (match[2] || match[3] || 'unit').replace(/hour/i, 'hr');
-            if (val > 0 && val < 100000) {
-              corrections.push({ value: val, unit, raw: match[0].trim() });
-            }
+        console.log('[AutoLearn] Correction detected: ' + userMsg.substring(0, 100));
+        const existingRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+        if (existingRates.length > 0) {
+          let bestMatch = null, bestScore = 0;
+          for (const rate of existingRates) {
+            const nameWords = rate.display_name.toLowerCase().split(/[\s&,\/\-]+/).filter(w => w.length > 2);
+            let score = 0;
+            for (const word of nameWords) { if (userLower.includes(word)) score++; }
+            const keyParts = rate.item_key.split('_').filter(w => w.length > 2);
+            for (const part of keyParts) { if (userLower.includes(part)) score += 0.5; }
+            if (score > bestScore) { bestScore = score; bestMatch = rate; }
           }
-        }
-
-        if (corrections.length > 0) {
-          console.log(`[AutoLearn] Detected ${corrections.length} rate correction(s) in user message`);
-
-          // Try to match corrections to existing rates using context from Claude's reply
-          const existingRates = db.prepare(`SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1`).all(userId);
-
-          for (const corr of corrections) {
-            console.log(`[AutoLearn] Rate value: ${corr.value} ${corr.unit} (from: "${corr.raw}")`);
-
-            // Find the closest matching existing rate by unit
-            const unitMatch = existingRates.find(r =>
-              r.unit && r.unit.toLowerCase().replace(/[£€\/]/g, '').trim() === corr.unit.toLowerCase()
-            );
-
-            if (unitMatch) {
-              // Update existing rate
-              db.prepare(`UPDATE client_rate_library SET value = ?, confidence = MIN(confidence + 0.05, 0.95), times_confirmed = times_confirmed + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-                .run(corr.value, unitMatch.id);
-              db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'auto_chat', ?)`)
-                .run('rc_' + require('uuid').v4().slice(0, 8), unitMatch.id, userId, unitMatch.value, corr.value, userMsg.substring(0, 500));
-              console.log(`[AutoLearn] Updated ${unitMatch.display_name}: ${unitMatch.value} -> ${corr.value}`);
-            }
-          }
+          let newValue = null;
+          const np = [/(?:should be|actually|is|to|now|changed to)\s*(?:\u00a3|\u20ac)?\s*(\d[\d,.]*)(?!\d)/i, /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i];
+          for (const pat of np) { const m = userMsg.match(pat); if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v>0&&v<1000000){newValue=v;break;} } }
+          if (!newValue) { const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g); if (nums) newValue = parseFloat(nums[0].replace(/,/g,'')); }
+          if (bestMatch && bestScore >= 1 && newValue && newValue !== bestMatch.value) {
+            console.log('[AutoLearn] Match: ' + bestMatch.display_name + ' score:' + bestScore + ' ' + bestMatch.value + '->' + newValue);
+            db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newValue, bestMatch.id);
+            db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+require('uuid').v4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
+            console.log('[AutoLearn] Updated ' + bestMatch.display_name);
+          } else { console.log('[AutoLearn] No match. Best:' + (bestMatch?bestMatch.display_name:'none') + ' score:' + bestScore + ' val:' + newValue); }
         }
       }
-    } catch (autoErr) {
-      console.error('[AutoLearn] Error:', autoErr.message);
-    }
+    } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
+
 
     // ─── Rate stats ──────────────────────────────────────────────
     let rateStats = null;
