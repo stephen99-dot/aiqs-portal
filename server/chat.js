@@ -145,6 +145,26 @@ COMMUNICATION STYLE: Direct, professional, UK construction terminology. Specific
 
 RATE LEARNING: If a client corrects a rate or provides their own pricing (e.g. "we charge £55/hr", "fabrication is 14 hrs/T", "that should be £3,800/T"), acknowledge the correction and confirm the updated rate. The system will automatically learn from these corrections. Encourage clients to correct any rates that don't match their costs.
 
+RATE TAGS (CRITICAL - always include these when rates are mentioned):
+When a client provides a NEW rate that isn't in their library, or corrects an existing rate, you MUST include a hidden tag at the END of your response on its own line. The client won't see these tags but the system uses them to update the rate library.
+
+For NEW rates the client provides:
+[RATE_ADD|category|Rate Name|value|unit]
+
+For CORRECTIONS to existing rates:
+[RATE_UPDATE|Rate Name|new_value]
+
+Examples:
+- Client says "we charge £60/hr for welding" -> include: [RATE_ADD|structural_steel|Welding Labour Rate|60|/hr]
+- Client says "add crane hire at £700 per day" -> include: [RATE_ADD|preliminaries|Crane Hire|700|/day]
+- Client says "balustrade is 262 not 280" -> include: [RATE_UPDATE|Balustrade Supply & Fit|262]
+- Client says "labour should be £55/hr" -> include: [RATE_UPDATE|Labour Rate|55]
+- Client says "you're missing scaffolding, we pay £25/m2" -> include: [RATE_ADD|preliminaries|Scaffolding|25|/m2]
+
+Valid categories: structural_steel, architectural_metalwork, preliminaries, groundworks, masonry, carpentry, roofing, plastering, flooring, electrical, plumbing, mechanical, decorating, kitchen, bathroom, demolition, partitions, general
+
+Always include the tag AND acknowledge the rate to the client naturally. Multiple tags are fine if multiple rates are mentioned.
+
 IMPORTANT: Estimates are approximate, subject to detailed measurement and site conditions.`;
 }
 
@@ -502,6 +522,64 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       }
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
+
+    // --- Parse RATE_ADD and RATE_UPDATE tags from Claude reply ---
+    try {
+      var addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
+      for (var ai = 0; ai < addMatches.length; ai++) {
+        var parts = addMatches[ai].replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
+        if (parts.length === 4) {
+          var cat = parts[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+          var rName = parts[1].trim();
+          var rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, ''));
+          var rUnit = parts[3].trim();
+          if (rName && !isNaN(rVal) && rVal > 0 && rUnit) {
+            var itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
+            var exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
+            if (!exists) {
+              var rateId = 'rl_' + require('uuid').v4().slice(0, 8);
+              db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run(rateId, userId, cat, itemKey, rName, rVal, rUnit);
+              console.log('[RateTag] ADD: ' + rName + ' = ' + rVal + ' ' + rUnit + ' (' + cat + ')');
+            } else {
+              db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id);
+              console.log('[RateTag] ADD (exists, updated): ' + rName + ' = ' + rVal);
+            }
+          }
+        }
+      }
+      var updateMatches = reply.match(/\[RATE_UPDATE\|([^|]+)\|([^\]]+)\]/g) || [];
+      for (var ui = 0; ui < updateMatches.length; ui++) {
+        var uParts = updateMatches[ui].replace(/^\[RATE_UPDATE\|/, '').replace(/\]$/, '').split('|');
+        if (uParts.length === 2) {
+          var uName = uParts[0].trim().toLowerCase();
+          var uVal = parseFloat(uParts[1].trim().replace(/[^0-9.\-]/g, ''));
+          if (uName && !isNaN(uVal) && uVal > 0) {
+            var allRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+            var found = null;
+            for (var ri = 0; ri < allRates.length; ri++) {
+              if (allRates[ri].display_name.toLowerCase() === uName || allRates[ri].item_key === uName.replace(/[^a-z0-9]+/g, '_')) { found = allRates[ri]; break; }
+            }
+            if (!found) {
+              for (var ri2 = 0; ri2 < allRates.length; ri2++) {
+                var words = uName.split(/[\s&,\/\-]+/).filter(function(w){return w.length>2;});
+                var sc = 0;
+                for (var wi = 0; wi < words.length; wi++) { if (allRates[ri2].display_name.toLowerCase().includes(words[wi])) sc++; }
+                if (sc >= 2) { found = allRates[ri2]; break; }
+              }
+            }
+            if (found && uVal !== found.value) {
+              db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(uVal, found.id);
+              db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+require('uuid').v4().slice(0,8),found.id,userId,found.value,uVal,'tag_update',reply.substring(0,200));
+              console.log('[RateTag] UPDATE: ' + found.display_name + ' ' + found.value + ' -> ' + uVal);
+            }
+          }
+        }
+      }
+      // Strip tags from reply
+      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+    } catch (tagErr) { console.error('[RateTag] Error:', tagErr.message); }
+
+
 
 
     // ─── Rate stats ──────────────────────────────────────────────
