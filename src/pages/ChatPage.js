@@ -28,9 +28,17 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [thinkingStage, setThinkingStage] = useState(0);
   const [expandedThinking, setExpandedThinking] = useState({});
+  const [rateStats, setRateStats] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const thinkingInterval = useRef(null);
+
+  // Fetch rate library stats on mount
+  useEffect(() => {
+    apiFetch('/my-rates').then(data => {
+      if (data.stats && data.stats.total > 0) setRateStats(data.stats);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
@@ -297,8 +305,12 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.reply,
         thinking: data.thinking || null,
+        rateStats: data.rateStats || null,
         timestamp: new Date().toISOString()
       }]);
+
+      // Update rate stats badge if backend sent new stats
+      if (data.rateStats) setRateStats(data.rateStats);
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -465,7 +477,22 @@ export default function ChatPage() {
       <div style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h1 style={styles.title}>AI Quantity Surveyor</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h1 style={styles.title}>AI Quantity Surveyor</h1>
+              {rateStats && (
+                <span style={{
+                  background: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
+                  color: isDark ? '#34D399' : '#059669',
+                  border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`,
+                  borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                }}>
+                  <span style={{ fontSize: '13px' }}>🧠</span>
+                  {rateStats.total} trained rate{rateStats.total !== 1 ? 's' : ''}
+                  {rateStats.avg_confidence >= 0.85 && ' • High accuracy'}
+                </span>
+              )}
+            </div>
             <p style={styles.subtitle}>Upload drawings and chat about your project -- get instant estimates and QS advice</p>
           </div>
           {messages.length > 0 && (
@@ -480,7 +507,13 @@ export default function ChatPage() {
             <div style={styles.welcome}>
               <div style={styles.welcomeIcon}>📐</div>
               <h3 style={styles.welcomeTitle}>Ready to analyse your project</h3>
-              <p style={styles.welcomeText}>Upload your drawings (PDF, images, or ZIP) and ask me anything -- rough costs, spec advice, quantities, building regs, risks to watch for.</p>
+              <p style={styles.welcomeText}>
+                Upload your drawings (PDF, images, or ZIP) and ask me anything. 
+                {rateStats 
+                  ? ` I'm using your ${rateStats.total} trained rates for accurate pricing. Correct anything that's off and I'll learn for next time.`
+                  : ' I\'ll use standard UK rates to start — correct anything that\'s off and I\'ll remember your rates for future projects.'
+                }
+              </p>
               <div style={styles.suggestions}>
                 {[
                   ['💰', 'Rough cost estimate', 'Can you give me a rough cost estimate for this project?'],
