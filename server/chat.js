@@ -349,18 +349,24 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     // ─── Build dynamic system prompt with client rates ───────────
     const systemPrompt = buildSystemPrompt(userId);
 
-    // ─── Call Claude API ─────────────────────────────────────────
+    // ─── Smart model routing: Sonnet for drawings, Haiku for text chat ───
+    const hasDrawings = fileNames.length > 0;
+    const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
+    const primaryBudget = hasDrawings ? 8000 : 5000;
+    const fallbackModel = 'claude-haiku-4-5-20251001';
+    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings detected)' : 'Haiku (text-only chat)'}`);
+
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
-    const sonnetBody = JSON.stringify({
-      model: 'claude-sonnet-4-20250514', max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: 8000 },
+    const primaryBody = JSON.stringify({
+      model: primaryModel, max_tokens: 16000,
+      thinking: { type: 'enabled', budget_tokens: primaryBudget },
       system: systemPrompt, messages
     });
 
     let response, lastError, usedFallback = false;
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-      response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: apiHeaders, body: sonnetBody });
+      response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: apiHeaders, body: primaryBody });
       if (response.ok) break;
       lastError = await response.json().catch(() => ({}));
       const isOverloaded = response.status === 529 || lastError?.error?.type === 'overloaded_error';
@@ -371,17 +377,21 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     }
 
-    if (!response.ok) {
+    // If primary model failed and it was Sonnet, fall back to Haiku
+    if (!response.ok && primaryModel !== fallbackModel) {
+      console.log('[API] Sonnet overloaded, falling back to Haiku...');
       response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST', headers: apiHeaders,
         body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001', max_tokens: 16000,
+          model: fallbackModel, max_tokens: 16000,
           thinking: { type: 'enabled', budget_tokens: 5000 },
           system: systemPrompt, messages
         })
       });
       if (!response.ok) return res.status(500).json({ error: 'AI service is currently busy -- try again in a few minutes' });
       usedFallback = true;
+    } else if (!response.ok) {
+      return res.status(500).json({ error: 'AI service is currently busy -- try again in a few minutes' });
     }
 
     const data = await response.json();
