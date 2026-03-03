@@ -121,7 +121,19 @@ export default function Layout() {
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => (
-              <NavLink key={item.path} to={item.path} end={item.path === '/admin'} style={{ textDecoration: 'none' }}>
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === '/admin'}
+                style={{ textDecoration: 'none' }}
+                onClick={(e) => {
+                  if (window.__aiqs_chat_sending) {
+                    e.preventDefault();
+                    if (!window.confirm('The AI is still processing your request. If you leave now, the response will be lost.\n\nLeave anyway?')) return;
+                    window.__aiqs_chat_sending = false;
+                  }
+                }}
+              >
                 {({ isActive }) => (
                   <div className="sidebar-nav-item" style={{
                     display: 'flex', alignItems: 'center', gap: 10,
