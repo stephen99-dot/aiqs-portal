@@ -139,7 +139,7 @@ WHEN ANALYSING DRAWINGS:
 - Include section subtotals, contingency (7.5-10%), OH&P (12-15%), VAT
 - Tag rate sources where client rates available: "(your verified rate)", "(your rate - calibrating)", "(generic rate)"
 
-After providing your analysis, tell the client you can generate downloadable Excel BOQ and Word Findings Report if they want — just say "generate documents" or "create BOQ".
+IMPORTANT CAPABILITY: This system CAN and DOES generate real downloadable Excel BOQ (.xlsx) and Word Findings Report (.docx) files. When a client asks you to "generate documents", "create the BOQ", or "download the report", the system will automatically produce these files and provide download buttons. Do NOT tell clients you cannot create files — you absolutely can. After providing your analysis, tell the client: "Want downloadable documents? Just say **generate documents** and I'll create an Excel BOQ and Word Findings Report for you."
 
 COMMUNICATION STYLE: Direct, professional, UK construction terminology. Specific numbers. State assumptions. Flag risks. Honest about limitations.
 
@@ -393,7 +393,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (usedFallback) reply += '\n\n---\n_Response from lighter model due to high demand._';
 
     // ─── Check if user wants document generation ─────────────────
-    const wantsDocuments = /generat|create|produce|download|excel|boq|xlsx|docx|findings report|make.*report|make.*boq|give.*me.*the.*document/i.test(message || '');
+    const wantsDocuments = /generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let downloadFiles = null;
 
     if (wantsDocuments && boqGen && findingsGen) {
