@@ -10,6 +10,7 @@ const webhookRoutes = require('./webhookRoutes');
 const creditRoutes = require('./creditRoutes');
 const rateRoutes = require('./rateRoutes');
 const ratesExtra = require('./rates-extra');
+const projectsUsage = require('./projects-usage');
 const { router: activityRoutes } = require('./activityRoutes');
 const { router: pipelineRoutes } = require('./pipelineRoutes');
 const { authMiddleware } = require('./auth');
@@ -28,13 +29,14 @@ app.use('/api', webhookRoutes);
 app.use('/api/credits', authMiddleware, creditRoutes);
 app.use('/api', rateRoutes);
 app.use('/api', ratesExtra);
+app.use('/api', projectsUsage);
 app.use('/api', activityRoutes);
 app.use('/api', pipelineRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
-  app.get('*', (req, res) => res.sendFile(path.join(buildPath, 'index.html')));
+  app.get('*', function(req, res) { res.sendFile(path.join(buildPath, 'index.html')); });
 }
 
-app.listen(PORT, '0.0.0.0', () => console.log('\n  AI QS Server running on port ' + PORT + '\n'));
+app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
