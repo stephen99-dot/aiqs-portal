@@ -330,6 +330,39 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
+    // --- Account suspension check ---
+    if (req.user.suspended) {
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
+    }
+
+    // --- Quota check ---
+    const PLAN_LIMITS = {
+      starter:      { messages: 10,  docs: 0,   revisions_per_doc: 1, label: 'Starter', pay_per_doc: true, doc_price: 99 },
+      professional: { messages: 100, docs: 10,  revisions_per_doc: 1, label: 'Professional' },
+      premium:      { messages: 200, docs: 20,  revisions_per_doc: 1, label: 'Premium' },
+      admin:        { messages: -1,  docs: -1,  revisions_per_doc: -1, label: 'Admin' },
+    };
+    if (req.user.role !== 'admin') {
+      const plan = req.user.plan || 'starter';
+      const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
+      var bonusMsgs = req.user.bonus_messages || 0;
+      var effectiveLimit = limits.messages + bonusMsgs;
+      if (effectiveLimit > 0) {
+        var mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
+        var monthStr = mStart.toISOString();
+        var used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, monthStr);
+        if (used.c >= effectiveLimit) {
+          return res.status(429).json({
+            error: 'Monthly message limit reached (' + effectiveLimit + ' messages on ' + limits.label + ' plan). Upgrade your plan for more.',
+            limit_type: 'messages',
+            used: used.c,
+            limit: effectiveLimit,
+            plan: plan
+          });
+        }
+      }
+    }
+
     let messages = [];
     if (history) { try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){} }
 
@@ -407,6 +440,20 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
 
     const data = await response.json();
+
+    // --- Log usage ---
+    const tokensIn = data.usage ? data.usage.input_tokens : 0;
+    const tokensOut = data.usage ? data.usage.output_tokens : 0;
+    const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
+    const costPerIn = modelUsed.includes('haiku') ? 0.0000008 : 0.000003;
+    const costPerOut = modelUsed.includes('haiku') ? 0.000004 : 0.000015;
+    const costEstimate = (tokensIn * costPerIn) + (tokensOut * costPerOut);
+    try {
+      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, costEstimate
+      );
+    } catch(ue) { console.error('[Usage] Log error:', ue.message); }
+
     let thinking = '', reply = '';
     for (const block of data.content) {
       if (block.type === 'thinking') thinking += (thinking ? '\n' : '') + block.thinking;
@@ -415,8 +462,59 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (usedFallback) reply += '\n\n---\n_Response from lighter model due to high demand._';
 
     // ─── Check if user wants document generation ─────────────────
-    const wantsDocuments = /generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    const wantsDocumentsRaw = /generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
+
+    // Doc generation quota check
+    if (wantsDocuments && req.user.role !== 'admin') {
+      var dPlan = req.user.plan || 'starter';
+      var dStart2 = new Date(); dStart2.setDate(1); dStart2.setHours(0,0,0,0);
+      var dMonthStr = dStart2.toISOString();
+      var docsGenThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, dMonthStr).c;
+      var revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
+
+      if (dPlan === 'starter') {
+        // Starter: pay-per-BOQ. Check paid credits.
+        var paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
+        var totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
+        var totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
+        var originalsEver = totalDocsEver - totalRevisionsEver;
+        // Each paid credit = 1 original + 1 revision
+        var lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
+        // Check if this might be a revision (same project name in recent context)
+        var looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+
+        if (looksLikeRevision && totalRevisionsEver < paidCredits) {
+          // Allow as revision
+          console.log('[Quota] Starter revision allowed');
+        } else if (originalsEver >= paidCredits) {
+          // No credit left - show payment link
+          var stripeLink = process.env.STRIPE_BOQ_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_LINK';
+          reply += '\n\n---\n**To generate your BOQ and Findings Report, a one-off payment of \u00a399 is required.**\n\n[Pay \u00a399 to generate documents](' + stripeLink + '?client_reference_id=' + userId + ')\n\nThis includes:\n- Full Excel BOQ with your trained rates\n- Professional Findings Report\n- 1 revision if rates need adjusting\n\nOnce payment is confirmed, just say **\"generate documents\"** again.';
+          wantsDocuments = false;
+        }
+      } else {
+        // Professional: 10 docs, Premium: 20 docs
+        var docLimit = dPlan === 'premium' ? 20 : 10;
+        var originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
+        // Check if this is a revision
+        var lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
+        var isRevisionCheck = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+        if (isRevisionCheck) {
+          // Count revisions for last project
+          var lastProject = lastDoc2.detail;
+          var projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastProject).c;
+          if (projectRevisions >= 1) {
+            reply += '\n\n---\nRevision limit reached for this project (1 revision included per BOQ).';
+            wantsDocuments = false;
+          }
+        } else if (originalsThisMonth >= docLimit) {
+          reply += '\n\n---\nDocument limit reached (' + docLimit + ' BOQs on ' + dPlan + ' plan this month).';
+          wantsDocuments = false;
+        }
+      }
+    }
 
     if (wantsDocuments && boqGen && findingsGen) {
       console.log('[Docs] User requested documents — generating structured data...');
@@ -480,6 +578,22 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           if (downloadFiles.length > 0) {
             reply += '\n\n---\n📥 **Your documents are ready for download:**';
             for (const f of downloadFiles) reply += `\n${f.type === 'xlsx' ? '📊' : '📄'} ${f.name}`;
+
+            // Auto-save project to history
+            try {
+              var totalVal = 0, itemCount = 0;
+              if (parsed.sections) { for (var si=0;si<parsed.sections.length;si++) { var sec=parsed.sections[si]; if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}} } }
+              var summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
+              var boqF = downloadFiles.find(function(f){return f.type==='xlsx';});
+              var docF = downloadFiles.find(function(f){return f.type==='docx';});
+              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)').run(
+                'cp_'+uuidv4().slice(0,8),userId,projectName,totalVal,reply.includes('EUR')?'EUR':'GBP',boqF?boqF.name:null,docF?docF.name:null,summaryText.substring(0,1000),itemCount
+              );
+              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)').run(
+                'ul_'+uuidv4().slice(0,8),userId,'doc_generated',projectName,modelUsed||'sonnet',0,0,0
+              );
+              console.log('[Project] Saved: '+projectName+' ('+itemCount+' items, '+totalVal.toFixed(0)+')');
+            } catch(pe) { console.error('[Project] Save error:', pe.message); }
           }
         } else {
           console.error('[Docs] Structured API call failed:', docResp.status);
@@ -589,7 +703,21 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       if (s && s.total > 0) rateStats = s;
     } catch(e) {}
 
-    res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles });
+    // --- Quota info for frontend ---
+    let quotaInfo = null;
+    if (req.user.role !== 'admin') {
+      var qPlan = req.user.plan || 'starter';
+      var qStart = new Date(); qStart.setDate(1); qStart.setHours(0,0,0,0);
+      var qMonth = qStart.toISOString();
+      var qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
+      var qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
+      var qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
+      var qMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
+      var qDocLimit = qPlan === 'starter' ? 0 : qPlan === 'professional' ? 10 : 20;
+      quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
+    }
+
+    res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles, quota: quotaInfo });
 
   } catch (err) {
     console.error('Chat error:', err);
