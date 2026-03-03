@@ -137,4 +137,38 @@ router.post('/my-rates/import', authMiddleware, upload.single('file'), async (re
   }
 });
 
+// Admin: import rates for a specific client
+router.post('/admin/import-rates/:clientId', authMiddleware, upload.single('file'), async function(req, res) {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    var targetUserId = req.params.clientId;
+    var targetUser = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(targetUserId);
+    if (!targetUser) return res.status(404).json({ error: 'Client not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file' });
+    var ext = path.extname(req.file.originalname).toLowerCase();
+    if (!['.xlsx','.xls','.csv'].includes(ext)) return res.status(400).json({ error: 'Upload .xlsx or .csv' });
+    var ExcelJS; try { ExcelJS = require('exceljs'); } catch(e) { return res.status(500).json({ error: 'Excel not available' }); }
+    var wb = new ExcelJS.Workbook();
+    if (ext === '.csv') await wb.csv.readFile(req.file.path); else await wb.xlsx.readFile(req.file.path);
+    var ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ error: 'No worksheet' });
+    var headerRow = null, colMap = {};
+    for (var r = 1; r <= Math.min(5, ws.rowCount); r++) { var row = ws.getRow(r); var vals = []; row.eachCell({ includeEmpty:true }, function(cell,col){ vals.push({col:col,val:String(cell.value||'').toLowerCase().trim()}); }); if (vals.some(function(v){return /rate|value|price|cost|amount/i.test(v.val);}) || vals.some(function(v){return /desc|name|item|trade/i.test(v.val);})) { headerRow=r; for(var i=0;i<vals.length;i++){var v=vals[i]; if(/desc|name|item|trade|element/i.test(v.val)&&!colMap.name)colMap.name=v.col; else if(/categor|section|group/i.test(v.val)&&!colMap.category)colMap.category=v.col; else if(/rate|value|price|cost|amount/i.test(v.val)&&!colMap.value)colMap.value=v.col; else if(/unit|uom/i.test(v.val)&&!colMap.unit)colMap.unit=v.col;} break; } }
+    if (!headerRow) { headerRow=0; colMap={name:1,value:2,unit:3,category:4}; }
+    if (!colMap.name||!colMap.value) return res.status(400).json({error:'Could not detect columns'});
+    var imported=[], skipped=[];
+    var tx = db.transaction(function(){ for(var r2=headerRow+1;r2<=ws.rowCount;r2++){var dr=ws.getRow(r2); var nm=String(dr.getCell(colMap.name).value||'').trim(); var vl=parseFloat(String(dr.getCell(colMap.value).value||'').replace(/[^0-9.\-]/g,'')); var un=colMap.unit?String(dr.getCell(colMap.unit).value||'').trim()||'unit':'unit'; var ct=colMap.category?String(dr.getCell(colMap.category).value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_')||'general':'general'; if(!nm||isNaN(vl)||vl<=0){if(nm)skipped.push(nm);continue;} var ik=nm.toLowerCase().replace(/[^a-z0-9]+/g,'_').substring(0,100); var ex=db.prepare('SELECT id FROM client_rate_library WHERE user_id=? AND category=? AND item_key=? AND is_active=1').get(targetUserId,ct,ik); if(ex){db.prepare('UPDATE client_rate_library SET value=?,unit=?,confidence=0.85,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(vl,un,ex.id);imported.push({name:nm,value:vl,action:'updated'});}else{db.prepare('INSERT INTO client_rate_library(id,user_id,category,item_key,display_name,value,unit,confidence,is_active)VALUES(?,?,?,?,?,?,?,0.85,1)').run('rl_'+uuidv4().slice(0,8),targetUserId,ct,ik,nm,vl,un);imported.push({name:nm,value:vl,action:'created'});}} });
+    tx();
+    try{fs.unlinkSync(req.file.path);}catch(e){}
+    console.log('[AdminImport] '+imported.length+' rates for '+targetUser.email);
+    res.json({success:true, client:targetUser.full_name||targetUser.email, imported:imported.length, skipped:skipped.length, rates:imported});
+  } catch(e) { console.error('[AdminImport]',e); res.status(500).json({error:'Import failed: '+e.message}); }
+});
+
+// Admin: get clients list for dropdown
+router.get('/admin/clients-list', authMiddleware, function(req, res) {
+  if (req.user.role !== 'admin') return res.status(403).json({error:'Admin only'});
+  res.json({clients: db.prepare("SELECT id,email,full_name,company FROM users WHERE role!='admin' ORDER BY full_name").all()});
+});
+
 module.exports = router;
