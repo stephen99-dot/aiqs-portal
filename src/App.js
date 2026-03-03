@@ -6,7 +6,7 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
-import NewProjectPage from './pages/NewProjectPage';
+import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
 import MyRatesPage from './pages/MyRatesPage';
@@ -48,7 +48,8 @@ function AppInner() {
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/new-project" element={<NewProjectPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/new-project" element={<Navigate to="/projects" replace />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
