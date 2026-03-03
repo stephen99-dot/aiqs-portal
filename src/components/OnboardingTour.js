@@ -1,48 +1,48 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowRightIcon, ArrowLeftIcon, XIcon, SparklesIcon } from './Icons';
+import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
     title: 'Welcome to AI QS',
-    description: 'Your AI-powered quantity surveying portal. Upload drawings, get professional BOQs back — usually within a couple of hours.',
+    description: 'Your AI-powered quantity surveying portal. Upload drawings in the chat, get estimates instantly, and generate professional BOQ documents.',
     position: 'center',
-    icon: '✦',
+    icon: '\u2726',
   },
   {
-    target: '[data-tour="new-project"]',
-    title: 'Submit a Project',
-    description: 'Click here to upload your drawings and project details. We support PDFs, DWGs, images, and more.',
+    target: '[data-tour="start-chat"]',
+    title: 'Start a Project',
+    description: 'Click here to open the AI chat. Upload your drawings, describe the project, and get a detailed cost estimate straight away.',
     position: 'bottom',
-    icon: '↗',
+    icon: '\u2197',
   },
   {
     target: '[data-tour="usage-bar"]',
     title: 'Your Usage',
-    description: 'Track how many projects you\'ve used this month. Your plan quota and remaining allowance are shown here.',
+    description: 'Track your messages and document generations this month. Your plan quota and remaining allowance are shown here.',
     position: 'bottom',
-    icon: '◎',
+    icon: '\u25CE',
   },
   {
     target: '[data-tour="stats"]',
     title: 'Project Overview',
-    description: 'A quick snapshot of all your projects — how many are queued, in progress, and completed.',
+    description: 'A snapshot of all your projects. Once you generate BOQ documents in the chat, they appear here automatically.',
     position: 'bottom',
-    icon: '▣',
+    icon: '\u25A3',
   },
   {
     target: '[data-tour="projects-list"]',
     title: 'Your Projects',
-    description: 'All your submitted projects appear here. Click any project to see its status, download your BOQ, and view the findings report.',
+    description: 'All generated BOQs and reports are saved here. You can re-download documents any time from the Projects page.',
     position: 'top',
-    icon: '☰',
+    icon: '\u2630',
   },
   {
     target: '[data-tour="sidebar-nav"]',
     title: 'Navigation',
-    description: 'Use the sidebar to navigate between your dashboard, submit new projects, and access the AI chat assistant.',
+    description: 'Use the sidebar to access Chat for new estimates, Projects for past BOQs, and My Rates to manage your pricing library.',
     position: 'right',
-    icon: '◧',
+    icon: '\u25E7',
   },
 ];
 
@@ -217,7 +217,6 @@ export default function OnboardingTour({ userId, onComplete }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, animation: 'tourFadeIn 0.4s ease forwards' }}>
       {showConfetti && step === 0 && <Confetti />}
 
-      {/* SVG overlay */}
       <svg ref={overlayRef} style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 10001 }}
         onClick={(e) => { if (e.target === overlayRef.current || e.target.tagName === 'rect') finish(); }}>
         <defs>
@@ -233,7 +232,6 @@ export default function OnboardingTour({ userId, onComplete }) {
         <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.7)" mask="url(#tour-mask)" style={{ cursor: 'pointer' }} />
       </svg>
 
-      {/* Spotlight ring */}
       {targetRect && (
         <div style={{
           position: 'fixed',
@@ -247,7 +245,6 @@ export default function OnboardingTour({ userId, onComplete }) {
         }} />
       )}
 
-      {/* Tooltip */}
       <div style={{
         ...getTooltipStyle(targetRect, currentStep.position, windowSize),
         zIndex: 10003,
@@ -258,7 +255,6 @@ export default function OnboardingTour({ userId, onComplete }) {
           borderRadius: 14, padding: '22px 22px 18px',
           boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.1)',
         }}>
-          {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{
@@ -283,7 +279,6 @@ export default function OnboardingTour({ userId, onComplete }) {
             </button>
           </div>
 
-          {/* Content */}
           <h3 style={{
             fontSize: 16, fontWeight: 700, color: '#F1F5F9',
             marginBottom: 6, lineHeight: 1.3,
@@ -297,7 +292,6 @@ export default function OnboardingTour({ userId, onComplete }) {
             {currentStep.description}
           </p>
 
-          {/* Progress + nav */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 4 }}>
               {TOUR_STEPS.map((_, i) => (
