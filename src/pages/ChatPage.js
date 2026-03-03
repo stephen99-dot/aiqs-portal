@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 
 // Get user-specific storage key to prevent chat leaking between accounts
@@ -74,6 +75,22 @@ export default function ChatPage() {
       setThinkingStage(0);
     }
     return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
+  }, [sending]);
+
+  // Block browser navigation (tab close, refresh) while sending
+  // Also set global flag so Layout sidebar can warn before navigating
+  useEffect(() => {
+    if (!sending) {
+      window.__aiqs_chat_sending = false;
+      return;
+    }
+    window.__aiqs_chat_sending = true;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => {
+      window.removeEventListener('beforeunload', handler);
+      window.__aiqs_chat_sending = false;
+    };
   }, [sending]);
 
   // -- Theme colors --
