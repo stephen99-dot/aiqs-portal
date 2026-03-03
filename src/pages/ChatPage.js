@@ -4,15 +4,6 @@ import { apiFetch } from '../utils/api';
 
 const STORAGE_KEY = 'aiqs_chat_history';
 
-// -- Thinking stages shown while waiting --
-const THINKING_STAGES = [
-  { icon: '📄', text: 'Reading your input...' },
-  { icon: '🔍', text: 'Analysing project scope...' },
-  { icon: '📐', text: 'Measuring quantities...' },
-  { icon: '💰', text: 'Calculating costs...' },
-  { icon: '📋', text: 'Preparing response...' },
-];
-
 export default function ChatPage() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
@@ -26,12 +17,12 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
-  const [thinkingStage, setThinkingStage] = useState(0);
+  const [liveProgress, setLiveProgress] = useState(null); // SSE progress: { stage, message }
+  const [progressHistory, setProgressHistory] = useState([]); // completed stages
   const [expandedThinking, setExpandedThinking] = useState({});
   const [rateStats, setRateStats] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const thinkingInterval = useRef(null);
 
   // Fetch rate library stats on mount
   useEffect(() => {
@@ -46,24 +37,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, thinkingStage]);
-
-  // Cycle through thinking stages while waiting
-  useEffect(() => {
-    if (sending) {
-      setThinkingStage(0);
-      thinkingInterval.current = setInterval(() => {
-        setThinkingStage(prev => {
-          if (prev < THINKING_STAGES.length - 1) return prev + 1;
-          return prev; // Stay on last stage
-        });
-      }, 2200);
-    } else {
-      if (thinkingInterval.current) clearInterval(thinkingInterval.current);
-      setThinkingStage(0);
-    }
-    return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
-  }, [sending]);
+  }, [messages, liveProgress, progressHistory]);
 
   // -- Theme colors --
   const colors = isDark ? {
@@ -285,6 +259,8 @@ export default function ChatPage() {
     setInput('');
     setFiles([]);
     setSending(true);
+    setLiveProgress(null);
+    setProgressHistory([]);
 
     try {
       const history = messages
@@ -296,22 +272,77 @@ export default function ChatPage() {
       formData.append('history', JSON.stringify(history));
       currentFiles.forEach(f => formData.append('files', f));
 
-      const data = await apiFetch('/chat', {
+      const token = localStorage.getItem('aiqs_token');
+      const response = await fetch('/api/chat', {
         method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.reply,
-        thinking: data.thinking || null,
-        rateStats: data.rateStats || null,
-        files: data.files || null,
-        timestamp: new Date().toISOString()
-      }]);
+      if (!response.ok) {
+        throw new Error('Request failed');
+      }
 
-      // Update rate stats badge if backend sent new stats
-      if (data.rateStats) setRateStats(data.rateStats);
+      // Parse SSE stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse complete SSE events from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        let eventType = '';
+        let eventData = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7);
+          } else if (line.startsWith('data: ')) {
+            eventData = line.slice(6);
+          } else if (line === '' && eventType && eventData) {
+            // Complete event received
+            try {
+              const parsed = JSON.parse(eventData);
+
+              if (eventType === 'progress') {
+                setProgressHistory(prev => {
+                  const exists = prev.some(p => p.stage === parsed.stage);
+                  if (exists) return prev;
+                  return [...prev, { ...parsed, done: false }];
+                });
+                setLiveProgress(parsed);
+              } else if (eventType === 'complete') {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: parsed.reply,
+                  thinking: parsed.thinking || null,
+                  rateStats: parsed.rateStats || null,
+                  files: parsed.files || null,
+                  timestamp: new Date().toISOString()
+                }]);
+                if (parsed.rateStats) setRateStats(parsed.rateStats);
+              } else if (eventType === 'error') {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: parsed.error || 'Something went wrong.',
+                  timestamp: new Date().toISOString(),
+                  error: true
+                }]);
+              }
+            } catch (parseErr) {
+              console.error('SSE parse error:', parseErr);
+            }
+            eventType = '';
+            eventData = '';
+          }
+        }
+      }
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -321,6 +352,8 @@ export default function ChatPage() {
       }]);
     } finally {
       setSending(false);
+      setLiveProgress(null);
+      setProgressHistory([]);
     }
   }
 
@@ -333,8 +366,15 @@ export default function ChatPage() {
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   }
 
-  // -- Thinking stages component --
+  // -- Live progress indicator (driven by SSE events) --
+  const STAGE_ICONS = {
+    processing: '📄', uploading: '📤', analysing: '🔍', retrying: '🔄',
+    fallback: '⚡', preparing: '📋', structuring: '📐', building_boq: '📊',
+    building_report: '📄', thinking: '🧠',
+  };
+
   function ThinkingIndicator() {
+    const allStages = progressHistory.length > 0 ? progressHistory : [{ stage: 'processing', message: 'Processing your request...', done: false }];
     return (
       <div style={styles.msgRow('assistant')}>
         <div style={styles.avatar}>📐</div>
@@ -353,35 +393,31 @@ export default function ChatPage() {
               borderRadius: '50%', background: colors.thinkingAccent,
               animation: 'thinkPulse 1.5s ease-in-out infinite',
             }} />
-            AI is thinking...
+            AI is working...
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {THINKING_STAGES.map((stage, i) => {
-              const isDone = i < thinkingStage;
-              const isActive = i === thinkingStage;
-              const isWaiting = i > thinkingStage;
+            {allStages.map((s, i) => {
+              const isLast = i === allStages.length - 1;
+              const isDone = !isLast;
               return (
-                <div key={i} style={{
+                <div key={s.stage} style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
                   padding: '6px 10px', borderRadius: '8px',
-                  background: isActive ? colors.stageActiveBg : 'transparent',
+                  background: isLast ? colors.stageActiveBg : 'transparent',
                   transition: 'all 0.4s ease',
-                  opacity: isWaiting ? 0.35 : 1,
                 }}>
-                  <span style={{ fontSize: '14px', flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>
-                    {isDone ? '✅' : stage.icon}
+                  <span style={{ fontSize: '14px', flexShrink: 0 }}>
+                    {isDone ? '✅' : (STAGE_ICONS[s.stage] || '⏳')}
                   </span>
                   <span style={{
-                    fontSize: '13px', fontWeight: isActive ? 600 : 400,
-                    color: isDone ? colors.stageDoneText : isActive ? colors.stageActiveText : colors.stageWaitText,
+                    fontSize: '13px', fontWeight: isLast ? 600 : 400,
+                    color: isDone ? colors.stageDoneText : colors.stageActiveText,
                     transition: 'color 0.3s ease',
                   }}>
-                    {stage.text}
+                    {s.message}
                   </span>
-                  {isActive && (
-                    <span style={{
-                      marginLeft: 'auto', display: 'flex', gap: '3px',
-                    }}>
+                  {isLast && (
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: '3px' }}>
                       {[0, 1, 2].map(d => (
                         <span key={d} style={{
                           width: '4px', height: '4px', borderRadius: '50%',
@@ -400,6 +436,7 @@ export default function ChatPage() {
       </div>
     );
   }
+
 
   // -- Collapsible thinking block --
   function ThinkingBlock({ thinking, index }) {
