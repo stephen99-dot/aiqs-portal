@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
+import MyRatesPage from './pages/MyRatesPage';
 import PipelinePage from './pages/PipelinePage';
 import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
@@ -50,6 +51,7 @@ function AppInner() {
           <Route path="/new-project" element={<NewProjectPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
