@@ -441,7 +441,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         var used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, monthStr);
         if (used.c >= effectiveLimit) {
           return res.status(429).json({
-            error: 'Monthly message limit reached (' + effectiveLimit + ' messages on ' + limits.label + ' plan). Upgrade your plan for more.',
+            error: 'You\'ve used all ' + effectiveLimit + ' messages this month on the ' + limits.label + ' plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.',
             limit_type: 'messages',
             used: used.c,
             limit: effectiveLimit,
@@ -616,8 +616,22 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
       const clientName = req.user.full_name || req.user.email;
       let projectName = 'Project';
-      const nm = reply.match(/(?:project|extension|conversion|renovation|build|works?)\s*(?:at|for|:)?\s*([A-Z][^\n,]{3,40})/i) || reply.match(/#+\s*.*?(?:ESTIMATE|BOQ|COST).*?:\s*(.+)/i);
-      if (nm) projectName = nm[1].trim();
+      
+      // Try to extract project name from the full conversation, not just the last reply
+      const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
+      
+      // Look for address patterns first (most reliable)
+      const addrMatch = allText.match(/(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}(?:\s+(?:Road|Street|Lane|Drive|Avenue|Close|Way|Crescent|Place|Court|Gardens|Terrace|Grove|Mews|Rise|Hill|Row|Walk|Square|Park|Green|Rd|St|Ln|Dr|Ave|Cl))\b)/i);
+      if (addrMatch) {
+        projectName = addrMatch[1].trim();
+      } else {
+        // Look for "project at/for/:" patterns
+        const projMatch = allText.match(/(?:project|extension|conversion|renovation|refurb|build|loft|dormer|garage|kitchen|bathroom)\s+(?:at|for|:|-|–)\s+([A-Z0-9][^\n,]{3,40})/i);
+        if (projMatch) projectName = projMatch[1].trim();
+      }
+      
+      // Clean up for filename
+      projectName = projectName.replace(/[^\w\s-]/g, '').trim().substring(0, 50);
 
       const convMessages = messages.map(m => ({
         role: m.role,
@@ -642,7 +656,8 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           const rawText = docData.content.filter(c => c.type === 'text').map(c => c.text).join('');
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
           const parsed = JSON.parse(cleaned);
-          const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50);
+          console.log('[Docs] Parsed JSON — sections:', (parsed.sections || []).length, 'items per section:', (parsed.sections || []).map(s => (s.items || []).length));
+          const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
           const ts = Date.now();
           downloadFiles = [];
 
@@ -695,6 +710,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       } catch (e) {
         console.error('[Docs] Generation error:', e.message);
+        console.error('[Docs] Stack:', e.stack ? e.stack.split('\n').slice(0,3).join(' | ') : 'no stack');
       }
     } else if (hasDrawings && !wantsDocuments) {
       reply += '\n\nIf you want downloadable documents, just say "generate documents" and I\'ll create an Excel BOQ and Word Findings Report for you.';
