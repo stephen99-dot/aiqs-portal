@@ -367,9 +367,11 @@ router.get('/downloads/:filename', authMiddleware, (req, res) => {
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
   const ext = path.extname(req.params.filename).toLowerCase();
   const mt = { '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.pdf':'application/pdf' };
+  const fileBuffer = fs.readFileSync(fp);
   res.setHeader('Content-Type', mt[ext] || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
-  res.sendFile(fp);
+  res.setHeader('Content-Length', fileBuffer.length);
+  res.send(fileBuffer);
 });
 
 // Client rate library
@@ -664,35 +666,64 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           // Excel BOQ
           const sections = parsed.sections || [];
           if (sections.length > 0) {
-            console.log('[Docs] Building Excel BOQ...');
-            const buf = await boqGen.generateBOQExcel(sections, projectName, clientName, {
-              contingency_pct: parsed.findings?.cost_summary?.contingency_pct || 7.5,
-              ohp_pct: parsed.findings?.cost_summary?.ohp_pct || 12,
-              vat_rate: parsed.findings?.cost_summary?.vat_rate || 20,
-            });
-            const fname = `BOQ-${safeName}-${ts}.xlsx`;
-            fs.writeFileSync(path.join(outputsDir, fname), buf);
-            downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
-            console.log(`[Docs] Excel: ${fname} (${(buf.length/1024).toFixed(1)}KB)`);
+            console.log('[Docs] Building Excel BOQ with', sections.length, 'sections...');
+            try {
+              const buf = await boqGen.generateBOQExcel(sections, projectName, clientName, {
+                contingency_pct: parsed.findings?.cost_summary?.contingency_pct || 7.5,
+                ohp_pct: parsed.findings?.cost_summary?.ohp_pct || 12,
+                vat_rate: parsed.findings?.cost_summary?.vat_rate || 20,
+              });
+              if (buf && buf.length > 100) {
+                const fname = `BOQ-${safeName}-${ts}.xlsx`;
+                fs.writeFileSync(path.join(outputsDir, fname), buf);
+                const savedSize = fs.statSync(path.join(outputsDir, fname)).size;
+                downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+                console.log(`[Docs] Excel: ${fname} (buf=${buf.length} bytes, saved=${savedSize} bytes)`);
+              } else {
+                console.error('[Docs] Excel buffer too small or empty:', buf ? buf.length : 'null');
+              }
+            } catch (excelErr) {
+              console.error('[Docs] Excel generation error:', excelErr.message);
+              console.error('[Docs] Excel stack:', excelErr.stack ? excelErr.stack.split('\n').slice(0,3).join(' | ') : '');
+            }
           }
 
           // Word Findings Report
-          console.log('[Docs] Building Findings Report...');
-          const findings = parsed.findings || {};
-          const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
-          const docName = `Findings-${safeName}-${ts}.docx`;
-          fs.writeFileSync(path.join(outputsDir, docName), docBuf);
-          downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
-          console.log(`[Docs] Word: ${docName} (${(docBuf.length/1024).toFixed(1)}KB)`);
+          try {
+            console.log('[Docs] Building Findings Report...');
+            const findings = parsed.findings || {};
+            const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
+            if (docBuf && docBuf.length > 100) {
+              const docName = `Findings-${safeName}-${ts}.docx`;
+              fs.writeFileSync(path.join(outputsDir, docName), docBuf);
+              const savedDocSize = fs.statSync(path.join(outputsDir, docName)).size;
+              downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
+              console.log(`[Docs] Word: ${docName} (buf=${docBuf.length} bytes, saved=${savedDocSize} bytes)`);
+            } else {
+              console.error('[Docs] Word buffer too small or empty:', docBuf ? docBuf.length : 'null');
+            }
+          } catch (wordErr) {
+            console.error('[Docs] Word generation error:', wordErr.message);
+          }
 
           if (downloadFiles.length > 0) {
-            reply += '\n\nYour documents are ready for download:';
-            for (const f of downloadFiles) reply += `\n- ${f.name}`;
+            // Replace Claude's reply entirely — don't let it ramble about not being able to generate files
+            var itemCount = 0, totalVal = 0;
+            if (parsed.sections) { for (var si=0;si<parsed.sections.length;si++) { var sec=parsed.sections[si]; if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}} } }
+            
+            var grandTotal = totalVal;
+            if (parsed.findings && parsed.findings.cost_summary && parsed.findings.cost_summary.grand_total) {
+              grandTotal = parsed.findings.cost_summary.grand_total;
+            }
+            
+            var currency = reply.includes('EUR') || reply.includes('\u20ac') ? '\u20ac' : '\u00a3';
+            reply = 'Your documents have been generated for ' + projectName + '.\n\n';
+            reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections, ';
+            reply += 'with a total project value of ' + currency + grandTotal.toLocaleString('en-GB', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' (excl. VAT).\n\n';
+            reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
 
             // Auto-save project to history
             try {
-              var totalVal = 0, itemCount = 0;
-              if (parsed.sections) { for (var si=0;si<parsed.sections.length;si++) { var sec=parsed.sections[si]; if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}} } }
               var summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
               var boqF = downloadFiles.find(function(f){return f.type==='xlsx';});
               var docF = downloadFiles.find(function(f){return f.type==='docx';});
