@@ -7,22 +7,21 @@ import OnboardingTour from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
-  NewProjectIcon, UploadIcon, DownloadIcon, DotIcon,
+  NewProjectIcon, UploadIcon, DownloadIcon,
 } from '../components/Icons';
 
 const STRIPE = {
-  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01', // £99 per BOQ (PAYG/Starter)
-  professional:    'https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02', // £347/month
-  premium:         'https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03', // £447/month
-  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06', // £79 extra BOQ (Pro/Premium)
-  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05', // Upgrade to Premium (from Pro)
+  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
+  professional:    'https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02',
+  premium:         'https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03',
+  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',
+  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',
 };
 
 function UsageBar({ usage, t }) {
   if (!usage) return null;
   const { plan, planLabel, quota, used, remaining, isPayg, atLimit } = usage;
 
-  // PAYG / Starter with no quota — show upgrade nudge
   if (isPayg) {
     return (
       <div data-tour="usage-bar" style={{
@@ -104,7 +103,6 @@ function UsageBar({ usage, t }) {
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: barColor, transition: 'width 0.5s ease' }} />
       </div>
 
-      {/* At-limit: show upgrade options */}
       {atLimit && (
         <div style={{
           marginTop: 12, padding: '14px 16px',
@@ -118,7 +116,6 @@ function UsageBar({ usage, t }) {
             <div style={{ fontSize: 11.5, color: t.textMuted }}>Upgrade your plan or buy an extra BOQ to continue</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {/* Upgrade to Premium (only show for Professional) */}
             {plan === 'professional' && (
               <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
                 padding: '7px 14px', borderRadius: 7,
@@ -130,7 +127,6 @@ function UsageBar({ usage, t }) {
                 <CrownIcon size={12} color="#fff" /> Upgrade to Premium — £447/mo
               </a>
             )}
-            {/* Buy extra BOQ — £79 for subscribers, £99 for PAYG */}
             <a
               href={plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg}
               target="_blank" rel="noopener noreferrer"
@@ -147,7 +143,6 @@ function UsageBar({ usage, t }) {
         </div>
       )}
 
-      {/* Warning when getting close (2 or fewer remaining) */}
       {!atLimit && remaining <= 2 && remaining > 0 && (
         <div style={{
           marginTop: 10, fontSize: 12, color: '#F59E0B',
@@ -228,7 +223,7 @@ function GettingStarted({ projects, t }) {
           marginTop: 12, padding: '9px 18px', borderRadius: 8,
           background: 'linear-gradient(135deg, #F59E0B, #D97706)',
           color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
-          boxShadow: '0 2px 10px rgba(245,158,11,0.18)', transition: 'all 0.2s',
+          boxShadow: '0 2px 10px rgba(245,158,11,0.18)',
         }}>
           Start Your First Project <ArrowRightIcon size={13} color="#0A0F1C" />
         </Link>
@@ -252,6 +247,15 @@ function StatCard({ icon: Icon, iconColor, iconBg, value, label, t, accent }) {
   );
 }
 
+const STATUS_MAP = {
+  submitted:        { label: 'Submitted',        color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+  completed:        { label: 'Completed',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+  delivered:        { label: 'Delivered',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+  in_progress:      { label: 'In Progress',      color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
+  awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+  in_review:        { label: 'In Review',        color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+};
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { t } = useTheme();
@@ -262,7 +266,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null)])
-      .then(([proj, usg]) => { setProjects(proj.projects || proj || []); setUsage(usg); })
+      .then(([proj, usg]) => {
+        setProjects(proj.projects || proj || []);
+        setUsage(usg);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -275,10 +282,12 @@ export default function DashboardPage() {
   }, [loading, user?.id]);
 
   const firstName = user?.fullName?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
+  const projectList = Array.isArray(projects) ? projects : [];
 
   return (
     <div className="page" data-tour="welcome">
       {showTour && <OnboardingTour userId={user?.id} onComplete={() => setShowTour(false)} />}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Welcome back, {firstName}</h1>
@@ -289,59 +298,92 @@ export default function DashboardPage() {
           Start Chat
         </Link>
       </div>
+
       <UsageBar usage={usage} t={t} />
-      <GettingStarted projects={Array.isArray(projects) ? projects : []} t={t} />
+      <GettingStarted projects={projectList} t={t} />
+
       <div className="stats-row" data-tour="stats">
-        <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow} value={Array.isArray(projects) ? projects.length : 0} label="Total Projects" t={t} />
-        <StatCard icon={ClockIcon} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'submitted' || p.status === 'in_review').length : 0} label="In Queue" t={t} />
-        <StatCard icon={PipelineIcon} iconColor="#A855F7" iconBg="rgba(168,85,247,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'in_progress').length : 0} label="In Progress" t={t} />
-        <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'completed' || p.status === 'delivered').length : 0} label="Completed" t={t} accent />
+        <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow}
+          value={projectList.length} label="Total Projects" t={t} />
+        <StatCard icon={ClockIcon} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.06)"
+          value={projectList.filter(p => p.status === 'submitted' || p.status === 'in_review').length} label="In Queue" t={t} />
+        <StatCard icon={PipelineIcon} iconColor="#A855F7" iconBg="rgba(168,85,247,0.06)"
+          value={projectList.filter(p => p.status === 'in_progress').length} label="In Progress" t={t} />
+        <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)"
+          value={projectList.filter(p => p.status === 'completed' || p.status === 'delivered').length} label="Completed" t={t} accent />
       </div>
+
       <div className="section-card" data-tour="projects-list">
-        <div className="section-card-header"><h2>Your Projects</h2></div>
+        <div className="section-card-header">
+          <h2>Your Projects</h2>
+          {projectList.length > 0 && (
+            <span style={{ fontSize: 12, color: t.textMuted }}>{projectList.length} total</span>
+          )}
+        </div>
+
         {loading ? (
-          <div className="empty-state"><div className="loading-spinner" /><p>Loading your projects...</p></div>
-        ) : !Array.isArray(projects) || projects.length === 0 ? (
+          <div className="empty-state">
+            <div className="loading-spinner" />
+            <p>Loading your projects...</p>
+          </div>
+        ) : projectList.length === 0 ? (
           <div className="empty-state">
             <div style={{
               width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
               background: 'rgba(245,158,11,0.06)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}><FolderIcon size={24} color="#F59E0B" /></div>
+            }}>
+              <FolderIcon size={24} color="#F59E0B" />
+            </div>
             <h3>No projects yet</h3>
             <p>Head to the chat, upload your drawings, and generate your first BOQ.</p>
-            <Link to="/chat" className="btn-primary" style={{ marginTop: 16 }}>Start Your First Project</Link>
+            <Link to="/chat" className="btn-primary" style={{ marginTop: 16 }}>
+              Start Your First Project
+            </Link>
           </div>
         ) : (
           <div className="projects-list">
-            {projects.slice(0, 10).map(project => {
-              const status = {
-                submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-                completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-                in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
-                awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-              };
-              const st = status[project.status] || status.submitted;
-             return (
-  <Link key={project.id} to={`/project/${project.id}`} className="project-row" style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
-    <div className="project-info">
-      <div className="project-title">{project.title}</div>
-      <div className="project-meta">
-        {project.item_count > 0 && <span>{project.item_count} items</span>}
-        {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}</span>}
-      </div>
-    </div>
-    <div className="project-right">
-      <span style={{
-        padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-        color: st.color, background: st.bg,
-      }}>{st.label}</span>
-      <span className="project-date" style={{ marginLeft: 10 }}>
-        {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-      </span>
-    </div>
-  </Link>
-);
+            {projectList.map(project => {
+              const st = STATUS_MAP[project.status] || STATUS_MAP.submitted;
+              return (
+                <Link
+                  key={project.id}
+                  to={`/project/${project.id}`}
+                  className="project-row"
+                  style={{
+                    cursor: 'pointer', textDecoration: 'none', color: 'inherit',
+                    display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  <div className="project-info">
+                    <div className="project-title">{project.title}</div>
+                    <div className="project-meta">
+                      {project.item_count > 0 && <span>{project.item_count} items</span>}
+                      {project.total_value > 0 && (
+                        <span style={{ marginLeft: 8 }}>
+                          {project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}
+                        </span>
+                      )}
+                      {project.project_type && (
+                        <span style={{ marginLeft: 8, opacity: 0.6 }}>{project.project_type}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="project-right">
+                    <span style={{
+                      padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                      color: st.color, background: st.bg, whiteSpace: 'nowrap',
+                    }}>
+                      {st.label}
+                    </span>
+                    <span className="project-date" style={{ marginLeft: 10, whiteSpace: 'nowrap' }}>
+                      {new Date(project.created_at).toLocaleDateString('en-GB', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                </Link>
+              );
             })}
           </div>
         )}
