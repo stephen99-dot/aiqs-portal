@@ -3,8 +3,8 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  DashboardIcon, NewProjectIcon, PipelineIcon, ClientsIcon,
-  ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
+  NewProjectIcon, PipelineIcon, ClientsIcon,
+  ChatIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 
@@ -26,8 +26,7 @@ export default function Layout() {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', Icon: DashboardIcon },
-    { path: '/projects', label: 'Projects', Icon: NewProjectIcon },
+    { path: '/dashboard', label: 'Projects', Icon: NewProjectIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/my-rates', label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
