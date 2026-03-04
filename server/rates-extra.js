@@ -59,78 +59,125 @@ router.post('/my-rates/import', authMiddleware, upload.single('file'), async (re
     if (ext === '.csv') await wb.csv.readFile(req.file.path);
     else await wb.xlsx.readFile(req.file.path);
 
-    const ws = wb.worksheets[0];
-    if (!ws) return res.status(400).json({ error: 'No worksheet found' });
-
-    // Detect header row and columns
-    var headerRow = null;
-    var colMap = {};
-    for (var r = 1; r <= Math.min(5, ws.rowCount); r++) {
-      var row = ws.getRow(r);
-      var vals = [];
-      row.eachCell({ includeEmpty: true }, function(cell, col) {
-        vals.push({ col: col, val: String(cell.value || '').toLowerCase().trim() });
-      });
-      var hasRate = vals.some(function(v) { return /rate|value|price|cost|amount/i.test(v.val); });
-      var hasDesc = vals.some(function(v) { return /desc|name|item|trade|element/i.test(v.val); });
-      if (hasRate || hasDesc) {
-        headerRow = r;
-        for (var i = 0; i < vals.length; i++) {
-          var v = vals[i];
-          if (/desc|name|item|trade|element|display/i.test(v.val) && !colMap.name) colMap.name = v.col;
-          else if (/categor|section|group/i.test(v.val) && !colMap.category) colMap.category = v.col;
-          else if (/rate|value|price|cost|amount/i.test(v.val) && !colMap.value) colMap.value = v.col;
-          else if (/unit|uom|measure/i.test(v.val) && !colMap.unit) colMap.unit = v.col;
-          else if (/note|comment/i.test(v.val) && !colMap.note) colMap.note = v.col;
-        }
-        break;
-      }
-    }
-
-    if (!headerRow) {
-      headerRow = 0;
-      var cc = ws.getRow(1).cellCount;
-      if (cc >= 2) { colMap.name = 1; colMap.value = 2; if (cc >= 3) colMap.unit = 3; if (cc >= 4) colMap.category = 4; }
-    }
-
-    if (!colMap.name || !colMap.value) {
-      return res.status(400).json({ error: 'Could not detect Name and Value columns. Add headers: Description, Rate, Unit, Category' });
-    }
-
     var imported = [];
     var skipped = [];
-    var defaultCat = 'general';
+    var sheetsProcessed = [];
 
+    // Helper: detect headers in a worksheet
+    function detectColumns(ws) {
+      var colMap = {};
+      var headerRow = null;
+      for (var r = 1; r <= Math.min(5, ws.rowCount); r++) {
+        var row = ws.getRow(r);
+        var vals = [];
+        row.eachCell({ includeEmpty: true }, function(cell, col) {
+          vals.push({ col: col, val: String(cell.value || '').toLowerCase().trim() });
+        });
+        var hasRate = vals.some(function(v) { return /\b(rate|value|price|cost|amount|total)\b/i.test(v.val); });
+        var hasDesc = vals.some(function(v) { return /\b(desc|name|item|trade|element)\b/i.test(v.val); });
+        if (hasRate || hasDesc) {
+          headerRow = r;
+          for (var i = 0; i < vals.length; i++) {
+            var v = vals[i];
+            // Match "Total Rate" before plain "Item" to avoid "Item" grabbing the wrong column
+            if (/total\s*rate|total\s*cost|all[\-\s]*in|combined/i.test(v.val) && !colMap.value) colMap.value = v.col;
+            else if (/^(desc|name|trade|element|display)/i.test(v.val) && !colMap.name) colMap.name = v.col;
+            else if (/categor|section|group/i.test(v.val) && !colMap.category) colMap.category = v.col;
+            else if (/\b(rate|value|price|cost|amount)\b/i.test(v.val) && !colMap.value) colMap.value = v.col;
+            else if (/\b(unit|uom|measure)\b/i.test(v.val) && !colMap.unit) colMap.unit = v.col;
+            else if (/\b(note|comment|remark)\b/i.test(v.val) && !colMap.note) colMap.note = v.col;
+            else if (/\blabour\b/i.test(v.val) && !colMap.labour) colMap.labour = v.col;
+            else if (/\bmateria/i.test(v.val) && !colMap.materials) colMap.materials = v.col;
+          }
+          // If we found "Description" but colMap.name ended up with "Item" column, prefer Description
+          // Also handle case where "Item" is a code column and "Description" is the name
+          if (!colMap.name) {
+            for (var i2 = 0; i2 < vals.length; i2++) {
+              if (/\bitem\b/i.test(vals[i2].val)) { colMap.item_code = vals[i2].col; }
+              if (/\bdesc/i.test(vals[i2].val)) { colMap.name = vals[i2].col; }
+            }
+            // Fallback: use Item column as name if no Description found
+            if (!colMap.name && colMap.item_code) colMap.name = colMap.item_code;
+          }
+          break;
+        }
+      }
+      // Fallback for headerless sheets
+      if (!headerRow) {
+        headerRow = 0;
+        var cc = ws.getRow(1).cellCount;
+        if (cc >= 2) { colMap.name = 1; colMap.value = 2; if (cc >= 3) colMap.unit = 3; }
+      }
+      return { headerRow: headerRow, colMap: colMap };
+    }
+
+    // Process all worksheets (skip INDEX/summary sheets)
+    var skipSheets = ['index', 'summary', 'contents', 'cover', 'location factors'];
+    
     var tx = db.transaction(function() {
-      for (var r2 = headerRow + 1; r2 <= ws.rowCount; r2++) {
-        var dataRow = ws.getRow(r2);
-        var name = String(dataRow.getCell(colMap.name).value || '').trim();
-        var rawVal = String(dataRow.getCell(colMap.value).value || '');
-        var value = parseFloat(rawVal.replace(/[^0-9.\-]/g, ''));
-        var unit = colMap.unit ? String(dataRow.getCell(colMap.unit).value || '').trim() || 'unit' : 'unit';
-        var category = colMap.category ? String(dataRow.getCell(colMap.category).value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || defaultCat : defaultCat;
-        var note = colMap.note ? String(dataRow.getCell(colMap.note).value || '').trim() : null;
+      for (var si = 0; si < wb.worksheets.length; si++) {
+        var ws = wb.worksheets[si];
+        var sheetName = ws.name || 'Sheet ' + (si + 1);
+        
+        // Skip non-data sheets
+        if (skipSheets.indexOf(sheetName.toLowerCase().trim()) >= 0) continue;
+        if (ws.rowCount < 2) continue;
 
-        if (!name || isNaN(value) || value <= 0) { if (name) skipped.push(name); continue; }
+        var detected = detectColumns(ws);
+        var headerRow = detected.headerRow;
+        var colMap = detected.colMap;
 
-        var item_key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
-        var existing = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, category, item_key);
+        if (!colMap.name && !colMap.value) continue; // Skip sheets we can't parse
 
-        if (existing) {
-          db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, confidence = 0.85, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(value, unit, existing.id);
-          imported.push({ name: name, value: value, unit: unit, action: 'updated' });
-        } else {
-          db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.85, ?, 1)')
-            .run('rl_' + uuidv4().slice(0, 8), userId, category, item_key, name, value, unit, note);
-          imported.push({ name: name, value: value, unit: unit, action: 'created' });
+        // Use sheet name as category (cleaned up)
+        var sheetCategory = sheetName.toLowerCase()
+          .replace(/&/g, '_and_')
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '')
+          .substring(0, 50) || 'general';
+
+        sheetsProcessed.push(sheetName);
+
+        for (var r2 = (headerRow || 0) + 1; r2 <= ws.rowCount; r2++) {
+          var dataRow = ws.getRow(r2);
+          var name = colMap.name ? String(dataRow.getCell(colMap.name).value || '').trim() : '';
+          
+          // Skip section header rows (all caps, no value, no unit)
+          var rawVal = colMap.value ? String(dataRow.getCell(colMap.value).value || '') : '';
+          var value = parseFloat(String(rawVal).replace(/[^0-9.\-]/g, ''));
+          
+          // If no total rate, try to compute from labour + materials
+          if ((isNaN(value) || value <= 0) && colMap.labour && colMap.materials) {
+            var lab = parseFloat(String(dataRow.getCell(colMap.labour).value || '').replace(/[^0-9.\-]/g, '')) || 0;
+            var mat = parseFloat(String(dataRow.getCell(colMap.materials).value || '').replace(/[^0-9.\-]/g, '')) || 0;
+            if (lab + mat > 0) value = lab + mat;
+          }
+
+          var unit = colMap.unit ? String(dataRow.getCell(colMap.unit).value || '').trim() || 'unit' : 'unit';
+          var category = colMap.category ? String(dataRow.getCell(colMap.category).value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || sheetCategory : sheetCategory;
+          var note = colMap.note ? String(dataRow.getCell(colMap.note).value || '').trim() : null;
+
+          if (!name || isNaN(value) || value <= 0) { if (name && name.length > 2) skipped.push(name); continue; }
+
+          var item_key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
+          var existing = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, category, item_key);
+
+          if (existing) {
+            db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, confidence = 0.85, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(value, unit, existing.id);
+            imported.push({ name: name, value: value, unit: unit, category: category, action: 'updated' });
+          } else {
+            db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.85, ?, 1)')
+              .run('rl_' + uuidv4().slice(0, 8), userId, category, item_key, name, value, unit, note);
+            imported.push({ name: name, value: value, unit: unit, category: category, action: 'created' });
+          }
         }
       }
     });
     tx();
 
     try { fs.unlinkSync(req.file.path); } catch(e) {}
-    console.log('[Import] ' + imported.length + ' rates imported for ' + req.user.email);
-    res.json({ success: true, imported: imported.length, skipped: skipped.length, skipped_items: skipped.slice(0, 10), rates: imported });
+    console.log('[Import] ' + imported.length + ' rates from ' + sheetsProcessed.length + ' sheets imported for ' + req.user.email);
+    res.json({ success: true, imported: imported.length, skipped: skipped.length, sheets: sheetsProcessed, skipped_items: skipped.slice(0, 10), rates: imported.slice(0, 20) });
   } catch(e) {
     console.error('[Import]', e);
     res.status(500).json({ error: 'Import failed: ' + e.message });
