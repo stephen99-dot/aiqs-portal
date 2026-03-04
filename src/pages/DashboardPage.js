@@ -263,6 +263,7 @@ export default function DashboardPage() {
   const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showTour, setShowTour] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null)])
@@ -273,6 +274,21 @@ export default function DashboardPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleDeleteProject(e, projectId) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('Delete this project? This cannot be undone.')) return;
+    setDeletingId(projectId);
+    try {
+      await apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+    } catch (err) {
+      alert('Failed to delete project. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!loading) {
@@ -369,18 +385,31 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
-                  <div className="project-right">
+                  <div className="project-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{
                       padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
                       color: st.color, background: st.bg, whiteSpace: 'nowrap',
                     }}>
                       {st.label}
                     </span>
-                    <span className="project-date" style={{ marginLeft: 10, whiteSpace: 'nowrap' }}>
+                    <span className="project-date" style={{ whiteSpace: 'nowrap' }}>
                       {new Date(project.created_at).toLocaleDateString('en-GB', {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </span>
+                    <button
+                      onClick={(e) => handleDeleteProject(e, project.id)}
+                      disabled={deletingId === project.id}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: t.textMuted, fontSize: 16, padding: '2px 6px',
+                        borderRadius: 5, opacity: deletingId === project.id ? 0.4 : 0.5,
+                        lineHeight: 1, flexShrink: 0,
+                      }}
+                      title="Delete project"
+                    >
+                      ×
+                    </button>
                   </div>
                 </Link>
               );
