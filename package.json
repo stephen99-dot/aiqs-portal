@@ -29,6 +29,7 @@
     "uuid": "^11.0.3",
     "exceljs": "^4.4.0",
     "docx": "^8.5.0"
+    "stripe": "^14.0.0",
   },
   "browserslist": {
     "production": [
