@@ -1,17 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, AlertTriangle, Upload, Pause, Play, Plus, CreditCard, ChevronDown } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, AlertTriangle, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
 function apiFetch(endpoint, options = {}) {
   const token = getToken();
-  return fetch(`${API_BASE}${endpoint}`, { ...options, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...options.headers } })
+  const h = { 'Authorization': 'Bearer ' + token, ...options.headers };
+  if (!(options.body instanceof FormData)) h['Content-Type'] = 'application/json';
+  return fetch(API_BASE + endpoint, { ...options, headers: h })
     .then(async (res) => { const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Request failed'); return data; });
-}
-function apiUpload(endpoint, formData) {
-  const token = getToken();
-  return fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData })
-    .then(async (res) => { const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Upload failed'); return data; });
 }
 
 function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
@@ -21,31 +18,26 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
   if (!isOpen) return null;
   const handleSubmit = async (e) => {
     e.preventDefault(); setError(''); setLoading(true);
-    try { const data = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(form) }); onUserAdded(data.user); setForm({ email:'',password:'',fullName:'',company:'',phone:'',role:'client' }); onClose(); }
+    try { const data = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(form) }); onUserAdded(data.user || data); setForm({ email:'',password:'',fullName:'',company:'',phone:'',role:'client' }); onClose(); }
     catch (err) { setError(err.message); } finally { setLoading(false); }
   };
-  const inputStyle = { width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC',color:isDark?'#E8EDF5':'#0F172A',fontSize:14,outline:'none',boxSizing:'border-box' };
-  const labelStyle = { display:'block',fontSize:12,fontWeight:600,color:isDark?'#94A3B8':'#64748B',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em' };
+  const inp = { width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC',color:isDark?'#E8EDF5':'#0F172A',fontSize:14,outline:'none',boxSizing:'border-box' };
+  const lbl = { display:'block',fontSize:11,fontWeight:600,color:isDark?'#94A3B8':'#64748B',marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em' };
   return (
     <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:32,width:'100%',maxWidth:480,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),boxShadow:'0 24px 48px rgba(0,0,0,0.3)'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}>
-          <h2 style={{margin:0,fontSize:20,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A',display:'flex',alignItems:'center',gap:10}}><UserPlus size={22} style={{color:'#2563EB'}} /> Add New User</h2>
-          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:isDark?'#5A6E87':'#94A3B8',padding:4}}><X size={20} /></button>
+      <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:460,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+          <h2 style={{margin:0,fontSize:18,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}><UserPlus size={20} style={{color:'#2563EB',verticalAlign:'middle',marginRight:8}} />Add User</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:isDark?'#5A6E87':'#94A3B8'}}><X size={18} /></button>
         </div>
-        {error && <div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'10px 14px',marginBottom:16,color:'#EF4444',fontSize:13,display:'flex',alignItems:'center',gap:8}}><AlertTriangle size={14} /> {error}</div>}
-        <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:14}}>
-          {[{key:'fullName',label:'Full Name',required:true,placeholder:'e.g. Paul Richards'},{key:'email',label:'Email',required:true,type:'email',placeholder:'paul@company.com'},{key:'password',label:'Password',required:true,type:'password',placeholder:'Min 6 characters'},{key:'company',label:'Company',placeholder:'e.g. Penn Contracting'},{key:'phone',label:'Phone',placeholder:'+44 7xxx xxx xxx'}].map(({key,label,required,type,placeholder}) => (
-            <div key={key}><label style={labelStyle}>{label} {required && <span style={{color:'#EF4444'}}>*</span>}</label><input type={type||'text'} value={form[key]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} required={required} placeholder={placeholder} style={inputStyle} /></div>
+        {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:8,padding:'8px 12px',marginBottom:14,color:'#EF4444',fontSize:13}}>{error}</div>}
+        <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:12}}>
+          {[{k:'fullName',l:'Full Name',r:true,p:'Paul Richards'},{k:'email',l:'Email',r:true,t:'email',p:'paul@company.com'},{k:'password',l:'Password',r:true,t:'password',p:'Min 6 characters'},{k:'company',l:'Company',p:'Penn Contracting'},{k:'phone',l:'Phone',p:'+44 7xxx xxx xxx'}].map(({k,l,r,t,p}) => (
+            <div key={k}><label style={lbl}>{l}{r&&<span style={{color:'#EF4444'}}> *</span>}</label><input type={t||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} required={r} placeholder={p} style={inp} /></div>
           ))}
-          <div><label style={labelStyle}>Role</label>
-            <div style={{display:'flex',gap:10}}>
-              {['client','admin'].map(role => (<button key={role} type="button" onClick={()=>setForm(f=>({...f,role}))} style={{flex:1,padding:'10px 14px',borderRadius:8,cursor:'pointer',border:(form.role===role?'2px solid #2563EB':'1px solid '+(isDark?'#1C2A44':'#E2E8F0')),background:form.role===role?'rgba(37,99,235,0.1)':'transparent',color:form.role===role?'#2563EB':(isDark?'#94A3B8':'#64748B'),fontSize:13,fontWeight:600,textTransform:'capitalize',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>{role==='admin'&&<Shield size={14}/>}{role==='client'&&<Users size={14}/>}{role}</button>))}
-            </div>
-          </div>
-          <div style={{display:'flex',gap:10,marginTop:8}}>
-            <button type="button" onClick={onClose} style={{flex:1,padding:12,borderRadius:10,cursor:'pointer',border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:14,fontWeight:600}}>Cancel</button>
-            <button type="submit" disabled={loading} style={{flex:1,padding:12,borderRadius:10,cursor:loading?'wait':'pointer',border:'none',background:'#2563EB',color:'#FFF',fontSize:14,fontWeight:600,opacity:loading?0.7:1}}>{loading ? 'Creating...' : 'Create User'}</button>
+          <div style={{display:'flex',gap:10,marginTop:6}}>
+            <button type="button" onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+            <button type="submit" disabled={loading} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer',opacity:loading?0.7:1}}>{loading?'Creating...':'Create User'}</button>
           </div>
         </form>
       </div>
@@ -55,89 +47,100 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
 
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
-  const [creditMsgs, setCreditMsgs] = useState(10);
-  const [creditDocs, setCreditDocs] = useState(1);
+  const [plan, setPlan] = useState(user.plan || 'starter');
+  const [bonusMsgs, setBonusMsgs] = useState(user.bonus_messages || 0);
+  const [bonusDocs, setBonusDocs] = useState(user.bonus_docs || 0);
   const [importResult, setImportResult] = useState(null);
-  const [suspendReason, setSuspendReason] = useState('');
+  const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
+  const [magicLink, setMagicLink] = useState('');
   const fileInputRef = React.useRef(null);
-  const bg = isDark ? '#0D1320' : '#F8FAFC';
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
   const muted = isDark ? '#5A6E87' : '#94A3B8';
-  const btnStyle = (color) => ({padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:color,color:'#FFF',fontSize:12,fontWeight:600,opacity:loading?0.6:1,display:'inline-flex',alignItems:'center',gap:6});
-  const outlineBtn = {padding:'7px 14px',borderRadius:8,border:'1px solid '+border,cursor:'pointer',background:'transparent',color:text,fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6};
-  const labelSm = {fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4};
-  const smallInput = {padding:'7px 10px',borderRadius:6,border:'1px solid '+border,background:bg,color:text,fontSize:13,width:70,outline:'none'};
-
+  const bg2 = isDark ? '#131B2E' : '#FFF';
+  const btn = (c) => ({padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:c,color:'#FFF',fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6,opacity:loading?0.6:1});
+  const outBtn = {padding:'7px 14px',borderRadius:8,border:'1px solid '+border,cursor:'pointer',background:'transparent',color:text,fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6};
+  const lbl = {fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4};
+  const sInp = {padding:'7px 10px',borderRadius:6,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:13,width:80,outline:'none'};
   const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch(e) { alert(e.message); } finally { setLoading(''); } };
 
-  const changePlan = (plan) => doAction('plan', async () => {
+  const savePlan = () => doAction('plan', async () => {
     await apiFetch('/admin/change-plan/'+user.id, { method:'POST', body:JSON.stringify({plan}) });
     onUpdate({ ...user, plan });
   });
-  const addCredits = () => doAction('credit', async () => {
-    const res = await apiFetch('/admin/credit/'+user.id, { method:'POST', body:JSON.stringify({ bonus_messages:creditMsgs, bonus_docs:creditDocs }) });
-    onUpdate({ ...user, bonus_messages: res.bonus_messages, bonus_docs: res.bonus_docs });
+  const saveCredits = () => doAction('credit', async () => {
+    await apiFetch('/admin/set-credits/'+user.id, { method:'POST', body:JSON.stringify({ bonus_messages: bonusMsgs, bonus_docs: bonusDocs }) });
+    onUpdate({ ...user, bonus_messages: bonusMsgs, bonus_docs: bonusDocs });
   });
   const toggleSuspend = () => doAction('suspend', async () => {
     if (user.suspended) { await apiFetch('/admin/unsuspend/'+user.id, { method:'POST' }); onUpdate({ ...user, suspended: 0, suspended_reason: null }); }
-    else { await apiFetch('/admin/suspend/'+user.id, { method:'POST', body:JSON.stringify({ reason: suspendReason || 'Suspended by admin' }) }); onUpdate({ ...user, suspended: 1, suspended_reason: suspendReason || 'Suspended by admin' }); }
+    else { await apiFetch('/admin/suspend/'+user.id, { method:'POST', body:JSON.stringify({ reason: suspendReason || 'Suspended by admin' }) }); onUpdate({ ...user, suspended: 1, suspended_reason: suspendReason }); }
   });
-  const grantDoc = () => doAction('grantdoc', async () => {
+  const genMagicLink = () => doAction('magic', async () => {
+    const res = await apiFetch('/admin/users/'+user.id+'/magic-link', { method:'POST' });
+    setMagicLink(res.magicLink || res.link || '');
+  });
+  const grantDocCredit = () => doAction('grantdoc', async () => {
     await apiFetch('/admin/grant-doc/'+user.id, { method:'POST' });
-    alert('Document credit granted to ' + (user.full_name || user.email));
+    alert('Paid BOQ credit granted — they can now generate 1 document on Starter plan');
   });
   const importRates = async (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
     setLoading('import');
-    try { const fd = new FormData(); fd.append('file', file); const res = await apiUpload('/admin/import-rates/'+user.id, fd); setImportResult(res); }
+    try { const fd = new FormData(); fd.append('file', file); const res = await apiFetch('/admin/import-rates/'+user.id, { method:'POST', body: fd }); setImportResult(res); }
     catch(err) { alert(err.message); } finally { setLoading(''); if(fileInputRef.current) fileInputRef.current.value=''; }
   };
 
   return (
-    <div style={{background:bg,borderTop:'1px solid '+border,padding:'20px 24px'}}>
+    <div style={{background:isDark?'#0D1320':'#F8FAFC',borderTop:'1px solid '+border,padding:'20px 24px'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:15,fontWeight:700,color:text}}>Manage: {user.full_name}</div>
+        <div style={{fontSize:15,fontWeight:700,color:text}}>Manage: {user.full_name || user.email}</div>
         <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
       </div>
-      <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:20}}>
-        <div style={{padding:'10px 16px',borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF',minWidth:120}}><div style={labelSm}>Plan</div><div style={{fontSize:14,fontWeight:700,color:text,textTransform:'capitalize'}}>{user.plan || 'starter'}</div></div>
-        <div style={{padding:'10px 16px',borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF',minWidth:120}}><div style={labelSm}>Bonus Messages</div><div style={{fontSize:14,fontWeight:700,color:'#2563EB'}}>{user.bonus_messages || 0}</div></div>
-        <div style={{padding:'10px 16px',borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF',minWidth:120}}><div style={labelSm}>Bonus Docs</div><div style={{fontSize:14,fontWeight:700,color:'#10B981'}}>{user.bonus_docs || 0}</div></div>
-        <div style={{padding:'10px 16px',borderRadius:10,border:'1px solid '+(user.suspended?'rgba(239,68,68,0.3)':border),background:user.suspended?'rgba(239,68,68,0.05)':(isDark?'#131B2E':'#FFF'),minWidth:120}}><div style={labelSm}>Status</div><div style={{fontSize:14,fontWeight:700,color:user.suspended?'#EF4444':'#10B981'}}>{user.suspended ? 'Suspended' : 'Active'}</div></div>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-        <div style={{padding:16,borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF'}}>
-          <div style={{...labelSm,marginBottom:10}}>Change Plan</div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+
+        {/* Plan */}
+        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={lbl}>Plan</div>
+          <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
             {['starter','professional','premium'].map(p => (
-              <button key={p} onClick={()=>changePlan(p)} disabled={user.plan===p||!!loading} style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:user.plan===p?'default':'pointer',border:user.plan===p?'2px solid #2563EB':'1px solid '+border,background:user.plan===p?'rgba(37,99,235,0.1)':'transparent',color:user.plan===p?'#2563EB':muted,textTransform:'capitalize',opacity:user.plan===p?1:(loading?0.5:1)}}>{p}</button>
+              <button key={p} onClick={()=>setPlan(p)} style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:plan===p?'2px solid #2563EB':'1px solid '+border,background:plan===p?'rgba(37,99,235,0.1)':'transparent',color:plan===p?'#2563EB':muted,textTransform:'capitalize'}}>{p}</button>
             ))}
           </div>
+          {plan !== (user.plan||'starter') && <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'),marginTop:8}}><Save size={12} /> Save Plan</button>}
         </div>
-        <div style={{padding:16,borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF'}}>
-          <div style={{...labelSm,marginBottom:10}}>Add Bonus Credits</div>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            <div><div style={{fontSize:10,color:muted,marginBottom:2}}>Messages</div><input type="number" value={creditMsgs} onChange={e=>setCreditMsgs(parseInt(e.target.value)||0)} style={smallInput} /></div>
-            <div><div style={{fontSize:10,color:muted,marginBottom:2}}>Docs</div><input type="number" value={creditDocs} onChange={e=>setCreditDocs(parseInt(e.target.value)||0)} style={smallInput} /></div>
-            <button onClick={addCredits} disabled={!!loading} style={{...btnStyle('#2563EB'),marginTop:14}}><Plus size={12} /> Add</button>
+
+        {/* Credits - SET not ADD */}
+        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={lbl}>Bonus Credits (set directly)</div>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:6}}>
+            <div><div style={{fontSize:10,color:muted}}>Messages</div><input type="number" value={bonusMsgs} onChange={e=>setBonusMsgs(parseInt(e.target.value)||0)} style={sInp} /></div>
+            <div><div style={{fontSize:10,color:muted}}>Docs</div><input type="number" value={bonusDocs} onChange={e=>setBonusDocs(parseInt(e.target.value)||0)} style={sInp} /></div>
+            <button onClick={saveCredits} disabled={!!loading} style={{...btn('#2563EB'),marginTop:14}}><Save size={12} /> Save</button>
           </div>
         </div>
-        <div style={{padding:16,borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF'}}>
-          <div style={{...labelSm,marginBottom:10}}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
-          {!user.suspended && <input value={suspendReason} onChange={e=>setSuspendReason(e.target.value)} placeholder="Reason (optional)" style={{...smallInput,width:'100%',marginBottom:8}} />}
-          <button onClick={toggleSuspend} disabled={!!loading} style={user.suspended ? btnStyle('#10B981') : btnStyle('#EF4444')}>{user.suspended ? <><Play size={12} /> Reactivate</> : <><Pause size={12} /> Suspend</>}</button>
+
+        {/* Suspend */}
+        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={lbl}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
+          {!user.suspended && <input value={suspendReason} onChange={e=>setSuspendReason(e.target.value)} placeholder="Reason (optional)" style={{...sInp,width:'100%',marginTop:6,marginBottom:8}} />}
+          <button onClick={toggleSuspend} disabled={!!loading} style={user.suspended?btn('#10B981'):btn('#EF4444')}>{user.suspended?<><Play size={12}/> Reactivate</>:<><Pause size={12}/> Suspend</>}</button>
           {user.suspended && user.suspended_reason && <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>}
         </div>
-        <div style={{padding:16,borderRadius:10,border:'1px solid '+border,background:isDark?'#131B2E':'#FFF'}}>
-          <div style={{...labelSm,marginBottom:10}}>Import Rates / Grant Credit</div>
+
+        {/* Magic Link + Import */}
+        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={lbl}>Tools</div>
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{display:'none'}} />
-          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            <button onClick={()=>fileInputRef.current && fileInputRef.current.click()} disabled={!!loading} style={outlineBtn}><Upload size={12} /> Upload Excel</button>
-            <button onClick={grantDoc} disabled={!!loading} style={outlineBtn}><CreditCard size={12} /> Grant BOQ Credit</button>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+            <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
+            <button onClick={()=>fileInputRef.current&&fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
+            <button onClick={grantDocCredit} disabled={!!loading} title="For Starter plan users who paid offline - lets them generate 1 BOQ" style={outBtn}><CreditCard size={12} /> Grant Paid BOQ</button>
           </div>
-          {importResult && <div style={{marginTop:8,fontSize:12,color:'#10B981'}}>Imported {importResult.imported} rates{importResult.skipped > 0 ? ', skipped '+importResult.skipped : ''}</div>}
+          {magicLink && <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}} onClick={()=>{navigator.clipboard.writeText(magicLink);alert('Copied!')}}>{magicLink}<br/><span style={{color:muted}}>Click to copy</span></div>}
+          {importResult && <div style={{marginTop:8,fontSize:12,color:'#10B981'}}>Imported {importResult.imported} rates{importResult.skipped>0?', skipped '+importResult.skipped:''}</div>}
         </div>
+
       </div>
     </div>
   );
@@ -152,59 +155,115 @@ export default function UserManagementPage({ theme }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [roleFilter, setRoleFilter] = useState('all');
   const [expandedUser, setExpandedUser] = useState(null);
+  const [tab, setTab] = useState('users');
+  const [activity, setActivity] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   const t = theme || {};
   const isDark = t.bg === '#06080F' || (t.bg && t.bg.includes && t.bg.includes('0'));
+
   const fetchUsers = useCallback(async () => {
-    try { setLoading(true); const data = await apiFetch('/admin/users'); setUsers(data.users || []); setError(''); }
+    try { setLoading(true); const data = await apiFetch('/admin/users'); setUsers(data.users || data || []); setError(''); }
     catch (err) { setError(err.message); } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const loadActivity = useCallback(async () => {
+    if (activity.length > 0) return;
+    setActivityLoading(true);
+    try { const data = await apiFetch('/usage'); setActivity(data.recent || []); }
+    catch(e) { console.error(e); } finally { setActivityLoading(false); }
+  }, [activity.length]);
+
+  useEffect(() => { if (tab === 'activity') loadActivity(); }, [tab, loadActivity]);
+
   const handleDelete = async (userId) => {
     try { await apiFetch('/admin/users/'+userId, { method:'DELETE' }); setUsers(prev => prev.filter(u => u.id !== userId)); setDeleteTarget(null); }
     catch (err) { alert('Failed: ' + err.message); }
   };
-  const handleToggleRole = async (user) => {
-    const newRole = user.role === 'admin' ? 'client' : 'admin';
-    try { await apiFetch('/admin/users/'+user.id+'/role', { method:'PUT', body:JSON.stringify({ role: newRole }) }); setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u)); }
-    catch (err) { alert('Failed: ' + err.message); }
-  };
   const handleUserUpdate = (updated) => { setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u)); };
   const filtered = users.filter(u => {
-    const matchSearch = !search || [u.full_name,u.email,u.company].some(f => f && f.toLowerCase().includes(search.toLowerCase()));
-    return (roleFilter === 'all' || u.role === roleFilter) && matchSearch;
+    const ms = !search || [u.full_name,u.email,u.company].some(f => f && f.toLowerCase().includes(search.toLowerCase()));
+    return (roleFilter === 'all' || u.role === roleFilter) && ms;
   });
   const adminCount = users.filter(u => u.role === 'admin').length;
   const clientCount = users.filter(u => u.role === 'client').length;
   const cardStyle = { background:isDark?'#131B2E':'#FFF', border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'), borderRadius:14, overflow:'hidden' };
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+  const formatDate = (d) => { try { return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return d; } };
+
   return (
     <div style={{padding:'28px 32px',maxWidth:1100,margin:'0 auto'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:28}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
         <div>
-          <h1 style={{margin:0,fontSize:26,fontWeight:800,color:isDark?'#E8EDF5':'#0F172A'}}>User Management</h1>
-          <p style={{margin:'4px 0 0',fontSize:14,color:isDark?'#5A6E87':'#94A3B8'}}>{users.length} total | {adminCount} admins | {clientCount} clients</p>
+          <h1 style={{margin:0,fontSize:24,fontWeight:800,color:isDark?'#E8EDF5':'#0F172A'}}>User Management</h1>
+          <p style={{margin:'4px 0 0',fontSize:13,color:isDark?'#5A6E87':'#94A3B8'}}>{users.length} total | {adminCount} admins | {clientCount} clients</p>
         </div>
-        <button onClick={()=>setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:14,fontWeight:600,cursor:'pointer'}}><UserPlus size={16} /> Add User</button>
+        <button onClick={()=>setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}><UserPlus size={15} /> Add User</button>
       </div>
-      <div style={{display:'flex',gap:12,marginBottom:20}}>
+
+      {/* Tabs */}
+      <div style={{display:'flex',gap:4,marginBottom:16,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
+        {['users','activity'].map(tb => (
+          <button key={tb} onClick={()=>setTab(tb)} style={{padding:'8px 18px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===tb?(isDark?'#1C2A44':'#FFF'):'transparent',color:tab===tb?(isDark?'#E8EDF5':'#0F172A'):(isDark?'#5A6E87':'#94A3B8'),boxShadow:tab===tb?'0 1px 3px rgba(0,0,0,0.1)':'none'}}>
+            {tb==='users'?<><Users size={13} style={{verticalAlign:'middle',marginRight:6}} />Users</>:<><Activity size={13} style={{verticalAlign:'middle',marginRight:6}} />Activity Feed</>}
+          </button>
+        ))}
+      </div>
+
+      {/* Activity Tab */}
+      {tab === 'activity' && (
+        <div style={cardStyle}>
+          <div style={{padding:'14px 20px',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>
+            <div style={{fontSize:14,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>Recent Activity</div>
+            <div style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8'}}>All client actions across the platform</div>
+          </div>
+          {activityLoading ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>Loading...</div> :
+          activity.length === 0 ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>No activity yet</div> :
+          activity.map((a, i) => (
+            <div key={i} style={{padding:'10px 20px',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:a.action==='doc_generated'?'#10B981':a.action==='chat_message'?'#3B82F6':a.action==='admin_credit'?'#A855F7':'#F59E0B'}}></div>
+                <div>
+                  <span style={{fontSize:12,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{a.full_name||a.email||'Unknown'}</span>
+                  <span style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8',marginLeft:8}}>
+                    {a.action==='chat_message'?'sent a message':a.action==='doc_generated'?'generated documents':a.action==='doc_paid'?'paid for BOQ':a.action==='admin_credit'?'received admin credit':a.action}
+                  </span>
+                  {a.detail && <span style={{fontSize:11,color:isDark?'#3D4A5C':'#CBD5E1',marginLeft:8}}>{a.detail.substring(0,80)}</span>}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:12,alignItems:'center',flexShrink:0}}>
+                {a.tokens_in > 0 && <span style={{fontSize:10,color:isDark?'#3D4A5C':'#CBD5E1',fontFamily:'monospace'}}>{Math.round((a.tokens_in+a.tokens_out)/1000)}k tok</span>}
+                {a.cost_estimate > 0 && <span style={{fontSize:10,color:isDark?'#3D4A5C':'#CBD5E1',fontFamily:'monospace'}}>${a.cost_estimate.toFixed(4)}</span>}
+                <span style={{fontSize:11,color:isDark?'#3D4A5C':'#CBD5E1'}}>{formatDate(a.created_at)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Users Tab */}
+      {tab === 'users' && (<>
+      <div style={{display:'flex',gap:12,marginBottom:16}}>
         <div style={{flex:1,display:'flex',alignItems:'center',gap:10,padding:'0 14px',borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC'}}>
-          <Search size={16} style={{color:isDark?'#5A6E87':'#94A3B8'}} />
-          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{flex:1,padding:'11px 0',border:'none',background:'transparent',color:isDark?'#E8EDF5':'#0F172A',fontSize:14,outline:'none'}} />
-          {search && <button onClick={()=>setSearch("")} style={{background:'none',border:'none',cursor:'pointer',color:isDark?'#5A6E87':'#94A3B8'}}><X size={14} /></button>}
+          <Search size={15} style={{color:muted}} />
+          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{flex:1,padding:'10px 0',border:'none',background:'transparent',color:isDark?'#E8EDF5':'#0F172A',fontSize:13,outline:'none'}} />
+          {search && <button onClick={()=>setSearch('')} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={14} /></button>}
         </div>
-        <div style={{display:'flex',gap:4,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
-          {['all','admin','client'].map(f => (<button key={f} onClick={()=>setRoleFilter(f)} style={{padding:'8px 16px',borderRadius:8,border:'none',cursor:'pointer',background:roleFilter===f?'#2563EB':'transparent',color:roleFilter===f?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:600,textTransform:'capitalize'}}>{f==='all'?'All ('+users.length+')':f==='admin'?'Admins ('+adminCount+')':'Clients ('+clientCount+')'}</button>))}
+        <div style={{display:'flex',gap:3,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
+          {['all','admin','client'].map(f => (
+            <button key={f} onClick={()=>setRoleFilter(f)} style={{padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:roleFilter===f?'#2563EB':'transparent',color:roleFilter===f?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:12,fontWeight:600,textTransform:'capitalize'}}>
+              {f==='all'?'All ('+users.length+')':f==='admin'?'Admins ('+adminCount+')':'Clients ('+clientCount+')'}
+            </button>
+          ))}
         </div>
       </div>
-      {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'14px 18px',marginBottom:20,color:'#EF4444',fontSize:14}}>{error}</div>}
-      {loading ? (
-        <div style={{textAlign:'center',padding:'60px 0',color:isDark?'#5A6E87':'#94A3B8'}}>Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div style={{textAlign:'center',padding:'60px 0',color:isDark?'#5A6E87':'#94A3B8'}}><Users size={40} style={{marginBottom:12,opacity:0.4}} /><p>{search?'No match':'No users yet'}</p></div>
-      ) : (
+      {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'12px 16px',marginBottom:16,color:'#EF4444',fontSize:13}}>{error}</div>}
+      {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
+       filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
         <div style={cardStyle}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
-              {['User','Company','Plan','Status','Actions'].map(h => (<th key={h} style={{padding:'12px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:isDark?'#5A6E87':'#94A3B8',textAlign:h==='Actions'?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>))}
+              {['User','Company','Plan','Status',''].map(h => (<th key={h} style={{padding:'11px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:muted,textAlign:h===''?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>))}
             </tr></thead>
             <tbody>
               {filtered.map((user, i) => (
@@ -213,27 +272,29 @@ export default function UserManagementPage({ theme }) {
                     onClick={()=>setExpandedUser(expandedUser===user.id?null:user.id)}
                     onMouseEnter={e=>{e.currentTarget.style.background=isDark?'rgba(37,99,235,0.04)':'#FAFBFE'}}
                     onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>
-                    <td style={{padding:'14px 16px'}}><div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <div style={{width:38,height:38,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:14,fontWeight:700}}>{user.full_name?user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2):'??'}</div>
-                      <div><div style={{fontSize:14,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{user.full_name} {user.role==='admin'&&<Shield size={12} style={{color:'#2563EB'}} />}</div><div style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8'}}>{user.email}</div></div>
+                    <td style={{padding:'12px 16px'}}><div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:36,height:36,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:700}}>{user.full_name?user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2):'??'}</div>
+                      <div><div style={{fontSize:13,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{user.full_name} {user.role==='admin'&&<Shield size={11} style={{color:'#2563EB'}} />}</div><div style={{fontSize:11,color:muted}}>{user.email}</div></div>
                     </div></td>
-                    <td style={{padding:'14px 16px',fontSize:13,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
-                    <td style={{padding:'14px 16px'}}><span style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:700,textTransform:'uppercase',background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),color:user.role==='admin'?'#2563EB':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':(isDark?'#94A3B8':'#64748B')}}>{user.role==='admin'?'Admin':(user.plan||'starter')}</span></td>
-                    <td style={{padding:'14px 16px'}}><span style={{padding:'4px 10px',borderRadius:6,fontSize:11,fontWeight:700,background:user.suspended?'rgba(239,68,68,0.1)':'rgba(16,185,129,0.1)',color:user.suspended?'#EF4444':'#10B981'}}>{user.suspended?'Suspended':'Active'}</span></td>
-                    <td style={{padding:'14px 16px',textAlign:'right'}}><div style={{display:'flex',gap:6,justifyContent:'flex-end'}} onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>setExpandedUser(expandedUser===user.id?null:user.id)} style={{padding:'6px 10px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:expandedUser===user.id?'rgba(37,99,235,0.1)':'transparent',cursor:'pointer',color:expandedUser===user.id?'#2563EB':(isDark?'#94A3B8':'#64748B'),display:'flex',alignItems:'center',gap:4,fontSize:12,fontWeight:600}}><ChevronDown size={14} style={{transform:expandedUser===user.id?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s'}} /> Manage</button>
-                      {user.role!=='admin'&&<button onClick={()=>setDeleteTarget(user)} style={{padding:'6px 8px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',cursor:'pointer',color:isDark?'#94A3B8':'#64748B',display:'flex',alignItems:'center'}}><Trash2 size={14} /></button>}
+                    <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
+                    <td style={{padding:'12px 16px'}}><span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),color:user.role==='admin'?'#2563EB':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':(isDark?'#94A3B8':'#64748B')}}>{user.role==='admin'?'Admin':(user.plan||'starter')}</span></td>
+                    <td style={{padding:'12px 16px'}}><span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,background:user.suspended?'rgba(239,68,68,0.1)':'rgba(16,185,129,0.1)',color:user.suspended?'#EF4444':'#10B981'}}>{user.suspended?'Suspended':'Active'}</span></td>
+                    <td style={{padding:'12px 16px',textAlign:'right'}}><div style={{display:'flex',gap:6,justifyContent:'flex-end'}} onClick={e=>e.stopPropagation()}>
+                      <button onClick={()=>setExpandedUser(expandedUser===user.id?null:user.id)} style={{padding:'5px 10px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:expandedUser===user.id?'rgba(37,99,235,0.1)':'transparent',cursor:'pointer',color:expandedUser===user.id?'#2563EB':muted,display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600}}><ChevronDown size={13} style={{transform:expandedUser===user.id?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s'}} /> Manage</button>
+                      {user.role!=='admin'&&<button onClick={()=>setDeleteTarget(user)} style={{padding:'5px 7px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',cursor:'pointer',color:muted,display:'flex',alignItems:'center'}}><Trash2 size={13} /></button>}
                     </div></td>
                   </tr>
-                  {expandedUser===user.id&&user.role!=='admin'&&(<tr><td colSpan={5} style={{padding:0}}><UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={()=>setExpandedUser(null)} /></td></tr>)}
+                  {expandedUser===user.id&&user.role!=='admin'&&<tr><td colSpan={5} style={{padding:0}}><UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={()=>setExpandedUser(null)} /></td></tr>}
                 </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      </>)}
+
       <AddUserModal isOpen={showAddModal} onClose={()=>setShowAddModal(false)} onUserAdded={u=>{setUsers(prev=>[u,...prev])}} isDark={isDark} />
-      {deleteTarget&&(<div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:32,width:'100%',maxWidth:420,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}><h3 style={{margin:'0 0 8px',fontSize:18,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3><p style={{margin:'0 0 24px',fontSize:13,color:'#EF4444'}}>This deletes all data. Cannot be undone.</p><div style={{display:'flex',gap:10}}><button onClick={()=>setDeleteTarget(null)} style={{flex:1,padding:12,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:14,fontWeight:600,cursor:'pointer'}}>Cancel</button><button onClick={()=>handleDelete(deleteTarget.id)} style={{flex:1,padding:12,borderRadius:10,border:'none',background:'#EF4444',color:'#FFF',fontSize:14,fontWeight:600,cursor:'pointer'}}>Delete</button></div></div></div>)}
+      {deleteTarget&&(<div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}><h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3><p style={{margin:'0 0 20px',fontSize:13,color:'#EF4444'}}>Deletes all data. Cannot be undone.</p><div style={{display:'flex',gap:10}}><button onClick={()=>setDeleteTarget(null)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button><button onClick={()=>handleDelete(deleteTarget.id)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#EF4444',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}>Delete</button></div></div></div>)}
     </div>
   );
 }
