@@ -2,7 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
-const STORAGE_KEY = 'aiqs_chat_history';
+function getUserStorageKey() {
+  try {
+    const token = localStorage.getItem('aiqs_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return 'aiqs_chat_' + (payload.id || payload.sub || 'default');
+    }
+  } catch {}
+  return 'aiqs_chat_default';
+}
 
 // -- Thinking stages shown while waiting --
 const THINKING_STAGES = [
@@ -19,7 +28,7 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const saved = sessionStorage.getItem(getUserStorageKey());
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -33,7 +42,7 @@ export default function ChatPage() {
   const thinkingInterval = useRef(null);
 
   useEffect(() => {
-    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
+    try { sessionStorage.setItem(getUserStorageKey(), JSON.stringify(messages)); } catch {}
   }, [messages]);
 
   useEffect(() => {
@@ -254,7 +263,7 @@ export default function ChatPage() {
   function clearChat() {
     setMessages([]);
     setExpandedThinking({});
-    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(getUserStorageKey());
   }
   function toggleThinking(idx) {
     setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] }));
@@ -303,12 +312,37 @@ export default function ChatPage() {
         timestamp: new Date().toISOString()
       }]);
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: 'Sorry, something went wrong. Please try again.',
-        timestamp: new Date().toISOString(),
-        error: true
-      }]);
+      const isQuotaError = err.message && (err.message.includes('limit reached') || err.message.includes('limit') || err.message.includes('Upgrade'));
+      const isSuspended = err.message && err.message.includes('suspended');
+
+      if (isQuotaError) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: err.message,
+          timestamp: new Date().toISOString(),
+          paymentRequired: {
+            type: 'upgrade',
+            message: err.message,
+            price: 99,
+            currency: 'GBP',
+            url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
+          }
+        }]);
+      } else if (isSuspended) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Your account has been suspended. Please contact support for assistance.',
+          timestamp: new Date().toISOString(),
+          error: true
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Sorry, something went wrong. Please try again.',
+          timestamp: new Date().toISOString(),
+          error: true
+        }]);
+      }
     } finally {
       setSending(false);
     }
