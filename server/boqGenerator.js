@@ -204,7 +204,10 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   ws.headerFooter.oddFooter = '&LThe AI QS \u2014 theaiqs.co.uk&RPage &P of &N';
   ws.views = [{ state: 'frozen', ySplit: headerRowNum, activeCell: 'A' + (headerRowNum + 1) }];
 
-  return await wb.xlsx.writeBuffer();
+  var buf = await wb.xlsx.writeBuffer();
+  // Ensure we return a proper Node.js Buffer
+  if (Buffer.isBuffer(buf)) return buf;
+  return Buffer.from(buf);
 }
 
 module.exports = { generateBOQExcel };
