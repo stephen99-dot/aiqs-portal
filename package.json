@@ -1,7 +1,7 @@
 {
   "name": "aiqs-app",
   "version": "1.0.0",
-  "description": "AI QS \u2014 Customer Portal for AI-Powered Quantity Surveying",
+  "description": "AI QS — Customer Portal for AI-Powered Quantity Surveying",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
@@ -28,8 +28,8 @@
     "nodemailer": "^6.9.0",
     "uuid": "^11.0.3",
     "exceljs": "^4.4.0",
-    "docx": "^8.5.0"
-"stripe": "^14.0.0",
+    "docx": "^8.5.0",
+    "stripe": "^14.0.0"
   },
   "browserslist": {
     "production": [
