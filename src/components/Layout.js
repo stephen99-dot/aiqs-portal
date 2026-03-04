@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   DashboardIcon, NewProjectIcon, PipelineIcon, ClientsIcon,
-  ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon,
+  ChatIcon, AdminIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 
@@ -30,6 +30,7 @@ export default function Layout() {
     { path: '/projects', label: 'Projects', Icon: NewProjectIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/my-rates', label: 'My Rates', Icon: RatesIcon },
+    { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
     { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
   ];
