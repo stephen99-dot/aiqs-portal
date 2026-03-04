@@ -322,26 +322,26 @@ export default function DashboardPage() {
                 awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
               };
               const st = status[project.status] || status.submitted;
-              return (
-                <Link key={project.id} to={`/project/${project.id}`} className="project-row" style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
-                  <div className="project-info">
-                    <div className="project-title">{project.title}</div>
-                    <div className="project-meta">
-                      {project.item_count > 0 && <span>{project.item_count} items</span>}
-                      {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}</span>}
-                    </div>
-                  </link>
-                  <div className="project-right">
-                    <span style={{
-                      padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                      color: st.color, background: st.bg,
-                    }}>{st.label}</span>
-                    <span className="project-date" style={{ marginLeft: 10 }}>
-                      {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                </div>
-              );
+             return (
+  <Link key={project.id} to={`/project/${project.id}`} className="project-row" style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
+    <div className="project-info">
+      <div className="project-title">{project.title}</div>
+      <div className="project-meta">
+        {project.item_count > 0 && <span>{project.item_count} items</span>}
+        {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}</span>}
+      </div>
+    </div>
+    <div className="project-right">
+      <span style={{
+        padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+        color: st.color, background: st.bg,
+      }}>{st.label}</span>
+      <span className="project-date" style={{ marginLeft: 10 }}>
+        {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+      </span>
+    </div>
+  </Link>
+);
             })}
           </div>
         )}
