@@ -10,10 +10,19 @@ import {
   NewProjectIcon, UploadIcon, DownloadIcon, DotIcon,
 } from '../components/Icons';
 
+const STRIPE = {
+  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01', // £99 per BOQ (PAYG/Starter)
+  professional:    'https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02', // £347/month
+  premium:         'https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03', // £447/month
+  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06', // £79 extra BOQ (Pro/Premium)
+  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05', // Upgrade to Premium (from Pro)
+};
+
 function UsageBar({ usage, t }) {
   if (!usage) return null;
   const { plan, planLabel, quota, used, remaining, isPayg, atLimit } = usage;
 
+  // PAYG / Starter with no quota — show upgrade nudge
   if (isPayg) {
     return (
       <div data-tour="usage-bar" style={{
@@ -33,15 +42,27 @@ function UsageBar({ usage, t }) {
             <ZapIcon size={12} color={t.warning} /> Pay As You Go
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            {used} project{used !== 1 ? 's' : ''} this month
+            {used} BOQ{used !== 1 ? 's' : ''} this month · £99 per BOQ
           </span>
         </div>
-        <a href="https://theaiqs.co.uk/#pricing" target="_blank" rel="noopener noreferrer" style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 12, fontWeight: 600, color: t.accent, textDecoration: 'none',
-        }}>
-          Upgrade & Save <ArrowRightIcon size={12} color={t.accent} />
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <a href={STRIPE.professional} target="_blank" rel="noopener noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 12px', borderRadius: 7,
+            background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
+            fontSize: 12, fontWeight: 600, color: t.accent, textDecoration: 'none',
+          }}>
+            <StarIcon size={11} color={t.accent} /> Pro — £347/mo
+          </a>
+          <a href={STRIPE.premium} target="_blank" rel="noopener noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 12px', borderRadius: 7,
+            background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)',
+            fontSize: 12, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
+          }}>
+            <CrownIcon size={11} color="#A78BFA" /> Premium — £447/mo
+          </a>
+        </div>
       </div>
     );
   }
@@ -68,7 +89,7 @@ function UsageBar({ usage, t }) {
             <PlanIcon size={12} color={planIconColor} /> {planLabel}
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> projects used this month
+            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used this month
           </span>
         </div>
         <span style={{
@@ -82,33 +103,36 @@ function UsageBar({ usage, t }) {
       <div style={{ width: '100%', height: 5, borderRadius: 5, background: t.surfaceHover, overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: barColor, transition: 'width 0.5s ease' }} />
       </div>
+
+      {/* At-limit: show upgrade options */}
       {atLimit && (
         <div style={{
-          marginTop: 12, padding: '12px 16px',
+          marginTop: 12, padding: '14px 16px',
           background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.1)',
-          borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexWrap: 'wrap', gap: 12,
+          borderRadius: 10,
         }}>
-          <div>
+          <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 2 }}>
-              You've used all {quota} projects this month
+              You've used all {quota} BOQs this month
             </div>
-            <div style={{ fontSize: 11.5, color: t.textMuted }}>Upgrade your plan or buy extra projects to continue</div>
+            <div style={{ fontSize: 11.5, color: t.textMuted }}>Upgrade your plan or buy an extra BOQ to continue</div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {/* Upgrade to Premium (only show for Professional) */}
             {plan === 'professional' && (
-              <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
+              <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
                 padding: '7px 14px', borderRadius: 7,
                 background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
                 color: '#fff', fontSize: 12, fontWeight: 600,
                 textDecoration: 'none', whiteSpace: 'nowrap',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
               }}>
-                <CrownIcon size={12} color="#fff" /> Upgrade to Premium
+                <CrownIcon size={12} color="#fff" /> Upgrade to Premium — £447/mo
               </a>
             )}
+            {/* Buy extra BOQ — £79 for subscribers, £99 for PAYG */}
             <a
-              href={(plan === 'professional' || plan === 'premium') ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01"}
+              href={plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg}
               target="_blank" rel="noopener noreferrer"
               style={{
                 padding: '7px 14px', borderRadius: 7,
@@ -117,9 +141,27 @@ function UsageBar({ usage, t }) {
                 textDecoration: 'none', whiteSpace: 'nowrap',
               }}
             >
-              {'Buy Extra Project \u2014 ' + ((plan === 'professional' || plan === 'premium') ? '\u00a379' : '\u00a399')}
+              Buy Extra BOQ — {plan === 'professional' || plan === 'premium' ? '£79' : '£99'}
             </a>
           </div>
+        </div>
+      )}
+
+      {/* Warning when getting close (2 or fewer remaining) */}
+      {!atLimit && remaining <= 2 && remaining > 0 && (
+        <div style={{
+          marginTop: 10, fontSize: 12, color: '#F59E0B',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+        }}>
+          <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left this month</span>
+          {plan === 'professional' && (
+            <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: 11.5, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+            }}>
+              Upgrade to Premium <ArrowRightIcon size={11} color="#A78BFA" />
+            </a>
+          )}
         </div>
       )}
     </div>
@@ -273,7 +315,12 @@ export default function DashboardPage() {
         ) : (
           <div className="projects-list">
             {projects.slice(0, 10).map(project => {
-              const status = { submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' }, completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)' } };
+              const status = {
+                submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+                completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+                in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
+                awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+              };
               const st = status[project.status] || status.submitted;
               return (
                 <div key={project.id} className="project-row" style={{ cursor: 'default' }}>
@@ -281,11 +328,15 @@ export default function DashboardPage() {
                     <div className="project-title">{project.title}</div>
                     <div className="project-meta">
                       {project.item_count > 0 && <span>{project.item_count} items</span>}
-                      {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '\u20ac' : '\u00a3'}{Math.round(project.total_value).toLocaleString()}</span>}
+                      {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}</span>}
                     </div>
                   </div>
                   <div className="project-right">
-                    <span className="project-date">
+                    <span style={{
+                      padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                      color: st.color, background: st.bg,
+                    }}>{st.label}</span>
+                    <span className="project-date" style={{ marginLeft: 10 }}>
                       {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
