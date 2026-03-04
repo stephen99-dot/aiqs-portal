@@ -70,6 +70,21 @@ router.post('/admin/unsuspend/:userId', authMiddleware, function(req, res) {
   res.json({ success: true, message: 'Account reactivated' });
 });
 
+// Admin: SET bonus messages or doc credits (replaces value, not adds)
+router.post('/admin/set-credits/:userId', authMiddleware, function(req, res) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  var messages = parseInt(req.body.bonus_messages);
+  var docs = parseInt(req.body.bonus_docs);
+  if (isNaN(messages) && isNaN(docs)) return res.status(400).json({ error: 'Specify bonus_messages or bonus_docs' });
+  var user = db.prepare('SELECT id, email, bonus_messages, bonus_docs FROM users WHERE id = ?').get(req.params.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  var newMsgs = isNaN(messages) ? (user.bonus_messages || 0) : messages;
+  var newDocs = isNaN(docs) ? (user.bonus_docs || 0) : docs;
+  db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ? WHERE id = ?').run(newMsgs, newDocs, req.params.userId);
+  console.log('[Admin] Set credits for ' + user.email + ': msgs=' + newMsgs + ', docs=' + newDocs);
+  res.json({ success: true, email: user.email, bonus_messages: newMsgs, bonus_docs: newDocs });
+});
+
 // Admin: add bonus messages or doc credits
 router.post('/admin/credit/:userId', authMiddleware, function(req, res) {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
