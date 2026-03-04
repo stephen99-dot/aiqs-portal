@@ -86,9 +86,18 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   });
   const importRates = async (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
-    setLoading('import');
-    try { const fd = new FormData(); fd.append('file', file); const res = await apiFetch('/admin/import-rates/'+user.id, { method:'POST', body: fd }); setImportResult(res); }
-    catch(err) { alert(err.message); } finally { setLoading(''); if(fileInputRef.current) fileInputRef.current.value=''; }
+    setLoading('import'); setImportResult(null);
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const token = localStorage.getItem('aiqs_token');
+      const resp = await fetch((process.env.REACT_APP_API_URL||'')+'/api/admin/import-rates/'+user.id, {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd
+      });
+      const res = await resp.json();
+      setImportResult(res);
+    }
+    catch(err) { setImportResult({ error: err.message }); }
+    finally { setLoading(''); if(fileInputRef.current) fileInputRef.current.value=''; }
   };
 
   return (
@@ -138,7 +147,14 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             <button onClick={grantDocCredit} disabled={!!loading} title="For Starter plan users who paid offline - lets them generate 1 BOQ" style={outBtn}><CreditCard size={12} /> Grant Paid BOQ</button>
           </div>
           {magicLink && <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}} onClick={()=>{navigator.clipboard.writeText(magicLink);alert('Copied!')}}>{magicLink}<br/><span style={{color:muted}}>Click to copy</span></div>}
-          {importResult && <div style={{marginTop:8,fontSize:12,color:'#10B981'}}>Imported {importResult.imported} rates{importResult.skipped>0?', skipped '+importResult.skipped:''}</div>}
+          {importResult && (
+            <div style={{marginTop:8,fontSize:12,color:importResult.error?'#EF4444':'#10B981'}}>
+              {importResult.error
+                ? 'Error: '+importResult.error
+                : 'Imported '+importResult.imported+' rates'+(importResult.sheets?' from '+importResult.sheets.length+' sheets':'')+(importResult.skipped>0?', skipped '+importResult.skipped:'')
+              }
+            </div>
+          )}
         </div>
 
       </div>
