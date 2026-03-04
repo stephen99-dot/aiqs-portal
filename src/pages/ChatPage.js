@@ -577,17 +577,36 @@ export default function ChatPage() {
                     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, opacity: 0.7 }}>Your documents are ready:</div>
                       {msg.downloadFiles.map((f, fi) => (
-                        <a key={fi} href={'/api' + f.url} download style={{
+                        <button key={fi} onClick={async () => {
+                          try {
+                            const token = localStorage.getItem('aiqs_token');
+                            const resp = await fetch(f.url, {
+                              headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                            if (!resp.ok) throw new Error('Download failed');
+                            const blob = await resp.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = f.name;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                          } catch (err) {
+                            alert('Download failed. Please try again.');
+                          }
+                        }} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 8,
                           padding: '10px 16px', borderRadius: 8,
                           background: f.type === 'xlsx' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
                           border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'),
                           color: f.type === 'xlsx' ? '#10B981' : '#3B82F6',
-                          textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                          fontSize: 13, fontWeight: 600,
                           cursor: 'pointer', transition: 'all 0.15s',
                         }}>
                           {f.type === 'xlsx' ? '\u{1F4CA}' : '\u{1F4C4}'} Download {f.name}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   )}
