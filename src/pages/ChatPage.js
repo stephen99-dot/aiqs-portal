@@ -1,19 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 
-// Get user-specific storage key to prevent chat leaking between accounts
-function getStorageKey() {
-  try {
-    const token = localStorage.getItem('aiqs_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return `aiqs_chat_${payload.id}`;
-    }
-  } catch {}
-  return 'aiqs_chat_guest';
-}
+const STORAGE_KEY = 'aiqs_chat_history';
 
 // -- Thinking stages shown while waiting --
 const THINKING_STAGES = [
@@ -28,10 +17,9 @@ export default function ChatPage() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
 
-  const storageKey = getStorageKey();
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(storageKey);
+      const saved = sessionStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -40,20 +28,12 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [thinkingStage, setThinkingStage] = useState(0);
   const [expandedThinking, setExpandedThinking] = useState({});
-  const [rateStats, setRateStats] = useState(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const thinkingInterval = useRef(null);
 
-  // Fetch rate library stats on mount
   useEffect(() => {
-    apiFetch('/my-rates').then(data => {
-      if (data.stats && data.stats.total > 0) setRateStats(data.stats);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    try { sessionStorage.setItem(storageKey, JSON.stringify(messages)); } catch {}
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {}
   }, [messages]);
 
   useEffect(() => {
@@ -75,22 +55,6 @@ export default function ChatPage() {
       setThinkingStage(0);
     }
     return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
-  }, [sending]);
-
-  // Block browser navigation (tab close, refresh) while sending
-  // Also set global flag so Layout sidebar can warn before navigating
-  useEffect(() => {
-    if (!sending) {
-      window.__aiqs_chat_sending = false;
-      return;
-    }
-    window.__aiqs_chat_sending = true;
-    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', handler);
-    return () => {
-      window.removeEventListener('beforeunload', handler);
-      window.__aiqs_chat_sending = false;
-    };
   }, [sending]);
 
   // -- Theme colors --
@@ -290,7 +254,7 @@ export default function ChatPage() {
   function clearChat() {
     setMessages([]);
     setExpandedThinking({});
-    sessionStorage.removeItem(storageKey);
+    sessionStorage.removeItem(STORAGE_KEY);
   }
   function toggleThinking(idx) {
     setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] }));
@@ -333,10 +297,11 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.reply,
         thinking: data.thinking || null,
-        files: data.files || null,
+        downloadFiles: data.files || null,
+        paymentRequired: data.payment_required || null,
+        quota: data.quota || null,
         timestamp: new Date().toISOString()
       }]);
-      if (data.rateStats) setRateStats(data.rateStats);
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -503,22 +468,7 @@ export default function ChatPage() {
       <div style={styles.header}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h1 style={styles.title}>AI Quantity Surveyor</h1>
-              {rateStats && (
-                <span style={{
-                  background: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
-                  color: isDark ? '#34D399' : '#059669',
-                  border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`,
-                  borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 600,
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                }}>
-                  <span style={{ fontSize: '13px' }}>🧠</span>
-                  {rateStats.total} trained rate{rateStats.total !== 1 ? 's' : ''}
-                  {rateStats.avg_confidence >= 0.85 && ' • High accuracy'}
-                </span>
-              )}
-            </div>
+            <h1 style={styles.title}>AI Quantity Surveyor</h1>
             <p style={styles.subtitle}>Upload drawings and chat about your project -- get instant estimates and QS advice</p>
           </div>
           {messages.length > 0 && (
@@ -533,13 +483,7 @@ export default function ChatPage() {
             <div style={styles.welcome}>
               <div style={styles.welcomeIcon}>📐</div>
               <h3 style={styles.welcomeTitle}>Ready to analyse your project</h3>
-              <p style={styles.welcomeText}>
-                Upload your drawings (PDF, images, or ZIP) and ask me anything.
-                {rateStats
-                  ? ` I'm using your ${rateStats.total} trained rates for accurate pricing. Correct anything that's off and I'll learn for next time.`
-                  : ' I\'ll use standard UK rates to start — correct anything that\'s off and I\'ll remember your rates for future projects.'
-                }
-              </p>
+              <p style={styles.welcomeText}>Upload your drawings (PDF, images, or ZIP) and ask me anything -- rough costs, spec advice, quantities, building regs, risks to watch for.</p>
               <div style={styles.suggestions}>
                 {[
                   ['💰', 'Rough cost estimate', 'Can you give me a rough cost estimate for this project?'],
@@ -594,38 +538,41 @@ export default function ChatPage() {
                       </React.Fragment>
                     ))}
                   </div>
-                  {msg.role === 'assistant' && msg.files && msg.files.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}>
-                      {msg.files.map((f, j) => (
-                        <button
-                          key={j}
-                          onClick={async () => {
-                            try {
-                              const token = localStorage.getItem('aiqs_token');
-                              const resp = await fetch(f.url, { headers: { 'Authorization': `Bearer ${token}` } });
-                              if (!resp.ok) throw new Error('Download failed');
-                              const blob = await resp.blob();
-                              const url = window.URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url; a.download = f.name;
-                              document.body.appendChild(a); a.click();
-                              window.URL.revokeObjectURL(url);
-                              document.body.removeChild(a);
-                            } catch (err) { alert('Download failed — please try again.'); }
-                          }}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
-                            border: `1px solid ${isDark ? 'rgba(37,99,235,0.3)' : 'rgba(37,99,235,0.2)'}`,
-                            borderRadius: '10px', padding: '8px 14px',
-                            color: isDark ? '#60A5FA' : '#2563EB',
-                            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                          }}
-                        >
-                          <span style={{ fontSize: '16px' }}>{f.type === 'xlsx' ? '📊' : '📄'}</span>
-                          <span>Download {f.type === 'xlsx' ? 'Excel BOQ' : 'Findings Report'}</span>
-                        </button>
+                  {/* Download buttons */}
+                  {msg.downloadFiles && msg.downloadFiles.length > 0 && (
+                    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: colors.text, opacity: 0.7 }}>Your documents are ready:</div>
+                      {msg.downloadFiles.map((f, fi) => (
+                        <a key={fi} href={'/api' + f.url} download style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 8,
+                          padding: '10px 16px', borderRadius: 8,
+                          background: f.type === 'xlsx' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                          border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'),
+                          color: f.type === 'xlsx' ? '#10B981' : '#3B82F6',
+                          textDecoration: 'none', fontSize: 13, fontWeight: 600,
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}>
+                          {f.type === 'xlsx' ? '\u{1F4CA}' : '\u{1F4C4}'} Download {f.name}
+                        </a>
                       ))}
+                    </div>
+                  )}
+                  {/* Payment required button */}
+                  {msg.paymentRequired && (
+                    <div style={{ marginTop: 14, padding: 16, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, marginBottom: 6 }}>{msg.paymentRequired.message}</div>
+                      <a href={msg.paymentRequired.url} target="_blank" rel="noopener noreferrer" style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 8,
+                        padding: '12px 24px', borderRadius: 8,
+                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                        color: '#0A0F1C', textDecoration: 'none',
+                        fontSize: 14, fontWeight: 700,
+                        boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}>
+                        Pay \u00a3{msg.paymentRequired.price} to Generate Documents
+                      </a>
+                      <div style={{ fontSize: 11, color: colors.text, opacity: 0.5, marginTop: 8 }}>Once payment is confirmed, just say "generate documents" again.</div>
                     </div>
                   )}
                 </div>
