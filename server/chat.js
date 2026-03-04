@@ -18,6 +18,20 @@ const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
+// ── Ensure chat_sessions table exists ────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT,
+      messages TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+} catch (e) { console.error('[DB] chat_sessions table error:', e.message); }
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
@@ -51,7 +65,6 @@ function buildSystemPrompt(userId, forDocGen) {
     }
   } catch (err) { console.error('[Chat] Rate load error:', err.message); }
 
-  // Load client insights
   try {
     const insights = db.prepare(`SELECT category, insight, times_reinforced FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC LIMIT 30`).all(userId);
     if (insights.length > 0) {
@@ -239,51 +252,16 @@ You are writing as a professional quantity surveyor, not a chatbot. Follow these
 10. Never say "Need me to..." with a list of options. Just say "Let me know if you want anything adjusted."
 11. State assumptions and exclusions in plain sentences, not bullet lists
 
-Example of GOOD tone:
-"Based on the drawings provided, I've measured the extension at approximately 5.3m2 ground floor with cavity wall construction tying into the existing first floor. The external walls total 23.4m2 net of openings. I've assumed standard strip foundations at 600x250mm, 9.74m run, and a cut timber roof to match the existing pitch.
-
-The total net construction cost comes to 16,787, with 7.5% contingency and 12% OH&P bringing it to 20,180 excluding VAT.
-
-Key assumptions: good site access, standard ground conditions, materials matched to existing dwelling. I haven't included architect fees, building control, or structural engineer calculations.
-
-Let me know if you want anything adjusted."
-
-Example of BAD tone (never do this):
-"### **Cost Estimate** 🏗️
-**Here's your breakdown:**
-- ✓ Strip foundations: £848
-- ✓ Cavity wall: £2,504
-**Total: £20,180**
-Need me to:
-- Adjust rates? 📊
-- Break down items? 📋"
-
-RATE LEARNING: If a client corrects a rate or provides their own pricing (e.g. "we charge ${'\u00a3'}55/hr", "fabrication is 14 hrs/T"), acknowledge it naturally in conversation. The system auto-learns from corrections.
+RATE LEARNING: If a client corrects a rate or provides their own pricing, acknowledge it naturally in conversation. The system auto-learns from corrections.
 
 RATE TAGS (hidden from client — include at END of response):
 For NEW rates: [RATE_ADD|category|Rate Name|value|unit]
 For CORRECTIONS: [RATE_UPDATE|Rate Name|new_value]
 
-Examples:
-Client: "we charge ${'\u00a3'}60/hr for welding" -> [RATE_ADD|structural_steel|Welding Labour Rate|60|/hr]
-Client: "balustrade is 262 not 280" -> [RATE_UPDATE|Balustrade Supply & Fit|262]
-
 Valid categories: structural_steel, architectural_metalwork, preliminaries, groundworks, masonry, carpentry, roofing, plastering, flooring, electrical, plumbing, mechanical, decorating, kitchen, bathroom, demolition, partitions, general
 
 CLIENT INSIGHT TAGS (hidden from client — include at END of response when you learn something reusable):
 [INSIGHT|category|insight text]
-
-Use these when the client reveals preferences, standards, or patterns that would help on FUTURE projects:
-- [INSIGHT|spec_preference|Client prefers Celotex over Kingspan for insulation]
-- [INSIGHT|markup|Client applies 15% markup on materials]
-- [INSIGHT|supplier|Client uses Travis Perkins as primary supplier]
-- [INSIGHT|scope|Client always includes provisional sums for drainage]
-- [INSIGHT|geography|Client operates mainly in Greater Manchester area]
-- [INSIGHT|trade|Client subcontracts all M&E work]
-- [INSIGHT|standard|Client requires NRM2 measurement standard]
-- [INSIGHT|feedback|Client prefers more detail on structural items]
-- [INSIGHT|workflow|Client wants BOQ before starting site work]
-- [INSIGHT|exclusion|Client always excludes architect and SE fees]
 
 Valid insight categories: spec_preference, markup, supplier, scope, geography, trade, standard, feedback, workflow, exclusion, team, project_type, commercial
 
@@ -351,19 +329,104 @@ function fileToContentBlock(filePath, ext) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// ENDPOINTS
+// CHAT SESSION ROUTES
 // ═══════════════════════════════════════════════════════════════════════
 
-// TEMPORARY: Admin-only seed endpoint — hit once then remove
-// Usage: Log in as admin, then visit /api/seed-rates in browser
+router.get('/chat-sessions', authMiddleware, (req, res) => {
+  try {
+    const sessions = db.prepare(
+      `SELECT id, title, created_at, updated_at FROM chat_sessions
+       WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`
+    ).all(req.user.id);
+    res.json({ sessions });
+  } catch (e) {
+    console.error('[ChatSessions] Load error:', e.message);
+    res.json({ sessions: [] });
+  }
+});
+
+router.get('/chat-sessions/:id', authMiddleware, (req, res) => {
+  try {
+    const session = db.prepare(
+      'SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    res.json({ ...session, messages: JSON.parse(session.messages || '[]') });
+  } catch (e) {
+    console.error('[ChatSessions] Get error:', e.message);
+    res.status(500).json({ error: 'Failed to load session' });
+  }
+});
+
+router.post('/chat-sessions', authMiddleware, (req, res) => {
+  try {
+    const { id, title, messages } = req.body;
+    if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages array required' });
+    const sessionId = id || 'cs_' + uuidv4().slice(0, 12);
+    let sessionTitle = title;
+    if (!sessionTitle) {
+      const firstUser = messages.find(m => m.role === 'user');
+      const content = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : '') : '';
+      sessionTitle = content.substring(0, 60).trim() || 'Chat ' + new Date().toLocaleDateString('en-GB');
+    }
+    const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+    if (existing) {
+      db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
+        .run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
+    } else {
+      db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)')
+        .run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
+    }
+    res.json({ id: sessionId, title: sessionTitle });
+  } catch (e) {
+    console.error('[ChatSessions] Save error:', e.message);
+    res.status(500).json({ error: 'Failed to save session' });
+  }
+});
+
+router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
+  try {
+    const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?')
+      .run(req.params.id, req.user.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[ChatSessions] Delete error:', e.message);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// DELETE PROJECT ROUTE
+// ═══════════════════════════════════════════════════════════════════════
+
+router.delete('/projects/:id', authMiddleware, (req, res) => {
+  try {
+    // Allow admin to delete any project, users can only delete their own
+    const query = req.user.role === 'admin'
+      ? 'DELETE FROM projects WHERE id = ?'
+      : 'DELETE FROM projects WHERE id = ? AND user_id = ?';
+    const params = req.user.role === 'admin'
+      ? [req.params.id]
+      : [req.params.id, req.user.id];
+    const result = db.prepare(query).run(...params);
+    if (result.changes === 0) return res.status(404).json({ error: 'Project not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[Projects] Delete error:', e.message);
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// OTHER ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════
+
 router.get('/seed-rates', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-
   const results = [];
   const allUsers = db.prepare('SELECT id, email, full_name, role FROM users ORDER BY created_at').all();
   results.push({ info: 'All users in database', users: allUsers.map(u => `${u.email} (${u.full_name}) [${u.role}]`) });
-
-  // Paul Metalwork
   const paul = db.prepare('SELECT id, full_name FROM users WHERE email = ?').get('paul@metalworksolutionsuk.com');
   if (paul) {
     const rates = [
@@ -386,18 +449,16 @@ router.get('/seed-rates', authMiddleware, (req, res) => {
     ];
     const insert = db.prepare(`INSERT OR REPLACE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, times_applied, times_confirmed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 5, 3, 1)`);
     const tx = db.transaction(() => {
-      for (const r of rates) insert.run('rl_' + require('uuid').v4().slice(0, 8), paul.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.confidence);
+      for (const r of rates) insert.run('rl_' + uuidv4().slice(0, 8), paul.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.confidence);
     });
     tx();
     results.push({ paul: `Seeded ${rates.length} rates for ${paul.full_name}` });
   } else {
     results.push({ paul: 'NOT FOUND — paul@metalworksolutionsuk.com not in users table' });
   }
-
   res.json({ success: true, results });
 });
 
-// File downloads
 router.get('/downloads/:filename', authMiddleware, (req, res) => {
   const fp = path.join(outputsDir, req.params.filename);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
@@ -410,7 +471,6 @@ router.get('/downloads/:filename', authMiddleware, (req, res) => {
   res.send(fileBuffer);
 });
 
-// Client rate library
 router.get('/my-rates', authMiddleware, (req, res) => {
   try {
     const rates = db.prepare(`SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, item_key`).all(req.user.id);
@@ -419,7 +479,6 @@ router.get('/my-rates', authMiddleware, (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Failed to load rate library' }); }
 });
 
-// Client insights - what the system has learned
 router.get('/my-insights', authMiddleware, (req, res) => {
   try {
     const insights = db.prepare(`SELECT * FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC`).all(req.user.id);
@@ -428,7 +487,6 @@ router.get('/my-insights', authMiddleware, (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Failed to load insights' }); }
 });
 
-// Delete a specific insight
 router.delete('/my-insights/:id', authMiddleware, (req, res) => {
   try {
     const result = db.prepare('DELETE FROM client_insights WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
@@ -437,7 +495,6 @@ router.delete('/my-insights/:id', authMiddleware, (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Failed to delete insight' }); }
 });
 
-// Admin: view insights for any user
 router.get('/admin/insights/:userId', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   try {
@@ -473,7 +530,7 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// MAIN CHAT ENDPOINT — normal JSON response
+// MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════
 
 router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res) => {
@@ -483,12 +540,10 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
-    // --- Account suspension check ---
     if (req.user.suspended) {
       return res.status(403).json({ error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
     }
 
-    // --- Quota check ---
     const PLAN_LIMITS = {
       starter:      { messages: 10,  docs: 0,   revisions_per_doc: 1, label: 'Starter', pay_per_doc: true, doc_price: 99 },
       professional: { messages: 100, docs: 10,  revisions_per_doc: 1, label: 'Professional' },
@@ -507,10 +562,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         if (used.c >= effectiveLimit) {
           return res.status(429).json({
             error: 'You\'ve used all ' + effectiveLimit + ' messages this month on the ' + limits.label + ' plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.',
-            limit_type: 'messages',
-            used: used.c,
-            limit: effectiveLimit,
-            plan: plan
+            limit_type: 'messages', used: used.c, limit: effectiveLimit, plan: plan
           });
         }
       }
@@ -557,7 +609,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // ─── Build prompt & choose model ─────────────────────────────
     const systemPrompt = buildSystemPrompt(userId, false);
     const hasDrawings = fileNames.length > 0;
     const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
@@ -594,7 +645,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     const data = await response.json();
 
-    // --- Log usage ---
     const tokensIn = data.usage ? data.usage.input_tokens : 0;
     const tokensOut = data.usage ? data.usage.output_tokens : 0;
     const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
@@ -614,13 +664,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
-    // ─── Check if user wants document generation ─────────────────
     const wantsDocumentsRaw = /generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
 
-    // Doc generation quota check
     if (wantsDocuments && req.user.role !== 'admin') {
       var dPlan = req.user.plan || 'starter';
       var dStart2 = new Date(); dStart2.setDate(1); dStart2.setHours(0,0,0,0);
@@ -629,46 +677,31 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       var revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
 
       if (dPlan === 'starter') {
-        // Starter: pay-per-BOQ. Check paid credits.
         var paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
         var totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
         var totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
         var originalsEver = totalDocsEver - totalRevisionsEver;
-        // Each paid credit = 1 original + 1 revision
         var lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-        // Check if this might be a revision (same project name in recent context)
         var looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-
         if (looksLikeRevision && totalRevisionsEver < paidCredits) {
-          // Allow as revision
           console.log('[Quota] Starter revision allowed');
         } else if (originalsEver >= paidCredits) {
-          // No credit left - return payment required flag
           wantsDocuments = false;
           paymentRequired = {
-            type: 'boq_payment',
-            plan: 'starter',
-            price: 99,
-            currency: 'GBP',
+            type: 'boq_payment', plan: 'starter', price: 99, currency: 'GBP',
             url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01?client_reference_id=' + userId,
-            message: 'To generate your BOQ and Findings Report, a one-off payment of \u00a399 is required. This includes a full Excel BOQ with your trained rates, a professional Findings Report, and 1 free revision.',
+            message: 'To generate your BOQ and Findings Report, a one-off payment of £99 is required. This includes a full Excel BOQ with your trained rates, a professional Findings Report, and 1 free revision.',
           };
         }
       } else {
-        // Professional: 10 docs, Premium: 20 docs
         var docLimit = dPlan === 'premium' ? 20 : 10;
         var originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
-        // Check if this is a revision
         var lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
         var isRevisionCheck = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
         if (isRevisionCheck) {
-          // Count revisions for last project
           var lastProject = lastDoc2.detail;
           var projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastProject).c;
-          if (projectRevisions >= 1) {
-            reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).';
-            wantsDocuments = false;
-          }
+          if (projectRevisions >= 1) { reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).'; wantsDocuments = false; }
         } else if (originalsThisMonth >= docLimit) {
           reply += '\n\nDocument limit reached (' + docLimit + ' BOQs on ' + dPlan + ' plan this month).';
           wantsDocuments = false;
@@ -678,24 +711,16 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     if (wantsDocuments && boqGen && findingsGen) {
       console.log('[Docs] User requested documents — generating structured data...');
-
       const clientName = req.user.full_name || req.user.email;
       let projectName = 'Project';
-      
-      // Try to extract project name from the full conversation, not just the last reply
       const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
-      
-      // Look for address patterns first (most reliable)
       const addrMatch = allText.match(/(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}(?:\s+(?:Road|Street|Lane|Drive|Avenue|Close|Way|Crescent|Place|Court|Gardens|Terrace|Grove|Mews|Rise|Hill|Row|Walk|Square|Park|Green|Rd|St|Ln|Dr|Ave|Cl))\b)/i);
       if (addrMatch) {
         projectName = addrMatch[1].trim();
       } else {
-        // Look for "project at/for/:" patterns
         const projMatch = allText.match(/(?:project|extension|conversion|renovation|refurb|build|loft|dormer|garage|kitchen|bathroom)\s+(?:at|for|:|-|–)\s+([A-Z0-9][^\n,]{3,40})/i);
         if (projMatch) projectName = projMatch[1].trim();
       }
-      
-      // Clean up for filename
       projectName = projectName.replace(/[^\w\s-]/g, '').trim().substring(0, 50);
 
       const convMessages = messages.map(m => ({
@@ -721,12 +746,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           const rawText = docData.content.filter(c => c.type === 'text').map(c => c.text).join('');
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
           const parsed = JSON.parse(cleaned);
-          console.log('[Docs] Parsed JSON — sections:', (parsed.sections || []).length, 'items per section:', (parsed.sections || []).map(s => (s.items || []).length));
+          console.log('[Docs] Parsed JSON — sections:', (parsed.sections || []).length);
           const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
           const ts = Date.now();
           downloadFiles = [];
 
-          // Excel BOQ
           const sections = parsed.sections || [];
           if (sections.length > 0) {
             console.log('[Docs] Building Excel BOQ with', sections.length, 'sections...');
@@ -739,19 +763,12 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
               if (buf && buf.length > 100) {
                 const fname = `BOQ-${safeName}-${ts}.xlsx`;
                 fs.writeFileSync(path.join(outputsDir, fname), buf);
-                const savedSize = fs.statSync(path.join(outputsDir, fname)).size;
                 downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
-                console.log(`[Docs] Excel: ${fname} (buf=${buf.length} bytes, saved=${savedSize} bytes)`);
-              } else {
-                console.error('[Docs] Excel buffer too small or empty:', buf ? buf.length : 'null');
+                console.log(`[Docs] Excel: ${fname}`);
               }
-            } catch (excelErr) {
-              console.error('[Docs] Excel generation error:', excelErr.message);
-              console.error('[Docs] Excel stack:', excelErr.stack ? excelErr.stack.split('\n').slice(0,3).join(' | ') : '');
-            }
+            } catch (excelErr) { console.error('[Docs] Excel error:', excelErr.message); }
           }
 
-          // Word Findings Report
           try {
             console.log('[Docs] Building Findings Report...');
             const findings = parsed.findings || {};
@@ -759,43 +776,53 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             if (docBuf && docBuf.length > 100) {
               const docName = `Findings-${safeName}-${ts}.docx`;
               fs.writeFileSync(path.join(outputsDir, docName), docBuf);
-              const savedDocSize = fs.statSync(path.join(outputsDir, docName)).size;
               downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
-              console.log(`[Docs] Word: ${docName} (buf=${docBuf.length} bytes, saved=${savedDocSize} bytes)`);
-            } else {
-              console.error('[Docs] Word buffer too small or empty:', docBuf ? docBuf.length : 'null');
+              console.log(`[Docs] Word: ${docName}`);
             }
-          } catch (wordErr) {
-            console.error('[Docs] Word generation error:', wordErr.message);
-          }
+          } catch (wordErr) { console.error('[Docs] Word error:', wordErr.message); }
 
           if (downloadFiles.length > 0) {
-            // Replace Claude's reply entirely — don't let it ramble about not being able to generate files
             var itemCount = 0, totalVal = 0;
-            if (parsed.sections) { for (var si=0;si<parsed.sections.length;si++) { var sec=parsed.sections[si]; if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}} } }
-            
+            if (parsed.sections) {
+              for (var si=0;si<parsed.sections.length;si++) {
+                var sec=parsed.sections[si];
+                if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}}
+              }
+            }
             var grandTotal = totalVal;
             if (parsed.findings && parsed.findings.cost_summary && parsed.findings.cost_summary.grand_total) {
               grandTotal = parsed.findings.cost_summary.grand_total;
             }
-            
-            var currency = reply.includes('EUR') || reply.includes('\u20ac') ? '\u20ac' : '\u00a3';
+            var currency = reply.includes('EUR') || reply.includes('€') ? '€' : '£';
             reply = 'Your documents have been generated for ' + projectName + '.\n\n';
             reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections, ';
-            reply += 'with a total project value of ' + currency + grandTotal.toLocaleString('en-GB', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' (excl. VAT).\n\n';
+            reply += 'with a total project value of ' + currency + grandTotal.toLocaleString('en-GB', {minimumFractionDigits:0,maximumFractionDigits:0}) + ' (excl. VAT).\n\n';
             reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
 
-            // Auto-save project to history
+            // ── Save to BOTH chat_projects AND projects table ──────────
             try {
               var summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
               var boqF = downloadFiles.find(function(f){return f.type==='xlsx';});
               var docF = downloadFiles.find(function(f){return f.type==='docx';});
-              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)').run(
-                'cp_'+uuidv4().slice(0,8),userId,projectName,totalVal,reply.includes('EUR')?'EUR':'GBP',boqF?boqF.name:null,docF?docF.name:null,summaryText.substring(0,1000),itemCount
-              );
-              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)').run(
-                'ul_'+uuidv4().slice(0,8),userId,'doc_generated',projectName,modelUsed||'sonnet',0,0,0
-              );
+              var projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
+
+              // Save to chat_projects (existing table)
+              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)')
+                .run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
+
+              // Also save to projects table so it shows on dashboard
+              try {
+                const projId = 'proj_' + uuidv4().slice(0, 10);
+                db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)`)
+                  .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null);
+                console.log('[Project] Saved to projects table: ' + projectName);
+              } catch(projErr) {
+                // projects table might have different schema — log but don't fail
+                console.error('[Project] projects table insert error:', projErr.message);
+              }
+
+              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
+                .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
               console.log('[Project] Saved: '+projectName+' ('+itemCount+' items, '+totalVal.toFixed(0)+')');
             } catch(pe) { console.error('[Project] Save error:', pe.message); }
           }
@@ -804,19 +831,17 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       } catch (e) {
         console.error('[Docs] Generation error:', e.message);
-        console.error('[Docs] Stack:', e.stack ? e.stack.split('\n').slice(0,3).join(' | ') : 'no stack');
       }
     } else if (hasDrawings && !wantsDocuments) {
       reply += '\n\nIf you want downloadable documents, just say "generate documents" and I\'ll create an Excel BOQ and Word Findings Report for you.';
     }
 
-    // --- Auto-learning: extract rates from user corrections ---
+    // ── Auto-learning: extract rates from corrections ─────────────
     try {
       const userMsg = (message || '');
       const userLower = userMsg.toLowerCase();
       const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong|instead of|changed to|now \d|is \d+\s*(?:not|instead))/i.test(userLower);
       if (isCorrection) {
-        console.log('[AutoLearn] Correction detected: ' + userMsg.substring(0, 100));
         const existingRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
         if (existingRates.length > 0) {
           let bestMatch = null, bestScore = 0;
@@ -829,20 +854,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             if (score > bestScore) { bestScore = score; bestMatch = rate; }
           }
           let newValue = null;
-          const np = [/(?:should be|actually|is|to|now|changed to)\s*(?:\u00a3|\u20ac)?\s*(\d[\d,.]*)(?!\d)/i, /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i];
+          const np = [/(?:should be|actually|is|to|now|changed to)\s*(?:£|€)?\s*(\d[\d,.]*)(?!\d)/i, /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i];
           for (const pat of np) { const m = userMsg.match(pat); if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v>0&&v<1000000){newValue=v;break;} } }
           if (!newValue) { const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g); if (nums) newValue = parseFloat(nums[0].replace(/,/g,'')); }
           if (bestMatch && bestScore >= 1 && newValue && newValue !== bestMatch.value) {
-            console.log('[AutoLearn] Match: ' + bestMatch.display_name + ' score:' + bestScore + ' ' + bestMatch.value + '->' + newValue);
             db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newValue, bestMatch.id);
-            db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+require('uuid').v4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
-            console.log('[AutoLearn] Updated ' + bestMatch.display_name);
-          } else { console.log('[AutoLearn] No match. Best:' + (bestMatch?bestMatch.display_name:'none') + ' score:' + bestScore + ' val:' + newValue); }
+            db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
+          }
         }
       }
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
 
-    // --- Parse RATE_ADD and RATE_UPDATE tags from Claude reply ---
+    // ── Parse RATE_ADD / RATE_UPDATE tags ─────────────────────────
     try {
       var addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
       for (var ai = 0; ai < addMatches.length; ai++) {
@@ -856,12 +879,9 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             var itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
             var exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
             if (!exists) {
-              var rateId = 'rl_' + require('uuid').v4().slice(0, 8);
-              db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run(rateId, userId, cat, itemKey, rName, rVal, rUnit);
-              console.log('[RateTag] ADD: ' + rName + ' = ' + rVal + ' ' + rUnit + ' (' + cat + ')');
+              db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit);
             } else {
               db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id);
-              console.log('[RateTag] ADD (exists, updated): ' + rName + ' = ' + rVal);
             }
           }
         }
@@ -888,17 +908,15 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             }
             if (found && uVal !== found.value) {
               db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(uVal, found.id);
-              db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+require('uuid').v4().slice(0,8),found.id,userId,found.value,uVal,'tag_update',reply.substring(0,200));
-              console.log('[RateTag] UPDATE: ' + found.display_name + ' ' + found.value + ' -> ' + uVal);
+              db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),found.id,userId,found.value,uVal,'tag_update',reply.substring(0,200));
             }
           }
         }
       }
-      // Strip tags from reply
       reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
     } catch (tagErr) { console.error('[RateTag] Error:', tagErr.message); }
 
-    // --- Parse INSIGHT tags from Claude reply ---
+    // ── Parse INSIGHT tags ────────────────────────────────────────
     try {
       var insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
       for (var ii2 = 0; ii2 < insightMatches.length; ii2++) {
@@ -908,46 +926,34 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           var iText = iParts[1].trim();
           var validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
           if (validInsightCats.includes(iCat) && iText.length > 5 && iText.length < 300) {
-            // Check for duplicate/similar insight
             var existingInsights = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, iCat);
             var isDuplicate = false;
             for (var ei = 0; ei < existingInsights.length; ei++) {
-              // Simple similarity check: if the new insight contains >60% of words from existing
               var existWords = existingInsights[ei].insight.toLowerCase().split(/\s+/);
               var newWords = iText.toLowerCase().split(/\s+/);
               var overlap = existWords.filter(function(w) { return newWords.indexOf(w) >= 0; }).length;
               if (overlap / Math.max(existWords.length, 1) > 0.6) {
-                // Reinforce existing insight
                 db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(existingInsights[ei].id);
                 isDuplicate = true;
-                console.log('[Insight] Reinforced:', existingInsights[ei].insight, '(x' + (existingInsights[ei].times_reinforced + 1) + ')');
                 break;
               }
             }
             if (!isDuplicate) {
-              var insightId = 'ins_' + uuidv4().slice(0, 8);
-              db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run(insightId, userId, iCat, iText);
-              console.log('[Insight] New:', iCat, '-', iText);
+              db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_'+uuidv4().slice(0,8), userId, iCat, iText);
             }
           }
         }
       }
     } catch (insErr) { console.error('[Insight] Parse error:', insErr.message); }
 
-    // Strip ALL hidden tags from reply (clean up any remaining)
     reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
 
-
-
-
-    // ─── Rate stats ──────────────────────────────────────────────
     let rateStats = null;
     try {
       const s = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(userId);
       if (s && s.total > 0) rateStats = s;
     } catch(e) {}
 
-    // --- Quota info for frontend ---
     let quotaInfo = null;
     if (req.user.role !== 'admin') {
       var qPlan = req.user.plan || 'starter';
