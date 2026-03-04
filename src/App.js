@@ -6,10 +6,9 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
-import ProjectsPage from './pages/ProjectsPage';
+import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
-import MyRatesPage from './pages/MyRatesPage';
 import PipelinePage from './pages/PipelinePage';
 import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
@@ -17,6 +16,8 @@ import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
+import MyRatesPage from './pages/MyRatesPage';
+import AIMemoryPage from './pages/AIMemoryPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -48,15 +49,15 @@ function AppInner() {
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/new-project" element={<Navigate to="/projects" replace />} />
+          <Route path="/new-project" element={<NewProjectPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
-          <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
+          <Route path="/my-rates" element={<MyRatesPage />} />
+          <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
