@@ -104,6 +104,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id);
   CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
   CREATE INDEX IF NOT EXISTS idx_chat_projects_user ON chat_projects(user_id);
+
+  CREATE TABLE IF NOT EXISTS client_insights (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    insight TEXT NOT NULL,
+    source_project TEXT,
+    times_reinforced INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_insights_user ON client_insights(user_id);
+  CREATE INDEX IF NOT EXISTS idx_insights_category ON client_insights(category);
 `);
 
 // Migrations for existing databases
