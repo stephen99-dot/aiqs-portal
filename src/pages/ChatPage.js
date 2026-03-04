@@ -610,24 +610,56 @@ export default function ChatPage() {
                       ))}
                     </div>
                   )}
-                  {/* Payment required button */}
-                  {msg.paymentRequired && (
-                    <div style={{ marginTop: 14, padding: 16, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, marginBottom: 6 }}>{msg.paymentRequired.message}</div>
-                      <a href={msg.paymentRequired.url} target="_blank" rel="noopener noreferrer" style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 8,
-                        padding: '12px 24px', borderRadius: 8,
-                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                        color: '#0A0F1C', textDecoration: 'none',
-                        fontSize: 14, fontWeight: 700,
-                        boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
-                        cursor: 'pointer', transition: 'all 0.15s',
-                      }}>
-                        Pay \u00a3{msg.paymentRequired.price} to Generate Documents
-                      </a>
-                      <div style={{ fontSize: 11, color: colors.text, opacity: 0.5, marginTop: 8 }}>Once payment is confirmed, just say "generate documents" again.</div>
-                    </div>
-                  )}
+           {/* Payment required / upgrade block */}
+{msg.paymentRequired && (
+  <div style={{ marginTop: 14, padding: 16, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+    <div style={{ fontSize: 13, fontWeight: 600, color: colors.textPrimary, marginBottom: 4 }}>
+      {msg.paymentRequired.message || 'Generate your BOQ documents'}
+    </div>
+    <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>
+      Choose how to proceed:
+    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Pay per BOQ — always available */}
+      <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '11px 18px', borderRadius: 8,
+        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+        color: '#0A0F1C', textDecoration: 'none',
+        fontSize: 13, fontWeight: 700,
+        boxShadow: '0 4px 14px rgba(245,158,11,0.25)',
+      }}>
+        Pay £99 — Generate this BOQ
+      </a>
+      {/* Monthly plans */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{
+          flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          padding: '9px 14px', borderRadius: 8,
+          background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
+          color: colors.textPrimary, textDecoration: 'none',
+          fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+        }}>
+          ⭐ Professional — £347/mo
+          <span style={{ fontSize: 11, opacity: 0.65 }}>10 BOQs</span>
+        </a>
+        <a href="https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03" target="_blank" rel="noopener noreferrer" style={{
+          flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          padding: '9px 14px', borderRadius: 8,
+          background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)',
+          color: colors.textPrimary, textDecoration: 'none',
+          fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+        }}>
+          👑 Premium — £447/mo
+          <span style={{ fontSize: 11, opacity: 0.65 }}>20 BOQs</span>
+        </a>
+      </div>
+    </div>
+    <div style={{ fontSize: 11, color: colors.textSecondary, opacity: 0.6, marginTop: 10 }}>
+      Once payment is confirmed, just say "generate documents" again.
+    </div>
+  </div>
+)}
                 </div>
               </div>
             </React.Fragment>
