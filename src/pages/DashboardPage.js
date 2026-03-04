@@ -298,7 +298,7 @@ export default function DashboardPage() {
         <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)" value={Array.isArray(projects) ? projects.filter(p => p.status === 'completed' || p.status === 'delivered').length : 0} label="Completed" t={t} accent />
       </div>
       <div className="section-card" data-tour="projects-list">
-        <div className="section-card-header"><h2>Recent Projects</h2></div>
+        <div className="section-card-header"><h2>Your Projects</h2></div>
         {loading ? (
           <div className="empty-state"><div className="loading-spinner" /><p>Loading your projects...</p></div>
         ) : !Array.isArray(projects) || projects.length === 0 ? (
