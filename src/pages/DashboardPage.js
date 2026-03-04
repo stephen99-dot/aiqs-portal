@@ -323,14 +323,14 @@ export default function DashboardPage() {
               };
               const st = status[project.status] || status.submitted;
               return (
-                <div key={project.id} className="project-row" style={{ cursor: 'default' }}>
+                <Link key={project.id} to={`/project/${project.id}`} className="project-row" style={{ cursor: 'pointer', textDecoration: 'none', color: 'inherit' }}>
                   <div className="project-info">
                     <div className="project-title">{project.title}</div>
                     <div className="project-meta">
                       {project.item_count > 0 && <span>{project.item_count} items</span>}
                       {project.total_value > 0 && <span style={{ marginLeft: 8 }}>{project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}</span>}
                     </div>
-                  </div>
+                  </link>
                   <div className="project-right">
                     <span style={{
                       padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
