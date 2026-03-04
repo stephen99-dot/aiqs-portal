@@ -37,6 +37,7 @@ const upload = multer({
 
 function buildSystemPrompt(userId, forDocGen) {
   let clientRateSection = '';
+  let clientInsightsSection = '';
   try {
     const rates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, confidence DESC`).all(userId);
     if (rates.length > 0) {
@@ -49,6 +50,20 @@ function buildSystemPrompt(userId, forDocGen) {
       clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
     }
   } catch (err) { console.error('[Chat] Rate load error:', err.message); }
+
+  // Load client insights
+  try {
+    const insights = db.prepare(`SELECT category, insight, times_reinforced FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC LIMIT 30`).all(userId);
+    if (insights.length > 0) {
+      const grouped = {};
+      for (const ins of insights) {
+        if (!grouped[ins.category]) grouped[ins.category] = [];
+        const strength = ins.times_reinforced >= 3 ? ' [STRONG]' : '';
+        grouped[ins.category].push(`  - ${ins.insight}${strength}`);
+      }
+      clientInsightsSection = `\n=== CLIENT PROFILE (learned from past projects) ===\nApply these preferences automatically — the client has told us this before.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat.toUpperCase()}]\n${items.join('\n')}`).join('\n\n')}\n===\n`;
+    }
+  } catch (err) { console.error('[Chat] Insight load error:', err.message); }
 
   if (forDocGen) {
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
@@ -66,6 +81,7 @@ Plumbing 1st fix: 2800 | Plumbing 2nd fix: 1400 | Radiator: 230/ea
 Render: 85/m2 | Scaffolding: 20/m2 | Skip hire: 330/ea
 Location: London +20%, Midlands +7%, North -3%, Scotland +3%, Ireland +10% (EUR)
 ${clientRateSection}
+${clientInsightsSection}
 
 CRITICAL REQUIREMENTS:
 1. Include 40-100+ line items depending on project size — DO NOT produce sparse estimates
@@ -206,6 +222,7 @@ LOCATION FACTORS:
 - North England: -5% to baseline  |  Scotland: baseline to +5%
 - Ireland: +5-15% (use EUR not GBP)
 ${clientRateSection}
+${clientInsightsSection}
 DOCUMENT GENERATION: This system generates downloadable Excel BOQ and Word Findings Report files. When a client asks to "generate documents" or "create the BOQ", the system produces these automatically. After providing your analysis, mention: "If you want downloadable documents, just say 'generate documents' and I'll create an Excel BOQ and Word Findings Report for you."
 
 COMMUNICATION STYLE — CRITICAL:
@@ -252,6 +269,25 @@ Client: "we charge ${'\u00a3'}60/hr for welding" -> [RATE_ADD|structural_steel|W
 Client: "balustrade is 262 not 280" -> [RATE_UPDATE|Balustrade Supply & Fit|262]
 
 Valid categories: structural_steel, architectural_metalwork, preliminaries, groundworks, masonry, carpentry, roofing, plastering, flooring, electrical, plumbing, mechanical, decorating, kitchen, bathroom, demolition, partitions, general
+
+CLIENT INSIGHT TAGS (hidden from client — include at END of response when you learn something reusable):
+[INSIGHT|category|insight text]
+
+Use these when the client reveals preferences, standards, or patterns that would help on FUTURE projects:
+- [INSIGHT|spec_preference|Client prefers Celotex over Kingspan for insulation]
+- [INSIGHT|markup|Client applies 15% markup on materials]
+- [INSIGHT|supplier|Client uses Travis Perkins as primary supplier]
+- [INSIGHT|scope|Client always includes provisional sums for drainage]
+- [INSIGHT|geography|Client operates mainly in Greater Manchester area]
+- [INSIGHT|trade|Client subcontracts all M&E work]
+- [INSIGHT|standard|Client requires NRM2 measurement standard]
+- [INSIGHT|feedback|Client prefers more detail on structural items]
+- [INSIGHT|workflow|Client wants BOQ before starting site work]
+- [INSIGHT|exclusion|Client always excludes architect and SE fees]
+
+Valid insight categories: spec_preference, markup, supplier, scope, geography, trade, standard, feedback, workflow, exclusion, team, project_type, commercial
+
+Only output INSIGHT tags when the client EXPLICITLY states something — do not infer or guess.
 
 All estimates are approximate, subject to detailed measurement and site conditions.`;
 }
@@ -381,6 +417,33 @@ router.get('/my-rates', authMiddleware, (req, res) => {
     const stats = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence, SUM(times_applied) as total_uses FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(req.user.id);
     res.json({ rates, stats });
   } catch(e) { res.status(500).json({ error: 'Failed to load rate library' }); }
+});
+
+// Client insights - what the system has learned
+router.get('/my-insights', authMiddleware, (req, res) => {
+  try {
+    const insights = db.prepare(`SELECT * FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC`).all(req.user.id);
+    const stats = db.prepare(`SELECT COUNT(*) as total, COUNT(DISTINCT category) as categories FROM client_insights WHERE user_id = ?`).get(req.user.id);
+    res.json({ insights, stats });
+  } catch(e) { res.status(500).json({ error: 'Failed to load insights' }); }
+});
+
+// Delete a specific insight
+router.delete('/my-insights/:id', authMiddleware, (req, res) => {
+  try {
+    const result = db.prepare('DELETE FROM client_insights WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    if (result.changes === 0) return res.status(404).json({ error: 'Insight not found' });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Failed to delete insight' }); }
+});
+
+// Admin: view insights for any user
+router.get('/admin/insights/:userId', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const insights = db.prepare(`SELECT * FROM client_insights WHERE user_id = ? ORDER BY category, times_reinforced DESC`).all(req.params.userId);
+    res.json({ insights });
+  } catch(e) { res.status(500).json({ error: 'Failed to load insights' }); }
 });
 
 router.post('/my-rates/corrections', authMiddleware, (req, res) => {
@@ -832,8 +895,47 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       }
       // Strip tags from reply
-      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
     } catch (tagErr) { console.error('[RateTag] Error:', tagErr.message); }
+
+    // --- Parse INSIGHT tags from Claude reply ---
+    try {
+      var insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
+      for (var ii2 = 0; ii2 < insightMatches.length; ii2++) {
+        var iParts = insightMatches[ii2].replace(/^\[INSIGHT\|/, '').replace(/\]$/, '').split('|');
+        if (iParts.length >= 2) {
+          var iCat = iParts[0].trim().toLowerCase().replace(/\s+/g, '_');
+          var iText = iParts[1].trim();
+          var validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
+          if (validInsightCats.includes(iCat) && iText.length > 5 && iText.length < 300) {
+            // Check for duplicate/similar insight
+            var existingInsights = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, iCat);
+            var isDuplicate = false;
+            for (var ei = 0; ei < existingInsights.length; ei++) {
+              // Simple similarity check: if the new insight contains >60% of words from existing
+              var existWords = existingInsights[ei].insight.toLowerCase().split(/\s+/);
+              var newWords = iText.toLowerCase().split(/\s+/);
+              var overlap = existWords.filter(function(w) { return newWords.indexOf(w) >= 0; }).length;
+              if (overlap / Math.max(existWords.length, 1) > 0.6) {
+                // Reinforce existing insight
+                db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(existingInsights[ei].id);
+                isDuplicate = true;
+                console.log('[Insight] Reinforced:', existingInsights[ei].insight, '(x' + (existingInsights[ei].times_reinforced + 1) + ')');
+                break;
+              }
+            }
+            if (!isDuplicate) {
+              var insightId = 'ins_' + uuidv4().slice(0, 8);
+              db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run(insightId, userId, iCat, iText);
+              console.log('[Insight] New:', iCat, '-', iText);
+            }
+          }
+        }
+      }
+    } catch (insErr) { console.error('[Insight] Parse error:', insErr.message); }
+
+    // Strip ALL hidden tags from reply (clean up any remaining)
+    reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
 
 
 
