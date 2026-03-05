@@ -402,15 +402,16 @@ router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
 
 router.delete('/projects/:id', authMiddleware, (req, res) => {
   try {
-    // Allow admin to delete any project, users can only delete their own
-    const query = req.user.role === 'admin'
-      ? 'DELETE FROM projects WHERE id = ?'
-      : 'DELETE FROM projects WHERE id = ? AND user_id = ?';
-    const params = req.user.role === 'admin'
-      ? [req.params.id]
-      : [req.params.id, req.user.id];
-    const result = db.prepare(query).run(...params);
-    if (result.changes === 0) return res.status(404).json({ error: 'Project not found' });
+    const projectId = req.params.id;
+    // Verify ownership first
+    const project = req.user.role === 'admin'
+      ? db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)
+      : db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    // Delete child records first to avoid FK constraint
+    db.prepare('DELETE FROM files WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM project_data WHERE project_id = ?').run(projectId);
+    db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
     res.json({ success: true });
   } catch (e) {
     console.error('[Projects] Delete error:', e.message);
