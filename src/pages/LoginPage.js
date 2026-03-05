@@ -15,8 +15,12 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      const result = await login(email, password);
+      if (result && result.forcePasswordChange) {
+        navigate('/change-password');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -34,33 +38,20 @@ export default function LoginPage() {
             <h1>Welcome back</h1>
             <p>Sign in to your AI QS portal</p>
           </div>
-
           {error && <div className="auth-error">{error}</div>}
-
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-field">
               <label>Email</label>
-              <input
-                type="email" value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                required autoFocus
-              />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" required autoFocus />
             </div>
             <div className="form-field">
               <label>Password</label>
-              <input
-                type="password" value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
             </div>
             <button type="submit" className="btn-primary full-width" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
-
           <div className="auth-footer">
             Don't have an account? <Link to="/register">Create one</Link>
           </div>
