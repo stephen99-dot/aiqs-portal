@@ -77,6 +77,12 @@ function ClientsTab({ t }) {
   const [deleting, setDeleting] = useState(false);
   const [actionMsg, setActionMsg] = useState(null);
 
+  // Reset password modal state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetPassword, setResetPassword] = useState('Welcome123!');
+  const [resetting, setResetting] = useState(false);
+
   useEffect(() => { loadUsers(); }, []);
   function loadUsers() { setLoading(true); apiFetch('/admin/users').then(setUsers).catch(console.error).finally(() => setLoading(false)); }
   function showMsg(text, type = 'success') { setActionMsg({ text, type }); setTimeout(() => setActionMsg(null), 4000); }
@@ -92,17 +98,34 @@ function ClientsTab({ t }) {
       showMsg((newUser.fullName || newUser.email) + ' added successfully');
     } catch (err) { setAddError(err.message || 'Failed to add user'); } finally { setAdding(false); }
   }
+
   async function handleDelete(userId) {
     setDeleting(true);
     try { await apiFetch('/admin/users/' + userId, { method: 'DELETE' }); setUsers(prev => prev.filter(u => u.id !== userId)); setConfirmDelete(null); showMsg('User deleted'); }
     catch (err) { alert('Failed to delete: ' + err.message); } finally { setDeleting(false); }
   }
-  async function handleResetPassword(user) {
-    const newPw = prompt('Set a new password for ' + (user.fullName || user.email) + ':', 'Welcome123!');
-    if (!newPw) return;
-    try { await apiFetch('/admin/users/' + user.id + '/password', { method: 'PUT', body: JSON.stringify({ password: newPw }) }); showMsg('Password reset for ' + (user.fullName || user.email)); }
-    catch (err) { alert('Failed: ' + err.message); }
+
+  function handleResetPassword(user) {
+    setResetTarget(user);
+    setResetPassword('Welcome123!');
+    setShowResetModal(true);
   }
+
+  async function confirmResetPassword() {
+    if (!resetPassword || resetPassword.length < 6) { alert('Password must be at least 6 characters'); return; }
+    setResetting(true);
+    try {
+      await apiFetch('/admin/users/' + resetTarget.id + '/password', { method: 'PUT', body: JSON.stringify({ password: resetPassword }) });
+      showMsg('Password reset for ' + (resetTarget.fullName || resetTarget.email) + ' — they will be prompted to set a new one on login');
+      setShowResetModal(false);
+      setResetTarget(null);
+    } catch (err) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setResetting(false);
+    }
+  }
+
   async function handleSendMagicLink(user) {
     try {
       const result = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
@@ -114,8 +137,10 @@ function ClientsTab({ t }) {
       }
     } catch (err) { alert('Failed: ' + err.message); }
   }
+
   function startEdit(user) { setEditingId(user.id); setEditPlan(user.plan || 'starter'); setEditQuota(user.quota || 0); }
   function cancelEdit() { setEditingId(null); }
+
   async function savePlan(userId) {
     setSaving(true);
     try {
@@ -124,17 +149,60 @@ function ClientsTab({ t }) {
       setEditingId(null); showMsg('Plan updated');
     } catch (err) { alert('Failed: ' + err.message); } finally { setSaving(false); }
   }
+
   function handlePlanChange(value) { setEditPlan(value); const p = PLAN_OPTIONS.find(p => p.value === value); if (p) setEditQuota(p.quota); }
+
   const planBadge = (plan) => {
     const s = { starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' }, professional: { bg: t.warningBg, color: t.warning, label: 'Pro' }, premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' }, custom: { bg: t.goldBg, color: t.gold, label: 'Custom' } }[plan] || { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' };
     return <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>;
   };
+
   const inputStyle = { padding: '9px 12px', borderRadius: 8, fontSize: 13, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, outline: 'none', width: '100%' };
+
   if (loading) return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Reset Password Modal */}
+      {showResetModal && resetTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 28, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: t.text, margin: '0 0 6px' }}>🔑 Reset Password</h3>
+            <p style={{ fontSize: 13, color: t.textMuted, margin: '0 0 18px', lineHeight: 1.5 }}>
+              Setting a new password for <strong style={{ color: t.text }}>{resetTarget.fullName || resetTarget.email}</strong>. They will be prompted to change it on next login.
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>New Password</label>
+              <input
+                type="text"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 13, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, outline: 'none', boxSizing: 'border-box' }}
+                autoFocus
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={confirmResetPassword}
+                disabled={resetting}
+                style={{ flex: 1, padding: '9px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#0F172A', border: 'none', cursor: 'pointer', opacity: resetting ? 0.6 : 1 }}
+              >
+                {resetting ? 'Saving...' : 'Reset Password'}
+              </button>
+              <button
+                onClick={() => { setShowResetModal(false); setResetTarget(null); }}
+                style={{ padding: '9px 16px', borderRadius: 8, fontSize: 13, background: 'transparent', color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : 'rgba(239,68,68,0.1)', color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}</div>}
+
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
@@ -143,6 +211,7 @@ function ClientsTab({ t }) {
             <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAddForm ? t.textSecondary : '#fff', border: showAddForm ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAddForm ? '✕ Cancel' : '+ Add Client'}</button>
           </div>
         </div>
+
         {showAddForm && (
           <form onSubmit={handleAddUser} style={{ padding: '16px 20px', borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
@@ -156,8 +225,10 @@ function ClientsTab({ t }) {
             <button type="submit" disabled={adding} style={{ padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer', opacity: adding ? 0.6 : 1 }}>{adding ? 'Adding...' : 'Add Client'}</button>
           </form>
         )}
+
         {users.map((user, i) => {
-          const isEditing = editingId === user.id; const isDeleting = confirmDelete === user.id;
+          const isEditing = editingId === user.id;
+          const isDeleting = confirmDelete === user.id;
           const pct = user.quota > 0 ? Math.min(100, (user.used / user.quota) * 100) : 0;
           const barColor = user.atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
           return (
@@ -233,7 +304,6 @@ function RatesTab({ t }) {
     apiFetch('/admin/rate-libraries').then(libs => { setLibraries(libs); if (libs.length > 0) setSelectedLib(libs[0].id); }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  // Load ALL rates for this library (no pagination — grouped by trade instead)
   const loadRates = useCallback(() => {
     if (!selectedLib) return;
     setLoadingRates(true);
@@ -247,18 +317,12 @@ function RatesTab({ t }) {
 
   useEffect(() => { loadRates(); }, [loadRates]);
 
-  function toggleTrade(trade) {
-    setOpenTrades(prev => ({ ...prev, [trade]: !prev[trade] }));
-  }
+  function toggleTrade(trade) { setOpenTrades(prev => ({ ...prev, [trade]: !prev[trade] })); }
   function expandAll() { const all = {}; trades.forEach(tr => { all[tr] = true; }); setOpenTrades(all); }
   function collapseAll() { setOpenTrades({}); }
 
-  // Group rates by trade
   const grouped = {};
-  rates.forEach(r => {
-    if (!grouped[r.trade]) grouped[r.trade] = [];
-    grouped[r.trade].push(r);
-  });
+  rates.forEach(r => { if (!grouped[r.trade]) grouped[r.trade] = []; grouped[r.trade].push(r); });
   const tradeKeys = Object.keys(grouped).sort();
 
   function startEdit(rate) { setEditingId(rate.id); setEditData({ code: rate.code, trade: rate.trade, description: rate.description, unit: rate.unit, labour_rate: rate.labour_rate, material_rate: rate.material_rate, notes: rate.notes || '' }); }
@@ -284,8 +348,6 @@ function RatesTab({ t }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.type === 'success' ? '#10B981' : '#EF4444' }}>{msg.type === 'success' ? '✅' : '❌'} {msg.text}</div>}
-
-      {/* Library selector */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -300,8 +362,6 @@ function RatesTab({ t }) {
           </div>
         </div>
       </div>
-
-      {/* Add rate form */}
       {showAdd && (
         <div style={{ background: t.card, border: '1px solid ' + (t.accent || '#F59E0B') + '40', borderRadius: 14, padding: '16px 20px' }}>
           <h4 style={{ fontSize: 13, fontWeight: 600, color: t.text, margin: '0 0 12px' }}>Add New Rate</h4>
@@ -317,34 +377,25 @@ function RatesTab({ t }) {
           <button onClick={handleAddRate} style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer' }}>Add Rate</button>
         </div>
       )}
-
-      {/* Search + expand/collapse */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="🔍  Search rates..." value={search} onChange={e => setSearch(e.target.value)} />
         <span style={{ fontSize: 12, color: t.textMuted }}>{rates.length} rates across {tradeKeys.length} trades</span>
         <button onClick={expandAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Expand All</button>
         <button onClick={collapseAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Collapse All</button>
       </div>
-
-      {/* Trade accordion */}
       {loadingRates ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>Loading rates...</div> : tradeKeys.length === 0 ? <div style={{ padding: 30, textAlign: 'center', color: t.textMuted }}>No rates found</div> : tradeKeys.map(trade => {
         const tradeRates = grouped[trade];
         const isOpen = openTrades[trade];
         return (
           <div key={trade} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
-            {/* Trade header — click to toggle */}
             <div onClick={() => toggleTrade(trade)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', cursor: 'pointer', background: isOpen ? (t.surfaceHover || t.surface) : 'transparent', transition: 'background 0.15s', userSelect: 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 16, transition: 'transform 0.2s', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{trade}</span>
                 <span style={{ fontSize: 11, color: t.textMuted, background: t.surfaceHover, padding: '2px 8px', borderRadius: 10 }}>{tradeRates.length} items</span>
               </div>
-              <span style={{ fontSize: 11, color: t.textDim }}>
-                £{tradeRates.reduce((sum, r) => sum + (r.total_rate || 0), 0).toFixed(0)} total value
-              </span>
+              <span style={{ fontSize: 11, color: t.textDim }}>£{tradeRates.reduce((sum, r) => sum + (r.total_rate || 0), 0).toFixed(0)} total value</span>
             </div>
-
-            {/* Rates table — shown when open */}
             {isOpen && (
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', padding: '8px 20px', borderTop: '1px solid ' + t.border, borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
@@ -384,7 +435,7 @@ function RatesTab({ t }) {
 }
 
 // ═══════════════════════════════════════════════════
-// ACTIVITY LOG TAB — REAL DATA FROM API
+// ACTIVITY LOG TAB
 // ═══════════════════════════════════════════════════
 
 function LogsTab({ t }) {
@@ -400,15 +451,8 @@ function LogsTab({ t }) {
     const params = new URLSearchParams({ limit: 100 });
     if (filter) params.set('type', filter);
     apiFetch('/admin/activity?' + params)
-      .then(data => {
-        setActivities(data.activities || []);
-        setTotal(data.total || 0);
-      })
-      .catch(err => {
-        console.error('Failed to load activity:', err);
-        // Fallback to empty if endpoint not yet deployed
-        setActivities([]);
-      })
+      .then(data => { setActivities(data.activities || []); setTotal(data.total || 0); })
+      .catch(err => { console.error('Failed to load activity:', err); setActivities([]); })
       .finally(() => setLoading(false));
   }
 
@@ -436,11 +480,8 @@ function LogsTab({ t }) {
     return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   }
 
-  const eventTypes = [...new Set(activities.map(a => a.event_type))];
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Filter bar */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, minWidth: 160 }}>
           <option value="">All Events ({total})</option>
@@ -454,13 +495,11 @@ function LogsTab({ t }) {
         <button onClick={loadActivity} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔄 Refresh</button>
         <span style={{ fontSize: 12, color: t.textMuted }}>{activities.length} events</span>
       </div>
-
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Activity Log</h3>
           <p style={{ fontSize: 12, color: t.textMuted, margin: '4px 0 0' }}>Real-time tracking of signups, projects, and system events</p>
         </div>
-
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: t.textMuted }}>Loading activity...</div>
         ) : activities.length === 0 ? (
@@ -469,25 +508,23 @@ function LogsTab({ t }) {
             <div style={{ fontSize: 14, color: t.textMuted }}>No activity yet</div>
             <div style={{ fontSize: 12, color: t.textDim, marginTop: 4 }}>Events will appear here when users sign up or submit projects</div>
           </div>
-        ) : (
-          activities.map((item, i) => {
-            const style = eventStyles[item.event_type] || defaultStyle;
-            return (
-              <div key={item.id} style={{ display: 'flex', gap: 14, padding: '14px 20px', borderBottom: i < activities.length - 1 ? '1px solid ' + t.border : 'none', alignItems: 'flex-start' }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: style.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>{style.icon}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.title}</span>
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: style.bg, color: style.color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{item.event_type.replace(/_/g, ' ')}</span>
-                  </div>
-                  {item.detail && <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{item.detail}</div>}
-                  {item.user_name && <div style={{ fontSize: 11, color: t.textDim, marginTop: 2 }}>by {item.user_name} ({item.user_email})</div>}
+        ) : activities.map((item, i) => {
+          const style = eventStyles[item.event_type] || defaultStyle;
+          return (
+            <div key={item.id} style={{ display: 'flex', gap: 14, padding: '14px 20px', borderBottom: i < activities.length - 1 ? '1px solid ' + t.border : 'none', alignItems: 'flex-start' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: style.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>{style.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.title}</span>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: style.bg, color: style.color, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{item.event_type.replace(/_/g, ' ')}</span>
                 </div>
-                <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeAgo(item.created_at)}</span>
+                {item.detail && <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{item.detail}</div>}
+                {item.user_name && <div style={{ fontSize: 11, color: t.textDim, marginTop: 2 }}>by {item.user_name} ({item.user_email})</div>}
               </div>
-            );
-          })
-        )}
+              <span style={{ fontSize: 11, color: t.textDim, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeAgo(item.created_at)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
