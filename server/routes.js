@@ -710,5 +710,63 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
     res.status(500).json({ error: 'Failed to activate project' });
   }
 });
-
+function seedDefaultRates(userId) {
+  try {
+    const defaults = [
+      { category: 'groundworks', item_key: 'strip_foundations', display_name: 'Strip Foundations 600x250mm', value: 87, unit: '£/m' },
+      { category: 'groundworks', item_key: 'concrete_slab_100mm', display_name: 'Concrete Slab 100mm Reinforced', value: 50, unit: '£/m2' },
+      { category: 'groundworks', item_key: 'dpm', display_name: 'DPM 1200g', value: 10, unit: '£/m2' },
+      { category: 'groundworks', item_key: 'floor_insulation_100mm', display_name: 'Floor Insulation 100mm Celotex', value: 21, unit: '£/m2' },
+      { category: 'masonry', item_key: 'blockwork_below_dpc', display_name: 'Blockwork Below DPC 440mm', value: 63, unit: '£/m2' },
+      { category: 'masonry', item_key: 'blockwork_inner_leaf', display_name: 'Blockwork Inner Leaf 100mm', value: 42, unit: '£/m2' },
+      { category: 'masonry', item_key: 'brick_outer_leaf', display_name: 'Brick Outer Leaf Facing', value: 63, unit: '£/m2' },
+      { category: 'masonry', item_key: 'cavity_insulation', display_name: 'Cavity Insulation 100mm', value: 14, unit: '£/m2' },
+      { category: 'masonry', item_key: 'cavity_wall_ties', display_name: 'Cavity Wall Ties', value: 4, unit: '£/m2' },
+      { category: 'masonry', item_key: 'render_monocouche', display_name: 'Render Monocouche', value: 85, unit: '£/m2' },
+      { category: 'structural_steel', item_key: 'structural_steel_saf', display_name: 'Structural Steel Supply Fab Install', value: 3500, unit: '£/T' },
+      { category: 'masonry', item_key: 'concrete_lintels', display_name: 'Concrete Lintels', value: 35, unit: '£/ea' },
+      { category: 'masonry', item_key: 'steel_lintels', display_name: 'Steel Lintels Catnic', value: 75, unit: '£/ea' },
+      { category: 'carpentry', item_key: 'roof_structure', display_name: 'Roof Structure Cut Timber', value: 95, unit: '£/m2' },
+      { category: 'roofing', item_key: 'roof_covering_tiles', display_name: 'Roof Covering Concrete Tiles', value: 52, unit: '£/m2' },
+      { category: 'roofing', item_key: 'breathable_membrane', display_name: 'Breathable Membrane', value: 5, unit: '£/m2' },
+      { category: 'roofing', item_key: 'tile_battens', display_name: 'Tile Battens', value: 7, unit: '£/m2' },
+      { category: 'roofing', item_key: 'lead_flashings', display_name: 'Lead Flashings', value: 55, unit: '£/m' },
+      { category: 'roofing', item_key: 'fascia_soffit', display_name: 'Fascia Soffit uPVC', value: 33, unit: '£/m' },
+      { category: 'roofing', item_key: 'guttering', display_name: 'Guttering uPVC', value: 22, unit: '£/m' },
+      { category: 'general', item_key: 'upvc_windows', display_name: 'UPVC Windows Standard', value: 450, unit: '£/ea' },
+      { category: 'general', item_key: 'composite_door', display_name: 'Composite External Door', value: 1100, unit: '£/ea' },
+      { category: 'carpentry', item_key: 'bifold_doors', display_name: 'Bi-fold Doors Per Leaf', value: 650, unit: '£/leaf' },
+      { category: 'carpentry', item_key: 'internal_doors', display_name: 'Internal Doors Painted Softwood', value: 330, unit: '£/ea' },
+      { category: 'plastering', item_key: 'plasterboard_skim', display_name: 'Plasterboard and Skim', value: 22, unit: '£/m2' },
+      { category: 'plastering', item_key: 'wall_tiling', display_name: 'Wall Tiling Ceramic', value: 55, unit: '£/m2' },
+      { category: 'flooring', item_key: 'floor_tiling', display_name: 'Floor Tiling Porcelain', value: 65, unit: '£/m2' },
+      { category: 'decorating', item_key: 'painting_emulsion', display_name: 'Painting Emulsion 2 Coats', value: 15, unit: '£/m2' },
+      { category: 'decorating', item_key: 'painting_gloss', display_name: 'Painting Gloss Woodwork', value: 12, unit: '£/m' },
+      { category: 'flooring', item_key: 'lvt_flooring', display_name: 'LVT Flooring', value: 62, unit: '£/m2' },
+      { category: 'flooring', item_key: 'carpet', display_name: 'Carpet Mid Range', value: 28, unit: '£/m2' },
+      { category: 'flooring', item_key: 'screed_50mm', display_name: 'Screed 50mm', value: 22, unit: '£/m2' },
+      { category: 'kitchen', item_key: 'kitchen_fitout', display_name: 'Kitchen Fit-out Mid Range', value: 11000, unit: '£/ea' },
+      { category: 'bathroom', item_key: 'bathroom_fitout', display_name: 'Bathroom Fit-out Mid Range', value: 6000, unit: '£/ea' },
+      { category: 'electrical', item_key: 'electrical_1st_fix', display_name: 'First Fix Electrical', value: 3500, unit: '£/item' },
+      { category: 'electrical', item_key: 'electrical_2nd_fix', display_name: 'Second Fix Electrical', value: 1500, unit: '£/item' },
+      { category: 'plumbing', item_key: 'plumbing_1st_fix', display_name: 'First Fix Plumbing', value: 2800, unit: '£/item' },
+      { category: 'plumbing', item_key: 'plumbing_2nd_fix', display_name: 'Second Fix Plumbing', value: 1400, unit: '£/item' },
+      { category: 'plumbing', item_key: 'radiator', display_name: 'Radiator Double Panel 600x1000', value: 230, unit: '£/ea' },
+      { category: 'preliminaries', item_key: 'scaffolding', display_name: 'Scaffolding', value: 20, unit: '£/m2' },
+      { category: 'preliminaries', item_key: 'skip_hire', display_name: 'Skip Hire 8yd', value: 330, unit: '£/ea' },
+      { category: 'preliminaries', item_key: 'site_setup', display_name: 'Site Setup Welfare Lump Sum', value: 2000, unit: '£' },
+      { category: 'preliminaries', item_key: 'project_management', display_name: 'Project Management Allowance', value: 1500, unit: '£' },
+    ];
+    const insert = db.prepare(`INSERT OR IGNORE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)`);
+    const tx = db.transaction(() => {
+      for (const r of defaults) {
+        insert.run('rl_' + uuidv4().slice(0, 8), userId, r.category, r.item_key, r.display_name, r.value, r.unit);
+      }
+    });
+    tx();
+    console.log(`[Rates] Seeded ${defaults.length} default rates for user ${userId}`);
+  } catch (err) {
+    console.error('[Rates] Seed error:', err.message);
+  }
+}
 module.exports = router;
