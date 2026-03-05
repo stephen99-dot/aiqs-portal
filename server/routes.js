@@ -335,15 +335,10 @@ router.post('/auth/login', async (req, res) => {
       user_email: user.email,
     });
 
-    res.json({
+   res.json({
       token,
-      user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
+      user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1 }
     });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Login failed' });
-  }
-});
 
 router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -557,7 +552,7 @@ router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
-router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {   try {     const { password } = req.body;     if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });     const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);     if (!user) return res.status(404).json({ error: 'User not found' });     const passwordHash = await bcrypt.hash(password, 12);     db.prepare('UPDATE users SET password_hash = ?, force_password_change = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.params.id);     res.json({ success: true });   } catch (err) {     console.error('Reset password error:', err);     res.status(500).json({ error: 'Failed to reset password' });   } });
   try {
     const { password } = req.body;
     if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
