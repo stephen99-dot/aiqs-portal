@@ -43,9 +43,7 @@ async function sendEmail({ to, subject, html }) {
   try {
     await smtpTransporter.sendMail({
       from: `"AI QS" <${process.env.SMTP_EMAIL || 'hello@crmwizardai.com'}>`,
-      to,
-      subject,
-      html,
+      to, subject, html,
     });
     console.log(`[Email] Sent to ${to}: ${subject}`);
     return true;
@@ -79,9 +77,7 @@ try {
 async function notifyAdmin({ type, title, detail, icon }) {
   try {
     const id = uuidv4();
-    db.prepare(
-      'INSERT INTO notifications (id, type, title, detail, icon) VALUES (?, ?, ?, ?, ?)'
-    ).run(id, type, title, detail || null, icon || 'user');
+    db.prepare('INSERT INTO notifications (id, type, title, detail, icon) VALUES (?, ?, ?, ?, ?)').run(id, type, title, detail || null, icon || 'user');
     console.log(`[Notification] Created: ${title}`);
   } catch (err) {
     console.error('[Notification] Failed to create:', err.message);
@@ -91,7 +87,6 @@ async function notifyAdmin({ type, title, detail, icon }) {
 async function sendAdminSignupEmail({ fullName, email, company, phone }) {
   const companyLine = company ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Company</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${company}</td></tr>` : '';
   const phoneLine = phone ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Phone</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${phone}</td></tr>` : '';
-
   await sendEmail({
     to: ADMIN_EMAIL,
     subject: `🆕 New Signup: ${fullName}`,
@@ -106,8 +101,7 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
           <table style="width:100%;border-collapse:collapse;">
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Name</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${fullName}</td></tr>
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Email</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;"><a href="mailto:${email}" style="color:#38BDF8;text-decoration:none;">${email}</a></td></tr>
-            ${companyLine}
-            ${phoneLine}
+            ${companyLine}${phoneLine}
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Plan</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#10B981;">Free Trial (2 projects)</td></tr>
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Time</td><td style="padding:6px 12px;font-size:14px;color:#F1F5F9;">${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td></tr>
           </table>
@@ -128,10 +122,7 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  }
+  filename: (req, file, cb) => { const ext = path.extname(file.originalname); cb(null, `${uuidv4()}${ext}`); }
 });
 
 const upload = multer({
@@ -140,11 +131,8 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.dwg', '.dxf', '.png', '.jpg', '.jpeg', '.xlsx', '.docx', '.zip'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`File type ${ext} not supported. Allowed: ${allowed.join(', ')}`));
-    }
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error(`File type ${ext} not supported. Allowed: ${allowed.join(', ')}`));
   }
 });
 
@@ -152,8 +140,7 @@ function getMonthlyUsage(userId) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-  const result = db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ?').get(userId, monthStart, monthEnd);
-  return result.count;
+  return db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ?').get(userId, monthStart, monthEnd).count;
 }
 
 function getUserPlanInfo(user) {
@@ -162,10 +149,7 @@ function getUserPlanInfo(user) {
   const quota = user.monthly_quota > 0 ? user.monthly_quota : planDef.quota;
   const used = getMonthlyUsage(user.id);
   return {
-    plan,
-    planLabel: planDef.label,
-    quota,
-    used,
+    plan, planLabel: planDef.label, quota, used,
     remaining: quota > 0 ? Math.max(0, quota - used) : (plan === 'starter' ? null : 0),
     isPayg: plan === 'starter' && quota === 0,
     atLimit: quota > 0 && used >= quota,
@@ -223,15 +207,8 @@ function seedDefaultRates(userId) {
       { category: 'preliminaries',     item_key: 'site_setup',           display_name: 'Site Setup Welfare Lump Sum',        value: 2000,  unit: '£'      },
       { category: 'preliminaries',     item_key: 'project_management',   display_name: 'Project Management Allowance',       value: 1500,  unit: '£'      },
     ];
-    const insert = db.prepare(
-      `INSERT OR IGNORE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)`
-    );
-    const tx = db.transaction(() => {
-      for (const r of defaults) {
-        insert.run('rl_' + uuidv4().slice(0, 8), userId, r.category, r.item_key, r.display_name, r.value, r.unit);
-      }
-    });
+    const insert = db.prepare(`INSERT OR IGNORE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)`);
+    const tx = db.transaction(() => { for (const r of defaults) insert.run('rl_' + uuidv4().slice(0, 8), userId, r.category, r.item_key, r.display_name, r.value, r.unit); });
     tx();
     console.log(`[Rates] Seeded ${defaults.length} default rates for user ${userId}`);
   } catch (err) {
@@ -241,46 +218,19 @@ function seedDefaultRates(userId) {
 
 async function triggerPipedream(project, user, files) {
   try {
-    const fileUrls = files.map(f => ({
-      url: `${PORTAL_BASE_URL}/api/files/download/${f.filename}`,
-      name: f.original_name,
-      fieldName: 'file'
-    }));
+    const fileUrls = files.map(f => ({ url: `${PORTAL_BASE_URL}/api/files/download/${f.filename}`, name: f.original_name, fieldName: 'file' }));
     const payload = {
-      source: 'portal',
-      projectId: project.id,
-      fullName: user.full_name,
-      clientEmail: user.email,
-      email: user.email,
-      projectDetails: project.description || project.title,
-      projectType: project.project_type,
-      address: project.location || '',
-      location: project.location || '',
-      company: user.company || '',
-      drawings_urls: fileUrls.map(f => f.url),
-      file_urls: fileUrls,
-      fileCount: files.length,
-      plan: user.plan || 'starter',
-      submittedAt: new Date().toISOString(),
+      source: 'portal', projectId: project.id, fullName: user.full_name,
+      clientEmail: user.email, email: user.email,
+      projectDetails: project.description || project.title, projectType: project.project_type,
+      address: project.location || '', location: project.location || '', company: user.company || '',
+      drawings_urls: fileUrls.map(f => f.url), file_urls: fileUrls,
+      fileCount: files.length, plan: user.plan || 'starter', submittedAt: new Date().toISOString(),
     };
     console.log(`[Pipedream] Triggering pipeline for project: ${project.title} (${files.length} files)`);
-
-    startPipelineRun({
-      project_id: project.id,
-      project_title: project.title,
-      client_name: user.full_name,
-      client_email: user.email,
-    });
-
-    const resp = await fetch(PIPEDREAM_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!resp.ok) {
-      console.error(`[Pipedream] Webhook returned ${resp.status}`);
-      return false;
-    }
+    startPipelineRun({ project_id: project.id, project_title: project.title, client_name: user.full_name, client_email: user.email });
+    const resp = await fetch(PIPEDREAM_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!resp.ok) { console.error(`[Pipedream] Webhook returned ${resp.status}`); return false; }
     console.log(`[Pipedream] Pipeline triggered successfully`);
     db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('in_progress', project.id);
     return true;
@@ -318,64 +268,33 @@ router.post('/auth/register', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
 
     const emailDomain = email.toLowerCase().split('@')[1];
-    const freeProviders = [
-      'gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk',
-      'live.com','live.co.uk','yahoo.com','yahoo.co.uk','icloud.com','me.com',
-      'aol.com','protonmail.com','proton.me','btinternet.com','sky.com',
-      'virginmedia.com','talktalk.net','mail.com','zoho.com','gmx.com',
-    ];
+    const freeProviders = ['gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk','live.com','live.co.uk','yahoo.com','yahoo.co.uk','icloud.com','me.com','aol.com','protonmail.com','proton.me','btinternet.com','sky.com','virginmedia.com','talktalk.net','mail.com','zoho.com','gmx.com'];
     if (!freeProviders.includes(emailDomain)) {
-      const domainUser = db.prepare(
-        "SELECT id, full_name, email FROM users WHERE LOWER(email) LIKE ? LIMIT 1"
-      ).get(`%@${emailDomain}`);
+      const domainUser = db.prepare("SELECT id, full_name, email FROM users WHERE LOWER(email) LIKE ? LIMIT 1").get(`%@${emailDomain}`);
       if (domainUser) {
-        notifyAdmin({
-          type: 'blocked_signup',
-          title: `Blocked signup: ${fullName}`,
-          detail: `${email.toLowerCase()} — domain already registered by ${domainUser.full_name} (${domainUser.email})`,
-          icon: 'user-blocked',
-        });
-        return res.status(409).json({
-          error: 'An account already exists for your organisation. Please contact your colleague or reach out to us for access.'
-        });
+        notifyAdmin({ type: 'blocked_signup', title: `Blocked signup: ${fullName}`, detail: `${email.toLowerCase()} — domain already registered by ${domainUser.full_name} (${domainUser.email})`, icon: 'user-blocked' });
+        return res.status(409).json({ error: 'An account already exists for your organisation. Please contact your colleague or reach out to us for access.' });
       }
     }
 
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
-    db.prepare('INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, \'starter\', 2)').run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
-
-    // Seed default rates for new user
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
     seedDefaultRates(id);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
 
-    logActivity({
-      event_type: 'signup',
-      title: fullName + ' signed up',
-      detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(),
-      user_id: id,
-      user_name: fullName,
-      user_email: email.toLowerCase(),
-    });
+    logActivity({ event_type: 'signup', title: fullName + ' signed up', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });
 
     if (role !== 'admin') {
-      notifyAdmin({
-        type: 'new_signup',
-        title: `New signup: ${fullName}`,
-        detail: [email.toLowerCase(), company, phone].filter(Boolean).join(' · '),
-        icon: 'user-plus',
-      });
+      notifyAdmin({ type: 'new_signup', title: `New signup: ${fullName}`, detail: [email.toLowerCase(), company, phone].filter(Boolean).join(' · '), icon: 'user-plus' });
       sendAdminSignupEmail({ fullName, email: email.toLowerCase(), company, phone });
     }
 
-    res.status(201).json({
-      token,
-      user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
-    });
+    res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit } });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -392,19 +311,8 @@ router.post('/auth/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
-
-    logActivity({
-      event_type: 'login',
-      title: (user.full_name || email) + ' logged in',
-      user_id: user.id,
-      user_name: user.full_name,
-      user_email: user.email,
-    });
-
-    res.json({
-      token,
-      user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1 }
-    });
+    logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1 } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -435,11 +343,7 @@ router.get('/auth/magic', (req, res) => {
   try {
     const { token } = req.query;
     if (!token) return res.status(400).json({ error: 'Token is required' });
-    try {
-      db.prepare('SELECT 1 FROM magic_links LIMIT 1').get();
-    } catch (e) {
-      return res.status(400).json({ error: 'Invalid or expired magic link' });
-    }
+    try { db.prepare('SELECT 1 FROM magic_links LIMIT 1').get(); } catch (e) { return res.status(400).json({ error: 'Invalid or expired magic link' }); }
     const link = db.prepare('SELECT * FROM magic_links WHERE token = ? AND used = 0').get(token);
     if (!link) return res.status(400).json({ error: 'Invalid or expired magic link' });
     const now = new Date().toISOString();
@@ -449,19 +353,8 @@ router.get('/auth/magic', (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
-
-    logActivity({
-      event_type: 'login',
-      title: (user.full_name || user.email) + ' logged in via magic link',
-      user_id: user.id,
-      user_name: user.full_name,
-      user_email: user.email,
-    });
-
-    res.json({
-      token: authToken,
-      user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit }
-    });
+    logActivity({ event_type: 'login', title: (user.full_name || user.email) + ' logged in via magic link', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit } });
   } catch (err) {
     console.error('Magic link login error:', err);
     res.status(500).json({ error: 'Failed to process magic link' });
@@ -488,7 +381,6 @@ router.put('/notifications/:id/read', authMiddleware, adminMiddleware, (req, res
     db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (err) {
-    console.error('Mark notification read error:', err);
     res.status(500).json({ error: 'Failed to mark as read' });
   }
 });
@@ -498,8 +390,61 @@ router.put('/notifications/read-all', authMiddleware, adminMiddleware, (req, res
     db.prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
     res.json({ success: true });
   } catch (err) {
-    console.error('Mark all read error:', err);
     res.status(500).json({ error: 'Failed to mark all as read' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTIVITY FEED — admin endpoint
+// Reads from activity_log table (written to by logActivity in activityRoutes.js)
+// Also synthesises live stats from current DB state
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/admin/activity', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    // Ensure table exists (safe on every request)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT,
+        user_id TEXT,
+        user_name TEXT,
+        user_email TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const filter = req.query.filter || 'all';
+
+    const events = filter !== 'all'
+      ? db.prepare('SELECT * FROM activity_log WHERE event_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(filter, limit, offset)
+      : db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+
+    const total = filter !== 'all'
+      ? db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE event_type = ?').get(filter).c
+      : db.prepare('SELECT COUNT(*) as c FROM activity_log').get().c;
+
+    // Live summary stats (always fresh from DB)
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const summary = {
+      total_users:         db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'client'").get().c,
+      signups_this_month:  db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'client' AND created_at >= ?").get(monthStart).c,
+      logins_today:        (() => { try { return db.prepare("SELECT COUNT(*) as c FROM activity_log WHERE event_type = 'login' AND created_at >= ?").get(todayStart).c; } catch(e) { return 0; } })(),
+      projects_this_month: db.prepare('SELECT COUNT(*) as c FROM projects WHERE created_at >= ?').get(monthStart).c,
+      docs_generated:      (() => { try { return db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action = 'doc_generated'").get().c; } catch(e) { return 0; } })(),
+    };
+
+    res.json({ events, total, summary });
+  } catch (err) {
+    console.error('Activity feed error:', err);
+    res.status(500).json({ error: 'Failed to load activity', events: [], total: 0, summary: {} });
   }
 });
 
@@ -538,22 +483,10 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     if (existing) return res.status(409).json({ error: 'A user with this email already exists' });
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
-    db.prepare('INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, \'starter\', 2)').run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
-
-    // Seed default rates for admin-created user
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     seedDefaultRates(id);
-
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-
-    logActivity({
-      event_type: 'signup',
-      title: fullName + ' added by admin',
-      detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(),
-      user_id: id,
-      user_name: fullName,
-      user_email: email.toLowerCase(),
-    });
-
+    logActivity({ event_type: 'signup', title: fullName + ' added by admin', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });
     res.status(201).json({ id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, createdAt: newUser.created_at });
   } catch (err) {
     console.error('Add user error:', err);
@@ -561,14 +494,31 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
+// ── DELETE USER — full cascade ───────────────────────────────────────────────
 router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account' });
     const user = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(req.params.id);
-    db.prepare('DELETE FROM projects WHERE user_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    const uid = req.params.id;
+
+    const del = db.transaction(() => {
+      db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid);
+      try { db.prepare('DELETE FROM project_data WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
+      db.prepare('DELETE FROM projects WHERE user_id = ?').run(uid);
+      try { db.prepare('DELETE FROM chat_projects WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM chat_sessions WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM rate_corrections_log WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM client_rate_library WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM client_insights WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM usage_log WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM magic_links WHERE user_id = ?').run(uid); } catch(e) {}
+      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+    });
+    del();
+
+    logActivity({ event_type: 'user_deleted', title: (user.full_name || user.email) + ' deleted by admin', detail: user.email, user_id: null, user_name: 'Admin', user_email: null });
     res.json({ success: true });
   } catch (err) {
     console.error('Delete user error:', err);
@@ -586,16 +536,7 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(plan, quota, req.params.id);
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     const planInfo = getUserPlanInfo(updated);
-
-    logActivity({
-      event_type: 'plan_changed',
-      title: (user.full_name || user.email) + ' plan changed to ' + PLANS[plan].label,
-      detail: 'Quota: ' + quota + '/month',
-      user_id: user.id,
-      user_name: user.full_name,
-      user_email: user.email,
-    });
-
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' plan changed to ' + PLANS[plan].label, detail: 'Quota: ' + quota + '/month', user_id: user.id, user_name: user.full_name, user_email: user.email });
     res.json({ id: updated.id, email: updated.email, fullName: updated.full_name, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining });
   } catch (err) {
     console.error('Update plan error:', err);
@@ -641,48 +582,28 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
     db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), user.id, token, expiresAt);
     const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
     const magicUrl = `${portalUrl}/magic?token=${token}`;
-    console.log(`Magic link for ${user.email}: ${magicUrl}`);
-
     const firstName = (user.full_name || 'there').split(' ')[0];
     const emailSent = await sendEmail({
       to: user.email,
       subject: 'Your AI QS Portal Login Link',
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 24px;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <div style="font-size: 28px; font-weight: 800; color: #0F172A;">AI <span style="color: #F59E0B;">QS</span></div>
-            <div style="font-size: 10px; letter-spacing: 3px; color: #94A3B8; text-transform: uppercase; margin-top: 2px;">Quantity Surveying</div>
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+            <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
           </div>
-          <h2 style="font-size: 20px; color: #0F172A; margin: 0 0 12px;">Hi ${firstName},</h2>
-          <p style="font-size: 15px; color: #475569; line-height: 1.6; margin: 0 0 24px;">
-            You've been invited to access the AI QS Portal. Click the button below to log in instantly — no password needed.
-          </p>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${magicUrl}" style="display: inline-block; padding: 14px 36px; background: #F59E0B; color: #0F172A; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px;">
-              Log In to AI QS Portal
-            </a>
+          <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Hi ${firstName},</h2>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 24px;">You've been invited to access the AI QS Portal. Click the button below to log in instantly — no password needed.</p>
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${magicUrl}" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Log In to AI QS Portal</a>
           </div>
-          <p style="font-size: 13px; color: #94A3B8; line-height: 1.5;">
-            This link expires in 24 hours and can only be used once. If you didn't request this, you can safely ignore this email.
-          </p>
-          <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 28px 0 16px;" />
-          <p style="font-size: 11px; color: #CBD5E1; text-align: center;">
-            AI QS — Automated Quantity Surveying<br />
-            <a href="https://theaiqs.co.uk" style="color: #94A3B8;">theaiqs.co.uk</a> · <a href="https://wa.me/447534808399" style="color: #94A3B8;">WhatsApp</a>
-          </p>
+          <p style="font-size:13px;color:#94A3B8;line-height:1.5;">This link expires in 24 hours and can only be used once.</p>
+          <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+          <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
         </div>
       `,
     });
-
-    res.json({
-      success: true,
-      email: user.email,
-      magicUrl: magicUrl,
-      emailSent: emailSent,
-      message: emailSent
-        ? `Magic link emailed to ${user.email}`
-        : `Magic link generated for ${user.full_name || user.email} (email not configured — link returned).`,
-    });
+    res.json({ success: true, email: user.email, magicUrl, emailSent, message: emailSent ? `Magic link emailed to ${user.email}` : `Magic link generated (email not configured — link returned).` });
   } catch (err) {
     console.error('Magic link error:', err);
     res.status(500).json({ error: 'Failed to generate magic link' });
@@ -723,30 +644,15 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     db.prepare('INSERT INTO projects (id, user_id, title, project_type, description, location, status) VALUES (?, ?, ?, ?, ?, ?, ?)').run(projectId, req.user.id, title, projectType, description || null, location || null, initialStatus);
     if (req.files && req.files.length > 0) {
       const insertFile = db.prepare('INSERT INTO files (id, project_id, filename, original_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)');
-      for (const file of req.files) {
-        insertFile.run(uuidv4(), projectId, file.filename, file.originalname, path.extname(file.originalname).toLowerCase(), file.size);
-      }
+      for (const file of req.files) insertFile.run(uuidv4(), projectId, file.filename, file.originalname, path.extname(file.originalname).toLowerCase(), file.size);
     }
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
     if (!isPayg && files.length > 0) triggerPipedream(project, user, files);
     const updatedPlanInfo = getUserPlanInfo(user);
 
-    logActivity({
-      event_type: 'project_created',
-      title: (user.full_name || user.email) + ' submitted a project',
-      detail: title + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)',
-      user_id: user.id,
-      user_name: user.full_name,
-      user_email: user.email,
-    });
-
-    notifyAdmin({
-      type: 'new_project',
-      title: `New project: ${title}`,
-      detail: (user.full_name || user.email) + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)',
-      icon: 'folder-plus',
-    });
+    logActivity({ event_type: 'project_created', title: (user.full_name || user.email) + ' submitted a project', detail: title + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    notifyAdmin({ type: 'new_project', title: `New project: ${title}`, detail: (user.full_name || user.email) + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)', icon: 'folder-plus' });
 
     res.status(201).json({ ...project, files, usage: updatedPlanInfo });
   } catch (err) {
