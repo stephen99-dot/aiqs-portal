@@ -39,17 +39,30 @@ export default function ChangePasswordPage() {
           <div className="auth-header">
             <div className="auth-logo-mark">QS</div>
             <h1>Set a new password</h1>
-            <p>Your password has been reset. Please choose a new one before continuing.</p>
+            <p>Your password has been reset by an admin. Please choose a new password before continuing.</p>
           </div>
           {error && <div className="auth-error">{error}</div>}
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-field">
               <label>New Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Min. 8 characters" required autoFocus />
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Min. 8 characters"
+                required
+                autoFocus
+              />
             </div>
             <div className="form-field">
               <label>Confirm Password</label>
-              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat your new password" required />
+              <input
+                type="password"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                placeholder="Repeat your new password"
+                required
+              />
             </div>
             <button type="submit" className="btn-primary full-width" disabled={loading}>
               {loading ? 'Saving...' : 'Set New Password'}
