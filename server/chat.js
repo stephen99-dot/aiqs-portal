@@ -51,38 +51,23 @@ const upload = multer({
 
 function extractInsightsFromMessage(userId, message) {
   if (!message || message.length < 5) return;
-
   const msg = message.trim();
-  const lower = msg.toLowerCase();
 
   const patterns = [
-    // Supplier patterns
     { regex: /we (?:always |usually |typically )?(?:use|buy from|get .+? from|source from|order from)\s+([A-Z][a-zA-Z\s&]+?)(?:\s+for|\s+as|\s+when|\.|\,|$)/i, category: 'supplier', template: m => `Client uses ${m[1].trim()} as supplier` },
     { regex: /(?:our|my) (?:main |preferred |usual )?supplier(?:s)? (?:is|are)\s+([A-Z][a-zA-Z\s&,]+?)(?:\.|,|$)/i, category: 'supplier', template: m => `Client supplier: ${m[1].trim()}` },
     { regex: /(?:we|I) (?:prefer|go with|stick with|always go to)\s+([A-Z][a-zA-Z\s&]+?)(?:\s+for|\s+when|\.|\,|$)/i, category: 'supplier', template: m => `Client prefers ${m[1].trim()}` },
-
-    // Spec preference patterns
     { regex: /we (?:always |usually |typically )?use\s+(.{5,60}?)\s+(?:for|as|on|in)\s+(?:all|our|every)/i, category: 'spec_preference', template: m => `Client spec: ${m[1].trim()}` },
     { regex: /(?:our|my) (?:standard|usual|default|preferred)\s+(?:spec|specification|finish|material) (?:is|for .+? is)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'spec_preference', template: m => `Standard spec: ${m[1].trim()}` },
     { regex: /we (?:don't|do not|never) use\s+(.{5,60}?)(?:\.|,|$)/i, category: 'spec_preference', template: m => `Client excludes: ${m[1].trim()}` },
-
-    // Markup / commercial patterns
     { regex: /(?:our|my|we use a?)\s+(?:markup|margin|overhead|oh&p|ohp) (?:is|of)\s+(\d+(?:\.\d+)?%?)/i, category: 'markup', template: m => `Client markup: ${m[1].trim()}` },
     { regex: /we (?:charge|quote|add)\s+(\d+(?:\.\d+)?%?)\s+(?:markup|margin|overhead|for overhead)/i, category: 'markup', template: m => `Client markup: ${m[1].trim()}` },
-
-    // Geography patterns
     { regex: /we (?:mainly|mostly|only|primarily) work (?:in|around|across)\s+(.{5,60}?)(?:\.|,|$)/i, category: 'geography', template: m => `Client works in: ${m[1].trim()}` },
     { regex: /(?:our|my) (?:area|region|patch|territory) is\s+(.{5,60}?)(?:\.|,|$)/i, category: 'geography', template: m => `Client area: ${m[1].trim()}` },
-
-    // Project type patterns
     { regex: /we (?:specialise|specialize|focus|mainly do|mostly do) (?:in|on)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'project_type', template: m => `Client speciality: ${m[1].trim()}` },
     { regex: /(?:our|my) (?:main|typical|usual) (?:work|projects?) (?:is|are|involve)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'project_type', template: m => `Typical projects: ${m[1].trim()}` },
-
-    // Team / crew patterns
     { regex: /(?:our|my) (?:team|crew|gang) (?:is|are|has|have)\s+(.{5,60}?)(?:\.|,|$)/i, category: 'team', template: m => `Client team: ${m[1].trim()}` },
     { regex: /we have\s+(\d+\s+(?:men|guys|workers|operatives|people|carpenters|bricklayers|labourers))/i, category: 'team', template: m => `Team size: ${m[1].trim()}` },
-
-    // Exclusion patterns
     { regex: /(?:we|I) (?:don't|do not|never|won't|will not) (?:include|cover|do|price|quote for)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'exclusion', template: m => `Client exclusion: ${m[1].trim()}` },
     { regex: /(?:always |please )?exclude\s+(.{5,80}?)\s+(?:from|in) (?:all|our|every|the)/i, category: 'exclusion', template: m => `Always exclude: ${m[1].trim()}` },
   ];
@@ -92,17 +77,13 @@ function extractInsightsFromMessage(userId, message) {
   for (const pattern of patterns) {
     const match = msg.match(pattern.regex);
     if (!match) continue;
-
     let insightText;
     try { insightText = pattern.template(match); } catch (e) { continue; }
-
     if (!insightText || insightText.length < 8 || insightText.length > 300) continue;
     if (!validCategories.includes(pattern.category)) continue;
-
     try {
       const existing = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, pattern.category);
       let isDuplicate = false;
-
       for (const ex of existing) {
         const existWords = ex.insight.toLowerCase().split(/\s+/).filter(w => w.length > 2);
         const newWords = insightText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
@@ -110,20 +91,14 @@ function extractInsightsFromMessage(userId, message) {
         if (overlap / Math.max(existWords.length, 1) > 0.5) {
           db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id);
           isDuplicate = true;
-          console.log(`[Insight] Reinforced: ${ex.insight}`);
           break;
         }
       }
-
       if (!isDuplicate) {
-        db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run(
-          'ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText
-        );
+        db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText);
         console.log(`[Insight] Saved: [${pattern.category}] ${insightText}`);
       }
-    } catch (err) {
-      console.error('[Insight] Save error:', err.message);
-    }
+    } catch (err) { console.error('[Insight] Save error:', err.message); }
   }
 }
 
@@ -134,6 +109,7 @@ function extractInsightsFromMessage(userId, message) {
 function buildSystemPrompt(userId, forDocGen) {
   let clientRateSection = '';
   let clientInsightsSection = '';
+
   try {
     const rates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, confidence DESC`).all(userId);
     if (rates.length > 0) {
@@ -359,11 +335,16 @@ function extractFromZip(zipPath) {
       } else if (TEXT_EXTS.includes(ext)) {
         try { extracted.text.push({name,content:entry.getData().toString('utf8')}); }
         catch(e){ extracted.skipped.push(name); }
-      } else if (CAD_EXTS.includes(ext)) { extracted.cad.push(name); }
-      else if (OFFICE_EXTS.includes(ext)) { extracted.skipped.push(name); }
-      else {
-        try { const fd=entry.getData(); const dt=detectFileType(fd); if(dt&&VISUAL_EXTS.includes(dt.ext)){const op=path.join(uploadsDir,`${uuidv4()}${dt.ext}`);fs.writeFileSync(op,fd);extracted.visual.push({path:op,name:`${name}(${dt.ext})`,ext:dt.ext});}else{extracted.skipped.push(name);}}
-        catch(e){extracted.skipped.push(name);}
+      } else if (CAD_EXTS.includes(ext)) {
+        extracted.cad.push(name);
+      } else if (OFFICE_EXTS.includes(ext)) {
+        extracted.skipped.push(name);
+      } else {
+        try {
+          const fd=entry.getData(); const dt=detectFileType(fd);
+          if(dt&&VISUAL_EXTS.includes(dt.ext)){const op=path.join(uploadsDir,`${uuidv4()}${dt.ext}`);fs.writeFileSync(op,fd);extracted.visual.push({path:op,name:`${name}(${dt.ext})`,ext:dt.ext});}
+          else{extracted.skipped.push(name);}
+        } catch(e){extracted.skipped.push(name);}
       }
     }
   } catch(e){ console.error('[ZIP] Failed:',e.message); }
@@ -388,8 +369,7 @@ function fileToContentBlock(filePath, ext) {
 router.get('/chat-sessions', authMiddleware, (req, res) => {
   try {
     const sessions = db.prepare(
-      `SELECT id, title, created_at, updated_at FROM chat_sessions
-       WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`
+      `SELECT id, title, created_at, updated_at FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`
     ).all(req.user.id);
     res.json({ sessions });
   } catch (e) {
@@ -400,9 +380,7 @@ router.get('/chat-sessions', authMiddleware, (req, res) => {
 
 router.get('/chat-sessions/:id', authMiddleware, (req, res) => {
   try {
-    const session = db.prepare(
-      'SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?'
-    ).get(req.params.id, req.user.id);
+    const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     res.json({ ...session, messages: JSON.parse(session.messages || '[]') });
   } catch (e) {
@@ -439,8 +417,7 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
 
 router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?')
-      .run(req.params.id, req.user.id);
+    const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
     res.json({ success: true });
   } catch (e) {
@@ -515,7 +492,11 @@ router.get('/downloads/:filename', authMiddleware, (req, res) => {
   const fp = path.join(outputsDir, req.params.filename);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
   const ext = path.extname(req.params.filename).toLowerCase();
-  const mt = { '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.pdf':'application/pdf' };
+  const mt = {
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.pdf': 'application/pdf'
+  };
   const fileBuffer = fs.readFileSync(fp);
   res.setHeader('Content-Type', mt[ext] || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
@@ -593,35 +574,43 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
     if (req.user.suspended) {
-      return res.status(403).json({ error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
+      return res.status(403).json({
+        error: 'Your account has been suspended. Contact support.',
+        suspended: true,
+        reason: req.user.suspended_reason || null
+      });
     }
 
+    // ── Message quota check ───────────────────────────────────────
     const PLAN_LIMITS = {
-      starter:      { messages: 10,  docs: 0,   revisions_per_doc: 1, label: 'Starter', pay_per_doc: true, doc_price: 99 },
-      professional: { messages: 100, docs: 10,  revisions_per_doc: 1, label: 'Professional' },
-      premium:      { messages: 200, docs: 20,  revisions_per_doc: 1, label: 'Premium' },
-      admin:        { messages: -1,  docs: -1,  revisions_per_doc: -1, label: 'Admin' },
+      starter:      { messages: 10,  label: 'Starter' },
+      professional: { messages: 100, label: 'Professional' },
+      premium:      { messages: 200, label: 'Premium' },
+      admin:        { messages: -1,  label: 'Admin' },
     };
+
     if (req.user.role !== 'admin') {
       const plan = req.user.plan || 'starter';
       const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
-      var bonusMsgs = req.user.bonus_messages || 0;
-      var effectiveLimit = limits.messages + bonusMsgs;
+      const bonusMsgs = req.user.bonus_messages || 0;
+      const effectiveLimit = limits.messages + bonusMsgs;
       if (effectiveLimit > 0) {
-        var mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
-        var monthStr = mStart.toISOString();
-        var used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, monthStr);
+        const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
+        const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, mStart.toISOString());
         if (used.c >= effectiveLimit) {
           return res.status(429).json({
-            error: 'You\'ve used all ' + effectiveLimit + ' messages this month on the ' + limits.label + ' plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.',
-            limit_type: 'messages', used: used.c, limit: effectiveLimit, plan: plan
+            error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`,
+            limit_type: 'messages', used: used.c, limit: effectiveLimit, plan
           });
         }
       }
     }
 
+    // ── Build message history ─────────────────────────────────────
     let messages = [];
-    if (history) { try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){} }
+    if (history) {
+      try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){}
+    }
 
     const currentContent = [];
     let fileNames = [], zipNotes = [];
@@ -633,10 +622,10 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         if (ext === '.zip') {
           const ex = extractFromZip(file.path);
           for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
-          for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`});fileNames.push(tf.name); }
-          if (ex.cad.length>0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
-          if (ex.skipped.length>0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
-          if (ex.visual.length===0&&ex.text.length===0) zipNotes.push(ex.cad.length>0?'ZIP only contains CAD files -- export as PDF.':'No supported files in ZIP.');
+          for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
+          if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
+          if (ex.skipped.length > 0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
+          if (ex.visual.length === 0 && ex.text.length === 0) zipNotes.push(ex.cad.length > 0 ? 'ZIP only contains CAD files -- export as PDF.' : 'No supported files in ZIP.');
         } else {
           const b = fileToContentBlock(file.path, ext);
           if (b) { currentContent.push(b); fileNames.push(file.originalname); }
@@ -661,13 +650,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
+    // ── Call Anthropic API ────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(userId, false);
     const hasDrawings = fileNames.length > 0;
     const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
     const primaryBudget = hasDrawings ? 8000 : 5000;
     console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings)' : 'Haiku (text chat)'}`);
 
-    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
+    const apiHeaders = {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    };
 
     let response, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -697,6 +691,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     const data = await response.json();
 
+    // ── Log usage ─────────────────────────────────────────────────
     const tokensIn = data.usage ? data.usage.input_tokens : 0;
     const tokensOut = data.usage ? data.usage.output_tokens : 0;
     const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
@@ -716,53 +711,71 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
+    // ── Document generation quota check ──────────────────────────
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
 
     if (wantsDocuments && req.user.role !== 'admin') {
-      var dPlan = req.user.plan || 'starter';
-      var dStart2 = new Date(); dStart2.setDate(1); dStart2.setHours(0,0,0,0);
-      var dMonthStr = dStart2.toISOString();
-      var docsGenThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, dMonthStr).c;
-      var revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
+      const dPlan = req.user.plan || 'starter';
+      const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
+      const dMonthStr = mStart.toISOString();
+      const docsGenThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, dMonthStr).c;
+      const revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
 
       if (dPlan === 'starter') {
-        var paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
-        var totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
-        var totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
-        var originalsEver = totalDocsEver - totalRevisionsEver;
-        var lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-        var looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-        if (looksLikeRevision && totalRevisionsEver < paidCredits) {
+        // ── FREE TRIAL + PAYG logic ───────────────────────────────
+        // monthly_quota = free trial BOQ slots assigned at signup (e.g. 2)
+        // paidCredits = one-off £99 payments logged as 'doc_paid'
+        // totalAllowed = how many original BOQs they can generate total (ever)
+        const freeTrialQuota = req.user.monthly_quota || 0;
+        const paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
+        const totalAllowed = freeTrialQuota + paidCredits;
+
+        const totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
+        const totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
+        const originalsEver = totalDocsEver - totalRevisionsEver;
+
+        const lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
+        const looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+
+        if (looksLikeRevision && totalRevisionsEver < totalAllowed) {
           console.log('[Quota] Starter revision allowed');
-        } else if (originalsEver >= paidCredits) {
+        } else if (originalsEver >= totalAllowed) {
+          // All free trial slots and paid credits used — show payment wall
           wantsDocuments = false;
           paymentRequired = {
             type: 'boq_payment', plan: 'starter', price: 99, currency: 'GBP',
             url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01?client_reference_id=' + userId,
             message: 'To generate your BOQ and Findings Report, a one-off payment of £99 is required. This includes a full Excel BOQ with your trained rates, a professional Findings Report, and 1 free revision.',
           };
+          console.log(`[Quota] Payment required — used ${originalsEver}/${totalAllowed} (${freeTrialQuota} free + ${paidCredits} paid)`);
+        } else {
+          console.log(`[Quota] Free trial — slot ${originalsEver + 1} of ${totalAllowed}`);
         }
       } else {
-        var docLimit = dPlan === 'premium' ? 20 : 10;
-        var originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
-        var lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-        var isRevisionCheck = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-        if (isRevisionCheck) {
-          var lastProject = lastDoc2.detail;
-          var projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastProject).c;
-          if (projectRevisions >= 1) { reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).'; wantsDocuments = false; }
+        // ── Professional / Premium monthly doc limit ──────────────
+        const docLimit = dPlan === 'premium' ? 20 : 10;
+        const originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
+        const lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
+        const isRevision = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+        if (isRevision) {
+          const projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastDoc2.detail).c;
+          if (projectRevisions >= 1) {
+            reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).';
+            wantsDocuments = false;
+          }
         } else if (originalsThisMonth >= docLimit) {
-          reply += '\n\nDocument limit reached (' + docLimit + ' BOQs on ' + dPlan + ' plan this month).';
+          reply += `\n\nDocument limit reached (${docLimit} BOQs on ${dPlan} plan this month).`;
           wantsDocuments = false;
         }
       }
     }
 
+    // ── Generate documents ────────────────────────────────────────
     if (wantsDocuments && boqGen && findingsGen) {
-      console.log('[Docs] User requested documents — generating structured data...');
+      console.log('[Docs] Generating structured data...');
       const clientName = req.user.full_name || req.user.email;
       let projectName = 'Project';
       const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
@@ -799,6 +812,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
           const parsed = JSON.parse(cleaned);
           console.log('[Docs] Parsed JSON — sections:', (parsed.sections || []).length);
+
           const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
           const ts = Date.now();
           downloadFiles = [];
@@ -834,11 +848,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           } catch (wordErr) { console.error('[Docs] Word error:', wordErr.message); }
 
           if (downloadFiles.length > 0) {
-            var itemCount = 0, totalVal = 0;
-            if (parsed.sections) {
-              for (var si=0;si<parsed.sections.length;si++) {
-                var sec=parsed.sections[si];
-                if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}}
+            let itemCount = 0, totalVal = 0;
+            for (const sec of (parsed.sections || [])) {
+              for (const item of (sec.items || [])) {
+                totalVal += parseFloat(item.total) || 0;
+                itemCount++;
               }
             }
             const contingencyPct = parsed.findings?.cost_summary?.contingency_pct || 7.5;
@@ -846,35 +860,30 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             const contingency = totalVal * (contingencyPct / 100);
             const ohp = (totalVal + contingency) * (ohpPct / 100);
             const grandTotal = totalVal + contingency + ohp;
-            var currency = reply.includes('EUR') || reply.includes('€') ? '€' : '£';
-            reply = 'Your documents have been generated for ' + projectName + '.\n\n';
-            reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections.\n\n';
-            reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
+
+            reply = `Your documents have been generated for ${projectName}.\n\n${itemCount} line items across ${(parsed.sections || []).length} sections.\n\nDownload your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.`;
 
             try {
-              var summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
-              var boqF = downloadFiles.find(function(f){return f.type==='xlsx';});
-              var docF = downloadFiles.find(function(f){return f.type==='docx';});
-              var projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
+              const boqF = downloadFiles.find(f => f.type === 'xlsx');
+              const docF = downloadFiles.find(f => f.type === 'docx');
+              const projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
+              const summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
 
               db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)')
                 .run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
 
               try {
                 const projId = 'proj_' + uuidv4().slice(0, 10);
-                // Add boq_filename/findings_filename columns if they don't exist yet
                 try { db.exec('ALTER TABLE projects ADD COLUMN boq_filename TEXT'); } catch(e) {}
                 try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
                 db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
                   .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null, boqF ? boqF.name : null, docF ? docF.name : null);
                 console.log('[Project] Saved to projects table: ' + projectName);
-              } catch(projErr) {
-                console.error('[Project] projects table insert error:', projErr.message);
-              }
+              } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
 
               db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
                 .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
-              console.log('[Project] Saved: '+projectName+' ('+itemCount+' items, '+totalVal.toFixed(0)+')');
+              console.log(`[Project] Saved: ${projectName} (${itemCount} items, £${grandTotal.toFixed(0)})`);
             } catch(pe) { console.error('[Project] Save error:', pe.message); }
           }
         } else {
@@ -883,13 +892,13 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       } catch (e) {
         console.error('[Docs] Generation error:', e.message);
       }
-    } else if (hasDrawings && !wantsDocuments) {
-      reply += '\n\nIf you want downloadable documents, just say "generate documents" and I\'ll create an Excel BOQ and Word Findings Report for you.';
+    } else if (hasDrawings && !wantsDocuments && !paymentRequired) {
+      reply += '\n\nIf you want downloadable documents, just say "generate" and I\'ll create an Excel BOQ and Word Findings Report for you.';
     }
 
     // ── Auto-learning: extract rates from corrections ─────────────
     try {
-      const userMsg = (message || '');
+      const userMsg = message || '';
       const userLower = userMsg.toLowerCase();
       const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong|instead of|changed to|now \d|is \d+\s*(?:not|instead))/i.test(userLower);
       if (isCorrection) {
@@ -905,9 +914,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             if (score > bestScore) { bestScore = score; bestMatch = rate; }
           }
           let newValue = null;
-          const np = [/(?:should be|actually|is|to|now|changed to)\s*(?:£|€)?\s*(\d[\d,.]*)(?!\d)/i, /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i];
-          for (const pat of np) { const m = userMsg.match(pat); if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v>0&&v<1000000){newValue=v;break;} } }
-          if (!newValue) { const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g); if (nums) newValue = parseFloat(nums[0].replace(/,/g,'')); }
+          const numPatterns = [
+            /(?:should be|actually|is|to|now|changed to)\s*(?:£|€)?\s*(\d[\d,.]*)(?!\d)/i,
+            /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i
+          ];
+          for (const pat of numPatterns) {
+            const m = userMsg.match(pat);
+            if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v>0&&v<1000000){newValue=v;break;} }
+          }
+          if (!newValue) {
+            const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g);
+            if (nums) newValue = parseFloat(nums[0].replace(/,/g,''));
+          }
           if (bestMatch && bestScore >= 1 && newValue && newValue !== bestMatch.value) {
             db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newValue, bestMatch.id);
             db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
@@ -917,23 +935,22 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
 
     // ── Server-side insight extraction ────────────────────────────
-    try {
-      extractInsightsFromMessage(userId, message);
-    } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
+    try { extractInsightsFromMessage(userId, message); } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
 
-    // ── Parse RATE_ADD / RATE_UPDATE tags ─────────────────────────
+    // ── Parse and apply RATE / INSIGHT tags from AI reply ─────────
     try {
-      var addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
-      for (var ai = 0; ai < addMatches.length; ai++) {
-        var parts = addMatches[ai].replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
+      // RATE_ADD tags
+      const addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
+      for (const m of addMatches) {
+        const parts = m.replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
         if (parts.length === 4) {
-          var cat = parts[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
-          var rName = parts[1].trim();
-          var rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, ''));
-          var rUnit = parts[3].trim();
+          const cat = parts[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+          const rName = parts[1].trim();
+          const rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, ''));
+          const rUnit = parts[3].trim();
           if (rName && !isNaN(rVal) && rVal > 0 && rUnit) {
-            var itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
-            var exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
+            const itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
+            const exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
             if (!exists) {
               db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit);
             } else {
@@ -942,25 +959,22 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           }
         }
       }
-      var updateMatches = reply.match(/\[RATE_UPDATE\|([^|]+)\|([^\]]+)\]/g) || [];
-      for (var ui = 0; ui < updateMatches.length; ui++) {
-        var uParts = updateMatches[ui].replace(/^\[RATE_UPDATE\|/, '').replace(/\]$/, '').split('|');
+
+      // RATE_UPDATE tags
+      const updateMatches = reply.match(/\[RATE_UPDATE\|([^|]+)\|([^\]]+)\]/g) || [];
+      for (const m of updateMatches) {
+        const uParts = m.replace(/^\[RATE_UPDATE\|/, '').replace(/\]$/, '').split('|');
         if (uParts.length === 2) {
-          var uName = uParts[0].trim().toLowerCase();
-          var uVal = parseFloat(uParts[1].trim().replace(/[^0-9.\-]/g, ''));
+          const uName = uParts[0].trim().toLowerCase();
+          const uVal = parseFloat(uParts[1].trim().replace(/[^0-9.\-]/g, ''));
           if (uName && !isNaN(uVal) && uVal > 0) {
-            var allRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
-            var found = null;
-            for (var ri = 0; ri < allRates.length; ri++) {
-              if (allRates[ri].display_name.toLowerCase() === uName || allRates[ri].item_key === uName.replace(/[^a-z0-9]+/g, '_')) { found = allRates[ri]; break; }
-            }
+            const allRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+            let found = allRates.find(r => r.display_name.toLowerCase() === uName || r.item_key === uName.replace(/[^a-z0-9]+/g, '_'));
             if (!found) {
-              for (var ri2 = 0; ri2 < allRates.length; ri2++) {
-                var words = uName.split(/[\s&,\/\-]+/).filter(function(w){return w.length>2;});
-                var sc = 0;
-                for (var wi = 0; wi < words.length; wi++) { if (allRates[ri2].display_name.toLowerCase().includes(words[wi])) sc++; }
-                if (sc >= 2) { found = allRates[ri2]; break; }
-              }
+              found = allRates.find(r => {
+                const words = uName.split(/[\s&,\/\-]+/).filter(w => w.length > 2);
+                return words.filter(w => r.display_name.toLowerCase().includes(w)).length >= 2;
+              });
             }
             if (found && uVal !== found.value) {
               db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(uVal, found.id);
@@ -969,29 +983,25 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           }
         }
       }
-      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
-    } catch (tagErr) { console.error('[RateTag] Error:', tagErr.message); }
 
-    // ── Parse INSIGHT tags ────────────────────────────────────────
-    try {
-      var insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
-      for (var ii2 = 0; ii2 < insightMatches.length; ii2++) {
-        var iParts = insightMatches[ii2].replace(/^\[INSIGHT\|/, '').replace(/\]$/, '').split('|');
+      // INSIGHT tags
+      const insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
+      const validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
+      for (const m of insightMatches) {
+        const iParts = m.replace(/^\[INSIGHT\|/, '').replace(/\]$/, '').split('|');
         if (iParts.length >= 2) {
-          var iCat = iParts[0].trim().toLowerCase().replace(/\s+/g, '_');
-          var iText = iParts[1].trim();
-          var validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
+          const iCat = iParts[0].trim().toLowerCase().replace(/\s+/g, '_');
+          const iText = iParts[1].trim();
           if (validInsightCats.includes(iCat) && iText.length > 5 && iText.length < 300) {
-            var existingInsights = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, iCat);
-            var isDuplicate = false;
-            for (var ei = 0; ei < existingInsights.length; ei++) {
-              var existWords = existingInsights[ei].insight.toLowerCase().split(/\s+/);
-              var newWords = iText.toLowerCase().split(/\s+/);
-              var overlap = existWords.filter(function(w) { return newWords.indexOf(w) >= 0; }).length;
+            const existingInsights = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, iCat);
+            let isDuplicate = false;
+            for (const ex of existingInsights) {
+              const existWords = ex.insight.toLowerCase().split(/\s+/);
+              const newWords = iText.toLowerCase().split(/\s+/);
+              const overlap = existWords.filter(w => newWords.includes(w)).length;
               if (overlap / Math.max(existWords.length, 1) > 0.6) {
-                db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(existingInsights[ei].id);
-                isDuplicate = true;
-                break;
+                db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id);
+                isDuplicate = true; break;
               }
             }
             if (!isDuplicate) {
@@ -1000,10 +1010,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           }
         }
       }
-    } catch (insErr) { console.error('[Insight] Parse error:', insErr.message); }
 
-    reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+      // Strip all tags from reply
+      reply = reply
+        .replace(/\[RATE_ADD\|[^\]]*\]/g, '')
+        .replace(/\[RATE_UPDATE\|[^\]]*\]/g, '')
+        .replace(/\[INSIGHT\|[^\]]*\]/g, '')
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim();
 
+    } catch (tagErr) { console.error('[Tags] Error:', tagErr.message); }
+
+    // ── Build quota info for frontend ─────────────────────────────
     let rateStats = null;
     try {
       const s = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(userId);
@@ -1012,15 +1030,23 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     let quotaInfo = null;
     if (req.user.role !== 'admin') {
-      var qPlan = req.user.plan || 'starter';
-      var qStart = new Date(); qStart.setDate(1); qStart.setHours(0,0,0,0);
-      var qMonth = qStart.toISOString();
-      var qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
-      var qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
-      var qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
-      var qMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
-      var qDocLimit = qPlan === 'starter' ? 0 : qPlan === 'professional' ? 10 : 20;
-      quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
+      const qPlan = req.user.plan || 'starter';
+      const qStart = new Date(); qStart.setDate(1); qStart.setHours(0,0,0,0);
+      const qMonth = qStart.toISOString();
+      const qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
+      const qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
+      const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
+      const qMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
+      const qDocLimit = qPlan === 'starter' ? (req.user.monthly_quota || 0) : qPlan === 'professional' ? 10 : 20;
+      quotaInfo = {
+        plan: qPlan,
+        messages_used: qMsgs,
+        messages_limit: qMsgLimit,
+        docs_used: qDocs - qRevs,
+        docs_limit: qDocLimit,
+        revisions_used: qRevs,
+        pay_per_doc: qPlan === 'starter'
+      };
     }
 
     res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles, quota: quotaInfo, payment_required: paymentRequired });
