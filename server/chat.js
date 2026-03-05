@@ -789,10 +789,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
                 if(sec.items){for(var ii=0;ii<sec.items.length;ii++){totalVal+=parseFloat(sec.items[ii].total)||0;itemCount++;}}
               }
             }
-            var grandTotal = totalVal;
-            if (parsed.findings && parsed.findings.cost_summary && parsed.findings.cost_summary.grand_total) {
-              grandTotal = parsed.findings.cost_summary.grand_total;
-            }
+            const contingencyPct = parsed.findings?.cost_summary?.contingency_pct || 7.5;
+const ohpPct = parsed.findings?.cost_summary?.ohp_pct || 12;
+const contingency = totalVal * (contingencyPct / 100);
+const ohp = (totalVal + contingency) * (ohpPct / 100);
+const grandTotal = totalVal + contingency + ohp;
             var currency = reply.includes('EUR') || reply.includes('€') ? '€' : '£';
             reply = 'Your documents have been generated for ' + projectName + '.\n\n';
             reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections, ';
