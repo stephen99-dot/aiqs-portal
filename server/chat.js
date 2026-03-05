@@ -862,8 +862,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
               try {
                 const projId = 'proj_' + uuidv4().slice(0, 10);
-                db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)`)
-                  .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null);
+                // Add boq_filename/findings_filename columns if they don't exist yet
+                try { db.exec('ALTER TABLE projects ADD COLUMN boq_filename TEXT'); } catch(e) {}
+                try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
+                db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
+                  .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null, boqF ? boqF.name : null, docF ? docF.name : null);
                 console.log('[Project] Saved to projects table: ' + projectName);
               } catch(projErr) {
                 console.error('[Project] projects table insert error:', projErr.message);
