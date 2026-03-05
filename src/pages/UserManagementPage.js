@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, AlertTriangle, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, AlertTriangle, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -45,6 +45,58 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
   );
 }
 
+function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
+  const [password, setPassword] = useState('Welcome123!');
+  const [saving, setSaving] = useState(false);
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+
+  const handleReset = async () => {
+    if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
+    setSaving(true);
+    try {
+      await apiFetch('/admin/users/' + user.id + '/password', { method: 'PUT', body: JSON.stringify({ password }) });
+      onSuccess('Password reset for ' + (user.full_name || user.email) + ' — they will be prompted to set a new one on login');
+      onClose();
+    } catch (err) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+border}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:text}}>🔑 Reset Password</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
+        </div>
+        <p style={{fontSize:13,color:muted,margin:'0 0 16px',lineHeight:1.5}}>
+          Setting a new password for <strong style={{color:text}}>{user.full_name || user.email}</strong>. They will be prompted to choose a new one on next login.
+        </p>
+        <div style={{marginBottom:16}}>
+          <label style={{display:'block',fontSize:11,fontWeight:600,color:muted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em'}}>New Password</label>
+          <input
+            type="text"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            autoFocus
+            style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:14,outline:'none',boxSizing:'border-box'}}
+          />
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={handleReset} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#F59E0B',color:'#0F172A',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.6:1}}>
+            {saving ? 'Resetting...' : 'Reset Password'}
+          </button>
+          <button onClick={onClose} style={{padding:'11px 18px',borderRadius:10,border:'1px solid '+border,background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
@@ -53,6 +105,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [importResult, setImportResult] = useState(null);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
   const fileInputRef = React.useRef(null);
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
@@ -63,6 +117,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const lbl = {fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4};
   const sInp = {padding:'7px 10px',borderRadius:6,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:13,width:80,outline:'none'};
   const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch(e) { alert(e.message); } finally { setLoading(''); } };
+
+  function showSuccess(msg) { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }
 
   const savePlan = () => doAction('plan', async () => {
     await apiFetch('/admin/change-plan/'+user.id, { method:'POST', body:JSON.stringify({plan}) });
@@ -101,64 +157,82 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   };
 
   return (
-    <div style={{background:isDark?'#0D1320':'#F8FAFC',borderTop:'1px solid '+border,padding:'20px 24px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:15,fontWeight:700,color:text}}>Manage: {user.full_name || user.email}</div>
-        <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-
-        {/* Plan */}
-        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
-          <div style={lbl}>Plan</div>
-          <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
-            {['starter','professional','premium'].map(p => (
-              <button key={p} onClick={()=>setPlan(p)} style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:plan===p?'2px solid #2563EB':'1px solid '+border,background:plan===p?'rgba(37,99,235,0.1)':'transparent',color:plan===p?'#2563EB':muted,textTransform:'capitalize'}}>{p}</button>
-            ))}
-          </div>
-          {plan !== (user.plan||'starter') && <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'),marginTop:8}}><Save size={12} /> Save Plan</button>}
+    <>
+      {showResetModal && (
+        <ResetPasswordModal
+          user={user}
+          isDark={isDark}
+          onClose={() => setShowResetModal(false)}
+          onSuccess={showSuccess}
+        />
+      )}
+      <div style={{background:isDark?'#0D1320':'#F8FAFC',borderTop:'1px solid '+border,padding:'20px 24px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:15,fontWeight:700,color:text}}>Manage: {user.full_name || user.email}</div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
         </div>
 
-        {/* Credits - SET not ADD */}
-        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
-          <div style={lbl}>Bonus Credits (set directly)</div>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:6}}>
-            <div><div style={{fontSize:10,color:muted}}>Messages</div><input type="number" value={bonusMsgs} onChange={e=>setBonusMsgs(parseInt(e.target.value)||0)} style={sInp} /></div>
-            <div><div style={{fontSize:10,color:muted}}>Docs</div><input type="number" value={bonusDocs} onChange={e=>setBonusDocs(parseInt(e.target.value)||0)} style={sInp} /></div>
-            <button onClick={saveCredits} disabled={!!loading} style={{...btn('#2563EB'),marginTop:14}}><Save size={12} /> Save</button>
+        {successMsg && (
+          <div style={{marginBottom:12,padding:'9px 14px',borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',color:'#10B981',fontSize:13,fontWeight:500}}>
+            ✅ {successMsg}
           </div>
-        </div>
+        )}
 
-        {/* Suspend */}
-        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
-          <div style={lbl}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
-          {!user.suspended && <input value={suspendReason} onChange={e=>setSuspendReason(e.target.value)} placeholder="Reason (optional)" style={{...sInp,width:'100%',marginTop:6,marginBottom:8}} />}
-          <button onClick={toggleSuspend} disabled={!!loading} style={user.suspended?btn('#10B981'):btn('#EF4444')}>{user.suspended?<><Play size={12}/> Reactivate</>:<><Pause size={12}/> Suspend</>}</button>
-          {user.suspended && user.suspended_reason && <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>}
-        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
 
-        {/* Magic Link + Import */}
-        <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
-          <div style={lbl}>Tools</div>
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{display:'none'}} />
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
-            <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
-            <button onClick={()=>fileInputRef.current&&fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
-            <button onClick={grantDocCredit} disabled={!!loading} title="For Starter plan users who paid offline - lets them generate 1 BOQ" style={outBtn}><CreditCard size={12} /> Grant Paid BOQ</button>
-          </div>
-          {magicLink && <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}} onClick={()=>{navigator.clipboard.writeText(magicLink);alert('Copied!')}}>{magicLink}<br/><span style={{color:muted}}>Click to copy</span></div>}
-          {importResult && (
-            <div style={{marginTop:8,fontSize:12,color:importResult.error?'#EF4444':'#10B981'}}>
-              {importResult.error
-                ? 'Error: '+importResult.error
-                : 'Imported '+importResult.imported+' rates'+(importResult.sheets?' from '+importResult.sheets.length+' sheets':'')+(importResult.skipped>0?', skipped '+importResult.skipped:'')
-              }
+          {/* Plan */}
+          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+            <div style={lbl}>Plan</div>
+            <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
+              {['starter','professional','premium'].map(p => (
+                <button key={p} onClick={()=>setPlan(p)} style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:plan===p?'2px solid #2563EB':'1px solid '+border,background:plan===p?'rgba(37,99,235,0.1)':'transparent',color:plan===p?'#2563EB':muted,textTransform:'capitalize'}}>{p}</button>
+              ))}
             </div>
-          )}
-        </div>
+            {plan !== (user.plan||'starter') && <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'),marginTop:8}}><Save size={12} /> Save Plan</button>}
+          </div>
 
+          {/* Credits */}
+          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+            <div style={lbl}>Bonus Credits (set directly)</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:6}}>
+              <div><div style={{fontSize:10,color:muted}}>Messages</div><input type="number" value={bonusMsgs} onChange={e=>setBonusMsgs(parseInt(e.target.value)||0)} style={sInp} /></div>
+              <div><div style={{fontSize:10,color:muted}}>Docs</div><input type="number" value={bonusDocs} onChange={e=>setBonusDocs(parseInt(e.target.value)||0)} style={sInp} /></div>
+              <button onClick={saveCredits} disabled={!!loading} style={{...btn('#2563EB'),marginTop:14}}><Save size={12} /> Save</button>
+            </div>
+          </div>
+
+          {/* Suspend */}
+          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+            <div style={lbl}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
+            {!user.suspended && <input value={suspendReason} onChange={e=>setSuspendReason(e.target.value)} placeholder="Reason (optional)" style={{...sInp,width:'100%',marginTop:6,marginBottom:8}} />}
+            <button onClick={toggleSuspend} disabled={!!loading} style={user.suspended?btn('#10B981'):btn('#EF4444')}>{user.suspended?<><Play size={12}/> Reactivate</>:<><Pause size={12}/> Suspend</>}</button>
+            {user.suspended && user.suspended_reason && <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>}
+          </div>
+
+          {/* Tools */}
+          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+            <div style={lbl}>Tools</div>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{display:'none'}} />
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+              <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
+              <button onClick={()=>fileInputRef.current&&fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
+              <button onClick={grantDocCredit} disabled={!!loading} title="For Starter plan users who paid offline" style={outBtn}><CreditCard size={12} /> Grant Paid BOQ</button>
+              <button onClick={()=>setShowResetModal(true)} disabled={!!loading} style={{...outBtn,color:'#F59E0B',borderColor:'rgba(245,158,11,0.3)',background:'rgba(245,158,11,0.06)'}}><Key size={12} /> Reset Password</button>
+            </div>
+            {magicLink && <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}} onClick={()=>{navigator.clipboard.writeText(magicLink);alert('Copied!')}}>{magicLink}<br/><span style={{color:muted}}>Click to copy</span></div>}
+            {importResult && (
+              <div style={{marginTop:8,fontSize:12,color:importResult.error?'#EF4444':'#10B981'}}>
+                {importResult.error
+                  ? 'Error: '+importResult.error
+                  : 'Imported '+importResult.imported+' rates'+(importResult.sheets?' from '+importResult.sheets.length+' sheets':'')+(importResult.skipped>0?', skipped '+importResult.skipped:'')
+                }
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
