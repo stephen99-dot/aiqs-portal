@@ -795,10 +795,9 @@ const contingency = totalVal * (contingencyPct / 100);
 const ohp = (totalVal + contingency) * (ohpPct / 100);
 const grandTotal = totalVal + contingency + ohp;
             var currency = reply.includes('EUR') || reply.includes('€') ? '€' : '£';
-            reply = 'Your documents have been generated for ' + projectName + '.\n\n';
-            reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections, ';
-            reply += 'with a total project value of ' + currency + grandTotal.toLocaleString('en-GB', {minimumFractionDigits:0,maximumFractionDigits:0}) + ' (excl. VAT).\n\n';
-            reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
+reply = 'Your documents have been generated for ' + projectName + '.\n\n';
+reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections.\n\n';
+reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
 
             // ── Save to BOTH chat_projects AND projects table ──────────
             try {
