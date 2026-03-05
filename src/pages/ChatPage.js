@@ -2,12 +2,41 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
+const STAGE_ICONS = {
+  file: (col) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    </svg>
+  ),
+  search: (col) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  ),
+  ruler: (col) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12h20M2 12l4-4M2 12l4 4M22 12l-4-4M22 12l-4 4"/>
+      <line x1="7" y1="12" x2="7" y2="12"/><line x1="12" y1="12" x2="12" y2="8"/><line x1="17" y1="12" x2="17" y2="12"/>
+    </svg>
+  ),
+  calculator: (col) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="16" y2="18"/>
+    </svg>
+  ),
+  check: (col) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={col} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+  ),
+};
+
 const THINKING_STAGES = [
-  { icon: '📄', text: 'Reading your input...' },
-  { icon: '🔍', text: 'Analysing project scope...' },
-  { icon: '📐', text: 'Measuring quantities...' },
-  { icon: '💰', text: 'Calculating costs...' },
-  { icon: '📋', text: 'Preparing response...' },
+  { iconKey: 'file',       text: 'Reading your input...' },
+  { iconKey: 'search',     text: 'Analysing project scope...' },
+  { iconKey: 'ruler',      text: 'Measuring quantities...' },
+  { iconKey: 'calculator', text: 'Calculating costs...' },
+  { iconKey: 'check',      text: 'Preparing response...' },
 ];
 
 export default function ChatPage() {
@@ -312,15 +341,20 @@ export default function ChatPage() {
               const isDone = i < thinkingStage;
               const isActive = i === thinkingStage;
               const isWaiting = i > thinkingStage;
+              const iconColor = isDone ? c.stageDoneText : isActive ? c.stageActiveText : c.stageWaitText;
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 7, background: isActive ? c.stageActiveBg : 'transparent', opacity: isWaiting ? 0.3 : 1, transition: 'all 0.4s ease' }}>
-                  <span style={{ fontSize: 13, flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>{isDone ? '✅' : stage.icon}</span>
+                  <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    {isDone
+                      ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c.stageDoneText} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      : STAGE_ICONS[stage.iconKey](iconColor)
+                    }
+                  </span>
                   <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, color: isDone ? c.stageDoneText : isActive ? c.stageActiveText : c.stageWaitText, transition: 'color 0.3s ease' }}>{stage.text}</span>
                   {isActive && <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>{[0,1,2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.stageActiveText, animation: 'typingPulse 1.4s infinite', animationDelay: `${d * 0.2}s` }} />)}</span>}
                 </div>
               );
-            })}
-          </div>
+            })}          </div>
         </div>
       </div>
     );
