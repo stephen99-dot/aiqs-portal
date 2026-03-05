@@ -59,7 +59,6 @@ async function sendEmail({ to, subject, html }) {
 // NOTIFICATIONS SYSTEM
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Create notifications table if it doesn't exist
 try {
   db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (
@@ -77,7 +76,6 @@ try {
   console.error('[Notifications] Failed to create table:', err.message);
 }
 
-// Helper: create a notification + email the admin
 async function notifyAdmin({ type, title, detail, icon }) {
   try {
     const id = uuidv4();
@@ -199,7 +197,7 @@ async function triggerPipedream(project, user, files) {
       submittedAt: new Date().toISOString(),
     };
     console.log(`[Pipedream] Triggering pipeline for project: ${project.title} (${files.length} files)`);
-    
+
     startPipelineRun({
       project_id: project.id,
       project_title: project.title,
@@ -251,31 +249,31 @@ router.post('/auth/register', async (req, res) => {
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
-    // --- One account per company domain (skip free email providers) ---
-const emailDomain = email.toLowerCase().split('@')[1];
-const freeProviders = [
-  'gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk',
-  'live.com','live.co.uk','yahoo.com','yahoo.co.uk','icloud.com','me.com',
-  'aol.com','protonmail.com','proton.me','btinternet.com','sky.com',
-  'virginmedia.com','talktalk.net','mail.com','zoho.com','gmx.com',
-];
-if (!freeProviders.includes(emailDomain)) {
-  const domainUser = db.prepare(
-    "SELECT id, full_name, email FROM users WHERE LOWER(email) LIKE ? LIMIT 1"
-  ).get(`%@${emailDomain}`);
-  if (domainUser) {
-    // Notify admin about the blocked attempt
-    notifyAdmin({
-      type: 'blocked_signup',
-      title: `Blocked signup: ${fullName}`,
-      detail: `${email.toLowerCase()} — domain already registered by ${domainUser.full_name} (${domainUser.email})`,
-      icon: 'user-blocked',
-    });
-    return res.status(409).json({
-      error: 'An account already exists for your organisation. Please contact your colleague or reach out to us for access.'
-    });
-  }
-}
+
+    const emailDomain = email.toLowerCase().split('@')[1];
+    const freeProviders = [
+      'gmail.com','googlemail.com','outlook.com','hotmail.com','hotmail.co.uk',
+      'live.com','live.co.uk','yahoo.com','yahoo.co.uk','icloud.com','me.com',
+      'aol.com','protonmail.com','proton.me','btinternet.com','sky.com',
+      'virginmedia.com','talktalk.net','mail.com','zoho.com','gmx.com',
+    ];
+    if (!freeProviders.includes(emailDomain)) {
+      const domainUser = db.prepare(
+        "SELECT id, full_name, email FROM users WHERE LOWER(email) LIKE ? LIMIT 1"
+      ).get(`%@${emailDomain}`);
+      if (domainUser) {
+        notifyAdmin({
+          type: 'blocked_signup',
+          title: `Blocked signup: ${fullName}`,
+          detail: `${email.toLowerCase()} — domain already registered by ${domainUser.full_name} (${domainUser.email})`,
+          icon: 'user-blocked',
+        });
+        return res.status(409).json({
+          error: 'An account already exists for your organisation. Please contact your colleague or reach out to us for access.'
+        });
+      }
+    }
+
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
@@ -284,7 +282,6 @@ if (!freeProviders.includes(emailDomain)) {
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
 
-    // ─── LOG: New signup ───
     logActivity({
       event_type: 'signup',
       title: fullName + ' signed up',
@@ -294,7 +291,6 @@ if (!freeProviders.includes(emailDomain)) {
       user_email: email.toLowerCase(),
     });
 
-    // ─── NOTIFY ADMIN: New signup (skip if admin is registering themselves) ───
     if (role !== 'admin') {
       notifyAdmin({
         type: 'new_signup',
@@ -326,7 +322,6 @@ router.post('/auth/login', async (req, res) => {
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
 
-    // ─── LOG: Login ───
     logActivity({
       event_type: 'login',
       title: (user.full_name || email) + ' logged in',
@@ -335,10 +330,15 @@ router.post('/auth/login', async (req, res) => {
       user_email: user.email,
     });
 
-   res.json({
+    res.json({
       token,
       user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1 }
     });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
 
 router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -352,7 +352,7 @@ router.put('/auth/change-password', authMiddleware, async (req, res) => {
     const { password } = req.body;
     if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const passwordHash = await bcrypt.hash(password, 12);
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.user.id);
+    db.prepare('UPDATE users SET password_hash = ?, force_password_change = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.user.id);
     res.json({ success: true });
   } catch (err) {
     console.error('Change password error:', err);
@@ -360,7 +360,6 @@ router.put('/auth/change-password', authMiddleware, async (req, res) => {
   }
 });
 
-// --- Magic Link Login ---
 router.get('/auth/magic', (req, res) => {
   try {
     const { token } = req.query;
@@ -380,7 +379,6 @@ router.get('/auth/magic', (req, res) => {
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
 
-    // ─── LOG: Magic link login ───
     logActivity({
       event_type: 'login',
       title: (user.full_name || user.email) + ' logged in via magic link',
@@ -400,18 +398,13 @@ router.get('/auth/magic', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// NOTIFICATIONS API (Admin only)
+// NOTIFICATIONS API
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Get all notifications (admin only)
 router.get('/notifications', authMiddleware, adminMiddleware, (req, res) => {
   try {
-    const notifications = db.prepare(
-      'SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50'
-    ).all();
-    const unreadCount = db.prepare(
-      'SELECT COUNT(*) as count FROM notifications WHERE read = 0'
-    ).get().count;
+    const notifications = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50').all();
+    const unreadCount = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE read = 0').get().count;
     res.json({ notifications, unreadCount });
   } catch (err) {
     console.error('Get notifications error:', err);
@@ -419,7 +412,6 @@ router.get('/notifications', authMiddleware, adminMiddleware, (req, res) => {
   }
 });
 
-// Mark one notification as read
 router.put('/notifications/:id/read', authMiddleware, adminMiddleware, (req, res) => {
   try {
     db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(req.params.id);
@@ -430,7 +422,6 @@ router.put('/notifications/:id/read', authMiddleware, adminMiddleware, (req, res
   }
 });
 
-// Mark all notifications as read
 router.put('/notifications/read-all', authMiddleware, adminMiddleware, (req, res) => {
   try {
     db.prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
@@ -479,7 +470,6 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     db.prepare('INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, \'starter\', 2)').run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
-    // ─── LOG: Admin added a user ───
     logActivity({
       event_type: 'signup',
       title: fullName + ' added by admin',
@@ -522,7 +512,6 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     const planInfo = getUserPlanInfo(updated);
 
-    // ─── LOG: Plan changed ───
     logActivity({
       event_type: 'plan_changed',
       title: (user.full_name || user.email) + ' plan changed to ' + PLANS[plan].label,
@@ -552,14 +541,14 @@ router.put('/admin/users/:id/role', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
-router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {   try {     const { password } = req.body;     if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });     const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);     if (!user) return res.status(404).json({ error: 'User not found' });     const passwordHash = await bcrypt.hash(password, 12);     db.prepare('UPDATE users SET password_hash = ?, force_password_change = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.params.id);     res.json({ success: true });   } catch (err) {     console.error('Reset password error:', err);     res.status(500).json({ error: 'Failed to reset password' });   } });
+router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { password } = req.body;
     if (!password || password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const passwordHash = await bcrypt.hash(password, 12);
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.params.id);
+    db.prepare('UPDATE users SET password_hash = ?, force_password_change = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, req.params.id);
     res.json({ success: true });
   } catch (err) {
     console.error('Reset password error:', err);
@@ -668,7 +657,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     if (!isPayg && files.length > 0) triggerPipedream(project, user, files);
     const updatedPlanInfo = getUserPlanInfo(user);
 
-    // ─── LOG: Project submitted ───
     logActivity({
       event_type: 'project_created',
       title: (user.full_name || user.email) + ' submitted a project',
@@ -678,7 +666,6 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
       user_email: user.email,
     });
 
-    // ─── NOTIFY ADMIN: New project submitted ───
     notifyAdmin({
       type: 'new_project',
       title: `New project: ${title}`,
