@@ -61,7 +61,7 @@ export default function MyRatesPage() {
       setRates(data.rates || []);
       setStats(data.stats || null);
       const cats = {};
-      for (const r of (data.rates || [])) cats[r.category] = true;
+      for (const r of (data.rates || [])) cats[r.category] = false;
       setExpandedCats(cats);
     } catch (e) { console.error('Failed to load rates:', e); } finally { setLoading(false); }
   }, []);
