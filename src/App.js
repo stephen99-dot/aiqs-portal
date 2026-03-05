@@ -18,6 +18,7 @@ import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -44,8 +45,13 @@ function AppInner() {
         {/* Guest routes */}
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
+
         {/* Magic link — no auth guard, handles its own login */}
         <Route path="/magic" element={<MagicLinkPage />} />
+
+        {/* Force password change — needs to be outside Layout so it's full screen */}
+        <Route path="/change-password" element={<ChangePasswordPage />} />
+
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -61,6 +67,7 @@ function AppInner() {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
       {user && <WhatsAppWidget theme={t} userName={user?.fullName} />}
