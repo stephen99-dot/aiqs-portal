@@ -2,17 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
-function getUserStorageKey() {
-  try {
-    const token = localStorage.getItem('aiqs_token');
-    if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return 'aiqs_chat_' + (payload.id || payload.sub || 'default');
-    }
-  } catch {}
-  return 'aiqs_chat_default';
-}
-
 const THINKING_STAGES = [
   { icon: '📄', text: 'Reading your input...' },
   { icon: '🔍', text: 'Analysing project scope...' },
@@ -22,7 +11,7 @@ const THINKING_STAGES = [
 ];
 
 export default function ChatPage() {
-  const { t, mode } = useTheme();
+  const { mode } = useTheme();
   const isDark = mode === 'dark';
 
   const [messages, setMessages] = useState([]);
@@ -32,33 +21,27 @@ export default function ChatPage() {
   const [thinkingStage, setThinkingStage] = useState(0);
   const [expandedThinking, setExpandedThinking] = useState({});
 
-  // Session management
+  // Sidebar open by default
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [showHistory, setShowHistory] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const thinkingInterval = useRef(null);
   const saveTimeout = useRef(null);
-  const hadFilesRef = useRef(false); // tracks whether files were sent with last message
+  const hadFilesRef = useRef(false);
 
-  // ── Load sessions on mount ──────────────────────────────────────
-  useEffect(() => {
-    loadSessions();
-  }, []);
+  useEffect(() => { loadSessions(); }, []);
 
   async function loadSessions() {
     setLoadingSessions(true);
     try {
       const data = await apiFetch('/chat-sessions');
       setSessions(data.sessions || []);
-    } catch (e) {
-      console.error('Failed to load sessions:', e);
-    } finally {
-      setLoadingSessions(false);
-    }
+    } catch (e) { console.error('Failed to load sessions:', e); }
+    finally { setLoadingSessions(false); }
   }
 
   async function loadSession(sessionId) {
@@ -67,10 +50,7 @@ export default function ChatPage() {
       setMessages(data.messages || []);
       setCurrentSessionId(sessionId);
       setExpandedThinking({});
-      setShowHistory(false);
-    } catch (e) {
-      console.error('Failed to load session:', e);
-    }
+    } catch (e) { console.error('Failed to load session:', e); }
   }
 
   async function deleteSession(sessionId, e) {
@@ -78,26 +58,17 @@ export default function ChatPage() {
     try {
       await apiFetch(`/chat-sessions/${sessionId}`, { method: 'DELETE' });
       setSessions(prev => prev.filter(s => s.id !== sessionId));
-      if (currentSessionId === sessionId) {
-        setMessages([]);
-        setCurrentSessionId(null);
-      }
-    } catch (e) {
-      console.error('Failed to delete session:', e);
-    }
+      if (currentSessionId === sessionId) { setMessages([]); setCurrentSessionId(null); }
+    } catch (e) { console.error('Failed to delete session:', e); }
   }
 
-  // Auto-save after each message update (debounced)
   const saveSession = useCallback(async (msgs, sessionId) => {
     if (msgs.length === 0) return;
     try {
       const saveable = msgs.map(m => ({
-        role: m.role,
-        content: m.content,
-        thinking: m.thinking || null,
-        downloadFiles: m.downloadFiles || null,
-        timestamp: m.timestamp,
-        error: m.error || false,
+        role: m.role, content: m.content,
+        thinking: m.thinking || null, downloadFiles: m.downloadFiles || null,
+        timestamp: m.timestamp, error: m.error || false,
       }));
       const data = await apiFetch('/chat-sessions', {
         method: 'POST',
@@ -110,17 +81,13 @@ export default function ChatPage() {
         return data.id;
       }
       return sessionId;
-    } catch (e) {
-      console.error('Failed to save session:', e);
-    }
+    } catch (e) { console.error('Failed to save session:', e); }
   }, []);
 
   useEffect(() => {
     if (messages.length === 0) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => {
-      saveSession(messages, currentSessionId);
-    }, 1500);
+    saveTimeout.current = setTimeout(() => saveSession(messages, currentSessionId), 1500);
     return () => clearTimeout(saveTimeout.current);
   }, [messages, currentSessionId, saveSession]);
 
@@ -141,77 +108,82 @@ export default function ChatPage() {
     return () => { if (thinkingInterval.current) clearInterval(thinkingInterval.current); };
   }, [sending]);
 
-  // Block nav while sending
   useEffect(() => {
     window.__aiqs_chat_sending = sending;
     return () => { window.__aiqs_chat_sending = false; };
   }, [sending]);
 
-  // ── Theme colors ────────────────────────────────────────────────
-  const colors = isDark ? {
+  // ── Colors ───────────────────────────────────────────────────────
+  const c = isDark ? {
     pageBg: '#06080F',
-    containerBg: '#0D1117',
-    containerBorder: '#1E293B',
-    sidebarBg: '#090D16',
-    sidebarBorder: '#1E293B',
-    sessionHover: '#111827',
-    sessionActive: '#1A2332',
-    welcomeBg: '#111827',
-    welcomeBorder: '#1E293B',
-    userBubble: '#1E3A5F',
-    assistantBubble: '#1A1F2E',
+    sidebarBg: '#0A0D16',
+    sidebarBorder: '#161E2E',
+    sidebarHeaderBg: '#080B13',
+    sessionHover: '#0F1520',
+    sessionActive: '#132040',
+    sessionActiveBorder: 'rgba(37,99,235,0.35)',
+    sessionActiveText: '#E2EEFF',
+    chatBg: '#0D1117',
+    chatBorder: '#1A2235',
+    userBubble: '#1B3557',
+    assistantBubble: '#111827',
     textPrimary: '#F1F5F9',
     textSecondary: '#94A3B8',
-    textMuted: '#64748B',
+    textMuted: '#3D5068',
     inputBg: '#111827',
     inputBorder: '#1E293B',
     inputText: '#F1F5F9',
-    inputPlaceholder: '#64748B',
+    inputPlaceholder: '#3D5068',
     accent: '#2563EB',
     suggestionBg: '#111827',
     suggestionBorder: '#1E293B',
-    suggestionHover: '#1A2332',
-    fileBadgeBg: '#1E293B',
-    fileBarBg: '#111827',
-    chipBg: '#1E293B',
-    chipBorder: '#334155',
+    fileBarBg: '#0D1117',
+    chipBg: '#1A2235',
+    chipBorder: '#2A3A55',
     errorText: '#F87171',
-    avatarBg: '#1E293B',
-    scrollThumb: '#334155',
+    avatarBg: '#1A2235',
+    scrollThumb: '#1E293B',
     thinkingBg: '#111827',
     thinkingBorder: '#1E293B',
     thinkingText: '#94A3B8',
     thinkingAccent: '#F59E0B',
     thinkingHeaderBg: '#0D1117',
-    stageActiveBg: 'rgba(37,99,235,0.1)',
+    stageActiveBg: 'rgba(37,99,235,0.08)',
     stageActiveText: '#60A5FA',
-    stageDoneText: '#10B981',
-    stageWaitText: '#3B4D66',
-    deleteBtn: '#334155',
+    stageDoneText: '#34D399',
+    stageWaitText: '#1E2D40',
+    topBarBg: '#080B13',
+    topBarBorder: '#161E2E',
+    divider: '#161E2E',
+    newChatColor: '#F59E0B',
+    newChatBg: 'rgba(245,158,11,0.07)',
+    newChatBorder: 'rgba(245,158,11,0.18)',
+    groupLabelColor: '#2D3E55',
+    collapseIconColor: '#2D3E55',
+    collapseIconActive: '#3B82F6',
   } : {
-    pageBg: '#F4F6FA',
-    containerBg: '#FFFFFF',
-    containerBorder: '#E2E8F0',
-    sidebarBg: '#F8FAFC',
+    pageBg: '#F0F4FA',
+    sidebarBg: '#FFFFFF',
     sidebarBorder: '#E2E8F0',
+    sidebarHeaderBg: '#F8FAFC',
     sessionHover: '#F1F5F9',
     sessionActive: '#EFF6FF',
-    welcomeBg: '#F8FAFC',
-    welcomeBorder: '#E2E8F0',
+    sessionActiveBorder: 'rgba(37,99,235,0.2)',
+    sessionActiveText: '#1E3A5F',
+    chatBg: '#FFFFFF',
+    chatBorder: '#E2E8F0',
     userBubble: '#2563EB',
     assistantBubble: '#F1F5F9',
     textPrimary: '#1E293B',
     textSecondary: '#475569',
     textMuted: '#94A3B8',
-    inputBg: '#FFFFFF',
+    inputBg: '#F8FAFC',
     inputBorder: '#CBD5E1',
     inputText: '#1E293B',
     inputPlaceholder: '#94A3B8',
     accent: '#2563EB',
     suggestionBg: '#FFFFFF',
     suggestionBorder: '#E2E8F0',
-    suggestionHover: '#F1F5F9',
-    fileBadgeBg: '#E2E8F0',
     fileBarBg: '#F8FAFC',
     chipBg: '#F1F5F9',
     chipBorder: '#CBD5E1',
@@ -223,17 +195,23 @@ export default function ChatPage() {
     thinkingText: '#64748B',
     thinkingAccent: '#D97706',
     thinkingHeaderBg: '#F1F5F9',
-    stageActiveBg: 'rgba(37,99,235,0.06)',
+    stageActiveBg: 'rgba(37,99,235,0.05)',
     stageActiveText: '#2563EB',
     stageDoneText: '#059669',
     stageWaitText: '#CBD5E1',
-    deleteBtn: '#E2E8F0',
+    topBarBg: '#FFFFFF',
+    topBarBorder: '#E2E8F0',
+    divider: '#E2E8F0',
+    newChatColor: '#D97706',
+    newChatBg: 'rgba(245,158,11,0.06)',
+    newChatBorder: 'rgba(245,158,11,0.2)',
+    groupLabelColor: '#CBD5E1',
+    collapseIconColor: '#CBD5E1',
+    collapseIconActive: '#2563EB',
   };
 
-  // ── Helpers ─────────────────────────────────────────────────────
-  function addFiles(fileList) {
-    setFiles(prev => [...prev, ...Array.from(fileList)].slice(0, 5));
-  }
+  // ── Helpers ──────────────────────────────────────────────────────
+  function addFiles(fl) { setFiles(prev => [...prev, ...Array.from(fl)].slice(0, 5)); }
   function removeFile(i) { setFiles(prev => prev.filter((_, idx) => idx !== i)); }
   function fileIcon(name) {
     const ext = (name || '').split('.').pop().toLowerCase();
@@ -244,98 +222,66 @@ export default function ChatPage() {
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     return (b / 1048576).toFixed(1) + ' MB';
   }
-  function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
+  function groupSessions(sessions) {
+    const today = [], yesterday = [], week = [], older = [];
     const now = new Date();
-    const diffDays = Math.floor((now - d) / 86400000);
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return diffDays + 'd ago';
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    sessions.forEach(s => {
+      const diff = Math.floor((now - new Date(s.updated_at)) / 86400000);
+      if (diff === 0) today.push(s);
+      else if (diff === 1) yesterday.push(s);
+      else if (diff < 7) week.push(s);
+      else older.push(s);
+    });
+    return [
+      { label: 'Today', items: today },
+      { label: 'Yesterday', items: yesterday },
+      { label: 'Previous 7 days', items: week },
+      { label: 'Older', items: older },
+    ].filter(g => g.items.length > 0);
   }
+  function startNewChat() { setMessages([]); setCurrentSessionId(null); setExpandedThinking({}); }
+  function toggleThinking(idx) { setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] })); }
 
-  function startNewChat() {
-    setMessages([]);
-    setCurrentSessionId(null);
-    setExpandedThinking({});
-    setShowHistory(false);
-  }
-
-  function toggleThinking(idx) {
-    setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] }));
-  }
-
-  // ── Send message ────────────────────────────────────────────────
+  // ── Send ─────────────────────────────────────────────────────────
   async function handleSend(e) {
     e.preventDefault();
     if (!input.trim() && files.length === 0) return;
-
     const userMessage = {
-      role: 'user',
-      content: input,
+      role: 'user', content: input,
       files: files.map(f => ({ name: f.name, size: f.size })),
       timestamp: new Date().toISOString(),
     };
-
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     const currentInput = input;
     const currentFiles = [...files];
-
-    // Track whether this send included drawings (for ETA display)
     hadFilesRef.current = files.length > 0;
-
-    setInput('');
-    setFiles([]);
-    setSending(true);
-
+    setInput(''); setFiles([]); setSending(true);
     try {
-      const history = messages
-        .filter(m => m.content)
-        .map(m => ({ role: m.role, content: m.content }));
-
+      const history = messages.filter(m => m.content).map(m => ({ role: m.role, content: m.content }));
       const formData = new FormData();
       formData.append('message', currentInput);
       formData.append('history', JSON.stringify(history));
       currentFiles.forEach(f => formData.append('files', f));
-
       const data = await apiFetch('/chat', { method: 'POST', body: formData });
-
-      const assistantMsg = {
-        role: 'assistant',
-        content: data.reply,
-        thinking: data.thinking || null,
-        downloadFiles: data.files || null,
-        paymentRequired: data.payment_required || null,
-        quota: data.quota || null,
+      setMessages(prev => [...prev, {
+        role: 'assistant', content: data.reply,
+        thinking: data.thinking || null, downloadFiles: data.files || null,
+        paymentRequired: data.payment_required || null, quota: data.quota || null,
         timestamp: new Date().toISOString(),
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
-
-      // Refresh session list after BOQ generation
-      if (data.files && data.files.length > 0) {
-        setTimeout(loadSessions, 2000);
-      }
+      }]);
+      if (data.files && data.files.length > 0) setTimeout(loadSessions, 2000);
     } catch (err) {
       const isQuota = err.message && (err.message.includes('limit') || err.message.includes('Upgrade'));
       const isSuspended = err.message && err.message.includes('suspended');
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: isSuspended
-          ? 'Your account has been suspended. Please contact support.'
+        content: isSuspended ? 'Your account has been suspended. Please contact support.'
           : isQuota ? err.message : 'Sorry, something went wrong. Please try again.',
-        timestamp: new Date().toISOString(),
-        error: !isQuota,
-        paymentRequired: isQuota ? {
-          type: 'upgrade', message: err.message, price: 99, currency: 'GBP',
-          url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
-        } : null,
+        timestamp: new Date().toISOString(), error: !isQuota,
+        paymentRequired: isQuota ? { type: 'upgrade', message: err.message, price: 99, currency: 'GBP', url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01' } : null,
       }]);
-    } finally {
-      setSending(false);
-    }
+    } finally { setSending(false); }
   }
 
   function handleKeyDown(e) {
@@ -346,35 +292,31 @@ export default function ChatPage() {
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   }
 
-  // ── Sub-components ───────────────────────────────────────────────
+  // ── Thinking indicator ───────────────────────────────────────────
   function ThinkingIndicator() {
     return (
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 12, background: colors.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📐</div>
-        <div style={{ maxWidth: '70%', borderRadius: '4px 16px 16px 16px', background: colors.assistantBubble, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: c.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>📐</div>
+        <div style={{ maxWidth: '72%', borderRadius: '4px 16px 16px 16px', background: c.assistantBubble, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: colors.thinkingAccent, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: colors.thinkingAccent, animation: 'thinkPulse 1.5s ease-in-out infinite' }} />
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: c.thinkingAccent, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: c.thinkingAccent, animation: 'thinkPulse 1.5s ease-in-out infinite' }} />
               AI is thinking...
             </div>
-            <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 500, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, color: c.textMuted, fontWeight: 500, whiteSpace: 'nowrap' }}>
               {hadFilesRef.current ? 'Est. 2–3 min with drawings' : 'Est. 30–60 sec'}
             </span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {THINKING_STAGES.map((stage, i) => {
               const isDone = i < thinkingStage;
               const isActive = i === thinkingStage;
               const isWaiting = i > thinkingStage;
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: isActive ? colors.stageActiveBg : 'transparent', opacity: isWaiting ? 0.35 : 1, transition: 'all 0.4s ease' }}>
-                  <span style={{ fontSize: 14, flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>{isDone ? '✅' : stage.icon}</span>
-                  <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isDone ? colors.stageDoneText : isActive ? colors.stageActiveText : colors.stageWaitText, transition: 'color 0.3s ease' }}>{stage.text}</span>
-                  {isActive && (
-                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
-                      {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: colors.stageActiveText, animation: 'typingPulse 1.4s infinite', animationDelay: `${d * 0.2}s` }} />)}
-                    </span>
-                  )}
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px', borderRadius: 7, background: isActive ? c.stageActiveBg : 'transparent', opacity: isWaiting ? 0.3 : 1, transition: 'all 0.4s ease' }}>
+                  <span style={{ fontSize: 13, flexShrink: 0, filter: isWaiting ? 'grayscale(1)' : 'none' }}>{isDone ? '✅' : stage.icon}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, color: isDone ? c.stageDoneText : isActive ? c.stageActiveText : c.stageWaitText, transition: 'color 0.3s ease' }}>{stage.text}</span>
+                  {isActive && <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>{[0,1,2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.stageActiveText, animation: 'typingPulse 1.4s infinite', animationDelay: `${d * 0.2}s` }} />)}</span>}
                 </div>
               );
             })}
@@ -388,151 +330,249 @@ export default function ChatPage() {
     if (!thinking) return null;
     const isExpanded = expandedThinking[index];
     return (
-      <div style={{ marginBottom: 8, borderRadius: 10, border: `1px solid ${colors.thinkingBorder}`, overflow: 'hidden' }}>
-        <button onClick={() => toggleThinking(index)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: colors.thinkingHeaderBg, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: colors.thinkingAccent }}>
+      <div style={{ marginBottom: 8, borderRadius: 10, border: `1px solid ${c.thinkingBorder}`, overflow: 'hidden' }}>
+        <button onClick={() => toggleThinking(index)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: c.thinkingHeaderBg, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: c.thinkingAccent }}>
           <span style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', display: 'inline-block', fontSize: 10 }}>▶</span>
-          <span>🧠</span>
-          <span>View AI reasoning</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: colors.textMuted }}>{isExpanded ? 'Click to collapse' : 'Click to expand'}</span>
+          <span>🧠</span><span>View AI reasoning</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 400, color: c.textMuted }}>{isExpanded ? 'Collapse' : 'Expand'}</span>
         </button>
         {isExpanded && (
-          <div style={{ padding: '12px 16px', background: colors.thinkingBg, borderTop: `1px solid ${colors.thinkingBorder}`, maxHeight: 300, overflowY: 'auto' }}>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.7, color: colors.thinkingText, fontFamily: "'JetBrains Mono', monospace" }}>{thinking}</pre>
+          <div style={{ padding: '12px 16px', background: c.thinkingBg, borderTop: `1px solid ${c.thinkingBorder}`, maxHeight: 300, overflowY: 'auto' }}>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.7, color: c.thinkingText, fontFamily: "'JetBrains Mono', monospace" }}>{thinking}</pre>
           </div>
         )}
       </div>
     );
   }
 
-  // ── History sidebar ──────────────────────────────────────────────
-  function HistorySidebar() {
-    return (
-      <div style={{
-        width: 260, flexShrink: 0,
-        background: colors.sidebarBg,
-        borderRight: `1px solid ${colors.sidebarBorder}`,
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
-        <div style={{ padding: '14px 14px 10px', borderBottom: `1px solid ${colors.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chat History</span>
-          <button onClick={startNewChat} style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '5px 10px', borderRadius: 7,
-            background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
-            color: '#F59E0B', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}>
-            + New
-          </button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px' }}>
-          {loadingSessions ? (
-            <div style={{ padding: '20px 10px', textAlign: 'center', color: colors.textMuted, fontSize: 12 }}>Loading...</div>
-          ) : sessions.length === 0 ? (
-            <div style={{ padding: '20px 10px', textAlign: 'center', color: colors.textMuted, fontSize: 12 }}>No previous chats yet</div>
-          ) : sessions.map(session => (
-            <div
-              key={session.id}
-              onClick={() => loadSession(session.id)}
-              style={{
-                padding: '9px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer',
-                background: currentSessionId === session.id ? colors.sessionActive : 'transparent',
-                border: currentSessionId === session.id ? `1px solid ${colors.accent}22` : '1px solid transparent',
-                transition: 'all 0.12s',
-                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6,
-              }}
-              onMouseEnter={e => { if (currentSessionId !== session.id) e.currentTarget.style.background = colors.sessionHover; }}
-              onMouseLeave={e => { if (currentSessionId !== session.id) e.currentTarget.style.background = 'transparent'; }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: colors.textPrimary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2 }}>
-                  {session.title || 'Untitled chat'}
-                </div>
-                <div style={{ fontSize: 10.5, color: colors.textMuted }}>{formatDate(session.updated_at)}</div>
-              </div>
-              <button
-                onClick={(e) => deleteSession(session.id, e)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, padding: '2px 4px', borderRadius: 4, fontSize: 13, flexShrink: 0, opacity: 0.5 }}
-                title="Delete this chat"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   // ── Render ───────────────────────────────────────────────────────
   return (
-    <div style={{ padding: 24, height: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column', background: colors.pageBg }}>
+    <div style={{ height: 'calc(100vh - 48px)', display: 'flex', overflow: 'hidden', background: c.pageBg }}>
       <style>{`
         @keyframes typingPulse { 0%,80%,100%{opacity:0.3;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
         @keyframes thinkPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .aiqs-messages-area::-webkit-scrollbar{width:6px}
-        .aiqs-messages-area::-webkit-scrollbar-track{background:transparent}
-        .aiqs-messages-area::-webkit-scrollbar-thumb{background:${colors.scrollThumb};border-radius:3px}
-        .aiqs-chat-textarea::placeholder{color:${colors.inputPlaceholder}}
-        .session-item:hover .session-delete{opacity:1!important}
+        .aiqs-msgs::-webkit-scrollbar{width:5px}
+        .aiqs-msgs::-webkit-scrollbar-track{background:transparent}
+        .aiqs-msgs::-webkit-scrollbar-thumb{background:${c.scrollThumb};border-radius:3px}
+        .aiqs-sidebar::-webkit-scrollbar{width:4px}
+        .aiqs-sidebar::-webkit-scrollbar-track{background:transparent}
+        .aiqs-sidebar::-webkit-scrollbar-thumb{background:${c.scrollThumb};border-radius:2px}
+        .aiqs-textarea::placeholder{color:${c.inputPlaceholder}}
+        .session-row:hover .del-btn{opacity:0.5!important}
+        .del-btn:hover{opacity:1!important;color:${c.errorText}!important}
+        .suggestion-chip:hover{border-color:${c.accent}44!important;background:${c.sessionHover}!important}
+        .new-chat-btn:hover{opacity:0.85}
+        .collapse-toggle:hover{opacity:1!important}
       `}</style>
 
-      {/* Header */}
-      <div style={{ marginBottom: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: colors.textPrimary, margin: 0 }}>AI Quantity Surveyor</h1>
-          <p style={{ fontSize: 14, color: colors.textSecondary, margin: '4px 0 0 0' }}>Upload drawings and chat about your project — get instant estimates and QS advice</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+      {/* ── Sidebar ── */}
+      <div style={{
+        width: sidebarOpen ? 264 : 0,
+        minWidth: sidebarOpen ? 264 : 0,
+        transition: 'width 0.2s ease, min-width 0.2s ease',
+        overflow: 'hidden',
+        background: c.sidebarBg,
+        borderRight: sidebarOpen ? `1px solid ${c.sidebarBorder}` : 'none',
+        display: 'flex', flexDirection: 'column',
+        flexShrink: 0,
+      }}>
+        {/* Sidebar header */}
+        <div style={{
+          padding: '0 12px',
+          height: 52,
+          background: c.sidebarHeaderBg,
+          borderBottom: `1px solid ${c.sidebarBorder}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: c.textPrimary, whiteSpace: 'nowrap' }}>Chat History</span>
+            {sessions.length > 0 && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, color: c.textMuted,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap',
+              }}>{sessions.length}</span>
+            )}
+          </div>
           <button
-            onClick={() => setShowHistory(h => !h)}
+            className="new-chat-btn"
+            onClick={startNewChat}
             style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', borderRadius: 8,
-              background: showHistory ? 'rgba(37,99,235,0.08)' : 'transparent',
-              border: `1px solid ${showHistory ? colors.accent + '44' : colors.containerBorder}`,
-              color: showHistory ? colors.accent : colors.textMuted,
-              fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 7,
+              background: c.newChatBg, border: `1px solid ${c.newChatBorder}`,
+              color: c.newChatColor, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              whiteSpace: 'nowrap', transition: 'opacity 0.15s',
             }}
           >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            History
+            + New
           </button>
-          {messages.length > 0 && (
-            <button
-              onClick={startNewChat}
-              style={{ padding: '7px 14px', borderRadius: 8, background: 'transparent', border: `1px solid ${colors.containerBorder}`, color: colors.textMuted, fontSize: 12.5, cursor: 'pointer' }}
-            >
-              New chat
-            </button>
+        </div>
+
+        {/* Session list */}
+        <div className="aiqs-sidebar" style={{ flex: 1, overflowY: 'auto', padding: '6px 6px 12px' }}>
+          {loadingSessions ? (
+            <div style={{ padding: '28px 12px', textAlign: 'center', color: c.textMuted, fontSize: 12 }}>Loading...</div>
+          ) : sessions.length === 0 ? (
+            <div style={{ padding: '40px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 30, marginBottom: 10, opacity: 0.4 }}>💬</div>
+              <div style={{ fontSize: 12, color: c.textMuted, lineHeight: 1.6 }}>No chats yet. Start a conversation below.</div>
+            </div>
+          ) : (
+            groupSessions(sessions).map(group => (
+              <div key={group.label} style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.groupLabelColor, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '10px 8px 4px' }}>
+                  {group.label}
+                </div>
+                {group.items.map(session => {
+                  const isActive = currentSessionId === session.id;
+                  return (
+                    <div
+                      key={session.id}
+                      className="session-row"
+                      onClick={() => loadSession(session.id)}
+                      style={{
+                        padding: '7px 9px',
+                        borderRadius: 8,
+                        marginBottom: 1,
+                        cursor: 'pointer',
+                        background: isActive ? c.sessionActive : 'transparent',
+                        border: `1px solid ${isActive ? c.sessionActiveBorder : 'transparent'}`,
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        transition: 'all 0.12s',
+                      }}
+                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = c.sessionHover; }}
+                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {/* Icon */}
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={isActive ? c.accent : c.textMuted} strokeWidth="2" style={{ flexShrink: 0, opacity: isActive ? 1 : 0.5 }}>
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                      </svg>
+                      {/* Title */}
+                      <span style={{
+                        flex: 1, minWidth: 0,
+                        fontSize: 12.5,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? c.sessionActiveText : c.textSecondary,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {session.title || 'Untitled chat'}
+                      </span>
+                      {/* Delete */}
+                      <button
+                        className="del-btn"
+                        onClick={e => deleteSession(session.id, e)}
+                        title="Delete"
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: c.textMuted, fontSize: 16, padding: '0 2px',
+                          lineHeight: 1, flexShrink: 0, opacity: 0,
+                          transition: 'opacity 0.15s, color 0.15s',
+                        }}
+                      >×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      {/* Main area */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, gap: 0, borderRadius: 16, overflow: 'hidden', border: `1px solid ${colors.containerBorder}`, background: colors.containerBg }}>
+      {/* ── Main chat area ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
-        {/* Sidebar */}
-        {showHistory && <HistorySidebar />}
+        {/* Top bar */}
+        <div style={{
+          height: 52, flexShrink: 0,
+          background: c.topBarBg,
+          borderBottom: `1px solid ${c.topBarBorder}`,
+          display: 'flex', alignItems: 'center',
+          padding: '0 16px', gap: 10,
+        }}>
+          {/* Sidebar toggle */}
+          <button
+            className="collapse-toggle"
+            onClick={() => setSidebarOpen(o => !o)}
+            title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+            style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent',
+              border: `1px solid ${c.topBarBorder}`,
+              cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.15s',
+            }}
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={sidebarOpen ? c.collapseIconActive : c.textMuted} strokeWidth="2">
+              <path d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          </button>
 
-        {/* Chat panel */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }} onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+          <div style={{ width: 1, height: 18, background: c.topBarBorder, flexShrink: 0 }} />
 
+          {/* Title */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: c.textPrimary }}>AI Quantity Surveyor</span>
+            <span style={{ fontSize: 12, color: c.textMuted, marginLeft: 10 }}>Upload drawings · get estimates · generate BOQs</span>
+          </div>
+
+          {/* New chat */}
+          <button
+            onClick={startNewChat}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px', borderRadius: 8, flexShrink: 0,
+              background: 'transparent', border: `1px solid ${c.topBarBorder}`,
+              color: c.textMuted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path d="M12 4v16m8-8H4"/></svg>
+            New chat
+          </button>
+        </div>
+
+        {/* Chat body */}
+        <div
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: c.chatBg }}
+          onDragOver={e => e.preventDefault()}
+          onDrop={handleDrop}
+        >
           {/* Messages */}
-          <div className="aiqs-messages-area" style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="aiqs-msgs" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
             {messages.length === 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', textAlign: 'center', flex: 1 }}>
-                <div style={{ fontSize: 48, marginBottom: 16, background: colors.welcomeBg, border: `1px solid ${colors.welcomeBorder}`, borderRadius: 20, width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📐</div>
-                <h3 style={{ fontSize: 20, fontWeight: 600, color: colors.textPrimary, margin: '0 0 8px 0' }}>Ready to analyse your project</h3>
-                <p style={{ fontSize: 14, color: colors.textSecondary, margin: '0 0 24px 0', maxWidth: 480 }}>Upload your drawings (PDF, images, or ZIP) and ask me anything — rough costs, spec advice, quantities, building regs, risks to watch for.</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, textAlign: 'center', padding: '0 24px' }}>
+                <div style={{
+                  width: 68, height: 68, borderRadius: 18,
+                  background: isDark ? '#0F1520' : '#F1F5F9',
+                  border: `1px solid ${c.topBarBorder}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 30, marginBottom: 18,
+                }}>📐</div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: c.textPrimary, margin: '0 0 8px' }}>Ready to analyse your project</h3>
+                <p style={{ fontSize: 14, color: c.textSecondary, margin: '0 0 28px', maxWidth: 460, lineHeight: 1.65 }}>
+                  Upload your drawings (PDF, images, or ZIP) and ask anything — rough costs, spec advice, quantities, building regs, risks.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 520 }}>
                   {[
                     ['💰', 'Rough cost estimate', 'Can you give me a rough cost estimate for this project?'],
                     ['📊', 'Extract quantities', 'What quantities can you extract from these drawings?'],
                     ['⚠️', 'Identify risks', 'What are the key risks or issues you can see?'],
                     ['📋', 'Building regs', 'What building regulations should I consider?'],
                   ].map(([icon, label, text], i) => (
-                    <button key={i} onClick={() => setInput(text)} style={{ background: colors.suggestionBg, border: `1px solid ${colors.suggestionBorder}`, borderRadius: 12, padding: '10px 16px', fontSize: 13, color: colors.textPrimary, cursor: 'pointer' }}>
+                    <button
+                      key={i}
+                      className="suggestion-chip"
+                      onClick={() => setInput(text)}
+                      style={{
+                        background: isDark ? '#0F1520' : '#F8FAFC',
+                        border: `1px solid ${c.topBarBorder}`,
+                        borderRadius: 10, padding: '9px 15px',
+                        fontSize: 13, color: c.textPrimary,
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
                       {icon} {label}
                     </button>
                   ))}
@@ -543,28 +583,33 @@ export default function ChatPage() {
             {messages.map((msg, i) => (
               <React.Fragment key={i}>
                 {msg.role === 'assistant' && msg.thinking && (
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: -8 }}>
-                    <div style={{ width: 36, flexShrink: 0 }} />
-                    <div style={{ maxWidth: '70%' }}>
+                  <div style={{ display: 'flex', gap: 12, marginBottom: -8 }}>
+                    <div style={{ width: 34, flexShrink: 0 }} />
+                    <div style={{ maxWidth: '72%' }}>
                       <ThinkingBlock thinking={msg.thinking} index={i} />
                     </div>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 12, background: colors.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 10,
+                    background: msg.role === 'user' ? c.accent : c.avatarBg,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 15, flexShrink: 0,
+                  }}>
                     {msg.role === 'user' ? '👤' : '📐'}
                   </div>
                   <div style={{
-                    maxWidth: '70%', padding: '12px 16px',
+                    maxWidth: '72%', padding: '11px 15px',
                     borderRadius: msg.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                    background: msg.role === 'user' ? colors.userBubble : colors.assistantBubble,
-                    color: msg.role === 'user' ? '#F1F5F9' : msg.error ? colors.errorText : colors.textPrimary,
-                    fontSize: 14, lineHeight: 1.6, wordBreak: 'break-word',
+                    background: msg.role === 'user' ? c.userBubble : c.assistantBubble,
+                    color: msg.role === 'user' ? '#F1F5F9' : msg.error ? c.errorText : c.textPrimary,
+                    fontSize: 14, lineHeight: 1.65, wordBreak: 'break-word',
                   }}>
                     {msg.role === 'user' && msg.files?.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
                         {msg.files.map((f, j) => (
-                          <span key={j} style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: '4px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span key={j} style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 6, padding: '3px 9px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                             {fileIcon(f.name)} {f.name}
                           </span>
                         ))}
@@ -576,10 +621,10 @@ export default function ChatPage() {
                       ))}
                     </div>
 
-                    {/* Download buttons */}
+                    {/* Downloads */}
                     {msg.downloadFiles && msg.downloadFiles.length > 0 && (
                       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: colors.textPrimary, opacity: 0.7 }}>Your documents are ready:</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: c.textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Documents ready</div>
                         {msg.downloadFiles.map((f, fi) => (
                           <button key={fi} onClick={async () => {
                             try {
@@ -596,11 +641,11 @@ export default function ChatPage() {
                             } catch { alert('Download failed. Please try again.'); }
                           }} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 8,
-                            padding: '10px 16px', borderRadius: 8,
+                            padding: '9px 14px', borderRadius: 8, cursor: 'pointer',
                             background: f.type === 'xlsx' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
-                            border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.2)' : 'rgba(59,130,246,0.2)'),
+                            border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.25)' : 'rgba(59,130,246,0.25)'),
                             color: f.type === 'xlsx' ? '#10B981' : '#3B82F6',
-                            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                            fontSize: 13, fontWeight: 600,
                           }}>
                             {f.type === 'xlsx' ? '📊' : '📄'} Download {f.name}
                           </button>
@@ -611,22 +656,22 @@ export default function ChatPage() {
                     {/* Payment required */}
                     {msg.paymentRequired && (
                       <div style={{ marginTop: 14, padding: 16, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: colors.textPrimary, marginBottom: 4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
-                        <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 14 }}>Choose how to proceed:</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: c.textPrimary, marginBottom: 4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
+                        <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 14 }}>Choose how to proceed:</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 8, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
                             Pay £99 — Generate this BOQ
                           </a>
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: colors.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                            <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
                               ⭐ Professional — £347/mo <span style={{ fontSize: 11, opacity: 0.65 }}>10 BOQs</span>
                             </a>
-                            <a href="https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', color: colors.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                            <a href="https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
                               👑 Premium — £447/mo <span style={{ fontSize: 11, opacity: 0.65 }}>20 BOQs</span>
                             </a>
                           </div>
                         </div>
-                        <div style={{ fontSize: 11, color: colors.textSecondary, opacity: 0.6, marginTop: 10 }}>Once payment is confirmed, just say "generate documents" again.</div>
+                        <div style={{ fontSize: 11, color: c.textSecondary, opacity: 0.6, marginTop: 10 }}>Once payment is confirmed, just say "generate documents" again.</div>
                       </div>
                     )}
                   </div>
@@ -640,39 +685,59 @@ export default function ChatPage() {
 
           {/* File chips */}
           {files.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: colors.fileBarBg, borderTop: `1px solid ${colors.containerBorder}`, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', gap: 8, padding: '8px 16px', background: c.fileBarBg, borderTop: `1px solid ${c.chatBorder}`, overflowX: 'auto', flexShrink: 0 }}>
               {files.map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: colors.chipBg, border: `1px solid ${colors.chipBorder}`, borderRadius: 10, padding: '6px 10px', fontSize: 12, color: colors.textPrimary, whiteSpace: 'nowrap' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: c.chipBg, border: `1px solid ${c.chipBorder}`, borderRadius: 10, padding: '5px 10px', fontSize: 12, color: c.textPrimary, whiteSpace: 'nowrap' }}>
                   <span>{fileIcon(f.name)}</span>
                   <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
-                  <span style={{ color: colors.textMuted }}>{formatSize(f.size)}</span>
-                  <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer', fontSize: 16, padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
+                  <span style={{ color: c.textMuted }}>{formatSize(f.size)}</span>
+                  <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', color: c.textMuted, cursor: 'pointer', fontSize: 16, padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Input bar */}
-          <form onSubmit={handleSend} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px', borderTop: `1px solid ${colors.containerBorder}`, background: colors.containerBg }}>
-            <button type="button" onClick={() => fileInputRef.current.click()} style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer', padding: 8, borderRadius: 10, display: 'flex', alignItems: 'center', flexShrink: 0 }} title="Upload drawings">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-                <path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-              </svg>
-            </button>
-            <input ref={fileInputRef} type="file" multiple onChange={e => { console.log('files selected:', e.target.files); if (e.target.files && e.target.files.length > 0) { addFiles(e.target.files); } }} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip" />
-            <textarea
-              className="aiqs-chat-textarea"
-              value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder={files.length > 0 ? 'Ask about these drawings...' : 'Upload drawings or ask a QS question...'}
-              rows={1} disabled={sending}
-              style={{ flex: 1, background: colors.inputBg, border: `1px solid ${colors.inputBorder}`, borderRadius: 12, padding: '10px 14px', fontSize: 14, color: colors.inputText, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, maxHeight: 120 }}
-            />
-            <button type="submit" disabled={sending || (!input.trim() && files.length === 0)} style={{ background: colors.accent, border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending || (!input.trim() && files.length === 0) ? 0.4 : 1 }}>
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </form>
+          {/* Input */}
+          <div style={{ padding: '10px 20px 14px', background: c.chatBg, borderTop: `1px solid ${c.chatBorder}`, flexShrink: 0 }}>
+            <form onSubmit={handleSend} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 14, padding: '7px 8px 7px 12px' }}>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current.click()}
+                style={{ background: 'none', border: 'none', color: c.textMuted, cursor: 'pointer', padding: '6px 6px', borderRadius: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                title="Upload drawings"
+              >
+                <svg width="19" height="19" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+              <input
+                ref={fileInputRef} type="file" multiple
+                onChange={e => { if (e.target.files?.length) addFiles(e.target.files); }}
+                style={{ display: 'none' }}
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip"
+              />
+              <textarea
+                className="aiqs-textarea"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={files.length > 0 ? 'Ask about these drawings...' : 'Upload drawings or ask a QS question...'}
+                rows={1}
+                disabled={sending}
+                style={{ flex: 1, background: 'transparent', border: 'none', padding: '6px 4px', fontSize: 14, color: c.inputText, resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.55, maxHeight: 140 }}
+              />
+              <button
+                type="submit"
+                disabled={sending || (!input.trim() && files.length === 0)}
+                style={{ background: c.accent, border: 'none', borderRadius: 10, padding: '8px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: sending || (!input.trim() && files.length === 0) ? 0.35 : 1, transition: 'opacity 0.15s' }}
+              >
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </form>
+            <div style={{ fontSize: 11, color: c.textMuted, textAlign: 'center', marginTop: 7 }}>
+              Drag & drop drawings · PDF, PNG, JPG, ZIP supported
+            </div>
+          </div>
         </div>
       </div>
     </div>
