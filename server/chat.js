@@ -46,6 +46,88 @@ const upload = multer({
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// SERVER-SIDE INSIGHT EXTRACTION
+// ═══════════════════════════════════════════════════════════════════════
+
+function extractInsightsFromMessage(userId, message) {
+  if (!message || message.length < 5) return;
+
+  const msg = message.trim();
+  const lower = msg.toLowerCase();
+
+  const patterns = [
+    // Supplier patterns
+    { regex: /we (?:always |usually |typically )?(?:use|buy from|get .+? from|source from|order from)\s+([A-Z][a-zA-Z\s&]+?)(?:\s+for|\s+as|\s+when|\.|\,|$)/i, category: 'supplier', template: m => `Client uses ${m[1].trim()} as supplier` },
+    { regex: /(?:our|my) (?:main |preferred |usual )?supplier(?:s)? (?:is|are)\s+([A-Z][a-zA-Z\s&,]+?)(?:\.|,|$)/i, category: 'supplier', template: m => `Client supplier: ${m[1].trim()}` },
+    { regex: /(?:we|I) (?:prefer|go with|stick with|always go to)\s+([A-Z][a-zA-Z\s&]+?)(?:\s+for|\s+when|\.|\,|$)/i, category: 'supplier', template: m => `Client prefers ${m[1].trim()}` },
+
+    // Spec preference patterns
+    { regex: /we (?:always |usually |typically )?use\s+(.{5,60}?)\s+(?:for|as|on|in)\s+(?:all|our|every)/i, category: 'spec_preference', template: m => `Client spec: ${m[1].trim()}` },
+    { regex: /(?:our|my) (?:standard|usual|default|preferred)\s+(?:spec|specification|finish|material) (?:is|for .+? is)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'spec_preference', template: m => `Standard spec: ${m[1].trim()}` },
+    { regex: /we (?:don't|do not|never) use\s+(.{5,60}?)(?:\.|,|$)/i, category: 'spec_preference', template: m => `Client excludes: ${m[1].trim()}` },
+
+    // Markup / commercial patterns
+    { regex: /(?:our|my|we use a?)\s+(?:markup|margin|overhead|oh&p|ohp) (?:is|of)\s+(\d+(?:\.\d+)?%?)/i, category: 'markup', template: m => `Client markup: ${m[1].trim()}` },
+    { regex: /we (?:charge|quote|add)\s+(\d+(?:\.\d+)?%?)\s+(?:markup|margin|overhead|for overhead)/i, category: 'markup', template: m => `Client markup: ${m[1].trim()}` },
+
+    // Geography patterns
+    { regex: /we (?:mainly|mostly|only|primarily) work (?:in|around|across)\s+(.{5,60}?)(?:\.|,|$)/i, category: 'geography', template: m => `Client works in: ${m[1].trim()}` },
+    { regex: /(?:our|my) (?:area|region|patch|territory) is\s+(.{5,60}?)(?:\.|,|$)/i, category: 'geography', template: m => `Client area: ${m[1].trim()}` },
+
+    // Project type patterns
+    { regex: /we (?:specialise|specialize|focus|mainly do|mostly do) (?:in|on)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'project_type', template: m => `Client speciality: ${m[1].trim()}` },
+    { regex: /(?:our|my) (?:main|typical|usual) (?:work|projects?) (?:is|are|involve)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'project_type', template: m => `Typical projects: ${m[1].trim()}` },
+
+    // Team / crew patterns
+    { regex: /(?:our|my) (?:team|crew|gang) (?:is|are|has|have)\s+(.{5,60}?)(?:\.|,|$)/i, category: 'team', template: m => `Client team: ${m[1].trim()}` },
+    { regex: /we have\s+(\d+\s+(?:men|guys|workers|operatives|people|carpenters|bricklayers|labourers))/i, category: 'team', template: m => `Team size: ${m[1].trim()}` },
+
+    // Exclusion patterns
+    { regex: /(?:we|I) (?:don't|do not|never|won't|will not) (?:include|cover|do|price|quote for)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'exclusion', template: m => `Client exclusion: ${m[1].trim()}` },
+    { regex: /(?:always |please )?exclude\s+(.{5,80}?)\s+(?:from|in) (?:all|our|every|the)/i, category: 'exclusion', template: m => `Always exclude: ${m[1].trim()}` },
+  ];
+
+  const validCategories = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
+
+  for (const pattern of patterns) {
+    const match = msg.match(pattern.regex);
+    if (!match) continue;
+
+    let insightText;
+    try { insightText = pattern.template(match); } catch (e) { continue; }
+
+    if (!insightText || insightText.length < 8 || insightText.length > 300) continue;
+    if (!validCategories.includes(pattern.category)) continue;
+
+    try {
+      const existing = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, pattern.category);
+      let isDuplicate = false;
+
+      for (const ex of existing) {
+        const existWords = ex.insight.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const newWords = insightText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const overlap = existWords.filter(w => newWords.includes(w)).length;
+        if (overlap / Math.max(existWords.length, 1) > 0.5) {
+          db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id);
+          isDuplicate = true;
+          console.log(`[Insight] Reinforced: ${ex.insight}`);
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run(
+          'ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText
+        );
+        console.log(`[Insight] Saved: [${pattern.category}] ${insightText}`);
+      }
+    } catch (err) {
+      console.error('[Insight] Save error:', err.message);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // DYNAMIC SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -81,18 +163,21 @@ function buildSystemPrompt(userId, forDocGen) {
   if (forDocGen) {
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
-GENERIC UK RATES (baseline):
-Strip foundations: 85/m | Concrete slab 100mm: 50/m2 | DPM: 10/m2 | Floor insulation 100mm: 20/m2
-Blockwork below DPC: 62/m2 | Blockwork inner leaf: 42/m2 | Brick outer leaf: 62/m2 | Cavity insulation: 14/m2
-Cavity wall complete: 108/m2 | Structural steel S&F: 3500/T | Concrete lintels: 35/ea | Steel lintels: 65/ea
-Roof structure: 95/m2 | Roof covering tiles: 52/m2 | Felt & battens: 12/m2 | Lead flashings: 55/m
-Fascia & soffit: 32/m | Guttering: 22/m | UPVC windows: 450/ea | Composite door: 1100/ea
-Internal doors: 330/ea | Plasterboard & skim: 22/m2 | Wall tiling: 55/m2 | Floor tiling: 65/m2
-Painting emulsion: 15/m2 | Gloss woodwork: 12/m | LVT: 62/m2 | Carpet: 28/m2 | Screed 50mm: 22/m2
-Kitchen mid: 11000/ea | Bathroom mid: 6000/ea | Electrical 1st fix: 3500 | Electrical 2nd fix: 1500
-Plumbing 1st fix: 2800 | Plumbing 2nd fix: 1400 | Radiator: 230/ea
-Render: 85/m2 | Scaffolding: 20/m2 | Skip hire: 330/ea
-Location: London +20%, Midlands +7%, North -3%, Scotland +3%, Ireland +10% (EUR)
+FIXED UK RATES — use these exact figures, no deviations:
+Strip foundations 600x250mm: 87/m | Concrete slab 100mm reinforced: 50/m2 | DPM 1200g: 10/m2 | Floor insulation 100mm Celotex: 21/m2
+Blockwork below DPC 440mm: 63/m2 | Blockwork inner leaf 100mm: 42/m2 | Brick outer leaf facing: 63/m2 | Cavity insulation 100mm: 14/m2
+Cavity wall ties: 4/m2 | Structural steel supply fab install: 3500/T | Concrete lintels: 35/ea | Steel lintels Catnic: 75/ea
+Roof structure cut timber: 95/m2 | Roof covering concrete tiles: 52/m2 | Breathable membrane: 5/m2 | Tile battens: 7/m2
+Lead flashings: 55/m | Fascia soffit uPVC: 33/m | Guttering uPVC: 22/m
+UPVC windows standard: 450/ea | Composite external door: 1100/ea | Bi-fold doors per leaf: 650/leaf
+Internal doors painted softwood: 330/ea | Plasterboard and skim: 22/m2 | Wall tiling ceramic: 55/m2 | Floor tiling porcelain: 65/m2
+Painting emulsion 2 coats: 15/m2 | Painting gloss woodwork: 12/m | LVT flooring: 62/m2 | Carpet mid range: 28/m2 | Screed 50mm: 22/m2
+Kitchen fit-out mid range: 11000/ea | Bathroom fit-out mid range: 6000/ea
+First fix electrical: 3500/item | Second fix electrical: 1500/item | First fix plumbing: 2800/item | Second fix plumbing: 1400/item
+Radiator double panel 600x1000: 230/ea | Render monocouche: 85/m2 | Scaffolding: 20/m2 | Skip hire 8yd: 330/ea
+Site setup welfare lump sum: 2000 | Project management allowance: 1500
+LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | Midlands +7% | North England -3% | Scotland +3% | Ireland +10% use EUR
+YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
 
@@ -186,54 +271,22 @@ ELEMENTAL BREAKDOWN (use these sections):
 14. Electrical — consumer unit, circuits, sockets, switches, lighting, testing, certification
 15. External Works — drainage, paving, landscaping, fencing, retaining walls
 
-GENERIC UK RATES (baseline — adjust for location):
-- Strip foundations 600x250mm: 80-95/m run
-- Concrete floor slab 100mm reinforced: 45-55/m2
-- DPM 1200g: 8-12/m2
-- Floor insulation 100mm Celotex: 18-24/m2
-- Blockwork below DPC 440mm: 58-68/m2
-- Blockwork inner leaf 100mm: 38-45/m2
-- Brick outer leaf facing: 55-70/m2
-- Cavity insulation 100mm: 12-16/m2
-- Cavity wall ties: 3-5/m2
-- Structural steel (supply, fab, install): 3,200-3,800/T
-- Concrete lintels: 25-45/each
-- Steel lintels (Catnic/IG): 35-120/each depending on span
-- Roof structure (cut timber): 85-105/m2
-- Roof covering (concrete tiles): 45-60/m2
-- Breathable membrane: 4-6/m2
-- Tile battens: 6-8/m2
-- Lead flashings: 45-65/m run
-- Fascia & soffit uPVC: 28-38/m run
-- Guttering uPVC half-round: 18-25/m run
-- UPVC windows (standard white): 350-550/each
-- Composite external door: 800-1,500/each
-- Bi-fold doors (per leaf): 500-800/leaf
-- Internal doors (painted softwood): 280-380/each
-- Plasterboard & skim: 18-25/m2
-- Wall tiling (ceramic): 45-65/m2
-- Floor tiling (porcelain 600x600): 55-75/m2
-- Painting emulsion (2 coats): 12-18/m2
-- Painting gloss (woodwork): 10-15/m run
-- LVT flooring: 55-70/m2
-- Carpet (mid-range + fitting): 22-35/m2
-- Screed 50mm: 18-25/m2
-- Kitchen fit-out (mid-range): 8,000-15,000
-- Bathroom fit-out (mid-range): 4,000-8,000
-- First fix electrical: 2,500-4,500
-- Second fix electrical: 1,200-2,000
-- First fix plumbing: 2,000-3,500
-- Second fix plumbing: 1,000-1,800
-- Radiator (double panel 600x1000): 180-280/each
-- Render (monocouche): 75-95/m2
-- Scaffolding: 15-25/m2 of elevation
-- Skip hire (8yd): 280-380/skip
-- Site welfare/setup: 1,500-3,000 lump sum
+FIXED UK RATES (use these exact figures — no ranges):
+Strip foundations 600x250mm: 87/m | Concrete slab 100mm reinforced: 50/m2 | DPM 1200g: 10/m2 | Floor insulation 100mm Celotex: 21/m2
+Blockwork below DPC 440mm: 63/m2 | Blockwork inner leaf 100mm: 42/m2 | Brick outer leaf facing: 63/m2 | Cavity insulation 100mm: 14/m2
+Cavity wall ties: 4/m2 | Structural steel supply fab install: 3500/T | Concrete lintels: 35/ea | Steel lintels Catnic: 75/ea
+Roof structure cut timber: 95/m2 | Roof covering concrete tiles: 52/m2 | Breathable membrane: 5/m2 | Tile battens: 7/m2
+Lead flashings: 55/m | Fascia soffit uPVC: 33/m | Guttering uPVC: 22/m
+UPVC windows standard: 450/ea | Composite external door: 1100/ea | Bi-fold doors per leaf: 650/leaf
+Internal doors painted softwood: 330/ea | Plasterboard and skim: 22/m2 | Wall tiling ceramic: 55/m2 | Floor tiling porcelain: 65/m2
+Painting emulsion 2 coats: 15/m2 | Painting gloss woodwork: 12/m | LVT flooring: 62/m2 | Carpet mid range: 28/m2 | Screed 50mm: 22/m2
+Kitchen fit-out mid range: 11000/ea | Bathroom fit-out mid range: 6000/ea
+First fix electrical: 3500/item | Second fix electrical: 1500/item | First fix plumbing: 2800/item | Second fix plumbing: 1400/item
+Radiator double panel 600x1000: 230/ea | Render monocouche: 85/m2 | Scaffolding: 20/m2 | Skip hire 8yd: 330/ea
+Site setup welfare lump sum: 2000 | Project management allowance: 1500
 
 LOCATION FACTORS:
-- London/SE: +15-25%  |  South Wales: baseline  |  Midlands: +5-10%
-- North England: -5% to baseline  |  Scotland: baseline to +5%
-- Ireland: +5-15% (use EUR not GBP)
+London/SE: +20% | Midlands: +7% | North England: -3% | Scotland: +3% | Ireland: +10% (use EUR)
 ${clientRateSection}
 ${clientInsightsSection}
 DOCUMENT GENERATION: This system generates downloadable Excel BOQ and Word Findings Report files. When a client asks to "generate documents" or "create the BOQ", the system produces these automatically. After providing your analysis, mention: "If you want downloadable documents, just say 'generate documents' and I'll create an Excel BOQ and Word Findings Report for you."
@@ -403,12 +456,10 @@ router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
 router.delete('/projects/:id', authMiddleware, (req, res) => {
   try {
     const projectId = req.params.id;
-    // Verify ownership first
     const project = req.user.role === 'admin'
       ? db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)
       : db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    // Delete child records first to avoid FK constraint
     db.prepare('DELETE FROM files WHERE project_id = ?').run(projectId);
     db.prepare('DELETE FROM project_data WHERE project_id = ?').run(projectId);
     db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
@@ -791,34 +842,30 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
               }
             }
             const contingencyPct = parsed.findings?.cost_summary?.contingency_pct || 7.5;
-const ohpPct = parsed.findings?.cost_summary?.ohp_pct || 12;
-const contingency = totalVal * (contingencyPct / 100);
-const ohp = (totalVal + contingency) * (ohpPct / 100);
-const grandTotal = totalVal + contingency + ohp;
+            const ohpPct = parsed.findings?.cost_summary?.ohp_pct || 12;
+            const contingency = totalVal * (contingencyPct / 100);
+            const ohp = (totalVal + contingency) * (ohpPct / 100);
+            const grandTotal = totalVal + contingency + ohp;
             var currency = reply.includes('EUR') || reply.includes('€') ? '€' : '£';
-reply = 'Your documents have been generated for ' + projectName + '.\n\n';
-reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections.\n\n';
-reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
+            reply = 'Your documents have been generated for ' + projectName + '.\n\n';
+            reply += itemCount + ' line items across ' + (parsed.sections || []).length + ' sections.\n\n';
+            reply += 'Download your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.';
 
-            // ── Save to BOTH chat_projects AND projects table ──────────
             try {
               var summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
               var boqF = downloadFiles.find(function(f){return f.type==='xlsx';});
               var docF = downloadFiles.find(function(f){return f.type==='docx';});
               var projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
 
-              // Save to chat_projects (existing table)
               db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)')
                 .run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
 
-              // Also save to projects table so it shows on dashboard
               try {
                 const projId = 'proj_' + uuidv4().slice(0, 10);
                 db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)`)
                   .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null);
                 console.log('[Project] Saved to projects table: ' + projectName);
               } catch(projErr) {
-                // projects table might have different schema — log but don't fail
                 console.error('[Project] projects table insert error:', projErr.message);
               }
 
@@ -865,6 +912,11 @@ reply += 'Download your Excel BOQ and Findings Report below. If any rates need a
         }
       }
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
+
+    // ── Server-side insight extraction ────────────────────────────
+    try {
+      extractInsightsFromMessage(userId, message);
+    } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
 
     // ── Parse RATE_ADD / RATE_UPDATE tags ─────────────────────────
     try {
