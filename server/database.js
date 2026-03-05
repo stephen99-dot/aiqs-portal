@@ -131,6 +131,7 @@ const migrations = [
   { column: 'suspended_reason', table: 'users', sql: "ALTER TABLE users ADD COLUMN suspended_reason TEXT" },
   { column: 'bonus_messages', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_messages INTEGER DEFAULT 0" },
   { column: 'bonus_docs', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_docs INTEGER DEFAULT 0" },
+  { column: 'force_password_change', table: 'users', sql: "ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
