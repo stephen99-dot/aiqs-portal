@@ -644,7 +644,7 @@ export default function ChatPage() {
 
           {/* Input bar */}
           <form onSubmit={handleSend} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '12px 16px', borderTop: `1px solid ${colors.containerBorder}`, background: colors.containerBg }}>
-            <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer', padding: 8, borderRadius: 10, display: 'flex', alignItems: 'center', flexShrink: 0 }} title="Upload drawings">
+            <button type="button" onClick={() => fileInputRef.current.click()} style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer', padding: 8, borderRadius: 10, display: 'flex', alignItems: 'center', flexShrink: 0 }} title="Upload drawings">
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
                 <path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
               </svg>
