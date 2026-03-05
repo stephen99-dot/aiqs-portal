@@ -275,9 +275,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleDeleteProject(e, projectId) {
-    e.preventDefault();
-    e.stopPropagation();
+  async function handleDeleteProject(projectId) {
     if (!window.confirm('Delete this project? This cannot be undone.')) return;
     setDeletingId(projectId);
     try {
@@ -362,56 +360,61 @@ export default function DashboardPage() {
             {projectList.map(project => {
               const st = STATUS_MAP[project.status] || STATUS_MAP.submitted;
               return (
-                <Link
+                <div
                   key={project.id}
-                  to={`/project/${project.id}`}
                   className="project-row"
-                  style={{
-                    cursor: 'pointer', textDecoration: 'none', color: 'inherit',
-                    display: 'flex', alignItems: 'center',
-                  }}
+                  style={{ display: 'flex', alignItems: 'center' }}
                 >
-                  <div className="project-info">
-                    <div className="project-title">{project.title}</div>
-                    <div className="project-meta">
-                      {project.item_count > 0 && <span>{project.item_count} items</span>}
-                      {project.total_value > 0 && (
-                        <span style={{ marginLeft: 8 }}>
-                          {project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}
-                        </span>
-                      )}
-                      {project.project_type && (
-                        <span style={{ marginLeft: 8, opacity: 0.6 }}>{project.project_type}</span>
-                      )}
+                  <Link
+                    to={`/project/${project.id}`}
+                    style={{ flex: 1, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', minWidth: 0 }}
+                  >
+                    <div className="project-info">
+                      <div className="project-title">{project.title}</div>
+                      <div className="project-meta">
+                        {project.item_count > 0 && <span>{project.item_count} items</span>}
+                        {project.total_value > 0 && (
+                          <span style={{ marginLeft: 8 }}>
+                            {project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}
+                          </span>
+                        )}
+                        {project.project_type && (
+                          <span style={{ marginLeft: 8, opacity: 0.6 }}>{project.project_type}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="project-right" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                      color: st.color, background: st.bg, whiteSpace: 'nowrap',
-                    }}>
-                      {st.label}
-                    </span>
-                    <span className="project-date" style={{ whiteSpace: 'nowrap' }}>
-                      {new Date(project.created_at).toLocaleDateString('en-GB', {
-                        day: 'numeric', month: 'short', year: 'numeric',
-                      })}
-                    </span>
-                    <button
-                      onClick={(e) => handleDeleteProject(e, project.id)}
-                      disabled={deletingId === project.id}
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        color: t.textMuted, fontSize: 16, padding: '2px 6px',
-                        borderRadius: 5, opacity: deletingId === project.id ? 0.4 : 0.5,
-                        lineHeight: 1, flexShrink: 0,
-                      }}
-                      title="Delete project"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </Link>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{
+                        padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
+                        color: st.color, background: st.bg, whiteSpace: 'nowrap',
+                      }}>
+                        {st.label}
+                      </span>
+                      <span className="project-date" style={{ whiteSpace: 'nowrap' }}>
+                        {new Date(project.created_at).toLocaleDateString('en-GB', {
+                          day: 'numeric', month: 'short', year: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteProject(project.id);
+                    }}
+                    disabled={deletingId === project.id}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: t.textMuted, fontSize: 16, padding: '2px 6px',
+                      borderRadius: 5, opacity: deletingId === project.id ? 0.4 : 0.5,
+                      lineHeight: 1, flexShrink: 0, marginLeft: 8,
+                    }}
+                    title="Delete project"
+                  >
+                    ×
+                  </button>
+                </div>
               );
             })}
           </div>
