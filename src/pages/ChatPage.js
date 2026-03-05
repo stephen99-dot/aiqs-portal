@@ -42,6 +42,7 @@ export default function ChatPage() {
   const fileInputRef = useRef(null);
   const thinkingInterval = useRef(null);
   const saveTimeout = useRef(null);
+  const hadFilesRef = useRef(false); // tracks whether files were sent with last message
 
   // ── Load sessions on mount ──────────────────────────────────────
   useEffect(() => {
@@ -281,6 +282,10 @@ export default function ChatPage() {
     setMessages(newMessages);
     const currentInput = input;
     const currentFiles = [...files];
+
+    // Track whether this send included drawings (for ETA display)
+    hadFilesRef.current = files.length > 0;
+
     setInput('');
     setFiles([]);
     setSending(true);
@@ -347,15 +352,15 @@ export default function ChatPage() {
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ width: 36, height: 36, borderRadius: 12, background: colors.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>📐</div>
         <div style={{ maxWidth: '70%', borderRadius: '4px 16px 16px 16px', background: colors.assistantBubble, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: colors.thinkingAccent, display: 'flex', alignItems: 'center', gap: 8 }}>
-    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: colors.thinkingAccent, animation: 'thinkPulse 1.5s ease-in-out infinite' }} />
-    AI is thinking...
-  </div>
-  <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 500 }}>
-    {files.length > 0 ? 'Est. 2–3 min with drawings' : 'Est. 30–60 sec'}
-  </span>
-</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: colors.thinkingAccent, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: colors.thinkingAccent, animation: 'thinkPulse 1.5s ease-in-out infinite' }} />
+              AI is thinking...
+            </div>
+            <span style={{ fontSize: 11, color: colors.textMuted, fontWeight: 500, whiteSpace: 'nowrap' }}>
+              {hadFilesRef.current ? 'Est. 2–3 min with drawings' : 'Est. 30–60 sec'}
+            </span>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {THINKING_STAGES.map((stage, i) => {
               const isDone = i < thinkingStage;
