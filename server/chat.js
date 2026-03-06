@@ -991,6 +991,25 @@ ${summary}`);
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
+    // If session has a locked takeoff and this is a short non-file message (e.g. "Dublin", "yes", "ok"),
+    // override the general AI reply with a focused response that acknowledges and moves forward
+    if (!hasFiles && !wantsDocuments && sessionId && benchmarkStore) {
+      try {
+        const existingTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId);
+        if (existingTakeoff && existingTakeoff.items && existingTakeoff.items.length > 0) {
+          const msgLen = (message || '').trim().length;
+          if (msgLen < 80) {
+            const isLocation = /dublin|cork|galway|london|manchester|birmingham|edinburgh|glasgow|cardiff|belfast|bristol|leeds|sheffield|liverpool|ireland|uk/i.test(message || '');
+            const isConfirm = /^(yes|ok|okay|sure|fine|go|proceed|correct|sounds good|perfect|great)/i.test((message || '').trim());
+            if (isLocation || isConfirm) {
+              const locLabel = isLocation ? (message || '').trim() : (existingTakeoff.location || 'location noted');
+              reply = 'Got it - ' + locLabel + ' noted. Quantities locked (ref: ' + existingTakeoff.id + ') with ' + existingTakeoff.items.length + ' items. Say "generate documents" and I will produce your Excel BOQ and Word Findings Report.';
+            }
+          }
+        }
+      } catch(e) {}
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // 3-STAGE DETERMINISTIC PIPELINE
     // Stage 1: EXTRACT quantities (AI measures, shows working, saves to DB)
