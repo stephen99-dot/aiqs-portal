@@ -331,6 +331,10 @@ function excelToText(filePath, originalName) {
     for (const opts of strategies) {
       try {
         wb = XLSX.read(buf, opts);
+        // TEMP DEBUG — remove after testing
+const debugSheet = wb.Sheets[wb.SheetNames[0]];
+const sampleCells = Object.keys(debugSheet).filter(k => !k.startsWith('!')).slice(0, 10);
+console.log('[Excel DEBUG] Sample cells:', JSON.stringify(sampleCells.map(k => ({ k, cell: debugSheet[k] })), null, 2));
         if (wb && wb.SheetNames && wb.SheetNames.length > 0) break;
       } catch(e) {
         console.log(`[Excel] Read strategy failed: ${e.message}`);
