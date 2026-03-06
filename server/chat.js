@@ -1107,11 +1107,17 @@ ${summary}`);
             }
 
             // Save locked takeoff to DB
+            // If no session_id yet (first message), create one now so takeoff is linkable
             const floorArea = parsed.floor_area_m2 || null;
+            let activeSessionId = sessionId;
+            if (!activeSessionId) {
+              activeSessionId = 'cs_' + require('crypto').randomBytes(6).toString('hex');
+              console.log(`[Takeoff] No session_id — auto-created: ${activeSessionId}`);
+            }
             const takeoffId = benchmarkStore.saveTakeoff(db, {
               userId,
-              sessionId,
-              projectName: parsed.location || 'Project',
+              sessionId: activeSessionId,
+              projectName: parsed.location || parsed.project_type || 'Project',
               projectType: parsed.project_type || projectTypeGuess,
               location: parsed.location || '',
               items: parsed.items,
@@ -1142,9 +1148,19 @@ ${summary}`);
             quantitySummary += `${parsed.items.length} items extracted across ${priced.sections.length} sections.\n`;
             quantitySummary += `Location: ${priced.location.label}\n\n`;
 
-            // Section summaries with costs
+            // Section summaries with costs — flag any suspiciously large sections
             for (const sec of priced.sections) {
-              quantitySummary += `${sec.name}: £${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n`;
+              const sectionPct = priced.summary.construction_total > 0 
+                ? (sec.subtotal / priced.summary.construction_total * 100).toFixed(0) 
+                : 0;
+              const flag = sec.subtotal > 50000 && parseFloat(sectionPct) > 40 ? ' ⚠️ REVIEW' : '';
+              quantitySummary += `${sec.name}: £${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}${flag}\n`;
+              // Warn on individual items with absurd totals
+              for (const item of sec.items || []) {
+                if (item.total > 100000) {
+                  quantitySummary += `  ⚠️ WARNING: ${item.description} = £${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × £${item.rate})\n`;
+                }
+              }
             }
             quantitySummary += `\nConstruction Total: £${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): £${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
@@ -1171,10 +1187,12 @@ ${summary}`);
 
             // Flag items that used annotated vs estimated dimensions
             const flaggedCount = parsed.items.filter(i => i.flagged).length;
-            const assumedCount = parsed.items.filter(i => i.assumption && i.assumption.length > 5).length;
-            const confirmedCount = parsed.items.length - flaggedCount - assumedCount;
+            const assumedCount = parsed.items.filter(i => !i.flagged && i.assumption && i.assumption.length > 5).length;
+            const confirmedCount = Math.max(0, parsed.items.length - flaggedCount - assumedCount);
+            const totalItems = parsed.items.length;
+            const confidencePct = totalItems > 0 ? Math.round((confirmedCount / totalItems) * 100) : 0;
 
-            quantitySummary += `\n\n📊 Confidence breakdown: ${confirmedCount} items from annotated dimensions | ${assumedCount} items from reasonable assumptions | ${flaggedCount} items need review`;
+            quantitySummary += `\n\n📊 Confidence: ${confidencePct}% from annotated dimensions (${confirmedCount}/${totalItems} items) | ${flaggedCount} flagged for review`;
             if (req.zipData && req.zipData.all_openings.length > 0) {
               quantitySummary += `\n📐 ${req.zipData.all_openings.length} door/window sizes read directly from schedule (no estimation)`;
             }
@@ -1184,7 +1202,7 @@ ${summary}`);
             quantitySummary += `\n\nQuantities are now locked (ref: ${takeoffId}). Review the figures above. If anything needs adjusting, tell me now. When you are satisfied, say "generate documents" and I will produce the Excel BOQ and Findings Report — the total will be exactly as shown above.`;
 
             reply = quantitySummary;
-            takeoffData = { takeoffId, priced, floorArea, projectType: parsed.project_type };
+            takeoffData = { takeoffId, priced, floorArea, projectType: parsed.project_type, sessionId: activeSessionId };
           }
         }
       } catch (extractErr) {
@@ -1242,7 +1260,8 @@ ${summary}`);
       console.log('[Stage 3] Generating documents from locked quantities...');
       const clientName = req.user.full_name || req.user.email;
 
-      // Find locked takeoff for this session
+      // Project name from takeoff location or drawings
+    // Find locked takeoff for this session
       let lockedTakeoff = null;
       let pricedResult = null;
 
@@ -1290,64 +1309,33 @@ ${summary}`);
         if (benchmarkStore) benchmarkStore.updateTakeoff(db, lockedTakeoff.id, { status: 'confirmed' });
 
       } else {
-        // ⚠️ FALLBACK PATH: no locked takeoff, do single-shot extraction+pricing
-        // This is the old method — used only when generate is called without prior extraction
-        console.log('[Stage 3] No locked takeoff found — running combined extraction+pricing');
+        // ⚠️ NO LOCKED TAKEOFF — block generation, tell user clearly
+        // Never silently generate from conversation context — that causes wrong projects
+        console.log('[Stage 3] No locked takeoff for session:', sessionId, '— blocking');
+        wantsDocuments = false;
 
-        const allConvText2 = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
-        const addrMatch = allConvText2.match(/(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}(?:\s+(?:Road|Street|Lane|Drive|Avenue|Close|Way|Crescent|Place|Court|Gardens|Terrace|Grove|Mews|Rise|Hill|Row|Walk|Square|Park|Green|Rd|St|Ln|Dr|Ave|Cl))\b)/i);
-        let projectName2 = addrMatch ? addrMatch[1].trim() : 'Project';
-        const projMatch = allConvText2.match(/(?:extension|conversion|renovation|refurb|loft)\s+(?:at|for|:|-|–)\s+([A-Z0-9][^\n,]{3,40})/i);
-        if (projMatch) projectName2 = projMatch[1].trim();
+        // Check if user has any recent takeoff at all (maybe session mismatch)
+        let latestTakeoff = null;
+        if (benchmarkStore) {
+          try {
+            latestTakeoff = db.prepare(
+              'SELECT id, project_name, created_at FROM quantity_takeoffs WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
+            ).get(userId);
+          } catch(e) {}
+        }
 
-        const convMessages2 = messages.map(m => ({
-          role: m.role,
-          content: typeof m.content === 'string' ? m.content : m.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
-        })).filter(m => m.content);
-        convMessages2.push({ role: 'assistant', content: reply });
+        if (latestTakeoff) {
+          reply = `I can't find the locked quantities for this session.
 
-        const docPrompt = buildSystemPrompt(userId, true);
-        const structuredMessages = [...convMessages2, { role: 'user', content: 'Produce the complete structured JSON for the BOQ and findings report. Include every line item. Be thorough.' }];
-        const docResp2 = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', headers: apiHeaders,
-          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 16000, system: docPrompt, messages: structuredMessages })
-        });
+Your most recent quantity takeoff was for **${latestTakeoff.project_name}** (ref: ${latestTakeoff.id}).
 
-        if (docResp2.ok) {
-          const docData2 = await docResp2.json();
-          const rawText2 = docData2.content.filter(c => c.type === 'text').map(c => c.text).join('');
-          const cleaned2 = rawText2.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          const parsedFallback = JSON.parse(cleaned2);
+To generate documents, please either:
+• Upload your drawings again in this chat to re-run the quantity takeoff, or
+• Start a new chat and upload the drawings fresh`;
+        } else {
+          reply = `To generate documents I need to run a quantity takeoff first.
 
-          // Convert old format to priced sections
-          const fallbackSections = (parsedFallback.sections || []).map(sec => ({
-            name: sec.title,
-            items: (sec.items || []).map(item => ({
-              ...item,
-              rate_source: item.rate_source || 'ai_estimate',
-            })),
-            subtotal: (sec.items || []).reduce((s, i) => s + (parseFloat(i.total) || 0), 0),
-          }));
-          const fallbackTotal = fallbackSections.reduce((s, sec) => s + sec.subtotal, 0);
-          pricedResult = {
-            sections: fallbackSections,
-            summary: {
-              construction_total: fallbackTotal,
-              contingency_pct: 7.5,
-              contingency: fallbackTotal * 0.075,
-              net_total: fallbackTotal * 1.075,
-              ohp_pct: 12,
-              ohp: fallbackTotal * 1.075 * 0.12,
-              net_with_ohp: fallbackTotal * 1.075 * 1.12,
-              vat_rate: 20,
-              vat: fallbackTotal * 1.075 * 1.12 * 0.2,
-              grand_total: fallbackTotal * 1.075 * 1.12 * 1.2,
-              currency: 'GBP',
-            },
-            location: { label: 'UK average' },
-            warnings: ['⚠️ Documents generated without locked quantity takeoff — totals may vary between runs.'],
-            item_count: fallbackSections.reduce((s, sec) => s + (sec.items || []).length, 0),
-          };
+Please upload your drawings (PDF, images, or ZIP) and I'll extract all measurements. Once quantities are locked you can say "generate documents" and the total will be deterministic.`;
         }
       }
 
@@ -1609,7 +1597,38 @@ ${summary}`);
       quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 
-    res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles, quota: quotaInfo, payment_required: paymentRequired });
+    // Return session_id and takeoff_id so frontend can persist them
+    // CRITICAL: Always resolve the active takeoff — even on "generate" turns
+    // where takeoffData is null (Stage 1 already ran in a previous turn)
+    const responseSessionId = (takeoffData && takeoffData.sessionId) || req.body.session_id || sessionId || null;
+
+    // Try to get takeoff_id from: 1) current extraction, 2) body (frontend sent it), 3) DB lookup by session
+    let responseTakeoffId = (typeof takeoffData === 'object' && takeoffData) ? takeoffData.takeoffId : null;
+    if (!responseTakeoffId && req.body.takeoff_id) {
+      responseTakeoffId = req.body.takeoff_id; // frontend remembered it
+    }
+    if (!responseTakeoffId && responseSessionId && benchmarkStore) {
+      // Last resort: look up from DB by session_id
+      try {
+        const sessionTakeoff = benchmarkStore.getTakeoffBySession(db, responseSessionId);
+        if (sessionTakeoff) {
+          responseTakeoffId = sessionTakeoff.id;
+          console.log(`[Session] Recovered takeoff_id ${responseTakeoffId} from DB for session ${responseSessionId}`);
+        }
+      } catch(e) {}
+    }
+
+    res.json({
+      reply,
+      thinking: thinking || null,
+      rateStats,
+      files: downloadFiles,
+      quota: quotaInfo,
+      payment_required: paymentRequired,
+      session_id: responseSessionId,
+      takeoff_id: responseTakeoffId,
+      takeoff_locked: responseTakeoffId ? true : false,
+    });
 
   } catch (err) {
     console.error('Chat error:', err);
