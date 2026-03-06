@@ -11,11 +11,11 @@ import {
 } from '../components/Icons';
 
 const STRIPE = {
-  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
-  professional:    'https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02',
-  premium:         'https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03',
-  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',
-  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',
+  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',  // £99 PAYG BOQ
+  professional:    'https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04',  // £347/mo Professional
+  premium:         'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // £447/mo Premium
+  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',  // £79 extra BOQ (subscribers)
+  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // upgrade to premium
 };
 
 function UsageBar({ usage, t }) {
@@ -44,7 +44,17 @@ function UsageBar({ usage, t }) {
             {used} BOQ{used !== 1 ? 's' : ''} this month · £99 per BOQ
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* £99 per BOQ button */}
+          <a href={STRIPE.starter_payg} target="_blank" rel="noopener noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 12px', borderRadius: 7,
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+            fontSize: 12, fontWeight: 700, color: '#0A0F1C', textDecoration: 'none',
+            boxShadow: '0 2px 8px rgba(245,158,11,0.25)',
+          }}>
+            <ZapIcon size={11} color="#0A0F1C" /> £99 per BOQ
+          </a>
           <a href={STRIPE.professional} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 12px', borderRadius: 7,
