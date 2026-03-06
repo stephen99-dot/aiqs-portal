@@ -324,12 +324,19 @@ export default function ChatPage() {
     } catch (err) {
       const isQuota = err.message && (err.message.includes('limit') || err.message.includes('Upgrade'));
       const isSuspended = err.message && err.message.includes('suspended');
+      // Distinguish message-limit errors (need subscription) from doc-limit errors (pay per BOQ)
+      const isMessageLimit = isQuota && err.message && err.message.includes('messages this month');
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: isSuspended ? 'Your account has been suspended. Please contact support.'
           : isQuota ? err.message : 'Sorry, something went wrong. Please try again.',
         timestamp: new Date().toISOString(), error: !isQuota,
-        paymentRequired: isQuota ? { type: 'upgrade', message: err.message, price: 99, currency: 'GBP', url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01' } : null,
+        paymentRequired: isQuota ? {
+          type: isMessageLimit ? 'message_upgrade' : 'upgrade',
+          message: err.message,
+          price: 99, currency: 'GBP',
+          url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
+        } : null,
       }]);
     } finally { setSending(false); }
   }
@@ -619,22 +626,36 @@ export default function ChatPage() {
 
                     {msg.paymentRequired && (
                       <div style={{ marginTop: 14, padding: 16, borderRadius: 10, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: c.textPrimary, marginBottom: 4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
-                        <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 14 }}>Choose how to proceed:</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: c.textPrimary, marginBottom: 4 }}>
+                          {msg.paymentRequired.type === 'message_upgrade' ? 'Upgrade your plan to continue' : (msg.paymentRequired.message || 'Generate your BOQ documents')}
+                        </div>
+                        <div style={{ fontSize: 12, color: c.textSecondary, marginBottom: 14 }}>
+                          {msg.paymentRequired.type === 'message_upgrade'
+                            ? 'Choose a subscription to unlock more messages and BOQ generation:'
+                            : 'Choose how to proceed:'}
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 8, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
-                            Pay £99 — Generate this BOQ
-                          </a>
+                          {/* Pay-per-BOQ button — only shown for doc quota, not message quota */}
+                          {msg.paymentRequired.type !== 'message_upgrade' && (
+                            <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 8, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+                              Pay £99 — Generate this BOQ
+                            </a>
+                          )}
+                          {/* Subscription buttons — always shown */}
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
-                              ⭐ Professional — £347/mo <span style={{ fontSize: 11, opacity: 0.65 }}>10 BOQs</span>
+                            <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: msg.paymentRequired.type === 'message_upgrade' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: msg.paymentRequired.type === 'message_upgrade' ? '#0A0F1C' : c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
+                              ⭐ Professional — £347/mo <span style={{ fontSize: 11, opacity: 0.75, marginLeft: 2 }}>100 msgs · 10 BOQs</span>
                             </a>
                             <a href="https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
-                              👑 Premium — £447/mo <span style={{ fontSize: 11, opacity: 0.65 }}>20 BOQs</span>
+                              👑 Premium — £447/mo <span style={{ fontSize: 11, opacity: 0.65, marginLeft: 2 }}>200 msgs · 20 BOQs</span>
                             </a>
                           </div>
                         </div>
-                        <div style={{ fontSize: 11, color: c.textSecondary, opacity: 0.6, marginTop: 10 }}>Once payment is confirmed, just say "generate documents" again.</div>
+                        <div style={{ fontSize: 11, color: c.textSecondary, opacity: 0.6, marginTop: 10 }}>
+                          {msg.paymentRequired.type === 'message_upgrade'
+                            ? 'After subscribing, refresh the page and your new limits will apply immediately.'
+                            : 'Once payment is confirmed, just say "generate documents" again.'}
+                        </div>
                       </div>
                     )}
                   </div>
