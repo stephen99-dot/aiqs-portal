@@ -6,9 +6,13 @@ const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
 
-let boqGen, findingsGen;
+let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
 try { findingsGen = require('./findingsGenerator'); } catch (e) { console.log('[Chat] docx not installed — Findings generation disabled. Run: npm install docx'); }
+try { deterministicPricer = require('./deterministicPricer'); } catch (e) { console.log('[Chat] deterministicPricer not found — copy deterministicPricer.js to server/'); }
+try { benchmarkStore = require('./benchmarkStore'); } catch (e) { console.log('[Chat] benchmarkStore not found — copy benchmarkStore.js to server/'); }
+try { memoryEngine = require('./memoryEngine'); } catch (e) { console.log('[Chat] memoryEngine not found — copy memoryEngine.js to server/'); }
+try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat] zipProcessor not found — copy zipProcessor.js to server/'); }
 
 const router = express.Router();
 
@@ -17,6 +21,11 @@ const uploadsDir = path.join(DATA_DIR, 'uploads');
 const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
+
+// Init benchmark/takeoff tables
+try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
+// Init memory engine tables
+try { if (memoryEngine) memoryEngine.initMemoryTables(db); } catch(e) { console.error('[Memory] Init error:', e.message); }
 
 try {
   db.exec(`
@@ -101,7 +110,7 @@ function extractInsightsFromMessage(userId, message) {
 // DYNAMIC SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════════════
 
-function buildSystemPrompt(userId, forDocGen) {
+function buildSystemPrompt(userId, forDocGen, benchmarkSection) {
   let clientRateSection = '';
   let clientInsightsSection = '';
   try {
@@ -128,6 +137,85 @@ function buildSystemPrompt(userId, forDocGen) {
       clientInsightsSection = `\n=== CLIENT PROFILE (learned from past projects) ===\nApply these preferences automatically — the client has told us this before.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat.toUpperCase()}]\n${items.join('\n')}`).join('\n\n')}\n===\n`;
     }
   } catch (err) { console.error('[Chat] Insight load error:', err.message); }
+
+  if (forDocGen === 'extract_quantities') {
+    // STAGE 1: Extract locked quantities from drawings
+    // AI measures everything, shows working, outputs structured JSON
+    // This JSON gets LOCKED and priced deterministically — no re-measuring on generate
+    return `You are an expert UK Quantity Surveyor performing a detailed measurement exercise from construction drawings.
+
+Your ONLY job right now is to MEASURE and EXTRACT quantities. Do NOT price anything. Do NOT generate a BOQ.
+
+You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
+
+MEASUREMENT RULES:
+1. Measure every visible element from the drawings with explicit working shown
+2. Show your working in the "working" field: e.g. "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²"
+3. State all assumptions clearly in the "assumption" field
+4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
+5. Flag anything uncertain with "flagged": true and explain why
+6. Be thorough — a single storey extension should have 40-70 items minimum
+
+AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
+Substructure: excavation_strip_foundation, concrete_strip_foundation, blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g
+Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers, stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
+Roof: roof_structure_cut_timber, osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool, velux_skylight_780x980
+Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
+Windows/Doors: bifold_door_aluminium, composite_external_door, composite_external_door_std, upvc_window_standard, window_obscure_small, window_bespoke_narrow, motorised_rooflight, mastic_sealant_allowance
+Internal: plasterboard_skim_walls, metal_stud_partition, wedi_wetroom_board, plasterboard_ceilings, screed_ufh_75mm, screed_sand_cement_75mm, internal_door_painted_solid_core, skirting_mdf_95mm, internal_decorations
+Floors: lvt_flooring_karndean, floor_tile_600x600, vinyl_safety_floor, shower_tray_900x900
+Drainage/Plumbing: svp_connection_110mm, foul_drainage_connection, rainwater_downpipe_relocation, rwp_outlet_hopper, first_fix_plumbing, second_fix_plumbing, ufh_manifold_kitchen
+Electrical: consumer_unit_upgrade, first_fix_electrical, second_fix_electrical, extract_fans, ev_charge_point_ducting, electrical_testing_certificate
+Prelims: site_setup_scaffold, skip_hire_8yd, site_welfare, building_control_fees, party_wall_surveyor, structural_engineer_fees, snagging_clearance
+
+If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true
+
+${clientRateSection}
+${benchmarkSection || ''}
+
+Respond with ONLY this JSON structure:
+{
+  "project_type": "e.g. Single Storey Rear Extension",
+  "location": "full address or town/postcode",
+  "floor_area_m2": 31.5,
+  "items": [
+    {
+      "key": "concrete_slab_150mm",
+      "description": "RC ground floor slab 150mm C25/30 A393 mesh on DPM",
+      "unit": "m²",
+      "qty": 31.5,
+      "working": "Ground floor area: 6.3m x 5.0m = 31.5m²",
+      "assumption": "150mm slab assumed, subject to engineer confirmation",
+      "section": "1. Substructure & Foundations",
+      "flagged": false,
+      "flag_reason": ""
+    }
+  ],
+  "anomalies": ["List any items that seemed unusually high or low"],
+  "missing_info": ["List anything you could not determine from the drawings"],
+  "confidence": "high|medium|low",
+  "confidence_notes": "Reason for confidence level"
+}`
+  }
+
+  if (forDocGen === 'generate_findings') {
+    return `You are an expert UK Quantity Surveyor writing a professional Findings Report.
+You will receive the complete priced BOQ data. Write the findings report narrative only.
+You MUST respond with ONLY valid JSON — no markdown, no backticks.
+
+Respond with this JSON structure:
+{
+  "reference": "AI-QS-XXXXX",
+  "project_type": "e.g. Single Storey Rear Extension",
+  "location": "Location",
+  "description": "Detailed project description paragraph",
+  "scope_summary": "Detailed scope summary",
+  "key_findings": [{"title": "Category", "detail": "Detailed finding", "items": ["point 1", "point 2"]}],
+  "assumptions": ["Detailed assumption 1"],
+  "exclusions": ["Specific exclusion 1"],
+  "recommendations": ["Specific recommendation 1"]
+}`
+  }
 
   if (forDocGen) {
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
@@ -258,7 +346,15 @@ LOCATION FACTORS:
 London/SE: +20% | Midlands: +7% | North England: -3% | Scotland: +3% | Ireland: +10% (use EUR)
 ${clientRateSection}
 ${clientInsightsSection}
-DOCUMENT GENERATION — CRITICAL: This portal DOES generate real downloadable Excel BOQ and Word Findings Report files. The backend processes these automatically the moment the client says "generate". NEVER tell a client you cannot generate files, create documents, or produce downloads. NEVER suggest they paste data into Excel themselves. NEVER say you are text-based or have limitations around file creation. When a client says "generate", "generate documents", "create the BOQ", or anything similar — simply confirm the documents are being generated. After providing analysis, always end with: "Just say generate and I will create your Excel BOQ and Word Findings Report."
+DOCUMENT GENERATION — CRITICAL RULES:
+
+Rule 1 — This portal DOES generate real downloadable Excel BOQ and Word Findings Report files directly. NEVER say you cannot generate files. NEVER say you are text-based. NEVER tell a client to copy data into Excel themselves. NEVER suggest the portal "may" generate files elsewhere. The files are generated automatically by the backend the moment the client triggers generation.
+
+Rule 2 — Only refuse to generate if the client has sent a generate command as their VERY FIRST message with absolutely no prior conversation and no drawings uploaded. In that case, ask for drawings or scope first.
+
+Rule 3 — If ANY project information exists in the conversation (drawings, scope description, quantities, location, project type), treat a "generate" command as valid and confirm documents are being generated.
+
+After providing analysis, always end with: "Just say 'generate documents' and I will create your Excel BOQ and Word Findings Report."
 
 COMMUNICATION STYLE — CRITICAL:
 You are writing as a professional quantity surveyor, not a chatbot. Follow these rules strictly:
@@ -620,6 +716,98 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// QUANTITY TAKEOFF ROUTES
+// ═══════════════════════════════════════════════════════════════════════
+
+// Get locked takeoff for a session
+router.get('/takeoff/:sessionId', authMiddleware, (req, res) => {
+  try {
+    if (!benchmarkStore) return res.status(503).json({ error: 'Benchmark store not available' });
+    const takeoff = benchmarkStore.getTakeoffBySession(db, req.params.sessionId);
+    if (!takeoff) return res.status(404).json({ error: 'No takeoff found for this session' });
+    if (takeoff.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    res.json({ takeoff });
+  } catch (e) { res.status(500).json({ error: 'Failed to load takeoff' }); }
+});
+
+// Update takeoff items (user corrections before generating)
+router.put('/takeoff/:id', authMiddleware, (req, res) => {
+  try {
+    if (!benchmarkStore) return res.status(503).json({ error: 'Benchmark store not available' });
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
+    const takeoff = benchmarkStore.getTakeoffById(db, req.params.id);
+    if (!takeoff) return res.status(404).json({ error: 'Takeoff not found' });
+    if (takeoff.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    benchmarkStore.updateTakeoff(db, req.params.id, { items });
+    // Re-price with updated items
+    const clientRates = {};
+    try {
+      const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
+      for (const r of dbRates) clientRates[r.item_key] = r.value;
+    } catch(e) {}
+    const priced = deterministicPricer.priceLockedQuantities(items, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 });
+    res.json({ success: true, priced });
+  } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// MEMORY ENGINE ROUTES
+// ═══════════════════════════════════════════════════════════════════════
+
+// GET /api/memory/stats — what has the system learned?
+router.get('/memory/stats', authMiddleware, (req, res) => {
+  try {
+    if (!memoryEngine) return res.status(503).json({ error: 'Memory engine not available' });
+    const stats = memoryEngine.getMemoryStats(db);
+    const clientCtx = memoryEngine.getClientContext(db, req.user.id);
+    res.json({ stats, client: clientCtx });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/memory/rates — top learned rates for this client
+router.get('/memory/rates', authMiddleware, (req, res) => {
+  try {
+    if (!memoryEngine) return res.status(503).json({ error: 'Memory engine not available' });
+    const rates = db.prepare(`
+      SELECT item_key, rate, sample_count, confidence, region, project_type, last_seen
+      FROM memory_rates
+      WHERE (scope='client' AND user_id=?) OR (scope='global')
+      ORDER BY scope='client' DESC, confidence DESC, sample_count DESC
+      LIMIT 100
+    `).all(req.user.id);
+    res.json({ rates, count: rates.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/memory/benchmarks/:projectType — quantity ranges for a project type
+router.get('/memory/benchmarks/:projectType', authMiddleware, (req, res) => {
+  try {
+    if (!memoryEngine) return res.status(503).json({ error: 'Memory engine not available' });
+    const ranges = memoryEngine.getQuantityRanges(db, {
+      projectType: req.params.projectType,
+      floorAreaM2: parseFloat(req.query.area) || null,
+    });
+    const projectStats = memoryEngine.getProjectBenchmarks(db, {
+      projectType: req.params.projectType,
+      region: req.query.region || 'uk_average',
+    });
+    res.json({ quantity_ranges: ranges, project_stats: projectStats, project_type: req.params.projectType });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/memory/correction — manual correction entry
+router.post('/memory/correction', authMiddleware, (req, res) => {
+  try {
+    if (!memoryEngine) return res.status(503).json({ error: 'Memory engine not available' });
+    const { itemKey, field, oldValue, newValue, reason } = req.body;
+    if (!field || newValue === undefined) return res.status(400).json({ error: 'field and newValue required' });
+    memoryEngine.recordCorrection(db, { userId: req.user.id, itemKey, field, oldValue, newValue, reason });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -667,12 +855,46 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         console.log(`[Upload] ${file.originalname} (${(file.size/1024/1024).toFixed(2)}MB)`);
 
         if (ext === '.zip') {
-          const ex = extractFromZip(file.path);
-          for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
-          for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
-          if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
-          if (ex.skipped.length > 0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
-          if (ex.visual.length === 0 && ex.text.length === 0) zipNotes.push(ex.cad.length > 0 ? 'ZIP only contains CAD files -- export as PDF.' : 'No supported files in ZIP.');
+          // ── NEW: Smart ZIP pre-processor ────────────────────────────
+          // Extracts annotated dimensions, room schedules, opening schedules
+          // from PDFs, Excel, Word, and images BEFORE Claude sees anything.
+          // Claude gets pre-extracted facts, not raw pixels.
+          if (zipProcessor) {
+            try {
+              console.log(`[ZIP] Running smart pre-processor on ${file.originalname}`);
+              const zipData = await zipProcessor.processZip(file.path, uploadsDir);
+              req.zipData = zipData; // stash for later use in extraction stage
+
+              // Build structured Claude content from ZIP
+              const zipContent = zipProcessor.buildClaudeContent(zipData, null);
+              for (const block of zipContent) currentContent.push(block);
+
+              // Add filenames for all files in zip
+              for (const f of zipData.drawing_index) fileNames.push(f.filename);
+
+              // Summary note
+              const summary = zipProcessor.buildUploadSummary(zipData);
+              zipNotes.push(`[ZIP Pre-processed]
+${summary}`);
+
+              console.log(`[ZIP] Pre-processing complete: ${zipData.drawing_index.length} files, ${zipData.all_dimensions.length} dimensions, ${zipData.all_rooms.length} rooms`);
+            } catch (zipErr) {
+              console.error('[ZIP] Smart processor failed, falling back to legacy:', zipErr.message);
+              // Fallback to old method
+              const ex = extractFromZip(file.path);
+              for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
+              for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
+              if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) — export as PDF and re-upload.`);
+            }
+          } else {
+            // Legacy ZIP handler (fallback if zipProcessor not installed)
+            const ex = extractFromZip(file.path);
+            for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
+            for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
+            if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
+            if (ex.skipped.length > 0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
+            if (ex.visual.length === 0 && ex.text.length === 0) zipNotes.push(ex.cad.length > 0 ? 'ZIP only contains CAD files -- export as PDF.' : 'No supported files in ZIP.');
+          }
 
         } else if (EXCEL_EXTS.includes(ext)) {
           const excelText = excelToText(file.path, file.originalname);
@@ -694,6 +916,8 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     }
 
+    // Extract session ID from body for takeoff tracking
+    const sessionIdForTakeoff = req.body.session_id || null;
     let textMessage = message || '';
     if (zipNotes.length > 0) {
       const n = zipNotes.join('\n');
@@ -767,11 +991,227 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
-    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    // ═══════════════════════════════════════════════════════════════
+    // 3-STAGE DETERMINISTIC PIPELINE
+    // Stage 1: EXTRACT quantities (AI measures, shows working, saves to DB)
+    // Stage 2: LOCK quantities (user confirms, stored in quantity_takeoffs)
+    // Stage 3: GENERATE (Node.js prices deterministically, AI writes findings)
+    // ═══════════════════════════════════════════════════════════════
+
+    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    const wantsExtract = hasFiles && !wantsDocumentsRaw; // files uploaded without generate = extract phase
+    const sessionId = req.body.session_id || null;
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
+    let takeoffData = null;
 
+    // Guard: refuse doc generation if no project data exists
+    if (wantsDocuments) {
+      const hasProjectData = fileNames.length > 0 || messages.some(m => {
+        const txt = typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.filter(c => c.type === 'text').map(c => c.text).join(' ') : '');
+        return txt.length > 100;
+      });
+      if (!hasProjectData) {
+        wantsDocuments = false;
+        reply = 'To generate a BOQ and Findings Report I need project information first. Please upload your drawings (PDF, images, or ZIP) or describe the scope of works, and I will produce a detailed estimate for you.';
+      }
+    }
+
+    // ── STAGE 1: QUANTITY EXTRACTION ─────────────────────────────────
+    // Triggered when files are uploaded. AI extracts locked quantities with working.
+    if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
+      console.log('[Stage 1] Extracting quantities from drawings...');
+      try {
+        // Get project type from conversation context
+        const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
+        const projectTypeGuess = /loft/i.test(allConvText) ? 'Loft Conversion' :
+          /two.stor/i.test(allConvText) ? 'Two Storey Extension' :
+          /single.stor|rear.ext|side.ext/i.test(allConvText) ? 'Single Storey Extension' :
+          /refurb|renovation/i.test(allConvText) ? 'Refurbishment' :
+          /conversion|flat|apartment/i.test(allConvText) ? 'Conversion' : 'General';
+
+        // Load full memory context for sanity checking + rate guidance
+        const locationGuess = (messages.concat([{role:'user',content:message||''}]))
+          .map(m => typeof m.content === 'string' ? m.content : '').join(' ')
+          .match(/([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2}|[A-Z][a-z]+(?:,?\s[A-Z][a-z]+)*,?\s(?:London|Manchester|Birmingham|Bristol|Edinburgh|Glasgow|Cardiff|Dublin|Cork|Richmond|Surrey|Essex|Kent|Devon|Somerset|Yorkshire|Lancashire|Cheshire|Cumbria|Northampton|Leicester|Nottingham|Derby|Coventry|Oxford|Cambridge|Reading|Brighton|Guildford))/)?.[0] || '';
+        const memoryCtx = memoryEngine
+          ? memoryEngine.buildMemoryContext(db, { userId, projectType: projectTypeGuess, region: memoryEngine.detectRegion(locationGuess) })
+          : (benchmarkStore ? benchmarkStore.formatBenchmarksForPrompt(benchmarkStore.getBenchmarkRanges(db, projectTypeGuess, null), projectTypeGuess) : '');
+
+        const extractPrompt = buildSystemPrompt(userId, 'extract_quantities', memoryCtx);
+
+        // If ZIP was pre-processed, inject the structured data as additional context
+        // This gives Claude pre-extracted dimensions/rooms/schedules as facts to work from
+        let extractContent = currentContent;
+        if (req.zipData && zipProcessor) {
+          const zipFloorArea = req.zipData.summary.total_floor_area_m2;
+          if (zipFloorArea > 0) {
+            // Use confirmed floor area from room schedule for better sanity checking
+            extractContent = [
+              ...currentContent,
+              {
+                type: 'text',
+                text: `\n\nCRITICAL: The room schedule in this ZIP shows a total floor area of ${zipFloorArea.toFixed(1)}m². Use this as your primary floor area figure — do NOT estimate it. All floor-area-derived quantities should use ${zipFloorArea.toFixed(1)}m².`,
+              },
+            ];
+          }
+        }
+
+        const extractMessages = [...messages, { role: 'user', content: extractContent }];
+
+        const extractResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', headers: apiHeaders,
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 8000,
+            system: extractPrompt,
+            messages: extractMessages
+          })
+        });
+
+        if (extractResp.ok) {
+          const extractData = await extractResp.json();
+          const rawText = extractData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+          const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+
+          if (parsed.items && parsed.items.length > 0) {
+            // Sanity check against memory — flags anomalies before user sees totals
+            const anomalies = parsed.anomalies || [];
+            if (memoryEngine) {
+              const checks = memoryEngine.sanityCheckWithMemory(db, {
+                items: parsed.items,
+                projectType: parsed.project_type || projectTypeGuess,
+                floorAreaM2: parsed.floor_area_m2,
+              });
+              anomalies.push(...checks.map(c => c.message));
+
+              // Also suggest commonly co-occurring items that are missing
+              const presentKeys = parsed.items.map(i => i.key).filter(Boolean);
+              const suggested = memoryEngine.getSuggestedItems(db, {
+                presentKeys,
+                projectType: parsed.project_type || projectTypeGuess,
+              });
+              if (suggested.length > 0) {
+                parsed.missing_info = parsed.missing_info || [];
+                const topSuggestions = suggested.slice(0, 5).map(s => `Consider adding: ${s.key} (seen in ${s.strength} similar projects)`);
+                parsed.missing_info.push(...topSuggestions);
+              }
+            } else if (benchmarkStore) {
+              const benchmarkRanges = benchmarkStore.getBenchmarkRanges(db, projectTypeGuess, null);
+              if (benchmarkRanges) {
+                const checks = benchmarkStore.sanityCheckItems(parsed.items, benchmarkRanges);
+                anomalies.push(...checks);
+              }
+            }
+
+            // Save locked takeoff to DB
+            // If no session_id yet (first message), create one now so takeoff is linkable
+            const floorArea = parsed.floor_area_m2 || null;
+            let activeSessionId = sessionId;
+            if (!activeSessionId) {
+              activeSessionId = 'cs_' + require('crypto').randomBytes(6).toString('hex');
+              console.log(`[Takeoff] No session_id — auto-created: ${activeSessionId}`);
+            }
+            const takeoffId = benchmarkStore.saveTakeoff(db, {
+              userId,
+              sessionId: activeSessionId,
+              projectName: parsed.location || parsed.project_type || 'Project',
+              projectType: parsed.project_type || projectTypeGuess,
+              location: parsed.location || '',
+              items: parsed.items,
+              status: 'draft',
+            });
+
+            console.log(`[Stage 1] Extracted ${parsed.items.length} items, saved as takeoff ${takeoffId}`);
+
+            // Price them immediately so user sees costs alongside quantities
+            const clientRates = {};
+            try {
+              const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+              for (const r of dbRates) clientRates[r.item_key] = r.value;
+            } catch(e) {}
+
+            const priced = deterministicPricer.priceLockedQuantities(
+              parsed.items,
+              parsed.location || '',
+              clientRates,
+              { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 }
+            );
+
+            // Format quantities summary for user
+            const flagged = parsed.items.filter(i => i.flagged);
+            const missing = parsed.missing_info || [];
+
+            let quantitySummary = `Quantity takeoff complete for ${parsed.project_type || 'your project'} at ${parsed.location || 'the project address'}.\n\n`;
+            quantitySummary += `${parsed.items.length} items extracted across ${priced.sections.length} sections.\n`;
+            quantitySummary += `Location: ${priced.location.label}\n\n`;
+
+            // Section summaries with costs — flag any suspiciously large sections
+            for (const sec of priced.sections) {
+              const sectionPct = priced.summary.construction_total > 0 
+                ? (sec.subtotal / priced.summary.construction_total * 100).toFixed(0) 
+                : 0;
+              const flag = sec.subtotal > 50000 && parseFloat(sectionPct) > 40 ? ' ⚠️ REVIEW' : '';
+              quantitySummary += `${sec.name}: £${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}${flag}\n`;
+              // Warn on individual items with absurd totals
+              for (const item of sec.items || []) {
+                if (item.total > 100000) {
+                  quantitySummary += `  ⚠️ WARNING: ${item.description} = £${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × £${item.rate})\n`;
+                }
+              }
+            }
+            quantitySummary += `\nConstruction Total: £${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): £${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nNet Total: £${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nVAT (${priced.summary.vat_rate}%): £${priced.summary.vat.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nGrand Total: £${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+
+            if (flagged.length > 0) {
+              quantitySummary += `\n\nItems needing review (${flagged.length}):\n`;
+              for (const f of flagged) quantitySummary += `  ${f.description}: ${f.flag_reason}\n`;
+            }
+            if (anomalies.length > 0) {
+              quantitySummary += `\n\nAnomaly checks:\n`;
+              for (const a of anomalies) quantitySummary += `  ${a}\n`;
+            }
+            if (missing.length > 0) {
+              quantitySummary += `\n\nMissing information:\n`;
+              for (const m of missing) quantitySummary += `  ${m}\n`;
+            }
+            if (priced.warnings.length > 0) {
+              quantitySummary += `\n\nPricing notes:\n`;
+              for (const w of priced.warnings) quantitySummary += `  ${w}\n`;
+            }
+
+            // Flag items that used annotated vs estimated dimensions
+            const flaggedCount = parsed.items.filter(i => i.flagged).length;
+            const assumedCount = parsed.items.filter(i => !i.flagged && i.assumption && i.assumption.length > 5).length;
+            const confirmedCount = Math.max(0, parsed.items.length - flaggedCount - assumedCount);
+            const totalItems = parsed.items.length;
+            const confidencePct = totalItems > 0 ? Math.round((confirmedCount / totalItems) * 100) : 0;
+
+            quantitySummary += `\n\n📊 Confidence: ${confidencePct}% from annotated dimensions (${confirmedCount}/${totalItems} items) | ${flaggedCount} flagged for review`;
+            if (req.zipData && req.zipData.all_openings.length > 0) {
+              quantitySummary += `\n📐 ${req.zipData.all_openings.length} door/window sizes read directly from schedule (no estimation)`;
+            }
+            if (req.zipData && req.zipData.all_rooms.length > 0) {
+              quantitySummary += `\n🏠 Floor area confirmed from room schedule: ${req.zipData.summary.total_floor_area_m2.toFixed(1)}m²`;
+            }
+            quantitySummary += `\n\nQuantities are now locked (ref: ${takeoffId}). Review the figures above. If anything needs adjusting, tell me now. When you are satisfied, say "generate documents" and I will produce the Excel BOQ and Findings Report — the total will be exactly as shown above.`;
+
+            reply = quantitySummary;
+            takeoffData = { takeoffId, priced, floorArea, projectType: parsed.project_type, sessionId: activeSessionId };
+          }
+        }
+      } catch (extractErr) {
+        console.error('[Stage 1] Extraction error:', extractErr.message);
+        // Fall through to normal chat response
+      }
+    }
+
+    // ── QUOTA CHECK ───────────────────────────────────────────────────
     if (wantsDocuments && req.user.role !== 'admin') {
       const dPlan = req.user.plan || 'starter';
       const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
@@ -786,8 +1226,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         const totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
         const totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
         const originalsEver = totalDocsEver - totalRevisionsEver;
-        const lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-        const looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+        const looksLikeRevision = totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
         if (looksLikeRevision && totalRevisionsEver < totalAllowed) {
           console.log('[Quota] Starter revision allowed');
         } else if (originalsEver >= totalAllowed) {
@@ -815,101 +1254,222 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     }
 
+    // ── STAGE 3: GENERATE DOCUMENTS ──────────────────────────────────
+    // Uses locked quantities from DB + deterministic pricing. AI only writes findings narrative.
     if (wantsDocuments && boqGen && findingsGen) {
-      console.log('[Docs] Generating structured data...');
+      console.log('[Stage 3] Generating documents from locked quantities...');
       const clientName = req.user.full_name || req.user.email;
-      let projectName = 'Project';
-      const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
-      const addrMatch = allText.match(/(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}(?:\s+(?:Road|Street|Lane|Drive|Avenue|Close|Way|Crescent|Place|Court|Gardens|Terrace|Grove|Mews|Rise|Hill|Row|Walk|Square|Park|Green|Rd|St|Ln|Dr|Ave|Cl))\b)/i);
-      if (addrMatch) { projectName = addrMatch[1].trim(); }
-      else {
-        const projMatch = allText.match(/(?:project|extension|conversion|renovation|refurb|build|loft|dormer|garage|kitchen|bathroom)\s+(?:at|for|:|-|–)\s+([A-Z0-9][^\n,]{3,40})/i);
-        if (projMatch) projectName = projMatch[1].trim();
+
+      // Project name from takeoff location or drawings
+    // Find locked takeoff for this session
+      let lockedTakeoff = null;
+      let pricedResult = null;
+
+      if (sessionId && benchmarkStore && deterministicPricer) {
+        lockedTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId);
       }
-      projectName = projectName.replace(/[^\w\s-]/g, '').trim().substring(0, 50);
 
-      const convMessages = messages.map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : m.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
-      })).filter(m => m.content);
-      convMessages.push({ role: 'assistant', content: reply });
+      if (lockedTakeoff && lockedTakeoff.items && lockedTakeoff.items.length > 0) {
+        // ✅ DETERMINISTIC PATH: use locked quantities
+        console.log(`[Stage 3] Using locked takeoff ${lockedTakeoff.id} with ${lockedTakeoff.items.length} items`);
 
-      try {
-        const docPrompt = buildSystemPrompt(userId, true);
-        const structuredMessages = [...convMessages, { role: 'user', content: 'Produce the complete structured JSON for the BOQ and findings report. Include every line item. Be thorough.' }];
-        const docResp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', headers: apiHeaders,
-          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 16000, system: docPrompt, messages: structuredMessages })
-        });
+        const clientRates = {};
+        try {
+          const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+          for (const r of dbRates) clientRates[r.item_key] = r.value;
+        } catch(e) {}
 
-        if (docResp.ok) {
-          const docData = await docResp.json();
-          const rawText = docData.content.filter(c => c.type === 'text').map(c => c.text).join('');
-          const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          const parsed = JSON.parse(cleaned);
-          console.log('[Docs] Parsed JSON — sections:', (parsed.sections || []).length);
-
-          const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
-          const ts = Date.now();
-          downloadFiles = [];
-
-          const sections = parsed.sections || [];
-          if (sections.length > 0) {
-            try {
-              const buf = await boqGen.generateBOQExcel(sections, projectName, clientName, {
-                contingency_pct: parsed.findings?.cost_summary?.contingency_pct || 7.5,
-                ohp_pct: parsed.findings?.cost_summary?.ohp_pct || 12,
-                vat_rate: parsed.findings?.cost_summary?.vat_rate || 20,
+        // Enrich clientRates with memory engine best rates
+        if (memoryEngine) {
+          const region = memoryEngine.detectRegion(lockedTakeoff.location || '');
+          for (const item of lockedTakeoff.items) {
+            if (!clientRates[item.key]) {
+              const memRate = memoryEngine.getBestRate(db, {
+                itemKey: item.key,
+                region,
+                projectType: lockedTakeoff.project_type || 'any',
+                userId,
               });
-              if (buf && buf.length > 100) {
-                const fname = `BOQ-${safeName}-${ts}.xlsx`;
-                fs.writeFileSync(path.join(outputsDir, fname), buf);
-                downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
-                console.log(`[Docs] Excel: ${fname}`);
+              if (memRate && memRate.confidence > 0.65) {
+                clientRates[item.key] = memRate.rate;
+                console.log(`[Memory] Using ${memRate.source} rate for ${item.key}: £${memRate.rate} (conf ${memRate.confidence.toFixed(2)})`);
               }
-            } catch (excelErr) { console.error('[Docs] Excel error:', excelErr.message); }
+            }
+          }
+        }
+
+        pricedResult = deterministicPricer.priceLockedQuantities(
+          lockedTakeoff.items,
+          lockedTakeoff.location || '',
+          clientRates,
+          { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 }
+        );
+
+        // Mark takeoff as confirmed
+        if (benchmarkStore) benchmarkStore.updateTakeoff(db, lockedTakeoff.id, { status: 'confirmed' });
+
+      } else {
+        // ⚠️ NO LOCKED TAKEOFF — block generation, tell user clearly
+        // Never silently generate from conversation context — that causes wrong projects
+        console.log('[Stage 3] No locked takeoff for session:', sessionId, '— blocking');
+        wantsDocuments = false;
+
+        // Check if user has any recent takeoff at all (maybe session mismatch)
+        let latestTakeoff = null;
+        if (benchmarkStore) {
+          try {
+            latestTakeoff = db.prepare(
+              'SELECT id, project_name, created_at FROM quantity_takeoffs WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
+            ).get(userId);
+          } catch(e) {}
+        }
+
+        if (latestTakeoff) {
+          reply = `I can't find the locked quantities for this session.
+
+Your most recent quantity takeoff was for **${latestTakeoff.project_name}** (ref: ${latestTakeoff.id}).
+
+To generate documents, please either:
+• Upload your drawings again in this chat to re-run the quantity takeoff, or
+• Start a new chat and upload the drawings fresh`;
+        } else {
+          reply = `To generate documents I need to run a quantity takeoff first.
+
+Please upload your drawings (PDF, images, or ZIP) and I'll extract all measurements. Once quantities are locked you can say "generate documents" and the total will be deterministic.`;
+        }
+      }
+
+      if (pricedResult && pricedResult.sections && pricedResult.sections.length > 0) {
+        const projectName = (lockedTakeoff && lockedTakeoff.project_name) || 'Project';
+        const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
+        const ts = Date.now();
+        downloadFiles = [];
+
+        // Convert priced sections to boqGenerator format
+        const boqSections = deterministicPricer ? deterministicPricer.toPricedSections(pricedResult) : pricedResult.sections;
+
+        // Generate Excel BOQ
+        try {
+          const buf = await boqGen.generateBOQExcel(boqSections, projectName, clientName, {
+            contingency_pct: pricedResult.summary.contingency_pct,
+            ohp_pct: pricedResult.summary.ohp_pct,
+            vat_rate: pricedResult.summary.vat_rate,
+          });
+          if (buf && buf.length > 100) {
+            const fname = `BOQ-${safeName}-${ts}.xlsx`;
+            fs.writeFileSync(path.join(outputsDir, fname), buf);
+            downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+            console.log(`[Stage 3] Excel: ${fname}`);
+          }
+        } catch (excelErr) { console.error('[Stage 3] Excel error:', excelErr.message); }
+
+        // Generate Findings Report — AI writes narrative only, not quantities
+        try {
+          const findingsPrompt = buildSystemPrompt(userId, 'generate_findings');
+          const findingsInput = {
+            priced_summary: pricedResult.summary,
+            sections: pricedResult.sections.map(s => ({ name: s.name, subtotal: s.subtotal })),
+            project_name: projectName,
+            location: lockedTakeoff ? lockedTakeoff.location : '',
+            project_type: lockedTakeoff ? lockedTakeoff.project_type : 'Extension',
+            item_count: pricedResult.item_count,
+            warnings: pricedResult.warnings,
+          };
+          const findingsResp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST', headers: apiHeaders,
+            body: JSON.stringify({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 4000,
+              system: findingsPrompt,
+              messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }]
+            })
+          });
+
+          let findings = {};
+          if (findingsResp.ok) {
+            const fData = await findingsResp.json();
+            const fText = fData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+            const fCleaned = fText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            findings = JSON.parse(fCleaned);
+            // Inject the deterministic cost summary
+            findings.cost_summary = {
+              sections: pricedResult.sections.map(s => ({ name: s.name, total: s.subtotal })),
+              net_total: pricedResult.summary.net_total,
+              contingency_pct: pricedResult.summary.contingency_pct,
+              contingency: pricedResult.summary.contingency,
+              ohp_pct: pricedResult.summary.ohp_pct,
+              ohp: pricedResult.summary.ohp,
+              grand_total: pricedResult.summary.grand_total,
+            };
           }
 
-          try {
-            const findings = parsed.findings || {};
-            const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
-            if (docBuf && docBuf.length > 100) {
-              const docName = `Findings-${safeName}-${ts}.docx`;
-              fs.writeFileSync(path.join(outputsDir, docName), docBuf);
-              downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
-              console.log(`[Docs] Word: ${docName}`);
-            }
-          } catch (wordErr) { console.error('[Docs] Word error:', wordErr.message); }
+          const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
+          if (docBuf && docBuf.length > 100) {
+            const docName = `Findings-${safeName}-${ts}.docx`;
+            fs.writeFileSync(path.join(outputsDir, docName), docBuf);
+            downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
+            console.log(`[Stage 3] Word: ${docName}`);
+          }
+        } catch (wordErr) { console.error('[Stage 3] Word error:', wordErr.message); }
 
-          if (downloadFiles.length > 0) {
-            let itemCount = 0, totalVal = 0;
-            for (const sec of (parsed.sections || [])) {
-              for (const item of (sec.items || [])) { totalVal += parseFloat(item.total) || 0; itemCount++; }
-            }
-            reply = `Your documents have been generated for ${projectName}.\n\n${itemCount} line items across ${(parsed.sections || []).length} sections.\n\nDownload your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.`;
+        if (downloadFiles.length > 0) {
+          const itemCount = pricedResult.item_count || 0;
+          const grandTotal = pricedResult.summary.grand_total;
+          reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): £${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
+
+          if (pricedResult.warnings && pricedResult.warnings.length > 0) {
+            reply += '\n\nNotes: ' + pricedResult.warnings.join(' | ');
+          }
+
+          // Store project + benchmarks
+          try {
+            const projCurrency = pricedResult.summary.currency || 'GBP';
+            const boqF = downloadFiles.find(f => f.type === 'xlsx');
+            const docF = downloadFiles.find(f => f.type === 'docx');
+
+            db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)')
+              .run('cp_'+uuidv4().slice(0,8), userId, projectName, grandTotal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, '', itemCount);
 
             try {
-              const boqF = downloadFiles.find(f => f.type === 'xlsx');
-              const docF = downloadFiles.find(f => f.type === 'docx');
-              const projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
-              const summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
-              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)').run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
+              const projId = 'proj_' + uuidv4().slice(0, 10);
+              try { db.exec('ALTER TABLE projects ADD COLUMN boq_filename TEXT'); } catch(e) {}
+              try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
+              db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
+                .run(projId, userId, projectName, grandTotal, projCurrency, itemCount, lockedTakeoff ? lockedTakeoff.project_type : null, boqF ? boqF.name : null, docF ? docF.name : null);
+            } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
+
+            db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
+              .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
+
+            // ── FULL MEMORY LEARNING ────────────────────────────────────
+            // Every confirmed project teaches the system.
+            // Rates, quantities, patterns, client profile — all updated.
+            if (lockedTakeoff) {
               try {
-                const projId = 'proj_' + uuidv4().slice(0, 10);
-                try { db.exec('ALTER TABLE projects ADD COLUMN boq_filename TEXT'); } catch(e) {}
-                try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
-                db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
-                  .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null, boqF ? boqF.name : null, docF ? docF.name : null);
-              } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
-              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)').run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
-            } catch(pe) { console.error('[Project] Save error:', pe.message); }
-          }
-        } else {
-          console.error('[Docs] Structured API call failed:', docResp.status);
+                if (memoryEngine) {
+                  memoryEngine.learnFromConfirmedProject(db, {
+                    userId,
+                    takeoffId: lockedTakeoff.id,
+                    items: lockedTakeoff.items,
+                    pricedResult,
+                    location: lockedTakeoff.location || '',
+                    projectType: lockedTakeoff.project_type || 'General',
+                    floorAreaM2: lockedTakeoff.floor_area_m2 || null,
+                  });
+                } else if (benchmarkStore) {
+                  benchmarkStore.extractAndStoreBenchmarks(db, lockedTakeoff.id, lockedTakeoff.floor_area_m2);
+                }
+                const stats = memoryEngine ? memoryEngine.getMemoryStats(db) : null;
+                if (stats) console.log(`[Memory] Total: ${stats.rates?.n} rates, ${stats.quantities?.n} qty records, ${stats.projects?.n} projects`);
+              } catch (learnErr) {
+                console.error('[Memory] Learning error:', learnErr.message);
+              }
+            }
+          } catch(pe) { console.error('[Project] Save error:', pe.message); }
         }
-      } catch (e) { console.error('[Docs] Generation error:', e.message); }
-    } else if (hasFiles && !wantsDocuments && !paymentRequired) {
-      reply += '\n\nIf you want downloadable documents, just say "generate" and I\'ll create an Excel BOQ and Word Findings Report for you.';
+      }
+    } else if (hasFiles && !wantsDocuments && !paymentRequired && !wantsExtract) {
+      reply += '\n\nQuantities extracted and locked. Say "generate documents" when you are ready to produce the Excel BOQ and Findings Report.';
     }
 
     // Auto-learning
@@ -917,6 +1477,25 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       const userMsg = message || '';
       const userLower = userMsg.toLowerCase();
       const isCorrection = /(?:should be|actually|we (?:charge|pay|use|quote)|rate is|cost is|price is|our rate|not right|too (?:high|low)|incorrect|wrong|instead of|changed to|now \d|is \d+\s*(?:not|instead))/i.test(userLower);
+      if (isCorrection && memoryEngine) {
+        // Extract correction and store in memory engine
+        const numMatch = userMsg.match(/(?:should be|actually|is|to|now|changed to|not|instead of)\s*(?:£|€)?\s*(\d[\d,.]*)/i);
+        if (numMatch) {
+          const correctedValue = parseFloat(numMatch[1].replace(/,/g,''));
+          if (correctedValue > 0 && correctedValue < 1000000) {
+            // Try to infer item key from context
+            const itemKeyGuess = userLower.match(/(?:excavat|concret|blockwork|brick|roof|plaster|screed|window|door|electric|plumb|drain|scaffold)/)?.[0];
+            memoryEngine.recordCorrection(db, {
+              userId,
+              itemKey: itemKeyGuess || null,
+              field: 'rate',
+              newValue: correctedValue,
+              reason: userMsg.substring(0, 200),
+              context: JSON.stringify({ session: currentSessionId }),
+            });
+          }
+        }
+      }
       if (isCorrection) {
         const existingRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
         if (existingRates.length > 0) {
@@ -1018,7 +1597,38 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 
-    res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles, quota: quotaInfo, payment_required: paymentRequired });
+    // Return session_id and takeoff_id so frontend can persist them
+    // CRITICAL: Always resolve the active takeoff — even on "generate" turns
+    // where takeoffData is null (Stage 1 already ran in a previous turn)
+    const responseSessionId = (takeoffData && takeoffData.sessionId) || req.body.session_id || sessionId || null;
+
+    // Try to get takeoff_id from: 1) current extraction, 2) body (frontend sent it), 3) DB lookup by session
+    let responseTakeoffId = (typeof takeoffData === 'object' && takeoffData) ? takeoffData.takeoffId : null;
+    if (!responseTakeoffId && req.body.takeoff_id) {
+      responseTakeoffId = req.body.takeoff_id; // frontend remembered it
+    }
+    if (!responseTakeoffId && responseSessionId && benchmarkStore) {
+      // Last resort: look up from DB by session_id
+      try {
+        const sessionTakeoff = benchmarkStore.getTakeoffBySession(db, responseSessionId);
+        if (sessionTakeoff) {
+          responseTakeoffId = sessionTakeoff.id;
+          console.log(`[Session] Recovered takeoff_id ${responseTakeoffId} from DB for session ${responseSessionId}`);
+        }
+      } catch(e) {}
+    }
+
+    res.json({
+      reply,
+      thinking: thinking || null,
+      rateStats,
+      files: downloadFiles,
+      quota: quotaInfo,
+      payment_required: paymentRequired,
+      session_id: responseSessionId,
+      takeoff_id: responseTakeoffId,
+      takeoff_locked: responseTakeoffId ? true : false,
+    });
 
   } catch (err) {
     console.error('Chat error:', err);
