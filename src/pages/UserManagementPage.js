@@ -90,6 +90,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
   const [customQuota, setCustomQuota] = useState(user.monthly_quota || user.quota || 0);
+  const [customBoqQuota, setCustomBoqQuota] = useState(user.monthly_boq_quota || user.boq_quota || 5);
   const [bonusMsgs, setBonusMsgs] = useState(user.bonus_messages || 0);
   const [bonusDocs, setBonusDocs] = useState(user.bonus_docs || 0);
   const [grantDocAmt, setGrantDocAmt] = useState(1);
@@ -122,12 +123,13 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
 
   const savePlan = () => doAction('plan', async () => {
     const quota = plan === 'custom' ? parseInt(customQuota) || 0 : PLANS.find(p => p.value === plan)?.quota || 0;
+    const boqQuota = plan === 'custom' ? parseInt(customBoqQuota) || 0 : plan === 'professional' ? 10 : plan === 'premium' ? 20 : 0;
     const result = await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ plan, monthlyQuota: quota })
+      body: JSON.stringify({ plan, monthlyQuota: quota, boqQuota })
     });
-    onUpdate({ ...user, plan, monthly_quota: quota, quota });
-    showSuccess('Plan updated to ' + plan + (plan === 'custom' ? ' (' + quota + ' msgs/mo)' : ''));
+    onUpdate({ ...user, plan, monthly_quota: quota, quota, boq_quota: boqQuota });
+    showSuccess('Plan updated to ' + plan + (plan === 'custom' ? ' (' + quota + ' msgs, ' + boqQuota + ' BOQs/mo)' : ''));
   });
 
   const saveCredits = () => doAction('credit', async () => {
@@ -240,10 +242,17 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               ))}
             </div>
             {plan === 'custom' && (
-              <div style={{marginTop:10}}>
-                <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>Monthly message limit</label>
-                <input type="number" value={customQuota} onChange={e => setCustomQuota(e.target.value)}
-                  style={{...sInp, width:100}} placeholder="e.g. 50" />
+              <div style={{marginTop:10,display:'flex',gap:12,flexWrap:'wrap'}}>
+                <div>
+                  <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>Messages / month</label>
+                  <input type="number" value={customQuota} onChange={e => setCustomQuota(e.target.value)}
+                    style={{...sInp, width:90}} placeholder="e.g. 50" />
+                </div>
+                <div>
+                  <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>BOQs / month</label>
+                  <input type="number" value={customBoqQuota} onChange={e => setCustomBoqQuota(e.target.value)}
+                    style={{...sInp, width:90}} placeholder="e.g. 5" />
+                </div>
               </div>
             )}
             <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'), marginTop:10}}>
