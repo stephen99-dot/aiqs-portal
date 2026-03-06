@@ -105,6 +105,37 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_log(created_at);
   CREATE INDEX IF NOT EXISTS idx_chat_projects_user ON chat_projects(user_id);
 
+  CREATE TABLE IF NOT EXISTS client_rate_library (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    display_name TEXT,
+    value REAL,
+    unit TEXT,
+    confidence REAL DEFAULT 0.75,
+    original_value REAL,
+    client_note TEXT,
+    times_applied INTEGER DEFAULT 0,
+    times_confirmed INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS rate_corrections_log (
+    id TEXT PRIMARY KEY,
+    rate_id TEXT,
+    user_id TEXT NOT NULL,
+    old_value REAL,
+    new_value REAL,
+    correction_source TEXT,
+    raw_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS client_insights (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -117,6 +148,9 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  CREATE INDEX IF NOT EXISTS idx_rate_library_user ON client_rate_library(user_id);
+  CREATE INDEX IF NOT EXISTS idx_rate_library_active ON client_rate_library(user_id, is_active);
+  CREATE INDEX IF NOT EXISTS idx_rate_corrections_user ON rate_corrections_log(user_id);
   CREATE INDEX IF NOT EXISTS idx_insights_user ON client_insights(user_id);
   CREATE INDEX IF NOT EXISTS idx_insights_category ON client_insights(category);
 `);
