@@ -36,11 +36,13 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
 });
+
+// ── UPDATED: Added .xlsx and .xls to allowed file types ──────────
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip'];
+    const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip', '.xlsx', '.xls'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
   }
 });
@@ -306,7 +308,8 @@ All estimates are approximate, subject to detailed measurement and site conditio
 const VISUAL_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
 const TEXT_EXTS = ['.txt', '.csv', '.json', '.xml', '.html', '.htm', '.md'];
 const CAD_EXTS = ['.dwg', '.dxf', '.rvt', '.ifc', '.skp'];
-const OFFICE_EXTS = ['.xlsx', '.xls', '.docx', '.doc', '.pptx', '.ppt'];
+const OFFICE_EXTS = ['.docx', '.doc', '.pptx', '.ppt'];
+const EXCEL_EXTS = ['.xlsx', '.xls'];
 
 function detectFileType(buffer) {
   if (!buffer || buffer.length < 4) return null;
@@ -317,6 +320,31 @@ function detectFileType(buffer) {
   if (buffer[0]===0x52&&buffer[1]===0x49&&buffer[2]===0x46&&buffer[3]===0x46&&buffer.length>=12&&buffer[8]===0x57&&buffer[9]===0x45&&buffer[10]===0x42&&buffer[11]===0x50) return {ext:'.webp',mime:'image/webp'};
   if (buffer[0]===0x50&&buffer[1]===0x4B) return {ext:'.zip',mime:'application/zip'};
   return null;
+}
+
+// ── NEW: Convert Excel file to readable text for Claude ──────────
+function excelToText(filePath, originalName) {
+  try {
+    const XLSX = require('xlsx');
+    const wb = XLSX.readFile(filePath);
+    let output = `[Excel file: ${originalName}]\n\n`;
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      // Convert to array of arrays for better formatting
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!data || data.length === 0) continue;
+      // Filter out completely empty rows
+      const filtered = data.filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined));
+      if (filtered.length === 0) continue;
+      output += `Sheet: ${sheetName}\n`;
+      output += filtered.map(row => row.join('\t')).join('\n');
+      output += '\n\n';
+    }
+    return output.trim();
+  } catch (err) {
+    console.error('[Excel] Parse error:', err.message);
+    return null;
+  }
 }
 
 function extractFromZip(zipPath) {
@@ -335,6 +363,19 @@ function extractFromZip(zipPath) {
       } else if (TEXT_EXTS.includes(ext)) {
         try { extracted.text.push({name,content:entry.getData().toString('utf8')}); }
         catch(e){ extracted.skipped.push(name); }
+      } else if (EXCEL_EXTS.includes(ext)) {
+        // Extract Excel from ZIP and convert to text
+        try {
+          const tmpPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
+          fs.writeFileSync(tmpPath, entry.getData());
+          const excelText = excelToText(tmpPath, name);
+          if (excelText) {
+            extracted.text.push({ name, content: excelText });
+          } else {
+            extracted.skipped.push(name);
+          }
+          try { fs.unlinkSync(tmpPath); } catch(e) {}
+        } catch(e) { extracted.skipped.push(name); }
       } else if (CAD_EXTS.includes(ext)) {
         extracted.cad.push(name);
       } else if (OFFICE_EXTS.includes(ext)) {
@@ -615,10 +656,12 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     const currentContent = [];
     let fileNames = [], zipNotes = [];
 
+    // ── Process uploaded files ────────────────────────────────────
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
         console.log(`[Upload] ${file.originalname} (${(file.size/1024/1024).toFixed(2)}MB)`);
+
         if (ext === '.zip') {
           const ex = extractFromZip(file.path);
           for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
@@ -626,6 +669,18 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
           if (ex.skipped.length > 0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
           if (ex.visual.length === 0 && ex.text.length === 0) zipNotes.push(ex.cad.length > 0 ? 'ZIP only contains CAD files -- export as PDF.' : 'No supported files in ZIP.');
+
+        } else if (EXCEL_EXTS.includes(ext)) {
+          // ── NEW: Excel handling ───────────────────────────────
+          const excelText = excelToText(file.path, file.originalname);
+          if (excelText) {
+            currentContent.push({ type: 'text', text: excelText });
+            fileNames.push(file.originalname);
+            console.log(`[Upload] Excel converted to text: ${file.originalname}`);
+          } else {
+            zipNotes.push(`Could not read ${file.originalname} — ensure it is a valid Excel file.`);
+          }
+
         } else {
           const b = fileToContentBlock(file.path, ext);
           if (b) { currentContent.push(b); fileNames.push(file.originalname); }
@@ -637,10 +692,13 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (zipNotes.length > 0) {
       const n = zipNotes.join('\n');
       if (textMessage) textMessage = `[Uploaded: ${fileNames.join(', ')}]\n\n${textMessage}\n\n[System: ${n}]`;
-      else if (fileNames.length > 0) textMessage = `Please analyse these drawings: ${fileNames.join(', ')}\n\n[System: ${n}]`;
+      else if (fileNames.length > 0) textMessage = `Please analyse these files: ${fileNames.join(', ')}\n\n[System: ${n}]`;
       else textMessage = `[System: ${n}]\n\nLet the user know about the file issue.`;
     } else if (fileNames.length > 0 && !textMessage) {
-      textMessage = `Please analyse these construction drawings: ${fileNames.join(', ')}`;
+      const isExcel = fileNames.some(n => n.match(/\.xlsx?$/i));
+      textMessage = isExcel
+        ? `Please review this spreadsheet data: ${fileNames.join(', ')}`
+        : `Please analyse these construction drawings: ${fileNames.join(', ')}`;
     } else if (fileNames.length > 0) {
       textMessage = `[Uploaded: ${fileNames.join(', ')}]\n\n${textMessage}`;
     }
@@ -655,7 +713,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     const hasDrawings = fileNames.length > 0;
     const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
     const primaryBudget = hasDrawings ? 8000 : 5000;
-    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings)' : 'Haiku (text chat)'}`);
+    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings/files)' : 'Haiku (text chat)'}`);
 
     const apiHeaders = {
       'Content-Type': 'application/json',
@@ -725,10 +783,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       const revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
 
       if (dPlan === 'starter') {
-        // ── FREE TRIAL + PAYG logic ───────────────────────────────
-        // monthly_quota = free trial BOQ slots assigned at signup (e.g. 2)
-        // paidCredits = one-off £99 payments logged as 'doc_paid'
-        // totalAllowed = how many original BOQs they can generate total (ever)
         const freeTrialQuota = req.user.monthly_quota || 0;
         const paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
         const totalAllowed = freeTrialQuota + paidCredits;
@@ -743,7 +797,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         if (looksLikeRevision && totalRevisionsEver < totalAllowed) {
           console.log('[Quota] Starter revision allowed');
         } else if (originalsEver >= totalAllowed) {
-          // All free trial slots and paid credits used — show payment wall
           wantsDocuments = false;
           paymentRequired = {
             type: 'boq_payment', plan: 'starter', price: 99, currency: 'GBP',
@@ -755,7 +808,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           console.log(`[Quota] Free trial — slot ${originalsEver + 1} of ${totalAllowed}`);
         }
       } else {
-        // ── Professional / Premium monthly doc limit ──────────────
         const docLimit = dPlan === 'premium' ? 20 : 10;
         const originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
         const lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
@@ -939,7 +991,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     // ── Parse and apply RATE / INSIGHT tags from AI reply ─────────
     try {
-      // RATE_ADD tags
       const addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of addMatches) {
         const parts = m.replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
@@ -960,7 +1011,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       }
 
-      // RATE_UPDATE tags
       const updateMatches = reply.match(/\[RATE_UPDATE\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of updateMatches) {
         const uParts = m.replace(/^\[RATE_UPDATE\|/, '').replace(/\]$/, '').split('|');
@@ -984,7 +1034,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       }
 
-      // INSIGHT tags
       const insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
       const validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
       for (const m of insightMatches) {
@@ -1011,7 +1060,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         }
       }
 
-      // Strip all tags from reply
       reply = reply
         .replace(/\[RATE_ADD\|[^\]]*\]/g, '')
         .replace(/\[RATE_UPDATE\|[^\]]*\]/g, '')
