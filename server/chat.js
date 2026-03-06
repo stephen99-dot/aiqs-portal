@@ -1023,27 +1023,13 @@ ${summary}`);
 
     // Before extracting: check if we know the project address
     // Address = currency + VAT rate + location factor. Without it, everything is wrong.
-    // Address check — before extracting, make sure we know the location
-    let addressKnown = true;
+    // Address detection — extract location from all conversation text
+    // We no longer BLOCK extraction, but we note if address is unknown
+    // and ask for it alongside the quantity summary
+    const allTextForAddr = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ');
+    const hasAddress = /\b(\d+\s+[A-Za-z]+.*(?:road|street|lane|avenue|drive|close|way|crescent|place|court|gardens|terrace|grove|row|walk|square|park|rd|st|ave|ln|dr)|dublin|cork|galway|limerick|london|manchester|birmingham|bristol|leeds|edinburgh|glasgow|cardiff|belfast|liverpool|sheffield|newcastle|nottingham|leicester|coventry|exeter|brighton|oxford|cambridge|reading|[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})/i.test(allTextForAddr);
+
     if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
-      const allTextForAddr = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ');
-      const hasAddress = /\b(\d+\s+[A-Za-z]+.*(?:road|street|lane|avenue|drive|close|way|crescent|place|court|gardens|terrace|grove|row|walk|square|park|rd|st|ave|ln|dr)|dublin|cork|galway|limerick|london|manchester|birmingham|bristol|leeds|edinburgh|glasgow|cardiff|belfast|liverpool|sheffield|newcastle|nottingham|leicester|coventry|exeter|brighton|oxford|cambridge|reading|[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})/i.test(allTextForAddr);
-
-      if (!hasAddress && fileNames.length > 0) {
-        // Files uploaded but no address — ask before extracting
-        reply = `📍 **Before I extract quantities, what's the project address?**
-
-This tells me:
-• **Currency** — UK (£) or Ireland (€)
-• **VAT rate** — 20% UK or 13.5% Ireland
-• **Local rates** — London, Manchester, Dublin etc. all price differently
-
-Just reply with the address or town and I'll get started on the quantities.`;
-        addressKnown = false;
-      }
-    }
-
-    if (wantsExtract && addressKnown && deterministicPricer && benchmarkStore && !wantsDocuments) {
       console.log('[Stage 1] Extracting quantities from drawings...');
       try {
         // Get project type from conversation context
@@ -1231,6 +1217,11 @@ Just reply with the address or town and I'll get started on the quantities.`;
             if (req.zipData && req.zipData.all_rooms.length > 0) {
               quantitySummary += `\n🏠 Floor area confirmed from room schedule: ${req.zipData.summary.total_floor_area_m2.toFixed(1)}m²`;
             }
+            // If no address was provided, ask for it now alongside the quantities
+            if (!hasAddress) {
+              quantitySummary += `\n\n📍 **One thing needed:** What's the project address or town? This lets me apply the correct local rates and currency (UK £ or Ireland €). Reply with the location and I'll update the pricing before you generate.`;
+            }
+
             quantitySummary += `\n\nQuantities are now locked (ref: ${takeoffId}). Review the figures above. If anything needs adjusting, tell me now. When you are satisfied, say "generate documents" and I will produce the Excel BOQ and Findings Report — the total will be exactly as shown above.`;
 
             reply = quantitySummary;
