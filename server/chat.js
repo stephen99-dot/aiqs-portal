@@ -366,7 +366,7 @@ function excelToText(filePath, originalName) {
             header: 1,
             defval: '',
             blankrows: false,
-            raw: false, // Use formatted strings, not raw values
+            raw: true, // Use raw calculated values
           });
 
           if (jsonData && jsonData.length > 0) {
