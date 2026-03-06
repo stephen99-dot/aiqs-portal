@@ -991,6 +991,22 @@ ${summary}`);
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
+    // ═══════════════════════════════════════════════════════════════
+    // 3-STAGE DETERMINISTIC PIPELINE
+    // Stage 1: EXTRACT quantities (AI measures, shows working, saves to DB)
+    // Stage 2: LOCK quantities (user confirms, stored in quantity_takeoffs)
+    // Stage 3: GENERATE (Node.js prices deterministically, AI writes findings)
+    // ═══════════════════════════════════════════════════════════════
+
+    const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
+    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    const wantsExtract = hasFiles && !wantsDocumentsRaw; // files uploaded without generate = extract phase
+    const sessionId = req.body.session_id || null;
+    let wantsDocuments = wantsDocumentsRaw;
+    let downloadFiles = null;
+    let paymentRequired = null;
+    let takeoffData = null;
+
     // If session has a locked takeoff and this is a short non-file message (e.g. "Dublin", "yes", "ok"),
     // override the general AI reply with a focused response that acknowledges and moves forward
     if (!hasFiles && !wantsDocuments && sessionId && benchmarkStore) {
@@ -1009,22 +1025,6 @@ ${summary}`);
         }
       } catch(e) {}
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // 3-STAGE DETERMINISTIC PIPELINE
-    // Stage 1: EXTRACT quantities (AI measures, shows working, saves to DB)
-    // Stage 2: LOCK quantities (user confirms, stored in quantity_takeoffs)
-    // Stage 3: GENERATE (Node.js prices deterministically, AI writes findings)
-    // ═══════════════════════════════════════════════════════════════
-
-    const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
-    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
-    const wantsExtract = hasFiles && !wantsDocumentsRaw; // files uploaded without generate = extract phase
-    const sessionId = req.body.session_id || null;
-    let wantsDocuments = wantsDocumentsRaw;
-    let downloadFiles = null;
-    let paymentRequired = null;
-    let takeoffData = null;
 
     // Guard: refuse doc generation if no project data exists
     if (wantsDocuments) {
@@ -1167,15 +1167,15 @@ ${summary}`);
               parsed.location || '',
               clientRates,
               (() => {
-            const locText = (lockedTakeoff.location || message || '').toLowerCase();
-            const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
-            return {
-              contingency_pct: 7.5,
-              ohp_pct: 12,
-              vat_rate: isIreland ? 13.5 : 20,
-              currency: isIreland ? 'EUR' : 'GBP',
-            };
-          })()
+                const locText = (parsed.location || message || '').toLowerCase();
+                const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
+                return {
+                  contingency_pct: 7.5,
+                  ohp_pct: 12,
+                  vat_rate: isIreland ? 13.5 : 20,
+                  currency: isIreland ? 'EUR' : 'GBP',
+                };
+              })()
             );
 
             // Format quantities summary for user
@@ -1543,7 +1543,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
               field: 'rate',
               newValue: correctedValue,
               reason: userMsg.substring(0, 200),
-              context: JSON.stringify({ session: currentSessionId }),
+              context: JSON.stringify({ session: sessionId }),
             });
           }
         }
