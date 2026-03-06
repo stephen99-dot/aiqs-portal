@@ -18,13 +18,21 @@ const PIPEDREAM_WEBHOOK = process.env.PIPEDREAM_WEBHOOK_URL || 'https://eojsrx5d
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://aiqs-portal.onrender.com';
 
 const PLANS = {
-  starter:      { label: 'Starter (PAYG)', quota: 0, price: 99 },
-  professional: { label: 'Professional',   quota: 10, price: 347 },
-  premium:      { label: 'Premium',        quota: 20, price: 447 },
-  custom:       { label: 'Custom',         quota: 999, price: 0 },
+  starter:      { label: 'Starter (PAYG)', quota: 0,  boqQuota: 0,  price: 99  },
+  professional: { label: 'Professional',   quota: 10, boqQuota: 10, price: 347 },
+  premium:      { label: 'Premium',        quota: 20, boqQuota: 20, price: 447 },
+  custom:       { label: 'Custom',         quota: 0,  boqQuota: 0,  price: 0   },
 };
 
-// --- SMTP Email Setup (Hostinger) ---
+// Ensure new columns exist (safe to run on every start)
+try { db.exec('ALTER TABLE users ADD COLUMN monthly_boq_quota INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN bonus_messages INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN bonus_docs INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN suspended INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN suspended_reason TEXT'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0'); } catch(e) {}
+
+// ── SMTP Email Setup (Hostinger) ─────────────────────────────────────────────
 const smtpTransporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.hostinger.com',
   port: parseInt(process.env.SMTP_PORT || '465'),
@@ -115,7 +123,7 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
   });
 }
 
-// --- File Upload Config ---
+// ── File Upload Config ────────────────────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -395,14 +403,11 @@ router.put('/notifications/read-all', authMiddleware, adminMiddleware, (req, res
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACTIVITY FEED — admin endpoint
-// Reads from activity_log table (written to by logActivity in activityRoutes.js)
-// Also synthesises live stats from current DB state
+// ACTIVITY FEED
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/admin/activity', authMiddleware, adminMiddleware, (req, res) => {
   try {
-    // Ensure table exists (safe on every request)
     db.exec(`
       CREATE TABLE IF NOT EXISTS activity_log (
         id TEXT PRIMARY KEY,
@@ -428,7 +433,6 @@ router.get('/admin/activity', authMiddleware, adminMiddleware, (req, res) => {
       ? db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE event_type = ?').get(filter).c
       : db.prepare('SELECT COUNT(*) as c FROM activity_log').get().c;
 
-    // Live summary stats (always fresh from DB)
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -464,14 +468,25 @@ router.get('/usage', authMiddleware, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ADMIN ROUTES
+// ADMIN — USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
-    return { id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name, company: u.company, phone: u.phone, role: u.role, plan: u.plan || 'starter', planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, atLimit: planInfo.atLimit, suspended: u.suspended || 0, suspended_reason: u.suspended_reason, bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0, created_at: u.created_at, project_count: 0 };
+    return {
+      id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name,
+      company: u.company, phone: u.phone, role: u.role,
+      plan: u.plan || 'starter', planLabel: planInfo.planLabel,
+      quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining,
+      messages_used: planInfo.used, monthly_quota: u.monthly_quota || 0,
+      atLimit: planInfo.atLimit,
+      suspended: u.suspended || 0, suspended_reason: u.suspended_reason,
+      bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0,
+      monthly_boq_quota: u.monthly_boq_quota || 0,
+      created_at: u.created_at, project_count: 0,
+    };
   }) });
 });
 
@@ -494,14 +509,12 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// ── DELETE USER — full cascade ───────────────────────────────────────────────
 router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account' });
     const user = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const uid = req.params.id;
-
     const del = db.transaction(() => {
       db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid);
       try { db.prepare('DELETE FROM project_data WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
@@ -517,7 +530,6 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
       db.prepare('DELETE FROM users WHERE id = ?').run(uid);
     });
     del();
-
     logActivity({ event_type: 'user_deleted', title: (user.full_name || user.email) + ' deleted by admin', detail: user.email, user_id: null, user_name: 'Admin', user_email: null });
     res.json({ success: true });
   } catch (err) {
@@ -526,21 +538,110 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
   }
 });
 
+// Update plan (supports custom with monthlyQuota + boqQuota)
 router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) => {
   try {
-    const { plan, monthlyQuota } = req.body;
-    if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'Invalid plan. Must be: starter, professional, premium, or custom' });
+    const { plan, monthlyQuota, boqQuota } = req.body;
+    const validPlans = ['starter', 'professional', 'premium', 'custom'];
+    if (!plan || !validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be: starter, professional, premium, or custom' });
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const quota = monthlyQuota !== undefined ? monthlyQuota : PLANS[plan].quota;
-    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(plan, quota, req.params.id);
+    const quota = monthlyQuota !== undefined ? parseInt(monthlyQuota) : (PLANS[plan]?.quota || 0);
+    const boq   = boqQuota    !== undefined ? parseInt(boqQuota)     : (PLANS[plan]?.boqQuota || 0);
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(plan, quota, boq, req.params.id);
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     const planInfo = getUserPlanInfo(updated);
-    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' plan changed to ' + PLANS[plan].label, detail: 'Quota: ' + quota + '/month', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' plan changed to ' + plan, detail: quota + ' msgs, ' + boq + ' BOQs/month', user_id: user.id, user_name: user.full_name, user_email: user.email });
     res.json({ id: updated.id, email: updated.email, fullName: updated.full_name, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining });
   } catch (err) {
     console.error('Update plan error:', err);
     res.status(500).json({ error: 'Failed to update plan' });
+  }
+});
+
+// Set bonus credits directly
+router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const bonus_messages = parseInt(req.body.bonus_messages) || 0;
+    const bonus_docs     = parseInt(req.body.bonus_docs)     || 0;
+    db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(bonus_messages, bonus_docs, req.params.id);
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_messages + ' bonus messages, ' + bonus_docs + ' bonus docs', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true, bonus_messages, bonus_docs });
+  } catch (err) {
+    console.error('Set credits error:', err);
+    res.status(500).json({ error: 'Failed to update credits' });
+  }
+});
+
+// Grant paid BOQ credits (adds on top of existing)
+router.post('/admin/users/:id/grant-doc', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const amount   = Math.max(1, parseInt(req.body.amount) || 1);
+    const newBonus = (user.bonus_docs || 0) + amount;
+    db.prepare('UPDATE users SET bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newBonus, req.params.id);
+    try {
+      db.prepare("INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, 'admin_credit', ?, 'admin', 0, 0, 0)")
+        .run('ul_' + uuidv4().slice(0, 8), req.params.id, amount + ' paid BOQ credit(s) granted by admin');
+    } catch(e) { /* ignore if usage_log schema differs */ }
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' granted ' + amount + ' BOQ credit(s)', detail: 'bonus_docs: ' + (user.bonus_docs || 0) + ' → ' + newBonus, user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true, bonus_docs: newBonus });
+  } catch (err) {
+    console.error('Grant doc error:', err);
+    res.status(500).json({ error: 'Failed to grant doc credit' });
+  }
+});
+
+// Legacy grant-doc endpoint (kept for backwards compat)
+router.post('/admin/grant-doc/:id', authMiddleware, adminMiddleware, (req, res) => {
+  req.params = { id: req.params.id };
+  req.body = { amount: 1 };
+  // forward to new handler logic
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const newBonus = (user.bonus_docs || 0) + 1;
+    db.prepare('UPDATE users SET bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newBonus, req.params.id);
+    res.json({ success: true, bonus_docs: newBonus });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to grant doc credit' });
+  }
+});
+
+// Suspend account
+router.post('/admin/suspend/:id', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const reason = req.body.reason || 'Suspended by admin';
+    db.prepare('UPDATE users SET suspended = 1, suspended_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(reason, req.params.id);
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' account suspended', detail: reason, user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Suspend error:', err);
+    res.status(500).json({ error: 'Failed to suspend account' });
+  }
+});
+
+// Unsuspend account
+router.post('/admin/unsuspend/:id', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    db.prepare('UPDATE users SET suspended = 0, suspended_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(req.params.id);
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' account reactivated', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Unsuspend error:', err);
+    res.status(500).json({ error: 'Failed to reactivate account' });
   }
 });
 
@@ -603,7 +704,7 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
         </div>
       `,
     });
-    res.json({ success: true, email: user.email, magicUrl, emailSent, message: emailSent ? `Magic link emailed to ${user.email}` : `Magic link generated (email not configured — link returned).` });
+    res.json({ success: true, email: user.email, magicUrl, magicLink: magicUrl, emailSent, message: emailSent ? `Magic link emailed to ${user.email}` : `Magic link generated (email not configured).` });
   } catch (err) {
     console.error('Magic link error:', err);
     res.status(500).json({ error: 'Failed to generate magic link' });
@@ -650,10 +751,8 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
     const files = db.prepare('SELECT * FROM files WHERE project_id = ?').all(projectId);
     if (!isPayg && files.length > 0) triggerPipedream(project, user, files);
     const updatedPlanInfo = getUserPlanInfo(user);
-
     logActivity({ event_type: 'project_created', title: (user.full_name || user.email) + ' submitted a project', detail: title + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)', user_id: user.id, user_name: user.full_name, user_email: user.email });
     notifyAdmin({ type: 'new_project', title: `New project: ${title}`, detail: (user.full_name || user.email) + (location ? ' — ' + location : '') + ' (' + (files.length || 0) + ' files)', icon: 'folder-plus' });
-
     res.status(201).json({ ...project, files, usage: updatedPlanInfo });
   } catch (err) {
     console.error('Create project error:', err);
