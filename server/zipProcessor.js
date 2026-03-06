@@ -476,8 +476,7 @@ async function processZip(zipPath, extractDir) {
     }
   }
 
-  // Clean up temp dir
-  try { fs.rmSync(tmpDir, { recursive: true }); } catch (e) {}
+  // NOTE: tmpDir cleanup moved to AFTER scale rendering — files needed for rendering
 
   console.log(`[ZIP] Extracted: ${results.all_dimensions.length} dimensions, ${results.all_rooms.length} rooms, ${results.all_openings.length} openings, ${results.images_for_vision.length} images need vision`);
 
@@ -548,6 +547,9 @@ async function processZip(zipPath, extractDir) {
       }
     }
   }
+
+  // Clean up temp dir now that scale rendering is complete
+  try { fs.rmSync(tmpDir, { recursive: true }); } catch (e) {}
 
   return results;
 }
