@@ -39,9 +39,21 @@ const THINKING_STAGES = [
   { iconKey: 'check',      text: 'Preparing response...' },
 ];
 
+// ── Mobile detection hook ──────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
+}
+
 export default function ChatPage() {
   const { mode } = useTheme();
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile();
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -50,7 +62,8 @@ export default function ChatPage() {
   const [thinkingStage, setThinkingStage] = useState(0);
   const [expandedThinking, setExpandedThinking] = useState({});
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // On mobile: closed by default. On desktop: open by default.
+  const [sidebarOpen, setSidebarOpen] = useState(!window.matchMedia('(max-width: 768px)').matches);
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -60,6 +73,11 @@ export default function ChatPage() {
   const thinkingInterval = useRef(null);
   const saveTimeout = useRef(null);
   const hadFilesRef = useRef(false);
+
+  // Close sidebar when viewport becomes mobile
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
 
   useEffect(() => { loadSessions(); }, []);
 
@@ -78,6 +96,8 @@ export default function ChatPage() {
       setMessages(data.messages || []);
       setCurrentSessionId(sessionId);
       setExpandedThinking({});
+      // Auto-close sidebar on mobile after picking a chat
+      if (isMobile) setSidebarOpen(false);
     } catch (e) { console.error('Failed to load session:', e); }
   }
 
@@ -188,6 +208,7 @@ export default function ChatPage() {
     groupLabelColor: '#2D3E55',
     collapseIconColor: '#2D3E55',
     collapseIconActive: '#3B82F6',
+    overlayBg: 'rgba(0,0,0,0.65)',
   } : {
     pageBg: '#F0F4FA',
     sidebarBg: '#FFFFFF',
@@ -235,6 +256,7 @@ export default function ChatPage() {
     groupLabelColor: '#CBD5E1',
     collapseIconColor: '#CBD5E1',
     collapseIconActive: '#2563EB',
+    overlayBg: 'rgba(0,0,0,0.4)',
   };
 
   function addFiles(fl) { setFiles(prev => [...prev, ...Array.from(fl)].slice(0, 5)); }
@@ -265,7 +287,10 @@ export default function ChatPage() {
       { label: 'Older', items: older },
     ].filter(g => g.items.length > 0);
   }
-  function startNewChat() { setMessages([]); setCurrentSessionId(null); setExpandedThinking({}); }
+  function startNewChat() {
+    setMessages([]); setCurrentSessionId(null); setExpandedThinking({});
+    if (isMobile) setSidebarOpen(false);
+  }
   function toggleThinking(idx) { setExpandedThinking(prev => ({ ...prev, [idx]: !prev[idx] })); }
 
   async function handleSend(e) {
@@ -375,8 +400,34 @@ export default function ChatPage() {
     );
   }
 
+  // ── Sidebar: on mobile = fixed overlay; on desktop = inline panel ──
+  const sidebarStyle = isMobile ? {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    height: '100%',
+    width: 280,
+    zIndex: 200,
+    transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform 0.25s ease',
+    background: c.sidebarBg,
+    borderRight: `1px solid ${c.sidebarBorder}`,
+    display: 'flex',
+    flexDirection: 'column',
+  } : {
+    width: sidebarOpen ? 264 : 0,
+    minWidth: sidebarOpen ? 264 : 0,
+    transition: 'width 0.2s ease, min-width 0.2s ease',
+    overflow: 'hidden',
+    background: c.sidebarBg,
+    borderRight: sidebarOpen ? `1px solid ${c.sidebarBorder}` : 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+  };
+
   return (
-    <div style={{ height: 'calc(100vh - 48px)', display: 'flex', overflow: 'hidden', background: c.pageBg }}>
+    <div style={{ height: 'calc(100vh - 48px)', display: 'flex', overflow: 'hidden', background: c.pageBg, position: 'relative' }}>
       <style>{`
         @keyframes typingPulse { 0%,80%,100%{opacity:0.3;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
         @keyframes thinkPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -394,17 +445,19 @@ export default function ChatPage() {
         .collapse-toggle:hover{opacity:1!important}
       `}</style>
 
+      {/* ── Mobile overlay backdrop — tapping it closes the sidebar ── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 199,
+            background: c.overlayBg,
+          }}
+        />
+      )}
+
       {/* ── Sidebar ── */}
-      <div style={{
-        width: sidebarOpen ? 264 : 0,
-        minWidth: sidebarOpen ? 264 : 0,
-        transition: 'width 0.2s ease, min-width 0.2s ease',
-        overflow: 'hidden',
-        background: c.sidebarBg,
-        borderRight: sidebarOpen ? `1px solid ${c.sidebarBorder}` : 'none',
-        display: 'flex', flexDirection: 'column',
-        flexShrink: 0,
-      }}>
+      <div style={sidebarStyle}>
         <div style={{ padding: '0 12px', height: 52, background: c.sidebarHeaderBg, borderBottom: `1px solid ${c.sidebarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: c.textPrimary, whiteSpace: 'nowrap' }}>Chat History</span>
@@ -412,9 +465,15 @@ export default function ChatPage() {
               <span style={{ fontSize: 10, fontWeight: 700, color: c.textMuted, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 20, padding: '1px 7px', whiteSpace: 'nowrap' }}>{sessions.length}</span>
             )}
           </div>
-          <button className="new-chat-btn" onClick={startNewChat} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: c.newChatBg, border: `1px solid ${c.newChatBorder}`, color: c.newChatColor, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'opacity 0.15s' }}>
-            + New
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button className="new-chat-btn" onClick={startNewChat} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: c.newChatBg, border: `1px solid ${c.newChatBorder}`, color: c.newChatColor, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'opacity 0.15s' }}>
+              + New
+            </button>
+            {/* Close button — mobile only */}
+            {isMobile && (
+              <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.textMuted, fontSize: 22, lineHeight: 1, padding: '0 4px' }}>×</button>
+            )}
+          </div>
         </div>
 
         <div className="aiqs-sidebar" style={{ flex: 1, overflowY: 'auto', padding: '6px 6px 12px' }}>
@@ -467,11 +526,11 @@ export default function ChatPage() {
           <div style={{ width: 1, height: 18, background: c.topBarBorder, flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: c.textPrimary }}>AI Quantity Surveyor</span>
-            <span style={{ fontSize: 12, color: c.textMuted, marginLeft: 10 }}>Upload drawings · get estimates · generate BOQs</span>
+            {!isMobile && <span style={{ fontSize: 12, color: c.textMuted, marginLeft: 10 }}>Upload drawings · get estimates · generate BOQs</span>}
           </div>
           <button onClick={startNewChat} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, flexShrink: 0, background: 'transparent', border: `1px solid ${c.topBarBorder}`, color: c.textMuted, fontSize: 12.5, fontWeight: 500, cursor: 'pointer' }}>
             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path d="M12 4v16m8-8H4"/></svg>
-            New chat
+            {!isMobile && 'New chat'}
           </button>
         </div>
 
@@ -479,13 +538,13 @@ export default function ChatPage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: c.chatBg }} onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
 
           {/* Messages */}
-          <div className="aiqs-msgs" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="aiqs-msgs" style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 12px' : '24px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
             {messages.length === 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, textAlign: 'center', padding: '0 24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, textAlign: 'center', padding: '0 16px' }}>
                 <div style={{ width: 68, height: 68, borderRadius: 18, background: isDark ? '#0F1520' : '#F1F5F9', border: `1px solid ${c.topBarBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, marginBottom: 18 }}>📐</div>
-                <h3 style={{ fontSize: 20, fontWeight: 700, color: c.textPrimary, margin: '0 0 8px' }}>Ready to analyse your project</h3>
-                <p style={{ fontSize: 14, color: c.textSecondary, margin: '0 0 28px', maxWidth: 460, lineHeight: 1.65 }}>
+                <h3 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: c.textPrimary, margin: '0 0 8px' }}>Ready to analyse your project</h3>
+                <p style={{ fontSize: isMobile ? 13 : 14, color: c.textSecondary, margin: '0 0 24px', maxWidth: 460, lineHeight: 1.65 }}>
                   Upload your drawings (PDF, images, ZIP) or spreadsheets (Excel) and ask anything — rough costs, spec advice, quantities, building regs, risks.
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 520 }}>
@@ -509,7 +568,7 @@ export default function ChatPage() {
                 {msg.role === 'assistant' && msg.thinking && (
                   <div style={{ display: 'flex', gap: 12, marginBottom: -8 }}>
                     <div style={{ width: 34, flexShrink: 0 }} />
-                    <div style={{ maxWidth: '72%' }}>
+                    <div style={{ maxWidth: isMobile ? '90%' : '72%' }}>
                       <ThinkingBlock thinking={msg.thinking} index={i} />
                     </div>
                   </div>
@@ -518,7 +577,7 @@ export default function ChatPage() {
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: msg.role === 'user' ? c.accent : c.avatarBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
                     {msg.role === 'user' ? '👤' : '📐'}
                   </div>
-                  <div style={{ maxWidth: '72%', padding: '11px 15px', borderRadius: msg.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: msg.role === 'user' ? c.userBubble : c.assistantBubble, color: msg.role === 'user' ? '#F1F5F9' : msg.error ? c.errorText : c.textPrimary, fontSize: 14, lineHeight: 1.65, wordBreak: 'break-word' }}>
+                  <div style={{ maxWidth: isMobile ? '85%' : '72%', padding: '11px 15px', borderRadius: msg.role === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: msg.role === 'user' ? c.userBubble : c.assistantBubble, color: msg.role === 'user' ? '#F1F5F9' : msg.error ? c.errorText : c.textPrimary, fontSize: isMobile ? 13 : 14, lineHeight: 1.65, wordBreak: 'break-word' }}>
                     {msg.role === 'user' && msg.files?.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
                         {msg.files.map((f, j) => (
@@ -602,7 +661,7 @@ export default function ChatPage() {
           )}
 
           {/* Input */}
-          <div style={{ padding: '10px 20px 14px', background: c.chatBg, borderTop: `1px solid ${c.chatBorder}`, flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? '8px 10px 12px' : '10px 20px 14px', background: c.chatBg, borderTop: `1px solid ${c.chatBorder}`, flexShrink: 0 }}>
             <form onSubmit={handleSend} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, background: c.inputBg, border: `1px solid ${c.inputBorder}`, borderRadius: 14, padding: '7px 8px 7px 12px' }}>
               <button type="button" onClick={() => fileInputRef.current.click()}
                 style={{ background: 'none', border: 'none', color: c.textMuted, cursor: 'pointer', padding: '6px 6px', borderRadius: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }}
@@ -611,7 +670,6 @@ export default function ChatPage() {
                   <path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                 </svg>
               </button>
-              {/* ── UPDATED: Added .xlsx and .xls to accept ── */}
               <input
                 ref={fileInputRef} type="file" multiple
                 onChange={e => { if (e.target.files?.length) addFiles(e.target.files); }}
@@ -633,7 +691,6 @@ export default function ChatPage() {
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
             </form>
-            {/* ── UPDATED: Hint text includes Excel ── */}
             <div style={{ fontSize: 11, color: c.textMuted, textAlign: 'center', marginTop: 7 }}>
               Drag & drop files · PDF, PNG, JPG, ZIP, Excel supported
             </div>
