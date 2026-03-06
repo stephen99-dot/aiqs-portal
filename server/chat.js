@@ -18,7 +18,6 @@ const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
-// ── Ensure chat_sessions table exists ────────────────────────────
 try {
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -37,7 +36,6 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
 });
 
-// ── UPDATED: Added .xlsx and .xls to allowed file types ──────────
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 },
@@ -54,7 +52,6 @@ const upload = multer({
 function extractInsightsFromMessage(userId, message) {
   if (!message || message.length < 5) return;
   const msg = message.trim();
-
   const patterns = [
     { regex: /we (?:always |usually |typically )?(?:use|buy from|get .+? from|source from|order from)\s+([A-Z][a-zA-Z\s&]+?)(?:\s+for|\s+as|\s+when|\.|\,|$)/i, category: 'supplier', template: m => `Client uses ${m[1].trim()} as supplier` },
     { regex: /(?:our|my) (?:main |preferred |usual )?supplier(?:s)? (?:is|are)\s+([A-Z][a-zA-Z\s&,]+?)(?:\.|,|$)/i, category: 'supplier', template: m => `Client supplier: ${m[1].trim()}` },
@@ -73,9 +70,7 @@ function extractInsightsFromMessage(userId, message) {
     { regex: /(?:we|I) (?:don't|do not|never|won't|will not) (?:include|cover|do|price|quote for)\s+(.{5,80}?)(?:\.|,|$)/i, category: 'exclusion', template: m => `Client exclusion: ${m[1].trim()}` },
     { regex: /(?:always |please )?exclude\s+(.{5,80}?)\s+(?:from|in) (?:all|our|every|the)/i, category: 'exclusion', template: m => `Always exclude: ${m[1].trim()}` },
   ];
-
   const validCategories = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
-
   for (const pattern of patterns) {
     const match = msg.match(pattern.regex);
     if (!match) continue;
@@ -92,13 +87,11 @@ function extractInsightsFromMessage(userId, message) {
         const overlap = existWords.filter(w => newWords.includes(w)).length;
         if (overlap / Math.max(existWords.length, 1) > 0.5) {
           db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id);
-          isDuplicate = true;
-          break;
+          isDuplicate = true; break;
         }
       }
       if (!isDuplicate) {
         db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText);
-        console.log(`[Insight] Saved: [${pattern.category}] ${insightText}`);
       }
     } catch (err) { console.error('[Insight] Save error:', err.message); }
   }
@@ -111,7 +104,6 @@ function extractInsightsFromMessage(userId, message) {
 function buildSystemPrompt(userId, forDocGen) {
   let clientRateSection = '';
   let clientInsightsSection = '';
-
   try {
     const rates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, confidence DESC`).all(userId);
     if (rates.length > 0) {
@@ -124,7 +116,6 @@ function buildSystemPrompt(userId, forDocGen) {
       clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
     }
   } catch (err) { console.error('[Chat] Rate load error:', err.message); }
-
   try {
     const insights = db.prepare(`SELECT category, insight, times_reinforced FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC LIMIT 30`).all(userId);
     if (insights.length > 0) {
@@ -298,7 +289,9 @@ Valid insight categories: spec_preference, markup, supplier, scope, geography, t
 
 Only output INSIGHT tags when the client EXPLICITLY states something — do not infer or guess.
 
-All estimates are approximate, subject to detailed measurement and site conditions.`;
+All estimates are approximate, subject to detailed measurement and site conditions.
+
+WHEN A CLIENT UPLOADS AN EXCEL FILE: Read the data carefully. It may be a BOQ, rate schedule, contractor quote, or project data. Analyse it thoroughly and respond professionally based on its contents. Do not say the file is corrupted or unreadable — always work with what you can extract.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -322,27 +315,106 @@ function detectFileType(buffer) {
   return null;
 }
 
-// ── NEW: Convert Excel file to readable text for Claude ──────────
+// ── Robust Excel to text conversion ──────────────────────────────
 function excelToText(filePath, originalName) {
   try {
     const XLSX = require('xlsx');
-    const wb = XLSX.readFile(filePath);
-    let output = `[Excel file: ${originalName}]\n\n`;
-    for (const sheetName of wb.SheetNames) {
-      const ws = wb.Sheets[sheetName];
-      // Convert to array of arrays for better formatting
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-      if (!data || data.length === 0) continue;
-      // Filter out completely empty rows
-      const filtered = data.filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined));
-      if (filtered.length === 0) continue;
-      output += `Sheet: ${sheetName}\n`;
-      output += filtered.map(row => row.join('\t')).join('\n');
-      output += '\n\n';
+
+    // Try multiple read strategies from most to least tolerant
+    let wb = null;
+    const readStrategies = [
+      // Strategy 1: Most tolerant — ignore styles, shared strings issues
+      { type: 'file', cellStyles: false, cellNF: false, sheetStubs: false, WTF: false, dense: false },
+      // Strategy 2: Read as buffer with tolerant options
+      { type: 'buffer', cellStyles: false, cellNF: false, WTF: false },
+      // Strategy 3: Raw read
+      {},
+    ];
+
+    for (const opts of readStrategies) {
+      try {
+        if (opts.type === 'buffer') {
+          const buf = fs.readFileSync(filePath);
+          wb = XLSX.read(buf, opts);
+        } else {
+          wb = XLSX.readFile(filePath, opts);
+        }
+        if (wb && wb.SheetNames && wb.SheetNames.length > 0) break;
+      } catch (e) {
+        console.log(`[Excel] Strategy failed, trying next: ${e.message}`);
+        wb = null;
+      }
     }
+
+    if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+      console.error('[Excel] All read strategies failed for:', originalName);
+      return null;
+    }
+
+    let output = `[Excel file: ${originalName}]\n\n`;
+    let totalRows = 0;
+
+    for (const sheetName of wb.SheetNames) {
+      try {
+        const ws = wb.Sheets[sheetName];
+        if (!ws) continue;
+
+        // Try JSON first (better for structured data like BOQs)
+        let sheetText = '';
+        try {
+          const jsonData = XLSX.utils.sheet_to_json(ws, {
+            header: 1,
+            defval: '',
+            blankrows: false,
+            raw: false, // Use formatted strings, not raw values
+          });
+
+          if (jsonData && jsonData.length > 0) {
+            // Filter completely empty rows
+            const filtered = jsonData.filter(row =>
+              Array.isArray(row) && row.some(cell => cell !== '' && cell !== null && cell !== undefined)
+            );
+
+            if (filtered.length > 0) {
+              sheetText = filtered.map(row => {
+                // Clean each cell — convert to string, trim
+                return row.map(cell => {
+                  if (cell === null || cell === undefined) return '';
+                  return String(cell).trim();
+                }).join('\t');
+              }).join('\n');
+              totalRows += filtered.length;
+            }
+          }
+        } catch (jsonErr) {
+          // Fallback to CSV if JSON fails
+          console.log(`[Excel] JSON parse failed for sheet ${sheetName}, trying CSV`);
+          try {
+            sheetText = XLSX.utils.sheet_to_csv(ws, { skipHidden: true, blankrows: false });
+            totalRows += sheetText.split('\n').length;
+          } catch (csvErr) {
+            console.log(`[Excel] CSV also failed for sheet ${sheetName}`);
+          }
+        }
+
+        if (sheetText && sheetText.trim()) {
+          output += `Sheet: ${sheetName}\n${sheetText.trim()}\n\n`;
+        }
+      } catch (sheetErr) {
+        console.error(`[Excel] Sheet ${sheetName} error:`, sheetErr.message);
+      }
+    }
+
+    if (totalRows === 0) {
+      console.error('[Excel] No data extracted from:', originalName);
+      return null;
+    }
+
+    console.log(`[Excel] Extracted ${totalRows} rows from ${wb.SheetNames.length} sheet(s): ${originalName}`);
     return output.trim();
+
   } catch (err) {
-    console.error('[Excel] Parse error:', err.message);
+    console.error('[Excel] Fatal parse error:', err.message);
     return null;
   }
 }
@@ -364,16 +436,12 @@ function extractFromZip(zipPath) {
         try { extracted.text.push({name,content:entry.getData().toString('utf8')}); }
         catch(e){ extracted.skipped.push(name); }
       } else if (EXCEL_EXTS.includes(ext)) {
-        // Extract Excel from ZIP and convert to text
         try {
           const tmpPath = path.join(uploadsDir, `${uuidv4()}${ext}`);
           fs.writeFileSync(tmpPath, entry.getData());
           const excelText = excelToText(tmpPath, name);
-          if (excelText) {
-            extracted.text.push({ name, content: excelText });
-          } else {
-            extracted.skipped.push(name);
-          }
+          if (excelText) extracted.text.push({ name, content: excelText });
+          else extracted.skipped.push(name);
           try { fs.unlinkSync(tmpPath); } catch(e) {}
         } catch(e) { extracted.skipped.push(name); }
       } else if (CAD_EXTS.includes(ext)) {
@@ -409,14 +477,9 @@ function fileToContentBlock(filePath, ext) {
 
 router.get('/chat-sessions', authMiddleware, (req, res) => {
   try {
-    const sessions = db.prepare(
-      `SELECT id, title, created_at, updated_at FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`
-    ).all(req.user.id);
+    const sessions = db.prepare(`SELECT id, title, created_at, updated_at FROM chat_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50`).all(req.user.id);
     res.json({ sessions });
-  } catch (e) {
-    console.error('[ChatSessions] Load error:', e.message);
-    res.json({ sessions: [] });
-  }
+  } catch (e) { console.error('[ChatSessions] Load error:', e.message); res.json({ sessions: [] }); }
 });
 
 router.get('/chat-sessions/:id', authMiddleware, (req, res) => {
@@ -424,10 +487,7 @@ router.get('/chat-sessions/:id', authMiddleware, (req, res) => {
     const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!session) return res.status(404).json({ error: 'Session not found' });
     res.json({ ...session, messages: JSON.parse(session.messages || '[]') });
-  } catch (e) {
-    console.error('[ChatSessions] Get error:', e.message);
-    res.status(500).json({ error: 'Failed to load session' });
-  }
+  } catch (e) { console.error('[ChatSessions] Get error:', e.message); res.status(500).json({ error: 'Failed to load session' }); }
 });
 
 router.post('/chat-sessions', authMiddleware, (req, res) => {
@@ -443,17 +503,12 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
     }
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
-      db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?')
-        .run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
+      db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
     } else {
-      db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)')
-        .run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
+      db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
     }
     res.json({ id: sessionId, title: sessionTitle });
-  } catch (e) {
-    console.error('[ChatSessions] Save error:', e.message);
-    res.status(500).json({ error: 'Failed to save session' });
-  }
+  } catch (e) { console.error('[ChatSessions] Save error:', e.message); res.status(500).json({ error: 'Failed to save session' }); }
 });
 
 router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
@@ -461,15 +516,8 @@ router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
     const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
     res.json({ success: true });
-  } catch (e) {
-    console.error('[ChatSessions] Delete error:', e.message);
-    res.status(500).json({ error: 'Failed to delete session' });
-  }
+  } catch (e) { console.error('[ChatSessions] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete session' }); }
 });
-
-// ═══════════════════════════════════════════════════════════════════════
-// DELETE PROJECT ROUTE
-// ═══════════════════════════════════════════════════════════════════════
 
 router.delete('/projects/:id', authMiddleware, (req, res) => {
   try {
@@ -482,15 +530,8 @@ router.delete('/projects/:id', authMiddleware, (req, res) => {
     db.prepare('DELETE FROM project_data WHERE project_id = ?').run(projectId);
     db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
     res.json({ success: true });
-  } catch (e) {
-    console.error('[Projects] Delete error:', e.message);
-    res.status(500).json({ error: 'Failed to delete project' });
-  }
+  } catch (e) { console.error('[Projects] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete project' }); }
 });
-
-// ═══════════════════════════════════════════════════════════════════════
-// OTHER ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════
 
 router.get('/seed-rates', authMiddleware, (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
@@ -518,9 +559,7 @@ router.get('/seed-rates', authMiddleware, (req, res) => {
       { category: 'preliminaries', item_key: 'hot_dip_galvanising_per_tonne', display_name: 'Hot Dip Galvanising', value: 650, unit: '£/T', confidence: 0.80 },
     ];
     const insert = db.prepare(`INSERT OR REPLACE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, times_applied, times_confirmed, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 5, 3, 1)`);
-    const tx = db.transaction(() => {
-      for (const r of rates) insert.run('rl_' + uuidv4().slice(0, 8), paul.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.confidence);
-    });
+    const tx = db.transaction(() => { for (const r of rates) insert.run('rl_' + uuidv4().slice(0, 8), paul.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.confidence); });
     tx();
     results.push({ paul: `Seeded ${rates.length} rates for ${paul.full_name}` });
   } else {
@@ -533,11 +572,7 @@ router.get('/downloads/:filename', authMiddleware, (req, res) => {
   const fp = path.join(outputsDir, req.params.filename);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
   const ext = path.extname(req.params.filename).toLowerCase();
-  const mt = {
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.pdf': 'application/pdf'
-  };
+  const mt = { '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.pdf': 'application/pdf' };
   const fileBuffer = fs.readFileSync(fp);
   res.setHeader('Content-Type', mt[ext] || 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
@@ -615,14 +650,9 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
     if (req.user.suspended) {
-      return res.status(403).json({
-        error: 'Your account has been suspended. Contact support.',
-        suspended: true,
-        reason: req.user.suspended_reason || null
-      });
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
     }
 
-    // ── Message quota check ───────────────────────────────────────
     const PLAN_LIMITS = {
       starter:      { messages: 10,  label: 'Starter' },
       professional: { messages: 100, label: 'Professional' },
@@ -639,24 +669,17 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
         const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, mStart.toISOString());
         if (used.c >= effectiveLimit) {
-          return res.status(429).json({
-            error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`,
-            limit_type: 'messages', used: used.c, limit: effectiveLimit, plan
-          });
+          return res.status(429).json({ error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
         }
       }
     }
 
-    // ── Build message history ─────────────────────────────────────
     let messages = [];
-    if (history) {
-      try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){}
-    }
+    if (history) { try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){} }
 
     const currentContent = [];
     let fileNames = [], zipNotes = [];
 
-    // ── Process uploaded files ────────────────────────────────────
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
@@ -671,14 +694,16 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           if (ex.visual.length === 0 && ex.text.length === 0) zipNotes.push(ex.cad.length > 0 ? 'ZIP only contains CAD files -- export as PDF.' : 'No supported files in ZIP.');
 
         } else if (EXCEL_EXTS.includes(ext)) {
-          // ── NEW: Excel handling ───────────────────────────────
           const excelText = excelToText(file.path, file.originalname);
           if (excelText) {
             currentContent.push({ type: 'text', text: excelText });
             fileNames.push(file.originalname);
-            console.log(`[Upload] Excel converted to text: ${file.originalname}`);
+            console.log(`[Upload] Excel converted successfully: ${file.originalname}`);
           } else {
-            zipNotes.push(`Could not read ${file.originalname} — ensure it is a valid Excel file.`);
+            // Even if parsing fails, tell Claude about the file and let it respond gracefully
+            currentContent.push({ type: 'text', text: `[Excel file uploaded: ${file.originalname}]\n\nNote: The file data could not be fully extracted. Please ask the user to describe the contents or re-save as a simpler Excel format.` });
+            fileNames.push(file.originalname);
+            console.log(`[Upload] Excel parse failed, sending placeholder: ${file.originalname}`);
           }
 
         } else {
@@ -696,9 +721,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       else textMessage = `[System: ${n}]\n\nLet the user know about the file issue.`;
     } else if (fileNames.length > 0 && !textMessage) {
       const isExcel = fileNames.some(n => n.match(/\.xlsx?$/i));
-      textMessage = isExcel
-        ? `Please review this spreadsheet data: ${fileNames.join(', ')}`
-        : `Please analyse these construction drawings: ${fileNames.join(', ')}`;
+      textMessage = isExcel ? `Please review and analyse this spreadsheet: ${fileNames.join(', ')}` : `Please analyse these construction drawings: ${fileNames.join(', ')}`;
     } else if (fileNames.length > 0) {
       textMessage = `[Uploaded: ${fileNames.join(', ')}]\n\n${textMessage}`;
     }
@@ -708,18 +731,13 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     messages.push({ role: 'user', content: currentContent });
 
-    // ── Call Anthropic API ────────────────────────────────────────
     const systemPrompt = buildSystemPrompt(userId, false);
-    const hasDrawings = fileNames.length > 0;
-    const primaryModel = hasDrawings ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
-    const primaryBudget = hasDrawings ? 8000 : 5000;
-    console.log(`[API] Using ${hasDrawings ? 'Sonnet (drawings/files)' : 'Haiku (text chat)'}`);
+    const hasFiles = fileNames.length > 0;
+    const primaryModel = hasFiles ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
+    const primaryBudget = hasFiles ? 8000 : 5000;
+    console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
 
-    const apiHeaders = {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    };
+    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
     let response, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -749,7 +767,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
     const data = await response.json();
 
-    // ── Log usage ─────────────────────────────────────────────────
     const tokensIn = data.usage ? data.usage.input_tokens : 0;
     const tokensOut = data.usage ? data.usage.output_tokens : 0;
     const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
@@ -769,7 +786,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
-    // ── Document generation quota check ──────────────────────────
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
@@ -786,14 +802,11 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         const freeTrialQuota = req.user.monthly_quota || 0;
         const paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
         const totalAllowed = freeTrialQuota + paidCredits;
-
         const totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
         const totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
         const originalsEver = totalDocsEver - totalRevisionsEver;
-
         const lastDocDetail = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
         const looksLikeRevision = lastDocDetail && totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-
         if (looksLikeRevision && totalRevisionsEver < totalAllowed) {
           console.log('[Quota] Starter revision allowed');
         } else if (originalsEver >= totalAllowed) {
@@ -803,7 +816,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01?client_reference_id=' + userId,
             message: 'To generate your BOQ and Findings Report, a one-off payment of £99 is required. This includes a full Excel BOQ with your trained rates, a professional Findings Report, and 1 free revision.',
           };
-          console.log(`[Quota] Payment required — used ${originalsEver}/${totalAllowed} (${freeTrialQuota} free + ${paidCredits} paid)`);
+          console.log(`[Quota] Payment required — used ${originalsEver}/${totalAllowed}`);
         } else {
           console.log(`[Quota] Free trial — slot ${originalsEver + 1} of ${totalAllowed}`);
         }
@@ -814,27 +827,21 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
         const isRevision = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
         if (isRevision) {
           const projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastDoc2.detail).c;
-          if (projectRevisions >= 1) {
-            reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).';
-            wantsDocuments = false;
-          }
+          if (projectRevisions >= 1) { reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).'; wantsDocuments = false; }
         } else if (originalsThisMonth >= docLimit) {
-          reply += `\n\nDocument limit reached (${docLimit} BOQs on ${dPlan} plan this month).`;
-          wantsDocuments = false;
+          reply += `\n\nDocument limit reached (${docLimit} BOQs on ${dPlan} plan this month).`; wantsDocuments = false;
         }
       }
     }
 
-    // ── Generate documents ────────────────────────────────────────
     if (wantsDocuments && boqGen && findingsGen) {
       console.log('[Docs] Generating structured data...');
       const clientName = req.user.full_name || req.user.email;
       let projectName = 'Project';
       const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + reply;
       const addrMatch = allText.match(/(\d+\s+[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,3}(?:\s+(?:Road|Street|Lane|Drive|Avenue|Close|Way|Crescent|Place|Court|Gardens|Terrace|Grove|Mews|Rise|Hill|Row|Walk|Square|Park|Green|Rd|St|Ln|Dr|Ave|Cl))\b)/i);
-      if (addrMatch) {
-        projectName = addrMatch[1].trim();
-      } else {
+      if (addrMatch) { projectName = addrMatch[1].trim(); }
+      else {
         const projMatch = allText.match(/(?:project|extension|conversion|renovation|refurb|build|loft|dormer|garage|kitchen|bathroom)\s+(?:at|for|:|-|–)\s+([A-Z0-9][^\n,]{3,40})/i);
         if (projMatch) projectName = projMatch[1].trim();
       }
@@ -848,11 +855,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
       try {
         const docPrompt = buildSystemPrompt(userId, true);
-        const structuredMessages = [
-          ...convMessages,
-          { role: 'user', content: 'Produce the complete structured JSON for the BOQ and findings report. Include every line item. Be thorough.' }
-        ];
-
+        const structuredMessages = [...convMessages, { role: 'user', content: 'Produce the complete structured JSON for the BOQ and findings report. Include every line item. Be thorough.' }];
         const docResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST', headers: apiHeaders,
           body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 16000, system: docPrompt, messages: structuredMessages })
@@ -871,7 +874,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
 
           const sections = parsed.sections || [];
           if (sections.length > 0) {
-            console.log('[Docs] Building Excel BOQ with', sections.length, 'sections...');
             try {
               const buf = await boqGen.generateBOQExcel(sections, projectName, clientName, {
                 contingency_pct: parsed.findings?.cost_summary?.contingency_pct || 7.5,
@@ -888,7 +890,6 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           }
 
           try {
-            console.log('[Docs] Building Findings Report...');
             const findings = parsed.findings || {};
             const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
             if (docBuf && docBuf.length > 100) {
@@ -902,17 +903,8 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           if (downloadFiles.length > 0) {
             let itemCount = 0, totalVal = 0;
             for (const sec of (parsed.sections || [])) {
-              for (const item of (sec.items || [])) {
-                totalVal += parseFloat(item.total) || 0;
-                itemCount++;
-              }
+              for (const item of (sec.items || [])) { totalVal += parseFloat(item.total) || 0; itemCount++; }
             }
-            const contingencyPct = parsed.findings?.cost_summary?.contingency_pct || 7.5;
-            const ohpPct = parsed.findings?.cost_summary?.ohp_pct || 12;
-            const contingency = totalVal * (contingencyPct / 100);
-            const ohp = (totalVal + contingency) * (ohpPct / 100);
-            const grandTotal = totalVal + contingency + ohp;
-
             reply = `Your documents have been generated for ${projectName}.\n\n${itemCount} line items across ${(parsed.sections || []).length} sections.\n\nDownload your Excel BOQ and Findings Report below. If any rates need adjusting or items adding, just let me know and I can regenerate.`;
 
             try {
@@ -920,35 +912,26 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
               const docF = downloadFiles.find(f => f.type === 'docx');
               const projCurrency = (reply.includes('EUR') || reply.includes('€')) ? 'EUR' : 'GBP';
               const summaryText = (parsed.findings && parsed.findings.executive_summary) || '';
-
-              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)')
-                .run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
-
+              db.prepare('INSERT INTO chat_projects (id,user_id,title,total_value,currency,boq_filename,findings_filename,summary,item_count) VALUES(?,?,?,?,?,?,?,?,?)').run('cp_'+uuidv4().slice(0,8), userId, projectName, totalVal, projCurrency, boqF?boqF.name:null, docF?docF.name:null, summaryText.substring(0,1000), itemCount);
               try {
                 const projId = 'proj_' + uuidv4().slice(0, 10);
                 try { db.exec('ALTER TABLE projects ADD COLUMN boq_filename TEXT'); } catch(e) {}
                 try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
                 db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
                   .run(projId, userId, projectName, totalVal, projCurrency, itemCount, (parsed.findings && parsed.findings.project_type) || null, boqF ? boqF.name : null, docF ? docF.name : null);
-                console.log('[Project] Saved to projects table: ' + projectName);
               } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
-
-              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
-                .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
-              console.log(`[Project] Saved: ${projectName} (${itemCount} items, £${grandTotal.toFixed(0)})`);
+              db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)').run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
             } catch(pe) { console.error('[Project] Save error:', pe.message); }
           }
         } else {
           console.error('[Docs] Structured API call failed:', docResp.status);
         }
-      } catch (e) {
-        console.error('[Docs] Generation error:', e.message);
-      }
-    } else if (hasDrawings && !wantsDocuments && !paymentRequired) {
+      } catch (e) { console.error('[Docs] Generation error:', e.message); }
+    } else if (hasFiles && !wantsDocuments && !paymentRequired) {
       reply += '\n\nIf you want downloadable documents, just say "generate" and I\'ll create an Excel BOQ and Word Findings Report for you.';
     }
 
-    // ── Auto-learning: extract rates from corrections ─────────────
+    // Auto-learning
     try {
       const userMsg = message || '';
       const userLower = userMsg.toLowerCase();
@@ -966,18 +949,12 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
             if (score > bestScore) { bestScore = score; bestMatch = rate; }
           }
           let newValue = null;
-          const numPatterns = [
-            /(?:should be|actually|is|to|now|changed to)\s*(?:£|€)?\s*(\d[\d,.]*)(?!\d)/i,
-            /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i
-          ];
+          const numPatterns = [/(?:should be|actually|is|to|now|changed to)\s*(?:£|€)?\s*(\d[\d,.]*)(?!\d)/i, /(\d[\d,.]*)\s*(?:not|instead of)\s*\d/i];
           for (const pat of numPatterns) {
             const m = userMsg.match(pat);
             if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v>0&&v<1000000){newValue=v;break;} }
           }
-          if (!newValue) {
-            const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g);
-            if (nums) newValue = parseFloat(nums[0].replace(/,/g,''));
-          }
+          if (!newValue) { const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g); if (nums) newValue = parseFloat(nums[0].replace(/,/g,'')); }
           if (bestMatch && bestScore >= 1 && newValue && newValue !== bestMatch.value) {
             db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newValue, bestMatch.id);
             db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
@@ -986,46 +963,33 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       }
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
 
-    // ── Server-side insight extraction ────────────────────────────
     try { extractInsightsFromMessage(userId, message); } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
 
-    // ── Parse and apply RATE / INSIGHT tags from AI reply ─────────
+    // Parse tags
     try {
       const addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of addMatches) {
         const parts = m.replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
         if (parts.length === 4) {
           const cat = parts[0].trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
-          const rName = parts[1].trim();
-          const rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, ''));
-          const rUnit = parts[3].trim();
+          const rName = parts[1].trim(); const rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, '')); const rUnit = parts[3].trim();
           if (rName && !isNaN(rVal) && rVal > 0 && rUnit) {
             const itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
             const exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
-            if (!exists) {
-              db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit);
-            } else {
-              db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id);
-            }
+            if (!exists) { db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit); }
+            else { db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id); }
           }
         }
       }
-
       const updateMatches = reply.match(/\[RATE_UPDATE\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of updateMatches) {
         const uParts = m.replace(/^\[RATE_UPDATE\|/, '').replace(/\]$/, '').split('|');
         if (uParts.length === 2) {
-          const uName = uParts[0].trim().toLowerCase();
-          const uVal = parseFloat(uParts[1].trim().replace(/[^0-9.\-]/g, ''));
+          const uName = uParts[0].trim().toLowerCase(); const uVal = parseFloat(uParts[1].trim().replace(/[^0-9.\-]/g, ''));
           if (uName && !isNaN(uVal) && uVal > 0) {
             const allRates = db.prepare('SELECT * FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
             let found = allRates.find(r => r.display_name.toLowerCase() === uName || r.item_key === uName.replace(/[^a-z0-9]+/g, '_'));
-            if (!found) {
-              found = allRates.find(r => {
-                const words = uName.split(/[\s&,\/\-]+/).filter(w => w.length > 2);
-                return words.filter(w => r.display_name.toLowerCase().includes(w)).length >= 2;
-              });
-            }
+            if (!found) { found = allRates.find(r => { const words = uName.split(/[\s&,\/\-]+/).filter(w => w.length > 2); return words.filter(w => r.display_name.toLowerCase().includes(w)).length >= 2; }); }
             if (found && uVal !== found.value) {
               db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(uVal, found.id);
               db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),found.id,userId,found.value,uVal,'tag_update',reply.substring(0,200));
@@ -1033,43 +997,27 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
           }
         }
       }
-
       const insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
       const validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
       for (const m of insightMatches) {
         const iParts = m.replace(/^\[INSIGHT\|/, '').replace(/\]$/, '').split('|');
         if (iParts.length >= 2) {
-          const iCat = iParts[0].trim().toLowerCase().replace(/\s+/g, '_');
-          const iText = iParts[1].trim();
+          const iCat = iParts[0].trim().toLowerCase().replace(/\s+/g, '_'); const iText = iParts[1].trim();
           if (validInsightCats.includes(iCat) && iText.length > 5 && iText.length < 300) {
             const existingInsights = db.prepare('SELECT id, insight, times_reinforced FROM client_insights WHERE user_id = ? AND category = ?').all(userId, iCat);
             let isDuplicate = false;
             for (const ex of existingInsights) {
-              const existWords = ex.insight.toLowerCase().split(/\s+/);
-              const newWords = iText.toLowerCase().split(/\s+/);
+              const existWords = ex.insight.toLowerCase().split(/\s+/); const newWords = iText.toLowerCase().split(/\s+/);
               const overlap = existWords.filter(w => newWords.includes(w)).length;
-              if (overlap / Math.max(existWords.length, 1) > 0.6) {
-                db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id);
-                isDuplicate = true; break;
-              }
+              if (overlap / Math.max(existWords.length, 1) > 0.6) { db.prepare('UPDATE client_insights SET times_reinforced = times_reinforced + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(ex.id); isDuplicate = true; break; }
             }
-            if (!isDuplicate) {
-              db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_'+uuidv4().slice(0,8), userId, iCat, iText);
-            }
+            if (!isDuplicate) { db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_'+uuidv4().slice(0,8), userId, iCat, iText); }
           }
         }
       }
-
-      reply = reply
-        .replace(/\[RATE_ADD\|[^\]]*\]/g, '')
-        .replace(/\[RATE_UPDATE\|[^\]]*\]/g, '')
-        .replace(/\[INSIGHT\|[^\]]*\]/g, '')
-        .replace(/\n\s*\n\s*\n/g, '\n\n')
-        .trim();
-
+      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
     } catch (tagErr) { console.error('[Tags] Error:', tagErr.message); }
 
-    // ── Build quota info for frontend ─────────────────────────────
     let rateStats = null;
     try {
       const s = db.prepare(`SELECT COUNT(*) as total, ROUND(AVG(confidence),2) as avg_confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1`).get(userId);
@@ -1086,15 +1034,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
       const qMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
       const qDocLimit = qPlan === 'starter' ? (req.user.monthly_quota || 0) : qPlan === 'professional' ? 10 : 20;
-      quotaInfo = {
-        plan: qPlan,
-        messages_used: qMsgs,
-        messages_limit: qMsgLimit,
-        docs_used: qDocs - qRevs,
-        docs_limit: qDocLimit,
-        revisions_used: qRevs,
-        pay_per_doc: qPlan === 'starter'
-      };
+      quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 
     res.json({ reply, thinking: thinking || null, rateStats, files: downloadFiles, quota: quotaInfo, payment_required: paymentRequired });
