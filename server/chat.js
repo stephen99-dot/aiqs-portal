@@ -1023,13 +1023,14 @@ ${summary}`);
 
     // Before extracting: check if we know the project address
     // Address = currency + VAT rate + location factor. Without it, everything is wrong.
+    // Address check — before extracting, make sure we know the location
+    let addressKnown = true;
     if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
       const allTextForAddr = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ');
       const hasAddress = /\b(\d+\s+[A-Za-z]+.*(?:road|street|lane|avenue|drive|close|way|crescent|place|court|gardens|terrace|grove|row|walk|square|park|rd|st|ave|ln|dr)|dublin|cork|galway|limerick|london|manchester|birmingham|bristol|leeds|edinburgh|glasgow|cardiff|belfast|liverpool|sheffield|newcastle|nottingham|leicester|coventry|exeter|brighton|oxford|cambridge|reading|[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})/i.test(allTextForAddr);
 
       if (!hasAddress && fileNames.length > 0) {
         // Files uploaded but no address — ask before extracting
-        // Store the fact files are pending so next message triggers extraction
         reply = `📍 **Before I extract quantities, what's the project address?**
 
 This tells me:
@@ -1038,11 +1039,11 @@ This tells me:
 • **Local rates** — London, Manchester, Dublin etc. all price differently
 
 Just reply with the address or town and I'll get started on the quantities.`;
-        wantsExtract = false; // Don't extract yet — wait for address
+        addressKnown = false;
       }
     }
 
-    if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
+    if (wantsExtract && addressKnown && deterministicPricer && benchmarkStore && !wantsDocuments) {
       console.log('[Stage 1] Extracting quantities from drawings...');
       try {
         // Get project type from conversation context
