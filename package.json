@@ -16,20 +16,21 @@
     "concurrently": "^9.1.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "docx": "^8.5.0",
     "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.263.1",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "react-scripts": "5.0.1",
-    "nodemailer": "^6.9.0",
+    "stripe": "^14.0.0",
     "uuid": "^11.0.3",
-    "exceljs": "^4.4.0",
-    "docx": "^8.5.0",
-    "stripe": "^14.0.0"
+    "xlsx": "^0.18.5"
   },
   "browserslist": {
     "production": [
