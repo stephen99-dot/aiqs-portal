@@ -237,10 +237,56 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
     }
 
     // Use the first rendered image (usually floor plan or most important view)
-    const mainImage = images[0];
+    let mainImage = images[0];
+
+    // Resize if image exceeds Claude Vision 5MB limit
+    // Target ~4MB max to leave headroom
+    const MAX_BYTES = 4 * 1024 * 1024; // 4MB
+    if (mainImage.buffer.length > MAX_BYTES) {
+      console.log(`[ScaleReader] Image too large (${(mainImage.buffer.length/1024/1024).toFixed(1)}MB) — resizing`);
+      try {
+        // Try sharp first (best quality)
+        const sharp = require('sharp');
+        // Calculate scale factor to get under 4MB
+        const scaleFactor = Math.sqrt(MAX_BYTES / mainImage.buffer.length) * 0.9;
+        const newWidth = Math.floor(mainImage.width * scaleFactor);
+        const newHeight = Math.floor(mainImage.height * scaleFactor);
+        const resizedBuf = await sharp(mainImage.buffer)
+          .resize(newWidth, newHeight)
+          .png({ compressionLevel: 8 })
+          .toBuffer();
+        mainImage = { ...mainImage, buffer: resizedBuf, width: newWidth, height: newHeight };
+        console.log(`[ScaleReader] Resized to ${newWidth}x${newHeight}px (${(resizedBuf.length/1024/1024).toFixed(1)}MB)`);
+      } catch(sharpErr) {
+        // sharp not available — try rendering at lower DPI instead
+        console.log(`[ScaleReader] sharp not available, re-rendering at lower DPI`);
+        const lowerDPI = 120;
+        const lowDir = path.join(path.dirname(mainImage.path), 'low_dpi');
+        fs.mkdirSync(lowDir, { recursive: true });
+        try {
+          const r = spawnSync('pdftoppm', [
+            '-r', String(lowerDPI), '-png', '-f', '1', '-l', '1',
+            pdfPath, path.join(lowDir, 'page')
+          ], { timeout: 30000 });
+          const lowFiles = fs.readdirSync(lowDir).filter(f => f.endsWith('.png'));
+          if (lowFiles.length > 0) {
+            const lowBuf = fs.readFileSync(path.join(lowDir, lowFiles[0]));
+            if (lowBuf.length <= MAX_BYTES) {
+              const dims = getPngDimensions(lowBuf);
+              mainImage = { ...mainImage, buffer: lowBuf, ...dims };
+              console.log(`[ScaleReader] Low-DPI fallback: ${dims.width}x${dims.height}px (${(lowBuf.length/1024/1024).toFixed(1)}MB)`);
+            }
+          }
+          try { fs.rmSync(lowDir, { recursive: true }); } catch(e) {}
+        } catch(e) {
+          console.log(`[ScaleReader] Low-DPI render failed: ${e.message}`);
+        }
+      }
+    }
+
     const base64 = mainImage.buffer.toString('base64');
     
-    console.log(`[ScaleReader] Image: ${mainImage.width}x${mainImage.height}px, sending to Claude Vision`);
+    console.log(`[ScaleReader] Image: ${mainImage.width}x${mainImage.height}px (${(mainImage.buffer.length/1024/1024).toFixed(1)}MB), sending to Claude Vision`);
 
     // Classify drawing type from filename + text
     const dt = drawingType || classifyDrawing(filename, existingText || '');
