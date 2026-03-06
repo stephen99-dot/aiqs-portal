@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, AlertTriangle, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -51,21 +51,15 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
   const muted = isDark ? '#5A6E87' : '#94A3B8';
-
   const handleReset = async () => {
     if (!password || password.length < 6) { alert('Password must be at least 6 characters'); return; }
     setSaving(true);
     try {
       await apiFetch('/admin/users/' + user.id + '/password', { method: 'PUT', body: JSON.stringify({ password }) });
-      onSuccess('Password reset for ' + (user.full_name || user.email) + ' — they will be prompted to set a new one on login');
+      onSuccess('Password reset for ' + (user.full_name || user.email));
       onClose();
-    } catch (err) {
-      alert('Failed: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (err) { alert('Failed: ' + err.message); } finally { setSaving(false); }
   };
-
   return (
     <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
       <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+border}}>
@@ -78,13 +72,8 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
         </p>
         <div style={{marginBottom:16}}>
           <label style={{display:'block',fontSize:11,fontWeight:600,color:muted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em'}}>New Password</label>
-          <input
-            type="text"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            autoFocus
-            style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:14,outline:'none',boxSizing:'border-box'}}
-          />
+          <input type="text" value={password} onChange={e=>setPassword(e.target.value)} autoFocus
+            style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:14,outline:'none',boxSizing:'border-box'}} />
         </div>
         <div style={{display:'flex',gap:10}}>
           <button onClick={handleReset} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#F59E0B',color:'#0F172A',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.6:1}}>
@@ -100,71 +89,108 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
+  const [customQuota, setCustomQuota] = useState(user.monthly_quota || user.quota || 0);
   const [bonusMsgs, setBonusMsgs] = useState(user.bonus_messages || 0);
   const [bonusDocs, setBonusDocs] = useState(user.bonus_docs || 0);
+  const [grantDocAmt, setGrantDocAmt] = useState(1);
   const [importResult, setImportResult] = useState(null);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const fileInputRef = React.useRef(null);
+
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
   const muted = isDark ? '#5A6E87' : '#94A3B8';
   const bg2 = isDark ? '#131B2E' : '#FFF';
+
+  const PLANS = [
+    { value: 'starter', label: 'Starter', quota: 0 },
+    { value: 'professional', label: 'Professional', quota: 100 },
+    { value: 'premium', label: 'Premium', quota: 200 },
+    { value: 'custom', label: 'Custom', quota: null },
+  ];
+
   const btn = (c) => ({padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:c,color:'#FFF',fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6,opacity:loading?0.6:1});
   const outBtn = {padding:'7px 14px',borderRadius:8,border:'1px solid '+border,cursor:'pointer',background:'transparent',color:text,fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6};
   const lbl = {fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4};
   const sInp = {padding:'7px 10px',borderRadius:6,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:13,width:80,outline:'none'};
-  const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch(e) { alert(e.message); } finally { setLoading(''); } };
 
+  const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch(e) { alert(e.message); } finally { setLoading(''); } };
   function showSuccess(msg) { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }
 
   const savePlan = () => doAction('plan', async () => {
-    await apiFetch('/admin/change-plan/'+user.id, { method:'POST', body:JSON.stringify({plan}) });
-    onUpdate({ ...user, plan });
+    const quota = plan === 'custom' ? parseInt(customQuota) || 0 : PLANS.find(p => p.value === plan)?.quota || 0;
+    const result = await apiFetch('/admin/users/' + user.id + '/plan', {
+      method: 'PUT',
+      body: JSON.stringify({ plan, monthlyQuota: quota })
+    });
+    onUpdate({ ...user, plan, monthly_quota: quota, quota });
+    showSuccess('Plan updated to ' + plan + (plan === 'custom' ? ' (' + quota + ' msgs/mo)' : ''));
   });
+
   const saveCredits = () => doAction('credit', async () => {
-    await apiFetch('/admin/set-credits/'+user.id, { method:'POST', body:JSON.stringify({ bonus_messages: bonusMsgs, bonus_docs: bonusDocs }) });
-    onUpdate({ ...user, bonus_messages: bonusMsgs, bonus_docs: bonusDocs });
+    await apiFetch('/admin/users/' + user.id + '/credits', {
+      method: 'PUT',
+      body: JSON.stringify({ bonus_messages: parseInt(bonusMsgs) || 0, bonus_docs: parseInt(bonusDocs) || 0 })
+    });
+    onUpdate({ ...user, bonus_messages: parseInt(bonusMsgs) || 0, bonus_docs: parseInt(bonusDocs) || 0 });
+    showSuccess('Credits updated — ' + bonusMsgs + ' bonus messages, ' + bonusDocs + ' bonus docs');
   });
+
+  const grantDoc = () => doAction('grantdoc', async () => {
+    const amount = parseInt(grantDocAmt) || 1;
+    await apiFetch('/admin/users/' + user.id + '/grant-doc', {
+      method: 'POST',
+      body: JSON.stringify({ amount })
+    });
+    onUpdate({ ...user, bonus_docs: (user.bonus_docs || 0) + amount });
+    showSuccess(amount + ' paid BOQ credit' + (amount > 1 ? 's' : '') + ' granted');
+  });
+
   const toggleSuspend = () => doAction('suspend', async () => {
-    if (user.suspended) { await apiFetch('/admin/unsuspend/'+user.id, { method:'POST' }); onUpdate({ ...user, suspended: 0, suspended_reason: null }); }
-    else { await apiFetch('/admin/suspend/'+user.id, { method:'POST', body:JSON.stringify({ reason: suspendReason || 'Suspended by admin' }) }); onUpdate({ ...user, suspended: 1, suspended_reason: suspendReason }); }
+    if (user.suspended) {
+      await apiFetch('/admin/unsuspend/' + user.id, { method: 'POST' });
+      onUpdate({ ...user, suspended: 0, suspended_reason: null });
+      showSuccess('Account reactivated');
+    } else {
+      await apiFetch('/admin/suspend/' + user.id, { method: 'POST', body: JSON.stringify({ reason: suspendReason || 'Suspended by admin' }) });
+      onUpdate({ ...user, suspended: 1, suspended_reason: suspendReason });
+      showSuccess('Account suspended');
+    }
   });
+
   const genMagicLink = () => doAction('magic', async () => {
-    const res = await apiFetch('/admin/users/'+user.id+'/magic-link', { method:'POST' });
-    setMagicLink(res.magicLink || res.link || '');
+    const res = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
+    setMagicLink(res.magicLink || res.link || res.magicUrl || '');
   });
-  const grantDocCredit = () => doAction('grantdoc', async () => {
-    await apiFetch('/admin/grant-doc/'+user.id, { method:'POST' });
-    alert('Paid BOQ credit granted — they can now generate 1 document on Starter plan');
-  });
+
   const importRates = async (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
     setLoading('import'); setImportResult(null);
     try {
       const fd = new FormData(); fd.append('file', file);
       const token = localStorage.getItem('aiqs_token');
-      const resp = await fetch((process.env.REACT_APP_API_URL||'')+'/api/admin/import-rates/'+user.id, {
+      const resp = await fetch((process.env.REACT_APP_API_URL || '') + '/api/admin/import-rates/' + user.id, {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd
       });
       const res = await resp.json();
       setImportResult(res);
-    }
-    catch(err) { setImportResult({ error: err.message }); }
-    finally { setLoading(''); if(fileInputRef.current) fileInputRef.current.value=''; }
+    } catch(err) { setImportResult({ error: err.message }); }
+    finally { setLoading(''); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
+
+  // Message usage stats
+  const msgsUsed = user.messages_used || user.used || 0;
+  const msgsTotal = (user.monthly_quota || user.quota || 0) + (user.bonus_messages || 0);
+  const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
+  const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
 
   return (
     <>
       {showResetModal && (
-        <ResetPasswordModal
-          user={user}
-          isDark={isDark}
-          onClose={() => setShowResetModal(false)}
-          onSuccess={showSuccess}
-        />
+        <ResetPasswordModal user={user} isDark={isDark} onClose={() => setShowResetModal(false)} onSuccess={showSuccess} />
       )}
       <div style={{background:isDark?'#0D1320':'#F8FAFC',borderTop:'1px solid '+border,padding:'20px 24px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -178,54 +204,128 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           </div>
         )}
 
+        {/* Message usage bar */}
+        <div style={{marginBottom:14,padding:'12px 16px',borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+            <span style={{fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em'}}>Message Usage This Month</span>
+            <span style={{fontSize:12,fontWeight:600,color:text}}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '∞ (PAYG)'}</span>
+          </div>
+          {msgsTotal > 0 ? (
+            <div style={{height:6,borderRadius:4,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden'}}>
+              <div style={{width:msgPct+'%',height:'100%',borderRadius:4,background:msgBarColor,transition:'width 0.3s'}} />
+            </div>
+          ) : (
+            <div style={{fontSize:11,color:muted}}>Pay-as-you-go — no monthly message limit</div>
+          )}
+          {user.bonus_messages > 0 && (
+            <div style={{fontSize:11,color:'#A78BFA',marginTop:4}}>+ {user.bonus_messages} bonus messages included</div>
+          )}
+        </div>
+
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
 
           {/* Plan */}
           <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
             <div style={lbl}>Plan</div>
             <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
-              {['starter','professional','premium'].map(p => (
-                <button key={p} onClick={()=>setPlan(p)} style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',border:plan===p?'2px solid #2563EB':'1px solid '+border,background:plan===p?'rgba(37,99,235,0.1)':'transparent',color:plan===p?'#2563EB':muted,textTransform:'capitalize'}}>{p}</button>
+              {PLANS.map(p => (
+                <button key={p.value} onClick={() => setPlan(p.value)}
+                  style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
+                    border: plan === p.value ? '2px solid #2563EB' : '1px solid '+border,
+                    background: plan === p.value ? 'rgba(37,99,235,0.1)' : 'transparent',
+                    color: plan === p.value ? '#2563EB' : muted,
+                    textTransform:'capitalize'}}>
+                  {p.label}
+                </button>
               ))}
             </div>
-            {plan !== (user.plan||'starter') && <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'),marginTop:8}}><Save size={12} /> Save Plan</button>}
+            {plan === 'custom' && (
+              <div style={{marginTop:10}}>
+                <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>Monthly message limit</label>
+                <input type="number" value={customQuota} onChange={e => setCustomQuota(e.target.value)}
+                  style={{...sInp, width:100}} placeholder="e.g. 50" />
+              </div>
+            )}
+            <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'), marginTop:10}}>
+              <Save size={12} /> Save Plan
+            </button>
           </div>
 
-          {/* Credits */}
+          {/* Bonus Credits */}
           <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
             <div style={lbl}>Bonus Credits (set directly)</div>
-            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:6}}>
-              <div><div style={{fontSize:10,color:muted}}>Messages</div><input type="number" value={bonusMsgs} onChange={e=>setBonusMsgs(parseInt(e.target.value)||0)} style={sInp} /></div>
-              <div><div style={{fontSize:10,color:muted}}>Docs</div><input type="number" value={bonusDocs} onChange={e=>setBonusDocs(parseInt(e.target.value)||0)} style={sInp} /></div>
-              <button onClick={saveCredits} disabled={!!loading} style={{...btn('#2563EB'),marginTop:14}}><Save size={12} /> Save</button>
+            <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap',marginTop:6}}>
+              <div>
+                <div style={{fontSize:10,color:muted,marginBottom:3}}>Messages</div>
+                <input type="number" value={bonusMsgs} onChange={e => setBonusMsgs(e.target.value)} style={sInp} />
+              </div>
+              <div>
+                <div style={{fontSize:10,color:muted,marginBottom:3}}>Docs</div>
+                <input type="number" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={sInp} />
+              </div>
+              <button onClick={saveCredits} disabled={!!loading} style={btn('#2563EB')}>
+                <Save size={12} /> Save
+              </button>
             </div>
+            <div style={{fontSize:11,color:muted,marginTop:8}}>These add on top of their plan allowance</div>
           </div>
 
           {/* Suspend */}
           <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
             <div style={lbl}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
-            {!user.suspended && <input value={suspendReason} onChange={e=>setSuspendReason(e.target.value)} placeholder="Reason (optional)" style={{...sInp,width:'100%',marginTop:6,marginBottom:8}} />}
-            <button onClick={toggleSuspend} disabled={!!loading} style={user.suspended?btn('#10B981'):btn('#EF4444')}>{user.suspended?<><Play size={12}/> Reactivate</>:<><Pause size={12}/> Suspend</>}</button>
-            {user.suspended && user.suspended_reason && <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>}
+            {!user.suspended && (
+              <input value={suspendReason} onChange={e => setSuspendReason(e.target.value)}
+                placeholder="Reason (optional)"
+                style={{...sInp, width:'100%', marginTop:6, marginBottom:8}} />
+            )}
+            <button onClick={toggleSuspend} disabled={!!loading}
+              style={user.suspended ? btn('#10B981') : btn('#EF4444')}>
+              {user.suspended ? <><Play size={12} /> Reactivate</> : <><Pause size={12} /> Suspend</>}
+            </button>
+            {user.suspended && user.suspended_reason && (
+              <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>
+            )}
           </div>
 
           {/* Tools */}
           <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
             <div style={lbl}>Tools</div>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{display:'none'}} />
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
-              <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
-              <button onClick={()=>fileInputRef.current&&fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
-              <button onClick={grantDocCredit} disabled={!!loading} title="For Starter plan users who paid offline" style={outBtn}><CreditCard size={12} /> Grant Paid BOQ</button>
-              <button onClick={()=>setShowResetModal(true)} disabled={!!loading} style={{...outBtn,color:'#F59E0B',borderColor:'rgba(245,158,11,0.3)',background:'rgba(245,158,11,0.06)'}}><Key size={12} /> Reset Password</button>
+
+            {/* Grant Paid BOQ — number input instead of button */}
+            <div style={{marginTop:6,marginBottom:10,padding:'10px 12px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC'}}>
+              <div style={{fontSize:10,fontWeight:600,color:muted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Grant Paid BOQ Credits</div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <input type="number" min={1} max={50} value={grantDocAmt}
+                  onChange={e => setGrantDocAmt(e.target.value)}
+                  style={{...sInp, width:60}} />
+                <span style={{fontSize:12,color:muted}}>credit{grantDocAmt !== 1 ? 's' : ''}</span>
+                <button onClick={grantDoc} disabled={!!loading} style={btn('#10B981')}>
+                  <CreditCard size={12} /> Grant
+                </button>
+              </div>
             </div>
-            {magicLink && <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}} onClick={()=>{navigator.clipboard.writeText(magicLink);alert('Copied!')}}>{magicLink}<br/><span style={{color:muted}}>Click to copy</span></div>}
+
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
+              <button onClick={() => setShowResetModal(true)} disabled={!!loading}
+                style={{...outBtn, color:'#F59E0B', borderColor:'rgba(245,158,11,0.3)', background:'rgba(245,158,11,0.06)'}}>
+                <Key size={12} /> Reset Password
+              </button>
+            </div>
+
+            {magicLink && (
+              <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}}
+                onClick={() => { navigator.clipboard.writeText(magicLink); showSuccess('Magic link copied!'); }}>
+                {magicLink}<br /><span style={{color:muted}}>Click to copy</span>
+              </div>
+            )}
             {importResult && (
               <div style={{marginTop:8,fontSize:12,color:importResult.error?'#EF4444':'#10B981'}}>
                 {importResult.error
-                  ? 'Error: '+importResult.error
-                  : 'Imported '+importResult.imported+' rates'+(importResult.sheets?' from '+importResult.sheets.length+' sheets':'')+(importResult.skipped>0?', skipped '+importResult.skipped:'')
-                }
+                  ? 'Error: ' + importResult.error
+                  : 'Imported ' + importResult.imported + ' rates' + (importResult.skipped > 0 ? ', skipped ' + importResult.skipped : '')}
               </div>
             )}
           </div>
@@ -267,19 +367,19 @@ export default function UserManagementPage({ theme }) {
   useEffect(() => { if (tab === 'activity') loadActivity(); }, [tab, loadActivity]);
 
   const handleDelete = async (userId) => {
-    try { await apiFetch('/admin/users/'+userId, { method:'DELETE' }); setUsers(prev => prev.filter(u => u.id !== userId)); setDeleteTarget(null); }
+    try { await apiFetch('/admin/users/' + userId, { method: 'DELETE' }); setUsers(prev => prev.filter(u => u.id !== userId)); setDeleteTarget(null); }
     catch (err) { alert('Failed: ' + err.message); }
   };
   const handleUserUpdate = (updated) => { setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u)); };
   const filtered = users.filter(u => {
-    const ms = !search || [u.full_name,u.email,u.company].some(f => f && f.toLowerCase().includes(search.toLowerCase()));
+    const ms = !search || [u.full_name, u.email, u.company].some(f => f && f.toLowerCase().includes(search.toLowerCase()));
     return (roleFilter === 'all' || u.role === roleFilter) && ms;
   });
   const adminCount = users.filter(u => u.role === 'admin').length;
   const clientCount = users.filter(u => u.role === 'client').length;
-  const cardStyle = { background:isDark?'#131B2E':'#FFF', border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'), borderRadius:14, overflow:'hidden' };
+  const cardStyle = { background: isDark ? '#131B2E' : '#FFF', border: '1px solid ' + (isDark ? '#1C2A44' : '#E2E8F0'), borderRadius: 14, overflow: 'hidden' };
   const muted = isDark ? '#5A6E87' : '#94A3B8';
-  const formatDate = (d) => { try { return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return d; } };
+  const formatDate = (d) => { try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch(e) { return d; } };
 
   return (
     <div style={{padding:'28px 32px',maxWidth:1100,margin:'0 auto'}}>
@@ -288,14 +388,14 @@ export default function UserManagementPage({ theme }) {
           <h1 style={{margin:0,fontSize:24,fontWeight:800,color:isDark?'#E8EDF5':'#0F172A'}}>User Management</h1>
           <p style={{margin:'4px 0 0',fontSize:13,color:isDark?'#5A6E87':'#94A3B8'}}>{users.length} total | {adminCount} admins | {clientCount} clients</p>
         </div>
-        <button onClick={()=>setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}><UserPlus size={15} /> Add User</button>
+        <button onClick={() => setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}><UserPlus size={15} /> Add User</button>
       </div>
 
       {/* Tabs */}
       <div style={{display:'flex',gap:4,marginBottom:16,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
         {['users','activity'].map(tb => (
-          <button key={tb} onClick={()=>setTab(tb)} style={{padding:'8px 18px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===tb?(isDark?'#1C2A44':'#FFF'):'transparent',color:tab===tb?(isDark?'#E8EDF5':'#0F172A'):(isDark?'#5A6E87':'#94A3B8'),boxShadow:tab===tb?'0 1px 3px rgba(0,0,0,0.1)':'none'}}>
-            {tb==='users'?<><Users size={13} style={{verticalAlign:'middle',marginRight:6}} />Users</>:<><Activity size={13} style={{verticalAlign:'middle',marginRight:6}} />Activity Feed</>}
+          <button key={tb} onClick={() => setTab(tb)} style={{padding:'8px 18px',borderRadius:8,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===tb?(isDark?'#1C2A44':'#FFF'):'transparent',color:tab===tb?(isDark?'#E8EDF5':'#0F172A'):(isDark?'#5A6E87':'#94A3B8'),boxShadow:tab===tb?'0 1px 3px rgba(0,0,0,0.1)':'none'}}>
+            {tb === 'users' ? <><Users size={13} style={{verticalAlign:'middle',marginRight:6}} />Users</> : <><Activity size={13} style={{verticalAlign:'middle',marginRight:6}} />Activity Feed</>}
           </button>
         ))}
       </div>
@@ -333,58 +433,119 @@ export default function UserManagementPage({ theme }) {
 
       {/* Users Tab */}
       {tab === 'users' && (<>
-      <div style={{display:'flex',gap:12,marginBottom:16}}>
-        <div style={{flex:1,display:'flex',alignItems:'center',gap:10,padding:'0 14px',borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC'}}>
-          <Search size={15} style={{color:muted}} />
-          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search..." style={{flex:1,padding:'10px 0',border:'none',background:'transparent',color:isDark?'#E8EDF5':'#0F172A',fontSize:13,outline:'none'}} />
-          {search && <button onClick={()=>setSearch('')} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={14} /></button>}
+        <div style={{display:'flex',gap:12,marginBottom:16}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:10,padding:'0 14px',borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC'}}>
+            <Search size={15} style={{color:muted}} />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." style={{flex:1,padding:'10px 0',border:'none',background:'transparent',color:isDark?'#E8EDF5':'#0F172A',fontSize:13,outline:'none'}} />
+            {search && <button onClick={() => setSearch('')} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={14} /></button>}
+          </div>
+          <div style={{display:'flex',gap:3,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
+            {['all','admin','client'].map(f => (
+              <button key={f} onClick={() => setRoleFilter(f)} style={{padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:roleFilter===f?'#2563EB':'transparent',color:roleFilter===f?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:12,fontWeight:600,textTransform:'capitalize'}}>
+                {f==='all'?'All ('+users.length+')':f==='admin'?'Admins ('+adminCount+')':'Clients ('+clientCount+')'}
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{display:'flex',gap:3,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
-          {['all','admin','client'].map(f => (
-            <button key={f} onClick={()=>setRoleFilter(f)} style={{padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:roleFilter===f?'#2563EB':'transparent',color:roleFilter===f?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:12,fontWeight:600,textTransform:'capitalize'}}>
-              {f==='all'?'All ('+users.length+')':f==='admin'?'Admins ('+adminCount+')':'Clients ('+clientCount+')'}
-            </button>
-          ))}
-        </div>
-      </div>
-      {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'12px 16px',marginBottom:16,color:'#EF4444',fontSize:13}}>{error}</div>}
-      {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
-       filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
-        <div style={cardStyle}>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
-              {['User','Company','Plan','Status',''].map(h => (<th key={h} style={{padding:'11px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:muted,textAlign:h===''?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>))}
-            </tr></thead>
-            <tbody>
-              {filtered.map((user, i) => (
-                <React.Fragment key={user.id}>
-                  <tr style={{borderBottom:expandedUser===user.id?'none':(i<filtered.length-1?'1px solid '+(isDark?'#1C2A44':'#F1F5F9'):'none'),cursor:'pointer'}}
-                    onClick={()=>setExpandedUser(expandedUser===user.id?null:user.id)}
-                    onMouseEnter={e=>{e.currentTarget.style.background=isDark?'rgba(37,99,235,0.04)':'#FAFBFE'}}
-                    onMouseLeave={e=>{e.currentTarget.style.background='transparent'}}>
-                    <td style={{padding:'12px 16px'}}><div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:36,height:36,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:700}}>{user.full_name?user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2):'??'}</div>
-                      <div><div style={{fontSize:13,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{user.full_name} {user.role==='admin'&&<Shield size={11} style={{color:'#2563EB'}} />}</div><div style={{fontSize:11,color:muted}}>{user.email}</div></div>
-                    </div></td>
-                    <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
-                    <td style={{padding:'12px 16px'}}><span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),color:user.role==='admin'?'#2563EB':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':(isDark?'#94A3B8':'#64748B')}}>{user.role==='admin'?'Admin':(user.plan||'starter')}</span></td>
-                    <td style={{padding:'12px 16px'}}><span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,background:user.suspended?'rgba(239,68,68,0.1)':'rgba(16,185,129,0.1)',color:user.suspended?'#EF4444':'#10B981'}}>{user.suspended?'Suspended':'Active'}</span></td>
-                    <td style={{padding:'12px 16px',textAlign:'right'}}><div style={{display:'flex',gap:6,justifyContent:'flex-end'}} onClick={e=>e.stopPropagation()}>
-                      <button onClick={()=>setExpandedUser(expandedUser===user.id?null:user.id)} style={{padding:'5px 10px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:expandedUser===user.id?'rgba(37,99,235,0.1)':'transparent',cursor:'pointer',color:expandedUser===user.id?'#2563EB':muted,display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600}}><ChevronDown size={13} style={{transform:expandedUser===user.id?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s'}} /> Manage</button>
-                      {user.role!=='admin'&&<button onClick={()=>setDeleteTarget(user)} style={{padding:'5px 7px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',cursor:'pointer',color:muted,display:'flex',alignItems:'center'}}><Trash2 size={13} /></button>}
-                    </div></td>
-                  </tr>
-                  {expandedUser===user.id&&user.role!=='admin'&&<tr><td colSpan={5} style={{padding:0}}><UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={()=>setExpandedUser(null)} /></td></tr>}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'12px 16px',marginBottom:16,color:'#EF4444',fontSize:13}}>{error}</div>}
+        {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
+         filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
+          <div style={cardStyle}>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
+                {['User','Company','Plan','Messages','Status',''].map(h => (
+                  <th key={h} style={{padding:'11px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:muted,textAlign:h===''?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {filtered.map((user, i) => {
+                  const msgsUsed = user.messages_used || user.used || 0;
+                  const msgsTotal = (user.monthly_quota || user.quota || 0) + (user.bonus_messages || 0);
+                  const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
+                  const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
+                  return (
+                    <React.Fragment key={user.id}>
+                      <tr style={{borderBottom:expandedUser===user.id?'none':(i<filtered.length-1?'1px solid '+(isDark?'#1C2A44':'#F1F5F9'):'none'),cursor:'pointer'}}
+                        onClick={() => setExpandedUser(expandedUser===user.id?null:user.id)}
+                        onMouseEnter={e => { e.currentTarget.style.background = isDark?'rgba(37,99,235,0.04)':'#FAFBFE'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                        <td style={{padding:'12px 16px'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:10}}>
+                            <div style={{width:36,height:36,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:700}}>
+                              {user.full_name?user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2):'??'}
+                            </div>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{user.full_name} {user.role==='admin'&&<Shield size={11} style={{color:'#2563EB'}} />}</div>
+                              <div style={{fontSize:11,color:muted}}>{user.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
+                        <td style={{padding:'12px 16px'}}>
+                          <span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',
+                            background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':user.plan==='custom'?'rgba(245,158,11,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),
+                            color:user.role==='admin'?'#2563EB':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':user.plan==='custom'?'#F59E0B':(isDark?'#94A3B8':'#64748B')}}>
+                            {user.role==='admin'?'Admin':(user.plan||'starter')}
+                          </span>
+                        </td>
+                        {/* Message usage bar in table */}
+                        <td style={{padding:'12px 16px',minWidth:140}}>
+                          {user.role === 'admin' ? <span style={{fontSize:11,color:muted}}>—</span> : msgsTotal > 0 ? (
+                            <div>
+                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                                <span style={{fontSize:10,color:muted}}>{msgsUsed} / {msgsTotal}</span>
+                                {user.bonus_messages > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_messages} bonus</span>}
+                              </div>
+                              <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:120}}>
+                                <div style={{width:msgPct+'%',height:'100%',borderRadius:3,background:msgBarColor}} />
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={{fontSize:11,color:muted}}>{msgsUsed} sent (PAYG)</span>
+                          )}
+                        </td>
+                        <td style={{padding:'12px 16px'}}>
+                          <span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,background:user.suspended?'rgba(239,68,68,0.1)':'rgba(16,185,129,0.1)',color:user.suspended?'#EF4444':'#10B981'}}>
+                            {user.suspended?'Suspended':'Active'}
+                          </span>
+                        </td>
+                        <td style={{padding:'12px 16px',textAlign:'right'}}>
+                          <div style={{display:'flex',gap:6,justifyContent:'flex-end'}} onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setExpandedUser(expandedUser===user.id?null:user.id)}
+                              style={{padding:'5px 10px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:expandedUser===user.id?'rgba(37,99,235,0.1)':'transparent',cursor:'pointer',color:expandedUser===user.id?'#2563EB':muted,display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600}}>
+                              <ChevronDown size={13} style={{transform:expandedUser===user.id?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s'}} /> Manage
+                            </button>
+                            {user.role!=='admin'&&<button onClick={() => setDeleteTarget(user)} style={{padding:'5px 7px',borderRadius:6,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',cursor:'pointer',color:muted,display:'flex',alignItems:'center'}}><Trash2 size={13} /></button>}
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedUser===user.id&&user.role!=='admin'&&(
+                        <tr><td colSpan={6} style={{padding:0}}>
+                          <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} />
+                        </td></tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </>)}
 
-      <AddUserModal isOpen={showAddModal} onClose={()=>setShowAddModal(false)} onUserAdded={u=>{setUsers(prev=>[u,...prev])}} isDark={isDark} />
-      {deleteTarget&&(<div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}><div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}><h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3><p style={{margin:'0 0 20px',fontSize:13,color:'#EF4444'}}>Deletes all data. Cannot be undone.</p><div style={{display:'flex',gap:10}}><button onClick={()=>setDeleteTarget(null)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button><button onClick={()=>handleDelete(deleteTarget.id)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#EF4444',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}>Delete</button></div></div></div>)}
+      <AddUserModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onUserAdded={u => { setUsers(prev => [u, ...prev]); }} isDark={isDark} />
+      {deleteTarget && (
+        <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}>
+            <h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3>
+            <p style={{margin:'0 0 20px',fontSize:13,color:'#EF4444'}}>Deletes all data. Cannot be undone.</p>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={() => setDeleteTarget(null)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget.id)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#EF4444',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
