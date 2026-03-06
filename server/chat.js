@@ -258,7 +258,11 @@ LOCATION FACTORS:
 London/SE: +20% | Midlands: +7% | North England: -3% | Scotland: +3% | Ireland: +10% (use EUR)
 ${clientRateSection}
 ${clientInsightsSection}
-DOCUMENT GENERATION — CRITICAL: This portal DOES generate real downloadable Excel BOQ and Word Findings Report files. The backend processes these automatically the moment the client says "generate". NEVER tell a client you cannot generate files, create documents, or produce downloads. NEVER suggest they paste data into Excel themselves. NEVER say you are text-based or have limitations around file creation. When a client says "generate", "generate documents", "create the BOQ", or anything similar — simply confirm the documents are being generated. After providing analysis, always end with: "Just say generate and I will create your Excel BOQ and Word Findings Report."
+DOCUMENT GENERATION — CRITICAL: This portal DOES generate real downloadable Excel BOQ and Word Findings Report files.
+
+IMPORTANT: You MUST NOT generate documents unless you have actual project data to work from. If a client says "generate" without having provided drawings, a scope description, dimensions, or any project details in the current conversation — tell them you need project information first before you can produce a BOQ. Ask them to upload drawings or describe the works.
+
+Once project data HAS been provided (drawings uploaded, scope described, quantities discussed): NEVER tell a client you cannot generate files, create documents, or produce downloads. NEVER suggest they paste data into Excel themselves. When a client says "generate documents", "create the BOQ", or similar — confirm the documents are being generated. After providing analysis, always end with: "Just say 'generate documents' and I will create your Excel BOQ and Word Findings Report."
 
 COMMUNICATION STYLE — CRITICAL:
 You are writing as a professional quantity surveyor, not a chatbot. Follow these rules strictly:
@@ -767,10 +771,22 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
-    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    const wantsDocumentsRaw = /generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
+
+    // Guard: refuse doc generation if no project data exists in this conversation
+    if (wantsDocuments) {
+      const hasProjectData = fileNames.length > 0 || messages.some(m => {
+        const txt = typeof m.content === 'string' ? m.content : (Array.isArray(m.content) ? m.content.filter(c => c.type === 'text').map(c => c.text).join(' ') : '');
+        return txt.length > 100; // has meaningful prior conversation
+      });
+      if (!hasProjectData) {
+        wantsDocuments = false;
+        reply = 'To generate a BOQ and Findings Report I need project information first. Please upload your drawings (PDF, images, or ZIP) or describe the scope of works, and I will produce a detailed estimate for you.';
+      }
+    }
 
     if (wantsDocuments && req.user.role !== 'admin') {
       const dPlan = req.user.plan || 'starter';
