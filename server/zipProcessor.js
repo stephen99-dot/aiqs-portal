@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
+let pdfScaleReader = null;
+try { pdfScaleReader = require('./pdfScaleReader'); } catch(e) { console.log('[ZIP] pdfScaleReader not found — scale measurement disabled'); }
 
 // ─── INSTALL DEPS CHECK ───────────────────────────────────────────────────────
 function ensureDeps() {
@@ -199,12 +201,13 @@ async function extractFromPDF(filePath, filename) {
       rooms: extractRooms(text, filename),
       openings: extractOpenings(text, filename),
       doc_type: classifyDocument(filename, text),
-      // For image-based PDFs (scanned), we'll need vision
       needs_vision: text.length < 200,
+      // Store file path for scale rendering
+      filePath,
     };
   } catch (e) {
     console.warn(`[ZIP] PDF parse failed for ${filename}: ${e.message}`);
-    return { filename, type: 'pdf', text: '', has_text: false, needs_vision: true, error: e.message };
+    return { filename, type: 'pdf', text: '', has_text: false, needs_vision: true, error: e.message, filePath };
   }
 }
 
@@ -477,6 +480,74 @@ async function processZip(zipPath, extractDir) {
   try { fs.rmSync(tmpDir, { recursive: true }); } catch (e) {}
 
   console.log(`[ZIP] Extracted: ${results.all_dimensions.length} dimensions, ${results.all_rooms.length} rooms, ${results.all_openings.length} openings, ${results.images_for_vision.length} images need vision`);
+
+  // ── SCALE-AWARE PDF RENDERING ──────────────────────────────────────
+  // For PDFs that are image-based (no text), render to images and measure using scale bar
+  if (pdfScaleReader) {
+    const drawingPdfs = results.files.filter(f =>
+      f.type === 'pdf' &&
+      f.filePath &&
+      ['floor_plan', 'elevation', 'section', 'roof_plan', 'drawing'].includes(f.doc_type)
+    ).slice(0, 4); // max 4 drawings to keep costs reasonable
+
+    if (drawingPdfs.length > 0) {
+      console.log(`[ZIP] Running scale-aware measurement on ${drawingPdfs.length} drawing(s)`);
+      const scaleMeasurements = [];
+
+      for (const pdf of drawingPdfs) {
+        try {
+          const measurement = await pdfScaleReader.processPdfWithScale(
+            pdf.filePath,
+            pdf.filename,
+            extractDir,
+            {
+              projectContext: results.summary.project_context || '',
+              drawingType: pdf.doc_type,
+              existingText: pdf.text || '',
+            }
+          );
+          if (measurement) {
+            scaleMeasurements.push(measurement);
+
+            // Extract rooms from scale measurements
+            if (measurement.room_schedule) {
+              for (const room of measurement.room_schedule) {
+                results.all_rooms.push({
+                  name: room.name,
+                  area_m2: room.area_m2,
+                  source: `${pdf.filename} (scale measured)`,
+                  confidence: 'high',
+                });
+              }
+              results.summary.total_floor_area_m2 = results.all_rooms.reduce((s, r) => s + (r.area_m2 || 0), 0);
+            }
+
+            // Extract openings from scale measurements
+            if (measurement.openings) {
+              for (const o of measurement.openings) {
+                results.all_openings.push({
+                  ref: o.ref || o.type,
+                  type: o.type?.includes('door') ? 'door' : 'window',
+                  width_mm: Math.round((o.width_m || 0) * 1000),
+                  height_mm: Math.round((o.height_m || 0) * 1000),
+                  source: `${pdf.filename} (scale measured)`,
+                });
+              }
+            }
+          }
+        } catch(scaleErr) {
+          console.warn(`[ZIP] Scale measurement failed for ${pdf.filename}: ${scaleErr.message}`);
+        }
+      }
+
+      // Store scale measurements for Claude extraction prompt
+      if (scaleMeasurements.length > 0) {
+        results.scale_measurements = scaleMeasurements;
+        results.scale_context = pdfScaleReader.formatMeasurementsForExtraction(scaleMeasurements);
+        console.log(`[ZIP] Scale measurement complete: ${scaleMeasurements.filter(m=>m?.scale_bar_found).length}/${scaleMeasurements.length} drawings had confirmed scale`);
+      }
+    }
+  }
 
   return results;
 }
