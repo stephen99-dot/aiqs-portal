@@ -1017,6 +1017,7 @@ ${summary}`);
     // Stage 3: GENERATE (Node.js prices deterministically, AI writes findings)
     // ═══════════════════════════════════════════════════════════════
 
+    const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     const wantsExtract = hasFiles && !wantsDocumentsRaw; // files uploaded without generate = extract phase
     const sessionId = req.body.session_id || null;
@@ -1166,7 +1167,7 @@ ${summary}`);
               parsed.location || '',
               clientRates,
               (() => {
-            const locText = (parsed.location || message || allConvText || '').toLowerCase();
+            const locText = (lockedTakeoff.location || message || '').toLowerCase();
             const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
             return {
               contingency_pct: 7.5,
@@ -1345,7 +1346,7 @@ ${summary}`);
           lockedTakeoff.location || '',
           clientRates,
           (() => {
-            const locText = (parsed.location || message || allConvText || '').toLowerCase();
+            const locText = (lockedTakeoff.location || message || '').toLowerCase();
             const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
             return {
               contingency_pct: 7.5,
