@@ -23,59 +23,92 @@ const MAX_PAGES = 2; // process first 2 pages per PDF
 
 async function renderPdfToImages(pdfPath, outputDir) {
   const images = [];
-  
-  // Try poppler first (available on Render/Linux by default)
-  try {
-    const result = spawnSync('pdftoppm', [
-      '-r', String(DPI), '-png', '-f', '1', '-l', String(MAX_PAGES),
-      pdfPath, path.join(outputDir, 'page')
-    ], { timeout: 30000 });
 
-    if (result.status === 0) {
+  // Check file exists before attempting render
+  if (!fs.existsSync(pdfPath)) {
+    console.log(`[ScaleReader] File not found: ${pdfPath}`);
+    return images;
+  }
+
+  // Use poppler pdftoppm — pre-installed on Render/Ubuntu Linux
+  // Much more reliable than pdf2pic/ImageMagick for server environments
+  try {
+    const outputPrefix = path.join(outputDir, 'page');
+    const result = spawnSync('pdftoppm', [
+      '-r', String(DPI),
+      '-png',
+      '-f', '1',
+      '-l', String(MAX_PAGES),
+      pdfPath,
+      outputPrefix
+    ], { timeout: 30000, encoding: 'buffer' });
+
+    if (result.status === 0 || result.status === null) {
       const files = fs.readdirSync(outputDir)
         .filter(f => f.startsWith('page') && f.endsWith('.png'))
         .sort()
         .slice(0, MAX_PAGES);
-      
+
       for (const f of files) {
         const fullPath = path.join(outputDir, f);
-        const buf = fs.readFileSync(fullPath);
-        const dims = getPngDimensions(buf);
-        images.push({ path: fullPath, buffer: buf, ...dims, method: 'poppler' });
+        if (fs.existsSync(fullPath)) {
+          const buf = fs.readFileSync(fullPath);
+          const dims = getPngDimensions(buf);
+          if (dims.width > 0) {
+            images.push({ path: fullPath, buffer: buf, ...dims, method: 'poppler' });
+          }
+        }
       }
-      
+
       if (images.length > 0) {
-        console.log(`[ScaleReader] Rendered ${images.length} pages via poppler`);
+        console.log(`[ScaleReader] Rendered ${images.length} pages via poppler (${images[0].width}x${images[0].height}px)`);
+        return images;
+      }
+    }
+
+    if (result.stderr && result.stderr.length > 0) {
+      console.log(`[ScaleReader] pdftoppm stderr: ${result.stderr.toString().substring(0, 200)}`);
+    }
+  } catch(e) {
+    console.log(`[ScaleReader] poppler error: ${e.message}`);
+  }
+
+  // Fallback: try pdftocairo (also part of poppler)
+  try {
+    const outputPrefix = path.join(outputDir, 'cairo');
+    const result = spawnSync('pdftocairo', [
+      '-png', '-r', String(DPI),
+      '-f', '1', '-l', String(MAX_PAGES),
+      pdfPath, outputPrefix
+    ], { timeout: 30000, encoding: 'buffer' });
+
+    if (result.status === 0) {
+      const files = fs.readdirSync(outputDir)
+        .filter(f => f.startsWith('cairo') && f.endsWith('.png'))
+        .sort()
+        .slice(0, MAX_PAGES);
+
+      for (const f of files) {
+        const fullPath = path.join(outputDir, f);
+        if (fs.existsSync(fullPath)) {
+          const buf = fs.readFileSync(fullPath);
+          const dims = getPngDimensions(buf);
+          if (dims.width > 0) {
+            images.push({ path: fullPath, buffer: buf, ...dims, method: 'pdftocairo' });
+          }
+        }
+      }
+
+      if (images.length > 0) {
+        console.log(`[ScaleReader] Rendered ${images.length} pages via pdftocairo`);
         return images;
       }
     }
   } catch(e) {
-    console.log(`[ScaleReader] poppler not available: ${e.message}`);
+    console.log(`[ScaleReader] pdftocairo not available: ${e.message}`);
   }
 
-  // Try pdf2pic fallback
-  try {
-    const { fromPath } = require('pdf2pic');
-    for (let p = 1; p <= MAX_PAGES; p++) {
-      const converter = fromPath(pdfPath, {
-        density: DPI, saveFilename: `p${p}`,
-        savePath: outputDir, format: 'png',
-      });
-      const result = await converter(p);
-      if (result?.path && fs.existsSync(result.path)) {
-        const buf = fs.readFileSync(result.path);
-        const dims = getPngDimensions(buf);
-        images.push({ path: result.path, buffer: buf, ...dims, method: 'pdf2pic' });
-      }
-    }
-    if (images.length > 0) {
-      console.log(`[ScaleReader] Rendered ${images.length} pages via pdf2pic`);
-      return images;
-    }
-  } catch(e) {
-    console.log(`[ScaleReader] pdf2pic not available: ${e.message}`);
-  }
-
+  console.log(`[ScaleReader] No PDF renderer available for ${path.basename(pdfPath)}`);
   return [];
 }
 
