@@ -775,7 +775,7 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
     }
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
-    const wantsDocumentsRaw = /generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
+    const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
