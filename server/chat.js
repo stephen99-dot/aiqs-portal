@@ -320,28 +320,20 @@ function excelToText(filePath, originalName) {
   try {
     const XLSX = require('xlsx');
 
-    // Try multiple read strategies from most to least tolerant
+    // Read as buffer — cellFormula:true preserves cached formula results in cell.v
     let wb = null;
-    const readStrategies = [
-      // Strategy 1: Most tolerant — ignore styles, shared strings issues
-      { type: 'file', cellStyles: false, cellNF: false, sheetStubs: false, WTF: false, dense: false },
-      // Strategy 2: Read as buffer with tolerant options
-      { type: 'buffer', cellStyles: false, cellNF: false, WTF: false },
-      // Strategy 3: Raw read
+    const buf = fs.readFileSync(filePath);
+    const strategies = [
+      { cellFormula: true, cellStyles: false, cellNF: false, WTF: false },
+      { cellFormula: false, cellStyles: false, cellNF: false, WTF: false },
       {},
     ];
-
-    for (const opts of readStrategies) {
+    for (const opts of strategies) {
       try {
-        if (opts.type === 'buffer') {
-          const buf = fs.readFileSync(filePath);
-          wb = XLSX.read(buf, opts);
-        } else {
-          wb = XLSX.readFile(filePath, opts);
-        }
+        wb = XLSX.read(buf, opts);
         if (wb && wb.SheetNames && wb.SheetNames.length > 0) break;
-      } catch (e) {
-        console.log(`[Excel] Strategy failed, trying next: ${e.message}`);
+      } catch(e) {
+        console.log(`[Excel] Read strategy failed: ${e.message}`);
         wb = null;
       }
     }
@@ -357,48 +349,37 @@ function excelToText(filePath, originalName) {
     for (const sheetName of wb.SheetNames) {
       try {
         const ws = wb.Sheets[sheetName];
-        if (!ws) continue;
+        if (!ws || !ws['!ref']) continue;
 
-        // Try JSON first (better for structured data like BOQs)
-        let sheetText = '';
-        try {
-          const jsonData = XLSX.utils.sheet_to_json(ws, {
-            header: 1,
-            defval: '',
-            blankrows: false,
-            raw: true, // Use raw calculated values
-          });
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        const rows = [];
 
-          if (jsonData && jsonData.length > 0) {
-            // Filter completely empty rows
-            const filtered = jsonData.filter(row =>
-              Array.isArray(row) && row.some(cell => cell !== '' && cell !== null && cell !== undefined)
-            );
-
-            if (filtered.length > 0) {
-              sheetText = filtered.map(row => {
-                // Clean each cell — convert to string, trim
-                return row.map(cell => {
-                  if (cell === null || cell === undefined) return '';
-                  return String(cell).trim();
-                }).join('\t');
-              }).join('\n');
-              totalRows += filtered.length;
+        for (let R = range.s.r; R <= range.e.r; R++) {
+          const row = [];
+          let hasContent = false;
+          for (let C = range.s.c; C <= range.e.c; C++) {
+            const cellAddr = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = ws[cellAddr];
+            let val = '';
+            if (cell) {
+              // w = formatted display string (best), v = raw/cached value (fallback)
+              if (cell.w !== undefined && cell.w !== null && String(cell.w).trim() !== '') {
+                val = String(cell.w).trim();
+              } else if (cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') {
+                val = String(cell.v).trim();
+              }
+              if (val) hasContent = true;
             }
+            row.push(val);
           }
-        } catch (jsonErr) {
-          // Fallback to CSV if JSON fails
-          console.log(`[Excel] JSON parse failed for sheet ${sheetName}, trying CSV`);
-          try {
-            sheetText = XLSX.utils.sheet_to_csv(ws, { skipHidden: true, blankrows: false });
-            totalRows += sheetText.split('\n').length;
-          } catch (csvErr) {
-            console.log(`[Excel] CSV also failed for sheet ${sheetName}`);
+          if (hasContent) {
+            rows.push(row.join('\t'));
+            totalRows++;
           }
         }
 
-        if (sheetText && sheetText.trim()) {
-          output += `Sheet: ${sheetName}\n${sheetText.trim()}\n\n`;
+        if (rows.length > 0) {
+          output += `Sheet: ${sheetName}\n${rows.join('\n')}\n\n`;
         }
       } catch (sheetErr) {
         console.error(`[Excel] Sheet ${sheetName} error:`, sheetErr.message);
