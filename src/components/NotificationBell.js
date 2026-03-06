@@ -238,6 +238,28 @@ export default function NotificationBell() {
     return isDark ? 'rgba(148,163,184,0.08)' : 'rgba(148,163,184,0.12)';
   };
 
+  // ── Calculate panel position relative to the bell button ──────────
+  // The wrapper div (ref) is position:relative, so the panel is
+  // positioned relative to it with right:0 so it never overflows
+  // off the right edge, and top:calc(100% + 8px) so it drops below.
+  const panelStyle = {
+    position: 'absolute',
+    top: 'calc(100% + 8px)',
+    right: 0,
+    // On very small screens make it narrower but still usable
+    width: 'min(340px, calc(100vw - 24px))',
+    maxHeight: '460px',
+    background: isDark ? '#131A2B' : '#FFFFFF',
+    border: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
+    borderRadius: '14px',
+    boxShadow: isDark
+      ? '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)'
+      : '0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
+    zIndex: 9999,
+    overflow: 'hidden',
+    animation: 'notifSlide 0.2s ease-out',
+  };
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       {toast && (
@@ -289,22 +311,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div style={{
-          position: 'fixed',
-          top: '16px',
-          left: '250px',
-          width: '340px',
-          maxHeight: '460px',
-          background: isDark ? '#131A2B' : '#FFFFFF',
-          border: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
-          borderRadius: '14px',
-          boxShadow: isDark
-            ? '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03)'
-            : '0 20px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
-          zIndex: 9999,
-          overflow: 'hidden',
-          animation: 'notifSlide 0.2s ease-out',
-        }}>
+        <div style={panelStyle}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '14px 16px',
