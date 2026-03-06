@@ -1020,6 +1020,28 @@ ${summary}`);
 
     // ── STAGE 1: QUANTITY EXTRACTION ─────────────────────────────────
     // Triggered when files are uploaded. AI extracts locked quantities with working.
+
+    // Before extracting: check if we know the project address
+    // Address = currency + VAT rate + location factor. Without it, everything is wrong.
+    if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
+      const allTextForAddr = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ');
+      const hasAddress = /\b(\d+\s+[A-Za-z]+.*(?:road|street|lane|avenue|drive|close|way|crescent|place|court|gardens|terrace|grove|row|walk|square|park|rd|st|ave|ln|dr)|dublin|cork|galway|limerick|london|manchester|birmingham|bristol|leeds|edinburgh|glasgow|cardiff|belfast|liverpool|sheffield|newcastle|nottingham|leicester|coventry|exeter|brighton|oxford|cambridge|reading|[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})/i.test(allTextForAddr);
+
+      if (!hasAddress && fileNames.length > 0) {
+        // Files uploaded but no address — ask before extracting
+        // Store the fact files are pending so next message triggers extraction
+        reply = `📍 **Before I extract quantities, what's the project address?**
+
+This tells me:
+• **Currency** — UK (£) or Ireland (€)
+• **VAT rate** — 20% UK or 13.5% Ireland
+• **Local rates** — London, Manchester, Dublin etc. all price differently
+
+Just reply with the address or town and I'll get started on the quantities.`;
+        wantsExtract = false; // Don't extract yet — wait for address
+      }
+    }
+
     if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
       console.log('[Stage 1] Extracting quantities from drawings...');
       try {
@@ -1137,7 +1159,16 @@ ${summary}`);
               parsed.items,
               parsed.location || '',
               clientRates,
-              { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 }
+              (() => {
+            const locText = (parsed.location || message || allConvText || '').toLowerCase();
+            const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
+            return {
+              contingency_pct: 7.5,
+              ohp_pct: 12,
+              vat_rate: isIreland ? 13.5 : 20,
+              currency: isIreland ? 'EUR' : 'GBP',
+            };
+          })()
             );
 
             // Format quantities summary for user
@@ -1302,7 +1333,16 @@ ${summary}`);
           lockedTakeoff.items,
           lockedTakeoff.location || '',
           clientRates,
-          { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 }
+          (() => {
+            const locText = (parsed.location || message || allConvText || '').toLowerCase();
+            const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
+            return {
+              contingency_pct: 7.5,
+              ohp_pct: 12,
+              vat_rate: isIreland ? 13.5 : 20,
+              currency: isIreland ? 'EUR' : 'GBP',
+            };
+          })()
         );
 
         // Mark takeoff as confirmed
