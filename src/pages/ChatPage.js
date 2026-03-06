@@ -635,18 +635,16 @@ export default function ChatPage() {
                             : 'Choose how to proceed:'}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {/* Pay-per-BOQ button — only shown for doc quota, not message quota */}
-                          {msg.paymentRequired.type !== 'message_upgrade' && (
-                            <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 8, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
-                              Pay £99 — Generate this BOQ
-                            </a>
-                          )}
+                          {/* Pay-per-BOQ button — always shown */}
+                          <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 8, background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+                            Pay £99 — Generate this BOQ
+                          </a>
                           {/* Subscription buttons — always shown */}
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <a href="https://buy.stripe.com/5kQdR97Nm4Ni9IQ4XW73G02" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: msg.paymentRequired.type === 'message_upgrade' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: msg.paymentRequired.type === 'message_upgrade' ? '#0A0F1C' : c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
+                            <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: msg.paymentRequired.type === 'message_upgrade' ? 'linear-gradient(135deg,#F59E0B,#D97706)' : 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', color: msg.paymentRequired.type === 'message_upgrade' ? '#0A0F1C' : c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 700 }}>
                               ⭐ Professional — £347/mo <span style={{ fontSize: 11, opacity: 0.75, marginLeft: 2 }}>100 msgs · 10 BOQs</span>
                             </a>
-                            <a href="https://buy.stripe.com/aFa00j5FebbGaMUcqo73G03" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
+                            <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)', color: c.textPrimary, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>
                               👑 Premium — £447/mo <span style={{ fontSize: 11, opacity: 0.65, marginLeft: 2 }}>200 msgs · 20 BOQs</span>
                             </a>
                           </div>
