@@ -80,7 +80,24 @@ const BASE_RATES = {
   'extract_fans':                      { rate: 320,  unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'Extract fans humidity sensor Vent Axia or equal' },
   'ev_charge_point_ducting':           { rate: 250,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'EV charge point ducting and draw wire' },
   'electrical_testing_certificate':    { rate: 350,  unit: 'Item',labour: 1.00, materials: 0.00, description: 'Testing inspection & NICEIC certificate' },
+  // Structural steelwork & misc
+  'custom_structural_steelwork':       { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
+  'structural_steelwork':              { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
+  'custom_velux_940x1178':             { rate: 1850, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux roof window 940x1178mm double glazed incl. flashings' },
+  'custom_velux_balcony':              { rate: 3800, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux Cabrio balcony window system double glazed incl. flashings' },
+  'custom_chipboard_first_floor':      { rate: 28,   unit: 'm²', labour: 0.45, materials: 0.55, description: '22mm moisture-resistant P5 chipboard flooring to joists' },
+  'chipboard_flooring':                { rate: 28,   unit: 'm²', labour: 0.45, materials: 0.55, description: '22mm moisture-resistant P5 chipboard flooring to joists' },
+  'custom_staircase':                  { rate: 3200, unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'Timber staircase softwood with newels, balusters, handrail, trimming' },
+  'staircase':                         { rate: 3200, unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'Timber staircase softwood with newels, balusters, handrail, trimming' },
+  'custom_garage_demolition':          { rate: 3500, unit: 'Item',labour: 0.80, materials: 0.20, description: 'Demolish existing garage structure, cart away debris, make good' },
+  'garage_demolition':                 { rate: 3500, unit: 'Item',labour: 0.80, materials: 0.20, description: 'Demolish existing garage structure, cart away debris, make good' },
+  'custom_external_render':            { rate: 55,   unit: 'm²', labour: 0.65, materials: 0.35, description: 'External render two-coat system on mesh carrier, smooth finish' },
+  'external_render':                   { rate: 55,   unit: 'm²', labour: 0.65, materials: 0.35, description: 'External render two-coat system on mesh carrier, smooth finish' },
+  'custom_air_source_heat_pump':       { rate: 9500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Air source heat pump supply & install incl. controls & MCS certification' },
+  'air_source_heat_pump':              { rate: 9500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Air source heat pump supply & install incl. controls & MCS certification' },
   // Prelims
+  'scaffolding':                       { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
+  'scaffolding_two_storey':            { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
   'site_setup_scaffold':               { rate: 2800, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Site setup hoarding scaffold incl. scaffold licence if required' },
   'skip_hire_8yd':                     { rate: 320,  unit: 'Nr',  labour: 0.10, materials: 0.90, description: 'Skip hire 8-yard' },
   'site_welfare':                      { rate: 650,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Site welfare PPE temporary power & water connection' },
@@ -115,7 +132,7 @@ function detectLocationFactor(locationStr) {
   if (loc.includes('manchester') || loc.includes('liverpool') || loc.includes('chester') || loc.includes('lancashire') || loc.includes('cheshire')) return { factor: 0.98, label: 'North West (-2%)' };
   if (loc.includes('leeds') || loc.includes('sheffield') || loc.includes('york') || loc.includes('hull') || loc.includes('bradford')) return { factor: 0.97, label: 'Yorkshire (-3%)' };
   if (loc.includes('newcastle') || loc.includes('sunderland') || loc.includes('durham') || loc.includes('carlisle') || loc.includes('cumbria')) return { factor: 0.97, label: 'North England (-3%)' };
-  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee')) return { factor: 1.03, label: 'Scotland (+3%)' };
+  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)' };
   if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)' };
   if (loc.includes('dublin') || loc.includes('cork') || loc.includes('ireland') || loc.includes('galway') || loc.includes('limerick')) return { factor: 1.10, label: 'Ireland (+10%)' };
   return { factor: 1.00, label: 'UK average' };

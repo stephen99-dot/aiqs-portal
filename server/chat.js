@@ -166,7 +166,16 @@ Internal: plasterboard_skim_walls, metal_stud_partition, wedi_wetroom_board, pla
 Floors: lvt_flooring_karndean, floor_tile_600x600, vinyl_safety_floor, shower_tray_900x900
 Drainage/Plumbing: svp_connection_110mm, foul_drainage_connection, rainwater_downpipe_relocation, rwp_outlet_hopper, first_fix_plumbing, second_fix_plumbing, ufh_manifold_kitchen
 Electrical: consumer_unit_upgrade, first_fix_electrical, second_fix_electrical, extract_fans, ev_charge_point_ducting, electrical_testing_certificate
-Prelims: site_setup_scaffold, skip_hire_8yd, site_welfare, building_control_fees, party_wall_surveyor, structural_engineer_fees, snagging_clearance
+Structural: structural_steelwork (lump sum for UBs/SHS/base plates per structural package)
+Floors: chipboard_flooring (22mm P5 chipboard to joists per m²)
+Stairs: staircase (complete timber staircase per Nr)
+Demolition: garage_demolition (demolish garage structure per Item)
+External: external_render (two-coat render system per m²)
+Heating: air_source_heat_pump (ASHP supply & install per Nr)
+Roof windows: velux_skylight_780x980 (780x980mm), custom_velux_940x1178 (940x1178mm), custom_velux_balcony (Cabrio balcony)
+Prelims: scaffolding (independent scaffold per m² of elevation), scaffolding_two_storey (two-storey scaffold per m²), site_setup_scaffold (site setup lump sum), skip_hire_8yd, site_welfare, building_control_fees, party_wall_surveyor, structural_engineer_fees, snagging_clearance
+
+IMPORTANT SCAFFOLDING NOTE: For scaffolding measured in m², use key "scaffolding" or "scaffolding_two_storey" (rate ~£22/m²). Only use "site_setup_scaffold" for the one-off site setup lump sum (1 Nr).
 
 If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true
 
