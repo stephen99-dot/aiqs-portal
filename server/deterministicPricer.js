@@ -35,7 +35,7 @@ const BASE_RATES = {
   'fascia_soffit_guttering':           { rate: 48,   unit: 'm',   labour: 0.50, materials: 0.50, description: 'Fascia, soffit, PVC gutter and downpipe all connections' },
   'lead_flashing_code4':               { rate: 95,   unit: 'm',   labour: 0.55, materials: 0.45, description: 'Lead flashing Code 4 at abutment lapped soaked & pointed' },
   'roof_insulation_mineral_wool':      { rate: 28,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Roof insulation 200mm mineral wool between & over rafters' },
-  'velux_skylight_780x980':            { rate: 1650, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux-type skylight 780x980mm double glazed incl. flashings' },
+  'velux_skylight_780x980':            { rate: 450,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux-type skylight 780x980mm double glazed incl. flashings' },
   // Cladding
   'timber_cladding_accoya':            { rate: 145,  unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Accoya/Siberian Larch vertical cladding factory pre-treated' },
   'ventilated_cavity_battens':         { rate: 9.5,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Ventilated cavity battens behind cladding' },
@@ -83,7 +83,7 @@ const BASE_RATES = {
   // Structural steelwork & misc
   'custom_structural_steelwork':       { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
   'structural_steelwork':              { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
-  'custom_velux_940x1178':             { rate: 1850, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux roof window 940x1178mm double glazed incl. flashings' },
+  'custom_velux_940x1178':             { rate: 650,  unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux roof window 940x1178mm double glazed incl. flashings' },
   'custom_velux_balcony':              { rate: 3800, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux Cabrio balcony window system double glazed incl. flashings' },
   'custom_chipboard_first_floor':      { rate: 28,   unit: 'm²', labour: 0.45, materials: 0.55, description: '22mm moisture-resistant P5 chipboard flooring to joists' },
   'chipboard_flooring':                { rate: 28,   unit: 'm²', labour: 0.45, materials: 0.55, description: '22mm moisture-resistant P5 chipboard flooring to joists' },
@@ -124,7 +124,7 @@ function estimateFallbackRate(item) {
     if (desc.includes('staircase') || desc.includes('stair'))      return 3200;
     if (desc.includes('kitchen'))                                   return 8500;
     if (desc.includes('bathroom') || desc.includes('en-suite') || desc.includes('ensuite')) return 5500;
-    if (desc.includes('velux') || desc.includes('rooflight') || desc.includes('skylight')) return 1850;
+    if (desc.includes('velux') || desc.includes('rooflight') || desc.includes('skylight')) return 650;
     if (desc.includes('door') && desc.includes('bi-fold'))         return 4400;
     if (desc.includes('door') && desc.includes('external'))        return 1450;
     if (desc.includes('door'))                                      return 420;
