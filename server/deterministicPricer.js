@@ -107,6 +107,88 @@ const BASE_RATES = {
   'snagging_clearance':                { rate: 650,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Clearance & clean at completion snagging allowance' },
 };
 
+/**
+ * Estimate a fallback rate when no base rate or AI estimate exists.
+ * Uses the item's unit and description keywords to pick a sensible market rate.
+ * This ensures we NEVER price something at £0.
+ */
+function estimateFallbackRate(item) {
+  const desc = (item.description || item.key || '').toLowerCase();
+  const unit = (item.unit || '').toLowerCase();
+
+  // Per-item / lump sum items — estimate by description keywords
+  if (unit === 'item' || unit === 'nr' || unit === 'no' || unit === 'nr.' || unit === 'each') {
+    if (desc.includes('demolish') || desc.includes('demolition'))  return 3500;
+    if (desc.includes('heat pump') || desc.includes('ashp'))       return 9500;
+    if (desc.includes('boiler'))                                    return 4500;
+    if (desc.includes('staircase') || desc.includes('stair'))      return 3200;
+    if (desc.includes('kitchen'))                                   return 8500;
+    if (desc.includes('bathroom') || desc.includes('en-suite') || desc.includes('ensuite')) return 5500;
+    if (desc.includes('velux') || desc.includes('rooflight') || desc.includes('skylight')) return 1850;
+    if (desc.includes('door') && desc.includes('bi-fold'))         return 4400;
+    if (desc.includes('door') && desc.includes('external'))        return 1450;
+    if (desc.includes('door'))                                      return 420;
+    if (desc.includes('window'))                                    return 450;
+    if (desc.includes('steel') || desc.includes('structural'))     return 3500;
+    if (desc.includes('cylinder') || desc.includes('tank'))        return 1200;
+    if (desc.includes('radiator'))                                  return 380;
+    if (desc.includes('sanitaryware') || desc.includes('wc') || desc.includes('toilet')) return 650;
+    if (desc.includes('shower'))                                    return 580;
+    if (desc.includes('sundries') || desc.includes('allowance'))   return 500;
+    return 750; // generic lump sum fallback
+  }
+
+  // Per m² items
+  if (unit === 'm²' || unit === 'm2' || unit === 'sqm') {
+    if (desc.includes('render'))                                    return 55;
+    if (desc.includes('cladding'))                                  return 145;
+    if (desc.includes('insulation'))                                return 28;
+    if (desc.includes('plasterboard') || desc.includes('skim'))    return 32;
+    if (desc.includes('tile') || desc.includes('tiling'))          return 65;
+    if (desc.includes('screed'))                                    return 42;
+    if (desc.includes('floor') && desc.includes('chip'))           return 28;
+    if (desc.includes('floor'))                                     return 42;
+    if (desc.includes('roof'))                                      return 55;
+    if (desc.includes('brick'))                                     return 95;
+    if (desc.includes('block'))                                     return 42;
+    if (desc.includes('scaffold'))                                  return 22;
+    if (desc.includes('membrane') || desc.includes('dpm'))         return 4.5;
+    if (desc.includes('concrete') || desc.includes('slab'))        return 78;
+    if (desc.includes('paving') || desc.includes('patio'))         return 85;
+    if (desc.includes('decoration') || desc.includes('paint'))     return 8.5;
+    return 45; // generic m² fallback
+  }
+
+  // Per linear metre
+  if (unit === 'm' || unit === 'lm' || unit === 'm¹') {
+    if (desc.includes('skirting'))                                   return 18;
+    if (desc.includes('gutter') || desc.includes('fascia'))        return 48;
+    if (desc.includes('flashing') || desc.includes('lead'))        return 95;
+    if (desc.includes('drainage') || desc.includes('pipe'))        return 145;
+    if (desc.includes('fence') || desc.includes('fencing'))        return 95;
+    if (desc.includes('kerb') || desc.includes('edging'))          return 35;
+    if (desc.includes('architrave') || desc.includes('dado'))      return 14;
+    return 35; // generic linear metre fallback
+  }
+
+  // Per m³
+  if (unit === 'm³' || unit === 'm3') {
+    if (desc.includes('excavat'))                                   return 95;
+    if (desc.includes('concrete'))                                  return 185;
+    if (desc.includes('fill') || desc.includes('hardcore'))        return 45;
+    return 95; // generic m³ fallback
+  }
+
+  // Per tonne / kg
+  if (unit === 'tonne' || unit === 't' || unit === 'kg') {
+    if (desc.includes('steel'))                                     return 3200;
+    return 250;
+  }
+
+  // Fallback for anything else
+  return 500;
+}
+
 // Location uplift factors
 const LOCATION_FACTORS = {
   'london':         1.20,
@@ -174,10 +256,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       rate = BASE_RATES[item.key].rate * locFactor;
       rateSource = 'base_library';
     } else {
-      // Unknown key — flag it
-      rate = item.assumed_rate || 0;
-      rateSource = 'unknown';
-      warnings.push(`No rate found for '${item.key}' — used assumed rate £${rate}`);
+      // Unknown key — use AI assumed rate, or estimate from unit type
+      rate = item.assumed_rate || estimateFallbackRate(item) ;
+      rate = rate * locFactor;
+      rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
+      warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate £${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
     }
 
     const baseRate = BASE_RATES[item.key] || { labour: 0.5, materials: 0.5, description: item.description };

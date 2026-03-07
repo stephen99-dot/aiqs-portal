@@ -177,7 +177,8 @@ Prelims: scaffolding (independent scaffold per m² of elevation), scaffolding_tw
 
 IMPORTANT SCAFFOLDING NOTE: For scaffolding measured in m², use key "scaffolding" or "scaffolding_two_storey" (rate ~£22/m²). Only use "site_setup_scaffold" for the one-off site setup lump sum (1 Nr).
 
-If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true
+If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true.
+IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the current UK market rate for that item, based on your knowledge of construction costs. NEVER leave assumed_rate as 0 — always provide a realistic market rate in GBP.
 
 ${clientRateSection}
 ${benchmarkSection || ''}
