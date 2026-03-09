@@ -155,6 +155,16 @@ MEASUREMENT RULES:
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
 6. Be thorough — a single storey extension should have 40-70 items minimum
+7. Break down composite elements into their individual components (e.g. a cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m — NOT a single "cavity wall" lump sum)
+8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
+
+QUANTITY SANITY CHECKS — before finalising, verify:
+- Typical single storey extension (25-40m²): construction cost should be £50,000-£140,000
+- Typical two storey extension (40-70m²): construction cost should be £100,000-£250,000
+- Typical loft conversion: construction cost should be £40,000-£90,000
+- If your total exceeds these ranges, re-check quantities for errors (wrong units, doubled areas, building-level instead of element-level)
+- No single line item for a residential project should exceed £25,000 unless it is genuinely a high-value item (e.g. bi-fold doors, kitchen, ASHP)
+- Scaffolding in m² should be elevation area (perimeter × height), NOT floor area × rate-per-m². Typical scaffolding for an extension is 50-200m²
 
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 Substructure: excavation_strip_foundation, concrete_strip_foundation, blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g
@@ -178,7 +188,8 @@ Prelims: scaffolding (independent scaffold per m² of elevation), scaffolding_tw
 IMPORTANT SCAFFOLDING NOTE: For scaffolding measured in m², use key "scaffolding" or "scaffolding_two_storey" (rate ~£22/m²). Only use "site_setup_scaffold" for the one-off site setup lump sum (1 Nr).
 
 If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true.
-IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the current UK market rate for that item, based on your knowledge of construction costs. NEVER leave assumed_rate as 0 — always provide a realistic market rate in GBP.
+IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the BASE UK market rate (UK national average, NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP.
+CRITICAL: The assumed_rate must be a PER-UNIT rate matching the "unit" field. If unit is "m²", the rate is price per square metre (e.g. 42 not 4200). If unit is "Nr", it is price per number. Do NOT put the total cost in assumed_rate — put the rate per single unit only.
 
 ${clientRateSection}
 ${benchmarkSection || ''}
@@ -1205,16 +1216,32 @@ ${summary}`);
               quantitySummary += `${sec.name}: £${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}${flag}\n`;
               // Warn on individual items with absurd totals
               for (const item of sec.items || []) {
-                if (item.total > 100000) {
-                  quantitySummary += `  ⚠️ WARNING: ${item.description} = £${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × £${item.rate})\n`;
+                if (item.total > 25000) {
+                  quantitySummary += `  ⚠️ WARNING: ${item.description} = £${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × £${item.rate}/${item.unit})\n`;
                 }
               }
             }
             quantitySummary += `\nConstruction Total: £${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): £${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nNet Total: £${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nOH&P (${priced.summary.ohp_pct}%): £${priced.summary.ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nNet + OH&P: £${priced.summary.net_with_ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nVAT (${priced.summary.vat_rate}%): £${priced.summary.vat.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nGrand Total: £${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+
+            // Per-m² sanity check — flag unreasonable totals
+            const floorAreaForCheck = parsed.floor_area_m2 || floorArea;
+            if (floorAreaForCheck && floorAreaForCheck > 0) {
+              const costPerM2 = priced.summary.construction_total / floorAreaForCheck;
+              const costPerM2Str = `£${Math.round(costPerM2).toLocaleString('en-GB')}/m²`;
+              if (costPerM2 > 5000) {
+                quantitySummary += `\n\n⚠️ COST CHECK: Construction cost is ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²). Typical UK extensions cost £2,000-3,500/m². This looks too high — please review quantities and rates above for errors.`;
+              } else if (costPerM2 > 3500) {
+                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — at the higher end of typical UK rates (£2,000-3,500/m²). Worth a quick review.`;
+              } else {
+                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — within typical UK range.`;
+              }
+            }
 
             if (flagged.length > 0) {
               quantitySummary += `\n\nItems needing review (${flagged.length}):\n`;

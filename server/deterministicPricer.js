@@ -263,10 +263,29 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate £${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
     }
 
+    // Sanity check: if AI assumed_rate looks like a total cost rather than a per-unit rate, cap it
+    if (rateSource === 'ai_estimated' && item.qty > 1) {
+      const itemTotal = item.qty * rate;
+      // If a single line item exceeds £50k with AI-estimated rate, the rate is likely wrong
+      if (itemTotal > 50000 && rate > 500) {
+        const expectedRate = estimateFallbackRate(item) * locFactor;
+        if (rate > expectedRate * 5) {
+          warnings.push(`Rate for '${item.key}' looks too high (£${Math.round(rate)}/${item.unit || 'Item'} × ${item.qty} = £${Math.round(itemTotal).toLocaleString()}). Using fallback rate £${Math.round(expectedRate * 100) / 100}/${item.unit || 'Item'} instead.`);
+          rate = expectedRate;
+          rateSource = 'fallback_corrected';
+        }
+      }
+    }
+
     const baseRate = BASE_RATES[item.key] || { labour: 0.5, materials: 0.5, description: item.description };
     const total = Math.round(item.qty * rate * 100) / 100;
     const labour = Math.round(total * baseRate.labour * 100) / 100;
     const materials = Math.round(total * baseRate.materials * 100) / 100;
+
+    // Flag individual items with suspiciously high totals
+    if (total > 25000) {
+      warnings.push(`High-value item: '${item.description || item.key}' = £${Math.round(total).toLocaleString()} (${item.qty} ${item.unit || 'Item'} × £${Math.round(rate * 100) / 100}) — please verify qty and rate`);
+    }
 
     pricedItems.push({
       key: item.key,
