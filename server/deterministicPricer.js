@@ -476,14 +476,38 @@ function detectLocationFactor(locationStr) {
 }
 
 /**
- * Cross-validate quantities against each other to catch impossible values.
- * Returns warnings for any quantities that don't make sense relative to others.
+ * Cross-validate quantities against each other and AUTO-CORRECT impossible values.
+ * Mutates items array in place — caps quantities, removes impossible items.
+ * Returns { warnings, corrections } so callers know what changed.
+ * This is the last line of defence before pricing.
  */
 function crossValidateQuantities(items) {
   const warnings = [];
+  const corrections = [];
   const byKey = {};
   for (const item of items) {
     byKey[item.key] = item;
+  }
+
+  // Helper: auto-correct a quantity and log it
+  function capQty(item, maxQty, reason) {
+    const oldQty = item.qty;
+    item.qty = maxQty;
+    const msg = `AUTO-CORRECTED: ${item.key} qty ${oldQty} → ${maxQty}. ${reason}`;
+    warnings.push(msg);
+    corrections.push({ key: item.key, old_qty: oldQty, new_qty: maxQty, reason });
+  }
+
+  // Helper: remove an item from the array
+  function removeItem(key, reason) {
+    const idx = items.findIndex(i => i.key === key);
+    if (idx >= 0) {
+      const removed = items.splice(idx, 1)[0];
+      const msg = `AUTO-REMOVED: ${key} (was qty ${removed.qty}). ${reason}`;
+      warnings.push(msg);
+      corrections.push({ key, old_qty: removed.qty, new_qty: 0, reason, action: 'removed' });
+      delete byKey[key];
+    }
   }
 
   // Get total floor area from concrete slab items
@@ -491,142 +515,186 @@ function crossValidateQuantities(items) {
   const floorArea = slabItem ? slabItem.qty : null;
 
   if (floorArea && floorArea > 0) {
-    // Wall area should be roughly perimeter × height. For a square building of area A,
-    // perimeter ≈ 4 × sqrt(A), height ≈ 2.4m, so wall area ≈ 9.6 × sqrt(A)
-    // For 30m² floor → ~53m² wall area. Allow 2x for internal walls = ~106m²
     const expectedPerimeter = 4 * Math.sqrt(floorArea);
-    const maxWallArea = expectedPerimeter * 2.7 * 3; // 3x for generous margin (internal walls, multiple rooms)
+    const maxWallArea = expectedPerimeter * 2.7 * 3; // 3x for generous margin
 
-    const brickArea = byKey['brick_outer_leaf'] ? byKey['brick_outer_leaf'].qty : 0;
-    if (brickArea > maxWallArea) {
-      warnings.push(`Brick outer leaf area (${brickArea}m²) seems too high for ${floorArea}m² floor area. Expected max ~${Math.round(maxWallArea)}m² (perimeter × height). Check for doubled quantities.`);
+    // Auto-cap brick outer leaf
+    const brickOuter = byKey['brick_outer_leaf'];
+    if (brickOuter && brickOuter.qty > maxWallArea) {
+      capQty(brickOuter, Math.round(maxWallArea), `Max wall area for ${floorArea}m² floor = ~${Math.round(maxWallArea)}m²`);
     }
 
-    const blockArea = byKey['blockwork_inner_leaf_100mm'] ? byKey['blockwork_inner_leaf_100mm'].qty : 0;
-    if (blockArea > maxWallArea) {
-      warnings.push(`Blockwork inner leaf area (${blockArea}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+    // Auto-cap blockwork inner leaf
+    const blockInner = byKey['blockwork_inner_leaf_100mm'];
+    if (blockInner && blockInner.qty > maxWallArea) {
+      capQty(blockInner, Math.round(maxWallArea), `Max wall area for ${floorArea}m² floor = ~${Math.round(maxWallArea)}m²`);
     }
 
-    // Roof area should be roughly floor area × pitch factor (1.1-1.3 typical)
+    // Auto-cap roof structure to 2x floor area
     const roofItem = byKey['roof_structure_cut_timber'];
     if (roofItem && roofItem.qty > floorArea * 2) {
-      warnings.push(`Roof structure area (${roofItem.qty}m²) is more than 2x floor area (${floorArea}m²). Check for error — typical pitch factor is 1.1-1.3x.`);
+      const capped = Math.round(floorArea * 1.3);
+      capQty(roofItem, capped, `Roof capped to ${floorArea}m² × 1.3 pitch factor. Was >2x floor area`);
     }
 
-    // Scaffolding should be elevation area (perimeter × height), NOT floor area
+    // Auto-cap scaffolding
     const scaffItem = byKey['scaffolding'] || byKey['scaffolding_two_storey'];
     if (scaffItem) {
-      const expectedScaff = expectedPerimeter * 3; // ~3m height for single storey with scaffold
+      const expectedScaff = expectedPerimeter * 3;
       if (scaffItem.qty > expectedScaff * 3) {
-        warnings.push(`Scaffolding area (${scaffItem.qty}m²) seems too high. Expected ~${Math.round(expectedScaff)}m² (perimeter × height). Make sure this is elevation area, not floor area.`);
+        capQty(scaffItem, Math.round(expectedScaff * 1.5), `Scaffolding capped to elevation area ~${Math.round(expectedScaff * 1.5)}m²`);
       }
     }
 
-    // Plasterboard walls shouldn't be more than total internal+external wall area
+    // Auto-cap plasterboard walls
     const plasterWalls = byKey['plasterboard_skim_walls'];
     if (plasterWalls && plasterWalls.qty > maxWallArea * 1.5) {
-      warnings.push(`Plasterboard wall area (${plasterWalls.qty}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+      capQty(plasterWalls, Math.round(maxWallArea * 1.2), `Plasterboard capped to ${Math.round(maxWallArea * 1.2)}m²`);
+    }
+
+    // Auto-cap ceiling area to 1.3x floor area
+    const ceilingItem = byKey['plasterboard_ceilings'];
+    if (ceilingItem && ceilingItem.qty > floorArea * 1.3) {
+      capQty(ceilingItem, Math.round(floorArea * 1.1), `Ceiling capped to ~floor area (${Math.round(floorArea * 1.1)}m²)`);
     }
   }
 
-  // Cavity wall ties should be proportional to wall area (typically 2.5-4 per m²)
+  // Cavity wall ties: cap to 4 per m² of brickwork
   const tiesItem = byKey['cavity_wall_ties_ss'];
   const brickItem = byKey['brick_outer_leaf'];
   if (tiesItem && brickItem && tiesItem.qty > brickItem.qty * 6) {
-    warnings.push(`Cavity wall ties (${tiesItem.qty} Nr) seems too high for ${brickItem.qty}m² of brickwork. Typical density is 2.5-4 ties per m².`);
+    capQty(tiesItem, Math.round(brickItem.qty * 4), `Cavity ties capped to 4/m² × ${brickItem.qty}m² brickwork`);
   }
 
-  // Cavity insulation should match outer leaf area closely
+  // Cavity insulation: cap to match outer leaf
   const cavInsItem = byKey['cavity_insulation_eps'];
-  if (cavInsItem && brickItem) {
-    if (cavInsItem.qty > brickItem.qty * 1.15) {
-      warnings.push(`Cavity insulation (${cavInsItem.qty}m²) exceeds brick outer leaf (${brickItem.qty}m²) by >15%. These should match.`);
-    }
+  if (cavInsItem && brickItem && cavInsItem.qty > brickItem.qty * 1.15) {
+    capQty(cavInsItem, brickItem.qty, `Cavity insulation matched to brick outer leaf ${brickItem.qty}m²`);
   }
 
-  // Inner leaf blockwork should be similar to outer leaf (slightly less due to internal openings)
+  // Inner leaf: cap to match outer leaf
   const blockItem = byKey['blockwork_inner_leaf_100mm'];
-  if (blockItem && brickItem) {
-    if (blockItem.qty > brickItem.qty * 1.2) {
-      warnings.push(`Inner leaf blockwork (${blockItem.qty}m²) exceeds outer leaf brick (${brickItem.qty}m²) by >20%. Inner leaf should be similar or less.`);
+  if (blockItem && brickItem && blockItem.qty > brickItem.qty * 1.2) {
+    capQty(blockItem, brickItem.qty, `Inner leaf matched to outer leaf ${brickItem.qty}m²`);
+  }
+
+  // DPM, insulation, hardcore: cap to match slab area
+  const slabForDpm = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
+  if (slabForDpm) {
+    const dpmItem = byKey['dpm_1200g'];
+    if (dpmItem && dpmItem.qty > slabForDpm.qty * 1.15) {
+      capQty(dpmItem, slabForDpm.qty, `DPM matched to slab area ${slabForDpm.qty}m²`);
+    }
+    const pirItem = byKey['pir_insulation_under_slab'];
+    if (pirItem && pirItem.qty > slabForDpm.qty * 1.15) {
+      capQty(pirItem, slabForDpm.qty, `PIR insulation matched to slab area ${slabForDpm.qty}m²`);
+    }
+    const hardcoreItem = byKey['hardcore_fill'];
+    if (hardcoreItem && hardcoreItem.qty > slabForDpm.qty * 1.15) {
+      capQty(hardcoreItem, slabForDpm.qty, `Hardcore matched to slab area ${slabForDpm.qty}m²`);
     }
   }
 
-  // DPM should match slab area
-  const dpmItem = byKey['dpm_1200g'];
-  const slabForDpm = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
-  if (dpmItem && slabForDpm && dpmItem.qty > slabForDpm.qty * 1.15) {
-    warnings.push(`DPM area (${dpmItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
-  }
-
-  // Insulation under slab should match slab area
-  const pirItem = byKey['pir_insulation_under_slab'];
-  if (pirItem && slabForDpm && pirItem.qty > slabForDpm.qty * 1.15) {
-    warnings.push(`PIR insulation (${pirItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
-  }
-
-  // Hardcore should match slab area
-  const hardcoreItem = byKey['hardcore_fill'];
-  if (hardcoreItem && slabForDpm && hardcoreItem.qty > slabForDpm.qty * 1.15) {
-    warnings.push(`Hardcore fill (${hardcoreItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
-  }
-
-  // Ceiling area should roughly match floor area
-  const ceilingItem = byKey['plasterboard_ceilings'];
-  if (ceilingItem && slabForDpm && ceilingItem.qty > slabForDpm.qty * 1.3) {
-    warnings.push(`Ceiling area (${ceilingItem.qty}m²) exceeds floor area (${slabForDpm.qty}m²) by >30%. These should be similar.`);
-  }
-
-  // Foundation excavation volume should be sensible: length × width × depth
-  // Typical strip: perimeter × 0.6m × 1.0m depth = perimeter × 0.6m³/m
+  // Foundation excavation: cap to 1.5x concrete volume
   const excItem = byKey['excavation_strip_foundation'];
   const concItem = byKey['concrete_strip_foundation'];
   if (excItem && concItem && excItem.qty > concItem.qty * 2) {
-    warnings.push(`Excavation volume (${excItem.qty}m³) is more than 2x concrete volume (${concItem.qty}m³). Check excavation dimensions.`);
+    capQty(excItem, Math.round(concItem.qty * 1.5 * 10) / 10, `Excavation capped to 1.5× concrete volume (${concItem.qty}m³)`);
   }
 
-  // Electrical circuit quantity guard — extensions should have max 1-2 circuits per type
-  const lightingItem = byKey['lighting_installation'];
-  const powerItem = byKey['power_sockets_circuit'];
-  const firstFixElec = byKey['first_fix_electrical'];
-  const secondFixElec = byKey['second_fix_electrical'];
-  if (lightingItem && lightingItem.qty > 2) {
-    warnings.push(`Lighting circuits (${lightingItem.qty}) exceeds 2. Residential extensions typically need 1-2 lighting circuits max. These are priced PER CIRCUIT not per room.`);
-  }
-  if (powerItem && powerItem.qty > 2) {
-    warnings.push(`Power socket circuits (${powerItem.qty}) exceeds 2. Residential extensions typically need 1-2 power circuits max. These are priced PER CIRCUIT not per room.`);
-  }
-  if (firstFixElec && firstFixElec.qty > 2) {
-    warnings.push(`First fix electrical (${firstFixElec.qty}) exceeds 2. Typical extension needs 1-2 first fix items max.`);
-  }
-  if (secondFixElec && secondFixElec.qty > 2) {
-    warnings.push(`Second fix electrical (${secondFixElec.qty}) exceeds 2. Typical extension needs 1-2 second fix items max.`);
+  // ═══════════════════════════════════════════════════════════════════════
+  // ELECTRICAL: HARD CAP at max per circuit type (#1 source of over-pricing)
+  // ═══════════════════════════════════════════════════════════════════════
+  const elecCaps = [
+    { key: 'lighting_installation', max: 2, label: 'Lighting circuits' },
+    { key: 'power_sockets_circuit', max: 2, label: 'Power circuits' },
+    { key: 'first_fix_electrical', max: 2, label: 'First fix electrical' },
+    { key: 'second_fix_electrical', max: 2, label: 'Second fix electrical' },
+    { key: 'consumer_unit_upgrade', max: 1, label: 'Consumer unit upgrade' },
+    { key: 'smoke_heat_detection', max: 1, label: 'Smoke/heat detection' },
+  ];
+  for (const ec of elecCaps) {
+    const item = byKey[ec.key];
+    if (item && item.qty > ec.max) {
+      capQty(item, ec.max, `${ec.label} capped at ${ec.max} — per CIRCUIT not per room`);
+    }
   }
 
-  // Roof double-count guard — should not have BOTH attic trusses AND cut timber roof structure
+  // ═══════════════════════════════════════════════════════════════════════
+  // ROOF: Remove duplicate structural items (mutually exclusive)
+  // ═══════════════════════════════════════════════════════════════════════
   const atticTrusses = byKey['attic_trusses_prefab'];
   const cutTimberRoof = byKey['roof_structure_cut_timber'];
   if (atticTrusses && cutTimberRoof) {
-    warnings.push(`Both attic_trusses_prefab AND roof_structure_cut_timber are included. These are mutually exclusive — use one or the other, not both.`);
+    removeItem('roof_structure_cut_timber', 'Mutually exclusive with attic_trusses_prefab');
   }
 
-  // Staircase guard — flag if staircase included (may not be needed for side/rear extensions)
+  // ═══════════════════════════════════════════════════════════════════════
+  // STAIRCASE: Remove if not needed (small extensions use existing stairs)
+  // ═══════════════════════════════════════════════════════════════════════
   const staircaseItem = byKey['staircase'];
   if (staircaseItem && floorArea && floorArea < 60) {
-    warnings.push(`New staircase (£${staircaseItem.qty * 4800}) included for a ${floorArea}m² extension. Verify this extension needs a new staircase — most side/rear extensions use the existing house staircase.`);
+    removeItem('staircase', `Extension is only ${floorArea}m² — most use existing staircase`);
+    if (byKey['stair_opening_formation']) {
+      removeItem('stair_opening_formation', 'Staircase removed — opening not needed either');
+    }
+  }
+  // Cap staircase qty to 1 in any case
+  if (byKey['staircase'] && byKey['staircase'].qty > 1) {
+    capQty(byKey['staircase'], 1, 'Only 1 staircase needed per project');
   }
 
-  // Count windows and doors — flag if suspiciously few for the floor area
+  // ═══════════════════════════════════════════════════════════════════════
+  // FIT-OUTS: Cap kitchen/bathroom quantities
+  // ═══════════════════════════════════════════════════════════════════════
+  const fitoutCaps = [
+    { key: 'kitchen_fitout_mid', max: 2 },
+    { key: 'kitchen_fitout_high', max: 2 },
+    { key: 'bathroom_fitout_mid', max: 3 },
+    { key: 'bathroom_fitout_high', max: 3 },
+    { key: 'shower_room_fitout', max: 3 },
+    { key: 'wc_cloakroom_fitout', max: 2 },
+  ];
+  for (const fc of fitoutCaps) {
+    const item = byKey[fc.key];
+    if (item && item.qty > fc.max) {
+      capQty(item, fc.max, `${fc.key} capped at ${fc.max} for residential`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // VELUX/ROOF WINDOWS: Cap total to reasonable count
+  // ═══════════════════════════════════════════════════════════════════════
+  const veluxKeys = ['velux_skylight_780x980', 'velux_skylight_940x1178', 'velux_skylight_940x978',
+    'velux_balcony_940x2520', 'custom_velux_940x1178', 'custom_velux_balcony', 'motorised_rooflight'];
+  let totalVelux = 0;
+  for (const vk of veluxKeys) {
+    if (byKey[vk]) totalVelux += byKey[vk].qty;
+  }
+  if (totalVelux > 6) {
+    // Scale each Velux item proportionally to bring total to 6
+    const veluxScale = 6 / totalVelux;
+    for (const vk of veluxKeys) {
+      if (byKey[vk] && byKey[vk].qty > 0) {
+        const newQty = Math.max(1, Math.round(byKey[vk].qty * veluxScale));
+        if (newQty < byKey[vk].qty) {
+          capQty(byKey[vk], newQty, `Total Velux/roof windows was ${totalVelux} — capped proportionally to max 6 total`);
+        }
+      }
+    }
+  }
+
+  // Count windows and doors — warn if suspiciously few
   if (floorArea && floorArea > 20) {
     const windowDoorItems = items.filter(i =>
       i.key && (i.key.includes('window') || i.key.includes('door') || i.key.includes('bifold') || i.key.includes('vent_panel'))
     );
     if (windowDoorItems.length < 3) {
-      warnings.push(`Only ${windowDoorItems.length} window/door items for ${floorArea}m² floor area. Most projects have at least 4-6 openings. Check the door/window schedule.`);
+      warnings.push(`Only ${windowDoorItems.length} window/door items for ${floorArea}m² floor area. Most projects have at least 4-6 openings.`);
     }
   }
 
-  return warnings;
+  return { warnings, corrections };
 }
 
 /**
@@ -711,12 +779,15 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const pricedItems = [];
   const warnings = [];
 
-  // Cross-validate quantities against each other before pricing
-  const crossValidationWarnings = crossValidateQuantities(lockedItems);
+  // Cross-validate quantities against each other before pricing — AUTO-CORRECTS bad quantities
+  const crossResult = crossValidateQuantities(lockedItems);
   // Detect duplicate/overlapping items
   const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
-  warnings.push(...crossValidationWarnings);
+  warnings.push(...crossResult.warnings);
   warnings.push(...duplicateWarnings);
+  if (crossResult.corrections.length > 0) {
+    warnings.push(`⚡ ${crossResult.corrections.length} quantities were auto-corrected before pricing to prevent over-counting.`);
+  }
 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
@@ -799,9 +870,26 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   if (estimatedFloorArea > 0) {
     const costPerM2 = constructionTotal / estimatedFloorArea;
     // UK residential extensions typically cost £1,800-£3,000/m² construction only
-    // If exceeding £3,500/m², something is likely wrong — flag it
+    // Hard cap at £3,500/m² — if above this, scale ALL items down proportionally
     if (costPerM2 > 3500) {
-      warnings.push(`COST CHECK: Construction cost is £${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area). Typical UK range is £1,800-£3,000/m². Review quantities and items for over-counting.`);
+      const targetCostPerM2 = 2800; // middle of typical range
+      const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
+      warnings.push(`COST CAP APPLIED: Construction was £${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds £3,500/m² cap. All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~£${targetCostPerM2}/m².`);
+
+      // Scale down every item total proportionally
+      for (const item of pricedItems) {
+        const labourShare = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
+        item.rate = Math.round(item.rate * scaleFactor * 100) / 100;
+        item.total = Math.round(item.qty * item.rate * 100) / 100;
+        item.labour = Math.round(item.total * labourShare * 100) / 100;
+        item.materials = Math.round((item.total - item.labour) * 100) / 100;
+      }
+
+      // Recalculate construction total after scaling
+      constructionTotal = sectionTotals.reduce((s, sec) => {
+        sec.subtotal = sec.items.reduce((ss, i) => ss + i.total, 0);
+        return s + sec.subtotal;
+      }, 0);
     }
   }
 
