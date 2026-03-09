@@ -138,18 +138,19 @@ function buildSystemPrompt(userId, forDocGen, benchmarkSection) {
     }
   } catch (err) { console.error('[Chat] Insight load error:', err.message); }
 
-  if (forDocGen === 'extract_quantities') {
-    // STAGE 1: Extract locked quantities from drawings
+  if (forDocGen === 'extract_quantities' || forDocGen === 'extract_quantities_text') {
+    // STAGE 1: Extract locked quantities from drawings OR text description
     // AI measures everything, shows working, outputs structured JSON
     // This JSON gets LOCKED and priced deterministically — no re-measuring on generate
-    return `You are an expert UK Quantity Surveyor performing a detailed measurement exercise from construction drawings.
+    const isTextOnly = forDocGen === 'extract_quantities_text';
+    return `You are an expert UK Quantity Surveyor performing a detailed ${isTextOnly ? 'quantity estimation from a project description' : 'measurement exercise from construction drawings'}.
 
 Your ONLY job right now is to MEASURE and EXTRACT quantities. Do NOT price anything. Do NOT generate a BOQ.
-
+${isTextOnly ? '\nYou are working from a TEXT DESCRIPTION only (no drawings). Use your professional QS expertise to estimate realistic quantities based on the project type, dimensions, and specification described. Be conservative — it is better to be slightly under than wildly over. Base quantities on typical UK construction for the project type described.\n' : ''}
 You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
 MEASUREMENT RULES:
-1. Measure every visible element from the drawings with explicit working shown
+1. ${isTextOnly ? 'Calculate quantities from the dimensions and scope described, using typical UK construction assumptions' : 'Measure every visible element from the drawings with explicit working shown'}
 2. Show your working in the "working" field: e.g. "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²"
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
@@ -157,6 +158,9 @@ MEASUREMENT RULES:
 6. Be thorough — a single storey extension should have 40-70 items minimum
 7. Break down composite elements into their individual components (e.g. a cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m — NOT a single "cavity wall" lump sum)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
+${isTextOnly ? `9. CRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
+10. For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically
+11. Do NOT inflate quantities — a 30m² extension should produce a construction total of roughly £60,000-£100,000 before contingency/OH&P/VAT` : ''}
 
 QUANTITY SANITY CHECKS — before finalising, verify:
 - Typical single storey extension (25-40m²): construction cost should be £50,000-£140,000
@@ -1050,7 +1054,11 @@ ${summary}`);
 
     const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
-    const wantsExtract = hasFiles && !wantsDocumentsRaw; // files uploaded without generate = extract phase
+    // Detect if text-only chat describes a construction project worth pricing
+    // This triggers the deterministic pricing pipeline even without file uploads
+    const describesPricingProject = !hasFiles && !wantsDocumentsRaw && /\b(extension|loft\s*conv|storey|refurb|renovation|conversion|new\s*build|garage|kitchen\s*ext|rear\s*ext|side\s*ext|wrap.?around|dormer|basement|annex|granny\s*flat|garden\s*room|orangery|conservatory)\b/i.test(allConvText)
+      && /\b(\d+\s*m[2²]|\d+\s*sq|\d+m\s*x\s*\d+m|\d+\s*metre|\d+\s*meter|\d+\s*foot|\d+\s*ft|bedroom|bathroom|kitchen|open\s*plan)\b/i.test(allConvText);
+    const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocumentsRaw; // files uploaded OR text describes a project = extract phase
     const sessionId = req.body.session_id || null;
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
@@ -1100,7 +1108,15 @@ ${summary}`);
     const hasAddress = /\b(\d+\s+[A-Za-z]+.*(?:road|street|lane|avenue|drive|close|way|crescent|place|court|gardens|terrace|grove|row|walk|square|park|rd|st|ave|ln|dr)|dublin|cork|galway|limerick|london|manchester|birmingham|bristol|leeds|edinburgh|glasgow|cardiff|belfast|liverpool|sheffield|newcastle|nottingham|leicester|coventry|exeter|brighton|oxford|cambridge|reading|[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})/i.test(allTextForAddr);
 
     if (wantsExtract && deterministicPricer && benchmarkStore && !wantsDocuments) {
-      console.log('[Stage 1] Extracting quantities from drawings...');
+      // Check if session already has a locked takeoff — don't re-extract
+      let existingTakeoffForExtract = null;
+      if (sessionId && benchmarkStore) {
+        try { existingTakeoffForExtract = benchmarkStore.getTakeoffBySession(db, sessionId); } catch(e) {}
+      }
+      const shouldExtract = !existingTakeoffForExtract || !existingTakeoffForExtract.items || existingTakeoffForExtract.items.length === 0;
+
+      if (shouldExtract) {
+      console.log(`[Stage 1] Extracting quantities from ${hasFiles ? 'drawings' : 'text description'}...`);
       try {
         // Get project type from conversation context
         const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
@@ -1118,7 +1134,7 @@ ${summary}`);
           ? memoryEngine.buildMemoryContext(db, { userId, projectType: projectTypeGuess, region: memoryEngine.detectRegion(locationGuess) })
           : (benchmarkStore ? benchmarkStore.formatBenchmarksForPrompt(benchmarkStore.getBenchmarkRanges(db, projectTypeGuess, null), projectTypeGuess) : '');
 
-        const extractPrompt = buildSystemPrompt(userId, 'extract_quantities', memoryCtx);
+        const extractPrompt = buildSystemPrompt(userId, hasFiles ? 'extract_quantities' : 'extract_quantities_text', memoryCtx);
 
         // If ZIP was pre-processed, inject the structured data as additional context
         // This gives Claude pre-extracted dimensions/rooms/schedules as facts to work from
@@ -1318,6 +1334,7 @@ ${summary}`);
         console.error('[Stage 1] Extraction error:', extractErr.message);
         // Fall through to normal chat response
       }
+      } // end shouldExtract
     }
 
     // ── QUOTA CHECK ───────────────────────────────────────────────────

@@ -221,6 +221,70 @@ function detectLocationFactor(locationStr) {
 }
 
 /**
+ * Cross-validate quantities against each other to catch impossible values.
+ * Returns warnings for any quantities that don't make sense relative to others.
+ */
+function crossValidateQuantities(items) {
+  const warnings = [];
+  const byKey = {};
+  for (const item of items) {
+    byKey[item.key] = item;
+  }
+
+  // Get total floor area from concrete slab items
+  const slabItem = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
+  const floorArea = slabItem ? slabItem.qty : null;
+
+  if (floorArea && floorArea > 0) {
+    // Wall area should be roughly perimeter × height. For a square building of area A,
+    // perimeter ≈ 4 × sqrt(A), height ≈ 2.4m, so wall area ≈ 9.6 × sqrt(A)
+    // For 30m² floor → ~53m² wall area. Allow 2x for internal walls = ~106m²
+    const expectedPerimeter = 4 * Math.sqrt(floorArea);
+    const maxWallArea = expectedPerimeter * 2.7 * 3; // 3x for generous margin (internal walls, multiple rooms)
+
+    const brickArea = byKey['brick_outer_leaf'] ? byKey['brick_outer_leaf'].qty : 0;
+    if (brickArea > maxWallArea) {
+      warnings.push(`Brick outer leaf area (${brickArea}m²) seems too high for ${floorArea}m² floor area. Expected max ~${Math.round(maxWallArea)}m² (perimeter × height). Check for doubled quantities.`);
+    }
+
+    const blockArea = byKey['blockwork_inner_leaf_100mm'] ? byKey['blockwork_inner_leaf_100mm'].qty : 0;
+    if (blockArea > maxWallArea) {
+      warnings.push(`Blockwork inner leaf area (${blockArea}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+    }
+
+    // Roof area should be roughly floor area × pitch factor (1.1-1.3 typical)
+    const roofItem = byKey['roof_structure_cut_timber'];
+    if (roofItem && roofItem.qty > floorArea * 2) {
+      warnings.push(`Roof structure area (${roofItem.qty}m²) is more than 2x floor area (${floorArea}m²). Check for error — typical pitch factor is 1.1-1.3x.`);
+    }
+
+    // Scaffolding should be elevation area (perimeter × height), NOT floor area
+    const scaffItem = byKey['scaffolding'] || byKey['scaffolding_two_storey'];
+    if (scaffItem) {
+      const expectedScaff = expectedPerimeter * 3; // ~3m height for single storey with scaffold
+      if (scaffItem.qty > expectedScaff * 3) {
+        warnings.push(`Scaffolding area (${scaffItem.qty}m²) seems too high. Expected ~${Math.round(expectedScaff)}m² (perimeter × height). Make sure this is elevation area, not floor area.`);
+      }
+    }
+
+    // Plasterboard walls shouldn't be more than total internal+external wall area
+    const plasterWalls = byKey['plasterboard_skim_walls'];
+    if (plasterWalls && plasterWalls.qty > maxWallArea * 1.5) {
+      warnings.push(`Plasterboard wall area (${plasterWalls.qty}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+    }
+  }
+
+  // Cavity wall ties should be proportional to wall area (typically 2.5-4 per m²)
+  const tiesItem = byKey['cavity_wall_ties_ss'];
+  const brickItem = byKey['brick_outer_leaf'];
+  if (tiesItem && brickItem && tiesItem.qty > brickItem.qty * 6) {
+    warnings.push(`Cavity wall ties (${tiesItem.qty} Nr) seems too high for ${brickItem.qty}m² of brickwork. Typical density is 2.5-4 ties per m².`);
+  }
+
+  return warnings;
+}
+
+/**
  * Price a set of locked quantities deterministically.
  * @param {Array} lockedItems - Array of { key, description, unit, qty, override_rate? }
  * @param {string} location - Location string for uplift detection
@@ -242,6 +306,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   const pricedItems = [];
   const warnings = [];
+
+  // Cross-validate quantities against each other before pricing
+  const crossValidationWarnings = crossValidateQuantities(lockedItems);
+  warnings.push(...crossValidationWarnings);
 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
