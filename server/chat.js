@@ -155,24 +155,28 @@ MEASUREMENT RULES:
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
-6. Be thorough — a single storey extension should have 40-70 items minimum
+6. Be accurate, not excessive — a typical single storey extension should have 25-45 items. Only include items that genuinely apply to the project scope. Do NOT pad the estimate with unnecessary items just to hit a count
 7. Break down composite elements into their individual components (e.g. a cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m — NOT a single "cavity wall" lump sum)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
-${isTextOnly ? `9. CRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
-10. For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically
-11. Do NOT inflate quantities — a 30m² extension should produce a construction total of roughly £60,000-£100,000 before contingency/OH&P/VAT` : ''}
+9. Be CONSERVATIVE with quantities — it is better to be slightly under than over. Round quantities DOWN where uncertain
+10. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them in the scope. These are client-side costs, not construction costs
+11. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
+${isTextOnly ? `12. CRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
+13. For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically
+14. Do NOT inflate quantities — a 30m² extension should produce a construction total of roughly £60,000-£100,000 before contingency/OH&P/VAT` : ''}
 
 QUANTITY SANITY CHECKS — before finalising, verify:
-- Typical single storey extension (25-40m²): construction cost should be £50,000-£140,000
-- Typical two storey extension (40-70m²): construction cost should be £100,000-£250,000
-- Typical loft conversion: construction cost should be £40,000-£90,000
-- Typical whole-house refurbishment (100-200m²): construction cost should be £100,000-£300,000
+- Typical single storey extension (25-40m²): construction cost should be £45,000-£100,000
+- Typical two storey extension (40-70m²): construction cost should be £80,000-£180,000
+- Typical loft conversion: construction cost should be £35,000-£75,000
+- Typical whole-house refurbishment (100-200m²): construction cost should be £80,000-£250,000
 - Typical heritage/listed building refurbishment: add 15-30% premium over standard refurbishment
-- Typical bathroom refurbishment: £5,000-£12,000 per bathroom
-- Typical kitchen refurbishment: £8,000-£20,000 per kitchen
-- If your total exceeds these ranges, re-check quantities for errors (wrong units, doubled areas, building-level instead of element-level)
-- No single line item for a residential project should exceed £25,000 unless it is genuinely a high-value item (e.g. bi-fold doors, kitchen, ASHP)
-- Scaffolding in m² should be elevation area (perimeter × height), NOT floor area × rate-per-m². Typical scaffolding for an extension is 50-200m²
+- Typical bathroom refurbishment: £4,000-£10,000 per bathroom
+- Typical kitchen refurbishment: £6,000-£15,000 per kitchen
+- If your total is near the TOP of these ranges, re-check quantities for errors (wrong units, doubled areas, building-level instead of element-level, duplicate items)
+- AIM FOR THE MIDDLE of these ranges unless the project scope clearly justifies higher — most projects should fall in the lower half
+- No single line item for a residential project should exceed £20,000 unless it is genuinely a high-value item (e.g. bi-fold doors, kitchen, ASHP)
+- Scaffolding in m² should be elevation area (perimeter × height), NOT floor area × rate-per-m². Typical scaffolding for an extension is 50-150m²
 
 REFURBISHMENT-SPECIFIC RULES:
 - For refurbishment projects, ALWAYS include strip-out items before new work (you must strip out old finishes before applying new ones)
@@ -324,18 +328,19 @@ CRITICAL REQUIREMENTS:
 3. Show proper quantities with working (e.g. "2no. walls @ 5.0m x 2.7m less openings")
 4. Include ALL trades: prelims, demo, substructure, superstructure, roof, windows, doors, finishes, MEP, external works
 5. Every item needs rate_source: "verified", "emerging", or "generic"
-6. Include prelims (scaffolding, skip hire, site setup, project management)
+6. Include prelims (scaffolding, skip hire, site setup) but NOT professional fees (architect, planning, CDM, PM) unless client asks
 7. The findings report must have detailed assumptions, exclusions, and recommendations
 
 COST SANITY CHECKS — verify your total before responding:
-- Typical single storey extension (25-40m2): construction cost £50,000-£140,000
-- Typical two storey extension (40-70m2): construction cost £100,000-£250,000
-- Typical loft conversion: construction cost £40,000-£90,000
-- Typical whole-house refurbishment (100-200m2): construction cost £100,000-£300,000
+- Typical single storey extension (25-40m2): construction cost £45,000-£100,000
+- Typical two storey extension (40-70m2): construction cost £80,000-£180,000
+- Typical loft conversion: construction cost £35,000-£75,000
+- Typical whole-house refurbishment (100-200m2): construction cost £80,000-£250,000
 - Typical heritage/listed refurbishment: add 15-30% over standard refurbishment
-- Cost per m2 for UK residential extensions: typically £2,000-£3,500/m2 (construction only, before contingency/OH&P/VAT)
-- Cost per m2 for UK refurbishment: typically £800-£2,000/m2 depending on scope
-- If your total exceeds these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
+- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
+- Cost per m2 for UK refurbishment: typically £800-£1,800/m2 depending on scope
+- AIM FOR THE MIDDLE of these ranges — most projects should fall in the lower half
+- If your total is near the TOP of these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
 - No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
 - Do NOT double-count: if you break cavity wall into components, do NOT also include a separate cavity wall lump sum
 - For refurbishment: ALWAYS include strip-out BEFORE new work. Break decoration per room where scope allows
@@ -392,15 +397,16 @@ WHEN ANALYSING DRAWINGS — BE THOROUGH:
 5. APPLY RATES with clear source attribution — never just guess
 6. STATE ALL ASSUMPTIONS clearly (slab thickness, insulation spec, foundation depth, etc.)
 7. FLAG anything unclear, missing information, or needing site verification
-8. Include PRELIMS (site setup, welfare, skip hire, scaffolding, project management)
-9. Include CONTINGENCY (7.5-10%) and OH&P (12-15%)
+8. Include PRELIMS (site setup, welfare, skip hire, scaffolding) but NOT professional fees (architect, planning, CDM, PM) unless client specifically asks
+9. Include CONTINGENCY (7.5%) and OH&P (12%) — use these exact percentages, not ranges
 10. Note whether VAT applies
+11. NEVER double-count: if you include a fit-out lump sum (kitchen_fitout_mid, bathroom_fitout_mid) do NOT also price individual items within that fit-out. If you include first_fix_plumbing do NOT also price individual pipe runs
 
 DETAIL EXPECTATIONS — MINIMUM STANDARDS:
-- For a standard single-storey extension: expect 40-60+ line items minimum
-- For a two-storey extension or conversion: expect 60-100+ line items
-- For a full refurb: expect 80-150+ line items
-- NEVER produce a sparse 10-20 item estimate — clients pay for detail
+- For a standard single-storey extension: expect 25-45 line items
+- For a two-storey extension or conversion: expect 40-70 line items
+- For a full refurb: expect 60-100 line items
+- Include enough detail to be professional, but do NOT pad the estimate with unnecessary items
 - Break down composite items: e.g. "Cavity wall" should show blockwork inner leaf, insulation, cavity ties, brick outer leaf separately where relevant
 - Show working for key quantities: "External wall area: 2no. walls @ 5.0m x 2.7m = 27.0m2, less 2no. windows @ 1.2x1.5m = 3.6m2, net wall area = 23.4m2"
 
@@ -422,36 +428,39 @@ ELEMENTAL BREAKDOWN (use these sections):
 15. External Works — drainage, paving, landscaping, fencing, retaining walls
 
 FIXED UK RATES (use these exact figures — no ranges, no deviations):
-Excavation strip foundation: 95/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
+Excavation strip foundation: 75/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
 Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
-Brick outer leaf facing: 95/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
+Brick outer leaf facing: 82/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
 Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
 Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
 Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
-UPVC windows standard: 450/ea | Composite external door: 1850/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 4400/ea
+UPVC windows standard: 450/ea | Composite external door: 1500/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 3800/ea
 Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
 Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
 Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
 Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
 First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
 Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
-Velux skylight 780x980: 1650/Nr | Structural steelwork supply fab install: 3500/Item
+Velux skylight 780x980: 1450/Nr | Structural steelwork supply fab install: 3500/Item
 Air source heat pump: 9500/Nr | UFH manifold: 1400/item | Radiator double panel: 380/ea
-Scaffolding: 22/m2 | Site setup scaffold: 2800/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
-Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural engineer fees: 2200/Item | Snagging clearance: 650/Item
+Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
+Building control fees: 950/Item | Snagging clearance: 650/Item
 
 LOCATION FACTORS:
 London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)
 
 COST SANITY CHECKS — you MUST verify your total before responding:
-- Typical single storey extension (25-40m2): construction cost £50,000-£140,000
-- Typical two storey extension (40-70m2): construction cost £100,000-£250,000
-- Typical loft conversion: construction cost £40,000-£90,000
-- Cost per m2 for UK residential extensions: typically £2,000-£3,500/m2 (construction only, before contingency/OH&P/VAT)
-- If your total exceeds these ranges, STOP and re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates
-- No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
+- Typical single storey extension (25-40m2): construction cost £45,000-£100,000
+- Typical two storey extension (40-70m2): construction cost £80,000-£180,000
+- Typical loft conversion: construction cost £35,000-£75,000
+- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
+- AIM FOR THE MIDDLE of these ranges — most projects should fall in the lower half unless the spec clearly justifies higher
+- If your total is near the TOP of these ranges, STOP and re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates, unnecessary items
+- No single line item for a residential project should exceed £20,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
 - Do NOT double-count: if you break cavity wall into brick + insulation + blockwork + ties, do NOT also include a separate "cavity wall" lump sum
+- Do NOT double-count fit-outs: if you use kitchen_fitout_mid or bathroom_fitout_mid, do NOT also include individual items within those fit-outs
 - MEP rates above are PER CIRCUIT/ZONE, not per socket or fitting. A typical extension has 1-2 electrical circuits and 1 plumbing circuit
+- Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically requests them
 ${clientRateSection}
 ${clientInsightsSection}
 DOCUMENT GENERATION — CRITICAL RULES:
