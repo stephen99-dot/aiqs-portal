@@ -38,6 +38,7 @@ const BASE_RATES = {
   'roof_insulation_mineral_wool':      { rate: 82,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Roof insulation 100mm Kingspan Thermaroof TR27 between and over rafters' },
   'velux_skylight_780x980':            { rate: 1450, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux GGL 780x980mm centre-pivot roof window incl. flashings' },
   'velux_skylight_940x1178':           { rate: 1450, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux GGL 940x1178mm standard centre-pivot roof window incl. flashings' },
+  'velux_skylight_940x978':            { rate: 1250, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux GGL 940x978mm centre-pivot roof window incl. flashings' },
   'velux_balcony_940x2520':            { rate: 4200, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux CVP/GEL PKN19 940x2520mm balcony-style roof window incl. flashings' },
   // Cladding
   'timber_cladding_accoya':            { rate: 145,  unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Accoya/Siberian Larch vertical cladding factory pre-treated' },
@@ -582,6 +583,37 @@ function crossValidateQuantities(items) {
   const concItem = byKey['concrete_strip_foundation'];
   if (excItem && concItem && excItem.qty > concItem.qty * 2) {
     warnings.push(`Excavation volume (${excItem.qty}m³) is more than 2x concrete volume (${concItem.qty}m³). Check excavation dimensions.`);
+  }
+
+  // Electrical circuit quantity guard — extensions should have max 1-2 circuits per type
+  const lightingItem = byKey['lighting_installation'];
+  const powerItem = byKey['power_sockets_circuit'];
+  const firstFixElec = byKey['first_fix_electrical'];
+  const secondFixElec = byKey['second_fix_electrical'];
+  if (lightingItem && lightingItem.qty > 2) {
+    warnings.push(`Lighting circuits (${lightingItem.qty}) exceeds 2. Residential extensions typically need 1-2 lighting circuits max. These are priced PER CIRCUIT not per room.`);
+  }
+  if (powerItem && powerItem.qty > 2) {
+    warnings.push(`Power socket circuits (${powerItem.qty}) exceeds 2. Residential extensions typically need 1-2 power circuits max. These are priced PER CIRCUIT not per room.`);
+  }
+  if (firstFixElec && firstFixElec.qty > 2) {
+    warnings.push(`First fix electrical (${firstFixElec.qty}) exceeds 2. Typical extension needs 1-2 first fix items max.`);
+  }
+  if (secondFixElec && secondFixElec.qty > 2) {
+    warnings.push(`Second fix electrical (${secondFixElec.qty}) exceeds 2. Typical extension needs 1-2 second fix items max.`);
+  }
+
+  // Roof double-count guard — should not have BOTH attic trusses AND cut timber roof structure
+  const atticTrusses = byKey['attic_trusses_prefab'];
+  const cutTimberRoof = byKey['roof_structure_cut_timber'];
+  if (atticTrusses && cutTimberRoof) {
+    warnings.push(`Both attic_trusses_prefab AND roof_structure_cut_timber are included. These are mutually exclusive — use one or the other, not both.`);
+  }
+
+  // Staircase guard — flag if staircase included (may not be needed for side/rear extensions)
+  const staircaseItem = byKey['staircase'];
+  if (staircaseItem && floorArea && floorArea < 60) {
+    warnings.push(`New staircase (£${staircaseItem.qty * 4800}) included for a ${floorArea}m² extension. Verify this extension needs a new staircase — most side/rear extensions use the existing house staircase.`);
   }
 
   // Count windows and doors — flag if suspiciously few for the floor area
