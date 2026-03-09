@@ -166,28 +166,57 @@ QUANTITY SANITY CHECKS — before finalising, verify:
 - Typical single storey extension (25-40m²): construction cost should be £50,000-£140,000
 - Typical two storey extension (40-70m²): construction cost should be £100,000-£250,000
 - Typical loft conversion: construction cost should be £40,000-£90,000
+- Typical whole-house refurbishment (100-200m²): construction cost should be £100,000-£300,000
+- Typical heritage/listed building refurbishment: add 15-30% premium over standard refurbishment
+- Typical bathroom refurbishment: £5,000-£12,000 per bathroom
+- Typical kitchen refurbishment: £8,000-£20,000 per kitchen
 - If your total exceeds these ranges, re-check quantities for errors (wrong units, doubled areas, building-level instead of element-level)
 - No single line item for a residential project should exceed £25,000 unless it is genuinely a high-value item (e.g. bi-fold doors, kitchen, ASHP)
 - Scaffolding in m² should be elevation area (perimeter × height), NOT floor area × rate-per-m². Typical scaffolding for an extension is 50-200m²
 
+REFURBISHMENT-SPECIFIC RULES:
+- For refurbishment projects, ALWAYS include strip-out items before new work (you must strip out old finishes before applying new ones)
+- Break decoration into per-room items where possible (mist coat + emulsion walls + emulsion ceiling + gloss woodwork)
+- For heating replacements, include: strip out old system + new boiler + radiators (per room count) + pipework + controls
+- For electrical rewires, include: strip out old + rewire (per m² or per room) + consumer unit + testing certificate
+- Use provisional_sum with qty as the £ value (rate=1) for items that cannot be accurately priced yet
+- For heritage projects, use lime-based rates NOT cement-based (lime_mortar_repointing, lime_plaster_walls, lime_render_external)
+
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
+
+=== NEW BUILD / EXTENSION KEYS ===
 Substructure: excavation_strip_foundation, concrete_strip_foundation, blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g
 Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers, stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
-Roof: roof_structure_cut_timber, osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool, velux_skylight_780x980
+Roof (new): roof_structure_cut_timber, osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool, velux_skylight_780x980
 Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
-Windows/Doors: bifold_door_aluminium, composite_external_door, composite_external_door_std, upvc_window_standard, window_obscure_small, window_bespoke_narrow, motorised_rooflight, mastic_sealant_allowance
+Windows/Doors (new): bifold_door_aluminium, composite_external_door, composite_external_door_std, upvc_window_standard, window_obscure_small, window_bespoke_narrow, motorised_rooflight, mastic_sealant_allowance
+
+=== REFURBISHMENT / HERITAGE KEYS ===
+Strip-out: strip_out_general (per m²), strip_out_kitchen (per Nr), strip_out_bathroom (per Nr), strip_out_heating (per Item), strip_out_electrics (per Item), strip_out_flooring (per m²), strip_out_plaster (per m²), strip_out_ceiling (per m²), soft_strip_room (per Nr)
+Heritage masonry: lime_mortar_repointing (per m²), lime_plaster_walls (per m²), lime_render_external (per m²), stone_repair_indent (per Nr), stone_cleaning (per m²), brick_repair_stitch (per m), wall_tie_replacement (per Nr), dpc_injection (per m)
+Heritage roofing: natural_slate_roofing (per m²), clay_tile_roofing (per m²), lead_sheet_roofing (per m²), lead_flashing_code5 (per m), flat_roof_felt (per m²), flat_roof_single_ply (per m²), chimney_repair (per Nr), chimney_rebuild (per Nr)
+Heritage rainwater: cast_iron_guttering (per m), cast_iron_downpipe (per m), cast_iron_hopper (per Nr), aluminium_guttering (per m)
+Heritage windows: sash_window_overhaul (per Nr), sash_window_replacement (per Nr), secondary_glazing (per Nr), timber_casement_window (per Nr), timber_door_refurbish (per Nr), heritage_front_door (per Nr)
+Damp/timber: damp_proofing_tanking (per m²), timber_treatment_spray (per m²), timber_repair_splice (per Nr), joist_replacement (per m), floorboard_replacement (per m²), floor_sanding_lacquer (per m²)
+Heating: gas_boiler_combi (per Nr), gas_boiler_system (per Nr), oil_boiler (per Nr), hot_water_cylinder (per Nr), radiator_single_panel (per Nr), radiator_double_panel (per Nr), radiator_column_cast (per Nr), heating_pipework_first_fix (per m), heating_controls_upgrade (per Item), gas_supply_meter (per Item), air_source_heat_pump (per Nr), ufh_manifold_kitchen (per Item)
+Electrical: full_electrical_rewire (per m² floor area), electrical_rewire_room (per Nr), fire_alarm_system (per Item), intruder_alarm (per Item), tv_data_cabling (per Nr), external_lighting (per Nr), consumer_unit_upgrade, first_fix_electrical, second_fix_electrical, extract_fans, ev_charge_point_ducting, electrical_testing_certificate
+Decoration: mist_coat (per m²), emulsion_walls_2coat (per m²), emulsion_ceiling (per m²), gloss_woodwork (per m²), external_masonry_paint (per m²), wallpaper_strip_repaper (per m²), internal_decorations (per m² lump)
+Insulation (refurb): loft_insulation_topup (per m²), internal_wall_insulation (per m²), external_wall_insulation (per m²), floor_insulation_suspended (per m²)
+Asbestos: asbestos_survey (per Item), asbestos_removal (per Item)
+
+=== SHARED KEYS (both new-build & refurbishment) ===
 Internal: plasterboard_skim_walls, metal_stud_partition, wedi_wetroom_board, plasterboard_ceilings, screed_ufh_75mm, screed_sand_cement_75mm, internal_door_painted_solid_core, skirting_mdf_95mm, internal_decorations
-Floors: lvt_flooring_karndean, floor_tile_600x600, vinyl_safety_floor, shower_tray_900x900
-Drainage/Plumbing: svp_connection_110mm, foul_drainage_connection, rainwater_downpipe_relocation, rwp_outlet_hopper, first_fix_plumbing, second_fix_plumbing, ufh_manifold_kitchen
-Electrical: consumer_unit_upgrade, first_fix_electrical, second_fix_electrical, extract_fans, ev_charge_point_ducting, electrical_testing_certificate
-Structural: structural_steelwork (lump sum for UBs/SHS/base plates per structural package)
+Floors: lvt_flooring_karndean, floor_tile_600x600, vinyl_safety_floor, carpet_supply_fit, engineered_timber_floor, shower_tray_900x900
+Fit-outs: kitchen_fitout_mid (per Nr), kitchen_fitout_high (per Nr), bathroom_fitout_mid (per Nr), bathroom_fitout_high (per Nr), wc_cloakroom_fitout (per Nr), shower_room_fitout (per Nr)
+Drainage/Plumbing: svp_connection_110mm, foul_drainage_connection, rainwater_downpipe_relocation, rwp_outlet_hopper, first_fix_plumbing, second_fix_plumbing, drainage_new_run (per m), manhole_inspection_chamber (per Nr)
+Structural: structural_steelwork (lump sum per structural package)
 Floors: chipboard_flooring (22mm P5 chipboard to joists per m²)
 Stairs: staircase (complete timber staircase per Nr)
 Demolition: garage_demolition (demolish garage structure per Item)
-External: external_render (two-coat render system per m²)
-Heating: air_source_heat_pump (ASHP supply & install per Nr)
-Roof windows: velux_skylight_780x980 (780x980mm), custom_velux_940x1178 (940x1178mm), custom_velux_balcony (Cabrio balcony)
-Prelims: scaffolding (independent scaffold per m² of elevation), scaffolding_two_storey (two-storey scaffold per m²), site_setup_scaffold (site setup lump sum), skip_hire_8yd, site_welfare, building_control_fees, party_wall_surveyor, structural_engineer_fees, snagging_clearance
+External: external_render (per m²), paving_slabs (per m²), block_paving (per m²), tarmac_driveway (per m²), gravel_driveway (per m²), retaining_wall_block (per m²), garden_wall_brick (per m²), gate_timber (per Nr), gate_metal (per Nr), landscaping_allowance (per Item)
+Roof windows: velux_skylight_780x980, custom_velux_940x1178, custom_velux_balcony
+Provisional: provisional_sum (use qty as £ value, rate=1), architect_fees, planning_application, cdm_principal_designer, project_management
+Prelims: scaffolding (per m² elevation), scaffolding_two_storey, site_setup_scaffold (lump sum), skip_hire_8yd, site_welfare, building_control_fees, party_wall_surveyor, structural_engineer_fees, snagging_clearance
 
 IMPORTANT SCAFFOLDING NOTE: For scaffolding measured in m², use key "scaffolding" or "scaffolding_two_storey" (rate ~£22/m²). Only use "site_setup_scaffold" for the one-off site setup lump sum (1 Nr).
 
@@ -246,6 +275,8 @@ Respond with this JSON structure:
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
 FIXED UK RATES — use these exact figures, no deviations:
+
+NEW BUILD / EXTENSION RATES:
 Excavation strip foundation: 95/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
 Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
 Brick outer leaf facing: 95/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
@@ -253,17 +284,36 @@ Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850
 Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
 Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
 UPVC windows standard: 450/ea | Composite external door: 1850/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 4400/ea
+
+REFURBISHMENT / HERITAGE RATES:
+Strip-out: General strip out: 18/m2 | Strip out kitchen: 450/Nr | Strip out bathroom: 350/Nr | Strip out heating: 750/Item | Strip out electrics: 450/Item | Strip out flooring: 8/m2 | Strip out plaster: 12/m2 | Strip out ceiling: 10/m2 | Soft strip room: 350/Nr
+Heritage masonry: Lime mortar repointing: 85/m2 | Lime plaster walls: 48/m2 | Lime render external: 65/m2 | Stone repair indent: 125/Nr | Stone cleaning: 35/m2 | Crack stitching: 95/m | Wall tie replacement: 22/Nr | DPC injection: 45/m
+Heritage roofing: Natural slate: 95/m2 | Clay plain tiles: 78/m2 | Lead sheet Code 5: 175/m2 | Lead flashing Code 5: 110/m | Flat roof felt: 65/m2 | Single ply membrane: 85/m2 | Chimney repair: 2500/Nr | Chimney rebuild: 4500/Nr
+Heritage rainwater: Cast iron gutter: 85/m | Cast iron downpipe: 75/m | Cast iron hopper: 120/Nr | Aluminium gutter: 55/m
+Heritage windows: Sash overhaul: 650/Nr | Sash replacement: 1800/Nr | Secondary glazing: 450/Nr | Timber casement: 950/Nr | Door refurbish: 350/Nr | Heritage front door: 2200/Nr
+Damp/timber: Tanking slurry: 75/m2 | Timber treatment spray: 12/m2 | Timber splice repair: 185/Nr | Joist replacement: 45/m | Floorboard replacement: 35/m2 | Floor sanding: 28/m2
+Heating: Gas combi boiler: 3200/Nr | Gas system boiler: 3800/Nr | Oil boiler: 4500/Nr | Hot water cylinder: 1200/Nr | Single radiator: 280/Nr | Double radiator: 380/Nr | Column radiator: 650/Nr | Heating pipework: 35/m | Heating controls: 450/Item | Gas supply/meter: 850/Item
+Electrical: Full rewire: 85/m2 | Rewire per room: 850/Nr | Fire alarm LD2: 1200/Item | Intruder alarm: 1500/Item | TV/data point: 150/Nr | External lighting: 250/Nr
+Decoration: Mist coat: 4/m2 | Emulsion walls 2 coat: 6.50/m2 | Emulsion ceiling: 7/m2 | Gloss woodwork: 12/m2 | External masonry paint: 9/m2 | Wallpaper: 18/m2
+Insulation (refurb): Loft top-up: 12/m2 | Internal wall insulation: 55/m2 | External wall insulation: 95/m2 | Suspended floor insulation: 32/m2
+Asbestos: Survey: 450/Item | Licensed removal: 1500/Item
+
+SHARED RATES:
 Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
-Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
-Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
-Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
+Wall tiling ceramic: 55/m2 | Wall tiling large format: 72/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Carpet supply and fit: 28/m2 | Engineered timber: 55/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
+Internal decorations (lump): 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
+Kitchen mid: 8500/ea | Kitchen high: 15000/ea | Bathroom mid: 5500/ea | Bathroom high: 8500/ea | WC/cloakroom: 2800/ea | Shower room: 4200/ea
 First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
 Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
 Velux skylight 780x980: 1650/Nr | Structural steelwork supply fab install: 3500/Item
-Air source heat pump: 9500/Nr | UFH manifold: 1400/item | Radiator double panel: 380/ea
+Air source heat pump: 9500/Nr | UFH manifold: 1400/item
+External: Paving slabs: 65/m2 | Block paving: 85/m2 | Tarmac: 55/m2 | Gravel: 25/m2 | Garden wall brick: 145/m2 | Retaining wall: 185/m2 | Drainage run: 125/m | Inspection chamber: 650/Nr | Landscaping: 2500/Item
 Scaffolding: 22/m2 | Site setup scaffold: 2800/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
 Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural engineer fees: 2200/Item | Snagging clearance: 650/Item
-LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
+Professional fees: Architect: 5500/Item | Planning application: 462/Item | CDM principal designer: 1800/Item | Project management: 3500/Item
+Provisional sum: use qty as £ value with rate=1
+
+LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | South West +5% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
 YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
@@ -281,10 +331,14 @@ COST SANITY CHECKS — verify your total before responding:
 - Typical single storey extension (25-40m2): construction cost £50,000-£140,000
 - Typical two storey extension (40-70m2): construction cost £100,000-£250,000
 - Typical loft conversion: construction cost £40,000-£90,000
+- Typical whole-house refurbishment (100-200m2): construction cost £100,000-£300,000
+- Typical heritage/listed refurbishment: add 15-30% over standard refurbishment
 - Cost per m2 for UK residential extensions: typically £2,000-£3,500/m2 (construction only, before contingency/OH&P/VAT)
+- Cost per m2 for UK refurbishment: typically £800-£2,000/m2 depending on scope
 - If your total exceeds these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
 - No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
 - Do NOT double-count: if you break cavity wall into components, do NOT also include a separate cavity wall lump sum
+- For refurbishment: ALWAYS include strip-out BEFORE new work. Break decoration per room where scope allows
 
 Respond with this JSON structure:
 {
@@ -1056,8 +1110,8 @@ ${summary}`);
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     // Detect if text-only chat describes a construction project worth pricing
     // This triggers the deterministic pricing pipeline even without file uploads
-    const describesPricingProject = !hasFiles && !wantsDocumentsRaw && /\b(extension|loft\s*conv|storey|refurb|renovation|conversion|new\s*build|garage|kitchen\s*ext|rear\s*ext|side\s*ext|wrap.?around|dormer|basement|annex|granny\s*flat|garden\s*room|orangery|conservatory)\b/i.test(allConvText)
-      && /\b(\d+\s*m[2²]|\d+\s*sq|\d+m\s*x\s*\d+m|\d+\s*metre|\d+\s*meter|\d+\s*foot|\d+\s*ft|bedroom|bathroom|kitchen|open\s*plan)\b/i.test(allConvText);
+    const describesPricingProject = !hasFiles && !wantsDocumentsRaw && /\b(extension|loft\s*conv|storey|refurb|renovation|conversion|new\s*build|garage|kitchen\s*ext|rear\s*ext|side\s*ext|wrap.?around|dormer|basement|annex|granny\s*flat|garden\s*room|orangery|conservatory|strip\s*out|rewire|repoint|damp\s*proof|heritage|listed\s*build|period\s*property|victorian|edwardian|georgian|whole\s*house|internal\s*&?\s*external|complete\s*refurb|gut\s*renovat|full\s*renovat)\b/i.test(allConvText)
+      && /\b(\d+\s*m[2²]|\d+\s*sq|\d+m\s*x\s*\d+m|\d+\s*metre|\d+\s*meter|\d+\s*foot|\d+\s*ft|bedroom|bathroom|kitchen|open\s*plan|room|floor|storey|story)\b/i.test(allConvText);
     const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocumentsRaw; // files uploaded OR text describes a project = extract phase
     const sessionId = req.body.session_id || null;
     let wantsDocuments = wantsDocumentsRaw;
@@ -1123,8 +1177,11 @@ ${summary}`);
         const projectTypeGuess = /loft/i.test(allConvText) ? 'Loft Conversion' :
           /two.stor/i.test(allConvText) ? 'Two Storey Extension' :
           /single.stor|rear.ext|side.ext/i.test(allConvText) ? 'Single Storey Extension' :
-          /refurb|renovation/i.test(allConvText) ? 'Refurbishment' :
-          /conversion|flat|apartment/i.test(allConvText) ? 'Conversion' : 'General';
+          /heritage|listed\s*build|grade\s*(i|ii|1|2)/i.test(allConvText) ? 'Heritage Refurbishment' :
+          /whole\s*house|complete\s*refurb|full\s*renovat|gut\s*renovat|internal\s*&?\s*external/i.test(allConvText) ? 'Whole House Refurbishment' :
+          /refurb|renovation|strip\s*out|rewire|repoint/i.test(allConvText) ? 'Refurbishment' :
+          /conversion|flat|apartment/i.test(allConvText) ? 'Conversion' :
+          /new.build/i.test(allConvText) ? 'New Build' : 'General';
 
         // Load full memory context for sanity checking + rate guidance
         const locationGuess = (messages.concat([{role:'user',content:message||''}]))
