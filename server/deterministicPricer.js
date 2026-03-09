@@ -41,15 +41,21 @@ const BASE_RATES = {
   'ventilated_cavity_battens':         { rate: 9.5,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Ventilated cavity battens behind cladding' },
   'close_boarded_fence_1800':          { rate: 95,   unit: 'm',   labour: 0.55, materials: 0.45, description: '1.8m high close-boarded timber fence incl. posts rails gravel boards' },
   'external_decorations_stain':        { rate: 12,   unit: 'm²',  labour: 0.80, materials: 0.20, description: 'Microporous stain 2-coat system to all exposed timber' },
-  // Windows & doors
-  'bifold_door_aluminium':             { rate: 3800, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door thermally broken double glazed incl. cill reveals ironmongery' },
-  'composite_external_door':           { rate: 1500, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Timber/aluminium composite external door incl. frame threshold ironmongery' },
-  'composite_external_door_std':       { rate: 1450, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Timber/aluminium composite external door standard incl. frame ironmongery' },
-  'upvc_window_standard':              { rate: 450,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'UPVC window standard double glazed trickle vent opening light' },
-  'window_obscure_small':              { rate: 680,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Window obscure double glazed UPVC/aluminium trickle vent' },
-  'window_bespoke_narrow':             { rate: 850,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Narrow bespoke double glazed window trickle vent' },
+  // Windows & doors — SIZE-BASED PRICING
+  'bifold_door_aluminium_small':       { rate: 2500, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door small (up to 2m wide, 2 panels) thermally broken double glazed' },
+  'bifold_door_aluminium':             { rate: 3200, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door medium (2-3m wide, 3 panels) thermally broken double glazed' },
+  'bifold_door_aluminium_large':       { rate: 4500, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door large (3-4m+ wide, 4-5 panels) thermally broken double glazed' },
+  'composite_external_door':           { rate: 1250, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Composite external door solid timber/GRP incl. frame threshold ironmongery' },
+  'composite_external_door_std':       { rate: 1100, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Composite external door standard incl. frame ironmongery' },
+  'upvc_window_small':                 { rate: 350,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'UPVC window small (up to 600x900mm) double glazed trickle vent' },
+  'upvc_window_standard':              { rate: 450,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'UPVC window standard (up to 1200x1200mm) double glazed trickle vent' },
+  'upvc_window_large':                 { rate: 580,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'UPVC window large (over 1200mm wide) double glazed trickle vent' },
+  'window_obscure_small':              { rate: 380,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Window obscure small (up to 600x900mm) double glazed UPVC' },
+  'window_obscure_standard':           { rate: 520,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Window obscure standard double glazed UPVC/aluminium trickle vent' },
+  'window_bespoke_narrow':             { rate: 650,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Narrow bespoke double glazed window trickle vent' },
+  'vent_panel_obscure':                { rate: 380,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Vent panel obscure glazed fixed or opening' },
+  'mastic_sealant_allowance':          { rate: 12,   unit: 'm',   labour: 0.70, materials: 0.30, description: 'Mastic sealant around window/door frames inside and outside' },
   'motorised_rooflight':               { rate: 1200, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'UPVC motorised rooflight bespoke incl. surround' },
-  'mastic_sealant_allowance':          { rate: 350,  unit: 'Item',labour: 0.70, materials: 0.30, description: 'Mastic sealant DPC over window/door heads cavity closers at reveals' },
   // Internal finishes
   'plasterboard_skim_walls':           { rate: 32,   unit: 'm²',  labour: 0.65, materials: 0.35, description: '15mm plasterboard & 3mm skim to walls taped & filled' },
   'metal_stud_partition':              { rate: 58,   unit: 'm²',  labour: 0.65, materials: 0.35, description: 'Metal stud 70mm partition plasterboard both faces skim' },
@@ -57,7 +63,8 @@ const BASE_RATES = {
   'plasterboard_ceilings':             { rate: 28,   unit: 'm²',  labour: 0.65, materials: 0.35, description: '12.5mm plasterboard ceilings taped filled & skimmed' },
   'screed_ufh_75mm':                   { rate: 85,   unit: 'm²',  labour: 0.55, materials: 0.45, description: '75mm screed with UFH on 30mm perimeter insulation strip' },
   'screed_sand_cement_75mm':           { rate: 42,   unit: 'm²',  labour: 0.60, materials: 0.40, description: '75mm sand:cement screed finished to receive floor finish' },
-  'internal_door_painted_solid_core':  { rate: 420,  unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'Internal door 762x2040mm painted solid core incl. lining architrave ironmongery' },
+  'internal_door_painted_solid_core':  { rate: 380,  unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'Internal door 762x2040mm painted solid core incl. lining architrave ironmongery' },
+  'internal_door_glazed':              { rate: 480,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Internal glazed timber door incl. lining architrave ironmongery' },
   'skirting_mdf_95mm':                 { rate: 18,   unit: 'm',   labour: 0.65, materials: 0.35, description: 'Skirting boards 95mm MDF ogee profile incl. angles & fixings' },
   'internal_decorations':              { rate: 8.5,  unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Internal decorations walls & ceilings 2 coats emulsion woodwork gloss' },
   // Floor finishes
@@ -248,12 +255,18 @@ function estimateFallbackRate(item) {
     if (desc.includes('sash') && desc.includes('replac'))          return 1800;
     if (desc.includes('sash') && desc.includes('overhaul'))        return 650;
     if (desc.includes('secondary glaz'))                            return 450;
-    if (desc.includes('door') && desc.includes('bi-fold'))         return 4400;
+    if (desc.includes('door') && desc.includes('bi-fold') && (desc.includes('large') || desc.includes('4m') || desc.includes('5m'))) return 4500;
+    if (desc.includes('door') && desc.includes('bi-fold') && (desc.includes('small') || desc.includes('2 panel') || desc.includes('1.7') || desc.includes('1.8'))) return 2500;
+    if (desc.includes('door') && desc.includes('bi-fold'))         return 3200;
     if (desc.includes('door') && desc.includes('front') && desc.includes('heritage')) return 2200;
-    if (desc.includes('door') && desc.includes('external'))        return 1450;
+    if (desc.includes('door') && desc.includes('external'))        return 1250;
     if (desc.includes('door') && desc.includes('refurb'))          return 350;
-    if (desc.includes('door'))                                      return 420;
-    if (desc.includes('casement'))                                  return 950;
+    if (desc.includes('door') && desc.includes('glaz'))            return 480;
+    if (desc.includes('door'))                                      return 380;
+    if (desc.includes('vent panel') || desc.includes('vent light')) return 380;
+    if (desc.includes('casement'))                                  return 650;
+    if (desc.includes('window') && desc.includes('small'))         return 350;
+    if (desc.includes('window') && (desc.includes('large') || desc.includes('1800') || desc.includes('1500'))) return 580;
     if (desc.includes('window'))                                    return 450;
     if (desc.includes('steel') || desc.includes('structural'))     return 3500;
     if (desc.includes('cylinder') || desc.includes('tank'))        return 1200;
