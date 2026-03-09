@@ -242,19 +242,24 @@ Respond with this JSON structure:
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
 FIXED UK RATES — use these exact figures, no deviations:
-Strip foundations 600x250mm: 87/m | Concrete slab 100mm reinforced: 50/m2 | DPM 1200g: 10/m2 | Floor insulation 100mm Celotex: 21/m2
-Blockwork below DPC 440mm: 63/m2 | Blockwork inner leaf 100mm: 42/m2 | Brick outer leaf facing: 63/m2 | Cavity insulation 100mm: 14/m2
-Cavity wall ties: 4/m2 | Structural steel supply fab install: 3500/T | Concrete lintels: 35/ea | Steel lintels Catnic: 75/ea
-Roof structure cut timber: 95/m2 | Roof covering concrete tiles: 52/m2 | Breathable membrane: 5/m2 | Tile battens: 7/m2
-Lead flashings: 55/m | Fascia soffit uPVC: 33/m | Guttering uPVC: 22/m
-UPVC windows standard: 450/ea | Composite external door: 1100/ea | Bi-fold doors per leaf: 650/leaf
-Internal doors painted softwood: 330/ea | Plasterboard and skim: 22/m2 | Wall tiling ceramic: 55/m2 | Floor tiling porcelain: 65/m2
-Painting emulsion 2 coats: 15/m2 | Painting gloss woodwork: 12/m | LVT flooring: 62/m2 | Carpet mid range: 28/m2 | Screed 50mm: 22/m2
-Kitchen fit-out mid range: 11000/ea | Bathroom fit-out mid range: 6000/ea
-First fix electrical: 3500/item | Second fix electrical: 1500/item | First fix plumbing: 2800/item | Second fix plumbing: 1400/item
-Radiator double panel 600x1000: 230/ea | Render monocouche: 85/m2 | Scaffolding: 20/m2 | Skip hire 8yd: 330/ea
-Site setup welfare lump sum: 2000 | Project management allowance: 1500
-LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | Midlands +7% | North England -3% | Scotland +3% | Ireland +10% use EUR
+Excavation strip foundation: 95/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
+Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
+Brick outer leaf facing: 95/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
+Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
+Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
+Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
+UPVC windows standard: 450/ea | Composite external door: 1850/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 4400/ea
+Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
+Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
+Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
+Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
+First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
+Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
+Velux skylight 780x980: 1650/Nr | Structural steelwork supply fab install: 3500/Item
+Air source heat pump: 9500/Nr | UFH manifold: 1400/item | Radiator double panel: 380/ea
+Scaffolding: 22/m2 | Site setup scaffold: 2800/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
+Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural engineer fees: 2200/Item | Snagging clearance: 650/Item
+LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
 YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
@@ -267,6 +272,15 @@ CRITICAL REQUIREMENTS:
 5. Every item needs rate_source: "verified", "emerging", or "generic"
 6. Include prelims (scaffolding, skip hire, site setup, project management)
 7. The findings report must have detailed assumptions, exclusions, and recommendations
+
+COST SANITY CHECKS — verify your total before responding:
+- Typical single storey extension (25-40m2): construction cost £50,000-£140,000
+- Typical two storey extension (40-70m2): construction cost £100,000-£250,000
+- Typical loft conversion: construction cost £40,000-£90,000
+- Cost per m2 for UK residential extensions: typically £2,000-£3,500/m2 (construction only, before contingency/OH&P/VAT)
+- If your total exceeds these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
+- No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
+- Do NOT double-count: if you break cavity wall into components, do NOT also include a separate cavity wall lump sum
 
 Respond with this JSON structure:
 {
@@ -349,22 +363,37 @@ ELEMENTAL BREAKDOWN (use these sections):
 14. Electrical — consumer unit, circuits, sockets, switches, lighting, testing, certification
 15. External Works — drainage, paving, landscaping, fencing, retaining walls
 
-FIXED UK RATES (use these exact figures — no ranges):
-Strip foundations 600x250mm: 87/m | Concrete slab 100mm reinforced: 50/m2 | DPM 1200g: 10/m2 | Floor insulation 100mm Celotex: 21/m2
-Blockwork below DPC 440mm: 63/m2 | Blockwork inner leaf 100mm: 42/m2 | Brick outer leaf facing: 63/m2 | Cavity insulation 100mm: 14/m2
-Cavity wall ties: 4/m2 | Structural steel supply fab install: 3500/T | Concrete lintels: 35/ea | Steel lintels Catnic: 75/ea
-Roof structure cut timber: 95/m2 | Roof covering concrete tiles: 52/m2 | Breathable membrane: 5/m2 | Tile battens: 7/m2
-Lead flashings: 55/m | Fascia soffit uPVC: 33/m | Guttering uPVC: 22/m
-UPVC windows standard: 450/ea | Composite external door: 1100/ea | Bi-fold doors per leaf: 650/leaf
-Internal doors painted softwood: 330/ea | Plasterboard and skim: 22/m2 | Wall tiling ceramic: 55/m2 | Floor tiling porcelain: 65/m2
-Painting emulsion 2 coats: 15/m2 | Painting gloss woodwork: 12/m | LVT flooring: 62/m2 | Carpet mid range: 28/m2 | Screed 50mm: 22/m2
-Kitchen fit-out mid range: 11000/ea | Bathroom fit-out mid range: 6000/ea
-First fix electrical: 3500/item | Second fix electrical: 1500/item | First fix plumbing: 2800/item | Second fix plumbing: 1400/item
-Radiator double panel 600x1000: 230/ea | Render monocouche: 85/m2 | Scaffolding: 20/m2 | Skip hire 8yd: 330/ea
-Site setup welfare lump sum: 2000 | Project management allowance: 1500
+FIXED UK RATES (use these exact figures — no ranges, no deviations):
+Excavation strip foundation: 95/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
+Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
+Brick outer leaf facing: 95/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
+Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
+Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
+Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
+UPVC windows standard: 450/ea | Composite external door: 1850/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 4400/ea
+Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
+Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
+Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
+Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
+First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
+Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
+Velux skylight 780x980: 1650/Nr | Structural steelwork supply fab install: 3500/Item
+Air source heat pump: 9500/Nr | UFH manifold: 1400/item | Radiator double panel: 380/ea
+Scaffolding: 22/m2 | Site setup scaffold: 2800/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
+Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural engineer fees: 2200/Item | Snagging clearance: 650/Item
 
 LOCATION FACTORS:
-London/SE: +20% | Midlands: +7% | North England: -3% | Scotland: +3% | Ireland: +10% (use EUR)
+London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)
+
+COST SANITY CHECKS — you MUST verify your total before responding:
+- Typical single storey extension (25-40m2): construction cost £50,000-£140,000
+- Typical two storey extension (40-70m2): construction cost £100,000-£250,000
+- Typical loft conversion: construction cost £40,000-£90,000
+- Cost per m2 for UK residential extensions: typically £2,000-£3,500/m2 (construction only, before contingency/OH&P/VAT)
+- If your total exceeds these ranges, STOP and re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates
+- No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
+- Do NOT double-count: if you break cavity wall into brick + insulation + blockwork + ties, do NOT also include a separate "cavity wall" lump sum
+- MEP rates above are PER CIRCUIT/ZONE, not per socket or fitting. A typical extension has 1-2 electrical circuits and 1 plumbing circuit
 ${clientRateSection}
 ${clientInsightsSection}
 DOCUMENT GENERATION — CRITICAL RULES:
