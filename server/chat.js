@@ -155,42 +155,58 @@ MEASUREMENT RULES:
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
-6. Be accurate, not excessive — only include items that genuinely apply to the project scope. Do NOT pad the estimate with unnecessary items
+6. Be THOROUGH — you must cover EVERY trade. A missing trade is worse than an imprecise quantity. Check you have items for: demolition, substructure, walls, roof, windows, doors, stairs, internal partitions, plasterboard, floor finishes, decoration, kitchen/bathroom fit-outs, drainage, heating/plumbing, electrical, prelims
 7. Break down composite elements into individual components (e.g. cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
-9. Be CONSERVATIVE with quantities — it is better to be slightly under than over. Round quantities DOWN where uncertain
-10. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them in the scope
-11. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
+9. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them
+10. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
 
-WINDOW & DOOR MEASUREMENT — CRITICAL (most common source of errors):
+COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they apply to the project. If you are missing an entire section, your takeoff is WRONG:
+1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface
+2. SUBSTRUCTURE — foundations (excavate + concrete separately), ground slab, DPM, insulation, screed (all as separate items)
+3. EXTERNAL WALLS — measure the FULL perimeter × FULL height. For a two-storey extension this means ground floor + first floor heights. Include: outer leaf, cavity insulation, inner leaf/frame, wall ties, DPC, cavity closers at EVERY opening, lintels
+4. ROOF — For attic/room-in-roof: use attic_trusses_prefab (lump sum £8,000-£15,000 NOT per m²). For simple roofs: use roof_structure_cut_timber per m². Include: sarking, membrane, battens, tiles, lead flashings, fascia/soffit/guttering, insulation, Velux windows
+5. WINDOWS & DOORS — Every window and door as SEPARATE line item. Include ground floor AND upper floor windows. Internal doors. Bifold/patio doors. Mastic sealant in linear metres
+6. STAIRCASE — include staircase AND stair opening formation as separate items
+7. FIRST FLOOR STRUCTURE — joists, chipboard, acoustic insulation (for two-storey)
+8. INTERNAL PARTITIONS & LININGS — stud partitions, plasterboard to ALL new walls AND ceilings (measure every surface), fire-rated board where required (party wall, under stairs)
+9. FLOOR FINISHES — screed, LVT/carpet/tiles by room, underlay, threshold strips. Do NOT omit floor finishes
+10. DECORATION — mist coat + emulsion to ALL new plaster walls and ceilings, gloss to woodwork. Measure total wall area + ceiling area
+11. FIT-OUTS — kitchen and/or bathroom as appropriate. Include sanitaryware, tiling, shower screens
+12. DRAINAGE — foul drainage (per connection point), rainwater drainage (gutters already in roof — but downpipe connections), surface water if required
+13. HEATING/PLUMBING — extend existing heating (radiators, pipework), hot/cold water to new rooms, sanitary connections. Price as lump sums per zone NOT per fitting
+14. ELECTRICAL — consumer unit extension, new circuits (lighting, power, extract fans separately), smoke/heat detection. Price as lump sums per circuit NOT per socket
+15. PRELIMS — scaffolding (elevation m²), skip hire, building control fees
+
+WALL AREA MEASUREMENT — CRITICAL (most common source of under-counting):
+- External wall area = FULL perimeter × FULL height (ground floor to eaves)
+- For two-storey: that means perimeter × (ground floor height + first floor height) = typically perimeter × 5.0-5.4m
+- THEN deduct window and door openings
+- Measure BOTH the outer leaf AND inner leaf/frame (they have similar areas)
+- Do NOT just measure one floor — measure the full height
+
+ROOF MEASUREMENT — CRITICAL:
+- If the drawings show ATTIC TRUSSES or room-in-roof, use "attic_trusses_prefab" as a LUMP SUM (1 Nr). These cost £8,000-£15,000 depending on span. Do NOT price at £55/m² — that rate is for simple cut timber rafters only
+- Velux/roof windows: use the actual size from drawings. Standard centre-pivot ~£1,450, large or balcony types ~£3,800-£4,200
+
+WINDOW & DOOR MEASUREMENT — CRITICAL:
 - Read the DOOR SCHEDULE and WINDOW SCHEDULE from the drawings carefully
-- List EVERY door and window as a SEPARATE line item with qty 1 — NEVER group them (e.g. "2 Nr windows" is WRONG)
-- Include the schedule reference in the description: "D01 — Shower room door 630x1975mm" not just "Internal door"
-- Read the ACTUAL DIMENSIONS from the schedule and pick the correct size-based key:
-  * Bifold up to 2m wide (2 panels) → bifold_door_aluminium_small
-  * Bifold 2-3m wide (3 panels) → bifold_door_aluminium
-  * Bifold 3m+ wide (4-5 panels) → bifold_door_aluminium_large
-  * Window up to 600x900mm → upvc_window_small or window_obscure_small
-  * Window up to 1200x1200mm → upvc_window_standard
-  * Window over 1200mm → upvc_window_large
+- List EVERY door and window as a SEPARATE line item with qty 1 — NEVER group them
+- Include the schedule reference: "D01 — Shower room door 630x1975mm"
+- Pick the correct SIZE variant based on actual dimensions
 - Include vent panels, fanlights, sidelights as separate items if shown
-- Include mastic sealant measured in LINEAR METRES around all external window and door frames (count perimeter of each opening)
-${isTextOnly ? `12. CRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
-13. For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically
-14. Do NOT inflate quantities — a 30m² extension should produce a construction total of roughly £60,000-£100,000 before contingency/OH&P/VAT` : ''}
+- Include mastic sealant measured in LINEAR METRES around all external frames
+${isTextOnly ? `\nCRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
+For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically` : ''}
 
 QUANTITY SANITY CHECKS — before finalising, verify:
-- Typical single storey extension (25-40m²): construction cost should be £45,000-£100,000
-- Typical two storey extension (40-70m²): construction cost should be £80,000-£180,000
-- Typical loft conversion: construction cost should be £35,000-£75,000
-- Typical whole-house refurbishment (100-200m²): construction cost should be £80,000-£250,000
-- Typical heritage/listed building refurbishment: add 15-30% premium over standard refurbishment
-- Typical bathroom refurbishment: £4,000-£10,000 per bathroom
-- Typical kitchen refurbishment: £6,000-£15,000 per kitchen
-- If your total is near the TOP of these ranges, re-check quantities for errors (wrong units, doubled areas, building-level instead of element-level, duplicate items)
-- AIM FOR THE MIDDLE of these ranges unless the project scope clearly justifies higher — most projects should fall in the lower half
-- No single line item for a residential project should exceed £20,000 unless it is genuinely a high-value item (e.g. bi-fold doors, kitchen, ASHP)
-- Scaffolding in m² should be elevation area (perimeter × height), NOT floor area × rate-per-m². Typical scaffolding for an extension is 50-150m²
+- Typical single storey extension (25-40m²): construction cost should be £55,000-£120,000
+- Typical two storey extension (40-70m²): construction cost should be £100,000-£200,000
+- Typical loft conversion: construction cost should be £40,000-£90,000
+- Typical whole-house refurbishment (100-200m²): construction cost should be £100,000-£300,000
+- If your total is BELOW these ranges, you are almost certainly MISSING items. Go back and check the completeness checklist above
+- No single line item for a residential project should exceed £20,000 unless genuinely high-value (attic trusses, ASHP, large Velux package)
+- Scaffolding in m² should be elevation area (perimeter × scaffold height), NOT floor area
 
 REFURBISHMENT-SPECIFIC RULES:
 - For refurbishment projects, ALWAYS include strip-out items before new work (you must strip out old finishes before applying new ones)
@@ -203,9 +219,11 @@ REFURBISHMENT-SPECIFIC RULES:
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 
 === NEW BUILD / EXTENSION KEYS ===
-Substructure: excavation_strip_foundation, concrete_strip_foundation, blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g
-Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers, stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
-Roof (new): roof_structure_cut_timber, osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool, velux_skylight_780x980
+Demolition & Site Prep: garage_demolition (~£3,500 lump), strip_out_existing_roof (~£2,200 lump), demolish_existing_walls (~£2,800 lump), break_out_existing_slab (per m² ~£85), cut_back_existing_finishes (~£1,400 lump), existing_wall_interface (~£1,300 lump), asbestos_survey (~£450), asbestos_removal (~£1,500)
+Substructure: excavation_strip_foundation (per m³), concrete_strip_foundation (per m³), blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g, screed_sand_cement_75mm
+Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers (per m at EVERY opening), stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
+Roof: attic_trusses_prefab (LUMP SUM ~£12,000 for room-in-roof — use this NOT per-m² rates for attic trusses), roof_structure_cut_timber (per m² — simple roofs only), osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool
+Velux: velux_skylight_780x980 (~£1,450), velux_skylight_940x1178 (~£1,450), velux_balcony_940x2520 (~£4,200)
 Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
 Windows/Doors (new — SIZE MATTERS, pick the right size variant):
   Bi-fold doors: bifold_door_aluminium_small (up to 2m/2 panels ~£2500), bifold_door_aluminium (2-3m/3 panels ~£3200), bifold_door_aluminium_large (3m+/4-5 panels ~£4500)
@@ -237,14 +255,18 @@ Insulation (refurb): loft_insulation_topup (per m²), internal_wall_insulation (
 Asbestos: asbestos_survey (per Item), asbestos_removal (per Item)
 
 === SHARED KEYS (both new-build & refurbishment) ===
-Internal: plasterboard_skim_walls, metal_stud_partition, wedi_wetroom_board, plasterboard_ceilings, screed_ufh_75mm, screed_sand_cement_75mm, internal_door_painted_solid_core, skirting_mdf_95mm, internal_decorations
-Floors: lvt_flooring_karndean, floor_tile_600x600, vinyl_safety_floor, carpet_supply_fit, engineered_timber_floor, shower_tray_900x900
-Fit-outs: kitchen_fitout_mid (per Nr), kitchen_fitout_high (per Nr), bathroom_fitout_mid (per Nr), bathroom_fitout_high (per Nr), wc_cloakroom_fitout (per Nr), shower_room_fitout (per Nr)
-Drainage/Plumbing: svp_connection_110mm, foul_drainage_connection, rainwater_downpipe_relocation, rwp_outlet_hopper, first_fix_plumbing, second_fix_plumbing, drainage_new_run (per m), manhole_inspection_chamber (per Nr)
+Internal linings: plasterboard_skim_walls (per m² — measure ALL new wall surfaces), plasterboard_ceilings (per m² — measure ALL new ceiling areas), plasterboard_fire_rated (per m² — under stairs, party walls), plasterboard_moisture_resistant (per m² — utility, wet areas), metal_stud_partition, wedi_wetroom_board
+Finishes: screed_ufh_75mm, screed_sand_cement_75mm, skirting_mdf_95mm (per m — measure ALL room perimeters), internal_decorations (per m² — mist coat + emulsion ALL new walls and ceilings)
+Internal doors: internal_door_painted_solid_core (~£380 per Nr), internal_door_glazed (~£480 per Nr)
+Floor finishes: lvt_flooring_karndean (~£42/m²), lvt_flooring_luxury (~£55/m²), floor_tile_600x600 (~£65/m²), carpet_supply_fit (~£28/m²), engineered_timber_floor (~£55/m²), vinyl_safety_floor
+Ceramic tiles: ceramic_wall_tiles_ensuite (~£72/m² — measure tiled wall area in bathrooms), tile_wall_ceramic, tile_wall_large_format
+Fit-outs: kitchen_fitout_mid (per Nr ~£8,500), kitchen_fitout_high (per Nr ~£15,000), bathroom_fitout_mid (per Nr ~£5,500), bathroom_fitout_high (per Nr ~£8,500), wc_cloakroom_fitout (per Nr ~£2,800), shower_room_fitout (per Nr ~£4,200)
+Drainage: foul_drainage_110mm (~£2,800 per connection), rainwater_drainage (~£1,200 lump), surface_water_drainage (per m ~£65), svp_connection_110mm, foul_drainage_connection, drainage_new_run (per m), manhole_inspection_chamber (per Nr)
+Heating/Plumbing: heating_extension (~£4,200 lump — extend existing heating to new rooms), ensuite_sanitary_plumbing (~£3,800 lump), utility_plumbing (~£2,500 lump), first_fix_plumbing, second_fix_plumbing
+Electrical: consumer_unit_upgrade (~£3,200 — extend CU for new circuits), lighting_installation (~£1,800 per circuit), power_sockets_circuit (~£1,400 per circuit), smoke_heat_detection (~£850 lump), extract_fans (~£320 each), electrical_testing_certificate
 Structural: structural_steelwork (lump sum per structural package)
-Floors: chipboard_flooring (22mm P5 chipboard to joists per m²)
-Stairs: staircase (complete timber staircase per Nr)
-Demolition: garage_demolition (demolish garage structure per Item)
+First floor: chipboard_flooring (22mm P5 chipboard to joists per m²)
+Stairs: staircase (~£4,800 complete timber staircase), stair_opening_formation (~£750 — form opening in existing ceiling)
 External: external_render (per m²), paving_slabs (per m²), block_paving (per m²), tarmac_driveway (per m²), gravel_driveway (per m²), retaining_wall_block (per m²), garden_wall_brick (per m²), gate_timber (per Nr), gate_metal (per Nr), landscaping_allowance (per Item)
 Roof windows: velux_skylight_780x980, custom_velux_940x1178, custom_velux_balcony
 Provisional: provisional_sum (use qty as £ value, rate=1), architect_fees, planning_application, cdm_principal_designer, project_management
@@ -431,10 +453,11 @@ WHEN ANALYSING DRAWINGS — BE THOROUGH:
 11. NEVER double-count: if you include a fit-out lump sum (kitchen_fitout_mid, bathroom_fitout_mid) do NOT also price individual items within that fit-out. If you include first_fix_plumbing do NOT also price individual pipe runs
 
 DETAIL EXPECTATIONS — MINIMUM STANDARDS:
-- For a standard single-storey extension: expect 25-45 line items
-- For a two-storey extension or conversion: expect 40-70 line items
-- For a full refurb: expect 60-100 line items
-- Include enough detail to be professional, but do NOT pad the estimate with unnecessary items
+- For a standard single-storey extension: expect 35-55 line items covering ALL trades
+- For a two-storey extension or conversion: expect 50-80 line items covering ALL trades
+- For a full refurb: expect 70-120 line items covering ALL trades
+- Every trade must be represented — a missing section is WORSE than an imprecise quantity
+- If the project involves demolition, you MUST break it down (strip roof, demolish walls, break out slab — NOT just "demolition")
 - Break down composite items: e.g. "Cavity wall" should show blockwork inner leaf, insulation, cavity ties, brick outer leaf separately where relevant
 - Show working for key quantities: "External wall area: 2no. walls @ 5.0m x 2.7m = 27.0m2, less 2no. windows @ 1.2x1.5m = 3.6m2, net wall area = 23.4m2"
 
@@ -456,27 +479,19 @@ ELEMENTAL BREAKDOWN (use these sections):
 15. External Works — drainage, paving, landscaping, fencing, retaining walls
 
 FIXED UK RATES (use these exact figures — no ranges, no deviations):
-Excavation strip foundation: 75/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
-Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
-Brick outer leaf facing: 82/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
-Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
-Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
-Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
-Bi-fold door small (up to 2m, 2 panels): 2500/ea | Bi-fold door medium (2-3m, 3 panels): 3200/ea | Bi-fold door large (3m+, 4-5 panels): 4500/ea
-Composite external door: 1250/ea | Composite external door standard: 1100/ea
-UPVC window small (up to 600x900mm): 350/ea | UPVC windows standard (up to 1200mm): 450/ea | UPVC window large (over 1200mm): 580/ea
-Window obscure small: 380/ea | Window obscure standard: 520/ea | Window bespoke narrow: 650/ea | Vent panel obscure: 380/ea
-Internal doors painted solid core: 380/ea | Internal door glazed: 480/ea | Mastic sealant: 12/m
-Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
-Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
-Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
-Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
-First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
-Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
-Velux skylight 780x980: 1450/Nr | Structural steelwork supply fab install: 3500/Item
-Air source heat pump: 9500/Nr | UFH manifold: 1400/item | Radiator double panel: 380/ea
-Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
-Building control fees: 950/Item | Snagging clearance: 650/Item
+DEMOLITION: Strip out existing roof: 2200/Item | Demolish existing walls: 2800/Item | Break out existing slab: 85/m2 | Cut back existing finishes at interface: 1400/Item | Asbestos survey: 450/Item | Garage demolition: 3500/Item
+SUBSTRUCTURE: Excavation strip foundation: 75/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill: 14/m2 | Concrete slab 150mm: 78/m2 | PIR insulation 150mm: 28/m2 | DPM 1200g: 4.50/m2 | Screed sand cement 75mm: 42/m2
+WALLS: Brick outer leaf facing: 82/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr | Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Stud wall both faces: 65/m2 | External render: 55/m2
+ROOF: Attic trusses prefab (room-in-roof): 12000/Item LUMP SUM | Roof structure cut timber (simple): 55/m2 | OSB sarking: 22/m2 | Breather membrane: 8/m2 | Tile battens: 12/m2 | Roof tiles interlocking: 68/m2 | Fascia soffit guttering: 45/m | Lead flashing Code 4: 95/m | Roof insulation Thermaroof: 82/m2 | Velux 780x980: 1450/Nr | Velux 940x1178: 1450/Nr | Velux balcony 940x2520: 4200/Nr
+WINDOWS & DOORS: Bi-fold small (up to 2m): 2500/ea | Bi-fold medium (2-3m): 3200/ea | Bi-fold large (3m+): 4500/ea | UPVC bi-fold/patio: 2400/ea | Composite external door: 1250/ea | UPVC window small: 350/ea | UPVC window standard: 450/ea | UPVC window large: 580/ea | Window obscure small: 380/ea | Window obscure standard: 520/ea | Internal door solid core: 380/ea | Internal door glazed: 480/ea | Mastic sealant: 12/m
+INTERNAL: Plasterboard skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Fire-rated plasterboard: 52/m2 | Moisture-resistant plasterboard: 42/m2 | Metal stud partition: 58/m2 | Skirting MDF 95mm: 18/m
+FINISHES: Internal decorations: 8.50/m2 | LVT Karndean: 42/m2 | LVT luxury: 55/m2 | Floor tile 600x600: 65/m2 | Carpet supply fit: 28/m2 | Wall tiling ceramic: 55/m2 | Ceramic tiles en-suite: 72/m2 | Screed UFH 75mm: 85/m2
+FIT-OUTS: Kitchen mid: 8500/ea | Kitchen high: 15000/ea | Bathroom mid: 5500/ea | Bathroom high: 8500/ea
+STAIRCASE: Timber staircase complete: 4800/ea | Stair opening formation: 750/Item
+DRAINAGE: Foul drainage 110mm connection: 2800/Item | Rainwater drainage: 1200/Item | Surface water drainage: 65/m
+M&P: Heating extension to new rooms: 4200/Item | En-suite sanitary plumbing: 3800/Item | Utility plumbing: 2500/Item | First fix plumbing: 1250/Item | Second fix plumbing: 650/Item
+ELECTRICAL: Consumer unit extend: 3200/Item | Lighting circuit: 1800/Item | Power sockets circuit: 1400/Item | Smoke/heat/CO detection: 850/Item | Extract fans: 320/Nr
+PRELIMS: Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 320/ea | Building control fees: 950/Item | Structural engineer: 2200/Item
 
 LOCATION FACTORS:
 London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)
