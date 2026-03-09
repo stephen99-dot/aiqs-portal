@@ -165,9 +165,14 @@ COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they
 1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface
 2. SUBSTRUCTURE — foundations (excavate + concrete separately), ground slab, DPM, insulation, screed (all as separate items)
 3. EXTERNAL WALLS — measure the FULL perimeter × FULL height. For a two-storey extension this means ground floor + first floor heights. Include: outer leaf, cavity insulation, inner leaf/frame, wall ties, DPC, cavity closers at EVERY opening, lintels
-4. ROOF — For attic/room-in-roof: use attic_trusses_prefab (lump sum £8,000-£15,000 NOT per m²). For simple roofs: use roof_structure_cut_timber per m². Include: sarking, membrane, battens, tiles, lead flashings, fascia/soffit/guttering, insulation, Velux windows
+4. ROOF — Choose ONE structural option ONLY:
+    Option A (room-in-roof / attic trusses): use attic_trusses_prefab as 1× lump sum (£8,000-£15,000). Do NOT also include roof_structure_cut_timber — these are mutually exclusive.
+    Option B (simple roof / no habitable roof space): use roof_structure_cut_timber per m² of roof plan area × pitch factor (~1.15). Do NOT also include attic_trusses_prefab.
+    For a standard two-storey side extension with a simple pitched roof tying into the existing house, use Option B.
+    THEN add the finishing layers: sarking, membrane, battens, tiles, lead flashings, fascia/soffit/guttering, insulation, Velux windows.
+    ROOF COST CHECK: For a simple extension roof (20-50m² plan area), total roof section should be £5,000-£15,000. If it exceeds £20,000, recheck for double-counting structural items or excessive Velux quantities
 5. WINDOWS & DOORS — Every window and door as SEPARATE line item. Include ground floor AND upper floor windows. Internal doors. Bifold/patio doors. Mastic sealant in linear metres
-6. STAIRCASE — include staircase AND stair opening formation as separate items
+6. STAIRCASE — ONLY include staircase if the extension needs a NEW staircase (e.g. new loft conversion, new basement access). For a two-storey side/rear extension where the existing house staircase provides first floor access, do NOT include a new staircase — only include stair_opening_formation IF a new opening is needed through an existing wall/floor. If in doubt, OMIT the staircase and flag it
 7. FIRST FLOOR STRUCTURE — joists, chipboard, acoustic insulation (for two-storey)
 8. INTERNAL PARTITIONS & LININGS — stud partitions, plasterboard to ALL new walls AND ceilings (measure every surface), fire-rated board where required (party wall, under stairs)
 9. FLOOR FINISHES — screed, LVT/carpet/tiles by room, underlay, threshold strips. Do NOT omit floor finishes
@@ -175,7 +180,11 @@ COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they
 11. FIT-OUTS — kitchen and/or bathroom as appropriate. Include sanitaryware, tiling, shower screens
 12. DRAINAGE — foul drainage (per connection point), rainwater drainage (gutters already in roof — but downpipe connections), surface water if required
 13. HEATING/PLUMBING — extend existing heating (radiators, pipework), hot/cold water to new rooms, sanitary connections. Price as lump sums per zone NOT per fitting
-14. ELECTRICAL — consumer unit extension, new circuits (lighting, power, extract fans separately), smoke/heat detection. Price as lump sums per circuit NOT per socket
+14. ELECTRICAL — consumer unit extension, new circuits (lighting, power, extract fans separately), smoke/heat detection. Price as lump sums per circuit NOT per socket.
+    CRITICAL ELECTRICAL QUANTITY LIMITS: A typical single-storey extension needs 1× consumer_unit_upgrade, 1× lighting_installation, 1× power_sockets_circuit, 1× first_fix_electrical, 1× second_fix_electrical, 1× smoke_heat_detection = ~£9,400 total.
+    A two-storey extension needs at most 2× lighting (one per floor) and 2× power (one per floor) = ~£12,800 total.
+    If your electrical total exceeds £13,000 for any extension under 80m², STOP and recheck — you are almost certainly pricing per room instead of per circuit.
+    NEVER use qty > 2 for lighting_installation or power_sockets_circuit on a residential extension
 15. PRELIMS — scaffolding (elevation m²), skip hire, building control fees
 
 WALL AREA MEASUREMENT — CRITICAL (most common source of under-counting):
@@ -223,7 +232,7 @@ Demolition & Site Prep: garage_demolition (~£3,500 lump), strip_out_existing_ro
 Substructure: excavation_strip_foundation (per m³), concrete_strip_foundation (per m³), blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g, screed_sand_cement_75mm
 Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers (per m at EVERY opening), stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
 Roof: attic_trusses_prefab (LUMP SUM ~£12,000 for room-in-roof — use this NOT per-m² rates for attic trusses), roof_structure_cut_timber (per m² — simple roofs only), osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool
-Velux: velux_skylight_780x980 (~£1,450), velux_skylight_940x1178 (~£1,450), velux_balcony_940x2520 (~£4,200)
+Velux: velux_skylight_780x980 (~£1,450), velux_skylight_940x978 (~£1,250), velux_skylight_940x1178 (~£1,450), velux_balcony_940x2520 (~£4,200)
 Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
 Windows/Doors (new — SIZE MATTERS, pick the right size variant):
   Bi-fold doors: bifold_door_aluminium_small (up to 2m/2 panels ~£2500), bifold_door_aluminium (2-3m/3 panels ~£3200), bifold_door_aluminium_large (3m+/4-5 panels ~£4500)
