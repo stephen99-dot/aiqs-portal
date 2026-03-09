@@ -478,6 +478,124 @@ function crossValidateQuantities(items) {
     warnings.push(`Cavity wall ties (${tiesItem.qty} Nr) seems too high for ${brickItem.qty}m² of brickwork. Typical density is 2.5-4 ties per m².`);
   }
 
+  // Cavity insulation should match outer leaf area closely
+  const cavInsItem = byKey['cavity_insulation_eps'];
+  if (cavInsItem && brickItem) {
+    if (cavInsItem.qty > brickItem.qty * 1.15) {
+      warnings.push(`Cavity insulation (${cavInsItem.qty}m²) exceeds brick outer leaf (${brickItem.qty}m²) by >15%. These should match.`);
+    }
+  }
+
+  // Inner leaf blockwork should be similar to outer leaf (slightly less due to internal openings)
+  const blockItem = byKey['blockwork_inner_leaf_100mm'];
+  if (blockItem && brickItem) {
+    if (blockItem.qty > brickItem.qty * 1.2) {
+      warnings.push(`Inner leaf blockwork (${blockItem.qty}m²) exceeds outer leaf brick (${brickItem.qty}m²) by >20%. Inner leaf should be similar or less.`);
+    }
+  }
+
+  // DPM should match slab area
+  const dpmItem = byKey['dpm_1200g'];
+  const slabForDpm = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
+  if (dpmItem && slabForDpm && dpmItem.qty > slabForDpm.qty * 1.15) {
+    warnings.push(`DPM area (${dpmItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
+  }
+
+  // Insulation under slab should match slab area
+  const pirItem = byKey['pir_insulation_under_slab'];
+  if (pirItem && slabForDpm && pirItem.qty > slabForDpm.qty * 1.15) {
+    warnings.push(`PIR insulation (${pirItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
+  }
+
+  // Hardcore should match slab area
+  const hardcoreItem = byKey['hardcore_fill'];
+  if (hardcoreItem && slabForDpm && hardcoreItem.qty > slabForDpm.qty * 1.15) {
+    warnings.push(`Hardcore fill (${hardcoreItem.qty}m²) exceeds slab area (${slabForDpm.qty}m²) by >15%. These should be similar.`);
+  }
+
+  // Ceiling area should roughly match floor area
+  const ceilingItem = byKey['plasterboard_ceilings'];
+  if (ceilingItem && slabForDpm && ceilingItem.qty > slabForDpm.qty * 1.3) {
+    warnings.push(`Ceiling area (${ceilingItem.qty}m²) exceeds floor area (${slabForDpm.qty}m²) by >30%. These should be similar.`);
+  }
+
+  // Foundation excavation volume should be sensible: length × width × depth
+  // Typical strip: perimeter × 0.6m × 1.0m depth = perimeter × 0.6m³/m
+  const excItem = byKey['excavation_strip_foundation'];
+  const concItem = byKey['concrete_strip_foundation'];
+  if (excItem && concItem && excItem.qty > concItem.qty * 2) {
+    warnings.push(`Excavation volume (${excItem.qty}m³) is more than 2x concrete volume (${concItem.qty}m³). Check excavation dimensions.`);
+  }
+
+  // Count windows and doors — flag if suspiciously few for the floor area
+  if (floorArea && floorArea > 20) {
+    const windowDoorItems = items.filter(i =>
+      i.key && (i.key.includes('window') || i.key.includes('door') || i.key.includes('bifold') || i.key.includes('vent_panel'))
+    );
+    if (windowDoorItems.length < 3) {
+      warnings.push(`Only ${windowDoorItems.length} window/door items for ${floorArea}m² floor area. Most projects have at least 4-6 openings. Check the door/window schedule.`);
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Detect duplicate and overlapping items that would cause double-counting.
+ * Returns warnings for any items that conflict.
+ */
+function detectDuplicatesAndOverlaps(items) {
+  const warnings = [];
+
+  // Define conflict groups — if both sides present, it's a double-count
+  const conflictRules = [
+    { group: ['kitchen_fitout_mid', 'kitchen_fitout_high'], conflicts_with_desc: ['worktop', 'kitchen unit', 'kitchen cabinet', 'splashback', 'kitchen appliance'], label: 'kitchen fit-out' },
+    { group: ['bathroom_fitout_mid', 'bathroom_fitout_high'], conflicts_with_desc: ['sanitaryware', 'bath ', 'basin', 'wc ', 'toilet', 'shower valve', 'bathroom tap'], label: 'bathroom fit-out' },
+    { group: ['shower_room_fitout'], conflicts_with_desc: ['shower valve', 'shower screen', 'shower tray'], label: 'shower room fit-out' },
+    { group: ['wc_cloakroom_fitout'], conflicts_with_desc: ['cloakroom basin', 'cloakroom wc'], label: 'WC/cloakroom fit-out' },
+    { group: ['internal_decorations'], conflicts_with_keys: ['mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'], label: 'decoration' },
+    { group: ['full_electrical_rewire'], conflicts_with_keys: ['first_fix_electrical', 'second_fix_electrical', 'electrical_rewire_room'], label: 'electrical' },
+  ];
+
+  const presentKeys = new Set(items.map(i => i.key));
+  const allDescriptions = items.map(i => (i.description || '').toLowerCase());
+
+  for (const rule of conflictRules) {
+    const hasGroup = rule.group.some(k => presentKeys.has(k));
+    if (!hasGroup) continue;
+
+    if (rule.conflicts_with_keys) {
+      const conflicting = rule.conflicts_with_keys.filter(k => presentKeys.has(k));
+      if (conflicting.length > 0) {
+        warnings.push(`Possible double-count in ${rule.label}: has lump-sum fit-out AND individual items (${conflicting.join(', ')}). Remove one or the other.`);
+      }
+    }
+
+    if (rule.conflicts_with_desc) {
+      for (const desc of allDescriptions) {
+        const match = rule.conflicts_with_desc.find(d => desc.includes(d));
+        if (match) {
+          warnings.push(`Possible double-count in ${rule.label}: has lump-sum fit-out AND item containing "${match}". Check these are not overlapping.`);
+          break;
+        }
+      }
+    }
+  }
+
+  // Check for exact duplicate keys (same key appearing multiple times — usually wrong)
+  const keyCounts = {};
+  for (const item of items) {
+    keyCounts[item.key] = (keyCounts[item.key] || 0) + 1;
+  }
+  for (const [key, count] of Object.entries(keyCounts)) {
+    // Some keys legitimately appear multiple times (e.g. different rooms)
+    if (count > 1 && !['internal_door_painted_solid_core', 'internal_door_glazed', 'upvc_window_standard', 'upvc_window_small', 'upvc_window_large', 'window_obscure_small', 'window_obscure_standard', 'radiator_double_panel', 'radiator_single_panel', 'extract_fans', 'skip_hire_8yd', 'soft_strip_room', 'electrical_rewire_room'].includes(key)) {
+      if (count > 2) {
+        warnings.push(`Key "${key}" appears ${count} times — likely duplicated. Review and merge if same element.`);
+      }
+    }
+  }
+
   return warnings;
 }
 
@@ -506,7 +624,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   // Cross-validate quantities against each other before pricing
   const crossValidationWarnings = crossValidateQuantities(lockedItems);
+  // Detect duplicate/overlapping items
+  const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
   warnings.push(...crossValidationWarnings);
+  warnings.push(...duplicateWarnings);
 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
@@ -646,4 +767,8 @@ function toPricedSections(pricedResult) {
   }));
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, BASE_RATES, LOCATION_FACTORS };
+function getBaseRate(key) {
+  return BASE_RATES[key] || null;
+}
+
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS };

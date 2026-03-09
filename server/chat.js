@@ -150,17 +150,31 @@ ${isTextOnly ? '\nYou are working from a TEXT DESCRIPTION only (no drawings). Us
 You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
 MEASUREMENT RULES:
-1. ${isTextOnly ? 'Calculate quantities from the dimensions and scope described, using typical UK construction assumptions' : 'Measure every visible element from the drawings with explicit working shown'}
-2. Show your working in the "working" field: e.g. "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²"
+1. ${isTextOnly ? 'Calculate quantities from the dimensions and scope described, using typical UK construction assumptions' : 'Measure every visible element from the drawings with explicit working shown. Read ALL dimensions annotated on the drawings — do not estimate if a dimension is written on the drawing'}
+2. Show your working in the "working" field for EVERY item. Format: "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²". If you cannot show working, flag the item
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
-6. Be accurate, not excessive — a typical single storey extension should have 25-45 items. Only include items that genuinely apply to the project scope. Do NOT pad the estimate with unnecessary items just to hit a count
-7. Break down composite elements into their individual components (e.g. a cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m — NOT a single "cavity wall" lump sum)
+6. Be accurate, not excessive — only include items that genuinely apply to the project scope. Do NOT pad the estimate with unnecessary items
+7. Break down composite elements into individual components (e.g. cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
 9. Be CONSERVATIVE with quantities — it is better to be slightly under than over. Round quantities DOWN where uncertain
-10. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them in the scope. These are client-side costs, not construction costs
+10. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them in the scope
 11. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
+
+WINDOW & DOOR MEASUREMENT — CRITICAL (most common source of errors):
+- Read the DOOR SCHEDULE and WINDOW SCHEDULE from the drawings carefully
+- List EVERY door and window as a SEPARATE line item with qty 1 — NEVER group them (e.g. "2 Nr windows" is WRONG)
+- Include the schedule reference in the description: "D01 — Shower room door 630x1975mm" not just "Internal door"
+- Read the ACTUAL DIMENSIONS from the schedule and pick the correct size-based key:
+  * Bifold up to 2m wide (2 panels) → bifold_door_aluminium_small
+  * Bifold 2-3m wide (3 panels) → bifold_door_aluminium
+  * Bifold 3m+ wide (4-5 panels) → bifold_door_aluminium_large
+  * Window up to 600x900mm → upvc_window_small or window_obscure_small
+  * Window up to 1200x1200mm → upvc_window_standard
+  * Window over 1200mm → upvc_window_large
+- Include vent panels, fanlights, sidelights as separate items if shown
+- Include mastic sealant measured in LINEAR METRES around all external window and door frames (count perimeter of each opening)
 ${isTextOnly ? `12. CRITICAL: Use realistic UK dimensions where not stated — typical storey height 2.4m, typical foundation depth 1m, typical cavity wall 300mm total
 13. For a given floor area, calculate wall perimeters, roof areas (add pitch factor ~1.15 for standard pitch), foundation lengths etc. systematically
 14. Do NOT inflate quantities — a 30m² extension should produce a construction total of roughly £60,000-£100,000 before contingency/OH&P/VAT` : ''}
@@ -851,6 +865,92 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// TENDER RETURN FEEDBACK — feed real contractor prices back into rates
+// ═══════════════════════════════════════════════════════════════════════
+
+router.post('/tender-return', authMiddleware, (req, res) => {
+  try {
+    const { takeoff_id, items } = req.body;
+    // items = [{ key: 'brick_outer_leaf', actual_rate: 78, actual_qty: 45.5, notes: '' }, ...]
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array required with actual_rate values' });
+    }
+
+    const userId = req.user.id;
+    const results = [];
+
+    // Ensure tender_returns table exists
+    db.exec(`CREATE TABLE IF NOT EXISTS tender_returns (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      takeoff_id TEXT,
+      item_key TEXT NOT NULL,
+      estimated_rate REAL,
+      actual_rate REAL NOT NULL,
+      actual_qty REAL,
+      variance_pct REAL,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    const insertStmt = db.prepare(`INSERT INTO tender_returns (id, user_id, takeoff_id, item_key, estimated_rate, actual_rate, actual_qty, variance_pct, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const upsertRate = db.prepare(`INSERT INTO client_rate_library (id, user_id, item_key, value, source, confidence, is_active, created_at) VALUES (?, ?, ?, ?, 'tender_return', 0.95, 1, CURRENT_TIMESTAMP) ON CONFLICT(user_id, item_key) DO UPDATE SET value = ?, source = 'tender_return', confidence = 0.95, updated_at = CURRENT_TIMESTAMP`);
+
+    const tx = db.transaction(() => {
+      for (const item of items) {
+        if (!item.key || !item.actual_rate || item.actual_rate <= 0) continue;
+
+        // Get estimated rate from BASE_RATES for variance calculation
+        const baseRate = deterministicPricer ? (deterministicPricer.getBaseRate ? deterministicPricer.getBaseRate(item.key) : null) : null;
+        const estimatedRate = baseRate ? baseRate.rate : null;
+        const variancePct = estimatedRate ? Math.round(((item.actual_rate - estimatedRate) / estimatedRate) * 100 * 10) / 10 : null;
+
+        const trId = 'tr_' + uuidv4().slice(0, 8);
+        insertStmt.run(trId, userId, takeoff_id || null, item.key, estimatedRate, item.actual_rate, item.actual_qty || null, variancePct, item.notes || '');
+
+        // Update client rate library with the real tender price
+        const crId = 'cr_' + uuidv4().slice(0, 8);
+        upsertRate.run(crId, userId, item.key, item.actual_rate, item.actual_rate);
+
+        results.push({
+          key: item.key,
+          estimated: estimatedRate,
+          actual: item.actual_rate,
+          variance_pct: variancePct,
+          saved: true,
+        });
+
+        // Feed into memory engine if available
+        if (memoryEngine) {
+          try {
+            memoryEngine.recordRate(db, {
+              itemKey: item.key,
+              rate: item.actual_rate,
+              source: 'tender_return',
+              userId,
+              region: 'unknown',
+              projectType: 'unknown',
+            });
+          } catch(me) {}
+        }
+      }
+    });
+    tx();
+
+    console.log(`[Tender Return] ${results.length} actual rates saved for user ${userId}`);
+    res.json({
+      success: true,
+      rates_updated: results.length,
+      results,
+      message: `${results.length} tender return rates saved. These will be used for all future projects.`,
+    });
+  } catch(e) {
+    console.error('[Tender Return] Error:', e.message);
+    res.status(500).json({ error: 'Failed to save tender return' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // QUANTITY TAKEOFF ROUTES
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1256,6 +1356,182 @@ ${summary}`);
           const parsed = JSON.parse(cleaned);
 
           if (parsed.items && parsed.items.length > 0) {
+            // ═══════════════════════════════════════════════════════════
+            // STAGE 1b: VALIDATION PASS — second AI reviews first pass
+            // Like a senior QS checking a junior's takeoff
+            // ═══════════════════════════════════════════════════════════
+            console.log(`[Stage 1b] Validating ${parsed.items.length} extracted items...`);
+            try {
+              const validationPrompt = `You are a SENIOR UK Quantity Surveyor reviewing a junior QS's quantity takeoff. Your job is to find errors, not confirm — be critical.
+
+You will receive:
+1. The original drawings/project description (in the conversation)
+2. The extracted items JSON from the junior QS
+
+YOUR REVIEW CHECKLIST:
+1. QUANTITIES — Check every quantity against the working shown. Recalculate key measurements:
+   - Wall areas: perimeter × height minus openings (recalculate, don't trust the junior's figure)
+   - Floor areas: length × width (check against drawings if visible)
+   - Roof areas: floor area × pitch factor (1.0 flat, 1.15 standard pitch, 1.3 steep)
+   - Foundation lengths: check perimeter matches drawing dimensions
+   - Volume items: length × width × depth (check each dimension)
+
+2. MISSING ITEMS — Check against the drawings for items the junior missed:
+   - Every window on the window schedule must appear as a SEPARATE line item
+   - Every door on the door schedule must appear as a SEPARATE line item
+   - Vent panels, fanlights, sidelights — often missed
+   - Mastic sealant measured in linear metres around ALL external frames
+   - DPC, cavity closers, wall ties — often forgotten
+   - Lintels above every opening
+   - Threshold strips, silicone, architraves
+
+3. DOUBLE-COUNTING — Flag any overlaps:
+   - kitchen_fitout_mid AND separate worktop/unit items = double count
+   - bathroom_fitout_mid AND separate sanitaryware = double count
+   - first_fix_plumbing AND individual pipe runs = double count
+   - internal_decorations lump AND per-room decoration items = double count
+   - Scaffolding as m² AND site_setup_scaffold lump = check not overlapping
+
+4. WRONG SIZE VARIANTS — Check door/window sizes against drawings:
+   - A 1770mm wide bifold is SMALL (2 panels) — use bifold_door_aluminium_small
+   - A 500x900mm window is SMALL — use upvc_window_small or window_obscure_small
+   - A 1800x1350mm window is LARGE — use upvc_window_large
+
+5. ITEM GROUPING — Every window and door MUST be a separate line with qty 1
+   - "2 Nr windows" is WRONG — should be "1 Nr W01" and "1 Nr W02" as separate items
+   - Reference schedule numbers (D01, W01 etc.) in descriptions
+
+6. PRELIMS CHECK — Are prelims reasonable?
+   - Scaffolding m² should be elevation area (perimeter × scaffold height), NOT floor area
+   - Skip hire: 1-2 for small extension, 3-4 for large/refurb
+   - Do NOT include professional fees (architect, planning, CDM, PM) unless explicitly in scope
+
+Respond with ONLY valid JSON:
+{
+  "corrections": [
+    { "action": "adjust_qty", "item_index": 0, "new_qty": 15.5, "reason": "Wall area recalculated: 5.2m × 2.4m = 12.48m² not 18m²" },
+    { "action": "adjust_key", "item_index": 3, "new_key": "bifold_door_aluminium_small", "reason": "1770mm wide is a small 2-panel bifold" },
+    { "action": "remove", "item_index": 5, "reason": "Double-counts with bathroom_fitout_mid on item 12" },
+    { "action": "split", "item_index": 7, "new_items": [
+      { "key": "upvc_window_standard", "description": "W01 - UPVC window 1200x1350mm", "unit": "Nr", "qty": 1, "section": "6. Windows & External Doors", "working": "From window schedule W01" },
+      { "key": "upvc_window_small", "description": "W02 - UPVC window 500x900mm obscure", "unit": "Nr", "qty": 1, "section": "6. Windows & External Doors", "working": "From window schedule W02" }
+    ], "reason": "Grouped as 2Nr — must be separate items from schedule" },
+    { "action": "add", "item": { "key": "mastic_sealant_allowance", "description": "Mastic sealant to all external window and door frames", "unit": "m", "qty": 25, "section": "6. Windows & External Doors", "working": "6 openings × ~4m perimeter average = 24m, round to 25m" }, "reason": "Missing from takeoff — required around all external frames" }
+  ],
+  "validation_notes": "Brief summary of what you found and overall confidence",
+  "items_checked": ${parsed.items.length},
+  "errors_found": 3,
+  "confidence": "high|medium|low"
+}
+
+If the takeoff is accurate with no issues, return: { "corrections": [], "validation_notes": "Takeoff reviewed — no errors found", "items_checked": N, "errors_found": 0, "confidence": "high" }
+
+CRITICAL RULES:
+- item_index is 0-based matching the items array order
+- Only flag genuine errors with clear reasoning — do not nitpick
+- Recalculate quantities yourself, don't just trust the working shown
+- Be especially strict on windows and doors — check every single one against the schedule
+- If floor area is stated, verify construction total is reasonable (£1,800-£3,000/m² for extensions)`;
+
+              // Build the validation message with original drawings + extracted items
+              const validationContent = [
+                ...extractContent,
+                { type: 'text', text: `\n\nJUNIOR QS TAKEOFF TO REVIEW:\n\`\`\`json\n${JSON.stringify(parsed.items, null, 2)}\n\`\`\`\n\nProject type: ${parsed.project_type || 'Unknown'}\nLocation: ${parsed.location || 'Unknown'}\nFloor area: ${parsed.floor_area_m2 || 'Not stated'}m²\n\nReview every item critically. Check quantities, find missing items, flag double-counts.` }
+              ];
+
+              const validationResp = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST', headers: apiHeaders,
+                body: JSON.stringify({
+                  model: 'claude-sonnet-4-20250514',
+                  max_tokens: 6000,
+                  system: validationPrompt,
+                  messages: [{ role: 'user', content: validationContent }]
+                })
+              });
+
+              if (validationResp.ok) {
+                const valData = await validationResp.json();
+                const valRaw = valData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+                const valCleaned = valRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                const validation = JSON.parse(valCleaned);
+
+                // Log validation cost
+                const valTokensIn = valData.usage ? valData.usage.input_tokens : 0;
+                const valTokensOut = valData.usage ? valData.usage.output_tokens : 0;
+                const valCost = (valTokensIn * 0.000003) + (valTokensOut * 0.000015);
+                try {
+                  db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    'ul_' + uuidv4().slice(0, 8), userId, 'validation_pass', `Stage 1b: ${validation.errors_found || 0} corrections`, 'claude-sonnet-4-20250514', valTokensIn, valTokensOut, valCost
+                  );
+                } catch(ue) {}
+
+                if (validation.corrections && validation.corrections.length > 0) {
+                  console.log(`[Stage 1b] Found ${validation.corrections.length} corrections, applying...`);
+
+                  // Apply corrections in reverse index order to maintain indices
+                  const sortedCorrections = [...validation.corrections].sort((a, b) => (b.item_index || 0) - (a.item_index || 0));
+                  const addItems = []; // collect items to add at the end
+
+                  for (const corr of sortedCorrections) {
+                    const idx = corr.item_index;
+
+                    if (corr.action === 'adjust_qty' && idx >= 0 && idx < parsed.items.length && corr.new_qty > 0) {
+                      console.log(`  [1b] Adjust qty: item ${idx} "${parsed.items[idx].description}" ${parsed.items[idx].qty} → ${corr.new_qty} (${corr.reason})`);
+                      parsed.items[idx].qty = corr.new_qty;
+                      parsed.items[idx].validation_note = corr.reason;
+                    }
+                    else if (corr.action === 'adjust_key' && idx >= 0 && idx < parsed.items.length && corr.new_key) {
+                      console.log(`  [1b] Adjust key: item ${idx} "${parsed.items[idx].key}" → "${corr.new_key}" (${corr.reason})`);
+                      parsed.items[idx].key = corr.new_key;
+                      parsed.items[idx].validation_note = corr.reason;
+                    }
+                    else if (corr.action === 'remove' && idx >= 0 && idx < parsed.items.length) {
+                      console.log(`  [1b] Remove: item ${idx} "${parsed.items[idx].description}" (${corr.reason})`);
+                      parsed.items.splice(idx, 1);
+                    }
+                    else if (corr.action === 'split' && idx >= 0 && idx < parsed.items.length && corr.new_items && corr.new_items.length > 0) {
+                      console.log(`  [1b] Split: item ${idx} into ${corr.new_items.length} items (${corr.reason})`);
+                      parsed.items.splice(idx, 1, ...corr.new_items.map(ni => ({
+                        ...ni,
+                        flagged: false,
+                        flag_reason: '',
+                        assumption: '',
+                        validation_note: corr.reason,
+                      })));
+                    }
+                    else if (corr.action === 'add' && corr.item && corr.item.key && corr.item.qty > 0) {
+                      addItems.push({
+                        ...corr.item,
+                        flagged: false,
+                        flag_reason: '',
+                        assumption: '',
+                        validation_note: `Added by validation: ${corr.reason}`,
+                      });
+                    }
+                  }
+
+                  // Add new items
+                  if (addItems.length > 0) {
+                    console.log(`  [1b] Adding ${addItems.length} missing items`);
+                    parsed.items.push(...addItems);
+                  }
+
+                  console.log(`[Stage 1b] After corrections: ${parsed.items.length} items (was ${validation.items_checked})`);
+                }
+
+                // Store validation metadata for display
+                parsed._validation = {
+                  notes: validation.validation_notes || '',
+                  errors_found: validation.errors_found || 0,
+                  corrections_applied: (validation.corrections || []).length,
+                  confidence: validation.confidence || 'unknown',
+                };
+              }
+            } catch (valErr) {
+              console.error('[Stage 1b] Validation error (non-fatal):', valErr.message);
+              // Non-fatal — continue with unvalidated items
+            }
+
             // Sanity check against memory — flags anomalies before user sees totals
             const anomalies = parsed.anomalies || [];
             if (memoryEngine) {
@@ -1334,7 +1610,16 @@ ${summary}`);
 
             let quantitySummary = `Quantity takeoff complete for ${parsed.project_type || 'your project'} at ${parsed.location || 'the project address'}.\n\n`;
             quantitySummary += `${parsed.items.length} items extracted across ${priced.sections.length} sections.\n`;
-            quantitySummary += `Location: ${priced.location.label}\n\n`;
+            quantitySummary += `Location: ${priced.location.label}\n`;
+            if (parsed._validation) {
+              const v = parsed._validation;
+              if (v.corrections_applied > 0) {
+                quantitySummary += `QA Review: ${v.corrections_applied} corrections applied (${v.notes})\n`;
+              } else {
+                quantitySummary += `QA Review: Passed — no errors found\n`;
+              }
+            }
+            quantitySummary += '\n';
 
             // Section summaries with costs — flag any suspiciously large sections
             for (const sec of priced.sections) {
