@@ -193,7 +193,21 @@ Substructure: excavation_strip_foundation, concrete_strip_foundation, blockwork_
 Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers, stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
 Roof (new): roof_structure_cut_timber, osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool, velux_skylight_780x980
 Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
-Windows/Doors (new): bifold_door_aluminium, composite_external_door, composite_external_door_std, upvc_window_standard, window_obscure_small, window_bespoke_narrow, motorised_rooflight, mastic_sealant_allowance
+Windows/Doors (new — SIZE MATTERS, pick the right size variant):
+  Bi-fold doors: bifold_door_aluminium_small (up to 2m/2 panels ~£2500), bifold_door_aluminium (2-3m/3 panels ~£3200), bifold_door_aluminium_large (3m+/4-5 panels ~£4500)
+  External doors: composite_external_door (~£1250), composite_external_door_std (~£1100)
+  Windows: upvc_window_small (up to 600x900mm ~£350), upvc_window_standard (up to 1200x1200mm ~£450), upvc_window_large (over 1200mm ~£580)
+  Obscure: window_obscure_small (up to 600x900mm ~£380), window_obscure_standard (~£520)
+  Bespoke: window_bespoke_narrow (~£650)
+  Other: vent_panel_obscure (~£380), mastic_sealant_allowance (per m ~£12), motorised_rooflight (~£1200)
+  Internal doors: internal_door_painted_solid_core (~£380), internal_door_glazed (~£480)
+
+WINDOW & DOOR RULES — CRITICAL:
+- List EVERY window and door as a SEPARATE line item with qty 1. Do NOT group windows or doors together
+- Reference the door/window schedule numbers (D01, D02, W01, W02 etc.) in each item description
+- Choose the correct SIZE variant based on actual dimensions from the drawings
+- Include mastic sealant as a measured item in linear metres around all external frames
+- Include vent panels separately if shown on drawings
 
 === REFURBISHMENT / HERITAGE KEYS ===
 Strip-out: strip_out_general (per m²), strip_out_kitchen (per Nr), strip_out_bathroom (per Nr), strip_out_heating (per Item), strip_out_electrics (per Item), strip_out_flooring (per m²), strip_out_plaster (per m²), strip_out_ceiling (per m²), soft_strip_room (per Nr)
@@ -434,8 +448,12 @@ Brick outer leaf facing: 82/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner 
 Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
 Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
 Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
-UPVC windows standard: 450/ea | Composite external door: 1500/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 3800/ea
-Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
+Bi-fold door small (up to 2m, 2 panels): 2500/ea | Bi-fold door medium (2-3m, 3 panels): 3200/ea | Bi-fold door large (3m+, 4-5 panels): 4500/ea
+Composite external door: 1250/ea | Composite external door standard: 1100/ea
+UPVC window small (up to 600x900mm): 350/ea | UPVC windows standard (up to 1200mm): 450/ea | UPVC window large (over 1200mm): 580/ea
+Window obscure small: 380/ea | Window obscure standard: 520/ea | Window bespoke narrow: 650/ea | Vent panel obscure: 380/ea
+Internal doors painted solid core: 380/ea | Internal door glazed: 480/ea | Mastic sealant: 12/m
+Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
 Wall tiling ceramic: 55/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
 Internal decorations: 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
 Kitchen fit-out mid range: 8500/ea | Bathroom fit-out mid range: 5500/ea
