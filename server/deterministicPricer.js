@@ -95,6 +95,120 @@ const BASE_RATES = {
   'external_render':                   { rate: 55,   unit: 'm²', labour: 0.65, materials: 0.35, description: 'External render two-coat system on mesh carrier, smooth finish' },
   'custom_air_source_heat_pump':       { rate: 9500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Air source heat pump supply & install incl. controls & MCS certification' },
   'air_source_heat_pump':              { rate: 9500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Air source heat pump supply & install incl. controls & MCS certification' },
+  // ============================================
+  // REFURBISHMENT / HERITAGE / RENOVATION RATES
+  // ============================================
+  // Strip-out & demolition
+  'strip_out_general':                 { rate: 18,   unit: 'm²',  labour: 0.85, materials: 0.15, description: 'General strip out of existing finishes, fixtures and fittings' },
+  'strip_out_kitchen':                 { rate: 450,  unit: 'Nr',  labour: 0.90, materials: 0.10, description: 'Strip out existing kitchen units, worktops, appliances and dispose' },
+  'strip_out_bathroom':                { rate: 350,  unit: 'Nr',  labour: 0.90, materials: 0.10, description: 'Strip out existing bathroom suite, tiling and dispose' },
+  'strip_out_heating':                 { rate: 750,  unit: 'Item',labour: 0.90, materials: 0.10, description: 'Strip out existing heating system incl. boiler, radiators, pipework' },
+  'strip_out_electrics':               { rate: 450,  unit: 'Item',labour: 0.90, materials: 0.10, description: 'Strip out existing electrical installation and dispose' },
+  'strip_out_flooring':                { rate: 8,    unit: 'm²',  labour: 0.90, materials: 0.10, description: 'Strip out existing floor finishes and dispose' },
+  'strip_out_plaster':                 { rate: 12,   unit: 'm²',  labour: 0.90, materials: 0.10, description: 'Hack off existing plaster to walls, cart away' },
+  'strip_out_ceiling':                 { rate: 10,   unit: 'm²',  labour: 0.90, materials: 0.10, description: 'Strip out existing ceiling, lath and plaster or plasterboard' },
+  'soft_strip_room':                   { rate: 350,  unit: 'Nr',  labour: 0.90, materials: 0.10, description: 'Soft strip single room - remove fittings, fixtures, finishes' },
+  // Heritage masonry & lime
+  'lime_mortar_repointing':            { rate: 85,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Rake out and repoint in NHL 3.5 lime mortar to match existing' },
+  'lime_plaster_walls':                { rate: 48,   unit: 'm²',  labour: 0.65, materials: 0.35, description: 'Three-coat lime plaster to walls incl. scratch, float and set' },
+  'lime_render_external':              { rate: 65,   unit: 'm²',  labour: 0.65, materials: 0.35, description: 'External lime render two-coat NHL 3.5 on mesh carrier' },
+  'stone_repair_indent':               { rate: 125,  unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'Cut out and replace damaged stone indent to match existing' },
+  'stone_cleaning':                    { rate: 35,   unit: 'm²',  labour: 0.80, materials: 0.20, description: 'Stone cleaning DOFF/TORC system to remove soiling' },
+  'brick_repair_stitch':               { rate: 95,   unit: 'm',   labour: 0.70, materials: 0.30, description: 'Crack stitching to masonry walls with helical bars and resin' },
+  'wall_tie_replacement':              { rate: 22,   unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'Remedial wall tie replacement stainless steel mechanical fix' },
+  'dpc_injection':                     { rate: 45,   unit: 'm',   labour: 0.60, materials: 0.40, description: 'Injection DPC silicone-based with chemical injection' },
+  // Heritage roofing
+  'natural_slate_roofing':             { rate: 95,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Natural slate roofing Welsh/Spanish on battens incl. fittings' },
+  'clay_tile_roofing':                 { rate: 78,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Clay plain tile roofing on battens incl. ridge, hip, valley' },
+  'lead_sheet_roofing':                { rate: 175,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Lead sheet roofing Code 5 on boarding incl. rolls and drips' },
+  'lead_flashing_code5':               { rate: 110,  unit: 'm',   labour: 0.55, materials: 0.45, description: 'Lead flashing Code 5 at abutments lapped soaked and pointed' },
+  'flat_roof_felt':                    { rate: 65,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Built-up felt flat roof three-layer system on insulation' },
+  'flat_roof_single_ply':              { rate: 85,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Single-ply membrane flat roof (EPDM/TPO) on insulation' },
+  'chimney_repair':                    { rate: 2500, unit: 'Nr',  labour: 0.70, materials: 0.30, description: 'Chimney repair incl. repoint, reflash, replace pot and cowl' },
+  'chimney_rebuild':                   { rate: 4500, unit: 'Nr',  labour: 0.60, materials: 0.40, description: 'Rebuild chimney stack above roof level incl. pots flaunching' },
+  // Heritage rainwater goods
+  'cast_iron_guttering':               { rate: 85,   unit: 'm',   labour: 0.50, materials: 0.50, description: 'Cast iron half-round gutter 100mm with brackets and fittings' },
+  'cast_iron_downpipe':                { rate: 75,   unit: 'm',   labour: 0.50, materials: 0.50, description: 'Cast iron circular downpipe 75mm with holderbats and shoe' },
+  'cast_iron_hopper':                  { rate: 120,  unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Cast iron hopper head ogee pattern' },
+  'aluminium_guttering':               { rate: 55,   unit: 'm',   labour: 0.50, materials: 0.50, description: 'Aluminium half-round gutter with brackets and fittings' },
+  // Heritage windows & doors
+  'sash_window_overhaul':              { rate: 650,  unit: 'Nr',  labour: 0.80, materials: 0.20, description: 'Overhaul existing timber sash window draught strip rebalance' },
+  'sash_window_replacement':           { rate: 1800, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Purpose-made timber sliding sash window double glazed to match existing' },
+  'secondary_glazing':                 { rate: 450,  unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Secondary glazing unit hinged or sliding to existing window' },
+  'timber_casement_window':            { rate: 950,  unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Timber casement window purpose-made double glazed' },
+  'timber_door_refurbish':             { rate: 350,  unit: 'Nr',  labour: 0.80, materials: 0.20, description: 'Refurbish existing timber door strip back, repair, redecorate' },
+  'heritage_front_door':               { rate: 2200, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Purpose-made hardwood front door panelled with ironmongery' },
+  // Damp & timber treatment
+  'damp_proofing_tanking':             { rate: 75,   unit: 'm²',  labour: 0.60, materials: 0.40, description: 'Damp proofing tanking slurry system two-coat' },
+  'timber_treatment_spray':            { rate: 12,   unit: 'm²',  labour: 0.70, materials: 0.30, description: 'Timber treatment spray application insecticide/fungicide' },
+  'timber_repair_splice':              { rate: 185,  unit: 'Nr',  labour: 0.70, materials: 0.30, description: 'Timber splice repair to joist/rafter with resin and bolts' },
+  'joist_replacement':                 { rate: 45,   unit: 'm',   labour: 0.65, materials: 0.35, description: 'Replace timber floor joist treated softwood incl. hangers' },
+  'floorboard_replacement':            { rate: 35,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Replace floorboards 22mm T&G softwood to match existing' },
+  'floor_sanding_lacquer':             { rate: 28,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Sand and lacquer existing timber floor 3 coats polyurethane' },
+  // Heating (gas/oil systems, not just ASHP)
+  'gas_boiler_combi':                  { rate: 3200, unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Gas combi boiler supply and install incl. flue and controls' },
+  'gas_boiler_system':                 { rate: 3800, unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Gas system boiler supply and install incl. flue and controls' },
+  'oil_boiler':                        { rate: 4500, unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Oil-fired boiler supply and install incl. flue and controls' },
+  'hot_water_cylinder':                { rate: 1200, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Unvented hot water cylinder 210L supply and install' },
+  'radiator_single_panel':             { rate: 280,  unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Single panel radiator supply fix and connect' },
+  'radiator_double_panel':             { rate: 380,  unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Double panel radiator supply fix and connect' },
+  'radiator_column_cast':              { rate: 650,  unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Column/cast iron style radiator supply fix and connect' },
+  'heating_pipework_first_fix':        { rate: 35,   unit: 'm',   labour: 0.65, materials: 0.35, description: 'Heating pipework first fix copper 15-22mm incl. fittings' },
+  'heating_controls_upgrade':          { rate: 450,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Heating controls upgrade programmer room stat TRVs' },
+  'gas_supply_meter':                  { rate: 850,  unit: 'Item',labour: 0.60, materials: 0.40, description: 'Gas supply and meter relocation/new connection' },
+  // Full electrical rewire
+  'full_electrical_rewire':            { rate: 85,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Full electrical rewire per m² floor area incl. consumer unit' },
+  'electrical_rewire_room':            { rate: 850,  unit: 'Nr',  labour: 0.75, materials: 0.25, description: 'Electrical rewire single room ring main lighting and sockets' },
+  'fire_alarm_system':                 { rate: 1200, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Fire alarm system Grade D LD2 linked smoke and heat detectors' },
+  'intruder_alarm':                    { rate: 1500, unit: 'Item',labour: 0.55, materials: 0.45, description: 'Intruder alarm system wireless with keypad and sensors' },
+  'tv_data_cabling':                   { rate: 150,  unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'TV/data point cat6 cable with faceplate' },
+  'external_lighting':                 { rate: 250,  unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'External light fitting LED with PIR and wiring' },
+  // Decoration (refurbishment detail)
+  'mist_coat':                         { rate: 4,    unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Mist coat to new plaster (diluted emulsion)' },
+  'emulsion_walls_2coat':              { rate: 6.5,  unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Two coats emulsion paint to prepared walls' },
+  'emulsion_ceiling':                  { rate: 7,    unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Two coats emulsion paint to ceiling' },
+  'gloss_woodwork':                    { rate: 12,   unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Gloss paint to woodwork undercoat and gloss' },
+  'external_masonry_paint':            { rate: 9,    unit: 'm²',  labour: 0.80, materials: 0.20, description: 'External masonry paint two coats Sandtex or equal' },
+  'wallpaper_strip_repaper':           { rate: 18,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Strip existing wallpaper and repaper lining paper and finish' },
+  // Floor finishes (additional refurb types)
+  'carpet_supply_fit':                 { rate: 28,   unit: 'm²',  labour: 0.35, materials: 0.65, description: 'Carpet supply and fit 80/20 wool twist with underlay and grippers' },
+  'engineered_timber_floor':           { rate: 55,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Engineered timber flooring supply and lay incl. underlay and trims' },
+  'tile_wall_ceramic':                 { rate: 55,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Wall tiling ceramic 200x300mm incl. adhesive and grout' },
+  'tile_wall_large_format':            { rate: 72,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Wall tiling large format 600x300mm incl. adhesive and grout' },
+  // Bathroom & kitchen fit-out
+  'kitchen_fitout_mid':                { rate: 8500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Kitchen fit-out mid range units worktop splashback sink and tap' },
+  'kitchen_fitout_high':               { rate: 15000,unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Kitchen fit-out high spec units stone worktop integrated appliances' },
+  'bathroom_fitout_mid':               { rate: 5500, unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Bathroom fit-out mid range bath/shower WC basin tiling' },
+  'bathroom_fitout_high':              { rate: 8500, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Bathroom fit-out high spec sanitaryware brassware tiling' },
+  'wc_cloakroom_fitout':               { rate: 2800, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'WC/cloakroom fit-out WC basin tiling vanity' },
+  'shower_room_fitout':                { rate: 4200, unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Shower room fit-out shower enclosure tray basin WC tiling' },
+  // External works
+  'paving_slabs':                      { rate: 65,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Concrete paving slabs 600x600mm on mortar bed' },
+  'block_paving':                      { rate: 85,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Block paving 200x100mm on sand bed incl. edging' },
+  'tarmac_driveway':                   { rate: 55,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Tarmac driveway base and wearing course on sub-base' },
+  'gravel_driveway':                   { rate: 25,   unit: 'm²',  labour: 0.45, materials: 0.55, description: 'Gravel driveway 50mm deep on geotextile membrane' },
+  'retaining_wall_block':              { rate: 185,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Retaining wall concrete block 200mm reinforced' },
+  'garden_wall_brick':                 { rate: 145,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Garden wall one brick thick in facing bricks' },
+  'gate_timber':                       { rate: 450,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Timber gate hardwood with ironmongery and posts' },
+  'gate_metal':                        { rate: 650,  unit: 'Nr',  labour: 0.45, materials: 0.55, description: 'Metal gate galvanised and painted with posts' },
+  'landscaping_allowance':             { rate: 2500, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Landscaping allowance turf planting beds and borders' },
+  'drainage_new_run':                  { rate: 125,  unit: 'm',   labour: 0.65, materials: 0.35, description: 'New drainage run 110mm UPVC to fall incl. bed and surround' },
+  'manhole_inspection_chamber':        { rate: 650,  unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'Inspection chamber 450mm dia polypropylene to invert' },
+  // Asbestos
+  'asbestos_survey':                   { rate: 450,  unit: 'Item',labour: 1.00, materials: 0.00, description: 'Asbestos management survey (R&D survey)' },
+  'asbestos_removal':                  { rate: 1500, unit: 'Item',labour: 0.80, materials: 0.20, description: 'Licensed asbestos removal and disposal (allowance per location)' },
+  // Insulation (refurbishment)
+  'loft_insulation_topup':             { rate: 12,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Top up loft insulation to 300mm mineral wool' },
+  'internal_wall_insulation':          { rate: 55,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Internal wall insulation 50mm PIR with plasterboard laminate' },
+  'external_wall_insulation':          { rate: 95,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'External wall insulation EWI system 90mm with render finish' },
+  'floor_insulation_suspended':        { rate: 32,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Insulation to suspended timber floor mineral wool between joists' },
+  // Provisional sums & professional fees
+  'provisional_sum':                   { rate: 1,    unit: 'Item',labour: 0.00, materials: 1.00, description: 'Provisional sum' },
+  'architect_fees':                    { rate: 5500, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Architect fees design and contract administration' },
+  'planning_application':              { rate: 462,  unit: 'Item',labour: 0.00, materials: 1.00, description: 'Planning application fee (householder)' },
+  'cdm_principal_designer':            { rate: 1800, unit: 'Item',labour: 0.00, materials: 1.00, description: 'CDM Principal Designer fee' },
+  'project_management':                { rate: 3500, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Project management fee' },
+
   // Prelims
   'scaffolding':                       { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
   'scaffolding_two_storey':            { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
@@ -120,51 +234,121 @@ function estimateFallbackRate(item) {
   if (unit === 'item' || unit === 'nr' || unit === 'no' || unit === 'nr.' || unit === 'each') {
     if (desc.includes('demolish') || desc.includes('demolition'))  return 3500;
     if (desc.includes('heat pump') || desc.includes('ashp'))       return 9500;
-    if (desc.includes('boiler'))                                    return 4500;
+    if (desc.includes('boiler') && desc.includes('oil'))           return 4500;
+    if (desc.includes('boiler') && desc.includes('system'))        return 3800;
+    if (desc.includes('boiler'))                                    return 3200;
     if (desc.includes('staircase') || desc.includes('stair'))      return 3200;
+    if (desc.includes('kitchen') && desc.includes('high'))         return 15000;
     if (desc.includes('kitchen'))                                   return 8500;
+    if (desc.includes('bathroom') && desc.includes('high'))        return 8500;
     if (desc.includes('bathroom') || desc.includes('en-suite') || desc.includes('ensuite')) return 5500;
+    if (desc.includes('shower room') || desc.includes('shower-room')) return 4200;
+    if (desc.includes('cloakroom') || desc.includes('wc room'))    return 2800;
     if (desc.includes('velux') || desc.includes('rooflight') || desc.includes('skylight')) return 1850;
+    if (desc.includes('sash') && desc.includes('replac'))          return 1800;
+    if (desc.includes('sash') && desc.includes('overhaul'))        return 650;
+    if (desc.includes('secondary glaz'))                            return 450;
     if (desc.includes('door') && desc.includes('bi-fold'))         return 4400;
+    if (desc.includes('door') && desc.includes('front') && desc.includes('heritage')) return 2200;
     if (desc.includes('door') && desc.includes('external'))        return 1450;
+    if (desc.includes('door') && desc.includes('refurb'))          return 350;
     if (desc.includes('door'))                                      return 420;
+    if (desc.includes('casement'))                                  return 950;
     if (desc.includes('window'))                                    return 450;
     if (desc.includes('steel') || desc.includes('structural'))     return 3500;
     if (desc.includes('cylinder') || desc.includes('tank'))        return 1200;
+    if (desc.includes('chimney') && desc.includes('rebuild'))      return 4500;
+    if (desc.includes('chimney'))                                   return 2500;
+    if (desc.includes('radiator') && desc.includes('column'))      return 650;
     if (desc.includes('radiator'))                                  return 380;
     if (desc.includes('sanitaryware') || desc.includes('wc') || desc.includes('toilet')) return 650;
     if (desc.includes('shower'))                                    return 580;
+    if (desc.includes('strip out') && desc.includes('heat'))       return 750;
+    if (desc.includes('strip out') && desc.includes('kitchen'))    return 450;
+    if (desc.includes('strip out') && desc.includes('bath'))       return 350;
+    if (desc.includes('strip out') && desc.includes('electr'))     return 450;
+    if (desc.includes('strip out') || desc.includes('soft strip')) return 350;
+    if (desc.includes('asbestos') && desc.includes('remov'))       return 1500;
+    if (desc.includes('asbestos') && desc.includes('survey'))      return 450;
+    if (desc.includes('fire alarm'))                                return 1200;
+    if (desc.includes('intruder') || desc.includes('burglar'))     return 1500;
+    if (desc.includes('heating control'))                           return 450;
+    if (desc.includes('gas supply') || desc.includes('meter'))     return 850;
+    if (desc.includes('manhole') || desc.includes('inspection chamber')) return 650;
+    if (desc.includes('gate') && desc.includes('metal'))           return 650;
+    if (desc.includes('gate'))                                      return 450;
+    if (desc.includes('landscap'))                                  return 2500;
+    if (desc.includes('provisional'))                               return 1;
     if (desc.includes('sundries') || desc.includes('allowance'))   return 500;
     return 750; // generic lump sum fallback
   }
 
   // Per m² items
   if (unit === 'm²' || unit === 'm2' || unit === 'sqm') {
+    if (desc.includes('strip out') || desc.includes('hack off'))   return 15;
+    if (desc.includes('lime render'))                               return 65;
+    if (desc.includes('lime plaster'))                              return 48;
+    if (desc.includes('lime') && desc.includes('repoint'))         return 85;
     if (desc.includes('render'))                                    return 55;
     if (desc.includes('cladding'))                                  return 145;
+    if (desc.includes('external wall insulation') || desc.includes('ewi')) return 95;
+    if (desc.includes('internal wall insulation'))                  return 55;
+    if (desc.includes('loft insulation') || desc.includes('top up')) return 12;
     if (desc.includes('insulation'))                                return 28;
     if (desc.includes('plasterboard') || desc.includes('skim'))    return 32;
+    if (desc.includes('damp') || desc.includes('tanking'))         return 75;
+    if (desc.includes('wall tile') || desc.includes('wall tiling')) return 55;
     if (desc.includes('tile') || desc.includes('tiling'))          return 65;
     if (desc.includes('screed'))                                    return 42;
     if (desc.includes('floor') && desc.includes('chip'))           return 28;
+    if (desc.includes('floor') && desc.includes('sand'))           return 28;
+    if (desc.includes('floor') && desc.includes('board'))          return 35;
+    if (desc.includes('carpet'))                                    return 28;
+    if (desc.includes('engineered') && desc.includes('timber'))    return 55;
     if (desc.includes('floor'))                                     return 42;
+    if (desc.includes('lead') && desc.includes('roof'))            return 175;
+    if (desc.includes('natural slate') || desc.includes('welsh slate')) return 95;
+    if (desc.includes('clay tile'))                                 return 78;
+    if (desc.includes('single ply') || desc.includes('epdm'))     return 85;
+    if (desc.includes('felt') && desc.includes('roof'))            return 65;
     if (desc.includes('roof'))                                      return 55;
+    if (desc.includes('stone clean'))                               return 35;
     if (desc.includes('brick'))                                     return 95;
+    if (desc.includes('block') && desc.includes('pav'))            return 85;
     if (desc.includes('block'))                                     return 42;
     if (desc.includes('scaffold'))                                  return 22;
     if (desc.includes('membrane') || desc.includes('dpm'))         return 4.5;
     if (desc.includes('concrete') || desc.includes('slab'))        return 78;
-    if (desc.includes('paving') || desc.includes('patio'))         return 85;
+    if (desc.includes('paving') || desc.includes('patio'))         return 65;
+    if (desc.includes('tarmac'))                                    return 55;
+    if (desc.includes('gravel'))                                    return 25;
+    if (desc.includes('mist coat'))                                 return 4;
+    if (desc.includes('emulsion'))                                  return 6.5;
+    if (desc.includes('gloss'))                                     return 12;
+    if (desc.includes('masonry paint'))                             return 9;
+    if (desc.includes('wallpaper'))                                 return 18;
     if (desc.includes('decoration') || desc.includes('paint'))     return 8.5;
+    if (desc.includes('timber treat'))                              return 12;
+    if (desc.includes('rewire'))                                    return 85;
+    if (desc.includes('retaining'))                                 return 185;
+    if (desc.includes('garden wall'))                               return 145;
     return 45; // generic m² fallback
   }
 
   // Per linear metre
   if (unit === 'm' || unit === 'lm' || unit === 'm¹') {
     if (desc.includes('skirting'))                                   return 18;
+    if (desc.includes('cast iron') && desc.includes('gutter'))     return 85;
+    if (desc.includes('cast iron') && desc.includes('down'))       return 75;
+    if (desc.includes('aluminium') && desc.includes('gutter'))     return 55;
     if (desc.includes('gutter') || desc.includes('fascia'))        return 48;
+    if (desc.includes('lead flash') && desc.includes('code 5'))    return 110;
     if (desc.includes('flashing') || desc.includes('lead'))        return 95;
-    if (desc.includes('drainage') || desc.includes('pipe'))        return 145;
+    if (desc.includes('crack stitch') || desc.includes('helical')) return 95;
+    if (desc.includes('dpc') && desc.includes('inject'))           return 45;
+    if (desc.includes('drainage') || desc.includes('pipe'))        return 125;
+    if (desc.includes('joist'))                                     return 45;
+    if (desc.includes('heating') && desc.includes('pipe'))         return 35;
     if (desc.includes('fence') || desc.includes('fencing'))        return 95;
     if (desc.includes('kerb') || desc.includes('edging'))          return 35;
     if (desc.includes('architrave') || desc.includes('dado'))      return 14;
@@ -221,6 +405,70 @@ function detectLocationFactor(locationStr) {
 }
 
 /**
+ * Cross-validate quantities against each other to catch impossible values.
+ * Returns warnings for any quantities that don't make sense relative to others.
+ */
+function crossValidateQuantities(items) {
+  const warnings = [];
+  const byKey = {};
+  for (const item of items) {
+    byKey[item.key] = item;
+  }
+
+  // Get total floor area from concrete slab items
+  const slabItem = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
+  const floorArea = slabItem ? slabItem.qty : null;
+
+  if (floorArea && floorArea > 0) {
+    // Wall area should be roughly perimeter × height. For a square building of area A,
+    // perimeter ≈ 4 × sqrt(A), height ≈ 2.4m, so wall area ≈ 9.6 × sqrt(A)
+    // For 30m² floor → ~53m² wall area. Allow 2x for internal walls = ~106m²
+    const expectedPerimeter = 4 * Math.sqrt(floorArea);
+    const maxWallArea = expectedPerimeter * 2.7 * 3; // 3x for generous margin (internal walls, multiple rooms)
+
+    const brickArea = byKey['brick_outer_leaf'] ? byKey['brick_outer_leaf'].qty : 0;
+    if (brickArea > maxWallArea) {
+      warnings.push(`Brick outer leaf area (${brickArea}m²) seems too high for ${floorArea}m² floor area. Expected max ~${Math.round(maxWallArea)}m² (perimeter × height). Check for doubled quantities.`);
+    }
+
+    const blockArea = byKey['blockwork_inner_leaf_100mm'] ? byKey['blockwork_inner_leaf_100mm'].qty : 0;
+    if (blockArea > maxWallArea) {
+      warnings.push(`Blockwork inner leaf area (${blockArea}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+    }
+
+    // Roof area should be roughly floor area × pitch factor (1.1-1.3 typical)
+    const roofItem = byKey['roof_structure_cut_timber'];
+    if (roofItem && roofItem.qty > floorArea * 2) {
+      warnings.push(`Roof structure area (${roofItem.qty}m²) is more than 2x floor area (${floorArea}m²). Check for error — typical pitch factor is 1.1-1.3x.`);
+    }
+
+    // Scaffolding should be elevation area (perimeter × height), NOT floor area
+    const scaffItem = byKey['scaffolding'] || byKey['scaffolding_two_storey'];
+    if (scaffItem) {
+      const expectedScaff = expectedPerimeter * 3; // ~3m height for single storey with scaffold
+      if (scaffItem.qty > expectedScaff * 3) {
+        warnings.push(`Scaffolding area (${scaffItem.qty}m²) seems too high. Expected ~${Math.round(expectedScaff)}m² (perimeter × height). Make sure this is elevation area, not floor area.`);
+      }
+    }
+
+    // Plasterboard walls shouldn't be more than total internal+external wall area
+    const plasterWalls = byKey['plasterboard_skim_walls'];
+    if (plasterWalls && plasterWalls.qty > maxWallArea * 1.5) {
+      warnings.push(`Plasterboard wall area (${plasterWalls.qty}m²) seems too high for ${floorArea}m² floor area. Check for doubled quantities.`);
+    }
+  }
+
+  // Cavity wall ties should be proportional to wall area (typically 2.5-4 per m²)
+  const tiesItem = byKey['cavity_wall_ties_ss'];
+  const brickItem = byKey['brick_outer_leaf'];
+  if (tiesItem && brickItem && tiesItem.qty > brickItem.qty * 6) {
+    warnings.push(`Cavity wall ties (${tiesItem.qty} Nr) seems too high for ${brickItem.qty}m² of brickwork. Typical density is 2.5-4 ties per m².`);
+  }
+
+  return warnings;
+}
+
+/**
  * Price a set of locked quantities deterministically.
  * @param {Array} lockedItems - Array of { key, description, unit, qty, override_rate? }
  * @param {string} location - Location string for uplift detection
@@ -242,6 +490,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   const pricedItems = [];
   const warnings = [];
+
+  // Cross-validate quantities against each other before pricing
+  const crossValidationWarnings = crossValidateQuantities(lockedItems);
+  warnings.push(...crossValidationWarnings);
 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
