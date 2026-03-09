@@ -6,7 +6,7 @@
 
 const BASE_RATES = {
   // Substructure
-  'excavation_strip_foundation':        { rate: 95,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations, remove spoil to skip' },
+  'excavation_strip_foundation':        { rate: 75,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations, remove spoil to skip' },
   'concrete_strip_foundation':          { rate: 185,  unit: 'm³',  labour: 0.35, materials: 0.65, description: 'Concrete strip foundations C25/30 incl. A393 mesh' },
   'blockwork_below_dpc':                { rate: 68,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Blockwork below DPC 140mm dense concrete block' },
   'dpc_polythene':                      { rate: 5.5,  unit: 'm',   labour: 0.50, materials: 0.50, description: 'DPC 450mm polythene, two courses, lapped' },
@@ -16,7 +16,7 @@ const BASE_RATES = {
   'pir_insulation_under_slab':         { rate: 28,   unit: 'm²',  labour: 0.15, materials: 0.85, description: 'PIR insulation 150mm under slab Kingspan TP10' },
   'dpm_1200g':                         { rate: 4.5,  unit: 'm²',  labour: 0.20, materials: 0.80, description: 'DPM 1200g polythene lapped & turned up at edges' },
   // Masonry & frame
-  'brick_outer_leaf':                  { rate: 95,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Facing brick outer leaf 102mm frost-resistant to match house' },
+  'brick_outer_leaf':                  { rate: 82,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Facing brick outer leaf 102mm frost-resistant to match house' },
   'cavity_insulation_eps':             { rate: 18,   unit: 'm²',  labour: 0.30, materials: 0.70, description: 'Cavity fully filled EPS insulation Superfill 34' },
   'blockwork_inner_leaf_100mm':        { rate: 42,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Inner leaf 100mm Aircrete block 1400kg/m³ incl. mortar' },
   'cavity_wall_ties_ss':               { rate: 0.85, unit: 'Nr',  labour: 0.60, materials: 0.40, description: 'Cavity wall ties 250mm stainless steel' },
@@ -35,15 +35,15 @@ const BASE_RATES = {
   'fascia_soffit_guttering':           { rate: 48,   unit: 'm',   labour: 0.50, materials: 0.50, description: 'Fascia, soffit, PVC gutter and downpipe all connections' },
   'lead_flashing_code4':               { rate: 95,   unit: 'm',   labour: 0.55, materials: 0.45, description: 'Lead flashing Code 4 at abutment lapped soaked & pointed' },
   'roof_insulation_mineral_wool':      { rate: 28,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Roof insulation 200mm mineral wool between & over rafters' },
-  'velux_skylight_780x980':            { rate: 1650, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux-type skylight 780x980mm double glazed incl. flashings' },
+  'velux_skylight_780x980':            { rate: 1450, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Velux-type skylight 780x980mm double glazed incl. flashings' },
   // Cladding
   'timber_cladding_accoya':            { rate: 145,  unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Accoya/Siberian Larch vertical cladding factory pre-treated' },
   'ventilated_cavity_battens':         { rate: 9.5,  unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Ventilated cavity battens behind cladding' },
   'close_boarded_fence_1800':          { rate: 95,   unit: 'm',   labour: 0.55, materials: 0.45, description: '1.8m high close-boarded timber fence incl. posts rails gravel boards' },
   'external_decorations_stain':        { rate: 12,   unit: 'm²',  labour: 0.80, materials: 0.20, description: 'Microporous stain 2-coat system to all exposed timber' },
   // Windows & doors
-  'bifold_door_aluminium':             { rate: 4400, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door thermally broken double glazed incl. cill reveals ironmongery' },
-  'composite_external_door':           { rate: 1850, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Timber/aluminium composite external door incl. frame threshold ironmongery' },
+  'bifold_door_aluminium':             { rate: 3800, unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door thermally broken double glazed incl. cill reveals ironmongery' },
+  'composite_external_door':           { rate: 1500, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Timber/aluminium composite external door incl. frame threshold ironmongery' },
   'composite_external_door_std':       { rate: 1450, unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Timber/aluminium composite external door standard incl. frame ironmongery' },
   'upvc_window_standard':              { rate: 450,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'UPVC window standard double glazed trickle vent opening light' },
   'window_obscure_small':              { rate: 680,  unit: 'Nr',  labour: 0.35, materials: 0.65, description: 'Window obscure double glazed UPVC/aluminium trickle vent' },
@@ -212,7 +212,7 @@ const BASE_RATES = {
   // Prelims
   'scaffolding':                       { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
   'scaffolding_two_storey':            { rate: 22,   unit: 'm²', labour: 0.60, materials: 0.40, description: 'Independent scaffold two-storey incl. erect, adapt, dismantle' },
-  'site_setup_scaffold':               { rate: 2800, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Site setup hoarding scaffold incl. scaffold licence if required' },
+  'site_setup_scaffold':               { rate: 2200, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Site setup hoarding scaffold incl. scaffold licence if required' },
   'skip_hire_8yd':                     { rate: 320,  unit: 'Nr',  labour: 0.10, materials: 0.90, description: 'Skip hire 8-yard' },
   'site_welfare':                      { rate: 650,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Site welfare PPE temporary power & water connection' },
   'building_control_fees':             { rate: 950,  unit: 'Item',labour: 0.00, materials: 1.00, description: 'Building Control application & inspection fees' },
@@ -568,10 +568,23 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     subtotal: items.reduce((s, i) => s + i.total, 0),
   }));
 
-  const constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
+  let constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
+
+  // Post-pricing cost/m² sanity check — estimate floor area from slab items
+  const slabItems = pricedItems.filter(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
+  const estimatedFloorArea = slabItems.reduce((s, i) => s + i.qty, 0);
+  if (estimatedFloorArea > 0) {
+    const costPerM2 = constructionTotal / estimatedFloorArea;
+    // UK residential extensions typically cost £1,800-£3,000/m² construction only
+    // If exceeding £3,500/m², something is likely wrong — flag it
+    if (costPerM2 > 3500) {
+      warnings.push(`COST CHECK: Construction cost is £${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area). Typical UK range is £1,800-£3,000/m². Review quantities and items for over-counting.`);
+    }
+  }
+
   const contingency = Math.round(constructionTotal * (contingency_pct / 100) * 100) / 100;
   const netTotal = constructionTotal + contingency;
-  const ohp = Math.round(netTotal * (ohp_pct / 100) * 100) / 100;
+  const ohp = Math.round(constructionTotal * (ohp_pct / 100) * 100) / 100;
   const netWithOhp = netTotal + ohp;
   const vat = Math.round(netWithOhp * (vat_rate / 100) * 100) / 100;
   const grandTotal = netWithOhp + vat;
