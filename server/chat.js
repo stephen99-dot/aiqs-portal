@@ -1759,7 +1759,9 @@ CRITICAL RULES:
               quantitySummary += `\n🏠 Floor area confirmed from room schedule: ${req.zipData.summary.total_floor_area_m2.toFixed(1)}m²`;
             }
             // If no address was provided, ask for it now alongside the quantities
-            if (!hasAddress) {
+            // Also check parsed.location — AI may have extracted it from drawings
+            const hasLocationFromExtraction = parsed.location && parsed.location.trim().length > 0;
+            if (!hasAddress && !hasLocationFromExtraction) {
               quantitySummary += `\n\n📍 **One thing needed:** What's the project address or town? This lets me apply the correct local rates and currency (UK £ or Ireland €). Reply with the location and I'll update the pricing before you generate.`;
             }
 
@@ -1857,7 +1859,7 @@ CRITICAL RULES:
               });
               if (memRate && memRate.confidence > 0.65) {
                 clientRates[item.key] = memRate.rate;
-                console.log(`[Memory] Using ${memRate.source} rate for ${item.key}: £${memRate.rate} (conf ${memRate.confidence.toFixed(2)})`);
+                console.log(`[Memory] Using ${memRate.source} rate for ${item.key}: ${memRate.rate} (conf ${memRate.confidence.toFixed(2)})`);
               }
             }
           }
@@ -1965,7 +1967,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             const fData = await findingsResp.json();
             const fText = fData.content.filter(c => c.type === 'text').map(c => c.text).join('');
             const fCleaned = fText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-            findings = JSON.parse(fCleaned);
+            try { findings = JSON.parse(fCleaned); } catch (jsonErr) { console.error('[Stage 3] Findings JSON parse error:', jsonErr.message); }
             // Inject the deterministic cost summary
             findings.cost_summary = {
               sections: pricedResult.sections.map(s => ({ name: s.name, total: s.subtotal })),
