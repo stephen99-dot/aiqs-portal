@@ -358,7 +358,7 @@ export default function UserManagementPage({ theme }) {
   const [activity, setActivity] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const t = theme || {};
-  const isDark = t.bg === '#06080F' || (t.bg && t.bg.includes && t.bg.includes('0'));
+  const isDark = t.name === 'dark';
 
   const fetchUsers = useCallback(async () => {
     try { setLoading(true); const data = await apiFetch('/admin/users'); setUsers(data.users || data || []); setError(''); }
