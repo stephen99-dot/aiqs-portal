@@ -1240,8 +1240,49 @@ ${summary}`);
 
     messages.push({ role: 'user', content: currentContent });
 
-    const systemPrompt = buildSystemPrompt(userId, false);
+    let systemPrompt = buildSystemPrompt(userId, false);
     const hasFiles = fileNames.length > 0;
+
+    // If session already has a locked takeoff, inject the pricer's figures into the
+    // system prompt so the LLM never invents its own conflicting cost breakdown.
+    const sessionId_pre = req.body.session_id || null;
+    if (sessionId_pre && benchmarkStore && deterministicPricer) {
+      try {
+        const existingTk = benchmarkStore.getTakeoffBySession(db, sessionId_pre);
+        if (existingTk && existingTk.items && existingTk.items.length > 0) {
+          const tkClientRates = {};
+          try {
+            const dbR = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+            for (const r of dbR) tkClientRates[r.item_key] = r.value;
+          } catch(e) {}
+          if (memoryEngine) {
+            const tkRegion = memoryEngine.detectRegion(existingTk.location || '');
+            for (const item of existingTk.items) {
+              if (!tkClientRates[item.key]) {
+                const mr = memoryEngine.getBestRate(db, { itemKey: item.key, region: tkRegion, projectType: existingTk.project_type || 'any', userId });
+                if (mr && mr.confidence > 0.65) tkClientRates[item.key] = mr.rate;
+              }
+            }
+          }
+          const locText = (existingTk.location || '').toLowerCase();
+          const tkIsIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|donegal/.test(locText);
+          const tkPriced = deterministicPricer.priceLockedQuantities(
+            existingTk.items, existingTk.location || '', tkClientRates,
+            { contingency_pct: 7.5, ohp_pct: 12, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP' }
+          );
+          const tkSym = tkPriced.summary.currency === 'EUR' ? '€' : '£';
+          const sectionLines = tkPriced.sections.map(s => `${s.name}: ${tkSym}${s.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}`).join('\n');
+          systemPrompt += `\n\nLOCKED TAKEOFF PRICING (ref: ${existingTk.id}) — THESE ARE THE CORRECT FIGURES:\n` +
+            sectionLines + '\n' +
+            `Construction Total: ${tkSym}${tkPriced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
+            `Grand Total (incl contingency, OH&P, VAT): ${tkSym}${tkPriced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
+            `CRITICAL: A deterministic pricer has already calculated costs for this project. Do NOT generate your own cost breakdown or section totals. ` +
+            `If the user asks about costs, ONLY reference these locked figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
+            `The pricer's figures are authoritative and must not be contradicted.`;
+        }
+      } catch(e) { console.error('[Takeoff inject] Error:', e.message); }
+    }
+
     const primaryModel = hasFiles ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
     const primaryBudget = hasFiles ? 8000 : 5000;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
