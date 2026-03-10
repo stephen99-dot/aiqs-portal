@@ -1480,7 +1480,7 @@ ${summary}`);
           method: 'POST', headers: apiHeaders,
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 8000,
+            max_tokens: 16000,
             system: extractPrompt,
             messages: extractMessages
           })
@@ -1580,7 +1580,7 @@ CRITICAL RULES:
                 method: 'POST', headers: apiHeaders,
                 body: JSON.stringify({
                   model: 'claude-sonnet-4-20250514',
-                  max_tokens: 6000,
+                  max_tokens: 12000,
                   system: validationPrompt,
                   messages: [{ role: 'user', content: validationContent }]
                 })
