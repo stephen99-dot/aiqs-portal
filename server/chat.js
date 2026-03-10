@@ -151,15 +151,29 @@ You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanat
 
 MEASUREMENT RULES:
 1. ${isTextOnly ? 'Calculate quantities from the dimensions and scope described, using typical UK construction assumptions' : 'Measure every visible element from the drawings with explicit working shown. Read ALL dimensions annotated on the drawings — do not estimate if a dimension is written on the drawing'}
-2. Show your working in the "working" field for EVERY item. Format: "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²". If you cannot show working, flag the item
+2. Show your working in the "working" field for EVERY item. Format: "(As specified: 100m of trench excavation at 1.00-1.50m depth)" or "(Rear wall: 6.2m × 2.7m = 16.74m² less 1no. window 1.2×0.9m = 1.08m², net = 15.66m²)". Always start with "(As specified: ..." when referencing a drawing spec, or "(Calculated: ..." when deriving from dimensions
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
-6. Be THOROUGH — you must cover EVERY trade. A missing trade is worse than an imprecise quantity. Check you have items for: demolition, substructure, walls, roof, windows, doors, stairs, internal partitions, plasterboard, floor finishes, decoration, kitchen/bathroom fit-outs, drainage, heating/plumbing, electrical, prelims
+6. Be THOROUGH — you must cover EVERY trade. A missing trade is worse than an imprecise quantity. Check you have items for ALL relevant trades for this project type
 7. Break down composite elements into individual components (e.g. cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
 9. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them
 10. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
+
+DESCRIPTION QUALITY — CRITICAL:
+Every item description MUST be a FULL PROFESSIONAL SPECIFICATION, not a short label. Write descriptions as they would appear in a formal Bill of Quantities issued to a contractor.
+
+BAD (too short): "Sand bed and surround for duct"
+GOOD: "Sand bed and surround to 125mm duct; minimum 150mm bed below duct, 150mm above; compacted; for full 100m external trench length"
+
+BAD: "Trench excavation for duct"
+GOOD: "Excavate trench for 125mm ESB duct; average depth 1.00–1.50m; in grass/soft ground; including grading trench bottom and trimming sides; backfill with selected granular material to clause 804, compacted in 300mm layers; including non-degradable marker tape with tracer wire installed 350mm below finished surface; dispose of surplus excavated"
+
+BAD: "ESB mini pillar"
+GOOD: "Supply and install new ESB Networks-approved Mini Pillar at site boundary; including concrete surround/base, all connections, earthing and testing; handover and commissioning with ESB Networks; no overhead poles required"
+
+Include: material specifications, sizes, standards/codes, compliance references (ESB Networks, Building Regs, BS EN), installation method, scope inclusions. The description should tell a contractor exactly what is expected.
 
 COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they apply to the project. If you are missing an entire section, your takeoff is WRONG:
 1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface

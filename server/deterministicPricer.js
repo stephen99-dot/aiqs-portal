@@ -6,17 +6,17 @@
 
 const BASE_RATES = {
   // Substructure
-  'excavation_strip_foundation':        { rate: 75,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations, remove spoil to skip' },
-  'concrete_strip_foundation':          { rate: 185,  unit: 'm³',  labour: 0.35, materials: 0.65, description: 'Concrete strip foundations C25/30 incl. A393 mesh' },
+  'excavation_strip_foundation':        { rate: 75,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations to engineer\'s design depth; remove excavated spoil to skip; trim sides and compact base; including earthwork support where required' },
+  'concrete_strip_foundation':          { rate: 185,  unit: 'm³',  labour: 0.35, materials: 0.65, description: 'Concrete to strip foundations; grade C25/30; including A393 mesh reinforcement; placing, vibrating and levelling; in accordance with structural engineer\'s design' },
   'blockwork_below_dpc':                { rate: 68,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Blockwork below DPC 140mm dense concrete block' },
   'dpc_polythene':                      { rate: 5.5,  unit: 'm',   labour: 0.50, materials: 0.50, description: 'DPC 450mm polythene, two courses, lapped' },
   'hardcore_fill':                      { rate: 14,   unit: 'm²',  labour: 0.40, materials: 0.60, description: 'Hardcore fill, compact & blind 200mm deep' },
-  'concrete_slab_150mm':               { rate: 78,   unit: 'm²',  labour: 0.35, materials: 0.65, description: 'RC ground floor slab 150mm C25/30 A393 mesh on DPM' },
-  'concrete_slab_100mm':               { rate: 50,   unit: 'm²',  labour: 0.35, materials: 0.65, description: 'RC ground floor slab 100mm C25/30 on DPM' },
+  'concrete_slab_150mm':               { rate: 78,   unit: 'm²',  labour: 0.35, materials: 0.65, description: 'Reinforced concrete ground floor slab; 150mm thick; grade C25/30; including A393 mesh reinforcement; on DPM; power-floated finish; in accordance with structural engineer\'s specification' },
+  'concrete_slab_100mm':               { rate: 50,   unit: 'm²',  labour: 0.35, materials: 0.65, description: 'Reinforced concrete ground floor slab; 100mm thick; grade C25/30; on DPM; power-floated finish' },
   'pir_insulation_under_slab':         { rate: 28,   unit: 'm²',  labour: 0.15, materials: 0.85, description: 'PIR insulation 150mm under slab Kingspan TP10' },
   'dpm_1200g':                         { rate: 4.5,  unit: 'm²',  labour: 0.20, materials: 0.80, description: 'DPM 1200g polythene lapped & turned up at edges' },
   // Masonry & frame
-  'brick_outer_leaf':                  { rate: 82,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Facing brick outer leaf 102mm frost-resistant to match house' },
+  'brick_outer_leaf':                  { rate: 82,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Facing brick outer leaf; 102mm thick; frost-resistant clay facing bricks to match existing house; laid in stretcher bond with flush pointing; including all cut bricks, closers and forming reveals' },
   'cavity_insulation_eps':             { rate: 18,   unit: 'm²',  labour: 0.30, materials: 0.70, description: 'Cavity fully filled EPS insulation Superfill 34' },
   'blockwork_inner_leaf_100mm':        { rate: 42,   unit: 'm²',  labour: 0.55, materials: 0.45, description: 'Inner leaf 100mm Aircrete block 1400kg/m³ incl. mortar' },
   'cavity_wall_ties_ss':               { rate: 0.85, unit: 'Nr',  labour: 0.60, materials: 0.40, description: 'Cavity wall ties 250mm stainless steel' },
@@ -258,25 +258,25 @@ const BASE_RATES = {
   // ============================================
   // INFRASTRUCTURE / UTILITIES / ESB RATES
   // ============================================
-  'traffic_management_plan':           { rate: 1300, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Traffic management plan — design, installation, hire and dismantle; liaison with local authority' },
-  'site_fencing_hoarding':             { rate: 850,  unit: 'Item',labour: 0.60, materials: 0.40, description: 'Supply, erect and dismantle fencing, hoarding, road plates, pedestrian barriers and safety equipment' },
-  'site_establishment_utility':        { rate: 1200, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Contractors general site establishment, attendance on utility networks, coordination with authorities' },
-  'trench_excavation_duct':            { rate: 49.5, unit: 'm',   labour: 0.75, materials: 0.25, description: 'Trench excavation for cable duct average depth 1.0-1.5m incl. backfill with granular material and tracer wire' },
-  'trench_excavation_road':            { rate: 132,  unit: 'm',   labour: 0.70, materials: 0.30, description: 'Trench excavation in existing macadam road surface incl. breaking up, excavation, backfill and reinstatement' },
-  'concrete_footpath_reinstatement':   { rate: 93.5, unit: 'm',   labour: 0.65, materials: 0.35, description: 'Breaking up existing concrete footpath and reinstatement to match existing' },
-  'surface_water_disposal_excav':      { rate: 880,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Surface water disposal during excavation works — pumping and management' },
+  'traffic_management_plan':           { rate: 1300, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Traffic Management Plan — design, installation, hire and dismantle; including all signage, cones, barriers and liaison with Local Authority/County Council; for full duration of contract' },
+  'site_fencing_hoarding':             { rate: 850,  unit: 'Item',labour: 0.60, materials: 0.40, description: 'Supply, erect and dismantle all required fencing, hoarding, road plates, pedestrian barriers and safety equipment to allow completion of works safely; including temporary lighting as required' },
+  'site_establishment_utility':        { rate: 1200, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Contractor\'s general site establishment; attendance on ESB Networks, school management and local authorities throughout the contract period' },
+  'trench_excavation_duct':            { rate: 49.5, unit: 'm',   labour: 0.75, materials: 0.25, description: 'Excavate trench for 125mm ESB duct; average depth 1.00–1.50m; in grass/soft ground; including grading trench bottom and trimming sides; backfill with selected granular material to clause 804, compacted in 300mm layers; including non-degradable marker tape with tracer wire installed 350mm below finished surface; dispose of surplus excavated' },
+  'trench_excavation_road':            { rate: 132,  unit: 'm',   labour: 0.70, materials: 0.30, description: 'Excavate trench for 125mm ESB duct; average depth 1.00–1.50m; in existing macadam road surface (approx. 180mm macadam on compacted hardcore); breaking up and lifting road surface prior to excavation; backfill with compacted granular material clause 804; reinstate road surface to match existing with 180mm bitmac and' },
+  'concrete_footpath_reinstatement':   { rate: 93.5, unit: 'm',   labour: 0.65, materials: 0.35, description: 'Extra over excavation: breaking up existing 100mm concrete footpath on consolidated hardcore; cutting, lifting and disposing; reinstating with new 100mm concrete path to match existing; including formwork and curing' },
+  'surface_water_disposal_excav':      { rate: 880,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Surface water disposal — pumping, bailing or other means of removing water from excavations as and when required throughout the contract period; allow provisional sum' },
   'granular_backfill_clause804':       { rate: 38.5, unit: 'm³',  labour: 0.40, materials: 0.60, description: 'Granular backfill material to clause 804 compacted in layers above sand bed' },
-  'disposal_excavated_material':       { rate: 27.5, unit: 'm³',  labour: 0.60, materials: 0.40, description: 'Disposal of excavated material off site to licensed tip' },
-  'sand_bed_surround_duct':            { rate: 27.5, unit: 'm',   labour: 0.45, materials: 0.55, description: 'Sand bed and surround min. 150mm compacted for 125mm duct' },
-  'cable_duct_125mm':                  { rate: 38.5, unit: 'm',   labour: 0.50, materials: 0.50, description: 'ESB approved red band cable duct 125mm diameter laid and jointed with draw wires' },
-  'duct_hole_cavity_wall':             { rate: 198,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Form/cut hole for 125mm duct through 465mm thick blockwork cavity wall' },
-  'duct_hole_external_wall':           { rate: 132,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Form/cut hole for 125mm duct through 250mm thick blockwork external wall' },
-  'marker_tape_tracer_wire':           { rate: 8.8,  unit: 'm',   labour: 0.30, materials: 0.70, description: 'Non-degradable marker tape with tracer wire installed 350mm below finished surface' },
-  'esb_mini_pillar_vault':             { rate: 4950, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'ESB mini pillar vault complete with all sundries' },
-  'esb_metering_pillar':               { rate: 2350, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'ESB Networks-approved metering pillar including all connections, earthing, sealing and testing' },
-  'esb_connection_provisional':        { rate: 2500, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Provisional sum: ESB Networks connection charge, meter installation and commissioning fee' },
-  'internal_duct_run':                 { rate: 38,   unit: 'm',   labour: 0.58, materials: 0.42, description: 'Supply and install 125mm ESB-approved conduit/duct through existing areas including all supports and fittings' },
-  'builders_work_internal_duct':       { rate: 750,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Builders work for internal duct runs including cutting/forming penetrations and making good all disturbed surfaces' },
+  'disposal_excavated_material':       { rate: 27.5, unit: 'm³',  labour: 0.60, materials: 0.40, description: 'Disposal of excavated material off site to licensed tip; including loading, transport and tipping charges; 100% bulking allowance' },
+  'sand_bed_surround_duct':            { rate: 27.5, unit: 'm',   labour: 0.45, materials: 0.55, description: 'Sand bed and surround to 125mm duct; minimum 150mm bed below duct, 150mm above; compacted; for full external trench length' },
+  'cable_duct_125mm':                  { rate: 38.5, unit: 'm',   labour: 0.50, materials: 0.50, description: 'ESB Networks-approved 125mm nominal diameter red-banded HDPE cable duct; laid and jointed in trench in accordance with ESB Networks specification; including all couplings, end caps and draw wire; bedded and surrounded in sand as described' },
+  'duct_hole_cavity_wall':             { rate: 198,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Extra over 125mm cable duct: forming/cutting hole through existing blockwork cavity wall; 465mm overall thickness; nominal duct size 125mm; including making good both faces; sealing with fire-rated mortar on internal face' },
+  'duct_hole_external_wall':           { rate: 132,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Extra over 125mm cable duct: forming/cutting hole through existing blockwork external wall; 250mm thickness; nominal duct size 125mm; including making good both faces' },
+  'marker_tape_tracer_wire':           { rate: 8.8,  unit: 'm',   labour: 0.30, materials: 0.70, description: 'Non-degradable marker tape with tracer wire installed 350mm below finished surface; for full trench length' },
+  'esb_mini_pillar_vault':             { rate: 4950, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Supply and install new ESB Networks-approved Mini Pillar at site boundary; including concrete surround/base, all connections, earthing and testing; handover and commissioning with ESB Networks; no overhead poles required' },
+  'esb_metering_pillar':               { rate: 2350, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Supply and install new ESB Networks-approved Metering Pillar on school grounds at location indicated on drawing; including all connections, earthing, sealing and testing; commissioning with ESB Networks meter installer' },
+  'esb_connection_provisional':        { rate: 2500, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Provisional sum: ESB Networks connection charge, meter installation and commissioning fee payable directly to ESB (pass-through; to be confirmed with ESB Networks)' },
+  'internal_duct_run':                 { rate: 38,   unit: 'm',   labour: 0.58, materials: 0.42, description: 'Supply and install 125mm nominal diameter ESB-approved conduit/duct through existing attic areas; run from point of entry at foundation/wall level up and through attic to main ESB distribution board; including all supports, fixings, bends, couplings, draw wire and allow for all necessary builders\' work in connection with internal duct runs' },
+  'builders_work_internal_duct':       { rate: 750,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Allow for all necessary builders\' work in connection with internal duct runs; including cutting/forming penetrations through internal partitions, ceilings or structural elements as required; making good all disturbed surfaces; provisional sum' },
 };
 
 /**
@@ -906,15 +906,26 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const labour = Math.round(total * baseRate.labour * 100) / 100;
     const materials = Math.round(total * baseRate.materials * 100) / 100;
 
+    // Build the best possible description:
+    // 1) Use AI description if it's detailed (>60 chars) — it likely includes project-specific specs
+    // 2) Otherwise prefer BASE_RATES description which has standard specs
+    // 3) Fallback to whatever we have
+    let bestDescription = item.description || baseRate.description || item.key;
+    if (baseRate.description && item.description && item.description.length < 60 && baseRate.description.length > item.description.length) {
+      // AI gave a sparse description but we have a richer one in the rate library
+      bestDescription = baseRate.description;
+    }
+
     // Flag individual items with suspiciously high totals
+    const cs = currency === 'EUR' ? '€' : '£';
     if (total > 25000) {
-      warnings.push(`High-value item: '${item.description || item.key}' = £${Math.round(total).toLocaleString()} (${item.qty} ${item.unit || 'Item'} × £${Math.round(rate * 100) / 100}) — please verify qty and rate`);
+      warnings.push(`High-value item: '${bestDescription}' = ${cs}${Math.round(total).toLocaleString()} (${item.qty} ${item.unit || 'Item'} × ${cs}${Math.round(rate * 100) / 100}) — please verify qty and rate`);
     }
 
     pricedItems.push({
       key: item.key,
       item_ref: item.item_ref || '',
-      description: item.description || baseRate.description,
+      description: bestDescription,
       unit: item.unit || baseRate.unit || '',
       qty: item.qty,
       rate: Math.round(rate * 100) / 100,
@@ -1011,9 +1022,23 @@ function toPricedSections(pricedResult) {
   return pricedResult.sections.map((sec, si) => ({
     number: String(si + 1),
     title: sec.name,
-    items: sec.items.map((item, ii) => ({
+    items: sec.items.map((item, ii) => {
+      // Format working field to match professional BOQ style
+      let formattedWorking = '';
+      if (item.working) {
+        // If working already starts with "(As specified:" or "(Calculated:", use as-is
+        const w = item.working.trim();
+        if (w.startsWith('(')) {
+          formattedWorking = `\n  ${w}`;
+        } else if (w.toLowerCase().startsWith('as specified')) {
+          formattedWorking = `\n  (${w})`;
+        } else {
+          formattedWorking = `\n  (${w})`;
+        }
+      }
+      return {
       item: `${si + 1}.${ii + 1}`,
-      description: item.working ? `${item.description}\n  (${item.working})` : item.description,
+      description: item.description + formattedWorking,
       unit: item.unit,
       qty: item.qty,
       rate: item.rate,
@@ -1021,7 +1046,8 @@ function toPricedSections(pricedResult) {
       materials: item.materials,
       total: item.total,
       rate_source: item.rate_source,
-    })),
+    };
+    }),
   }));
 }
 
