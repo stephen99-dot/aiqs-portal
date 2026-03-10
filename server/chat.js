@@ -1463,6 +1463,17 @@ ${summary}`);
                 `\n- For WALL AREAS: measure from the drawings — these are specific to the extension perimeter, not the whole house` +
                 `\n- The ${zipFloorArea.toFixed(1)}m² total includes existing rooms that are NOT being rebuilt. Do NOT use ${zipFloorArea.toFixed(1)}m² for any quantity unless you are genuinely working on the entire house` +
                 `\n- Set floor_area_m2 in the JSON output to ${extensionArea} (the extension area), NOT ${zipFloorArea.toFixed(1)} (the whole house)`;
+            } else if (isExtension && zipFloorArea > 150) {
+              // Extension project but no explicit extension area found, AND total area is suspiciously large
+              // Warn the LLM that this is likely the whole house, not the extension
+              floorAreaNote = `\n\nWARNING — FLOOR AREA CHECK REQUIRED: The room schedule shows ${zipFloorArea.toFixed(1)}m² total. However, this is an EXTENSION project — the room schedule likely includes the EXISTING house rooms too.` +
+                `\n- Do NOT use ${zipFloorArea.toFixed(1)}m² for new construction quantities. That is almost certainly the whole house area.` +
+                `\n- MEASURE the extension footprint from the drawings: look at the proposed plan and identify which rooms are NEW (extension) vs EXISTING.` +
+                `\n- Typical UK rear extension: single storey 15-40m², two storey 30-80m² (per floor).` +
+                `\n- If the extension footprint is not annotated, estimate from the drawing scale or room sizes.` +
+                `\n- Use the EXTENSION area for: concrete slab, insulation, DPM, screed, floor finishes, demolition.` +
+                `\n- Set floor_area_m2 in the JSON output to the EXTENSION area only, not the whole house.` +
+                `\n- If you cannot determine the extension area, use a conservative estimate based on the project description and typical sizes.`;
             } else {
               floorAreaNote = `\n\nCRITICAL: The room schedule in this ZIP shows a total floor area of ${zipFloorArea.toFixed(1)}m². Use this as your primary floor area figure — do NOT estimate it. All floor-area-derived quantities should use ${zipFloorArea.toFixed(1)}m².`;
             }

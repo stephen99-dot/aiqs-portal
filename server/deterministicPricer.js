@@ -450,9 +450,10 @@ function estimateFallbackRate(item) {
     if (desc.includes('crack stitch') || desc.includes('helical')) return 95;
     if (desc.includes('dpc') && desc.includes('inject'))           return 45;
     if (desc.includes('surface water') && desc.includes('drain'))  return 65;
+    if (desc.includes('downpipe') || desc.includes('down pipe'))   return 35;
     if (desc.includes('drainage') || desc.includes('pipe'))        return 125;
     if (desc.includes('mastic') || desc.includes('sealant'))       return 12;
-    if (desc.includes('joist'))                                     return 45;
+    if (desc.includes('joist'))                                     return 18;
     if (desc.includes('heating') && desc.includes('pipe'))         return 35;
     if (desc.includes('fence') || desc.includes('fencing'))        return 95;
     if (desc.includes('kerb') || desc.includes('edging'))          return 35;
@@ -525,7 +526,7 @@ function detectLocationFactor(locationStr) {
  * Returns { warnings, corrections } so callers know what changed.
  * This is the last line of defence before pricing.
  */
-function crossValidateQuantities(items) {
+function crossValidateQuantities(items, projectType) {
   const warnings = [];
   const corrections = [];
   const byKey = {};
@@ -554,9 +555,52 @@ function crossValidateQuantities(items) {
     }
   }
 
-  // Get total floor area from concrete slab items
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROJECT-TYPE FLOOR AREA CAPS — prevent whole-house area being used for extensions
+  // ═══════════════════════════════════════════════════════════════════════
+  const pType = (projectType || '').toLowerCase();
+  const isExtension = pType.includes('extension') || pType.includes('residential_extension');
+  const isLoft = pType.includes('loft');
+
+  // Maximum reasonable floor area per project type (single floor)
+  const maxFloorArea = isLoft ? 60 : isExtension ? 80 : null;
+
+  if (maxFloorArea) {
+    // Cap concrete slab to max floor area for extensions
+    const slabKeys = ['concrete_slab_150mm', 'concrete_slab_100mm'];
+    for (const sk of slabKeys) {
+      const slab = byKey[sk];
+      if (slab && slab.qty > maxFloorArea) {
+        capQty(slab, maxFloorArea, `${isExtension ? 'Extension' : 'Loft'} slab capped to max ${maxFloorArea}m² — was ${slab.qty}m² (likely includes existing house area from room schedule)`);
+      }
+    }
+
+    // Cap all area-dependent ground floor items
+    const areaKeys = ['pir_insulation_under_slab', 'dpm_1200g', 'hardcore_fill', 'screed_sand_cement_75mm', 'screed_ufh_75mm'];
+    for (const ak of areaKeys) {
+      const aItem = byKey[ak];
+      if (aItem && aItem.qty > maxFloorArea * 1.1) {
+        capQty(aItem, maxFloorArea, `Capped to match extension slab area ${maxFloorArea}m²`);
+      }
+    }
+  }
+
+  // Get total floor area from concrete slab items (AFTER any caps applied above)
   const slabItem = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
   const floorArea = slabItem ? slabItem.qty : null;
+
+  // For extensions, also cap total wall area based on reasonable perimeter
+  // A two-storey extension has ~30-40m perimeter × ~5m height = 150-200m² max wall area
+  if (isExtension && floorArea && floorArea > 0) {
+    const maxExtWallArea = floorArea * 4; // generous: 4× floor area for all wall surfaces
+    const wallKeys = ['brick_outer_leaf', 'blockwork_inner_leaf_100mm', 'cavity_insulation_eps'];
+    for (const wk of wallKeys) {
+      const wItem = byKey[wk];
+      if (wItem && wItem.qty > maxExtWallArea) {
+        capQty(wItem, Math.round(maxExtWallArea), `Wall area capped to ${Math.round(maxExtWallArea)}m² (4× extension floor area ${floorArea}m²). Was ${wItem.qty}m² — likely includes existing house walls`);
+      }
+    }
+  }
 
   if (floorArea && floorArea > 0) {
     const expectedPerimeter = 4 * Math.sqrt(floorArea);
@@ -888,7 +932,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   let crossResult = { warnings: [], corrections: [] };
   const skipCrossValidation = projectType === 'infrastructure' || projectType === 'commercial';
   if (!skipCrossValidation) {
-    crossResult = crossValidateQuantities(lockedItems);
+    crossResult = crossValidateQuantities(lockedItems, projectType);
   }
   // Detect duplicate/overlapping items
   const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
