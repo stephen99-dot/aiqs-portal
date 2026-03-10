@@ -255,6 +255,28 @@ const BASE_RATES = {
   'party_wall_surveyor':               { rate: 1200, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Party Wall surveyor fee (if applicable under PWA 1996)' },
   'structural_engineer_fees':          { rate: 2200, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Structural engineer fees design & site inspections' },
   'snagging_clearance':                { rate: 650,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Clearance & clean at completion snagging allowance' },
+  // ============================================
+  // INFRASTRUCTURE / UTILITIES / ESB RATES
+  // ============================================
+  'traffic_management_plan':           { rate: 1300, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Traffic management plan — design, installation, hire and dismantle; liaison with local authority' },
+  'site_fencing_hoarding':             { rate: 850,  unit: 'Item',labour: 0.60, materials: 0.40, description: 'Supply, erect and dismantle fencing, hoarding, road plates, pedestrian barriers and safety equipment' },
+  'site_establishment_utility':        { rate: 1200, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Contractors general site establishment, attendance on utility networks, coordination with authorities' },
+  'trench_excavation_duct':            { rate: 49.5, unit: 'm',   labour: 0.75, materials: 0.25, description: 'Trench excavation for cable duct average depth 1.0-1.5m incl. backfill with granular material and tracer wire' },
+  'trench_excavation_road':            { rate: 132,  unit: 'm',   labour: 0.70, materials: 0.30, description: 'Trench excavation in existing macadam road surface incl. breaking up, excavation, backfill and reinstatement' },
+  'concrete_footpath_reinstatement':   { rate: 93.5, unit: 'm',   labour: 0.65, materials: 0.35, description: 'Breaking up existing concrete footpath and reinstatement to match existing' },
+  'surface_water_disposal_excav':      { rate: 880,  unit: 'Item',labour: 0.50, materials: 0.50, description: 'Surface water disposal during excavation works — pumping and management' },
+  'granular_backfill_clause804':       { rate: 38.5, unit: 'm³',  labour: 0.40, materials: 0.60, description: 'Granular backfill material to clause 804 compacted in layers above sand bed' },
+  'disposal_excavated_material':       { rate: 27.5, unit: 'm³',  labour: 0.60, materials: 0.40, description: 'Disposal of excavated material off site to licensed tip' },
+  'sand_bed_surround_duct':            { rate: 27.5, unit: 'm',   labour: 0.45, materials: 0.55, description: 'Sand bed and surround min. 150mm compacted for 125mm duct' },
+  'cable_duct_125mm':                  { rate: 38.5, unit: 'm',   labour: 0.50, materials: 0.50, description: 'ESB approved red band cable duct 125mm diameter laid and jointed with draw wires' },
+  'duct_hole_cavity_wall':             { rate: 198,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Form/cut hole for 125mm duct through 465mm thick blockwork cavity wall' },
+  'duct_hole_external_wall':           { rate: 132,  unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'Form/cut hole for 125mm duct through 250mm thick blockwork external wall' },
+  'marker_tape_tracer_wire':           { rate: 8.8,  unit: 'm',   labour: 0.30, materials: 0.70, description: 'Non-degradable marker tape with tracer wire installed 350mm below finished surface' },
+  'esb_mini_pillar_vault':             { rate: 4950, unit: 'Nr',  labour: 0.50, materials: 0.50, description: 'ESB mini pillar vault complete with all sundries' },
+  'esb_metering_pillar':               { rate: 2350, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'ESB Networks-approved metering pillar including all connections, earthing, sealing and testing' },
+  'esb_connection_provisional':        { rate: 2500, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Provisional sum: ESB Networks connection charge, meter installation and commissioning fee' },
+  'internal_duct_run':                 { rate: 38,   unit: 'm',   labour: 0.58, materials: 0.42, description: 'Supply and install 125mm ESB-approved conduit/duct through existing areas including all supports and fittings' },
+  'builders_work_internal_duct':       { rate: 750,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Builders work for internal duct runs including cutting/forming penetrations and making good all disturbed surfaces' },
 };
 
 /**
@@ -459,20 +481,27 @@ const LOCATION_FACTORS = {
   'default':        1.00,
 };
 
+// GBP to EUR conversion — applied ON TOP of the Ireland location factor
+// Irish construction rates are already higher (captured by the 1.10 factor)
+// but currency conversion means the EUR figure is ~1.17x the GBP figure
+const GBP_TO_EUR = 1.17;
+
 function detectLocationFactor(locationStr) {
-  if (!locationStr) return { factor: 1.00, label: 'default' };
+  if (!locationStr) return { factor: 1.00, label: 'default', isIreland: false };
   const loc = locationStr.toLowerCase();
-  if (loc.includes('london') || loc.includes('tw') || loc.includes('sw') || loc.includes('se') || loc.includes('ec') || loc.includes('wc') || loc.includes('w1') || loc.includes('e1') || loc.includes('n1') || loc.includes('nw') || loc.includes('richmond') || loc.includes('kingston') || loc.includes('wimbledon') || loc.includes('croydon')) return { factor: 1.20, label: 'London/SE (+20%)' };
-  if (loc.includes('brighton') || loc.includes('guildford') || loc.includes('oxford') || loc.includes('cambridge') || loc.includes('surrey') || loc.includes('kent') || loc.includes('essex') || loc.includes('hertford') || loc.includes('reading')) return { factor: 1.15, label: 'South East (+15%)' };
-  if (loc.includes('bristol') || loc.includes('bath') || loc.includes('exeter') || loc.includes('devon') || loc.includes('somerset') || loc.includes('dorset') || loc.includes('cornwall')) return { factor: 1.05, label: 'South West (+5%)' };
-  if (loc.includes('birmingham') || loc.includes('coventry') || loc.includes('leicester') || loc.includes('nottingham') || loc.includes('derby') || loc.includes('northampton') || loc.includes('stoke')) return { factor: 1.07, label: 'Midlands (+7%)' };
-  if (loc.includes('manchester') || loc.includes('liverpool') || loc.includes('chester') || loc.includes('lancashire') || loc.includes('cheshire')) return { factor: 0.98, label: 'North West (-2%)' };
-  if (loc.includes('leeds') || loc.includes('sheffield') || loc.includes('york') || loc.includes('hull') || loc.includes('bradford')) return { factor: 0.97, label: 'Yorkshire (-3%)' };
-  if (loc.includes('newcastle') || loc.includes('sunderland') || loc.includes('durham') || loc.includes('carlisle') || loc.includes('cumbria')) return { factor: 0.97, label: 'North England (-3%)' };
-  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)' };
-  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)' };
-  if (loc.includes('dublin') || loc.includes('cork') || loc.includes('ireland') || loc.includes('galway') || loc.includes('limerick')) return { factor: 1.10, label: 'Ireland (+10%)' };
-  return { factor: 1.00, label: 'UK average' };
+  // Ireland detection — comprehensive list of Irish counties, cities, and patterns
+  const irelandPattern = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow|eircode|co\.\s*(dublin|cork|galway|limerick|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow)|lansborough|athlone|mullingar|tullamore|portlaoise|killarney|tralee|ennis|letterkenny|drogheda|dundalk|navan|naas|newbridge|bray|greystones|swords|malahide|clonmel|carrick|thurles|nenagh|castlebar|ballina|sligo town|boyle|ballinasloe|tuam|loughrea|oranmore/;
+  if (irelandPattern.test(loc)) return { factor: 1.10, label: 'Ireland (+10%)', isIreland: true };
+  if (loc.includes('london') || loc.includes('tw') || loc.includes('sw') || loc.includes('se') || loc.includes('ec') || loc.includes('wc') || loc.includes('w1') || loc.includes('e1') || loc.includes('n1') || loc.includes('nw') || loc.includes('richmond') || loc.includes('kingston') || loc.includes('wimbledon') || loc.includes('croydon')) return { factor: 1.20, label: 'London/SE (+20%)', isIreland: false };
+  if (loc.includes('brighton') || loc.includes('guildford') || loc.includes('oxford') || loc.includes('cambridge') || loc.includes('surrey') || loc.includes('kent') || loc.includes('essex') || loc.includes('hertford') || loc.includes('reading')) return { factor: 1.15, label: 'South East (+15%)', isIreland: false };
+  if (loc.includes('bristol') || loc.includes('bath') || loc.includes('exeter') || loc.includes('devon') || loc.includes('somerset') || loc.includes('dorset') || loc.includes('cornwall')) return { factor: 1.05, label: 'South West (+5%)', isIreland: false };
+  if (loc.includes('birmingham') || loc.includes('coventry') || loc.includes('leicester') || loc.includes('nottingham') || loc.includes('derby') || loc.includes('northampton') || loc.includes('stoke')) return { factor: 1.07, label: 'Midlands (+7%)', isIreland: false };
+  if (loc.includes('manchester') || loc.includes('liverpool') || loc.includes('chester') || loc.includes('lancashire') || loc.includes('cheshire')) return { factor: 0.98, label: 'North West (-2%)', isIreland: false };
+  if (loc.includes('leeds') || loc.includes('sheffield') || loc.includes('york') || loc.includes('hull') || loc.includes('bradford')) return { factor: 0.97, label: 'Yorkshire (-3%)', isIreland: false };
+  if (loc.includes('newcastle') || loc.includes('sunderland') || loc.includes('durham') || loc.includes('carlisle') || loc.includes('cumbria')) return { factor: 0.97, label: 'North England (-3%)', isIreland: false };
+  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)', isIreland: false };
+  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)', isIreland: false };
+  return { factor: 1.00, label: 'UK average', isIreland: false };
 }
 
 /**
@@ -757,30 +786,79 @@ function detectDuplicatesAndOverlaps(items) {
 }
 
 /**
+ * Detect project type from items to adjust validation behaviour.
+ * Returns a type string so we know whether to apply residential extension caps.
+ */
+function detectProjectType(items) {
+  const keys = new Set(items.map(i => i.key));
+  const allDescs = items.map(i => (i.description || '').toLowerCase()).join(' ');
+
+  // Infrastructure / utility project — ESB ducts, cable runs, meter pillars
+  if (allDescs.includes('esb') || allDescs.includes('cable duct') || allDescs.includes('mini pillar') ||
+      allDescs.includes('metering') || allDescs.includes('electrical supply') || allDescs.includes('duct installation') ||
+      allDescs.includes('trench excav') || allDescs.includes('tracer wire')) {
+    return 'infrastructure';
+  }
+
+  // Refurbishment — dominated by strip-out, rewire, replaster, decoration
+  const stripOutCount = items.filter(i => i.key && i.key.startsWith('strip_out')).length;
+  const refurbKeys = ['full_electrical_rewire', 'electrical_rewire_room', 'lime_mortar_repointing', 'lime_plaster_walls',
+    'sash_window_overhaul', 'sash_window_replacement', 'damp_proofing_tanking', 'timber_treatment_spray'];
+  const hasRefurbItems = refurbKeys.some(k => keys.has(k));
+  if (stripOutCount >= 3 || hasRefurbItems) return 'refurbishment';
+
+  // Commercial — larger scale, no residential fit-outs
+  if (allDescs.includes('school') || allDescs.includes('office') || allDescs.includes('commercial') ||
+      allDescs.includes('hospital') || allDescs.includes('church') || allDescs.includes('hotel')) {
+    return 'commercial';
+  }
+
+  // Has slab/foundation = likely residential extension
+  if (keys.has('concrete_slab_150mm') || keys.has('concrete_slab_100mm') || keys.has('excavation_strip_foundation')) {
+    return 'residential_extension';
+  }
+
+  return 'general';
+}
+
+/**
  * Price a set of locked quantities deterministically.
  * @param {Array} lockedItems - Array of { key, description, unit, qty, override_rate? }
  * @param {string} location - Location string for uplift detection
  * @param {Object} clientRates - Client-specific rates from DB { item_key: value }
- * @param {Object} options - { contingency_pct, ohp_pct, vat_rate, currency }
+ * @param {Object} options - { contingency_pct, ohp_pct, vat_rate, currency, project_type }
  * @returns {Object} - Complete priced BOQ structure
  */
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
+  const locationInfo = detectLocationFactor(location);
+
+  // Auto-detect Ireland from location and set correct defaults
+  const isIreland = locationInfo.isIreland || (options.currency === 'EUR');
   const {
     contingency_pct = 7.5,
     ohp_pct = 12,
-    vat_rate = 20,
-    currency = 'GBP',
+    vat_rate = isIreland ? 13.5 : 20,
+    currency = isIreland ? 'EUR' : 'GBP',
   } = options;
 
-  const locationInfo = detectLocationFactor(location);
-  const locFactor = locationInfo.factor;
-  const isIreland = locFactor === 1.10 && currency === 'EUR';
+  // Location factor + currency conversion for Ireland (GBP base rates → EUR)
+  let locFactor = locationInfo.factor;
+  if (isIreland) {
+    locFactor = locationInfo.factor * GBP_TO_EUR; // e.g. 1.10 × 1.17 = 1.287 total uplift
+  }
 
   const pricedItems = [];
   const warnings = [];
 
-  // Cross-validate quantities against each other before pricing — AUTO-CORRECTS bad quantities
-  const crossResult = crossValidateQuantities(lockedItems);
+  // Detect project type to control which auto-corrections apply
+  const projectType = options.project_type || detectProjectType(lockedItems);
+  const isResidentialExtension = projectType === 'residential_extension';
+
+  // Cross-validate quantities — only apply residential caps for residential extensions
+  let crossResult = { warnings: [], corrections: [] };
+  if (isResidentialExtension) {
+    crossResult = crossValidateQuantities(lockedItems);
+  }
   // Detect duplicate/overlapping items
   const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
   warnings.push(...crossResult.warnings);
@@ -871,10 +949,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const costPerM2 = constructionTotal / estimatedFloorArea;
     // UK residential extensions typically cost £1,800-£3,000/m² construction only
     // Hard cap at £3,500/m² — if above this, scale ALL items down proportionally
-    if (costPerM2 > 3500) {
+    if (costPerM2 > 3500 && isResidentialExtension) {
       const targetCostPerM2 = 2800; // middle of typical range
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
-      warnings.push(`COST CAP APPLIED: Construction was £${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds £3,500/m² cap. All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~£${targetCostPerM2}/m².`);
+      const cs = currency === 'EUR' ? '€' : '£';
+      warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}3,500/m² cap. All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
 
       // Scale down every item total proportionally
       for (const item of pricedItems) {
@@ -916,7 +995,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       currency,
     },
     location: locationInfo,
+    project_type: projectType,
     warnings,
+    corrections: crossResult.corrections,
     item_count: pricedItems.length,
     priced_at: new Date().toISOString(),
   };
