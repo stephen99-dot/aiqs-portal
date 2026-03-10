@@ -361,6 +361,18 @@ function estimateFallbackRate(item) {
     if (desc.includes('landscap'))                                  return 2500;
     if (desc.includes('provisional'))                               return 1;
     if (desc.includes('sundries') || desc.includes('allowance'))   return 500;
+    // Small fittings and accessories — low-value per-Nr items
+    if (desc.includes('weep vent') || desc.includes('weep hole'))  return 3;
+    if (desc.includes('air admittance') || desc.includes('aav'))   return 35;
+    if (desc.includes('cavity barrier') || desc.includes('firestop')) return 18;
+    if (desc.includes('wall tie') && desc.includes('replac'))      return 8;
+    if (desc.includes('bracket') || desc.includes('fixing'))       return 12;
+    if (desc.includes('vent') && !desc.includes('event'))          return 45;
+    if (desc.includes('valve'))                                     return 35;
+    if (desc.includes('trap'))                                      return 25;
+    if (desc.includes('stopcock') || desc.includes('isolat'))      return 25;
+    if (desc.includes('backflow'))                                  return 45;
+    if (desc.includes('access panel') || desc.includes('inspect')) return 35;
     return 750; // generic lump sum fallback
   }
 
@@ -445,6 +457,9 @@ function estimateFallbackRate(item) {
     if (desc.includes('fence') || desc.includes('fencing'))        return 95;
     if (desc.includes('kerb') || desc.includes('edging'))          return 35;
     if (desc.includes('architrave') || desc.includes('dado'))      return 14;
+    if (desc.includes('cavity barrier') || desc.includes('firestop')) return 18;
+    if (desc.includes('dpc') || desc.includes('damp proof'))       return 7.5;
+    if (desc.includes('cavity closer'))                             return 14;
     return 35; // generic linear metre fallback
   }
 
