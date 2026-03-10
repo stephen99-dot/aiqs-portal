@@ -19,7 +19,7 @@ const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://aiqs-portal.onre
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = `${PORTAL_BASE_URL}/auth/google/callback`;
+const GOOGLE_REDIRECT_URI = `${PORTAL_BASE_URL}/api/auth/google/callback`;
 
 const PLANS = {
   starter:      { label: 'Starter (PAYG)', quota: 0,  boqQuota: 0,  price: 99  },
