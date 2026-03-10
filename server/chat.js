@@ -1657,6 +1657,24 @@ CRITICAL RULES:
               for (const r of dbRates) clientRates[r.item_key] = r.value;
             } catch(e) {}
 
+            // Enrich with memory engine rates — must match Stage 3 to avoid discrepancy
+            if (memoryEngine) {
+              const region = memoryEngine.detectRegion(parsed.location || '');
+              for (const item of parsed.items) {
+                if (!clientRates[item.key]) {
+                  const memRate = memoryEngine.getBestRate(db, {
+                    itemKey: item.key,
+                    region,
+                    projectType: parsed.project_type || projectTypeGuess || 'any',
+                    userId,
+                  });
+                  if (memRate && memRate.confidence > 0.65) {
+                    clientRates[item.key] = memRate.rate;
+                  }
+                }
+              }
+            }
+
             const priced = deterministicPricer.priceLockedQuantities(
               parsed.items,
               parsed.location || '',
