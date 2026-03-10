@@ -151,15 +151,29 @@ You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanat
 
 MEASUREMENT RULES:
 1. ${isTextOnly ? 'Calculate quantities from the dimensions and scope described, using typical UK construction assumptions' : 'Measure every visible element from the drawings with explicit working shown. Read ALL dimensions annotated on the drawings — do not estimate if a dimension is written on the drawing'}
-2. Show your working in the "working" field for EVERY item. Format: "Rear wall: 6.2m x 2.7m = 16.74m² less 1no. window 1.2x0.9m = 1.08m², net = 15.66m²". If you cannot show working, flag the item
+2. Show your working in the "working" field for EVERY item. Format: "(As specified: 100m of trench excavation at 1.00-1.50m depth)" or "(Rear wall: 6.2m × 2.7m = 16.74m² less 1no. window 1.2×0.9m = 1.08m², net = 15.66m²)". Always start with "(As specified: ..." when referencing a drawing spec, or "(Calculated: ..." when deriving from dimensions
 3. State all assumptions clearly in the "assumption" field
 4. Use the exact item keys from the RATE LIBRARY — this is how prices get applied
 5. Flag anything uncertain with "flagged": true and explain why
-6. Be THOROUGH — you must cover EVERY trade. A missing trade is worse than an imprecise quantity. Check you have items for: demolition, substructure, walls, roof, windows, doors, stairs, internal partitions, plasterboard, floor finishes, decoration, kitchen/bathroom fit-outs, drainage, heating/plumbing, electrical, prelims
+6. Be THOROUGH — you must cover EVERY trade. A missing trade is worse than an imprecise quantity. Check you have items for ALL relevant trades for this project type
 7. Break down composite elements into individual components (e.g. cavity wall = brick outer leaf m² + cavity insulation m² + blockwork inner leaf m² + cavity wall ties Nr + DPC m)
 8. Use ELEMENT-LEVEL quantities, NOT building-level. Measure each wall, floor, roof slope separately with dimensions shown
 9. Do NOT include professional fees (architect, planning, CDM, project management) unless the client specifically mentions them
 10. NEVER double-count: if you include first_fix_plumbing do NOT also include individual pipe runs. If you include kitchen_fitout_mid do NOT also include separate worktop/unit items. If you include bathroom_fitout_mid do NOT also include separate sanitaryware items
+
+DESCRIPTION QUALITY — CRITICAL:
+Every item description MUST be a FULL PROFESSIONAL SPECIFICATION, not a short label. Write descriptions as they would appear in a formal Bill of Quantities issued to a contractor.
+
+BAD (too short): "Sand bed and surround for duct"
+GOOD: "Sand bed and surround to 125mm duct; minimum 150mm bed below duct, 150mm above; compacted; for full 100m external trench length"
+
+BAD: "Trench excavation for duct"
+GOOD: "Excavate trench for 125mm ESB duct; average depth 1.00–1.50m; in grass/soft ground; including grading trench bottom and trimming sides; backfill with selected granular material to clause 804, compacted in 300mm layers; including non-degradable marker tape with tracer wire installed 350mm below finished surface; dispose of surplus excavated"
+
+BAD: "ESB mini pillar"
+GOOD: "Supply and install new ESB Networks-approved Mini Pillar at site boundary; including concrete surround/base, all connections, earthing and testing; handover and commissioning with ESB Networks; no overhead poles required"
+
+Include: material specifications, sizes, standards/codes, compliance references (ESB Networks, Building Regs, BS EN), installation method, scope inclusions. The description should tell a contractor exactly what is expected.
 
 COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they apply to the project. If you are missing an entire section, your takeoff is WRONG:
 1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface
@@ -283,8 +297,29 @@ Prelims: scaffolding (per m² elevation), scaffolding_two_storey, site_setup_sca
 
 IMPORTANT SCAFFOLDING NOTE: For scaffolding measured in m², use key "scaffolding" or "scaffolding_two_storey" (rate ~£22/m²). Only use "site_setup_scaffold" for the one-off site setup lump sum (1 Nr).
 
+=== INFRASTRUCTURE / UTILITIES / ESB KEYS ===
+Use these for utility connection, cable duct, and ESB/electrical supply projects:
+Prelims: traffic_management_plan (~£1,300 Item), site_fencing_hoarding (~£850 Item), site_establishment_utility (~£1,200 Item)
+Excavation: trench_excavation_duct (~£49.50/m — soft ground), trench_excavation_road (~£132/m — through macadam road), concrete_footpath_reinstatement (~£93.50/m), surface_water_disposal_excav (~£880 Item)
+Backfill: granular_backfill_clause804 (~£38.50/m³), disposal_excavated_material (~£27.50/m³)
+Ducting: sand_bed_surround_duct (~£27.50/m), cable_duct_125mm (~£38.50/m), duct_hole_cavity_wall (~£198/Nr), duct_hole_external_wall (~£132/Nr), marker_tape_tracer_wire (~£8.80/m), internal_duct_run (~£38/m), builders_work_internal_duct (~£750 Item)
+ESB Pillars: esb_mini_pillar_vault (~£4,950/Nr), esb_metering_pillar (~£2,350/Nr), esb_connection_provisional (~£2,500 Item — provisional sum for ESB Networks fees)
+
+PROJECT TYPE DETECTION — CRITICAL:
+Identify the project type FIRST and only use the relevant keys:
+- If this is a UTILITY/ESB/CABLE DUCT project: use Infrastructure/Utilities keys above. Do NOT include residential extension items (foundations, walls, roof, kitchen, bathroom etc.)
+- If this is a RESIDENTIAL EXTENSION: use the New Build/Extension keys. Do NOT include infrastructure keys.
+- If this is a REFURBISHMENT: use the Refurbishment/Heritage keys. Include strip-out items BEFORE new work.
+- If this is a MIXED project: use the relevant keys from each section as appropriate.
+
+IRELAND-SPECIFIC:
+- If the project is in Ireland (Republic of Ireland, not Northern Ireland), note: VAT = 13.5%, currency = EUR
+- ESB = Electricity Supply Board (Irish electrical utility)
+- Irish counties: Co. Longford, Co. Dublin, Co. Cork, Co. Galway, etc.
+- Use "ESB Networks" not "UK Power Networks" for Irish projects
+
 If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true.
-IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the BASE UK market rate (UK national average, NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP.
+IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the BASE UK/Irish market rate (NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP (will be converted to EUR automatically for Ireland).
 CRITICAL: The assumed_rate must be a PER-UNIT rate matching the "unit" field. If unit is "m²", the rate is price per square metre (e.g. 42 not 4200). If unit is "Nr", it is price per number. Do NOT put the total cost in assumed_rate — put the rate per single unit only.
 
 ${clientRateSection}
@@ -376,7 +411,16 @@ Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural en
 Professional fees: Architect: 5500/Item | Planning application: 462/Item | CDM principal designer: 1800/Item | Project management: 3500/Item
 Provisional sum: use qty as £ value with rate=1
 
+INFRASTRUCTURE / UTILITY RATES:
+Traffic management plan: 1300/Item | Site fencing/hoarding: 850/Item | Site establishment utility: 1200/Item
+Trench excavation (duct, soft ground): 49.50/m | Trench excavation (road): 132/m | Concrete footpath reinstatement: 93.50/m
+Surface water disposal: 880/Item | Granular backfill clause 804: 38.50/m3 | Disposal excavated material: 27.50/m3
+Sand bed surround 125mm duct: 27.50/m | Cable duct 125mm: 38.50/m | Duct hole cavity wall: 198/Nr | Duct hole external wall: 132/Nr
+Marker tape + tracer wire: 8.80/m | Internal duct run: 38/m | Builders work internal duct: 750/Item
+ESB mini pillar vault: 4950/Nr | ESB metering pillar: 2350/Nr | ESB connection provisional: 2500/Item
+
 LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | South West +5% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
+IRELAND: If the project is in Ireland, use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
 YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
@@ -1005,7 +1049,8 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
       for (const r of dbRates) clientRates[r.item_key] = r.value;
     } catch(e) {}
-    const priced = deterministicPricer.priceLockedQuantities(items, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12, vat_rate: 20 });
+    // Let the pricer auto-detect Ireland from location (sets EUR + 13.5% VAT automatically)
+    const priced = deterministicPricer.priceLockedQuantities(items, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12 });
     res.json({ success: true, priced });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
 });
@@ -1631,6 +1676,7 @@ CRITICAL RULES:
             // Format quantities summary for user
             const flagged = parsed.items.filter(i => i.flagged);
             const missing = parsed.missing_info || [];
+            const currSym = priced.summary.currency === 'EUR' ? '€' : '£';
 
             let quantitySummary = `Quantity takeoff complete for ${parsed.project_type || 'your project'} at ${parsed.location || 'the project address'}.\n\n`;
             quantitySummary += `${parsed.items.length} items extracted across ${priced.sections.length} sections.\n`;
@@ -1651,33 +1697,33 @@ CRITICAL RULES:
                 ? (sec.subtotal / priced.summary.construction_total * 100).toFixed(0) 
                 : 0;
               const flag = sec.subtotal > 50000 && parseFloat(sectionPct) > 40 ? ' ⚠️ REVIEW' : '';
-              quantitySummary += `${sec.name}: £${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}${flag}\n`;
+              quantitySummary += `${sec.name}: ${currSym}${sec.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}${flag}\n`;
               // Warn on individual items with absurd totals
               for (const item of sec.items || []) {
                 if (item.total > 25000) {
-                  quantitySummary += `  ⚠️ WARNING: ${item.description} = £${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × £${item.rate}/${item.unit})\n`;
+                  quantitySummary += `  ⚠️ WARNING: ${item.description} = ${currSym}${item.total.toLocaleString('en-GB', {maximumFractionDigits:0})} — check qty (${item.qty} ${item.unit} × ${currSym}${item.rate}/${item.unit})\n`;
                 }
               }
             }
-            quantitySummary += `\nConstruction Total: £${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): £${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nNet Total: £${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nOH&P (${priced.summary.ohp_pct}%): £${priced.summary.ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nNet + OH&P: £${priced.summary.net_with_ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nVAT (${priced.summary.vat_rate}%): £${priced.summary.vat.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nGrand Total: £${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nConstruction Total: ${currSym}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): ${currSym}${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nNet Total: ${currSym}${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nOH&P (${priced.summary.ohp_pct}%): ${currSym}${priced.summary.ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nNet + OH&P: ${currSym}${priced.summary.net_with_ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nVAT (${priced.summary.vat_rate}%): ${currSym}${priced.summary.vat.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            quantitySummary += `\nGrand Total: ${currSym}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
 
             // Per-m² sanity check — flag unreasonable totals
             const floorAreaForCheck = parsed.floor_area_m2 || floorArea;
             if (floorAreaForCheck && floorAreaForCheck > 0) {
               const costPerM2 = priced.summary.construction_total / floorAreaForCheck;
-              const costPerM2Str = `£${Math.round(costPerM2).toLocaleString('en-GB')}/m²`;
+              const costPerM2Str = `${currSym}${Math.round(costPerM2).toLocaleString('en-GB')}/m²`;
               if (costPerM2 > 5000) {
-                quantitySummary += `\n\n⚠️ COST CHECK: Construction cost is ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²). Typical UK extensions cost £2,000-3,500/m². This looks too high — please review quantities and rates above for errors.`;
+                quantitySummary += `\n\n⚠️ COST CHECK: Construction cost is ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²). Typical extensions cost ${currSym}2,000-3,500/m². This looks too high — please review quantities and rates above for errors.`;
               } else if (costPerM2 > 3500) {
-                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — at the higher end of typical UK rates (£2,000-3,500/m²). Worth a quick review.`;
+                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — at the higher end of typical rates (${currSym}2,000-3,500/m²). Worth a quick review.`;
               } else {
-                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — within typical UK range.`;
+                quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — within typical range.`;
               }
             }
 
@@ -1882,6 +1928,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
             vat_rate: pricedResult.summary.vat_rate,
+            currency: pricedResult.summary.currency === 'EUR' ? '€' : '£',
           });
           if (buf && buf.length > 100) {
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
@@ -1943,7 +1990,8 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
         if (downloadFiles.length > 0) {
           const itemCount = pricedResult.item_count || 0;
           const grandTotal = pricedResult.summary.grand_total;
-          reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): £${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
+          const docCurrSym = (pricedResult.summary.currency === 'EUR') ? '€' : '£';
+          reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): ${docCurrSym}${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
 
           if (pricedResult.warnings && pricedResult.warnings.length > 0) {
             reply += '\n\nNotes: ' + pricedResult.warnings.join(' | ');

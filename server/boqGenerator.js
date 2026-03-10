@@ -21,7 +21,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   // Column definitions
   ws.columns = [
     { header: 'Item', key: 'item', width: 8 },
-    { header: 'Description', key: 'desc', width: 48 },
+    { header: 'Description', key: 'desc', width: 62 },
     { header: 'Unit', key: 'unit', width: 8 },
     { header: 'Qty', key: 'qty', width: 10 },
     { header: 'Rate (' + currency + ')', key: 'rate', width: 12 },
@@ -108,7 +108,11 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     // Section header
     var secRow = ws.getRow(row);
     ws.mergeCells('A' + row + ':I' + row);
-    secRow.getCell(1).value = (section.number || (si + 1)) + '. ' + (section.title || 'Section');
+    // Format section title: "1. PRELIMINARY WORKS & TRAFFIC MANAGEMENT" style (number + uppercase descriptive title)
+    // Format section title: "1. 1. PRELIMINARY WORKS & TRAFFIC MANAGEMENT" style
+    var secNum = section.number || String(si + 1);
+    var secTitle = (section.title || 'Section').toUpperCase();
+    secRow.getCell(1).value = secNum + '. ' + secTitle;
     secRow.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
     secRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
     secRow.getCell(1).border = allBorders;
@@ -155,7 +159,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     if (items.length > 0) {
       var subRow = ws.getRow(row);
       subRow.getCell(1).value = '';
-      subRow.getCell(2).value = (section.title || 'Section') + ' Subtotal';
+      subRow.getCell(2).value = 'SUB-TOTAL \u2014 SECTION ' + secNum + ': ' + secTitle;
       subRow.getCell(2).font = { name: 'Arial', size: 10, bold: true };
       subRow.getCell(3).value = '';
       subRow.getCell(4).value = '';
@@ -227,7 +231,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // Grand total excl VAT
   var gtRow = ws.getRow(row);
-  gtRow.getCell(2).value = 'GRAND TOTAL (Excl. VAT)';
+  gtRow.getCell(2).value = 'TOTAL CONSTRUCTION COST (EXCL. VAT)';
   gtRow.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: '1B2A4A' } };
   gtRow.getCell(8).value = { formula: 'H' + netRowNum + '+H' + contRowNum + '+H' + ohpRowNum };
   gtRow.getCell(8).numFmt = currFmt;
@@ -241,7 +245,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // VAT
   var vatRow = ws.getRow(row);
-  vatRow.getCell(2).value = 'VAT (' + vatRate + '%)';
+  vatRow.getCell(2).value = 'VAT @ ' + vatRate + '%';
   vatRow.getCell(2).font = { name: 'Arial', size: 10 };
   vatRow.getCell(8).value = { formula: 'H' + gtRowNum + '*' + (vatRate / 100) };
   vatRow.getCell(8).numFmt = currFmt;
@@ -252,7 +256,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // Total incl VAT
   var inclRow = ws.getRow(row);
-  inclRow.getCell(2).value = 'TOTAL (Incl. VAT)';
+  inclRow.getCell(2).value = 'TOTAL CONSTRUCTION COST (INCL. VAT @ ' + vatRate + '%)';
   inclRow.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: '1B2A4A' } };
   inclRow.getCell(8).value = { formula: 'H' + gtRowNum + '+H' + vatRowNum };
   inclRow.getCell(8).numFmt = currFmt;
