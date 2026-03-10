@@ -884,7 +884,8 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       rate = item.assumed_rate || estimateFallbackRate(item) ;
       rate = rate * locFactor;
       rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
-      warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate £${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
+      const currSym = currency === 'EUR' ? '€' : '£';
+      warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate ${currSym}${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
     }
 
     // Sanity check: if AI assumed_rate looks like a total cost rather than a per-unit rate, cap it
@@ -894,7 +895,8 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       if (itemTotal > 50000 && rate > 500) {
         const expectedRate = estimateFallbackRate(item) * locFactor;
         if (rate > expectedRate * 5) {
-          warnings.push(`Rate for '${item.key}' looks too high (£${Math.round(rate)}/${item.unit || 'Item'} × ${item.qty} = £${Math.round(itemTotal).toLocaleString()}). Using fallback rate £${Math.round(expectedRate * 100) / 100}/${item.unit || 'Item'} instead.`);
+          const cSym = currency === 'EUR' ? '€' : '£';
+          warnings.push(`Rate for '${item.key}' looks too high (${cSym}${Math.round(rate)}/${item.unit || 'Item'} × ${item.qty} = ${cSym}${Math.round(itemTotal).toLocaleString()}). Using fallback rate ${cSym}${Math.round(expectedRate * 100) / 100}/${item.unit || 'Item'} instead.`);
           rate = expectedRate;
           rateSource = 'fallback_corrected';
         }
