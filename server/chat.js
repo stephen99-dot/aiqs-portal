@@ -1436,13 +1436,30 @@ ${summary}`);
         if (req.zipData && zipProcessor) {
           const zipFloorArea = req.zipData.summary.total_floor_area_m2;
           if (zipFloorArea > 0) {
-            // Use confirmed floor area from room schedule for better sanity checking
+            // Detect if this is an extension (small new-build area added to existing house)
+            // If the project type mentions extension/conversion and there's a noted increase area,
+            // distinguish the extension area from the total house area
+            const allText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
+            const isExtension = /extension|conversion|garage\s*conv|loft\s*conv/i.test(allText);
+            const notedIncrease = allText.match(/(\d+)\s*m[2²]\s*(increase|extension|new|additional)/i)
+              || allText.match(/(increase|extension|new|additional)\s*(?:of\s*)?(\d+)\s*m[2²]/i);
+            const extensionArea = notedIncrease ? parseFloat(notedIncrease[1] || notedIncrease[2]) : null;
+
+            let floorAreaNote;
+            if (isExtension && extensionArea && extensionArea < zipFloorArea * 0.5) {
+              floorAreaNote = `\n\nCRITICAL FLOOR AREA DISTINCTION: The room schedule shows a TOTAL house floor area of ${zipFloorArea.toFixed(1)}m², but this project is an EXTENSION with only ${extensionArea}m² of NEW construction.` +
+                `\n- For NEW WORK quantities (concrete slab, insulation, screed, DPM, floor finishes, UFH): use the EXTENSION area of ${extensionArea}m²` +
+                `\n- For DEMOLITION quantities (break_out_existing_slab, strip out): use ONLY the area being demolished for the extension, NOT the whole house. Typically this is the extension footprint (${extensionArea}m²) plus any existing areas being opened up (e.g. garage ~15-20m²)` +
+                `\n- For WALL AREAS: measure from the drawings — these are specific to the extension perimeter, not the whole house` +
+                `\n- The ${zipFloorArea.toFixed(1)}m² total includes existing rooms that are NOT being rebuilt. Do NOT use ${zipFloorArea.toFixed(1)}m² for any quantity unless you are genuinely working on the entire house` +
+                `\n- Set floor_area_m2 in the JSON output to ${extensionArea} (the extension area), NOT ${zipFloorArea.toFixed(1)} (the whole house)`;
+            } else {
+              floorAreaNote = `\n\nCRITICAL: The room schedule in this ZIP shows a total floor area of ${zipFloorArea.toFixed(1)}m². Use this as your primary floor area figure — do NOT estimate it. All floor-area-derived quantities should use ${zipFloorArea.toFixed(1)}m².`;
+            }
+
             extractContent = [
               ...currentContent,
-              {
-                type: 'text',
-                text: `\n\nCRITICAL: The room schedule in this ZIP shows a total floor area of ${zipFloorArea.toFixed(1)}m². Use this as your primary floor area figure — do NOT estimate it. All floor-area-derived quantities should use ${zipFloorArea.toFixed(1)}m².`,
-              },
+              { type: 'text', text: floorAreaNote },
             ];
           }
         }
@@ -1773,7 +1790,16 @@ CRITICAL RULES:
             quantitySummary += `\nGrand Total: ${currSym}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
 
             // Per-m² sanity check — flag unreasonable totals
-            const floorAreaForCheck = parsed.floor_area_m2 || floorArea;
+            // For extension projects, prefer the slab area (actual new construction)
+            // over parsed floor_area_m2 which might be total house area from room schedule
+            let floorAreaForCheck = parsed.floor_area_m2 || floorArea;
+            if (floorAreaForCheck && /extension|conversion/i.test(parsed.project_type || '')) {
+              const slabItem = parsed.items.find(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
+              if (slabItem && slabItem.qty > 0 && slabItem.qty < floorAreaForCheck * 0.5) {
+                // Slab area is much smaller than reported floor area — use slab as actual extension area
+                floorAreaForCheck = slabItem.qty;
+              }
+            }
             if (floorAreaForCheck && floorAreaForCheck > 0) {
               const costPerM2 = priced.summary.construction_total / floorAreaForCheck;
               const costPerM2Str = `${currSym}${Math.round(costPerM2).toLocaleString('en-GB')}/m²`;

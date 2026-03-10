@@ -624,6 +624,21 @@ function crossValidateQuantities(items) {
     }
   }
 
+  // Slab demolition: cap to new slab area + reasonable margin
+  // If break_out_existing_slab is much larger than the new slab, the extraction
+  // likely confused total house area with extension area
+  const breakOutSlab = byKey['break_out_existing_slab'];
+  const newSlabForDemo = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
+  if (breakOutSlab && newSlabForDemo) {
+    // For extensions, slab demolition should not exceed 2x the new slab area
+    // (allows for opening up existing rooms adjacent to extension + garage etc.)
+    const maxDemoArea = newSlabForDemo.qty * 2;
+    if (breakOutSlab.qty > maxDemoArea && breakOutSlab.qty > 80) {
+      capQty(breakOutSlab, Math.round(maxDemoArea),
+        `Slab demolition capped to 2× new slab area (${newSlabForDemo.qty}m²). Was ${breakOutSlab.qty}m² — likely includes existing house area not being demolished`);
+    }
+  }
+
   // Foundation excavation: cap to 1.5x concrete volume
   const excItem = byKey['excavation_strip_foundation'];
   const concItem = byKey['concrete_strip_foundation'];
@@ -852,11 +867,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   // Detect project type to control which auto-corrections apply
   const projectType = options.project_type || detectProjectType(lockedItems);
-  const isResidentialExtension = projectType === 'residential_extension';
 
-  // Cross-validate quantities — only apply residential caps for residential extensions
+  // Cross-validate quantities for all residential project types
+  // (extensions, refurbishments, general) — skip only for infrastructure/commercial
   let crossResult = { warnings: [], corrections: [] };
-  if (isResidentialExtension) {
+  const skipCrossValidation = projectType === 'infrastructure' || projectType === 'commercial';
+  if (!skipCrossValidation) {
     crossResult = crossValidateQuantities(lockedItems);
   }
   // Detect duplicate/overlapping items
