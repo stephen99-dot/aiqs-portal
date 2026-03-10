@@ -1243,6 +1243,16 @@ ${summary}`);
     let systemPrompt = buildSystemPrompt(userId, false);
     const hasFiles = fileNames.length > 0;
 
+    // When files are uploaded, the deterministic pricer will handle pricing via Stage 1.
+    // Tell the LLM to focus on scope analysis only — do NOT generate a cost breakdown.
+    // This prevents showing inflated LLM-generated prices if extraction fails.
+    if (hasFiles && deterministicPricer) {
+      systemPrompt += `\n\nIMPORTANT: Construction drawings have been uploaded. A deterministic pricing engine will calculate costs automatically after you analyse the drawings. ` +
+        `Do NOT generate a detailed Bill of Quantities with section subtotals and rates. Do NOT calculate a construction total, contingency, OH&P, VAT, or grand total. ` +
+        `Instead, provide a brief SCOPE ANALYSIS only: describe what you see in the drawings (project type, key elements, approximate areas, notable features). ` +
+        `End with: "I'm now extracting quantities from these drawings for deterministic pricing."`;
+    }
+
     // If session already has a locked takeoff, inject the pricer's figures into the
     // system prompt so the LLM never invents its own conflicting cost breakdown.
     const sessionId_pre = req.body.session_id || null;
@@ -1858,7 +1868,14 @@ CRITICAL RULES:
         }
       } catch (extractErr) {
         console.error('[Stage 1] Extraction error:', extractErr.message);
-        // Fall through to normal chat response
+        // When extraction fails on file uploads, warn the user — do NOT show the LLM's
+        // own pricing which uses different rates and methodology
+        if (hasFiles) {
+          reply = `I've analysed the drawings but the quantity extraction encountered an error. ` +
+            `Please try again — upload the drawings once more and I will extract quantities for deterministic pricing.\n\n` +
+            `Error detail: ${extractErr.message}\n\n` +
+            `If this persists, try uploading fewer files at once or ensure drawings are clear PDFs/images.`;
+        }
       }
       } // end shouldExtract
     }
