@@ -585,6 +585,86 @@ function crossValidateQuantities(items, projectType) {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // REFURBISHMENT / APARTMENT FLOOR AREA CAPS
+  // For refurbs there is no concrete slab to anchor floor area.
+  // Infer floor area from the smallest credible area-based item and cap others.
+  // Prevents room schedule total (e.g. 309m² across both floors) being used
+  // for single-floor items like flooring, ceilings, and electrical.
+  // ═══════════════════════════════════════════════════════════════════════
+  const isRefurb = pType.includes('refurb') || pType.includes('renovation') ||
+    pType.includes('conversion') || pType.includes('fit') || pType.includes('apartment') || pType.includes('flat');
+
+  if (isRefurb && !isExtension && !isLoft) {
+    // Collect all area-based items to infer actual floor area
+    const areaItemKeys = [
+      'plasterboard_skim_walls', 'plasterboard_ceilings', 'screed_sand_cement_75mm',
+      'screed_ufh_75mm', 'laminate_flooring', 'engineered_timber_flooring',
+      'carpet_supply_fit', 'vinyl_flooring', 'ceramic_floor_tiles', 'porcelain_floor_tiles',
+    ];
+    // Items where qty represents floor area (not wall area)
+    const floorItemKeys = [
+      'plasterboard_ceilings', 'screed_sand_cement_75mm', 'screed_ufh_75mm',
+      'laminate_flooring', 'engineered_timber_flooring', 'carpet_supply_fit',
+      'vinyl_flooring', 'ceramic_floor_tiles', 'porcelain_floor_tiles',
+    ];
+
+    // Find the most reliable floor area estimate from floor-area items
+    const floorAreas = [];
+    for (const fk of floorItemKeys) {
+      const item = byKey[fk];
+      if (item && item.qty > 0) floorAreas.push(item.qty);
+    }
+
+    // Also check custom items that are per-m² and clearly area-based
+    for (const item of items) {
+      if (item.unit === 'm²' && item.qty > 20) {
+        const desc = (item.description || '').toLowerCase();
+        if (desc.includes('floor') || desc.includes('ceiling')) {
+          floorAreas.push(item.qty);
+        }
+      }
+    }
+
+    if (floorAreas.length >= 2) {
+      // Sort areas — the median is likely the actual floor area
+      floorAreas.sort((a, b) => a - b);
+      const medianFloor = floorAreas[Math.floor(floorAreas.length / 2)];
+
+      // If any area-based items are more than 2x the median floor area, they probably
+      // include room schedule totals from multiple floors or existing+proposed areas
+      const maxReasonableArea = medianFloor * 2.2; // generous 2.2x for walls being more than floors
+
+      // Cap wall plasterboard: walls can be up to ~3x floor area (perimeter × height)
+      // but not 4-5x which means room schedule confusion
+      const plasterWalls2 = byKey['plasterboard_skim_walls'];
+      if (plasterWalls2 && plasterWalls2.qty > medianFloor * 3.5) {
+        capQty(plasterWalls2, Math.round(medianFloor * 3),
+          `Refurb plasterboard capped: was ${plasterWalls2.qty}m² but floor area ~${Math.round(medianFloor)}m² — walls cannot exceed ~3× floor area`);
+      }
+
+      // Cap ceiling to ~floor area
+      const ceilings2 = byKey['plasterboard_ceilings'];
+      if (ceilings2 && ceilings2.qty > medianFloor * 1.3) {
+        capQty(ceilings2, Math.round(medianFloor * 1.1),
+          `Refurb ceiling capped to ~floor area (${Math.round(medianFloor)}m²)`);
+      }
+
+      // Cap any custom per-m² items that look like they used total room schedule
+      for (const item of items) {
+        if (item.unit === 'm²' && item.qty > maxReasonableArea) {
+          const desc = (item.description || '').toLowerCase();
+          const isWallItem = desc.includes('wall') || desc.includes('plaster') || desc.includes('dry') || desc.includes('skim');
+          const maxForItem = isWallItem ? medianFloor * 3 : medianFloor * 1.3;
+          if (item.qty > maxForItem) {
+            capQty(item, Math.round(maxForItem),
+              `Refurb area cap: ${item.key || 'custom item'} was ${item.qty}m² but apartment/floor area ~${Math.round(medianFloor)}m². Likely room schedule total used instead of actual working area`);
+          }
+        }
+      }
+    }
+  }
+
   // Get total floor area from concrete slab items (AFTER any caps applied above)
   const slabItem = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
   const floorArea = slabItem ? slabItem.qty : null;
@@ -1037,6 +1117,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const costPerM2 = constructionTotal / estimatedFloorArea;
     // UK residential extensions typically cost £1,800-£3,000/m² construction only
     // Hard cap at £3,500/m² — if above this, scale ALL items down proportionally
+    const isResidentialExtension = projectType === 'residential_extension' || projectType === 'general';
     if (costPerM2 > 3500 && isResidentialExtension) {
       const targetCostPerM2 = 2800; // middle of typical range
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
