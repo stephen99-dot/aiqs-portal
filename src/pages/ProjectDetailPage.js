@@ -99,9 +99,14 @@ export default function ProjectDetailPage() {
             {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
-          {status.label}
-        </span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
+            📋 Variations
+          </Link>
+          <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
+            {status.label}
+          </span>
+        </div>
       </div>
 
       {/* Progress tracker */}
