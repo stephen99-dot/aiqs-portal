@@ -153,6 +153,34 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_rate_corrections_user ON rate_corrections_log(user_id);
   CREATE INDEX IF NOT EXISTS idx_insights_user ON client_insights(user_id);
   CREATE INDEX IF NOT EXISTS idx_insights_category ON client_insights(category);
+
+  CREATE TABLE IF NOT EXISTS variations (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    vo_number TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    additions REAL DEFAULT 0,
+    omissions REAL DEFAULT 0,
+    net_change REAL DEFAULT 0,
+    currency TEXT DEFAULT 'GBP',
+    status TEXT DEFAULT 'draft',
+    approved_at DATETIME,
+    rejected_at DATETIME,
+    rejection_reason TEXT,
+    original_boq_filename TEXT,
+    revised_boq_filename TEXT,
+    vo_doc_filename TEXT,
+    raw_analysis TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_variations_project ON variations(project_id);
+  CREATE INDEX IF NOT EXISTS idx_variations_user ON variations(user_id);
 `);
 
 // Migrations for existing databases
