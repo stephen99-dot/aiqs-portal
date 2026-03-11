@@ -1288,7 +1288,11 @@ ${summary}`);
             `Grand Total (incl contingency, OH&P, VAT): ${tkSym}${tkPriced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
             `CRITICAL: A deterministic pricer has already calculated costs for this project. Do NOT generate your own cost breakdown or section totals. ` +
             `If the user asks about costs, ONLY reference these locked figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
-            `The pricer's figures are authoritative and must not be contradicted.`;
+            `The pricer's figures are authoritative and must not be contradicted.\n` +
+            `QUANTITY ADJUSTMENTS: If the user flags a quantity as wrong (e.g. "plasterboard seems high", "electrical area should be 160m² not 309m²"), ` +
+            `you may agree and explain why. The system will automatically detect your agreement and update the locked takeoff. ` +
+            `Tell the user: "I've updated that quantity — say 'generate documents' to get the corrected BOQ." ` +
+            `Do NOT invent your own total or re-calculate the full BOQ yourself — the deterministic pricer will re-price with the corrected quantities.`;
         }
       } catch(e) { console.error('[Takeoff inject] Error:', e.message); }
     }
@@ -2213,6 +2217,96 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
         }
       }
     } catch (autoErr) { console.error('[AutoLearn]', autoErr.message); }
+
+    // ── LIVE TAKEOFF CORRECTIONS ────────────────────────────────────────
+    // When user flags a quantity issue ("this seems high", "plasterboard should be X")
+    // AND the session has a locked takeoff, update the locked items in the DB.
+    // This ensures "generate documents" uses corrected quantities, not the originals.
+    try {
+      const userMsg = message || '';
+      const userLower = userMsg.toLowerCase();
+      const replyLower = reply.toLowerCase();
+      const isQtyQuery = /(?:seems?\s*(?:high|too|wrong|incorrect)|check\s*qty|should\s*be|actually\s*(?:is|was|should)|plasterboard|750\s*m|floor\s*area|not\s*(?:right|correct))/i.test(userLower);
+      const llmAgreed = /(?:error|mistake|you'?re\s*(?:right|correct|absolutely)|overstat|incorrect|should\s*(?:be|have\s*been)|I'?ve\s*(?:made|been)|apolog|let\s*me\s*(?:correct|fix|adjust|recalculate))/i.test(replyLower);
+
+      if ((isQtyQuery || llmAgreed) && sessionId && benchmarkStore) {
+        const liveT = benchmarkStore.getTakeoffBySession(db, sessionId);
+        if (liveT && liveT.items && liveT.items.length > 0) {
+          let itemsModified = false;
+          const items = liveT.items;
+
+          // Strategy 1: Parse explicit qty corrections from user message
+          // e.g. "plasterboard should be 250m²" or "electrical should be 162m²"
+          const qtyCorrections = userMsg.matchAll(/(\w[\w\s]*?)\s*(?:should\s*be|is\s*actually|correct(?:ed)?\s*(?:to|is))\s*(?:about\s*)?(\d[\d,.]*)\s*m[2²]/gi);
+          for (const match of qtyCorrections) {
+            const itemHint = match[1].toLowerCase().trim();
+            const newQty = parseFloat(match[2].replace(/,/g, ''));
+            if (newQty > 0 && newQty < 100000) {
+              // Find matching item in locked takeoff
+              for (const item of items) {
+                const desc = (item.description || '').toLowerCase();
+                const key = (item.key || '').toLowerCase();
+                if ((desc.includes(itemHint) || key.includes(itemHint.replace(/\s+/g, '_'))) && item.unit === 'm²') {
+                  if (Math.abs(item.qty - newQty) > 1) {
+                    console.log(`[LiveCorrection] User correction: ${item.key} qty ${item.qty} → ${newQty} (user said: "${match[0]}")`);
+                    item.qty = newQty;
+                    item.validation_note = `User corrected from ${item.qty} to ${newQty}`;
+                    itemsModified = true;
+                  }
+                }
+              }
+            }
+          }
+
+          // Strategy 2: If LLM agreed the total should be much lower and mentioned
+          // a specific contractor quote, look for the LLM recalculating with corrected areas.
+          // Parse "actual apartment working area estimated at Xm²" or "floor area of Xm²"
+          const areaMatch = replyLower.match(/(?:actual|working|correct|apartment)\s*(?:area|floor\s*area)\s*(?:estimated\s*at|of|is|=)\s*(\d[\d,.]*)\s*m[2²]/i);
+          if (areaMatch) {
+            const correctArea = parseFloat(areaMatch[1].replace(/,/g, ''));
+            if (correctArea > 10 && correctArea < 10000) {
+              // Find area-based items using a much larger area and cap them
+              for (const item of items) {
+                if (item.unit === 'm²' && item.qty > correctArea * 2.5) {
+                  const desc = (item.description || '').toLowerCase();
+                  const isWallItem = desc.includes('wall') || desc.includes('plaster') || desc.includes('dry') || desc.includes('skim');
+                  const maxArea = isWallItem ? correctArea * 3 : correctArea * 1.3;
+                  if (item.qty > maxArea) {
+                    console.log(`[LiveCorrection] Area cap: ${item.key} qty ${item.qty} → ${Math.round(maxArea)} (floor area ${correctArea}m²)`);
+                    item.qty = Math.round(maxArea);
+                    item.validation_note = `Capped from LLM-acknowledged floor area correction (${correctArea}m²)`;
+                    itemsModified = true;
+                  }
+                }
+              }
+            }
+          }
+
+          // Strategy 3: If LLM provided a corrected base estimate (e.g. "base estimate of £62,825")
+          // and the locked takeoff has a much higher total, flag for re-pricing
+          const baseEstMatch = replyLower.match(/(?:base|correct|actual)\s*(?:estimate|cost|total|construction)\s*(?:of|is|=|:)\s*(?:£|€)\s*([\d,]+)/i);
+          if (baseEstMatch && !itemsModified) {
+            const correctedTotal = parseFloat(baseEstMatch[1].replace(/,/g, ''));
+            if (correctedTotal > 1000) {
+              // Quick-price current items to see the gap
+              const currentTotal = items.reduce((sum, item) => {
+                // Rough estimate using base rates
+                return sum + (item.qty * (item.override_rate || 50));
+              }, 0);
+              if (currentTotal > correctedTotal * 2) {
+                console.log(`[LiveCorrection] LLM acknowledged total should be ~£${correctedTotal} but items suggest ~£${Math.round(currentTotal)}. Items may need manual review.`);
+                // Add a warning note but don't blindly scale — the user needs to generate to see pricer output
+              }
+            }
+          }
+
+          if (itemsModified) {
+            benchmarkStore.updateTakeoff(db, liveT.id, { items });
+            console.log(`[LiveCorrection] Updated locked takeoff ${liveT.id} with corrections`);
+          }
+        }
+      }
+    } catch (liveCorrErr) { console.error('[LiveCorrection]', liveCorrErr.message); }
 
     try { extractInsightsFromMessage(userId, message); } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
 
