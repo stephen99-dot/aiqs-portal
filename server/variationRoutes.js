@@ -401,7 +401,6 @@ router.get('/variations/download/:filename', authMiddleware, (req, res) => {
   }
 });
 
-module.exports = router;
 
 // POST /api/variations/:id/generate-revised-boq
 router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, res) => {
@@ -417,29 +416,64 @@ router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, 
     const allApproved = db.prepare("SELECT * FROM variations WHERE project_id = ? AND status = 'approved' ORDER BY created_at ASC").all(variation.project_id);
     const sym = (variation.currency === 'EUR') ? '€' : '£';
 
-    const variationSummary = allApproved.map(function(v) {
+    // Build sections directly from stored variation analysis — no AI call needed
+    // This is reliable because we already have the structured scope_changes from when the VO was created
+    var sections = [];
+
+    allApproved.forEach(function(v) {
       var analysis = {};
       try { analysis = JSON.parse(v.raw_analysis); } catch (e) {}
-      return v.vo_number + ': ' + v.title + '\n' + v.description + '\nScope changes: ' + JSON.stringify(analysis.scope_changes || []);
-    }).join('\n\n---\n\n');
 
-    const systemPrompt = 'You are an expert UK Quantity Surveyor. Produce structured BOQ data in JSON format. Respond ONLY with valid JSON — no preamble, no markdown.';
-    const userPrompt = 'Produce a revised Bill of Quantities incorporating the approved variations below.\n\nPROJECT: ' + project.title + '\nTYPE: ' + project.project_type + '\nLOCATION: ' + (project.location || 'UK') + '\nORIGINAL CONTRACT VALUE: ' + sym + (project.total_value || 0).toLocaleString() + '\n\nAPPROVED VARIATIONS:\n' + variationSummary + '\n\nReturn JSON in this structure. Include a final VARIATIONS section listing all variation items:\n{"sections":[{"number":"1","title":"Section Title","items":[{"item":"A","description":"...","unit":"m2","qty":10,"rate":50,"labour":300,"materials":200,"total":500,"rate_source":"generic"}]}],"summary":{"original_total":0,"variations_total":0,"revised_total":0,"currency":"' + (variation.currency || 'GBP') + '"}}';
+      var items = [];
+      var itemLetter = 'A';
 
-    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-opus-4-5', max_tokens: 8000, system: systemPrompt, messages: [{ role: 'user', content: userPrompt }] })
+      // Build items from scope_changes
+      var changes = analysis.scope_changes || [];
+      changes.forEach(function(change) {
+        var cost = parseFloat(change.cost) || 0;
+        var labour = Math.round(cost * 0.55 * 100) / 100;
+        var materials = Math.round(cost * 0.45 * 100) / 100;
+        items.push({
+          item: itemLetter,
+          description: (change.type === 'omission' ? '[OMISSION] ' : '') + change.item + (change.detail ? ' — ' + change.detail : ''),
+          unit: change.unit || 'item',
+          qty: 1,
+          rate: cost,
+          labour: change.type === 'omission' ? -labour : labour,
+          materials: change.type === 'omission' ? -materials : materials,
+          total: change.type === 'omission' ? -cost : cost,
+          rate_source: 'generic'
+        });
+        itemLetter = String.fromCharCode(itemLetter.charCodeAt(0) + 1);
+      });
+
+      // If no scope_changes, create a single summary item
+      if (items.length === 0) {
+        var net = parseFloat(v.net_change) || 0;
+        var labour = Math.round(Math.abs(net) * 0.55 * 100) / 100;
+        var materials = Math.round(Math.abs(net) * 0.45 * 100) / 100;
+        items.push({
+          item: 'A',
+          description: v.description,
+          unit: 'item',
+          qty: 1,
+          rate: Math.abs(net),
+          labour: net >= 0 ? labour : -labour,
+          materials: net >= 0 ? materials : -materials,
+          total: net,
+          rate_source: 'generic'
+        });
+      }
+
+      sections.push({
+        number: v.vo_number,
+        title: v.title,
+        items: items
+      });
     });
 
-    const aiData = await apiResponse.json();
-    if (!apiResponse.ok) throw new Error(aiData.error?.message || 'Anthropic API error');
-
-    var boqData = {};
-    try {
-      var raw = aiData.content[0].text.replace(/```json|```/g, '').trim();
-      boqData = JSON.parse(raw);
-    } catch (e) { throw new Error('Failed to parse revised BOQ from AI'); }
+    var totalVariations = allApproved.reduce(function(s, v) { return s + (parseFloat(v.net_change) || 0); }, 0);
+    var originalTotal = parseFloat(project.total_value) || 0;
 
     var generateBOQExcel;
     try { var mod = require('./boqGenerator'); generateBOQExcel = mod.generateBOQExcel; } catch (e) {
@@ -448,25 +482,162 @@ router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, 
 
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
     const buffer = await generateBOQExcel(
-      boqData.sections || [],
-      project.title + ' — REVISED (inc. Variations)',
+      sections,
+      project.title + ' — VARIATION ACCOUNT',
       user ? user.full_name : 'Client',
       { currency: sym }
     );
 
-    const filename = 'Revised_BOQ_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
+    const filename = 'VariationAccount_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
     const outPath = path.join(outputsDir, filename);
     fs.writeFileSync(outPath, buffer);
 
     db.prepare('UPDATE variations SET revised_boq_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(filename, req.params.id);
-    db.prepare('UPDATE projects SET boq_filename = ?, total_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(filename, boqData.summary ? boqData.summary.revised_total : project.total_value, variation.project_id);
 
     const updated = db.prepare('SELECT * FROM variations WHERE id = ?').get(req.params.id);
-    res.json({ variation: updated, filename: filename, summary: boqData.summary });
+    res.json({
+      variation: updated,
+      filename: filename,
+      summary: { original_total: originalTotal, variations_total: totalVariations, revised_total: originalTotal + totalVariations, currency: variation.currency || 'GBP' }
+    });
 
   } catch (err) {
     console.error('[Variations] revised BOQ error:', err);
-    res.status(500).json({ error: 'Failed to generate revised BOQ: ' + err.message });
+    res.status(500).json({ error: 'Failed to generate variation account: ' + err.message });
   }
 });
+
+// POST /api/projects/:projectId/client-copy — generate client copy with baked-in margins
+router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const contingency = parseFloat(req.body.contingency) || 0;
+    const ohp = parseFloat(req.body.ohp) || 0;
+    const vat = parseFloat(req.body.vat) || 0;
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
+    if (!project && req.user.role !== 'admin') return res.status(403).json({ error: 'Access denied' });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ found for this project' });
+
+    // Read the original BOQ Excel and re-build with uplifted values using ExcelJS
+    const ExcelJS = require('exceljs');
+    const originalPath = path.join(outputsDir, project.boq_filename);
+    if (!require('fs').existsSync(originalPath)) return res.status(404).json({ error: 'Original BOQ file not found on server' });
+
+    // Uplift multiplier: compound the percentages
+    const multiplier = (1 + contingency / 100) * (1 + ohp / 100) * (1 + vat / 100);
+
+    const srcWb = new ExcelJS.Workbook();
+    await srcWb.xlsx.readFile(originalPath);
+
+    const srcWs = srcWb.getWorksheet('BOQ') || srcWb.worksheets[0];
+    if (!srcWs) return res.status(500).json({ error: 'Could not read BOQ worksheet' });
+
+    // Build new workbook — clone structure, uplift monetary columns
+    const newWb = new ExcelJS.Workbook();
+    newWb.creator = 'The AI QS';
+    newWb.created = new Date();
+
+    const newWs = newWb.addWorksheet('BOQ', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
+    });
+
+    // Monetary columns (1-indexed): Rate=5, Labour=6, Materials=7, Total=8
+    const monetaryCols = new Set([5, 6, 7, 8]);
+    // Columns to HIDE in client copy: Rate Source (9)
+    const hiddenCols = new Set([9]);
+
+    srcWs.eachRow({ includeEmpty: true }, function(row, rowNumber) {
+      const newRow = newWs.getRow(rowNumber);
+
+      // Copy row height
+      newRow.height = row.height;
+
+      row.eachCell({ includeEmpty: true }, function(cell, colNumber) {
+        if (hiddenCols.has(colNumber)) return; // skip rate source column
+
+        const newCell = newRow.getCell(colNumber);
+
+        // Copy style
+        if (cell.style) {
+          try { newCell.style = JSON.parse(JSON.stringify(cell.style)); } catch (e) {}
+        }
+
+        // Modify title row to add "CLIENT COPY" label
+        if (rowNumber === 1 && colNumber === 1) {
+          const origVal = (typeof cell.value === 'object' && cell.value?.richText)
+            ? cell.value.richText.map(r => r.text).join('') : (cell.value || '');
+          newCell.value = origVal + ' — CLIENT COPY';
+          return;
+        }
+
+        // Uplift monetary cells that contain numbers
+        if (monetaryCols.has(colNumber) && typeof cell.value === 'number') {
+          newCell.value = Math.round(cell.value * multiplier * 100) / 100;
+          return;
+        }
+
+        // For formula cells in monetary columns, extract cached value and uplift
+        if (monetaryCols.has(colNumber) && cell.value && typeof cell.value === 'object' && cell.value.formula) {
+          const cached = cell.value.result;
+          if (typeof cached === 'number') {
+            newCell.value = Math.round(cached * multiplier * 100) / 100;
+          } else {
+            newCell.value = cached || 0;
+          }
+          return;
+        }
+
+        // Everything else — copy as-is
+        if (cell.value && typeof cell.value === 'object' && cell.value.formula) {
+          newCell.value = cell.value.result || 0;
+        } else {
+          newCell.value = cell.value;
+        }
+      });
+
+      newRow.commit();
+    });
+
+    // Copy column widths (skip hidden)
+    srcWs.columns.forEach(function(col, i) {
+      if (!hiddenCols.has(i + 1) && col.width) {
+        newWs.getColumn(i + 1).width = col.width;
+      }
+    });
+
+    // Copy merged cells
+    if (srcWs.mergeCells) {
+      try {
+        Object.keys(srcWs._merges || {}).forEach(function(key) {
+          try { newWs.mergeCells(key); } catch (e) {}
+        });
+      } catch (e) {}
+    }
+
+    // Add uplift note at bottom
+    const lastRow = newWs.rowCount + 2;
+    const noteRow = newWs.getRow(lastRow);
+    noteRow.getCell(1).value = 'This document is prepared for client use. All rates are inclusive of contingency, overhead & profit' + (vat > 0 ? ', and VAT' : '') + '.';
+    noteRow.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF888888' } };
+    noteRow.commit();
+
+    // Freeze panes
+    newWs.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
+    newWs.headerFooter.oddFooter = '&LThe AI QS - theaiqs.co.uk — CLIENT COPY&RPage &P of &N';
+
+    const buffer = await newWb.xlsx.writeBuffer();
+    const filename = 'ClientCopy_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(Buffer.from(buffer));
+
+  } catch (err) {
+    console.error('[ClientCopy] error:', err);
+    res.status(500).json({ error: 'Failed to generate client copy: ' + err.message });
+  }
+});
+
+module.exports = router;
