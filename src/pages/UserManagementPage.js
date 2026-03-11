@@ -89,16 +89,12 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
-  const [customQuota, setCustomQuota] = useState(user.monthly_quota || user.quota || 0);
-  const [customBoqQuota, setCustomBoqQuota] = useState(user.monthly_boq_quota || user.boq_quota || 5);
-  const [bonusMsgs, setBonusMsgs] = useState(user.bonus_messages || 0);
-  const [bonusDocs, setBonusDocs] = useState(user.bonus_docs || 0);
-  const [grantDocAmt, setGrantDocAmt] = useState(1);
-  const [importResult, setImportResult] = useState(null);
+  const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [importResult, setImportResult] = useState(null);
   const fileInputRef = React.useRef(null);
 
   const border = isDark ? '#1C2A44' : '#E2E8F0';
@@ -107,48 +103,37 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const bg2 = isDark ? '#131B2E' : '#FFF';
 
   const PLANS = [
-    { value: 'starter', label: 'Starter', quota: 0 },
-    { value: 'professional', label: 'Professional', quota: 100 },
-    { value: 'premium', label: 'Premium', quota: 200 },
-    { value: 'custom', label: 'Custom', quota: null },
+    { value: 'starter', label: 'Starter' },
+    { value: 'professional', label: 'Professional' },
+    { value: 'premium', label: 'Premium' },
+    { value: 'custom', label: 'Custom' },
   ];
 
-  const btn = (c) => ({padding:'7px 14px',borderRadius:8,border:'none',cursor:'pointer',background:c,color:'#FFF',fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6,opacity:loading?0.6:1});
-  const outBtn = {padding:'7px 14px',borderRadius:8,border:'1px solid '+border,cursor:'pointer',background:'transparent',color:text,fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6};
-  const lbl = {fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4};
-  const sInp = {padding:'7px 10px',borderRadius:6,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:13,width:80,outline:'none'};
+  const btn = (c) => ({ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: c, color: '#FFF', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: loading ? 0.6 : 1 });
+  const outBtn = { padding: '7px 14px', borderRadius: 8, border: '1px solid ' + border, cursor: 'pointer', background: 'transparent', color: text, fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 };
+  const lbl = { fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 };
+  const sInp = { padding: '7px 10px', borderRadius: 6, border: '1px solid ' + border, background: isDark ? '#0D1320' : '#F8FAFC', color: text, fontSize: 13, outline: 'none' };
 
-  const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch(e) { alert(e.message); } finally { setLoading(''); } };
+  const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch (e) { alert(e.message); } finally { setLoading(''); } };
   function showSuccess(msg) { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }
 
   const savePlan = () => doAction('plan', async () => {
-    const quota = plan === 'custom' ? parseInt(customQuota) || 0 : PLANS.find(p => p.value === plan)?.quota || 0;
-    const boqQuota = plan === 'custom' ? parseInt(customBoqQuota) || 0 : plan === 'professional' ? 10 : plan === 'premium' ? 20 : 0;
-    const result = await apiFetch('/admin/users/' + user.id + '/plan', {
+    await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ plan, monthlyQuota: quota, boqQuota })
+      body: JSON.stringify({ plan, monthlyQuota: user.monthly_quota || 0, boqQuota: parseInt(docAllowance) || 0 })
     });
-    onUpdate({ ...user, plan, monthly_quota: quota, quota, boq_quota: boqQuota });
-    showSuccess('Plan updated to ' + plan + (plan === 'custom' ? ' (' + quota + ' msgs, ' + boqQuota + ' BOQs/mo)' : ''));
+    onUpdate({ ...user, plan, monthly_boq_quota: parseInt(docAllowance) || 0 });
+    showSuccess('Plan updated to ' + plan);
   });
 
-  const saveCredits = () => doAction('credit', async () => {
-    await apiFetch('/admin/users/' + user.id + '/credits', {
+  const saveDocAllowance = () => doAction('docs', async () => {
+    const qty = parseInt(docAllowance) || 0;
+    await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ bonus_messages: parseInt(bonusMsgs) || 0, bonus_docs: parseInt(bonusDocs) || 0 })
+      body: JSON.stringify({ plan, monthlyQuota: user.monthly_quota || 0, boqQuota: qty })
     });
-    onUpdate({ ...user, bonus_messages: parseInt(bonusMsgs) || 0, bonus_docs: parseInt(bonusDocs) || 0 });
-    showSuccess('Credits updated — ' + bonusMsgs + ' bonus messages, ' + bonusDocs + ' bonus docs');
-  });
-
-  const grantDoc = () => doAction('grantdoc', async () => {
-    const amount = parseInt(grantDocAmt) || 1;
-    await apiFetch('/admin/users/' + user.id + '/grant-doc', {
-      method: 'POST',
-      body: JSON.stringify({ amount })
-    });
-    onUpdate({ ...user, bonus_docs: (user.bonus_docs || 0) + amount });
-    showSuccess(amount + ' paid BOQ credit' + (amount > 1 ? 's' : '') + ' granted');
+    onUpdate({ ...user, monthly_boq_quota: qty, boq_quota: qty });
+    showSuccess('Document allowance set to ' + qty);
   });
 
   const toggleSuspend = () => doAction('suspend', async () => {
@@ -179,13 +164,12 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
       });
       const res = await resp.json();
       setImportResult(res);
-    } catch(err) { setImportResult({ error: err.message }); }
+    } catch (err) { setImportResult({ error: err.message }); }
     finally { setLoading(''); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
-  // Message usage stats
   const msgsUsed = user.messages_used || user.used || 0;
-  const msgsTotal = (user.monthly_quota || user.quota || 0) + (user.bonus_messages || 0);
+  const msgsTotal = user.monthly_quota || user.quota || 0;
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
 
@@ -194,147 +178,112 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
       {showResetModal && (
         <ResetPasswordModal user={user} isDark={isDark} onClose={() => setShowResetModal(false)} onSuccess={showSuccess} />
       )}
-      <div style={{background:isDark?'#0D1320':'#F8FAFC',borderTop:'1px solid '+border,padding:'20px 24px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <div style={{fontSize:15,fontWeight:700,color:text}}>Manage: {user.full_name || user.email}</div>
-          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
+      <div style={{ background: isDark ? '#0D1320' : '#F8FAFC', borderTop: '1px solid ' + border, padding: '20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: text }}>Manage: {user.full_name || user.email}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: muted }}><X size={16} /></button>
         </div>
 
         {successMsg && (
-          <div style={{marginBottom:12,padding:'9px 14px',borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',color:'#10B981',fontSize:13,fontWeight:500}}>
+          <div style={{ marginBottom: 12, padding: '9px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#10B981', fontSize: 13, fontWeight: 500 }}>
             ✅ {successMsg}
           </div>
         )}
 
         {/* Message usage bar */}
-        <div style={{marginBottom:14,padding:'12px 16px',borderRadius:10,border:'1px solid '+border,background:bg2}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-            <span style={{fontSize:11,fontWeight:600,color:muted,textTransform:'uppercase',letterSpacing:'0.05em'}}>Message Usage This Month</span>
-            <span style={{fontSize:12,fontWeight:600,color:text}}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '∞ (PAYG)'}</span>
+        <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Message Usage This Month</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: text }}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '∞'}</span>
           </div>
           {msgsTotal > 0 ? (
-            <div style={{height:6,borderRadius:4,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden'}}>
-              <div style={{width:msgPct+'%',height:'100%',borderRadius:4,background:msgBarColor,transition:'width 0.3s'}} />
+            <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
+              <div style={{ width: msgPct + '%', height: '100%', borderRadius: 4, background: msgBarColor, transition: 'width 0.3s' }} />
             </div>
           ) : (
-            <div style={{fontSize:11,color:muted}}>Pay-as-you-go — no monthly message limit</div>
-          )}
-          {user.bonus_messages > 0 && (
-            <div style={{fontSize:11,color:'#A78BFA',marginTop:4}}>+ {user.bonus_messages} bonus messages included</div>
+            <div style={{ fontSize: 11, color: muted }}>No message limit set</div>
           )}
         </div>
 
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
 
           {/* Plan */}
-          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
             <div style={lbl}>Plan</div>
-            <div style={{display:'flex',gap:6,marginTop:6,flexWrap:'wrap'}}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
               {PLANS.map(p => (
                 <button key={p.value} onClick={() => setPlan(p.value)}
-                  style={{padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',
-                    border: plan === p.value ? '2px solid #2563EB' : '1px solid '+border,
+                  style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    border: plan === p.value ? '2px solid #2563EB' : '1px solid ' + border,
                     background: plan === p.value ? 'rgba(37,99,235,0.1)' : 'transparent',
-                    color: plan === p.value ? '#2563EB' : muted,
-                    textTransform:'capitalize'}}>
+                    color: plan === p.value ? '#2563EB' : muted, textTransform: 'capitalize' }}>
                   {p.label}
                 </button>
               ))}
             </div>
-            {plan === 'custom' && (
-              <div style={{marginTop:10,display:'flex',gap:12,flexWrap:'wrap'}}>
-                <div>
-                  <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>Messages / month</label>
-                  <input type="number" value={customQuota} onChange={e => setCustomQuota(e.target.value)}
-                    style={{...sInp, width:90}} placeholder="e.g. 50" />
-                </div>
-                <div>
-                  <label style={{fontSize:10,color:muted,display:'block',marginBottom:3}}>BOQs / month</label>
-                  <input type="number" value={customBoqQuota} onChange={e => setCustomBoqQuota(e.target.value)}
-                    style={{...sInp, width:90}} placeholder="e.g. 5" />
-                </div>
-              </div>
-            )}
-            <button onClick={savePlan} disabled={!!loading} style={{...btn('#2563EB'), marginTop:10}}>
+            <button onClick={savePlan} disabled={!!loading} style={{ ...btn('#2563EB'), marginTop: 10 }}>
               <Save size={12} /> Save Plan
             </button>
           </div>
 
-          {/* Bonus Credits */}
-          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
-            <div style={lbl}>Bonus Credits (set directly)</div>
-            <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap',marginTop:6}}>
-              <div>
-                <div style={{fontSize:10,color:muted,marginBottom:3}}>Messages</div>
-                <input type="number" value={bonusMsgs} onChange={e => setBonusMsgs(e.target.value)} style={sInp} />
-              </div>
-              <div>
-                <div style={{fontSize:10,color:muted,marginBottom:3}}>Docs</div>
-                <input type="number" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={sInp} />
-              </div>
-              <button onClick={saveCredits} disabled={!!loading} style={btn('#2563EB')}>
+          {/* Documents Allowance */}
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+            <div style={lbl}>Documents Allowance</div>
+            <p style={{ fontSize: 12, color: muted, margin: '4px 0 10px', lineHeight: 1.4 }}>
+              Set how many documents this client can generate. Set 0 for none.
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="number" min={0} max={999}
+                value={docAllowance}
+                onChange={e => setDocAllowance(e.target.value)}
+                style={{ ...sInp, width: 80, fontSize: 16, fontWeight: 700, textAlign: 'center' }}
+              />
+              <span style={{ fontSize: 13, color: muted }}>documents</span>
+              <button onClick={saveDocAllowance} disabled={!!loading} style={btn('#2563EB')}>
                 <Save size={12} /> Save
               </button>
             </div>
-            <div style={{fontSize:11,color:muted,marginTop:8}}>These add on top of their plan allowance</div>
           </div>
 
           {/* Suspend */}
-          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
             <div style={lbl}>{user.suspended ? 'Reactivate Account' : 'Suspend Account'}</div>
             {!user.suspended && (
               <input value={suspendReason} onChange={e => setSuspendReason(e.target.value)}
                 placeholder="Reason (optional)"
-                style={{...sInp, width:'100%', marginTop:6, marginBottom:8}} />
+                style={{ ...sInp, width: '100%', marginTop: 6, marginBottom: 8 }} />
             )}
             <button onClick={toggleSuspend} disabled={!!loading}
               style={user.suspended ? btn('#10B981') : btn('#EF4444')}>
               {user.suspended ? <><Play size={12} /> Reactivate</> : <><Pause size={12} /> Suspend</>}
             </button>
             {user.suspended && user.suspended_reason && (
-              <div style={{fontSize:11,color:'#EF4444',marginTop:6}}>Reason: {user.suspended_reason}</div>
+              <div style={{ fontSize: 11, color: '#EF4444', marginTop: 6 }}>Reason: {user.suspended_reason}</div>
             )}
           </div>
 
           {/* Tools */}
-          <div style={{padding:14,borderRadius:10,border:'1px solid '+border,background:bg2}}>
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
             <div style={lbl}>Tools</div>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{display:'none'}} />
-
-            {/* Grant Paid BOQ — number input instead of button */}
-            <div style={{marginTop:6,marginBottom:10,padding:'10px 12px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC'}}>
-              <div style={{fontSize:10,fontWeight:600,color:muted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Grant Paid BOQ Credits</div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <input type="number" min={1} max={50} value={grantDocAmt}
-                  onChange={e => setGrantDocAmt(e.target.value)}
-                  style={{...sInp, width:60}} />
-                <span style={{fontSize:12,color:muted}}>credit{grantDocAmt !== 1 ? 's' : ''}</span>
-                <button onClick={grantDoc} disabled={!!loading} style={btn('#10B981')}>
-                  <CreditCard size={12} /> Grant
-                </button>
-              </div>
-            </div>
-
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={importRates} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <button onClick={genMagicLink} disabled={!!loading} style={outBtn}><Link2 size={12} /> Magic Link</button>
               <button onClick={() => fileInputRef.current && fileInputRef.current.click()} disabled={!!loading} style={outBtn}><Upload size={12} /> Import Rates</button>
               <button onClick={() => setShowResetModal(true)} disabled={!!loading}
-                style={{...outBtn, color:'#F59E0B', borderColor:'rgba(245,158,11,0.3)', background:'rgba(245,158,11,0.06)'}}>
+                style={{ ...outBtn, color: '#F59E0B', borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}>
                 <Key size={12} /> Reset Password
               </button>
             </div>
-
             {magicLink && (
-              <div style={{marginTop:8,padding:8,borderRadius:6,background:isDark?'#0D1320':'#F1F5F9',fontSize:11,wordBreak:'break-all',color:'#2563EB',cursor:'pointer'}}
+              <div style={{ marginTop: 8, padding: 8, borderRadius: 6, background: isDark ? '#0D1320' : '#F1F5F9', fontSize: 11, wordBreak: 'break-all', color: '#2563EB', cursor: 'pointer' }}
                 onClick={() => { navigator.clipboard.writeText(magicLink); showSuccess('Magic link copied!'); }}>
-                {magicLink}<br /><span style={{color:muted}}>Click to copy</span>
+                {magicLink}<br /><span style={{ color: muted }}>Click to copy</span>
               </div>
             )}
             {importResult && (
-              <div style={{marginTop:8,fontSize:12,color:importResult.error?'#EF4444':'#10B981'}}>
-                {importResult.error
-                  ? 'Error: ' + importResult.error
-                  : 'Imported ' + importResult.imported + ' rates' + (importResult.skipped > 0 ? ', skipped ' + importResult.skipped : '')}
+              <div style={{ marginTop: 8, fontSize: 12, color: importResult.error ? '#EF4444' : '#10B981' }}>
+                {importResult.error ? 'Error: ' + importResult.error : 'Imported ' + importResult.imported + ' rates' + (importResult.skipped > 0 ? ', skipped ' + importResult.skipped : '')}
               </div>
             )}
           </div>
@@ -469,7 +418,7 @@ export default function UserManagementPage({ theme }) {
               <tbody>
                 {filtered.map((user, i) => {
                   const msgsUsed = user.messages_used || user.used || 0;
-                  const msgsTotal = (user.monthly_quota || user.quota || 0) + (user.bonus_messages || 0);
+                  const msgsTotal = (user.monthly_quota || user.quota || 0);
                   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
                   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
                   return (
@@ -503,7 +452,6 @@ export default function UserManagementPage({ theme }) {
                             <div>
                               <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
                                 <span style={{fontSize:10,color:muted}}>{msgsUsed} / {msgsTotal}</span>
-                                {user.bonus_messages > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_messages} bonus</span>}
                               </div>
                               <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:120}}>
                                 <div style={{width:msgPct+'%',height:'100%',borderRadius:3,background:msgBarColor}} />
