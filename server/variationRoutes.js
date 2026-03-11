@@ -4,7 +4,6 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const Anthropic = require('@anthropic-ai/sdk');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
 
@@ -27,7 +26,7 @@ const upload = multer({
   }
 });
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 // ─── Helper: get next VO number for a project ────────────────────────────────
 function getNextVONumber(projectId) {
@@ -265,6 +264,8 @@ Respond ONLY with this JSON structure:
   "notes": "any important caveats or qualifications"
 }`;
 
+    if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
+
     // Build message content — include uploaded drawings if present
     const content = [];
     if (req.files?.length) {
@@ -280,16 +281,28 @@ Respond ONLY with this JSON structure:
     }
     content.push({ type: 'text', text: userPrompt });
 
-    const aiResponse = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{ role: 'user', content }]
+    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'pdfs-2024-09-25'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content }]
+      })
     });
+
+    const aiData = await apiResponse.json();
+    if (!apiResponse.ok) throw new Error(aiData.error?.message || 'Anthropic API error');
 
     let analysis = {};
     try {
-      const raw = aiResponse.content[0].text.replace(/```json|```/g, '').trim();
+      const raw = aiData.content[0].text.replace(/```json|```/g, '').trim();
       analysis = JSON.parse(raw);
     } catch (e) {
       console.error('[Variations] parse error:', e.message);
