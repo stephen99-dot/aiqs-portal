@@ -178,13 +178,15 @@ Include: material specifications, sizes, standards/codes, compliance references 
 COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they apply to the project. If you are missing an entire section, your takeoff is WRONG:
 1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface
 2. SUBSTRUCTURE — foundations (excavate + concrete separately), ground slab, DPM, insulation, screed (all as separate items)
-3. EXTERNAL WALLS — measure the FULL perimeter × FULL height. For a two-storey extension this means ground floor + first floor heights. Include: outer leaf, cavity insulation, inner leaf/frame, wall ties, DPC, cavity closers at EVERY opening, lintels
+3. EXTERNAL WALLS — measure the FULL perimeter × FULL height. For a two-storey extension this means ground floor + first floor heights. Include: outer leaf, cavity insulation, inner leaf/frame, wall ties, DPC, cavity closers at EVERY opening, lintels.
+    WALL SECTION MERGING: All external wall items (structure AND cladding/finish) go in ONE section called "External Walls". Do NOT split into "External Wall Structure" and "External Wall Cladding" as separate sections
 4. ROOF — Choose ONE structural option ONLY:
     Option A (room-in-roof / attic trusses): use attic_trusses_prefab as 1× lump sum (£8,000-£15,000). Do NOT also include roof_structure_cut_timber — these are mutually exclusive.
     Option B (simple roof / no habitable roof space): use roof_structure_cut_timber per m² of roof plan area × pitch factor (~1.15). Do NOT also include attic_trusses_prefab.
     For a standard two-storey side extension with a simple pitched roof tying into the existing house, use Option B.
     THEN add the finishing layers: sarking, membrane, battens, tiles, lead flashings, fascia/soffit/guttering, insulation, Velux windows.
-    ROOF COST CHECK: For a simple extension roof (20-50m² plan area), total roof section should be £5,000-£15,000. If it exceeds £20,000, recheck for double-counting structural items or excessive Velux quantities
+    ROOF COST CHECK: For a simple extension roof (20-50m² plan area), total roof section should be £5,000-£15,000. If it exceeds £20,000, recheck for double-counting structural items or excessive Velux quantities.
+    ROOF SECTION MERGING: All roof items (structure, covering, insulation, Velux) go in ONE section called "Roof Structure & Covering". Do NOT split roof into multiple sections like "Roof Structure", "Roof Covering", "Roof Insulation" — this causes confusion and makes it look like you are pricing things twice
 5. WINDOWS & DOORS — Every window and door as SEPARATE line item. Include ground floor AND upper floor windows. Internal doors. Bifold/patio doors. Mastic sealant in linear metres
 6. STAIRCASE — ONLY include staircase if the extension needs a NEW staircase (e.g. new loft conversion, new basement access). For a two-storey side/rear extension where the existing house staircase provides first floor access, do NOT include a new staircase — only include stair_opening_formation IF a new opening is needed through an existing wall/floor. If in doubt, OMIT the staircase and flag it
 7. FIRST FLOOR STRUCTURE — joists, chipboard, acoustic insulation (for two-storey)
@@ -242,12 +244,14 @@ REFURBISHMENT-SPECIFIC RULES:
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 
 === NEW BUILD / EXTENSION KEYS ===
-Demolition & Site Prep: garage_demolition (~£3,500 lump), strip_out_existing_roof (~£2,200 lump), demolish_existing_walls (~£2,800 lump), break_out_existing_slab (per m² ~£85), cut_back_existing_finishes (~£1,400 lump), existing_wall_interface (~£1,300 lump), asbestos_survey (~£450), asbestos_removal (~£1,500)
+Demolition & Site Prep: garage_demolition (~£3,500 lump), outbuilding_demolition (~£1,200 per store/shed), chimney_demolition (~£1,800 per chimney), chimney_demolition_full (~£2,500), strip_out_existing_roof (~£2,200 lump), demolish_existing_walls (~£2,800 lump), break_out_existing_slab (per m² ~£85), cut_back_existing_finishes (~£1,400 lump), existing_wall_interface (~£1,300 lump), asbestos_survey (~£450), asbestos_removal (~£1,500)
 Substructure: excavation_strip_foundation (per m³), concrete_strip_foundation (per m³), blockwork_below_dpc, dpc_polythene, hardcore_fill, concrete_slab_150mm, concrete_slab_100mm, pir_insulation_under_slab, dpm_1200g, screed_sand_cement_75mm
 Masonry: brick_outer_leaf, cavity_insulation_eps, blockwork_inner_leaf_100mm, cavity_wall_ties_ss, timber_sole_plate, cavity_closers (per m at EVERY opening), stud_wall_plasterboard_both_faces, steel_lintels_catnic, steel_lintels_bespoke
-Roof: attic_trusses_prefab (LUMP SUM ~£12,000 for room-in-roof — use this NOT per-m² rates for attic trusses), roof_structure_cut_timber (per m² — simple roofs only), osb_sarking, breather_membrane, tile_battens, roof_tiles_interlocking, box_gutter_lead_lined, fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool
-Velux: velux_skylight_780x980 (~£1,450), velux_skylight_940x978 (~£1,250), velux_skylight_940x1178 (~£1,450), velux_balcony_940x2520 (~£4,200)
-Cladding: timber_cladding_accoya, ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
+Roof: attic_trusses_prefab (LUMP SUM ~£12,000 for room-in-roof — use this NOT per-m² rates for attic trusses), roof_trusses_fink (~£35/m² — factory fink trusses), roof_structure_cut_timber (per m² — simple roofs only), osb_sarking (~£22/m²), breather_membrane, tile_battens, roof_tiles_interlocking, natural_slate_roofing (~£95/m²), natural_slate_roofing_scottish (~£105/m²), box_gutter_lead_lined, lead_valley_gutter (~£165/m), ridge_tiles_dry_fix (~£45/m), fascia_soffit_guttering, lead_flashing_code4, roof_insulation_mineral_wool
+Velux: velux_skylight_780x980 (~£1,450), velux_skylight_940x978 (~£1,250), velux_skylight_940x1178 (~£1,450), velux_balcony_940x2520 (~£4,200), velux_sk06 (~£1,650 — INTEGRA SK06 1140x1180mm solar-powered)
+Cladding: timber_cladding_accoya (~£145/m²), composite_cladding (~£75/m² — composite on battens with membrane), stone_cladding (~£95/m²), fibre_cement_cladding (~£65/m²), zinc_cladding (~£125/m²), render_on_insulation (~£85/m²), ventilated_cavity_battens, close_boarded_fence_1800, external_decorations_stain
+Timber frame: timber_frame_wall_panel (~£85/m² — factory panel incl. studs/sheathing/membrane), breathable_membrane_walls (~£8/m²), insulated_plasterboard (~£28/m² — Celotex/Kingspan laminate)
+OSB: osb_sheathing (~£18/m² — 11mm wall sheathing), osb_sarking (~£22/m² — 18mm roof sarking)
 Windows/Doors (new — SIZE MATTERS, pick the right size variant):
   Bi-fold doors: bifold_door_aluminium_small (up to 2m/2 panels ~£2500), bifold_door_aluminium (2-3m/3 panels ~£3200), bifold_door_aluminium_large (3m+/4-5 panels ~£4500)
   External doors: composite_external_door (~£1250), composite_external_door_std (~£1100)
@@ -255,7 +259,8 @@ Windows/Doors (new — SIZE MATTERS, pick the right size variant):
   Obscure: window_obscure_small (up to 600x900mm ~£380), window_obscure_standard (~£520)
   Bespoke: window_bespoke_narrow (~£650)
   Other: vent_panel_obscure (~£380), mastic_sealant_allowance (per m ~£12), motorised_rooflight (~£1200)
-  Internal doors: internal_door_painted_solid_core (~£380), internal_door_glazed (~£480)
+  Internal doors: internal_door_painted_solid_core (~£380), internal_door_glazed (~£480), internal_door_standard (~£380)
+  Extra: garage_door_up_over (~£750), garage_door_sectional (~£1200), sliding_patio_door (~£2200), french_doors (~£1800), bifold_door_aluminium_xlarge (5m+/6 panels ~£5800)
 
 WINDOW & DOOR RULES — CRITICAL:
 - List EVERY window and door as a SEPARATE line item with qty 1. Do NOT group windows or doors together
@@ -281,13 +286,13 @@ Asbestos: asbestos_survey (per Item), asbestos_removal (per Item)
 Internal linings: plasterboard_skim_walls (per m² — measure ALL new wall surfaces), plasterboard_ceilings (per m² — measure ALL new ceiling areas), plasterboard_fire_rated (per m² — under stairs, party walls), plasterboard_moisture_resistant (per m² — utility, wet areas), metal_stud_partition, wedi_wetroom_board
 Finishes: screed_ufh_75mm, screed_sand_cement_75mm, skirting_mdf_95mm (per m — measure ALL room perimeters), internal_decorations (per m² — mist coat + emulsion ALL new walls and ceilings)
 Internal doors: internal_door_painted_solid_core (~£380 per Nr), internal_door_glazed (~£480 per Nr)
-Floor finishes: lvt_flooring_karndean (~£42/m²), lvt_flooring_luxury (~£55/m²), floor_tile_600x600 (~£65/m²), carpet_supply_fit (~£28/m²), engineered_timber_floor (~£55/m²), vinyl_safety_floor
+Floor finishes: lvt_flooring_karndean (~£42/m²), lvt_flooring_luxury (~£55/m²), floor_tile_600x600 (~£65/m²), ceramic_floor_tiles (~£65/m²), porcelain_floor_tiles (~£75/m²), carpet_supply_fit (~£28/m²), laminate_flooring (~£25/m²), vinyl_flooring (~£32/m²), engineered_timber_floor (~£55/m²), plywood_flooring (~£32/m²), vinyl_safety_floor
 Ceramic tiles: ceramic_wall_tiles_ensuite (~£72/m² — measure tiled wall area in bathrooms), tile_wall_ceramic, tile_wall_large_format
 Fit-outs: kitchen_fitout_mid (per Nr ~£8,500), kitchen_fitout_high (per Nr ~£15,000), bathroom_fitout_mid (per Nr ~£5,500), bathroom_fitout_high (per Nr ~£8,500), wc_cloakroom_fitout (per Nr ~£2,800), shower_room_fitout (per Nr ~£4,200)
 Drainage: foul_drainage_110mm (~£2,800 per connection), rainwater_drainage (~£1,200 lump), surface_water_drainage (per m ~£65), svp_connection_110mm, foul_drainage_connection, drainage_new_run (per m), manhole_inspection_chamber (per Nr)
-Heating/Plumbing: heating_extension (~£4,200 lump — extend existing heating to new rooms), ensuite_sanitary_plumbing (~£3,800 lump), utility_plumbing (~£2,500 lump), first_fix_plumbing, second_fix_plumbing
+Heating/Plumbing: heating_extension (~£4,200 lump — extend existing heating to new rooms), boiler_relocation (~£1,800 — move existing boiler), combi_boiler_mid (~£3,200), combi_boiler_high (~£4,200), underfloor_heating (~£45/m²), ensuite_sanitary_plumbing (~£3,800 lump), utility_plumbing (~£2,500 lump), first_fix_plumbing, second_fix_plumbing
 Electrical: consumer_unit_upgrade (~£3,200 — extend CU for new circuits), lighting_installation (~£1,800 per circuit), power_sockets_circuit (~£1,400 per circuit), smoke_heat_detection (~£850 lump), extract_fans (~£320 each), electrical_testing_certificate
-Structural: structural_steelwork (lump sum per structural package)
+Structural: structural_steelwork (lump sum per structural package), padstone (~£65/Nr), wall_plate_timber (~£14/m), joist_hanger (~£8/Nr), lintels_precast (~£55/Nr), cavity_tray (~£18/m)
 First floor: chipboard_flooring (22mm P5 chipboard to joists per m²)
 Stairs: staircase (~£4,800 complete timber staircase), stair_opening_formation (~£750 — form opening in existing ceiling)
 External: external_render (per m²), paving_slabs (per m²), block_paving (per m²), tarmac_driveway (per m²), gravel_driveway (per m²), retaining_wall_block (per m²), garden_wall_brick (per m²), gate_timber (per Nr), gate_metal (per Nr), landscaping_allowance (per Item)

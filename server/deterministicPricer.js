@@ -256,6 +256,94 @@ const BASE_RATES = {
   'structural_engineer_fees':          { rate: 2200, unit: 'Item',labour: 0.00, materials: 1.00, description: 'Structural engineer fees design & site inspections' },
   'snagging_clearance':                { rate: 650,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Clearance & clean at completion snagging allowance' },
   // ============================================
+  // ADDITIONAL COMMON RATES — covers items frequently
+  // falling through to AI estimation on new accounts
+  // ============================================
+  // Insulated plasterboard / dry-lining
+  'celotex_tb4020_insulated_plasterboard': { rate: 28, unit: 'm²', labour: 0.55, materials: 0.45, description: 'Celotex TB4020 insulated plasterboard 40mm face-fixed to studs' },
+  'custom_celotex_tb4020':             { rate: 28,   unit: 'm²', labour: 0.55, materials: 0.45, description: 'Celotex TB4020 insulated plasterboard 40mm face-fixed with battens and service void' },
+  'insulated_plasterboard':            { rate: 28,   unit: 'm²', labour: 0.55, materials: 0.45, description: 'Insulated plasterboard laminate 40-50mm fixed to masonry or studs' },
+  // Cladding systems
+  'composite_cladding':                { rate: 75,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Composite cladding on counter-battens with breathable membrane and cavity barriers' },
+  'custom_composite_cladding':         { rate: 75,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Composite cladding on battens with breathable membrane, cavity barriers at 8m centres' },
+  'stone_cladding':                    { rate: 95,   unit: 'm²', labour: 0.45, materials: 0.55, description: 'Stone cladding to lower walls incl. fixings and ventilation gap' },
+  'custom_stone_cladding_base':        { rate: 95,   unit: 'm²', labour: 0.45, materials: 0.55, description: 'Stone cladding to base/lower walls per client specification' },
+  'zinc_cladding':                     { rate: 125,  unit: 'm²', labour: 0.50, materials: 0.50, description: 'Standing seam zinc cladding on plywood substrate' },
+  'fibre_cement_cladding':             { rate: 65,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Fibre cement cladding (Cedral/Marley) on battens with membrane' },
+  'render_on_insulation':              { rate: 85,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Silicone render on EWI system with insulation and mesh' },
+  // Timber frame construction
+  'timber_frame_wall_panel':           { rate: 85,   unit: 'm²', labour: 0.45, materials: 0.55, description: 'Timber frame wall panel factory-made incl. studs, sheathing, breather membrane' },
+  'custom_timber_frame_panels':        { rate: 85,   unit: 'm²', labour: 0.45, materials: 0.55, description: 'Timber frame wall panels erected on sole plate' },
+  'breathable_membrane_walls':         { rate: 8,    unit: 'm²', labour: 0.30, materials: 0.70, description: 'Breathable membrane to external walls (Tyvek/Protect)' },
+  // OSB / structural boarding
+  'osb_sheathing':                     { rate: 18,   unit: 'm²', labour: 0.40, materials: 0.60, description: '11mm OSB3 sheathing to timber frame walls' },
+  'custom_osb_sarking':                { rate: 22,   unit: 'm²', labour: 0.40, materials: 0.60, description: '18mm OSB3 sarking board to roof structure' },
+  // Floor finishes (commonly missing)
+  'plywood_flooring':                  { rate: 32,   unit: 'm²', labour: 0.45, materials: 0.55, description: '18mm structural plywood flooring to joists or battens' },
+  'laminate_flooring':                 { rate: 25,   unit: 'm²', labour: 0.35, materials: 0.65, description: 'Laminate flooring supply and lay incl. underlay and trims' },
+  'vinyl_flooring':                    { rate: 32,   unit: 'm²', labour: 0.40, materials: 0.60, description: 'Vinyl flooring sheet or tile supply and lay incl. adhesive' },
+  'ceramic_floor_tiles':               { rate: 65,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Ceramic floor tiles supply and fix incl. adhesive and grout' },
+  'ceramic_floor_tiles_ensuite':       { rate: 72,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Ceramic/porcelain floor tiles to en-suite/bathroom incl. adhesive and grout' },
+  'porcelain_floor_tiles':             { rate: 75,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Porcelain floor tiles supply and fix incl. adhesive and grout' },
+  'engineered_timber_flooring':        { rate: 55,   unit: 'm²', labour: 0.40, materials: 0.60, description: 'Engineered timber flooring supply and lay incl. underlay and trims' },
+  // Doors
+  'internal_door_standard':            { rate: 380,  unit: 'Nr', labour: 0.55, materials: 0.45, description: 'Internal door standard timber incl. lining, architrave, ironmongery' },
+  'garage_door_up_over':               { rate: 750,  unit: 'Nr', labour: 0.35, materials: 0.65, description: 'Up-and-over garage door steel/GRP incl. frame and ironmongery' },
+  'garage_door_sectional':             { rate: 1200, unit: 'Nr', labour: 0.35, materials: 0.65, description: 'Sectional insulated garage door with electric opener' },
+  'sliding_patio_door':                { rate: 2200, unit: 'Nr', labour: 0.30, materials: 0.70, description: 'Aluminium sliding patio door double glazed thermally broken' },
+  'french_doors':                      { rate: 1800, unit: 'Nr', labour: 0.30, materials: 0.70, description: 'French doors aluminium or timber double glazed pair' },
+  // Heating
+  'combi_boiler_mid':                  { rate: 3200, unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Combi boiler mid range (Vaillant/Worcester) supply and install incl. flue' },
+  'combi_boiler_high':                 { rate: 4200, unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Combi boiler high spec supply and install incl. flue and controls' },
+  'boiler_relocation':                 { rate: 1800, unit: 'Item', labour: 0.65, materials: 0.35, description: 'Relocate existing boiler to new position incl. new flue and pipework' },
+  'radiator_standard':                 { rate: 280,  unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Radiator standard panel type supply fix and connect' },
+  'underfloor_heating':                { rate: 45,   unit: 'm²', labour: 0.50, materials: 0.50, description: 'Underfloor heating wet system pipe and manifold' },
+  // Kitchen
+  'kitchen_worktop_laminate':          { rate: 120,  unit: 'm',  labour: 0.40, materials: 0.60, description: 'Kitchen worktop laminate supply and fit incl. end caps' },
+  'kitchen_worktop_stone':             { rate: 350,  unit: 'm',  labour: 0.35, materials: 0.65, description: 'Kitchen worktop stone/quartz supply and fit templated' },
+  'custom_kitchen_fitout':             { rate: 8500, unit: 'Nr', labour: 0.40, materials: 0.60, description: 'Kitchen fit-out mid range units, worktop, sink, taps' },
+  // Electrical (per-m² rates for rewire/whole-house)
+  'full_electrical_installation':      { rate: 65,   unit: 'm²', labour: 0.75, materials: 0.25, description: 'Full electrical installation per m² incl. sockets, lights, consumer unit' },
+  'custom_electrical_installation':    { rate: 65,   unit: 'm²', labour: 0.75, materials: 0.25, description: 'Full electrical first and second fix per m² floor area' },
+  // Sundries / management
+  'custom_skirting_boxing':            { rate: 22,   unit: 'm',  labour: 0.60, materials: 0.40, description: 'Service boxing MDF or softwood to conceal pipework' },
+  'service_boxing':                    { rate: 22,   unit: 'm',  labour: 0.60, materials: 0.40, description: 'Service boxing MDF or softwood to conceal pipework' },
+  'custom_sundries_management':        { rate: 1500, unit: 'Item', labour: 0.70, materials: 0.30, description: 'Sundries and site management allowance' },
+  'site_management':                   { rate: 1500, unit: 'Item', labour: 0.70, materials: 0.30, description: 'Site management and supervision allowance' },
+  // Roof — additional variants
+  'roof_trusses_fink':                 { rate: 35,   unit: 'm²', labour: 0.40, materials: 0.60, description: 'Fink truss roof system factory made delivered and craned' },
+  'natural_slate_roofing_scottish':    { rate: 105,  unit: 'm²', labour: 0.50, materials: 0.50, description: 'Natural slate roofing Scottish/reclaimed on battens incl. fittings' },
+  'lead_valley_gutter':                { rate: 165,  unit: 'm',  labour: 0.55, materials: 0.45, description: 'Lead Code 5 valley gutter on boarding' },
+  'ridge_tiles_dry_fix':               { rate: 45,   unit: 'm',  labour: 0.50, materials: 0.50, description: 'Ridge tiles dry-fix system on GRP roll' },
+  'hip_tiles':                         { rate: 48,   unit: 'm',  labour: 0.50, materials: 0.50, description: 'Hip tiles on mortar bed or dry-fix' },
+  // Velux variants
+  'velux_sk06':                        { rate: 1650, unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Velux INTEGRA SK06 roof window 1140x1180mm solar powered incl. flashings' },
+  'velux_sk06_integra':                { rate: 1650, unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Velux INTEGRA SK06 solar-powered roof window incl. flashings' },
+  'custom_velux_sk06':                 { rate: 1650, unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Velux INTEGRA SK06 solar-powered roof window incl. flashings' },
+  // Chimney demolition
+  'chimney_demolition':                { rate: 1800, unit: 'Nr', labour: 0.80, materials: 0.20, description: 'Demolish chimney stack down to roof level and make good' },
+  'chimney_demolition_full':           { rate: 2500, unit: 'Nr', labour: 0.80, materials: 0.20, description: 'Demolish chimney stack full height and make good' },
+  // Store/outbuilding demolition
+  'outbuilding_demolition':            { rate: 1200, unit: 'Nr', labour: 0.85, materials: 0.15, description: 'Demolish small outbuilding/store and cart away' },
+  'store_demolition':                  { rate: 1200, unit: 'Nr', labour: 0.85, materials: 0.15, description: 'Demolish store/shed structure and dispose' },
+  // Drainage — additional
+  'gully_trapped':                     { rate: 185,  unit: 'Nr', labour: 0.55, materials: 0.45, description: 'Trapped gully 110mm with grid and connection' },
+  'soakaway':                          { rate: 650,  unit: 'Nr', labour: 0.60, materials: 0.40, description: 'Soakaway crate system incl. geotextile and connection' },
+  'downpipe_68mm':                     { rate: 28,   unit: 'm',  labour: 0.50, materials: 0.50, description: '68mm UPVC rainwater downpipe with brackets and shoe' },
+  'rwp_connection':                    { rate: 250,  unit: 'Nr', labour: 0.60, materials: 0.40, description: 'Rainwater downpipe connection to below-ground drainage' },
+  // Bifold — extra large
+  'bifold_door_aluminium_xlarge':      { rate: 5800, unit: 'Nr', labour: 0.30, materials: 0.70, description: 'Aluminium bi-fold door extra large (5m+ wide, 6+ panels) thermally broken' },
+  // Structural
+  'padstone':                          { rate: 65,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Precast concrete padstone 440x215x100mm bedded in mortar' },
+  'wall_plate_timber':                 { rate: 14,   unit: 'm',  labour: 0.55, materials: 0.45, description: 'Timber wall plate 100x75mm treated softwood bolted to blockwork' },
+  'joist_hanger':                      { rate: 8,    unit: 'Nr', labour: 0.60, materials: 0.40, description: 'Joist hanger galvanised steel for timber joist' },
+  // Misc commonly extracted items
+  'threshold_strip':                   { rate: 25,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Threshold strip aluminium at door openings' },
+  'architrave':                        { rate: 14,   unit: 'm',  labour: 0.65, materials: 0.35, description: 'Architrave MDF or softwood ogee profile' },
+  'lintels_precast':                   { rate: 55,   unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Precast concrete lintel to openings' },
+  'cavity_tray':                       { rate: 18,   unit: 'm',  labour: 0.40, materials: 0.60, description: 'Cavity tray DPC at lintels and abutments' },
+  'ventilation_grille':                { rate: 35,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Air brick / ventilation grille 215x140mm' },
+  // ============================================
   // INFRASTRUCTURE / UTILITIES / ESB RATES
   // ============================================
   'traffic_management_plan':           { rate: 1300, unit: 'Item',labour: 0.60, materials: 0.40, description: 'Traffic Management Plan — design, installation, hire and dismantle; including all signage, cones, barriers and liaison with Local Authority/County Council; for full duration of contract' },
@@ -800,6 +888,36 @@ function crossValidateQuantities(items, projectType) {
     const item = byKey[ec.key];
     if (item && item.qty > ec.max) {
       capQty(item, ec.max, `${ec.label} capped at ${ec.max} — per CIRCUIT not per room`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ELECTRICAL: Per-m² rate cap for extensions and refurbishments
+  // full_electrical_rewire at £85/m² is for WHOLE HOUSE rewires.
+  // Extensions should use circuit-based pricing (£4,000-£6,000 total).
+  // If a per-m² electrical item × floor area exceeds reasonable total, cap it.
+  // ═══════════════════════════════════════════════════════════════════════
+  const elecPerM2Keys = ['full_electrical_rewire', 'full_electrical_installation',
+    'custom_electrical_installation'];
+  for (const ek of elecPerM2Keys) {
+    const elecItem = byKey[ek];
+    if (elecItem && elecItem.unit === 'm²') {
+      // For extensions: cap total electrical to £6,000 (typical 1-2 circuit extension)
+      if ((isExtension || isLoft) && floorArea && floorArea > 0) {
+        const maxElecTotal = 6000;
+        const elecTotal = elecItem.qty * (elecItem.override_rate || 85);
+        if (elecTotal > maxElecTotal) {
+          const cappedQty = Math.round(maxElecTotal / 85);
+          capQty(elecItem, cappedQty,
+            `Extension electrical capped: ${elecItem.qty}m² × £85 = £${Math.round(elecTotal)} exceeds £${maxElecTotal} typical for extension. Use circuit-based pricing instead`);
+        }
+      }
+      // For all projects: cap per-m² electrical rate at £65/m² max
+      // £85/m² is for complex whole-house rewires; most projects should be lower
+      if (elecItem.qty > 200) {
+        capQty(elecItem, Math.min(elecItem.qty, 200),
+          `Electrical per-m² area capped at 200m² — larger areas should use circuit-based pricing`);
+      }
     }
   }
 
