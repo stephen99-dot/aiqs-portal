@@ -20,6 +20,7 @@ import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import GoogleSuccessPage from './pages/GoogleSuccessPage';
+import VariationsPage from './pages/VariationsPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -66,6 +67,7 @@ function AppInner() {
           <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
+          <Route path="/project/:id/variations" element={<VariationsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
