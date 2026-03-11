@@ -385,7 +385,7 @@ export default function ProjectDetailPage() {
             <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 13, opacity: 0.7 }}>Total uplift on base rates</span>
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
-                +{(((1 + clientCopySettings.contingency / 100) * (1 + clientCopySettings.ohp / 100) * (1 + clientCopySettings.vat / 100)) - 1) * 100).toFixed(1)}%
+                +{((((1 + clientCopySettings.contingency / 100) * (1 + clientCopySettings.ohp / 100) * (1 + clientCopySettings.vat / 100)) - 1) * 100).toFixed(1)}%
               </span>
             </div>
 
