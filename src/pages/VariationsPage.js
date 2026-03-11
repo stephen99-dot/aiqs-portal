@@ -23,6 +23,7 @@ export default function VariationsPage() {
   const [selected, setSelected]     = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [generatingBoq, setGeneratingBoq] = useState(false);
   const [form, setForm] = useState({ title: '', description: '' });
   const [files, setFiles]   = useState([]);
   const [error, setError]   = useState('');
@@ -85,8 +86,21 @@ export default function VariationsPage() {
     } catch (err) { setError(err.message); }
   }
 
-  async function handleReject() {
-    if (!rejectModal) return;
+  async function handleGenerateRevisedBoq(varId) {
+    setGeneratingBoq(true);
+    setError('');
+    try {
+      const data = await apiFetch(`/variations/${varId}/generate-revised-boq`, { method: 'POST' });
+      setVariations(v => v.map(x => x.id === varId ? data.variation : x));
+      if (selected?.id === varId) setSelected(data.variation);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingBoq(false);
+    }
+  }
+
+  async function handleReject() {    if (!rejectModal) return;
     try {
       const data = await apiFetch(`/variations/${rejectModal}/reject`, {
         method: 'PATCH',
@@ -321,8 +335,23 @@ export default function VariationsPage() {
                     </>
                   )}
                   {selected.status === 'approved' && (
-                    <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                      ✓ Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10B981', fontSize: 13, fontWeight: 600 }}>
+                        ✓ Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
+                      </div>
+                      {!selected.revised_boq_filename ? (
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: 13 }}
+                          disabled={generatingBoq}
+                          onClick={() => handleGenerateRevisedBoq(selected.id)}>
+                          {generatingBoq ? '⏳ Generating Revised BOQ...' : '📊 Generate Revised BOQ'}
+                        </button>
+                      ) : (
+                        <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => handleDownload(selected.revised_boq_filename)}>
+                          ↓ Download Revised BOQ (Excel)
+                        </button>
+                      )}
                     </div>
                   )}
                   {selected.status === 'rejected' && (
