@@ -402,3 +402,71 @@ router.get('/variations/download/:filename', authMiddleware, (req, res) => {
 });
 
 module.exports = router;
+
+// POST /api/variations/:id/generate-revised-boq
+router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, res) => {
+  try {
+    const variation = db.prepare('SELECT * FROM variations WHERE id = ?').get(req.params.id);
+    if (!variation) return res.status(404).json({ error: 'Variation not found' });
+    if (variation.status !== 'approved') return res.status(400).json({ error: 'Variation must be approved first' });
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(variation.project_id, req.user.id);
+    if (!project && req.user.role !== 'admin') return res.status(403).json({ error: 'Access denied' });
+    if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
+
+    const allApproved = db.prepare("SELECT * FROM variations WHERE project_id = ? AND status = 'approved' ORDER BY created_at ASC").all(variation.project_id);
+    const sym = (variation.currency === 'EUR') ? '€' : '£';
+
+    const variationSummary = allApproved.map(function(v) {
+      var analysis = {};
+      try { analysis = JSON.parse(v.raw_analysis); } catch (e) {}
+      return v.vo_number + ': ' + v.title + '\n' + v.description + '\nScope changes: ' + JSON.stringify(analysis.scope_changes || []);
+    }).join('\n\n---\n\n');
+
+    const systemPrompt = 'You are an expert UK Quantity Surveyor. Produce structured BOQ data in JSON format. Respond ONLY with valid JSON — no preamble, no markdown.';
+    const userPrompt = 'Produce a revised Bill of Quantities incorporating the approved variations below.\n\nPROJECT: ' + project.title + '\nTYPE: ' + project.project_type + '\nLOCATION: ' + (project.location || 'UK') + '\nORIGINAL CONTRACT VALUE: ' + sym + (project.total_value || 0).toLocaleString() + '\n\nAPPROVED VARIATIONS:\n' + variationSummary + '\n\nReturn JSON in this structure. Include a final VARIATIONS section listing all variation items:\n{"sections":[{"number":"1","title":"Section Title","items":[{"item":"A","description":"...","unit":"m2","qty":10,"rate":50,"labour":300,"materials":200,"total":500,"rate_source":"generic"}]}],"summary":{"original_total":0,"variations_total":0,"revised_total":0,"currency":"' + (variation.currency || 'GBP') + '"}}';
+
+    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-opus-4-5', max_tokens: 8000, system: systemPrompt, messages: [{ role: 'user', content: userPrompt }] })
+    });
+
+    const aiData = await apiResponse.json();
+    if (!apiResponse.ok) throw new Error(aiData.error?.message || 'Anthropic API error');
+
+    var boqData = {};
+    try {
+      var raw = aiData.content[0].text.replace(/```json|```/g, '').trim();
+      boqData = JSON.parse(raw);
+    } catch (e) { throw new Error('Failed to parse revised BOQ from AI'); }
+
+    var generateBOQExcel;
+    try { var mod = require('./boqGenerator'); generateBOQExcel = mod.generateBOQExcel; } catch (e) {
+      return res.status(500).json({ error: 'BOQ generator not available' });
+    }
+
+    const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
+    const buffer = await generateBOQExcel(
+      boqData.sections || [],
+      project.title + ' — REVISED (inc. Variations)',
+      user ? user.full_name : 'Client',
+      { currency: sym }
+    );
+
+    const filename = 'Revised_BOQ_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
+    const outPath = path.join(outputsDir, filename);
+    fs.writeFileSync(outPath, buffer);
+
+    db.prepare('UPDATE variations SET revised_boq_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(filename, req.params.id);
+    db.prepare('UPDATE projects SET boq_filename = ?, total_value = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(filename, boqData.summary ? boqData.summary.revised_total : project.total_value, variation.project_id);
+
+    const updated = db.prepare('SELECT * FROM variations WHERE id = ?').get(req.params.id);
+    res.json({ variation: updated, filename: filename, summary: boqData.summary });
+
+  } catch (err) {
+    console.error('[Variations] revised BOQ error:', err);
+    res.status(500).json({ error: 'Failed to generate revised BOQ: ' + err.message });
+  }
+});
