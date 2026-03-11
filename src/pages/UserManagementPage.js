@@ -89,6 +89,7 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
+  const [msgAllowance, setMsgAllowance] = useState(user.monthly_quota || user.quota || 0);
   const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
@@ -120,20 +121,21 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const savePlan = () => doAction('plan', async () => {
     await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ plan, monthlyQuota: user.monthly_quota || 0, boqQuota: parseInt(docAllowance) || 0 })
+      body: JSON.stringify({ plan, monthlyQuota: parseInt(msgAllowance) || 0, boqQuota: parseInt(docAllowance) || 0 })
     });
-    onUpdate({ ...user, plan, monthly_boq_quota: parseInt(docAllowance) || 0 });
+    onUpdate({ ...user, plan, monthly_quota: parseInt(msgAllowance) || 0, monthly_boq_quota: parseInt(docAllowance) || 0 });
     showSuccess('Plan updated to ' + plan);
   });
 
-  const saveDocAllowance = () => doAction('docs', async () => {
-    const qty = parseInt(docAllowance) || 0;
+  const saveAllowances = () => doAction('allowances', async () => {
+    const msgs = parseInt(msgAllowance) || 0;
+    const docs = parseInt(docAllowance) || 0;
     await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ plan, monthlyQuota: user.monthly_quota || 0, boqQuota: qty })
+      body: JSON.stringify({ plan, monthlyQuota: msgs, boqQuota: docs })
     });
-    onUpdate({ ...user, monthly_boq_quota: qty, boq_quota: qty });
-    showSuccess('Document allowance set to ' + qty);
+    onUpdate({ ...user, monthly_quota: msgs, quota: msgs, monthly_boq_quota: docs, boq_quota: docs });
+    showSuccess('Allowances updated — ' + msgs + ' messages, ' + docs + ' documents');
   });
 
   const toggleSuspend = () => doAction('suspend', async () => {
@@ -169,9 +171,13 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   };
 
   const msgsUsed = user.messages_used || user.used || 0;
-  const msgsTotal = user.monthly_quota || user.quota || 0;
+  const msgsTotal = parseInt(msgAllowance) || user.monthly_quota || user.quota || 0;
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
+  const boqUsed = user.boq_used || user.docs_used || 0;
+  const boqTotal = parseInt(docAllowance) || user.monthly_boq_quota || user.boq_quota || 0;
+  const boqPct = boqTotal > 0 ? Math.min(100, (boqUsed / boqTotal) * 100) : 0;
+  const boqBarColor = boqPct >= 90 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
 
   return (
     <>
@@ -190,19 +196,26 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           </div>
         )}
 
-        {/* Message usage bar */}
-        <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Message Usage This Month</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: text }}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '∞'}</span>
-          </div>
-          {msgsTotal > 0 ? (
-            <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
-              <div style={{ width: msgPct + '%', height: '100%', borderRadius: 4, background: msgBarColor, transition: 'width 0.3s' }} />
+        {/* Usage bars */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          {[
+            { label: 'Messages This Month', used: msgsUsed, total: msgsTotal, pct: msgPct, color: msgBarColor },
+            { label: 'Documents This Month', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
+          ].map(({ label, used, total, pct, color }) => (
+            <div key={label} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: total > 0 && pct >= 90 ? '#EF4444' : text }}>{used} / {total > 0 ? total : '—'}</span>
+              </div>
+              {total > 0 ? (
+                <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
+                  <div style={{ width: pct + '%', height: '100%', borderRadius: 4, background: color, transition: 'width 0.3s' }} />
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: muted }}>No allowance set</div>
+              )}
             </div>
-          ) : (
-            <div style={{ fontSize: 11, color: muted }}>No message limit set</div>
-          )}
+          ))}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -226,22 +239,22 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             </button>
           </div>
 
-          {/* Documents Allowance */}
+          {/* Allowances */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
-            <div style={lbl}>Documents Allowance</div>
-            <p style={{ fontSize: 12, color: muted, margin: '4px 0 10px', lineHeight: 1.4 }}>
-              Set how many documents this client can generate. Set 0 for none.
-            </p>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                type="number" min={0} max={999}
-                value={docAllowance}
-                onChange={e => setDocAllowance(e.target.value)}
-                style={{ ...sInp, width: 80, fontSize: 16, fontWeight: 700, textAlign: 'center' }}
-              />
-              <span style={{ fontSize: 13, color: muted }}>documents</span>
-              <button onClick={saveDocAllowance} disabled={!!loading} style={btn('#2563EB')}>
-                <Save size={12} /> Save
+            <div style={lbl}>Allowances (this month)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+              {[
+                { label: 'Messages', val: msgAllowance, set: setMsgAllowance },
+                { label: 'Documents / BOQs', val: docAllowance, set: setDocAllowance },
+              ].map(({ label, val, set }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: muted, width: 110, flexShrink: 0 }}>{label}</span>
+                  <input type="number" min={0} max={9999} value={val} onChange={e => set(e.target.value)}
+                    style={{ ...sInp, width: 70, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
+                </div>
+              ))}
+              <button onClick={saveAllowances} disabled={!!loading} style={{ ...btn('#2563EB'), marginTop: 2 }}>
+                <Save size={12} /> Save Allowances
               </button>
             </div>
           </div>
