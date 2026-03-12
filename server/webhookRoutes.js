@@ -88,10 +88,19 @@ async function sendWelcomeEmail({ email, fullName, password, magicLink, projectT
           </p>
         </div>
 
+        <div style="background: #111827; border: 1px solid #1C2A44; border-radius: 10px; padding: 18px; margin: 24px 0;">
+          <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #5A6E87; text-transform: uppercase; letter-spacing: 0.05em;">What you can do</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">💬 <strong>Chat with AI</strong> — upload drawings and get instant cost estimates</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">📥 <strong>Download BOQs</strong> — get professional Excel & Word documents</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">📋 <strong>Raise Variations</strong> — manage change orders from the project page</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">💰 <strong>My Rates</strong> — customise your pricing library, auto-applied to every estimate</p>
+          <p style="margin: 0; font-size: 14px; color: #E8EDF5;">📊 <strong>Track Usage</strong> — monitor your message and BOQ credits on the dashboard</p>
+        </div>
+
         <p style="font-size: 14px; color: #5A6E87; line-height: 1.6; margin: 24px 0 0;">
           Portal: <a href="${PORTAL_URL}" style="color: #2563EB; text-decoration: none;">${PORTAL_URL}</a>
         </p>
-        
+
         <p style="font-size: 14px; color: #5A6E87; line-height: 1.6; margin: 8px 0 0;">
           Questions? WhatsApp us anytime — the link is in your dashboard.
         </p>

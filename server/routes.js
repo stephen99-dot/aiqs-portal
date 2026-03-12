@@ -129,6 +129,38 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
   });
 }
 
+async function sendClientWelcomeEmail({ fullName, email }) {
+  const firstName = (fullName || 'there').split(' ')[0];
+  const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+  await sendEmail({
+    to: email,
+    subject: `Welcome to AI QS — Let's get your first BOQ`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+        <div style="text-align:center;margin-bottom:32px;">
+          <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+          <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+        </div>
+        <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Welcome, ${firstName}!</h2>
+        <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">Your AI QS account is ready. Here's what you can do:</p>
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:18px;margin:0 0 24px;">
+          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>💬 Chat with AI</strong> — upload drawings and get instant cost estimates</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>📥 Download BOQs</strong> — professional Excel &amp; Word documents</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>📋 Raise Variations</strong> — manage change orders from the project page</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>💰 My Rates</strong> — customise your pricing library</p>
+          <p style="margin:0;font-size:14px;color:#1E293B;"><strong>📊 Track Usage</strong> — monitor message &amp; BOQ credits on the dashboard</p>
+        </div>
+        <div style="text-align:center;margin:28px 0;">
+          <a href="${portalUrl}/chat" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Start Your First Project</a>
+        </div>
+        <p style="font-size:13px;color:#94A3B8;line-height:1.5;">You're on the free trial with 2 project credits. Need more? Upgrade anytime from your dashboard.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+        <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+      </div>
+    `,
+  });
+}
+
 // ── File Upload Config ────────────────────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -306,6 +338,7 @@ router.post('/auth/register', async (req, res) => {
     if (role !== 'admin') {
       notifyAdmin({ type: 'new_signup', title: `New signup: ${fullName}`, detail: [email.toLowerCase(), company, phone].filter(Boolean).join(' · '), icon: 'user-plus' });
       sendAdminSignupEmail({ fullName, email: email.toLowerCase(), company, phone });
+      sendClientWelcomeEmail({ fullName, email: email.toLowerCase() }).catch(err => console.error('[Welcome email] Failed:', err.message));
     }
 
     res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit } });
@@ -445,6 +478,7 @@ router.get('/auth/google/callback', async (req, res) => {
       if (role !== 'admin') {
         notifyAdmin({ type: 'new_signup', title: `New signup (Google): ${fullName}`, detail: email, icon: 'user-plus' });
         sendAdminSignupEmail({ fullName, email, company: null, phone: null });
+        sendClientWelcomeEmail({ fullName, email }).catch(err => console.error('[Welcome email] Failed:', err.message));
       }
     } else {
       // Existing user — update google_id and avatar if not set
@@ -559,7 +593,24 @@ router.get('/usage', authMiddleware, (req, res) => {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
   const monthProjects = db.prepare('SELECT id, title, project_type, status, created_at FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC').all(req.user.id, monthStart, monthEnd);
-  res.json({ ...planInfo, monthProjects, monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }) });
+
+  // Message usage this month
+  let messagesUsed = 0;
+  try {
+    const row = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(req.user.id, monthStart);
+    messagesUsed = row?.c || 0;
+  } catch(e) {}
+  const plan = user.plan || 'starter';
+  const defaultMsgLimit = plan === 'starter' ? 10 : plan === 'professional' ? 100 : 200;
+  const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
+  const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
+
+  res.json({
+    ...planInfo, monthProjects,
+    monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+    messagesUsed, messagesLimit, messagesRemaining,
+    messagesAtLimit: messagesLimit > 0 && messagesUsed >= messagesLimit,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
