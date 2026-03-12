@@ -2,27 +2,27 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 // Bump this version whenever tour content changes — existing users will see the updated tour
-export const TOUR_VERSION = 2;
+export const TOUR_VERSION = 3;
 
 const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
     title: 'Welcome to AI QS',
-    description: 'Your AI-powered quantity surveying portal. Upload drawings, get instant estimates, and generate professional BOQ documents — all from one place.',
+    description: 'Your AI-powered quantity surveying portal. Upload drawings, chat with the AI, and get professional BOQ documents — Excel and Word — in minutes.',
     position: 'center',
     icon: '\u2726',
   },
   {
     target: '[data-tour="start-chat"]',
     title: 'Start a Project',
-    description: 'Open the AI chat to begin. Upload your drawings (PDF, ZIP, Excel, images), describe the project scope, and get a detailed cost breakdown. You can track your remaining messages in the chat header.',
+    description: 'Click here to open the AI chat. Upload your drawings (PDF, ZIP, Excel, or images), describe the scope, and the AI will produce a full cost breakdown. Once it\'s ready, you\'ll be able to download your BOQ straight from the chat.',
     position: 'bottom',
     icon: '\u2197',
   },
   {
     target: '[data-tour="usage-bar"]',
-    title: 'Your Plan & Usage',
-    description: 'Track both your BOQ generations and chat messages here. Each bar shows how many you\'ve used this month vs your plan limit. When you\'re running low, you\'ll see a warning — and you can upgrade or buy extras at any time.',
+    title: 'Messages & BOQ Credits',
+    description: 'These bars show your monthly usage — chat messages and BOQ generations. Hover over them to see exactly how many you have left. When you\'re running low you\'ll see a warning, and you can upgrade or buy top-ups anytime from your dashboard.',
     position: 'bottom',
     icon: '\u25CE',
   },
@@ -35,15 +35,15 @@ const TOUR_STEPS = [
   },
   {
     target: '[data-tour="projects-list"]',
-    title: 'Your Projects & Documents',
-    description: 'Every BOQ you generate appears here. Click any project to view the full breakdown, download Excel/Word documents, raise variations, or share with your team.',
+    title: 'Your Projects',
+    description: 'Every BOQ you generate appears here. Click into any project to view the full breakdown, download Excel/Word documents, or raise a variation (change order). You can also add notes and share documents with your team.',
     position: 'top',
     icon: '\u2630',
   },
   {
     target: '[data-tour="sidebar-nav"]',
     title: 'Navigation',
-    description: 'Chat — start new estimates and generate documents. Projects — view all your BOQs and download files. My Rates — manage your pricing library (rates are auto-applied to every estimate). Variations — track and manage project change orders.',
+    description: 'Chat — upload drawings and generate new BOQs. Projects — click into any project to download files or raise variations. My Rates — build your own pricing library (rates are auto-applied to every estimate). Variations — view and manage all change orders across projects.',
     position: 'right',
     icon: '\u25E7',
   },
