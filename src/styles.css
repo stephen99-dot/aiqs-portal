@@ -457,6 +457,37 @@ body {
   .auth-header h1 { font-size: 1.35rem; }
   .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
   .form-actions { flex-direction: column; }
+
+  /* Hide non-essential table columns on mobile */
+  .hide-mobile { display: none !important; }
+
+  /* Projects table: show only project name + value on mobile */
+  .projects-table-header,
+  .projects-table-row {
+    grid-template-columns: 1fr 100px !important;
+    padding: 10px 14px !important;
+  }
+
+  /* MyRates table: show only name + value on mobile */
+  .rates-table-header,
+  .rates-table-row {
+    grid-template-columns: 1fr 80px !important;
+    padding: 8px 14px !important;
+  }
+
+  /* Admin tables: horizontal scroll wrapper */
+  .admin-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* General table overflow prevention */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -14px;
+    padding: 0 14px;
+  }
 }
 
 /* === RESPONSIVE — SMALL PHONES (max-width: 400px) === */
