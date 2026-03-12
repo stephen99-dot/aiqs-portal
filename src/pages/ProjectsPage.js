@@ -82,28 +82,28 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',overflow:'hidden'}}>
-            <div style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 120px 100px 80px 100px 120px':'1fr 100px 80px 100px 120px',padding:'10px 20px',fontSize:'11px',fontWeight:600,color:c.textMut,textTransform:'uppercase',borderBottom:'1px solid '+c.cardBorder}}>
+            <div style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 120px 100px 80px 100px 120px':'1fr 100px 80px 100px 120px',padding:'10px 20px',fontSize:'11px',fontWeight:600,color:c.textMut,textTransform:'uppercase',borderBottom:'1px solid '+c.cardBorder}} className="projects-table-header">
               <div>Project</div>
               {isAdmin && <div>Client</div>}
               <div style={{textAlign:'right'}}>Value</div>
-              <div style={{textAlign:'center'}}>Items</div>
-              <div style={{textAlign:'center'}}>Files</div>
-              <div style={{textAlign:'right'}}>Date</div>
+              <div style={{textAlign:'center'}} className="hide-mobile">Items</div>
+              <div style={{textAlign:'center'}} className="hide-mobile">Files</div>
+              <div style={{textAlign:'right'}} className="hide-mobile">Date</div>
             </div>
             {projects.map(p => (
-              <div key={p.id} style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 120px 100px 80px 100px 120px':'1fr 100px 80px 100px 120px',padding:'12px 20px',alignItems:'center',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),transition:'background 0.1s'}} onMouseEnter={e=>e.currentTarget.style.background=c.rowHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <div key={p.id} className="projects-table-row" style={{display:'grid',gridTemplateColumns:isAdmin?'1fr 120px 100px 80px 100px 120px':'1fr 100px 80px 100px 120px',padding:'12px 20px',alignItems:'center',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),transition:'background 0.1s'}} onMouseEnter={e=>e.currentTarget.style.background=c.rowHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div>
                   <div style={{fontSize:'13px',fontWeight:600,color:c.text}}>{p.title}</div>
                   {p.summary && <div style={{fontSize:'11px',color:c.textMut,marginTop:'2px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'300px'}}>{p.summary}</div>}
                 </div>
                 {isAdmin && <div style={{fontSize:'12px',color:c.textSec}}>{p.full_name||p.email||'--'}</div>}
                 <div style={{textAlign:'right',fontSize:'13px',fontWeight:600,color:c.text,fontFamily:'monospace'}}>{formatCurrency(p.total_value, p.currency)}</div>
-                <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}}>{p.item_count||0}</div>
-                <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}}>
+                <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}} className="hide-mobile">{p.item_count||0}</div>
+                <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}} className="hide-mobile">
                   {p.boq_filename && <a href={'/api/downloads/'+p.boq_filename} style={{fontSize:'11px',color:c.accent,textDecoration:'none'}}>BOQ</a>}
                   {p.findings_filename && <a href={'/api/downloads/'+p.findings_filename} style={{fontSize:'11px',color:c.accent,textDecoration:'none'}}>Report</a>}
                 </div>
-                <div style={{textAlign:'right',fontSize:'12px',color:c.textMut}}>{formatDate(p.created_at)}</div>
+                <div style={{textAlign:'right',fontSize:'12px',color:c.textMut}} className="hide-mobile">{formatDate(p.created_at)}</div>
               </div>
             ))}
           </div>

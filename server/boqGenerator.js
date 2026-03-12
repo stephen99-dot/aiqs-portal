@@ -18,17 +18,18 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 }
   });
 
-  // Column definitions
+  // Column definitions — tightened so Total (col H) is visible on mobile screens
+  // Description reduced from 62→48, Labour/Materials reduced from 14→12
   ws.columns = [
-    { header: 'Item', key: 'item', width: 8 },
-    { header: 'Description', key: 'desc', width: 62 },
-    { header: 'Unit', key: 'unit', width: 8 },
-    { header: 'Qty', key: 'qty', width: 10 },
-    { header: 'Rate (' + currency + ')', key: 'rate', width: 12 },
-    { header: 'Labour (' + currency + ')', key: 'labour', width: 14 },
-    { header: 'Materials (' + currency + ')', key: 'materials', width: 14 },
-    { header: 'Total (' + currency + ')', key: 'total', width: 14 },
-    { header: 'Rate Source', key: 'source', width: 14 }
+    { header: 'Item', key: 'item', width: 7 },
+    { header: 'Description', key: 'desc', width: 48 },
+    { header: 'Unit', key: 'unit', width: 6 },
+    { header: 'Qty', key: 'qty', width: 8 },
+    { header: 'Rate (' + currency + ')', key: 'rate', width: 10 },
+    { header: 'Labour (' + currency + ')', key: 'labour', width: 12 },
+    { header: 'Materials (' + currency + ')', key: 'materials', width: 12 },
+    { header: 'Total (' + currency + ')', key: 'total', width: 13 },
+    { header: 'Rate Source', key: 'source', width: 12 }
   ];
 
   // Colours

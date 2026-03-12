@@ -249,14 +249,14 @@ export default function MyRatesPage() {
             </div>
             {isExpanded && (
               <div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'8px 20px',fontSize:'11px',fontWeight:600,color:c.textMut,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid '+c.catBorder}}>
-                  <div>Rate</div><div style={{textAlign:'right'}}>Value</div><div style={{textAlign:'center'}}>Unit</div><div style={{textAlign:'center'}}>Confidence</div><div style={{textAlign:'center'}}>Actions</div>
+                <div className="rates-table-header" style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'8px 20px',fontSize:'11px',fontWeight:600,color:c.textMut,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid '+c.catBorder}}>
+                  <div>Rate</div><div style={{textAlign:'right'}}>Value</div><div style={{textAlign:'center'}} className="hide-mobile">Unit</div><div style={{textAlign:'center'}} className="hide-mobile">Confidence</div><div style={{textAlign:'center'}} className="hide-mobile">Actions</div>
                 </div>
                 {catRates.map(rate=>{
                   const isEditing = editingId===rate.id;
                   const badge = confidenceBadge(rate.confidence,isDark);
                   return (
-                    <div key={rate.id} style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'10px 20px',alignItems:'center',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),transition:'background 0.1s'}} onMouseEnter={e=>e.currentTarget.style.background=c.rowHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <div key={rate.id} className="rates-table-row" style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'10px 20px',alignItems:'center',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),transition:'background 0.1s'}} onMouseEnter={e=>e.currentTarget.style.background=c.rowHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                       <div>
                         <div style={{fontSize:'13px',fontWeight:500,color:c.text}}>{rate.display_name}</div>
                         {rate.client_note && <div style={{fontSize:'11px',color:c.textMut,marginTop:'2px'}}>{rate.client_note}</div>}
@@ -268,9 +268,9 @@ export default function MyRatesPage() {
                           <span style={{fontSize:'13px',fontWeight:600,color:c.text,fontFamily:'monospace'}}>{typeof rate.value==='number'?rate.value.toLocaleString('en-GB'):rate.value}</span>
                         )}
                       </div>
-                      <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}}>{rate.unit}</div>
-                      <div style={{textAlign:'center'}}><span style={{fontSize:'10px',fontWeight:600,color:badge.color,background:badge.bg,border:'1px solid '+badge.border,borderRadius:'8px',padding:'2px 6px'}}>{badge.text}</span></div>
-                      <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}}>
+                      <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}} className="hide-mobile">{rate.unit}</div>
+                      <div style={{textAlign:'center'}} className="hide-mobile"><span style={{fontSize:'10px',fontWeight:600,color:badge.color,background:badge.bg,border:'1px solid '+badge.border,borderRadius:'8px',padding:'2px 6px'}}>{badge.text}</span></div>
+                      <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}} className="hide-mobile">
                         {isEditing ? (
                           <>
                             <button onClick={()=>handleSave(rate)} style={{background:isDark?'rgba(16,185,129,0.15)':'rgba(16,185,129,0.1)',border:'none',borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:isDark?'#34D399':'#059669',cursor:'pointer',fontWeight:600}}>Save</button>
