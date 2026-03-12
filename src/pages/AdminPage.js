@@ -84,7 +84,7 @@ function ClientsTab({ t }) {
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => { loadUsers(); }, []);
-  function loadUsers() { setLoading(true); apiFetch('/admin/users').then(setUsers).catch(console.error).finally(() => setLoading(false)); }
+  function loadUsers() { setLoading(true); apiFetch('/admin/users').then(r => setUsers(r.users || r || [])).catch(console.error).finally(() => setLoading(false)); }
   function showMsg(text, type = 'success') { setActionMsg({ text, type }); setTimeout(() => setActionMsg(null), 4000); }
 
   async function handleAddUser(e) {

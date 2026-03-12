@@ -679,7 +679,9 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
     if (!user) return res.status(404).json({ error: 'User not found' });
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    db.exec('DROP TABLE IF EXISTS magic_links; CREATE TABLE magic_links (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+    db.exec('CREATE TABLE IF NOT EXISTS magic_links (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+    // Clean up expired/used magic links for this user (keep table intact for other users)
+    db.prepare('DELETE FROM magic_links WHERE user_id = ? OR (used = 1) OR (expires_at < ?)').run(user.id, new Date().toISOString());
     db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), user.id, token, expiresAt);
     const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
     const magicUrl = `${portalUrl}/magic?token=${token}`;
