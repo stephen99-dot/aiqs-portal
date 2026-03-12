@@ -362,7 +362,9 @@ export default function DashboardPage() {
       try {
         const seen = localStorage.getItem(key);
         // Show tour if never seen, or if tour content has been updated (version bump)
-        if (!seen || Number(seen) < (TOUR_VERSION || 1)) setShowTour(true);
+        // Old versions stored 'true' instead of a number — treat any non-numeric value as version 0
+        const seenVersion = Number(seen) || 0;
+        if (!seen || seenVersion < (TOUR_VERSION || 1)) setShowTour(true);
       } catch {}
     }
   }, [loading, user?.id]);
