@@ -38,9 +38,9 @@ try { db.exec('ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAUL
 try { db.exec('ALTER TABLE users ADD COLUMN google_id TEXT'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN avatar TEXT'); } catch(e) {}
 
-// ── SMTP Email Setup (Hostinger) ─────────────────────────────────────────────
+// ── SMTP Email Setup (Google Workspace) ──────────────────────────────────────
 const smtpTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.SMTP_PORT || '465'),
   secure: true,
   auth: {
