@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
+import OnboardingTour from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
@@ -356,13 +356,21 @@ export default function DashboardPage() {
     }
   }
 
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+
   useEffect(() => {
     if (!loading) {
-      const key = `aiqs_tour_complete_${user?.id || 'default'}`;
+      const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
+      const whatsNewKey = `aiqs_whats_new_v3_${user?.id || 'default'}`;
       try {
-        const seen = localStorage.getItem(key);
-        // Show tour if never seen, or if tour content has been updated (version bump)
-        if (!seen || Number(seen) < (TOUR_VERSION || 1)) setShowTour(true);
+        const seen = localStorage.getItem(tourKey);
+        if (!seen) {
+          // Brand new user — show the full onboarding tour
+          setShowTour(true);
+        } else if (!localStorage.getItem(whatsNewKey)) {
+          // Existing user who hasn't seen the latest updates — show What's New banner
+          setShowWhatsNew(true);
+        }
       } catch {}
     }
   }, [loading, user?.id]);
@@ -373,6 +381,34 @@ export default function DashboardPage() {
   return (
     <div className="page" data-tour="welcome">
       {showTour && <OnboardingTour userId={user?.id} onComplete={() => setShowTour(false)} />}
+
+      {showWhatsNew && (
+        <div style={{
+          background: t.card, border: `1px solid rgba(245,158,11,0.2)`,
+          borderRadius: 12, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowSm,
+          borderLeft: '3px solid #F59E0B',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ZapIcon size={14} color="#F59E0B" /> What's New
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: t.textSecondary, lineHeight: 1.8 }}>
+                <li><strong style={{ color: t.text }}>Variations</strong> — raise change orders directly from any project page</li>
+                <li><strong style={{ color: t.text }}>My Rates</strong> — build your own pricing library, auto-applied to every estimate</li>
+                <li><strong style={{ color: t.text }}>Usage tracking</strong> — hover the bars above to see your remaining messages and BOQ credits</li>
+              </ul>
+            </div>
+            <button onClick={() => {
+              setShowWhatsNew(false);
+              try { localStorage.setItem(`aiqs_whats_new_v3_${user?.id || 'default'}`, 'true'); } catch {}
+            }} style={{
+              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
+              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
+            }}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       <div className="page-header">
         <div>
