@@ -251,13 +251,23 @@ export default function ChatPage() {
       if (data.files?.length) setTimeout(loadSessions, 2000);
 
     } catch (err) {
-      const isQuota = err.message?.includes('limit') || err.message?.includes('Upgrade');
+      const isQuota = err.status === 429 || err.data?.limit_type || err.message?.includes('limit') || err.message?.includes('Upgrade') || err.message?.includes('credits');
+      const limitType = err.data?.limit_type || 'messages';
+      const userPlan = err.data?.plan || 'starter';
+      let quotaMessage = err.message || 'You have reached your usage limit.';
+      if (isQuota && !quotaMessage.includes('Upgrade') && !quotaMessage.includes('Contact')) {
+        quotaMessage += ' Upgrade your plan for more credits.';
+      }
       setMessages(p => [...p, {
         role: 'assistant',
-        content: isQuota ? err.message : 'Something went wrong — please try again.',
+        content: isQuota ? quotaMessage : 'Something went wrong — please try again.',
         timestamp: new Date().toISOString(),
         error: !isQuota,
-        paymentRequired: isQuota ? { message: err.message, url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01' } : null,
+        paymentRequired: isQuota ? {
+          message: quotaMessage,
+          type: limitType,
+          plan: userPlan,
+        } : null,
       }]);
     } finally { setSending(false); }
   }

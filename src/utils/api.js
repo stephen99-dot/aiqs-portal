@@ -33,7 +33,10 @@ async function apiFetch(endpoint, options = {}) {
   }
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || 'Something went wrong');
+    const err = new Error(data.error || 'Something went wrong');
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
   return data;
 }
