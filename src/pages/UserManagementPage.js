@@ -113,10 +113,10 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const bg2 = isDark ? '#131B2E' : '#FFF';
 
   const PLANS = [
-    { value: 'starter', label: 'Starter' },
-    { value: 'professional', label: 'Professional' },
-    { value: 'premium', label: 'Premium' },
-    { value: 'custom', label: 'Custom' },
+    { value: 'starter', label: 'Starter', msgs: 1, docs: 0 },
+    { value: 'professional', label: 'Professional', msgs: 100, docs: 10 },
+    { value: 'premium', label: 'Premium', msgs: 200, docs: 20 },
+    { value: 'custom', label: 'Custom', msgs: null, docs: null },
   ];
 
   const btn = (c) => ({ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: c, color: '#FFF', fontSize: 12, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: loading ? 0.6 : 1 });
@@ -234,7 +234,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             <div style={lbl}>Plan</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
               {PLANS.map(p => (
-                <button key={p.value} onClick={() => setPlan(p.value)}
+                <button key={p.value} onClick={() => { setPlan(p.value); if (p.msgs !== null) setMsgAllowance(p.msgs); if (p.docs !== null) setDocAllowance(p.docs); }}
                   style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
                     border: plan === p.value ? '2px solid #2563EB' : '1px solid ' + border,
                     background: plan === p.value ? 'rgba(37,99,235,0.1)' : 'transparent',
@@ -442,7 +442,7 @@ export default function UserManagementPage({ theme }) {
               <tbody>
                 {filtered.map((user, i) => {
                   const msgsUsed = user.messages_used || user.used || 0;
-                  const msgsTotal = (user.monthly_quota || user.quota || 0);
+                  const msgsTotal = user.monthly_quota || user.quota || (user.plan==='premium'?200:user.plan==='professional'?100:user.plan==='starter'?1:0);
                   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
                   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
                   return (
@@ -490,7 +490,7 @@ export default function UserManagementPage({ theme }) {
                         <td style={{padding:'12px 16px',minWidth:100}}>
                           {(()=>{
                             const docsUsed = user.docs_used || 0;
-                            const docsTotal = user.docs_limit || (user.plan==='premium'?20:user.plan==='professional'?10:user.monthly_boq_quota||0);
+                            const docsTotal = user.docs_limit || user.monthly_boq_quota || (user.plan==='premium'?20:user.plan==='professional'?10:0);
                             const docPct = docsTotal > 0 ? Math.min(100, (docsUsed / docsTotal) * 100) : 0;
                             const docBarColor = docPct >= 90 ? '#EF4444' : docPct >= 70 ? '#F59E0B' : '#3B82F6';
                             return docsTotal > 0 ? (
@@ -503,7 +503,7 @@ export default function UserManagementPage({ theme }) {
                                   <div style={{width:docPct+'%',height:'100%',borderRadius:3,background:docBarColor}} />
                                 </div>
                               </div>
-                            ) : <span style={{fontSize:11,color:muted}}>{docsUsed} gen</span>;
+                            ) : <span style={{fontSize:11,color:muted}}>{docsUsed} generated</span>;
                           })()}
                         </td>
                         <td style={{padding:'12px 16px'}}>
