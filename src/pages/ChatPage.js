@@ -253,20 +253,32 @@ export default function ChatPage() {
       if (data.files?.length) setTimeout(loadSessions, 2000);
 
     } catch (err) {
-      const isQuota = err.status === 429 || err.data?.limit_type || err.message?.includes('limit') || err.message?.includes('Upgrade') || err.message?.includes('credits');
+      console.error('[Chat] Error:', err.status, err.message, err.data);
+      const isSuspended = err.data?.suspended || /suspend/i.test(err.message || '');
+      const isQuota = !isSuspended && (err.status === 429 || err.data?.limit_type
+        || /limit|upgrade|credits|quota|no message/i.test(err.message || ''));
       const limitType = err.data?.limit_type || 'messages';
       const userPlan = err.data?.plan || 'starter';
-      let quotaMessage = err.message || 'You have reached your usage limit.';
-      if (isQuota && !quotaMessage.includes('Upgrade') && !quotaMessage.includes('Contact')) {
-        quotaMessage += ' Upgrade your plan for more credits.';
+      let displayMessage;
+      if (isSuspended) {
+        displayMessage = err.message || 'Your account has been suspended. Contact support.';
+      } else if (isQuota) {
+        displayMessage = err.message || 'You have reached your usage limit.';
+        if (!/upgrade|contact|plan/i.test(displayMessage)) {
+          displayMessage += ' Upgrade your plan for more credits.';
+        }
+      } else if (err.message && err.message !== 'Something went wrong' && !err.message.includes('Session expired')) {
+        displayMessage = err.message;
+      } else {
+        displayMessage = 'Something went wrong — please try again.';
       }
       setMessages(p => [...p, {
         role: 'assistant',
-        content: isQuota ? quotaMessage : 'Something went wrong — please try again.',
+        content: displayMessage,
         timestamp: new Date().toISOString(),
-        error: !isQuota,
+        error: isSuspended || !isQuota,
         paymentRequired: isQuota ? {
-          message: quotaMessage,
+          message: displayMessage,
           type: limitType,
           plan: userPlan,
         } : null,
