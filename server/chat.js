@@ -1142,13 +1142,16 @@ router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res)
       const plan = req.user.plan || 'starter';
       const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
       const bonusMsgs = req.user.bonus_messages || 0;
-      const effectiveLimit = limits.messages + bonusMsgs;
-      if (effectiveLimit > 0) {
-        const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
-        const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, mStart.toISOString());
-        if (used.c >= effectiveLimit) {
-          return res.status(429).json({ error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
-        }
+      // Use admin-set monthly_quota if present, otherwise fall back to plan default
+      const baseLimit = (req.user.monthly_quota != null && req.user.monthly_quota >= 0) ? req.user.monthly_quota : limits.messages;
+      const effectiveLimit = baseLimit + bonusMsgs;
+      if (effectiveLimit <= 0) {
+        return res.status(429).json({ error: `You have no message credits. Contact your admin to update your plan.`, limit_type: 'messages', used: 0, limit: 0, plan });
+      }
+      const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
+      const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, mStart.toISOString());
+      if (used.c >= effectiveLimit) {
+        return res.status(429).json({ error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
       }
     }
 
@@ -1930,7 +1933,8 @@ CRITICAL RULES:
           console.log(`[Quota] Free trial — slot ${originalsEver + 1} of ${totalAllowed}`);
         }
       } else {
-        const docLimit = dPlan === 'premium' ? 20 : 10;
+        const defaultDocLimit = dPlan === 'premium' ? 20 : 10;
+        const docLimit = (req.user.monthly_boq_quota != null && req.user.monthly_boq_quota >= 0) ? req.user.monthly_boq_quota : defaultDocLimit;
         const originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
         const lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
         const isRevision = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
@@ -2382,8 +2386,10 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       const qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
       const qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
       const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
-      const qMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
-      const qDocLimit = qPlan === 'starter' ? (req.user.monthly_quota || 0) : qPlan === 'professional' ? 10 : 20;
+      const defaultMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
+      const qMsgLimit = (req.user.monthly_quota != null && req.user.monthly_quota >= 0) ? req.user.monthly_quota : defaultMsgLimit;
+      const defaultDocLimit = qPlan === 'starter' ? 0 : qPlan === 'professional' ? 10 : 20;
+      const qDocLimit = (req.user.monthly_boq_quota != null && req.user.monthly_boq_quota >= 0) ? req.user.monthly_boq_quota : defaultDocLimit;
       quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 
