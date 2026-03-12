@@ -492,17 +492,60 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
 
 router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { email, fullName, company, phone, role, password } = req.body;
+    const { email, fullName, company, phone, role, sendInvite } = req.body;
     if (!email || !fullName) return res.status(400).json({ error: 'Email and full name are required' });
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (existing) return res.status(409).json({ error: 'A user with this email already exists' });
     const id = uuidv4();
-    const passwordHash = await bcrypt.hash(password || 'Welcome123!', 12);
-    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
+    // Generate a random temporary password — user will set their own via magic link
+    const tempPassword = crypto.randomBytes(24).toString('hex');
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 2, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     seedDefaultRates(id);
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     logActivity({ event_type: 'signup', title: fullName + ' added by admin', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });
-    res.status(201).json({ id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, createdAt: newUser.created_at });
+
+    // Auto-send welcome email with magic link
+    let emailSent = false;
+    let magicUrl = null;
+    if (sendInvite !== false) {
+      try {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days for new user invite
+        db.exec('CREATE TABLE IF NOT EXISTS magic_links (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+        db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), id, token, expiresAt);
+        const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+        magicUrl = `${portalUrl}/magic?token=${token}`;
+        const firstName = (fullName || 'there').split(' ')[0];
+        emailSent = await sendEmail({
+          to: email.toLowerCase(),
+          subject: 'Welcome to AI QS — Set Up Your Account',
+          html: `
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+              <div style="text-align:center;margin-bottom:32px;">
+                <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+                <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+              </div>
+              <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Hi ${firstName},</h2>
+              <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 8px;">You've been signed up to the <strong>AI QS Portal</strong> — automated quantity surveying powered by AI.</p>
+              <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 24px;">Click the button below to set your password and get started.</p>
+              <div style="text-align:center;margin:32px 0;">
+                <a href="${magicUrl}" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Set Up Your Account</a>
+              </div>
+              <p style="font-size:13px;color:#94A3B8;line-height:1.5;">This link expires in 7 days. If it expires, ask your administrator to send a new one.</p>
+              <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+              <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+            </div>
+          `,
+        });
+        if (emailSent) console.log(`[Invite] Welcome email sent to ${email}`);
+        else console.log(`[Invite] Email not configured — magic link: ${magicUrl}`);
+      } catch (inviteErr) {
+        console.error('[Invite] Failed to send welcome email:', inviteErr.message);
+      }
+    }
+
+    res.status(201).json({ id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, createdAt: newUser.created_at, emailSent, magicUrl: emailSent ? null : magicUrl });
   } catch (err) {
     console.error('Add user error:', err);
     res.status(500).json({ error: 'Failed to add user' });
