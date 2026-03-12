@@ -254,18 +254,20 @@ export default function ChatPage() {
 
     } catch (err) {
       console.error('[Chat] Error:', err.status, err.message, err.data);
-      const isQuota = err.status === 429 || err.status === 403 || err.data?.limit_type || err.data?.suspended
-        || /limit|upgrade|credits|suspend|quota|no message/i.test(err.message || '');
-      const isServerError = !isQuota && err.message && err.message !== 'Something went wrong' && !err.message.includes('Session expired');
+      const isSuspended = err.data?.suspended || /suspend/i.test(err.message || '');
+      const isQuota = !isSuspended && (err.status === 429 || err.data?.limit_type
+        || /limit|upgrade|credits|quota|no message/i.test(err.message || ''));
       const limitType = err.data?.limit_type || 'messages';
       const userPlan = err.data?.plan || 'starter';
       let displayMessage;
-      if (isQuota) {
+      if (isSuspended) {
+        displayMessage = err.message || 'Your account has been suspended. Contact support.';
+      } else if (isQuota) {
         displayMessage = err.message || 'You have reached your usage limit.';
         if (!/upgrade|contact|plan/i.test(displayMessage)) {
           displayMessage += ' Upgrade your plan for more credits.';
         }
-      } else if (isServerError) {
+      } else if (err.message && err.message !== 'Something went wrong' && !err.message.includes('Session expired')) {
         displayMessage = err.message;
       } else {
         displayMessage = 'Something went wrong — please try again.';
@@ -274,7 +276,7 @@ export default function ChatPage() {
         role: 'assistant',
         content: displayMessage,
         timestamp: new Date().toISOString(),
-        error: !isQuota,
+        error: isSuspended || !isQuota,
         paymentRequired: isQuota ? {
           message: displayMessage,
           type: limitType,
