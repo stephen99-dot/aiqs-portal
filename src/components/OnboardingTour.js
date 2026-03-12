@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
+// Bump this version whenever tour content changes — existing users will see the updated tour
+export const TOUR_VERSION = 2;
+
 const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
@@ -204,7 +207,7 @@ export default function OnboardingTour({ userId, onComplete }) {
   const prev = () => { if (step > 0) setStep(s => s - 1); };
   const finish = () => {
     setVisible(false);
-    try { localStorage.setItem(`aiqs_tour_complete_${userId || 'default'}`, 'true'); } catch {}
+    try { localStorage.setItem(`aiqs_tour_complete_${userId || 'default'}`, String(TOUR_VERSION)); } catch {}
     setTimeout(() => onComplete?.(), 300);
   };
 

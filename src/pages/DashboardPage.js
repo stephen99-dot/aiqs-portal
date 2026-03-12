@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-import OnboardingTour from '../components/OnboardingTour';
+import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
@@ -359,7 +359,11 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       const key = `aiqs_tour_complete_${user?.id || 'default'}`;
-      try { if (!localStorage.getItem(key)) setShowTour(true); } catch {}
+      try {
+        const seen = localStorage.getItem(key);
+        // Show tour if never seen, or if tour content has been updated (version bump)
+        if (!seen || Number(seen) < (TOUR_VERSION || 1)) setShowTour(true);
+      } catch {}
     }
   }, [loading, user?.id]);
 
