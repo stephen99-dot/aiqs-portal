@@ -238,16 +238,11 @@ export default function NotificationBell() {
     return isDark ? 'rgba(148,163,184,0.08)' : 'rgba(148,163,184,0.12)';
   };
 
-  // ── Calculate panel position relative to the bell button ──────────
-  // The wrapper div (ref) is position:relative, so the panel is
-  // positioned relative to it with right:0 so it never overflows
-  // off the right edge, and top:calc(100% + 8px) so it drops below.
   const panelStyle = {
-    position: 'absolute',
-    top: 'calc(100% + 8px)',
-    left: 0,
-    // On very small screens make it narrower but still usable
-    width: 'min(340px, calc(100vw - 24px))',
+    position: 'fixed',
+    top: '60px',
+    left: '244px',
+    width: '340px',
     maxHeight: '460px',
     background: isDark ? '#131A2B' : '#FFFFFF',
     border: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,
@@ -311,7 +306,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div style={panelStyle}>
+        <div className="notif-panel-fixed" style={panelStyle}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '14px 16px',
@@ -442,6 +437,13 @@ export default function NotificationBell() {
         @keyframes toastProgress {
           from { width: 100%; }
           to { width: 0%; }
+        }
+        @media (max-width: 768px) {
+          .notif-panel-fixed {
+            left: 12px !important;
+            top: 60px !important;
+            width: calc(100vw - 24px) !important;
+          }
         }
       `}</style>
     </div>
