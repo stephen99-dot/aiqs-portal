@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 // Bump this version whenever tour content changes — existing users will see the updated tour
-export const TOUR_VERSION = 3;
+export const TOUR_VERSION = 4;
 
 const TOUR_STEPS = [
   {
@@ -27,25 +27,25 @@ const TOUR_STEPS = [
     icon: '\u25CE',
   },
   {
-    target: '[data-tour="stats"]',
-    title: 'Project Overview',
-    description: 'A live snapshot of all your projects — total count, queued, in progress, and completed. These update automatically as you work in the chat.',
-    position: 'bottom',
-    icon: '\u25A3',
-  },
-  {
     target: '[data-tour="projects-list"]',
-    title: 'Your Projects',
-    description: 'Every BOQ you generate appears here. Click into any project to view the full breakdown, download Excel/Word documents, or raise a variation (change order). You can also add notes and share documents with your team.',
+    title: 'Your Projects & Variations',
+    description: 'Every BOQ you generate appears here. Click into any project to view the full cost breakdown, download your Excel and Word documents, and raise variations (change orders). If the scope changes mid-project, just open the project and add a variation — the costs update automatically.',
     position: 'top',
     icon: '\u2630',
   },
   {
-    target: '[data-tour="sidebar-nav"]',
-    title: 'Navigation',
-    description: 'Chat — upload drawings and generate new BOQs. Projects — click into any project to download files or raise variations. My Rates — build your own pricing library (rates are auto-applied to every estimate). Variations — view and manage all change orders across projects.',
+    target: '[data-tour="my-rates"]',
+    title: 'My Rates — Your Pricing Library',
+    description: 'Build and manage your own rate library here. Add your preferred rates for materials, labour, and subcontractors. These rates are automatically applied every time the AI generates a BOQ — so your estimates always reflect your actual costs, not generic market rates.',
     position: 'right',
-    icon: '\u25E7',
+    icon: '\u00A3',
+  },
+  {
+    target: '[data-tour="sidebar-nav"]',
+    title: 'You\'re All Set',
+    description: 'That\'s everything you need to get started. Upload your first set of drawings in the Chat, and you\'ll have a priced BOQ within minutes. If you need help, just ask — the AI is here to assist.',
+    position: 'right',
+    icon: '\u2714',
   },
 ];
 

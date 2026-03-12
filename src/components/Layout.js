@@ -28,7 +28,7 @@ export default function Layout() {
   const navItems = [
     { path: '/dashboard', label: 'Projects', Icon: NewProjectIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
-    { path: '/my-rates', label: 'My Rates', Icon: RatesIcon },
+    { path: '/my-rates', label: 'My Rates', Icon: RatesIcon, tourId: 'my-rates' },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
     { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
@@ -132,7 +132,7 @@ export default function Layout() {
                 }}
               >
                 {({ isActive }) => (
-                  <div className="sidebar-nav-item" style={{
+                  <div className="sidebar-nav-item" data-tour={item.tourId || undefined} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', borderRadius: 7,
                     fontSize: 13, fontWeight: isActive ? 600 : 500,
