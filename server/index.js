@@ -13,6 +13,7 @@ const ratesExtra = require('./rates-extra');
 const projectsUsage = require('./projects-usage');
 const { router: activityRoutes } = require('./activityRoutes');
 const { router: pipelineRoutes } = require('./pipelineRoutes');
+const variationRoutes = require('./variationRoutes');
 const { authMiddleware } = require('./auth');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api', ratesExtra);
 app.use('/api', projectsUsage);
 app.use('/api', activityRoutes);
 app.use('/api', pipelineRoutes);
+app.use('/api', variationRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');

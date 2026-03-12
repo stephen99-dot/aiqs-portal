@@ -17,6 +17,10 @@ const ADMIN_EMAIL = 'hello@crmwizardai.com';
 const PIPEDREAM_WEBHOOK = process.env.PIPEDREAM_WEBHOOK_URL || 'https://eojsrx5dgazyle8.m.pipedream.net';
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://aiqs-portal.onrender.com';
 
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = `${PORTAL_BASE_URL}/api/auth/google/callback`;
+
 const PLANS = {
   starter:      { label: 'Starter (PAYG)', quota: 0,  boqQuota: 0,  price: 99  },
   professional: { label: 'Professional',   quota: 10, boqQuota: 10, price: 347 },
@@ -31,6 +35,8 @@ try { db.exec('ALTER TABLE users ADD COLUMN bonus_docs INTEGER DEFAULT 0'); } ca
 try { db.exec('ALTER TABLE users ADD COLUMN suspended INTEGER DEFAULT 0'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN suspended_reason TEXT'); } catch(e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN google_id TEXT'); } catch(e) {}
+try { db.exec('ALTER TABLE users ADD COLUMN avatar TEXT'); } catch(e) {}
 
 // ── SMTP Email Setup (Hostinger) ─────────────────────────────────────────────
 const smtpTransporter = nodemailer.createTransport({
@@ -370,6 +376,93 @@ router.get('/auth/magic', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// GOOGLE OAUTH
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Step 1: Redirect to Google
+router.get('/auth/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID) return res.status(500).json({ error: 'Google OAuth not configured' });
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'online',
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+// Step 2: Google redirects back here with a code
+router.get('/auth/google/callback', async (req, res) => {
+  try {
+    const { code, error } = req.query;
+    if (error || !code) return res.redirect(`/login?error=google_denied`);
+
+    // Exchange code for tokens
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) return res.redirect(`/login?error=google_token_failed`);
+
+    // Get user info from Google
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await profileRes.json();
+    if (!profile.email) return res.redirect(`/login?error=google_no_email`);
+
+    const email = profile.email.toLowerCase();
+    const fullName = profile.name || email.split('@')[0];
+    const googleId = profile.id;
+    const avatar = profile.picture || null;
+
+    // Find or create user
+    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+
+    if (!user) {
+      // New user — create account
+      const id = uuidv4();
+      const role = email === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
+      db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 2)")
+        .run(id, email, fullName, googleId, avatar, role);
+      seedDefaultRates(id);
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+
+      logActivity({ event_type: 'signup', title: fullName + ' signed up via Google', detail: email, user_id: id, user_name: fullName, user_email: email });
+      if (role !== 'admin') {
+        notifyAdmin({ type: 'new_signup', title: `New signup (Google): ${fullName}`, detail: email, icon: 'user-plus' });
+        sendAdminSignupEmail({ fullName, email, company: null, phone: null });
+      }
+    } else {
+      // Existing user — update google_id and avatar if not set
+      db.prepare('UPDATE users SET google_id = COALESCE(google_id, ?), avatar = COALESCE(avatar, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(googleId, avatar, user.id);
+      logActivity({ event_type: 'login', title: fullName + ' logged in via Google', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    }
+
+    if (user.suspended) return res.redirect(`/login?error=account_suspended`);
+
+    const authToken = generateToken(user);
+    // Redirect to frontend with token in query param — frontend will store it
+    res.redirect(`/auth/google/success?token=${authToken}`);
+  } catch (err) {
+    console.error('Google OAuth callback error:', err);
+    res.redirect(`/login?error=google_failed`);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // NOTIFICATIONS API
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -594,7 +687,6 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
   }
 });
 
-// Update plan (supports custom with monthlyQuota + boqQuota)
 router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { plan, monthlyQuota, boqQuota } = req.body;
@@ -616,7 +708,6 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
-// Set bonus credits directly
 router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
@@ -633,7 +724,6 @@ router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, re
   }
 });
 
-// Grant paid BOQ credits (adds on top of existing)
 router.post('/admin/users/:id/grant-doc', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
@@ -645,7 +735,7 @@ router.post('/admin/users/:id/grant-doc', authMiddleware, adminMiddleware, (req,
     try {
       db.prepare("INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, 'admin_credit', ?, 'admin', 0, 0, 0)")
         .run('ul_' + uuidv4().slice(0, 8), req.params.id, amount + ' paid BOQ credit(s) granted by admin');
-    } catch(e) { /* ignore if usage_log schema differs */ }
+    } catch(e) {}
     logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' granted ' + amount + ' BOQ credit(s)', detail: 'bonus_docs: ' + (user.bonus_docs || 0) + ' → ' + newBonus, user_id: user.id, user_name: user.full_name, user_email: user.email });
     res.json({ success: true, bonus_docs: newBonus });
   } catch (err) {
@@ -654,11 +744,7 @@ router.post('/admin/users/:id/grant-doc', authMiddleware, adminMiddleware, (req,
   }
 });
 
-// Legacy grant-doc endpoint (kept for backwards compat)
 router.post('/admin/grant-doc/:id', authMiddleware, adminMiddleware, (req, res) => {
-  req.params = { id: req.params.id };
-  req.body = { amount: 1 };
-  // forward to new handler logic
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -670,7 +756,6 @@ router.post('/admin/grant-doc/:id', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
-// Suspend account
 router.post('/admin/suspend/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
@@ -686,7 +771,6 @@ router.post('/admin/suspend/:id', authMiddleware, adminMiddleware, (req, res) =>
   }
 });
 
-// Unsuspend account
 router.post('/admin/unsuspend/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
