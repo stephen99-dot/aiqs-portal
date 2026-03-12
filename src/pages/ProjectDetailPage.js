@@ -2,6 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 
+// SVG icons for document types
+const ExcelIcon = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+    <rect x="2" y="2" width="28" height="28" rx="4" fill="#107C41"/>
+    <path d="M8 8h6v6H8V8zm0 10h6v6H8v-6zm10-10h6v6h-6V8zm0 10h6v6h-6v-6z" fill="#21A366"/>
+    <text x="16" y="21" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="system-ui">X</text>
+  </svg>
+);
+
+const WordIcon = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+    <rect x="2" y="2" width="28" height="28" rx="4" fill="#185ABD"/>
+    <text x="16" y="21" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="system-ui">W</text>
+  </svg>
+);
+
+const ClientCopyIcon = ({ size = 28 }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+    <rect x="2" y="2" width="28" height="28" rx="4" fill="#7C3AED"/>
+    <path d="M16 10v4m0 0v4m0-4h4m-4 0h-4" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
+    <path d="M10 22h12" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
 const STATUS_MAP = {
   submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', desc: 'Your project has been received. We\'ll begin review shortly.' },
   in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', desc: 'We\'re reviewing your drawings and project brief.' },
@@ -202,20 +226,20 @@ export default function ProjectDetailPage() {
                 }}>
                   {project.total_value > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Project Value</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Project Value</div>
                       <div style={{ fontSize: 16, fontWeight: 700, color: '#10B981' }}>{formatCurrency(project.total_value, project.currency)}</div>
                     </div>
                   )}
                   {project.item_count > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Line Items</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#F1F5F9' }}>{project.item_count}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Line Items</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{project.item_count}</div>
                     </div>
                   )}
                   {project.project_type && (
                     <div>
-                      <div style={{ fontSize: 11, color: '#64748B', marginBottom: 2 }}>Type</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#F1F5F9' }}>{project.project_type}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Type</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{project.project_type}</div>
                     </div>
                   )}
                 </div>
@@ -237,12 +261,12 @@ export default function ProjectDetailPage() {
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.12)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.06)'}
                 >
-                  <span style={{ fontSize: 28 }}>📊</span>
+                  <ExcelIcon />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#F1F5F9', marginBottom: 2 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
                       Bill of Quantities (Excel)
                     </div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {project.boq_filename}
                     </div>
                   </div>
@@ -275,12 +299,12 @@ export default function ProjectDetailPage() {
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.12)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.06)'}
                 >
-                  <span style={{ fontSize: 28 }}>📄</span>
+                  <WordIcon />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#F1F5F9', marginBottom: 2 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
                       Findings Report (Word)
                     </div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {project.findings_filename}
                     </div>
                   </div>
@@ -297,7 +321,7 @@ export default function ProjectDetailPage() {
                 </button>
               )}
 
-              <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', textAlign: 'center' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
                 Need changes? Go back to the chat and say "regenerate documents" with any adjustments.
               </p>
 
@@ -314,12 +338,12 @@ export default function ProjectDetailPage() {
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.12)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.06)'}
                 >
-                  <span style={{ fontSize: 28 }}>👤</span>
+                  <ClientCopyIcon />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#F1F5F9', marginBottom: 2 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
                       Client Copy (Excel)
                     </div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       Contingency & OH&P baked into rates — margin hidden
                     </div>
                   </div>
@@ -332,8 +356,8 @@ export default function ProjectDetailPage() {
             </div>
           ) : (
             <div style={{ padding: '32px 0', textAlign: 'center' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-              <p style={{ fontSize: 14, color: '#64748B', margin: 0 }}>
+              <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
+              <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
                 No documents generated yet. Open the chat for this project and say "generate documents" to create your BOQ and Findings Report.
               </p>
               <Link
