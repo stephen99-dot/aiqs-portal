@@ -98,51 +98,11 @@ async function notifyAdmin({ type, title, detail, icon }) {
   }
 }
 
-// ── SendGrid Email (used when SMTP not available) ────────────────────────────
-const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'hello@crmwizardai.com';
-
-async function sendEmailSendGrid({ to, toName, subject, html }) {
-  if (!SENDGRID_API_KEY) {
-    console.log(`[SendGrid] No API key set, skipping email to ${to}`);
-    return false;
-  }
-  try {
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SENDGRID_API_KEY}` },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to, name: toName || to }] }],
-        from: { email: FROM_EMAIL, name: 'AI QS' },
-        subject,
-        content: [{ type: 'text/html', value: html }],
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      console.error(`[SendGrid] Error sending to ${to}:`, err);
-      return false;
-    }
-    console.log(`[SendGrid] Sent to ${to}: ${subject}`);
-    return true;
-  } catch (err) {
-    console.error(`[SendGrid] Failed to send to ${to}:`, err.message);
-    return false;
-  }
-}
-
-// Smart email sender: tries SendGrid first, falls back to SMTP
-async function sendSmartEmail({ to, toName, subject, html }) {
-  if (SENDGRID_API_KEY) return sendEmailSendGrid({ to, toName, subject, html });
-  return sendEmail({ to, subject, html });
-}
-
 async function sendAdminSignupEmail({ fullName, email, company, phone }) {
   const companyLine = company ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Company</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${company}</td></tr>` : '';
   const phoneLine = phone ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Phone</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${phone}</td></tr>` : '';
-  await sendSmartEmail({
+  await sendEmail({
     to: ADMIN_EMAIL,
-    toName: 'Admin',
     subject: `🆕 New Signup: ${fullName}`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#0F172A;border-radius:16px;">
@@ -172,9 +132,8 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
 async function sendClientWelcomeEmail({ fullName, email }) {
   const firstName = (fullName || 'there').split(' ')[0];
   const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
-  await sendSmartEmail({
+  await sendEmail({
     to: email,
-    toName: fullName,
     subject: `Welcome to AI QS — Let's get your first BOQ`,
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
@@ -718,9 +677,8 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
         const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
         magicUrl = `${portalUrl}/magic?token=${token}`;
         const firstName = (fullName || 'there').split(' ')[0];
-        emailSent = await sendSmartEmail({
+        emailSent = await sendEmail({
           to: email.toLowerCase(),
-          toName: fullName,
           subject: 'Welcome to AI QS — Set Up Your Account',
           html: `
             <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
@@ -922,9 +880,8 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
     const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
     const magicUrl = `${portalUrl}/magic?token=${token}`;
     const firstName = (user.full_name || 'there').split(' ')[0];
-    const emailSent = await sendSmartEmail({
+    const emailSent = await sendEmail({
       to: user.email,
-      toName: user.full_name,
       subject: 'Your AI QS Portal Login Link',
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
