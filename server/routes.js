@@ -579,7 +579,8 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       if (docsUsed < 0) docsUsed = 0;
     } catch(e) {}
     const plan = u.plan || 'starter';
-    const docsLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : (u.monthly_boq_quota || 0);
+    const defaultDocLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
+    const docsLimit = (u.monthly_boq_quota != null && u.monthly_boq_quota >= 0) ? u.monthly_boq_quota : defaultDocLimit;
     return {
       id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name,
       company: u.company, phone: u.phone, role: u.role,
