@@ -323,6 +323,7 @@ router.post('/auth/login', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
@@ -365,6 +366,7 @@ router.get('/auth/magic', (req, res) => {
     db.prepare('UPDATE magic_links SET used = 1 WHERE id = ?').run(link.id);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(link.user_id);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || user.email) + ' logged in via magic link', user_id: user.id, user_name: user.full_name, user_email: user.email });

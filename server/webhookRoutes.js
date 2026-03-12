@@ -264,7 +264,7 @@ router.get('/magic/:token', (req, res) => {
     const { token } = req.params;
 
     const link = db.prepare(`
-      SELECT ml.*, u.email, u.full_name, u.role
+      SELECT ml.*, u.email, u.full_name, u.role, u.suspended, u.suspended_reason
       FROM magic_links ml
       JOIN users u ON u.id = ml.user_id
       WHERE ml.token = ? AND ml.expires_at > datetime('now') AND ml.used = 0
@@ -272,6 +272,10 @@ router.get('/magic/:token', (req, res) => {
 
     if (!link) {
       return res.status(404).json({ error: 'Invalid or expired magic link' });
+    }
+
+    if (link.suspended) {
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: link.suspended_reason || null });
     }
 
     // Mark as used
