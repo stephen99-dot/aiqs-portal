@@ -12,13 +12,21 @@ function apiFetch(endpoint, options = {}) {
 }
 
 function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
-  const [form, setForm] = useState({ email: '', password: '', fullName: '', company: '', phone: '', role: 'client' });
+  const [form, setForm] = useState({ email: '', fullName: '', company: '', phone: '', role: 'client' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState('');
   if (!isOpen) return null;
   const handleSubmit = async (e) => {
-    e.preventDefault(); setError(''); setLoading(true);
-    try { const data = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(form) }); onUserAdded(data.user || data); setForm({ email:'',password:'',fullName:'',company:'',phone:'',role:'client' }); onClose(); }
+    e.preventDefault(); setError(''); setResult(''); setLoading(true);
+    try {
+      const data = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify({ ...form, sendInvite: true }) });
+      onUserAdded(data.user || data);
+      if (data.emailSent) setResult('Invite emailed to ' + form.email);
+      else if (data.magicUrl) { await navigator.clipboard.writeText(data.magicUrl).catch(()=>{}); setResult('User created — invite link copied to clipboard'); }
+      setForm({ email:'',fullName:'',company:'',phone:'',role:'client' });
+      setTimeout(() => { setResult(''); onClose(); }, 2000);
+    }
     catch (err) { setError(err.message); } finally { setLoading(false); }
   };
   const inp = { width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC',color:isDark?'#E8EDF5':'#0F172A',fontSize:14,outline:'none',boxSizing:'border-box' };
@@ -31,13 +39,14 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:isDark?'#5A6E87':'#94A3B8'}}><X size={18} /></button>
         </div>
         {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:8,padding:'8px 12px',marginBottom:14,color:'#EF4444',fontSize:13}}>{error}</div>}
+        {result && <div style={{background:'rgba(16,185,129,0.1)',borderRadius:8,padding:'8px 12px',marginBottom:14,color:'#10B981',fontSize:13}}>{result}</div>}
         <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:12}}>
-          {[{k:'fullName',l:'Full Name',r:true,p:'Paul Richards'},{k:'email',l:'Email',r:true,t:'email',p:'paul@company.com'},{k:'password',l:'Password',r:true,t:'password',p:'Min 6 characters'},{k:'company',l:'Company',p:'Penn Contracting'},{k:'phone',l:'Phone',p:'+44 7xxx xxx xxx'}].map(({k,l,r,t,p}) => (
+          {[{k:'fullName',l:'Full Name',r:true,p:'Paul Richards'},{k:'email',l:'Email',r:true,t:'email',p:'paul@company.com'},{k:'company',l:'Company',p:'Penn Contracting'},{k:'phone',l:'Phone',p:'+44 7xxx xxx xxx'}].map(({k,l,r,t,p}) => (
             <div key={k}><label style={lbl}>{l}{r&&<span style={{color:'#EF4444'}}> *</span>}</label><input type={t||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} required={r} placeholder={p} style={inp} /></div>
           ))}
           <div style={{display:'flex',gap:10,marginTop:6}}>
             <button type="button" onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
-            <button type="submit" disabled={loading} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer',opacity:loading?0.7:1}}>{loading?'Creating...':'Create User'}</button>
+            <button type="submit" disabled={loading} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer',opacity:loading?0.7:1}}>{loading?'Creating & Sending Invite...':'Create & Send Invite'}</button>
           </div>
         </form>
       </div>
@@ -369,7 +378,10 @@ export default function UserManagementPage({ theme }) {
   const loadActivity = useCallback(async () => {
     if (activity.length > 0) return;
     setActivityLoading(true);
-    try { const data = await apiFetch('/usage'); setActivity(data.recent || []); }
+    try {
+      const data = await apiFetch('/admin/activity');
+      setActivity(data.activities || data.recent || []);
+    }
     catch(e) { console.error(e); } finally { setActivityLoading(false); }
   }, [activity.length]);
 
@@ -418,25 +430,24 @@ export default function UserManagementPage({ theme }) {
           </div>
           {activityLoading ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>Loading...</div> :
           activity.length === 0 ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>No activity yet</div> :
-          activity.map((a, i) => (
-            <div key={i} style={{padding:'10px 20px',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          activity.map((a, i) => {
+            const evType = a.event_type || a.action || '';
+            const dotColor = evType.includes('boq')||evType.includes('doc')||evType.includes('completed')?'#10B981':evType.includes('login')?'#3B82F6':evType.includes('signup')?'#A855F7':evType.includes('error')?'#EF4444':'#F59E0B';
+            return (
+            <div key={a.id||i} style={{padding:'10px 20px',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),display:'flex',justifyContent:'space-between',alignItems:'center'}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:8,height:8,borderRadius:'50%',background:a.action==='doc_generated'?'#10B981':a.action==='chat_message'?'#3B82F6':a.action==='admin_credit'?'#A855F7':'#F59E0B'}}></div>
+                <div style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:dotColor}}></div>
                 <div>
-                  <span style={{fontSize:12,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{a.full_name||a.email||'Unknown'}</span>
-                  <span style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8',marginLeft:8}}>
-                    {a.action==='chat_message'?'sent a message':a.action==='doc_generated'?'generated documents':a.action==='doc_paid'?'paid for BOQ':a.action==='admin_credit'?'received admin credit':a.action}
-                  </span>
+                  <span style={{fontSize:12,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{a.user_name||a.full_name||a.email||'System'}</span>
+                  <span style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8',marginLeft:8}}>{a.title||evType}</span>
                   {a.detail && <span style={{fontSize:11,color:isDark?'#3D4A5C':'#CBD5E1',marginLeft:8}}>{a.detail.substring(0,80)}</span>}
                 </div>
               </div>
-              <div style={{display:'flex',gap:12,alignItems:'center',flexShrink:0}}>
-                {a.tokens_in > 0 && <span style={{fontSize:10,color:isDark?'#3D4A5C':'#CBD5E1',fontFamily:'monospace'}}>{Math.round((a.tokens_in+a.tokens_out)/1000)}k tok</span>}
-                {a.cost_estimate > 0 && <span style={{fontSize:10,color:isDark?'#3D4A5C':'#CBD5E1',fontFamily:'monospace'}}>${a.cost_estimate.toFixed(4)}</span>}
+              <div style={{flexShrink:0}}>
                 <span style={{fontSize:11,color:isDark?'#3D4A5C':'#CBD5E1'}}>{formatDate(a.created_at)}</span>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
 
@@ -462,7 +473,7 @@ export default function UserManagementPage({ theme }) {
           <div style={cardStyle}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
-                {['User','Company','Plan','Messages','Status',''].map(h => (
+                {['User','Company','Plan','Messages','BOQs','Status',''].map(h => (
                   <th key={h} style={{padding:'11px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:muted,textAlign:h===''?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>
                 ))}
               </tr></thead>
@@ -498,20 +509,40 @@ export default function UserManagementPage({ theme }) {
                           </span>
                         </td>
                         {/* Message usage bar in table */}
-                        <td style={{padding:'12px 16px',minWidth:140}}>
-                          {user.role === 'admin' ? <span style={{fontSize:11,color:muted}}>—</span> : msgsTotal > 0 ? (
+                        <td style={{padding:'12px 16px',minWidth:120}}>
+                          {msgsTotal > 0 ? (
                             <div>
                               <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
                                 <span style={{fontSize:10,color:muted}}>{msgsUsed} / {msgsTotal}</span>
-                                {user.bonus_messages > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_messages} bonus</span>}
+                                {user.bonus_messages > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_messages}</span>}
                               </div>
-                              <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:120}}>
+                              <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
                                 <div style={{width:msgPct+'%',height:'100%',borderRadius:3,background:msgBarColor}} />
                               </div>
                             </div>
                           ) : (
-                            <span style={{fontSize:11,color:muted}}>{msgsUsed} sent (PAYG)</span>
+                            <span style={{fontSize:11,color:muted}}>{msgsUsed} sent</span>
                           )}
+                        </td>
+                        {/* BOQ docs usage */}
+                        <td style={{padding:'12px 16px',minWidth:100}}>
+                          {(()=>{
+                            const docsUsed = user.docs_used || 0;
+                            const docsTotal = user.docs_limit || (user.plan==='premium'?20:user.plan==='professional'?10:user.monthly_boq_quota||0);
+                            const docPct = docsTotal > 0 ? Math.min(100, (docsUsed / docsTotal) * 100) : 0;
+                            const docBarColor = docPct >= 90 ? '#EF4444' : docPct >= 70 ? '#F59E0B' : '#3B82F6';
+                            return docsTotal > 0 ? (
+                              <div>
+                                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                                  <span style={{fontSize:10,color:muted}}>{docsUsed} / {docsTotal}</span>
+                                  {user.bonus_docs > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_docs}</span>}
+                                </div>
+                                <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
+                                  <div style={{width:docPct+'%',height:'100%',borderRadius:3,background:docBarColor}} />
+                                </div>
+                              </div>
+                            ) : <span style={{fontSize:11,color:muted}}>{docsUsed} gen</span>;
+                          })()}
                         </td>
                         <td style={{padding:'12px 16px'}}>
                           <span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,background:user.suspended?'rgba(239,68,68,0.1)':'rgba(16,185,129,0.1)',color:user.suspended?'#EF4444':'#10B981'}}>
@@ -528,8 +559,8 @@ export default function UserManagementPage({ theme }) {
                           </div>
                         </td>
                       </tr>
-                      {expandedUser===user.id&&user.role!=='admin'&&(
-                        <tr><td colSpan={6} style={{padding:0}}>
+                      {expandedUser===user.id&&(
+                        <tr><td colSpan={7} style={{padding:0}}>
                           <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} />
                         </td></tr>
                       )}

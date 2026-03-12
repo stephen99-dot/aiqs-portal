@@ -473,18 +473,31 @@ router.get('/usage', authMiddleware, (req, res) => {
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const monthStr = monthStart.toISOString();
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
+    // Count BOQ docs generated this month (exclude revisions)
+    let docsUsed = 0;
+    try {
+      const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(u.id, monthStr);
+      const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, monthStr);
+      docsUsed = (docsGen?.c || 0) - (docsRev?.c || 0);
+      if (docsUsed < 0) docsUsed = 0;
+    } catch(e) {}
+    const plan = u.plan || 'starter';
+    const docsLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : (u.monthly_boq_quota || 0);
     return {
       id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name,
       company: u.company, phone: u.phone, role: u.role,
-      plan: u.plan || 'starter', planLabel: planInfo.planLabel,
+      plan: plan, planLabel: planInfo.planLabel,
       quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining,
       messages_used: planInfo.used, monthly_quota: u.monthly_quota || 0,
       atLimit: planInfo.atLimit,
       suspended: u.suspended || 0, suspended_reason: u.suspended_reason,
       bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0,
       monthly_boq_quota: u.monthly_boq_quota || 0,
+      docs_used: docsUsed, docs_limit: docsLimit,
       created_at: u.created_at, project_count: 0,
     };
   }) });
