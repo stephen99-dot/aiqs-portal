@@ -124,7 +124,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const lbl = { fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 };
   const sInp = { padding: '7px 10px', borderRadius: 6, border: '1px solid ' + border, background: isDark ? '#0D1320' : '#F8FAFC', color: text, fontSize: 13, outline: 'none' };
 
-  const doAction = async (key, fn) => { setLoading(key); try { await fn(); } catch (e) { alert(e.message); } finally { setLoading(''); } };
+  const [errorMsg, setErrorMsg] = useState('');
+  const doAction = async (key, fn) => { setLoading(key); setErrorMsg(''); try { await fn(); } catch (e) { setErrorMsg(e.message || 'Action failed'); } finally { setLoading(''); } };
   function showSuccess(msg) { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }
 
   const savePlan = () => doAction('plan', async () => {
@@ -201,7 +202,13 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
 
         {successMsg && (
           <div style={{ marginBottom: 12, padding: '9px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#10B981', fontSize: 13, fontWeight: 500 }}>
-            ✅ {successMsg}
+            {successMsg}
+          </div>
+        )}
+
+        {errorMsg && (
+          <div style={{ marginBottom: 12, padding: '9px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', fontSize: 13, fontWeight: 500 }}>
+            {errorMsg}
           </div>
         )}
 

@@ -10,6 +10,8 @@ const ICONS = {
   calc: c => <svg width="13" height="13" fill="none" stroke={c} strokeWidth="2" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/></svg>,
   check: c => <svg width="13" height="13" fill="none" stroke={c} strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
   lock: c => <svg width="12" height="12" fill="none" stroke={c} strokeWidth="2.5" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
+  excel: () => <svg width="16" height="16" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="4" fill="#107C41"/><text x="16" y="21" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="system-ui">X</text></svg>,
+  word: () => <svg width="16" height="16" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="4" fill="#185ABD"/><text x="16" y="21" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="system-ui">W</text></svg>,
 };
 
 const STAGES = [
@@ -393,7 +395,7 @@ export default function ChatPage() {
                       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
                     } catch { alert('Download failed — please try again.'); }
                   }} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:8, cursor:'pointer', background: f.type==='xlsx'?'rgba(16,185,129,0.1)':'rgba(59,130,246,0.1)', border:'1px solid '+(f.type==='xlsx'?'rgba(16,185,129,0.25)':'rgba(59,130,246,0.25)'), color: f.type==='xlsx'?'#10B981':'#3B82F6', fontSize:13, fontWeight:600 }}>
-                    {f.type==='xlsx'?'📊':'📄'} Download {f.name}
+                    {f.type==='xlsx'?ICONS.excel():ICONS.word()} Download {f.name}
                   </button>
                 ))}
               </div>

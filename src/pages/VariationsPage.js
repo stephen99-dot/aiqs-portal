@@ -158,7 +158,7 @@ export default function VariationsPage() {
         <div>
           {variations.length === 0 && !showForm && (
             <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+              <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
               <p style={{ opacity: 0.6, marginBottom: 16, fontSize: 14 }}>No variations raised yet</p>
               <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowForm(true)}>Raise First Variation</button>
             </div>
@@ -345,7 +345,7 @@ export default function VariationsPage() {
                           style={{ fontSize: 13 }}
                           disabled={generatingBoq}
                           onClick={() => handleGenerateRevisedBoq(selected.id)}>
-                          {generatingBoq ? '⏳ Generating Revised BOQ...' : '📊 Generate Revised BOQ'}
+                          {generatingBoq ? 'Generating Revised BOQ...' : 'Generate Revised BOQ'}
                         </button>
                       ) : (
                         <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => handleDownload(selected.revised_boq_filename)}>

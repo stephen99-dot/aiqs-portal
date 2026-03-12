@@ -2,8 +2,8 @@ const db = require('./database');
 
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
-  'price_1T52aREOVz3JQx7Ah7HHz1oh': { plan: 'professional', quota: 10 },
-  'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', quota: 20 },
+  'price_1T52aREOVz3JQx7Ah7HHz1oh': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+  'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', msgQuota: 200, boqQuota: 20 },
 };
 
 module.exports = async function stripeWebhook(req, res) {
@@ -98,7 +98,7 @@ async function handleCheckoutComplete(session, stripeSecret) {
 
     if (priceId && PRICE_TO_PLAN[priceId]) {
       const planInfo = PRICE_TO_PLAN[priceId];
-      updateUserPlan(customerEmail, planInfo.plan, planInfo.quota, subscription.id);
+      updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id);
     } else {
       console.log(`[Stripe] Unknown price ID: ${priceId}`);
     }
@@ -125,8 +125,8 @@ async function handleSubscriptionUpdate(subscription) {
 
   if (subscription.status === 'active') {
     console.log(`[Stripe] Subscription active for ${user.email} — setting plan to ${planInfo.plan}`);
-    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(planInfo.plan, planInfo.quota, user.id);
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, user.id);
   } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
     console.log(`[Stripe] Subscription ${subscription.status} for ${user.email}`);
     // Optionally downgrade or flag — for now just log
@@ -143,11 +143,11 @@ async function handleSubscriptionCancelled(subscription) {
 
   console.log(`[Stripe] Subscription cancelled for ${user.email} — reverting to starter`);
 
-  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, stripe_subscription_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run('starter', 0, user.id);
+  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run('starter', 0, 0, user.id);
 }
 
-function updateUserPlan(email, plan, quota, subscriptionId) {
+function updateUserPlan(email, plan, msgQuota, boqQuota, subscriptionId) {
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
 
   if (!user) {
@@ -155,8 +155,8 @@ function updateUserPlan(email, plan, quota, subscriptionId) {
     return;
   }
 
-  console.log(`[Stripe] Updating ${email} to ${plan} (quota: ${quota})`);
+  console.log(`[Stripe] Updating ${email} to ${plan} (messages: ${msgQuota}, BOQs: ${boqQuota})`);
 
-  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(plan, quota, subscriptionId, user.id);
+  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(plan, msgQuota, boqQuota, subscriptionId, user.id);
 }
