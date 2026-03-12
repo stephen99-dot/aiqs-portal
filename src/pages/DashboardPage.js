@@ -234,8 +234,8 @@ function MessageUsageBar({ usage, t }) {
 function GettingStarted({ projects, t }) {
   const steps = [
     { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
-    { key: 'chat', label: 'Start a chat and upload your drawings', done: projects.length > 0, icon: UploadIcon },
-    { key: 'boq', label: 'Generate your first BOQ', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
+    { key: 'chat', label: 'Start a chat — upload drawings (PDF, ZIP, Excel)', done: projects.length > 0, icon: UploadIcon },
+    { key: 'boq', label: 'Generate your first BOQ (Excel & Word download)', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
   ];
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => { try { if (localStorage.getItem('aiqs_checklist_dismissed') === 'true') setDismissed(true); } catch {} }, []);

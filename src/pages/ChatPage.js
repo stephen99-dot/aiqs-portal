@@ -576,7 +576,7 @@ export default function ChatPage() {
                 <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:30, marginBottom:18 }}>📐</div>
                 <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>Ready to analyse your project</h3>
                 <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 24px', maxWidth:460, lineHeight:1.65 }}>
-                  Upload a ZIP with drawings, PDFs, or Excel schedules. Quantities get locked before you generate — so the total never changes between runs.
+                  Upload drawings (PDF, ZIP, Excel, images) and describe your scope. Quantities get locked before you generate — so totals stay consistent. Download BOQs as Excel or Word, then raise variations from the project page.
                 </p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', maxWidth:520 }}>
                   {[
