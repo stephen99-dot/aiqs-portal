@@ -70,7 +70,7 @@ function ClientsTab({ t }) {
   const [editQuota, setEditQuota] = useState('');
   const [saving, setSaving] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState({ email: '', fullName: '', company: '', phone: '', password: '' });
+  const [addForm, setAddForm] = useState({ email: '', fullName: '', company: '', phone: '' });
   const [addError, setAddError] = useState('');
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -92,10 +92,17 @@ function ClientsTab({ t }) {
     if (!addForm.email || !addForm.fullName) { setAddError('Email and full name are required'); return; }
     setAdding(true);
     try {
-      const newUser = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify({ email: addForm.email, fullName: addForm.fullName, company: addForm.company, phone: addForm.phone, password: addForm.password || 'Welcome123!' }) });
+      const newUser = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify({ email: addForm.email, fullName: addForm.fullName, company: addForm.company, phone: addForm.phone, sendInvite: true }) });
       setUsers(prev => [...prev, { ...newUser, plan: 'starter', planLabel: 'PAYG', quota: 0, used: 0, remaining: 0, atLimit: false }]);
-      setShowAddForm(false); setAddForm({ email: '', fullName: '', company: '', phone: '', password: '' });
-      showMsg((newUser.fullName || newUser.email) + ' added successfully');
+      setShowAddForm(false); setAddForm({ email: '', fullName: '', company: '', phone: '' });
+      if (newUser.emailSent) {
+        showMsg('Invite emailed to ' + (newUser.email || addForm.email));
+      } else if (newUser.magicUrl) {
+        const copied = await navigator.clipboard.writeText(newUser.magicUrl).then(() => true).catch(() => false);
+        showMsg(copied ? 'User created — invite link copied to clipboard (email not configured)' : 'User created — check console for invite link');
+      } else {
+        showMsg((newUser.fullName || newUser.email) + ' added successfully');
+      }
     } catch (err) { setAddError(err.message || 'Failed to add user'); } finally { setAdding(false); }
   }
 
@@ -219,10 +226,10 @@ function ClientsTab({ t }) {
               <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Email *</label><input style={inputStyle} type="email" placeholder="john@example.com" value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} /></div>
               <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Company</label><input style={inputStyle} placeholder="Company name" value={addForm.company} onChange={e => setAddForm(p => ({ ...p, company: e.target.value }))} /></div>
               <div><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Phone</label><input style={inputStyle} placeholder="+44 7..." value={addForm.phone} onChange={e => setAddForm(p => ({ ...p, phone: e.target.value }))} /></div>
-              <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: 11, color: t.textMuted, display: 'block', marginBottom: 4 }}>Password <span style={{ color: t.textDim }}>(default: Welcome123!)</span></label><input style={inputStyle} type="text" placeholder="Welcome123!" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} /></div>
             </div>
-            {addError && <div style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>⚠️ {addError}</div>}
-            <button type="submit" disabled={adding} style={{ padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer', opacity: adding ? 0.6 : 1 }}>{adding ? 'Adding...' : 'Add Client'}</button>
+            <p style={{ fontSize: 12, color: t.textMuted, margin: '0 0 10px', lineHeight: 1.4 }}>They'll receive an email to set up their password and access the portal.</p>
+            {addError && <div style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>{addError}</div>}
+            <button type="submit" disabled={adding} style={{ padding: '9px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer', opacity: adding ? 0.6 : 1 }}>{adding ? 'Creating & Sending Invite...' : 'Create User & Send Invite'}</button>
           </form>
         )}
 

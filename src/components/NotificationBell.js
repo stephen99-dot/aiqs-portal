@@ -245,7 +245,7 @@ export default function NotificationBell() {
   const panelStyle = {
     position: 'absolute',
     top: 'calc(100% + 8px)',
-    right: 0,
+    left: 0,
     // On very small screens make it narrower but still usable
     width: 'min(340px, calc(100vw - 24px))',
     maxHeight: '460px',
