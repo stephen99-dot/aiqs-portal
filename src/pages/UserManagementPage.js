@@ -442,7 +442,7 @@ export default function UserManagementPage({ theme }) {
               <tbody>
                 {filtered.map((user, i) => {
                   const msgsUsed = user.messages_used || user.used || 0;
-                  const msgsTotal = user.monthly_quota || user.quota || (user.plan==='premium'?200:user.plan==='professional'?100:user.plan==='starter'?1:0);
+                  const msgsTotal = (user.monthly_quota != null ? user.monthly_quota : null) ?? user.quota ?? (user.plan==='premium'?200:user.plan==='professional'?100:user.plan==='starter'?1:0);
                   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
                   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
                   return (
@@ -490,7 +490,7 @@ export default function UserManagementPage({ theme }) {
                         <td style={{padding:'12px 16px',minWidth:100}}>
                           {(()=>{
                             const docsUsed = user.docs_used || 0;
-                            const docsTotal = user.docs_limit || user.monthly_boq_quota || (user.plan==='premium'?20:user.plan==='professional'?10:0);
+                            const docsTotal = (user.monthly_boq_quota != null ? user.monthly_boq_quota : null) ?? user.docs_limit ?? (user.plan==='premium'?20:user.plan==='professional'?10:0);
                             const docPct = docsTotal > 0 ? Math.min(100, (docsUsed / docsTotal) * 100) : 0;
                             const docBarColor = docPct >= 90 ? '#EF4444' : docPct >= 70 ? '#F59E0B' : '#3B82F6';
                             return docsTotal > 0 ? (
