@@ -7,7 +7,7 @@ import OnboardingTour from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
-  NewProjectIcon, UploadIcon, DownloadIcon,
+  NewProjectIcon, UploadIcon, DownloadIcon, ChatIcon,
 } from '../components/Icons';
 
 const STRIPE = {
@@ -173,6 +173,64 @@ function UsageBar({ usage, t }) {
   );
 }
 
+function MessageUsageBar({ usage, t }) {
+  if (!usage || usage.messagesLimit == null) return null;
+  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel } = usage;
+  if (messagesLimit <= 0) return null;
+
+  const pct = messagesLimit > 0 ? Math.min(100, (messagesUsed / messagesLimit) * 100) : 0;
+  const barColor = messagesAtLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#3B82F6';
+  const PlanIcon = plan === 'premium' ? CrownIcon : StarIcon;
+  const planIconColor = plan === 'premium' ? '#A78BFA' : t.accentLight;
+  const planBg = plan === 'premium' ? 'rgba(124,58,237,0.1)' : t.accentGlow;
+
+  return (
+    <div style={{
+      background: t.card, border: `1px solid ${messagesAtLimit ? 'rgba(239,68,68,0.25)' : t.border}`,
+      borderRadius: 12, padding: '16px 20px', marginBottom: 20, boxShadow: t.shadowSm,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 6,
+            background: planBg, color: planIconColor,
+            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}>
+            <ChatIcon size={12} color={planIconColor} /> Messages
+          </span>
+          <span style={{ fontSize: 12.5, color: t.textSecondary }}>
+            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used this month
+          </span>
+        </div>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 11.5, fontWeight: 600,
+          color: messagesAtLimit ? '#EF4444' : messagesRemaining <= 5 ? '#F59E0B' : t.textMuted,
+        }}>
+          {messagesAtLimit ? <><BanIcon size={12} color="#EF4444" /> Limit reached</> : `${messagesRemaining} remaining`}
+        </span>
+      </div>
+      <div style={{ width: '100%', height: 5, borderRadius: 5, background: t.surfaceHover, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: barColor, transition: 'width 0.5s ease' }} />
+      </div>
+      {messagesAtLimit && (
+        <div style={{
+          marginTop: 10, fontSize: 12.5, color: '#EF4444',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          You've used all {messagesLimit} messages this month — upgrade your plan for more.
+        </div>
+      )}
+      {!messagesAtLimit && messagesRemaining <= 5 && messagesRemaining > 0 && (
+        <div style={{ marginTop: 10, fontSize: 12, color: '#F59E0B' }}>
+          Only {messagesRemaining} message{messagesRemaining !== 1 ? 's' : ''} left this month
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GettingStarted({ projects, t }) {
   const steps = [
     { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
@@ -324,6 +382,7 @@ export default function DashboardPage() {
       </div>
 
       <UsageBar usage={usage} t={t} />
+      <MessageUsageBar usage={usage} t={t} />
       <GettingStarted projects={projectList} t={t} />
 
       <div className="stats-row" data-tour="stats">

@@ -46,6 +46,9 @@ export default function ChatPage() {
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [currentTakeoffId, setCurrentTakeoffId] = useState(null);
 
+  // ── Quota tracking ────────────────────────────────────────────────
+  const [quotaInfo, setQuotaInfo]     = useState(null);
+
   // ── Sidebar ────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(!mobile);
   const [sessions, setSessions]       = useState([]);
@@ -58,7 +61,12 @@ export default function ChatPage() {
   const hadFiles    = useRef(false);
 
   useEffect(() => { if (mobile) setSidebarOpen(false); }, [mobile]);
-  useEffect(() => { loadSessions(); }, []);
+  useEffect(() => {
+    loadSessions();
+    apiFetch('/usage').then(d => {
+      if (d) setQuotaInfo({ messages_used: d.messagesUsed || 0, messages_limit: d.messagesLimit || 0, docs_used: d.used || 0, docs_limit: d.quota || 0, plan: d.plan });
+    }).catch(() => {});
+  }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, stage]);
 
   useEffect(() => {
@@ -250,6 +258,7 @@ export default function ChatPage() {
         timestamp: new Date().toISOString(),
       };
       setMessages(p => [...p, aiMsg]);
+      if (data.quota) setQuotaInfo(data.quota);
       if (data.files?.length) setTimeout(loadSessions, 2000);
 
     } catch (err) {
@@ -527,6 +536,29 @@ export default function ChatPage() {
             {!mobile && <span style={{ fontSize:12, color:c.textMuted }}>Upload drawings · lock quantities · generate BOQs</span>}
             {!mobile && currentTakeoffId && <LockedBanner/>}
           </div>
+          {quotaInfo && quotaInfo.messages_limit > 0 && (() => {
+            const used = quotaInfo.messages_used || 0;
+            const limit = quotaInfo.messages_limit || 0;
+            const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+            const atLimit = limit > 0 && used >= limit;
+            const low = !atLimit && (limit - used) <= 5;
+            const pillColor = atLimit ? '#EF4444' : low ? '#F59E0B' : c.textMuted;
+            return (
+              <div title={`${used} of ${limit} messages used this month`} style={{
+                display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8, flexShrink:0,
+                background: atLimit ? 'rgba(239,68,68,0.08)' : low ? 'rgba(245,158,11,0.06)' : 'transparent',
+                border: `1px solid ${atLimit ? 'rgba(239,68,68,0.2)' : low ? 'rgba(245,158,11,0.15)' : c.topBorder}`,
+              }}>
+                <svg width="12" height="12" fill="none" stroke={pillColor} strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                <span style={{ fontSize:11, fontWeight:600, color:pillColor, whiteSpace:'nowrap' }}>
+                  {mobile ? `${used}/${limit}` : `${used} / ${limit} messages`}
+                </span>
+                <div style={{ width: mobile ? 30 : 50, height:3, borderRadius:3, background: dark ? '#1E293B' : '#E2E8F0', overflow:'hidden', flexShrink:0 }}>
+                  <div style={{ width:`${pct}%`, height:'100%', borderRadius:3, background: atLimit ? '#EF4444' : low ? '#F59E0B' : '#3B82F6', transition:'width 0.3s ease' }}/>
+                </div>
+              </div>
+            );
+          })()}
           <button onClick={newChat} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 14px', borderRadius:8, flexShrink:0, background:'transparent', border:`1px solid ${c.topBorder}`, color:c.textMuted, fontSize:12.5, fontWeight:500, cursor:'pointer' }}>
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
             {!mobile && 'New'}

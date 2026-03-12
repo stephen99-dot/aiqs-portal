@@ -559,7 +559,24 @@ router.get('/usage', authMiddleware, (req, res) => {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
   const monthProjects = db.prepare('SELECT id, title, project_type, status, created_at FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC').all(req.user.id, monthStart, monthEnd);
-  res.json({ ...planInfo, monthProjects, monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }) });
+
+  // Message usage this month
+  let messagesUsed = 0;
+  try {
+    const row = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(req.user.id, monthStart);
+    messagesUsed = row?.c || 0;
+  } catch(e) {}
+  const plan = user.plan || 'starter';
+  const defaultMsgLimit = plan === 'starter' ? 10 : plan === 'professional' ? 100 : 200;
+  const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
+  const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
+
+  res.json({
+    ...planInfo, monthProjects,
+    monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+    messagesUsed, messagesLimit, messagesRemaining,
+    messagesAtLimit: messagesLimit > 0 && messagesUsed >= messagesLimit,
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
