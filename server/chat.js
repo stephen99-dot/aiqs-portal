@@ -47,7 +47,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 150 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip', '.xlsx', '.xls'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
@@ -1120,7 +1120,17 @@ router.post('/memory/correction', authMiddleware, (req, res) => {
 // MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/chat', authMiddleware, upload.array('files', 10), async (req, res) => {
+router.post('/chat', authMiddleware, (req, res, next) => {
+  upload.array('files', 10)(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `File too large — maximum upload size is 150MB. Try compressing the ZIP or uploading fewer files at once.` });
+      }
+      return res.status(400).json({ error: `Upload failed: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const { message, history } = req.body;
     const userId = req.user.id;
