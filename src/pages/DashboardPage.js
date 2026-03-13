@@ -20,7 +20,7 @@ const STRIPE = {
 
 function UsageBar({ usage, t }) {
   if (!usage) return null;
-  const { plan, planLabel, quota, used, remaining, isPayg, atLimit } = usage;
+  const { plan, planLabel, quota, used, remaining, isPayg, atLimit, monthName } = usage;
 
   if (isPayg) {
     return (
@@ -98,7 +98,7 @@ function UsageBar({ usage, t }) {
             <PlanIcon size={12} color={planIconColor} /> {planLabel}
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used this month
+            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used{monthName ? ` (${monthName})` : ' this month'}
           </span>
         </div>
         <span style={{
@@ -175,7 +175,7 @@ function UsageBar({ usage, t }) {
 
 function MessageUsageBar({ usage, t }) {
   if (!usage || usage.messagesLimit == null) return null;
-  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel } = usage;
+  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel, monthName } = usage;
   if (messagesLimit <= 0) return null;
 
   const pct = messagesLimit > 0 ? Math.min(100, (messagesUsed / messagesLimit) * 100) : 0;
@@ -200,7 +200,7 @@ function MessageUsageBar({ usage, t }) {
             <ChatIcon size={12} color={planIconColor} /> Messages
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used this month
+            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used{monthName ? ` (${monthName})` : ' this month'}
           </span>
         </div>
         <span style={{

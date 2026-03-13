@@ -6,6 +6,17 @@ const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
 
+// Returns the start of the user's current billing cycle.
+// Subscribers: uses billing_cycle_start set by Stripe webhook on each renewal.
+// Non-subscribers / fallback: 1st of calendar month.
+function getBillingCycleStart(user) {
+  if (user.billing_cycle_start) {
+    return user.billing_cycle_start;
+  }
+  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
 try { findingsGen = require('./findingsGenerator'); } catch (e) { console.log('[Chat] docx not installed — Findings generation disabled. Run: npm install docx'); }
@@ -1158,8 +1169,8 @@ router.post('/chat', authMiddleware, (req, res, next) => {
       if (effectiveLimit <= 0) {
         return res.status(429).json({ error: `You have no message credits. Contact your admin to update your plan.`, limit_type: 'messages', used: 0, limit: 0, plan });
       }
-      const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
-      const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, mStart.toISOString());
+      const cycleStart = getBillingCycleStart(req.user);
+      const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, cycleStart);
       if (used.c >= effectiveLimit) {
         return res.status(429).json({ error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
       }
@@ -1916,8 +1927,7 @@ CRITICAL RULES:
     // ── QUOTA CHECK ───────────────────────────────────────────────────
     if (wantsDocuments && req.user.role !== 'admin') {
       const dPlan = req.user.plan || 'starter';
-      const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
-      const dMonthStr = mStart.toISOString();
+      const dMonthStr = getBillingCycleStart(req.user);
       const docsGenThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, dMonthStr).c;
       const revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
 
@@ -2391,8 +2401,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     let quotaInfo = null;
     if (req.user.role !== 'admin') {
       const qPlan = req.user.plan || 'starter';
-      const qStart = new Date(); qStart.setDate(1); qStart.setHours(0,0,0,0);
-      const qMonth = qStart.toISOString();
+      const qMonth = getBillingCycleStart(req.user);
       const qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
       const qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
       const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;

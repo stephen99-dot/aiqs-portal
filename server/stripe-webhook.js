@@ -63,6 +63,13 @@ module.exports = async function stripeWebhook(req, res) {
         break;
       }
 
+      // Subscription invoice paid — resets billing cycle
+      case 'invoice.paid': {
+        const invoice = event.data.object;
+        await handleInvoicePaid(invoice, STRIPE_SECRET);
+        break;
+      }
+
       // One-time payment completed (PAYG)
       case 'payment_intent.succeeded': {
         console.log('[Stripe] Payment intent succeeded:', event.data.object.id);
@@ -98,7 +105,9 @@ async function handleCheckoutComplete(session, stripeSecret) {
 
     if (priceId && PRICE_TO_PLAN[priceId]) {
       const planInfo = PRICE_TO_PLAN[priceId];
-      updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id);
+      // Set billing_cycle_start to subscription's current period start
+      const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
+      updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id, cycleStart);
     } else {
       console.log(`[Stripe] Unknown price ID: ${priceId}`);
     }
@@ -124,13 +133,53 @@ async function handleSubscriptionUpdate(subscription) {
   const planInfo = PRICE_TO_PLAN[priceId];
 
   if (subscription.status === 'active') {
-    console.log(`[Stripe] Subscription active for ${user.email} — setting plan to ${planInfo.plan}`);
-    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, user.id);
+    const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
+    console.log(`[Stripe] Subscription active for ${user.email} — plan: ${planInfo.plan}, cycle start: ${cycleStart}`);
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, cycleStart, user.id);
   } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
     console.log(`[Stripe] Subscription ${subscription.status} for ${user.email}`);
     // Optionally downgrade or flag — for now just log
   }
+}
+
+async function handleInvoicePaid(invoice, stripeSecret) {
+  // Only handle subscription invoices (not one-off payments)
+  if (!invoice.subscription) return;
+
+  const user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(invoice.subscription);
+
+  if (!user) {
+    // Try finding by email as fallback
+    const email = invoice.customer_email;
+    if (email) {
+      const userByEmail = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+      if (userByEmail) {
+        console.log(`[Stripe] invoice.paid — matched ${email} by email, updating subscription ID`);
+        db.prepare('UPDATE users SET stripe_subscription_id = ? WHERE id = ?').run(invoice.subscription, userByEmail.id);
+        // Now fetch subscription to get current_period_start
+        const stripe = require('stripe')(stripeSecret);
+        const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+        const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
+        db.prepare('UPDATE users SET billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(cycleStart, userByEmail.id);
+        console.log(`[Stripe] Billing cycle reset for ${email} — new cycle: ${cycleStart}`);
+        return;
+      }
+    }
+    console.log(`[Stripe] invoice.paid — no user found for subscription: ${invoice.subscription}`);
+    return;
+  }
+
+  // Get the subscription to read current_period_start
+  const stripe = require('stripe')(stripeSecret);
+  const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+  const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
+
+  console.log(`[Stripe] Invoice paid for ${user.email} — billing cycle reset to ${cycleStart}`);
+
+  db.prepare('UPDATE users SET billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(cycleStart, user.id);
 }
 
 async function handleSubscriptionCancelled(subscription) {
@@ -143,11 +192,11 @@ async function handleSubscriptionCancelled(subscription) {
 
   console.log(`[Stripe] Subscription cancelled for ${user.email} — reverting to starter`);
 
-  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = NULL, billing_cycle_start = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run('starter', 0, 0, user.id);
 }
 
-function updateUserPlan(email, plan, msgQuota, boqQuota, subscriptionId) {
+function updateUserPlan(email, plan, msgQuota, boqQuota, subscriptionId, cycleStart) {
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
 
   if (!user) {
@@ -155,8 +204,8 @@ function updateUserPlan(email, plan, msgQuota, boqQuota, subscriptionId) {
     return;
   }
 
-  console.log(`[Stripe] Updating ${email} to ${plan} (messages: ${msgQuota}, BOQs: ${boqQuota})`);
+  console.log(`[Stripe] Updating ${email} to ${plan} (messages: ${msgQuota}, BOQs: ${boqQuota}, cycle: ${cycleStart})`);
 
-  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(plan, msgQuota, boqQuota, subscriptionId, user.id);
+  db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(plan, msgQuota, boqQuota, subscriptionId, cycleStart, user.id);
 }
