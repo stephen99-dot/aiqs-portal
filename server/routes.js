@@ -771,6 +771,45 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
   }
 });
 
+// Sync a user's subscription from Stripe (for fixing missed webhooks)
+router.post('/admin/users/:id/sync-stripe', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+    if (!STRIPE_SECRET) return res.status(500).json({ error: 'Stripe not configured' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const stripe = require('stripe')(STRIPE_SECRET);
+    // Search for customer by email
+    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    if (customers.data.length === 0) return res.status(404).json({ error: 'No Stripe customer found for ' + user.email });
+
+    const customer = customers.data[0];
+    const subscriptions = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
+    if (subscriptions.data.length === 0) return res.status(404).json({ error: 'No active subscription for ' + user.email });
+
+    const sub = subscriptions.data[0];
+    const priceId = sub.items.data[0]?.price?.id;
+    const PRICE_TO_PLAN = {
+      'price_1T52aREOVz3JQx7Ah7HHz1oh': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+      'price_1T6phnEOVz3JQx7A08xGJ8er': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+      'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', msgQuota: 200, boqQuota: 20 },
+    };
+    const planInfo = PRICE_TO_PLAN[priceId];
+    if (!planInfo) return res.status(400).json({ error: 'Unknown price ID: ' + priceId });
+
+    const cycleStart = new Date(sub.current_period_start * 1000).toISOString();
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, sub.id, cycleStart, user.id);
+
+    console.log(`[Admin] Stripe sync for ${user.email}: ${planInfo.plan}, cycle start: ${cycleStart}`);
+    res.json({ success: true, plan: planInfo.plan, billing_cycle_start: cycleStart, subscription_id: sub.id });
+  } catch (err) {
+    console.error('[Admin] Stripe sync error:', err);
+    res.status(500).json({ error: 'Stripe sync failed: ' + err.message });
+  }
+});
+
 router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);

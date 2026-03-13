@@ -145,6 +145,15 @@ function ClientsTab({ t }) {
     } catch (err) { alert('Failed: ' + err.message); }
   }
 
+  async function handleSyncStripe(user) {
+    if (!window.confirm(`Sync ${user.full_name || user.email} from Stripe? This will update their plan and billing cycle from their active subscription.`)) return;
+    try {
+      const result = await apiFetch('/admin/users/' + user.id + '/sync-stripe', { method: 'POST' });
+      showMsg(`Synced: ${result.plan} plan, billing cycle: ${new Date(result.billing_cycle_start).toLocaleDateString('en-GB')}`);
+      loadUsers();
+    } catch (err) { alert('Sync failed: ' + err.message); }
+  }
+
   function startEdit(user) { setEditingId(user.id); setEditPlan(user.plan || 'starter'); setEditQuota(user.quota || 0); }
   function cancelEdit() { setEditingId(null); }
 
@@ -272,7 +281,7 @@ function ClientsTab({ t }) {
                   {isEditing ? (
                     <><button onClick={() => savePlan(user.id)} disabled={saving} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: t.success, color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button><button onClick={cancelEdit} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button></>
                   ) : (
-                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
+                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => handleSyncStripe(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(124,58,237,0.08)', color: '#A78BFA', border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer' }} title="Sync plan & billing cycle from Stripe">Sync</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
                   )}
                 </div>
               </div>

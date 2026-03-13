@@ -3,6 +3,7 @@ const db = require('./database');
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
   'price_1T52aREOVz3JQx7Ah7HHz1oh': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+  'price_1T6phnEOVz3JQx7A08xGJ8er': { plan: 'professional', msgQuota: 100, boqQuota: 10 }, // legacy £299/mo
   'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', msgQuota: 200, boqQuota: 20 },
 };
 
@@ -109,7 +110,7 @@ async function handleCheckoutComplete(session, stripeSecret) {
       const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
       updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id, cycleStart);
     } else {
-      console.log(`[Stripe] Unknown price ID: ${priceId}`);
+      console.error(`[Stripe] Unknown price ID: ${priceId} — customer: ${customerEmail}, amount: ${session.amount_total}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     }
   }
 }
@@ -118,7 +119,7 @@ async function handleSubscriptionUpdate(subscription) {
   const priceId = subscription.items.data[0]?.price?.id;
 
   if (!priceId || !PRICE_TO_PLAN[priceId]) {
-    console.log(`[Stripe] Unknown price ID on update: ${priceId}`);
+    console.error(`[Stripe] Unknown price ID on update: ${priceId} — subscription: ${subscription.id}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     return;
   }
 
