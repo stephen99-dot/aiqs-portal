@@ -186,45 +186,4 @@ router.put('/users/:id/role', requireAdmin, (req, res) => {
   }
 });
 
-// ─── POST /api/admin/users/:id/message — Send a message to a user ───────────
-router.post('/users/:id/message', requireAdmin, (req, res) => {
-  try {
-    const { id } = req.params;
-    const { message } = req.body;
-    if (!message || !message.trim()) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
-    if (!existing) return res.status(404).json({ error: 'User not found' });
-
-    const { v4: uuidv4 } = require('uuid');
-    const msgId = uuidv4();
-    db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(msgId, id, message.trim());
-    res.json({ id: msgId, message: message.trim() });
-  } catch (err) {
-    console.error('Send user message error:', err);
-    res.status(500).json({ error: 'Failed to send message' });
-  }
-});
-
-// ─── GET /api/admin/users/:id/messages — Get all messages for a user ────────
-router.get('/users/:id/messages', requireAdmin, (req, res) => {
-  try {
-    const messages = db.prepare('SELECT * FROM user_messages WHERE user_id = ? ORDER BY created_at DESC').all(req.params.id);
-    res.json({ messages });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
-
-// ─── DELETE /api/admin/users/:id/messages/:msgId — Delete a message ─────────
-router.delete('/users/:id/messages/:msgId', requireAdmin, (req, res) => {
-  try {
-    db.prepare('DELETE FROM user_messages WHERE id = ? AND user_id = ?').run(req.params.msgId, req.params.id);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete message' });
-  }
-});
-
 module.exports = router;

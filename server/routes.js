@@ -1036,9 +1036,50 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// USER MESSAGES (client-facing)
+// USER MESSAGES (admin + client)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Admin: send a message to a user
+router.post('/admin/users/:id/message', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+
+    const msgId = uuidv4();
+    db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(msgId, id, message.trim());
+    res.json({ id: msgId, message: message.trim() });
+  } catch (err) {
+    console.error('Send user message error:', err);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Admin: get all messages for a user
+router.get('/admin/users/:id/messages', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const messages = db.prepare('SELECT * FROM user_messages WHERE user_id = ? ORDER BY created_at DESC').all(req.params.id);
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Admin: delete a message
+router.delete('/admin/users/:id/messages/:msgId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    db.prepare('DELETE FROM user_messages WHERE id = ? AND user_id = ?').run(req.params.msgId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
+});
+
+// Client: fetch active messages
 router.get('/my-messages', authMiddleware, (req, res) => {
   try {
     const messages = db.prepare(
