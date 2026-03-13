@@ -1035,4 +1035,28 @@ router.post('/projects/:id/activate', authMiddleware, (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// USER MESSAGES (client-facing)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/my-messages', authMiddleware, (req, res) => {
+  try {
+    const messages = db.prepare(
+      'SELECT id, message, created_at FROM user_messages WHERE user_id = ? AND dismissed = 0 ORDER BY created_at DESC'
+    ).all(req.user.id);
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch messages', messages: [] });
+  }
+});
+
+router.put('/my-messages/:id/dismiss', authMiddleware, (req, res) => {
+  try {
+    db.prepare('UPDATE user_messages SET dismissed = 1 WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to dismiss message' });
+  }
+});
+
 module.exports = router;

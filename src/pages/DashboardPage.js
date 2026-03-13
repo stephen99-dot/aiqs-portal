@@ -332,16 +332,25 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showTour, setShowTour] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [adminMessages, setAdminMessages] = useState([]);
 
   useEffect(() => {
-    Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null)])
-      .then(([proj, usg]) => {
+    Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null), apiFetch('/my-messages').catch(() => ({ messages: [] }))])
+      .then(([proj, usg, msgs]) => {
         setProjects(proj.projects || proj || []);
         setUsage(usg);
+        setAdminMessages(msgs.messages || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  const dismissMessage = async (msgId) => {
+    try {
+      await apiFetch('/my-messages/' + msgId + '/dismiss', { method: 'PUT' });
+      setAdminMessages(prev => prev.filter(m => m.id !== msgId));
+    } catch {}
+  };
 
   async function handleDeleteProject(projectId) {
     if (!window.confirm('Delete this project? This cannot be undone.')) return;
@@ -409,6 +418,35 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {adminMessages.length > 0 && adminMessages.map(msg => (
+        <div key={msg.id} style={{
+          background: t.card, border: '1px solid rgba(37,99,235,0.25)',
+          borderRadius: 12, padding: '16px 20px', marginBottom: 16, boxShadow: t.shadowSm,
+          borderLeft: '3px solid #2563EB',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                background: 'rgba(37,99,235,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginTop: 1,
+              }}>
+                <ChatIcon size={14} color="#2563EB" />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Message from AI QS</div>
+                <div style={{ fontSize: 13.5, color: t.text, lineHeight: 1.5 }}>{msg.message}</div>
+              </div>
+            </div>
+            <button onClick={() => dismissMessage(msg.id)} style={{
+              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
+              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
+            }}>Dismiss</button>
+          </div>
+        </div>
+      ))}
 
       <div className="page-header">
         <div>
