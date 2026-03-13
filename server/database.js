@@ -181,6 +181,17 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_variations_project ON variations(project_id);
   CREATE INDEX IF NOT EXISTS idx_variations_user ON variations(user_id);
+
+  CREATE TABLE IF NOT EXISTS user_messages (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    dismissed INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_messages_user ON user_messages(user_id);
 `);
 
 // Migrations for existing databases

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -105,7 +105,17 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [showResetModal, setShowResetModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [importResult, setImportResult] = useState(null);
+  const [userMsg, setUserMsg] = useState('');
+  const [userMsgs, setUserMsgs] = useState([]);
+  const [msgsLoaded, setMsgsLoaded] = useState(false);
   const fileInputRef = React.useRef(null);
+
+  // Load existing messages for this user
+  React.useEffect(() => {
+    apiFetch('/admin/users/' + user.id + '/messages')
+      .then(res => { setUserMsgs(res.messages || []); setMsgsLoaded(true); })
+      .catch(() => setMsgsLoaded(true));
+  }, [user.id]);
 
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
@@ -164,6 +174,23 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     const res = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
     setMagicLink(res.magicLink || res.link || res.magicUrl || '');
   });
+
+  const sendMessage = () => doAction('msg', async () => {
+    if (!userMsg.trim()) return;
+    const res = await apiFetch('/admin/users/' + user.id + '/message', {
+      method: 'POST', body: JSON.stringify({ message: userMsg.trim() })
+    });
+    setUserMsgs(prev => [{ id: res.id, message: res.message, created_at: new Date().toISOString(), dismissed: 0 }, ...prev]);
+    setUserMsg('');
+    showSuccess('Message sent to ' + (user.full_name || user.email));
+  });
+
+  const deleteMessage = async (msgId) => {
+    try {
+      await apiFetch('/admin/users/' + user.id + '/messages/' + msgId, { method: 'DELETE' });
+      setUserMsgs(prev => prev.filter(m => m.id !== msgId));
+    } catch (e) { setErrorMsg('Failed to delete message'); }
+  };
 
   const syncStripe = () => doAction('sync', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/sync-stripe', { method: 'POST' });
@@ -323,6 +350,33 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             {importResult && (
               <div style={{ marginTop: 8, fontSize: 12, color: importResult.error ? '#EF4444' : '#10B981' }}>
                 {importResult.error ? 'Error: ' + importResult.error : 'Imported ' + importResult.imported + ' rates' + (importResult.skipped > 0 ? ', skipped ' + importResult.skipped : '')}
+              </div>
+            )}
+          </div>
+
+          {/* Send Message */}
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}>
+            <div style={lbl}><MessageSquare size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Send Message to {(user.full_name || 'User').split(' ')[0]}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <textarea value={userMsg} onChange={e => setUserMsg(e.target.value)}
+                placeholder={'e.g. Hey ' + ((user.full_name || '').split(' ')[0] || 'there') + ', we\'ve added your rates into the portal!'}
+                rows={2}
+                style={{ ...sInp, flex: 1, resize: 'vertical', minHeight: 38, fontFamily: 'inherit' }} />
+              <button onClick={sendMessage} disabled={!!loading || !userMsg.trim()}
+                style={{ ...btn('#10B981'), alignSelf: 'flex-end', opacity: (!userMsg.trim() || loading) ? 0.4 : 1 }}>
+                <Send size={12} /> Send
+              </button>
+            </div>
+            {msgsLoaded && userMsgs.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Active Messages</div>
+                {userMsgs.map(m => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6, background: isDark ? '#0D1320' : '#F1F5F9', marginBottom: 4 }}>
+                    <span style={{ flex: 1, fontSize: 12, color: text, lineHeight: 1.4 }}>{m.message}</span>
+                    <span style={{ fontSize: 10, color: muted, flexShrink: 0 }}>{m.dismissed ? 'Dismissed' : 'Active'}</span>
+                    <button onClick={() => deleteMessage(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: muted, padding: 2 }}><X size={12} /></button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
