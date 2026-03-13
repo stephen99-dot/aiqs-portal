@@ -167,8 +167,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
 
   const syncStripe = () => doAction('sync', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/sync-stripe', { method: 'POST' });
+    onUpdate({ ...user, plan: res.plan, stripe_subscription_id: res.subscription_id, billing_cycle_start: res.billing_cycle_start });
     showSuccess('Synced from Stripe: ' + res.plan + ' plan, billing cycle ' + new Date(res.billing_cycle_start).toLocaleDateString('en-GB'));
-    if (onUpdate) onUpdate();
   });
 
   const importRates = async (e) => {
