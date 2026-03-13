@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -165,6 +165,12 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     setMagicLink(res.magicLink || res.link || res.magicUrl || '');
   });
 
+  const syncStripe = () => doAction('sync', async () => {
+    const res = await apiFetch('/admin/users/' + user.id + '/sync-stripe', { method: 'POST' });
+    showSuccess('Synced from Stripe: ' + res.plan + ' plan, billing cycle ' + new Date(res.billing_cycle_start).toLocaleDateString('en-GB'));
+    if (onUpdate) onUpdate();
+  });
+
   const importRates = async (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
     setLoading('import'); setImportResult(null);
@@ -302,6 +308,10 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               <button onClick={() => setShowResetModal(true)} disabled={!!loading}
                 style={{ ...outBtn, color: '#F59E0B', borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}>
                 <Key size={12} /> Reset Password
+              </button>
+              <button onClick={syncStripe} disabled={!!loading}
+                style={{ ...outBtn, color: '#8B5CF6', borderColor: 'rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.06)' }}>
+                <RefreshCw size={12} /> Sync Stripe
               </button>
             </div>
             {magicLink && (
