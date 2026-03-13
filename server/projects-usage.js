@@ -25,24 +25,27 @@ router.get('/usage', authMiddleware, function(req, res) {
   try {
     var isAdmin = req.user.role === 'admin';
     var userId = req.user.id;
+    // Admin stats use calendar month; client stats use billing cycle
     var d = new Date(); d.setDate(1); d.setHours(0,0,0,0);
-    var monthStr = d.toISOString();
+    var calendarMonthStr = d.toISOString();
     var stats = {};
 
     if (isAdmin) {
       stats.total_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='chat_message'").get().c;
       stats.total_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='doc_generated'").get().c;
       stats.total_cost = db.prepare("SELECT COALESCE(SUM(cost_estimate),0) as t FROM usage_log").get().t;
-      stats.month_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='chat_message' AND created_at >= ?").get(monthStr).c;
-      stats.month_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='doc_generated' AND created_at >= ?").get(monthStr).c;
-      stats.month_cost = db.prepare("SELECT COALESCE(SUM(cost_estimate),0) as t FROM usage_log WHERE created_at >= ?").get(monthStr).t;
+      stats.month_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='chat_message' AND created_at >= ?").get(calendarMonthStr).c;
+      stats.month_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action='doc_generated' AND created_at >= ?").get(calendarMonthStr).c;
+      stats.month_cost = db.prepare("SELECT COALESCE(SUM(cost_estimate),0) as t FROM usage_log WHERE created_at >= ?").get(calendarMonthStr).t;
       stats.by_client = db.prepare("SELECT u.full_name, u.email, u.company, COUNT(CASE WHEN ul.action='chat_message' THEN 1 END) as messages, COUNT(CASE WHEN ul.action='doc_generated' THEN 1 END) as docs, COALESCE(SUM(ul.tokens_in),0) as tokens_in, COALESCE(SUM(ul.tokens_out),0) as tokens_out, COALESCE(SUM(ul.cost_estimate),0) as cost, MAX(ul.created_at) as last_active FROM usage_log ul JOIN users u ON ul.user_id = u.id GROUP BY ul.user_id ORDER BY cost DESC").all();
       stats.rate_training = db.prepare("SELECT u.full_name, u.email, u.company, COUNT(r.id) as total_rates, ROUND(AVG(r.confidence),2) as avg_confidence, SUM(r.times_confirmed) as total_corrections FROM users u LEFT JOIN client_rate_library r ON u.id = r.user_id AND r.is_active = 1 WHERE u.role != 'admin' GROUP BY u.id ORDER BY total_rates DESC").all();
     } else {
+      var user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+      var cycleStart = (user && user.billing_cycle_start) ? user.billing_cycle_start : calendarMonthStr;
       stats.total_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message'").get(userId).c;
       stats.total_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
-      stats.month_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, monthStr).c;
-      stats.month_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, monthStr).c;
+      stats.month_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, cycleStart).c;
+      stats.month_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, cycleStart).c;
       stats.total_rates = db.prepare("SELECT COUNT(*) as c FROM client_rate_library WHERE user_id=? AND is_active=1").get(userId).c;
       stats.avg_confidence = db.prepare("SELECT ROUND(AVG(confidence),2) as c FROM client_rate_library WHERE user_id=? AND is_active=1").get(userId).c || 0;
     }

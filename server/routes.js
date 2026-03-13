@@ -182,18 +182,23 @@ const upload = multer({
   }
 });
 
-function getMonthlyUsage(userId) {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-  return db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ?').get(userId, monthStart, monthEnd).count;
+// Returns the start of the user's billing cycle (Stripe renewal date, or 1st of month fallback)
+function getBillingCycleStart(user) {
+  if (user && user.billing_cycle_start) return user.billing_cycle_start;
+  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function getMonthlyUsage(userId, user) {
+  const cycleStart = getBillingCycleStart(user);
+  return db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ? AND created_at >= ?').get(userId, cycleStart).count;
 }
 
 function getUserPlanInfo(user) {
   const plan = user.plan || 'starter';
   const planDef = PLANS[plan] || PLANS.starter;
   const quota = user.monthly_quota > 0 ? user.monthly_quota : planDef.quota;
-  const used = getMonthlyUsage(user.id);
+  const used = getMonthlyUsage(user.id, user);
   return {
     plan, planLabel: planDef.label, quota, used,
     remaining: quota > 0 ? Math.max(0, quota - used) : (plan === 'starter' ? null : 0),
@@ -589,15 +594,13 @@ router.get('/usage', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const planInfo = getUserPlanInfo(user);
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-  const monthProjects = db.prepare('SELECT id, title, project_type, status, created_at FROM projects WHERE user_id = ? AND created_at >= ? AND created_at < ? ORDER BY created_at DESC').all(req.user.id, monthStart, monthEnd);
+  const cycleStart = getBillingCycleStart(user);
+  const monthProjects = db.prepare('SELECT id, title, project_type, status, created_at FROM projects WHERE user_id = ? AND created_at >= ? ORDER BY created_at DESC').all(req.user.id, cycleStart);
 
-  // Message usage this month
+  // Message usage this billing cycle
   let messagesUsed = 0;
   try {
-    const row = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(req.user.id, monthStart);
+    const row = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(req.user.id, cycleStart);
     messagesUsed = row?.c || 0;
   } catch(e) {}
   const plan = user.plan || 'starter';
@@ -605,9 +608,16 @@ router.get('/usage', authMiddleware, (req, res) => {
   const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
   const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
 
+  // Calculate cycle dates for display
+  const cycleStartDate = new Date(cycleStart);
+  const cycleEndDate = new Date(cycleStartDate);
+  cycleEndDate.setMonth(cycleEndDate.getMonth() + 1);
+
   res.json({
     ...planInfo, monthProjects,
-    monthName: now.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
+    monthName: cycleStartDate.toLocaleString('en-GB', { day: 'numeric', month: 'long' }) + ' – ' + cycleEndDate.toLocaleString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    billingCycleStart: cycleStart,
+    billingCycleEnd: cycleEndDate.toISOString(),
     messagesUsed, messagesLimit, messagesRemaining,
     messagesAtLimit: messagesLimit > 0 && messagesUsed >= messagesLimit,
   });
@@ -619,15 +629,14 @@ router.get('/usage', authMiddleware, (req, res) => {
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  const monthStr = monthStart.toISOString();
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
-    // Count BOQ docs generated this month (exclude revisions)
+    const userCycleStart = getBillingCycleStart(u);
+    // Count BOQ docs generated this billing cycle (exclude revisions)
     let docsUsed = 0;
     try {
-      const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(u.id, monthStr);
-      const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, monthStr);
+      const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(u.id, userCycleStart);
+      const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, userCycleStart);
       docsUsed = (docsGen?.c || 0) - (docsRev?.c || 0);
       if (docsUsed < 0) docsUsed = 0;
     } catch(e) {}
@@ -759,6 +768,45 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
   } catch (err) {
     console.error('Update plan error:', err);
     res.status(500).json({ error: 'Failed to update plan' });
+  }
+});
+
+// Sync a user's subscription from Stripe (for fixing missed webhooks)
+router.post('/admin/users/:id/sync-stripe', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+    if (!STRIPE_SECRET) return res.status(500).json({ error: 'Stripe not configured' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const stripe = require('stripe')(STRIPE_SECRET);
+    // Search for customer by email
+    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    if (customers.data.length === 0) return res.status(404).json({ error: 'No Stripe customer found for ' + user.email });
+
+    const customer = customers.data[0];
+    const subscriptions = await stripe.subscriptions.list({ customer: customer.id, status: 'active', limit: 1 });
+    if (subscriptions.data.length === 0) return res.status(404).json({ error: 'No active subscription for ' + user.email });
+
+    const sub = subscriptions.data[0];
+    const priceId = sub.items.data[0]?.price?.id;
+    const PRICE_TO_PLAN = {
+      'price_1T52aREOVz3JQx7Ah7HHz1oh': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+      'price_1T6phnEOVz3JQx7A08xGJ8er': { plan: 'professional', msgQuota: 100, boqQuota: 10 },
+      'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', msgQuota: 200, boqQuota: 20 },
+    };
+    const planInfo = PRICE_TO_PLAN[priceId];
+    if (!planInfo) return res.status(400).json({ error: 'Unknown price ID: ' + priceId });
+
+    const cycleStart = new Date(sub.current_period_start * 1000).toISOString();
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, sub.id, cycleStart, user.id);
+
+    console.log(`[Admin] Stripe sync for ${user.email}: ${planInfo.plan}, cycle start: ${cycleStart}`);
+    res.json({ success: true, plan: planInfo.plan, billing_cycle_start: cycleStart, subscription_id: sub.id });
+  } catch (err) {
+    console.error('[Admin] Stripe sync error:', err);
+    res.status(500).json({ error: 'Stripe sync failed: ' + err.message });
   }
 });
 

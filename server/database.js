@@ -197,6 +197,8 @@ const migrations = [
   { column: 'bonus_messages', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_messages INTEGER DEFAULT 0" },
   { column: 'bonus_docs', table: 'users', sql: "ALTER TABLE users ADD COLUMN bonus_docs INTEGER DEFAULT 0" },
   { column: 'force_password_change', table: 'users', sql: "ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0" },
+  { column: 'billing_cycle_start', table: 'users', sql: "ALTER TABLE users ADD COLUMN billing_cycle_start TEXT" },
+  { column: 'stripe_subscription_id', table: 'users', sql: "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {
