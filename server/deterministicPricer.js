@@ -656,6 +656,8 @@ function crossValidateQuantities(items, projectType) {
   const pType = (projectType || '').toLowerCase();
   const isExtension = pType.includes('extension') || pType.includes('residential_extension');
   const isLoft = pType.includes('loft');
+  const isRefurb = pType.includes('refurb') || pType.includes('renovation') ||
+    pType.includes('conversion') || pType.includes('fit') || pType.includes('apartment') || pType.includes('flat');
 
   // Maximum reasonable floor area per project type (single floor)
   // For two-storey extensions or combined projects (extension + loft + refurb), allow larger area
@@ -692,9 +694,6 @@ function crossValidateQuantities(items, projectType) {
   // Prevents room schedule total (e.g. 309m² across both floors) being used
   // for single-floor items like flooring, ceilings, and electrical.
   // ═══════════════════════════════════════════════════════════════════════
-  const isRefurb = pType.includes('refurb') || pType.includes('renovation') ||
-    pType.includes('conversion') || pType.includes('fit') || pType.includes('apartment') || pType.includes('flat');
-
   if (isRefurb && !isExtension && !isLoft) {
     // Collect all area-based items to infer actual floor area
     const areaItemKeys = [
@@ -902,6 +901,25 @@ function crossValidateQuantities(items, projectType) {
     const item = byKey[ec.key];
     if (item && item.qty > ec.max) {
       capQty(item, ec.max, `${ec.label} capped at ${ec.max} — per CIRCUIT not per room`);
+    }
+  }
+
+  // Also catch non-standard electrical keys the AI might use (e.g. 'new_power_circuit',
+  // 'power_circuit_ground_floor') that bypass the exact-key caps above.
+  // Any Item-based electrical item with qty > max should be capped.
+  for (const item of items) {
+    if (item.removed) continue;
+    const k = (item.key || '').toLowerCase();
+    const d = (item.description || '').toLowerCase();
+    const isElecItem = (k.includes('power_circuit') || k.includes('lighting_circuit') ||
+      k.includes('electrical_circuit') || k.includes('new_power') ||
+      (k.includes('circuit') && (d.includes('socket') || d.includes('power') || d.includes('lighting'))));
+    if (isElecItem && (item.unit === 'Item' || item.unit === 'Nr') && !byKey[item.key + '_capped']) {
+      // Skip if already handled by exact-key caps above
+      const alreadyCapped = elecCaps.some(ec => ec.key === item.key);
+      if (!alreadyCapped && item.qty > elecMax.power) {
+        capQty(item, elecMax.power, `Electrical circuit '${item.key}' capped at ${elecMax.power} — per CIRCUIT not per socket/room`);
+      }
     }
   }
 
@@ -1179,6 +1197,18 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     } else if (clientRates[item.key] && clientRates[item.key] > 0) {
       rate = clientRates[item.key];
       rateSource = 'client_verified';
+      // Sanity check: if client rate is wildly different from base rate, prefer base rate
+      // This catches corrupted memory engine rates that slipped into clientRates
+      if (BASE_RATES[item.key] && BASE_RATES[item.key].rate > 0) {
+        const baseWithLoc = BASE_RATES[item.key].rate * locFactor;
+        const ratio = rate / baseWithLoc;
+        if (ratio > 5 || ratio < 0.1) {
+          const cs = currency === 'EUR' ? '€' : '£';
+          warnings.push(`Client rate for '${item.key}' (${cs}${Math.round(rate * 100) / 100}) is ${ratio.toFixed(1)}x base rate (${cs}${Math.round(baseWithLoc * 100) / 100}) — using base rate instead`);
+          rate = baseWithLoc;
+          rateSource = 'base_library';
+        }
+      }
     } else if (BASE_RATES[item.key]) {
       rate = BASE_RATES[item.key].rate * locFactor;
       rateSource = 'base_library';
