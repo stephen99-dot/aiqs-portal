@@ -1879,6 +1879,7 @@ CRITICAL RULES:
             // Enrich with memory engine rates — must match Stage 3 to avoid discrepancy
             if (memoryEngine) {
               const region = memoryEngine.detectRegion(parsed.location || '');
+              const pricerBaseRates = deterministicPricer ? deterministicPricer.BASE_RATES : {};
               for (const item of parsed.items) {
                 if (!clientRates[item.key]) {
                   const memRate = memoryEngine.getBestRate(db, {
@@ -1888,6 +1889,16 @@ CRITICAL RULES:
                     userId,
                   });
                   if (memRate && memRate.confidence > 0.65) {
+                    // Sanity check: don't let memory rates override BASE_RATES with wildly different values
+                    // A corrupted memory rate (e.g. £2,245/m² for scaffolding vs base £22/m²) would cascade
+                    const baseEntry = pricerBaseRates[item.key];
+                    if (baseEntry && baseEntry.rate > 0) {
+                      const ratio = memRate.rate / baseEntry.rate;
+                      if (ratio > 3 || ratio < 0.25) {
+                        console.log(`[Memory] REJECTED ${item.key}: memory rate £${memRate.rate} is ${ratio.toFixed(1)}x base rate £${baseEntry.rate} — likely corrupted`);
+                        continue;
+                      }
+                    }
                     clientRates[item.key] = memRate.rate;
                   }
                 }
@@ -2107,6 +2118,7 @@ CRITICAL RULES:
         // Enrich clientRates with memory engine best rates
         if (memoryEngine) {
           const region = memoryEngine.detectRegion(lockedTakeoff.location || '');
+          const pricerBaseRates = deterministicPricer ? deterministicPricer.BASE_RATES : {};
           for (const item of lockedTakeoff.items) {
             if (!clientRates[item.key]) {
               const memRate = memoryEngine.getBestRate(db, {
@@ -2116,6 +2128,15 @@ CRITICAL RULES:
                 userId,
               });
               if (memRate && memRate.confidence > 0.65) {
+                // Sanity check: don't let memory rates override BASE_RATES with wildly different values
+                const baseEntry = pricerBaseRates[item.key];
+                if (baseEntry && baseEntry.rate > 0) {
+                  const ratio = memRate.rate / baseEntry.rate;
+                  if (ratio > 3 || ratio < 0.25) {
+                    console.log(`[Memory] REJECTED ${item.key}: memory rate £${memRate.rate} is ${ratio.toFixed(1)}x base rate £${baseEntry.rate} — likely corrupted`);
+                    continue;
+                  }
+                }
                 clientRates[item.key] = memRate.rate;
                 console.log(`[Memory] Using ${memRate.source} rate for ${item.key}: ${memRate.rate} (conf ${memRate.confidence.toFixed(2)})`);
               }
