@@ -240,8 +240,10 @@ QUANTITY SANITY CHECKS — before finalising, verify:
 - Typical two storey extension (40-70m²): construction cost should be £100,000-£200,000
 - Typical loft conversion: construction cost should be £40,000-£90,000
 - Typical whole-house refurbishment (100-200m²): construction cost should be £100,000-£300,000
+- Typical water damage / insurance reinstatement (2-3 bed property, multiple rooms): construction cost should be £30,000-£80,000
+- Typical water damage / insurance reinstatement (4+ bed property or extensive damage): construction cost should be £50,000-£120,000
 - If your total is BELOW these ranges, you are almost certainly MISSING items. Go back and check the completeness checklist above
-- No single line item for a residential project should exceed £20,000 unless genuinely high-value (attic trusses, ASHP, large Velux package)
+- No single line item for a residential project should exceed £20,000 unless genuinely high-value (attic trusses, ASHP, large Velux package, kitchen PC sum)
 - Scaffolding in m² should be elevation area (perimeter × scaffold height), NOT floor area
 
 REFURBISHMENT-SPECIFIC RULES:
@@ -251,6 +253,32 @@ REFURBISHMENT-SPECIFIC RULES:
 - For electrical rewires, include: strip out old + rewire (per m² or per room) + consumer unit + testing certificate
 - Use provisional_sum with qty as the £ value (rate=1) for items that cannot be accurately priced yet
 - For heritage projects, use lime-based rates NOT cement-based (lime_mortar_repointing, lime_plaster_walls, lime_render_external)
+
+REFURBISHMENT ROOM-BY-ROOM BREAKDOWN — CRITICAL:
+For ANY refurbishment, renovation, or damage repair project affecting multiple rooms, you MUST break down the work ROOM BY ROOM. Each affected room should be a SEPARATE SECTION with its own items:
+- Strip out existing finishes (skirting, architraves, ceiling, floor coverings)
+- Floor preparation and new floor finishes
+- Wall preparation and replastering/lining
+- Ceiling work (insulation, plasterboard, skim)
+- Skirting boards and architraves
+- Internal door (ease/adjust or replace)
+- Decoration (all surfaces)
+Example sections: "4. Hall", "5. Living Room", "6. Kitchen", "7. Bathroom"
+
+A refurbishment with 4+ rooms should have 40-70+ line items minimum. If you are producing fewer than 30 items for a multi-room refurb, you are MISSING scope.
+
+WATER DAMAGE / INSURANCE REINSTATEMENT — CRITICAL:
+For water damage, flood damage, fire damage, or insurance reinstatement projects:
+1. Include STRUCTURAL DRYING as a provisional sum (typically £2,000-£5,000 depending on extent)
+2. Include electrical testing/inspection before reinstatement (safety requirement)
+3. Include fungicidal/sterilising treatment to timbers and affected areas
+4. Include asbestos survey if pre-2000 property
+5. Kitchen: if affected, include kitchen supply as a PC Sum (Prime Cost) — typically £5,000-£10,000 for like-for-like replacement. Include separate items for strip out, installation, plumbing, and electrical connections
+6. Bathroom: if affected, include careful removal and reinstallation of existing suite, OR new suite as provisional/PC sum
+7. Services: include provisional sums for electrical rewiring (subject to NICEIC contractor's report) and plumbing repairs (subject to Gas Safe contractor's report) — these are ESSENTIAL items
+8. Preliminaries should include: site supervision, welfare facilities, security/hoardings, material storage, H&S compliance, professional cleaning, waste disposal, temporary heating for drying
+9. Include general items: fungicidal treatment, asbestos survey, full decoration to ALL rooms (not just damaged ones if scope says throughout)
+10. COST CHECK: A water damage reinstatement for a typical 2-3 bed property should be £30,000-£80,000+ depending on extent. If your total is under £15,000, you are almost certainly MISSING entire rooms or major cost items
 
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 
@@ -281,7 +309,8 @@ WINDOW & DOOR RULES — CRITICAL:
 - Include vent panels separately if shown on drawings
 
 === REFURBISHMENT / HERITAGE KEYS ===
-Strip-out: strip_out_general (per m²), strip_out_kitchen (per Nr), strip_out_bathroom (per Nr), strip_out_heating (per Item), strip_out_electrics (per Item), strip_out_flooring (per m²), strip_out_plaster (per m²), strip_out_ceiling (per m²), soft_strip_room (per Nr)
+Strip-out: strip_out_general (per m²), strip_out_kitchen (per Nr), strip_out_bathroom (per Nr), strip_out_heating (per Item), strip_out_electrics (per Item), strip_out_flooring (per m²), strip_out_plaster (per m²), strip_out_ceiling (per m²), soft_strip_room (per Nr), strip_out_skirting_architrave (per Nr room — strip skirting boards, architraves, coving; remove from site ~£280-380/room)
+Water damage / insurance: structural_drying (per Item provisional sum ~£2,000-£5,000), dehumidifier_hire (per week ~£150), fungicidal_treatment (per Item — apply sterilising solution to all affected timbers ~£275), bathroom_suite_remove_refit (per Nr — carefully remove, protect, store, refit suite ~£650-770), concrete_floor_prep_dpm (per Nr room — prepare concrete floor, 2-part epoxy DPM, latex levelling screed ~£320-690), ceiling_insulation_plasterboard (per Nr room — 100mm insulation between joists + 12.5mm board, scrim, skim ~£220-930 depending on room size)
 Heritage masonry: lime_mortar_repointing (per m²), lime_plaster_walls (per m²), lime_render_external (per m²), stone_repair_indent (per Nr), stone_cleaning (per m²), brick_repair_stitch (per m), wall_tie_replacement (per Nr), dpc_injection (per m)
 Heritage roofing: natural_slate_roofing (per m²), clay_tile_roofing (per m²), lead_sheet_roofing (per m²), lead_flashing_code5 (per m), flat_roof_felt (per m²), flat_roof_single_ply (per m²), chimney_repair (per Nr), chimney_rebuild (per Nr)
 Heritage rainwater: cast_iron_guttering (per m), cast_iron_downpipe (per m), cast_iron_hopper (per Nr), aluminium_guttering (per m)
@@ -456,13 +485,16 @@ COST SANITY CHECKS — verify your total before responding:
 - Typical loft conversion: construction cost £35,000-£75,000
 - Typical whole-house refurbishment (100-200m2): construction cost £80,000-£250,000
 - Typical heritage/listed refurbishment: add 15-30% over standard refurbishment
+- Typical water damage / insurance reinstatement (2-3 bed, multiple rooms): £30,000-£80,000
+- Typical water damage / insurance reinstatement (4+ bed or extensive): £50,000-£120,000
 - Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
 - Cost per m2 for UK refurbishment: typically £800-£1,800/m2 depending on scope
-- AIM FOR THE MIDDLE of these ranges — most projects should fall in the lower half
+- If your total is BELOW these ranges, you are almost certainly MISSING items or entire rooms — re-check
 - If your total is near the TOP of these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
-- No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
+- No single line item for a residential project should exceed £25,000 unless genuinely high-value (e.g. bi-fold doors, kitchen PC sum, ASHP)
 - Do NOT double-count: if you break cavity wall into components, do NOT also include a separate cavity wall lump sum
-- For refurbishment: ALWAYS include strip-out BEFORE new work. Break decoration per room where scope allows
+- For refurbishment: ALWAYS include strip-out BEFORE new work. Break down ROOM BY ROOM with items per room
+- For damage repair: include provisional sums for services, structural drying, kitchen/bathroom PC sums where affected
 
 Respond with this JSON structure:
 {
@@ -525,10 +557,22 @@ DETAIL EXPECTATIONS — MINIMUM STANDARDS:
 - For a standard single-storey extension: expect 35-55 line items covering ALL trades
 - For a two-storey extension or conversion: expect 50-80 line items covering ALL trades
 - For a full refurb: expect 70-120 line items covering ALL trades
+- For a multi-room refurbishment/damage repair: expect 50-80+ line items with ROOM-BY-ROOM breakdown
 - Every trade must be represented — a missing section is WORSE than an imprecise quantity
 - If the project involves demolition, you MUST break it down (strip roof, demolish walls, break out slab — NOT just "demolition")
 - Break down composite items: e.g. "Cavity wall" should show blockwork inner leaf, insulation, cavity ties, brick outer leaf separately where relevant
 - Show working for key quantities: "External wall area: 2no. walls @ 5.0m x 2.7m = 27.0m2, less 2no. windows @ 1.2x1.5m = 3.6m2, net wall area = 23.4m2"
+
+REFURBISHMENT / DAMAGE REPAIR PROJECTS:
+- ALWAYS break down work ROOM BY ROOM — each affected room gets its own section
+- Each room section should include: strip-out, floor prep, floor finishes, replastering/lining, ceiling, skirting, architraves, door, decoration
+- Include separate sections for: Preliminaries, Service Installation (electrical + plumbing provisional sums), General Items (fungicidal treatment, asbestos survey, full decoration)
+- For water/flood/fire damage: include structural drying provisional sum, electrical testing, temporary heating, professional cleaning
+- Kitchen reinstatement: PC Sum for kitchen supply (£5,000-£10,000+), plus separate strip out, installation, plumbing and electrical
+- Bathroom reinstatement: suite removal/storage/reinstallation OR new suite provisional sum
+- Electrical and plumbing: include as PROVISIONAL SUMS subject to specialist contractor's report
+- Preliminaries for refurbs: site supervision, welfare, hoardings, storage, H&S, CDM, cleaning, waste, temporary heating — typically £5,000-£10,000
+- COST CHECK: Multi-room water damage reinstatement should be £30,000-£80,000+. If under £15,000, you are missing scope
 
 ELEMENTAL BREAKDOWN (use these sections):
 1. Preliminaries & General — site setup, welfare, scaffolding, waste, insurance, PM
@@ -569,10 +613,12 @@ COST SANITY CHECKS — you MUST verify your total before responding:
 - Typical single storey extension (25-40m2): construction cost £45,000-£100,000
 - Typical two storey extension (40-70m2): construction cost £80,000-£180,000
 - Typical loft conversion: construction cost £35,000-£75,000
+- Typical water damage / insurance reinstatement (2-3 bed, multiple rooms): £30,000-£80,000
+- Typical water damage / insurance reinstatement (4+ bed or extensive): £50,000-£120,000
 - Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
-- AIM FOR THE MIDDLE of these ranges — most projects should fall in the lower half unless the spec clearly justifies higher
-- If your total is near the TOP of these ranges, STOP and re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates, unnecessary items
-- No single line item for a residential project should exceed £20,000 unless genuinely high-value (e.g. bi-fold doors, kitchen, ASHP)
+- If your total is BELOW these ranges, you are almost certainly MISSING items or entire rooms — go back and add them
+- If your total is near the TOP of these ranges, re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates
+- No single line item for a residential project should exceed £20,000 unless genuinely high-value (e.g. bi-fold doors, kitchen PC sum, ASHP)
 - Do NOT double-count: if you break cavity wall into brick + insulation + blockwork + ties, do NOT also include a separate "cavity wall" lump sum
 - Do NOT double-count fit-outs: if you use kitchen_fitout_mid or bathroom_fitout_mid, do NOT also include individual items within those fit-outs
 - MEP rates above are PER CIRCUIT/ZONE, not per socket or fitting. A typical extension has 1-2 electrical circuits and 1 plumbing circuit
@@ -1458,6 +1504,7 @@ ${summary}`);
           /two.stor/i.test(allConvText) ? 'Two Storey Extension' :
           /single.stor|rear.ext|side.ext/i.test(allConvText) ? 'Single Storey Extension' :
           /heritage|listed\s*build|grade\s*(i|ii|1|2)/i.test(allConvText) ? 'Heritage Refurbishment' :
+          /water\s*damage|flood\s*damage|fire\s*damage|insurance\s*reinstate|storm\s*damage|escape\s*of\s*water|burst\s*pipe|leak\s*damage/i.test(allConvText) ? 'Insurance Reinstatement / Damage Repair' :
           /whole\s*house|complete\s*refurb|full\s*renovat|gut\s*renovat|internal\s*&?\s*external/i.test(allConvText) ? 'Whole House Refurbishment' :
           /refurb|renovation|strip\s*out|rewire|repoint/i.test(allConvText) ? 'Refurbishment' :
           /conversion|flat|apartment/i.test(allConvText) ? 'Conversion' :
@@ -1607,12 +1654,22 @@ Respond with ONLY valid JSON:
 
 If the takeoff is accurate with no issues, return: { "corrections": [], "validation_notes": "Takeoff reviewed — no errors found", "items_checked": N, "errors_found": 0, "confidence": "high" }
 
+7. REFURBISHMENT / DAMAGE REPAIR SCOPE CHECK — For refurb/damage projects:
+   - Every affected room should have its OWN section with strip-out + new finishes
+   - Check for missing rooms — if project mentions hall, living room, kitchen, bathroom, each must have items
+   - Water damage projects MUST include: structural drying, fungicidal treatment, electrical testing, provisional sums for services
+   - Kitchen reinstatement needs: strip out + PC sum for supply + installation + plumbing + electrical (not just one lump sum)
+   - Bathroom needs: suite removal/storage/refit OR new suite provisional sum
+   - Preliminaries for refurbs should include 10-20 items (supervision, welfare, hoardings, storage, H&S, cleaning, waste, heating)
+   - If total item count is under 30 for a multi-room refurb, ADD missing items — scope is almost certainly incomplete
+
 CRITICAL RULES:
 - item_index is 0-based matching the items array order
 - Only flag genuine errors with clear reasoning — do not nitpick
 - Recalculate quantities yourself, don't just trust the working shown
 - Be especially strict on windows and doors — check every single one against the schedule
-- If floor area is stated, verify construction total is reasonable (£1,800-£3,000/m² for extensions)`;
+- If floor area is stated, verify construction total is reasonable (£1,800-£3,000/m² for extensions, £800-£1,800/m² for refurbishments)
+- For water damage reinstatement: total should be £30,000-£80,000 for a 2-3 bed property. If under £15,000, flag as INCOMPLETE SCOPE`;
 
               // Build the validation message with original drawings + extracted items
               const validationContent = [
