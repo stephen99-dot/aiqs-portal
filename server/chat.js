@@ -1464,6 +1464,7 @@ ${summary}`);
     let downloadFiles = null;
     let paymentRequired = null;
     let takeoffData = null;
+    let pipelineLog = null;
 
     // If session has a locked takeoff and this is a short non-file message (e.g. "Dublin", "yes", "ok"),
     // override the general AI reply with a focused response that acknowledges and moves forward
@@ -1517,6 +1518,7 @@ ${summary}`);
 
       if (shouldExtract) {
       console.log(`[Stage 1] Extracting quantities from ${hasFiles ? 'drawings' : 'text description'}...`);
+      pipelineLog = []; // Capture pipeline activity for frontend visibility
       try {
         // Get project type from conversation context
         const allConvText = messages.map(m => typeof m.content === 'string' ? m.content : '').join(' ') + ' ' + (message || '');
@@ -1537,6 +1539,8 @@ ${summary}`);
         const memoryCtx = memoryEngine
           ? memoryEngine.buildMemoryContext(db, { userId, projectType: projectTypeGuess, region: memoryEngine.detectRegion(locationGuess) })
           : (benchmarkStore ? benchmarkStore.formatBenchmarksForPrompt(benchmarkStore.getBenchmarkRanges(db, projectTypeGuess, null), projectTypeGuess) : '');
+
+        pipelineLog.push({ stage: 'detect', label: 'Project type detected', detail: projectTypeGuess + (locationGuess ? ' — ' + locationGuess : ''), ts: Date.now() });
 
         const extractPrompt = buildSystemPrompt(userId, hasFiles ? 'extract_quantities' : 'extract_quantities_text', memoryCtx);
 
@@ -1602,6 +1606,8 @@ ${summary}`);
           const rawText = extractData.content.filter(c => c.type === 'text').map(c => c.text).join('');
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
           const parsed = JSON.parse(cleaned);
+
+          pipelineLog.push({ stage: 'extract', label: 'Stage 1: Quantities extracted', detail: `${parsed.items?.length || 0} items across ${[...new Set((parsed.items || []).map(i => i.section))].length} sections` + (parsed.floor_area_m2 ? ` — ${parsed.floor_area_m2}m² floor area` : ''), ts: Date.now() });
 
           if (parsed.items && parsed.items.length > 0) {
             // ═══════════════════════════════════════════════════════════
@@ -1786,6 +1792,19 @@ CRITICAL RULES:
                   }
 
                   console.log(`[Stage 1b] After corrections: ${parsed.items.length} items (was ${validation.items_checked})`);
+                  const corrSummary = validation.corrections.map(c => {
+                    if (c.action === 'adjust_qty') return `Adjusted qty: ${c.reason}`;
+                    if (c.action === 'adjust_key') return `Changed item key: ${c.reason}`;
+                    if (c.action === 'remove') return `Removed: ${c.reason}`;
+                    if (c.action === 'add') return `Added: ${c.item?.description || c.reason}`;
+                    if (c.action === 'split') return `Split item: ${c.reason}`;
+                    return c.reason || c.action;
+                  });
+                  pipelineLog.push({ stage: 'validate', label: 'Stage 1b: QA Review', detail: `${validation.corrections.length} corrections applied`, corrections: corrSummary, confidence: validation.confidence || 'unknown', ts: Date.now() });
+                }
+
+                if (!validation.corrections || validation.corrections.length === 0) {
+                  pipelineLog.push({ stage: 'validate', label: 'Stage 1b: QA Review', detail: 'Passed — no errors found', corrections: [], confidence: validation.confidence || 'high', ts: Date.now() });
                 }
 
                 // Store validation metadata for display
@@ -1890,6 +1909,9 @@ CRITICAL RULES:
                 };
               })()
             );
+
+            // Log pricing stage
+            pipelineLog.push({ stage: 'price', label: 'Stage 2: Deterministic pricing', detail: `${priced.sections.length} sections priced — Construction total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})} — Grand total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`, warnings: priced.warnings || [], ts: Date.now() });
 
             // Format quantities summary for user
             const flagged = parsed.items.filter(i => i.flagged);
@@ -2531,6 +2553,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       session_id: responseSessionId,
       takeoff_id: responseTakeoffId,
       takeoff_locked: responseTakeoffId ? true : false,
+      pipeline_log: pipelineLog || null,
     });
 
   } catch (err) {

@@ -164,6 +164,7 @@ export default function ChatPage() {
       const saveable = msgs.map(m => ({
         role: m.role, content: m.content,
         thinking: m.thinking || null, downloadFiles: m.downloadFiles || null,
+        pipelineLog: m.pipelineLog || null,
         timestamp: m.timestamp, error: m.error || false,
         takeoffLocked: m.takeoffLocked || false,
       }));
@@ -253,6 +254,7 @@ export default function ChatPage() {
         paymentRequired: data.payment_required || null,
         quota: data.quota || null,
         takeoffLocked: !!data.takeoff_id,
+        pipelineLog: data.pipeline_log || null,
         sessionId: data.session_id,
         takeoffId: data.takeoff_id,
         timestamp: new Date().toISOString(),
@@ -353,6 +355,52 @@ export default function ChatPage() {
     );
   }
 
+  function PipelineLog({ log, idx }) {
+    if (!log || !log.length) return null;
+    const open = expanded['pl_'+idx];
+    const stageIcons = { detect: '🔍', extract: '📐', validate: '✅', price: '💰' };
+    return (
+      <div style={{ marginBottom:8, borderRadius:10, border:`1px solid ${c.thinkBorder}`, overflow:'hidden' }}>
+        <button onClick={() => setExpanded(p => ({...p, ['pl_'+idx]: !p['pl_'+idx]}))}
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:dark?'#0D1117':'#F1F5F9', border:'none', cursor:'pointer', fontSize:12, fontWeight:600, color:'#3B82F6' }}>
+          <span style={{ transform:open?'rotate(90deg)':'rotate(0)', transition:'transform 0.2s', fontSize:10 }}>▶</span>
+          <span style={{ fontSize:13 }}>⚙️</span> <span>View pipeline</span>
+          <span style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:c.textMuted }}>
+            {log.length} stage{log.length !== 1 ? 's' : ''} · {open?'Collapse':'Expand'}
+          </span>
+        </button>
+        {open && (
+          <div style={{ padding:'10px 14px', background:c.thinkBg, borderTop:`1px solid ${c.thinkBorder}` }}>
+            {log.map((entry, i) => (
+              <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom: i < log.length-1 ? `1px solid ${c.thinkBorder}` : 'none' }}>
+                <span style={{ fontSize:15, flexShrink:0, marginTop:1 }}>{stageIcons[entry.stage] || '⚙️'}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:c.text, marginBottom:2 }}>{entry.label}</div>
+                  <div style={{ fontSize:11.5, color:c.textMuted, lineHeight:1.5 }}>{entry.detail}</div>
+                  {entry.corrections && entry.corrections.length > 0 && (
+                    <div style={{ marginTop:6, padding:'6px 10px', borderRadius:6, background:dark?'rgba(245,158,11,0.06)':'rgba(245,158,11,0.05)', border:'1px solid rgba(245,158,11,0.15)' }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:c.amber, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>QA Corrections</div>
+                      {entry.corrections.map((corr, ci) => (
+                        <div key={ci} style={{ fontSize:11, color:c.thinkText, lineHeight:1.6, paddingLeft:8, borderLeft:`2px solid rgba(245,158,11,0.2)`, marginBottom:3 }}>{corr}</div>
+                      ))}
+                    </div>
+                  )}
+                  {entry.warnings && entry.warnings.length > 0 && (
+                    <div style={{ marginTop:4 }}>
+                      {entry.warnings.map((w, wi) => (
+                        <div key={wi} style={{ fontSize:11, color:c.amber, lineHeight:1.5 }}>⚠ {w}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function LockedBanner() {
     if (!currentTakeoffId) return null;
     return (
@@ -366,10 +414,13 @@ export default function ChatPage() {
     const isUser = msg.role === 'user';
     return (
       <>
-        {!isUser && msg.thinking && (
+        {!isUser && (msg.thinking || msg.pipelineLog) && (
           <div style={{ display:'flex', gap:12 }}>
             <div style={{ width:34, flexShrink:0 }}/>
-            <div style={{ maxWidth: mobile ? '90%' : '72%' }}><ThinkingBlock thinking={msg.thinking} idx={idx}/></div>
+            <div style={{ maxWidth: mobile ? '90%' : '72%' }}>
+              {msg.thinking && <ThinkingBlock thinking={msg.thinking} idx={idx}/>}
+              {msg.pipelineLog && <PipelineLog log={msg.pipelineLog} idx={idx}/>}
+            </div>
           </div>
         )}
         <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexDirection:isUser?'row-reverse':'row' }}>
