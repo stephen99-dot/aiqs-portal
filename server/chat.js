@@ -186,6 +186,14 @@ GOOD: "Supply and install new ESB Networks-approved Mini Pillar at site boundary
 
 Include: material specifications, sizes, standards/codes, compliance references (ESB Networks, Building Regs, BS EN), installation method, scope inclusions. The description should tell a contractor exactly what is expected.
 
+FLOOR AREA SANITY CHECK — CRITICAL:
+Before setting floor_area_m2, verify it makes sense for the project type:
+- A single room is typically 4-20m². If the project mentions MULTIPLE rooms, the total floor area is the SUM of all rooms
+- A 2-3 bed property is typically 50-80m² total. A multi-room refurb affecting 4+ rooms is typically 30-60m²
+- If the documents show a small area (e.g. 4m²) alongside references to multiple rooms (hall, living room, kitchen, bathroom), that small area is ONE ROOM or a damage zone — NOT the total property
+- For refurbishment/damage projects, estimate room sizes if not given: hall ~4-8m², living room ~15-20m², kitchen ~8-12m², bathroom ~4-6m², bedroom ~10-14m²
+- NEVER set floor_area_m2 below 20m² for a project affecting 3+ rooms
+
 COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they apply to the project. If you are missing an entire section, your takeoff is WRONG:
 1. DEMOLITION & SITE PREP — strip out existing (roof, walls, slab, finishes separately), asbestos survey allowance, cut back existing finishes at interface
 2. SUBSTRUCTURE — foundations (excavate + concrete separately), ground slab, DPM, insulation, screed (all as separate items)
@@ -269,16 +277,30 @@ A refurbishment with 4+ rooms should have 40-70+ line items minimum. If you are 
 
 WATER DAMAGE / INSURANCE REINSTATEMENT — CRITICAL:
 For water damage, flood damage, fire damage, or insurance reinstatement projects:
-1. Include STRUCTURAL DRYING as a provisional sum (typically £2,000-£5,000 depending on extent)
-2. Include electrical testing/inspection before reinstatement (safety requirement)
-3. Include fungicidal/sterilising treatment to timbers and affected areas
-4. Include asbestos survey if pre-2000 property
-5. Kitchen: if affected, include kitchen supply as a PC Sum (Prime Cost) — typically £5,000-£10,000 for like-for-like replacement. Include separate items for strip out, installation, plumbing, and electrical connections
-6. Bathroom: if affected, include careful removal and reinstallation of existing suite, OR new suite as provisional/PC sum
-7. Services: include provisional sums for electrical rewiring (subject to NICEIC contractor's report) and plumbing repairs (subject to Gas Safe contractor's report) — these are ESSENTIAL items
-8. Preliminaries should include: site supervision, welfare facilities, security/hoardings, material storage, H&S compliance, professional cleaning, waste disposal, temporary heating for drying
-9. Include general items: fungicidal treatment, asbestos survey, full decoration to ALL rooms (not just damaged ones if scope says throughout)
-10. COST CHECK: A water damage reinstatement for a typical 2-3 bed property should be £30,000-£80,000+ depending on extent. If your total is under £15,000, you are almost certainly MISSING entire rooms or major cost items
+
+FLOOR AREA — DO NOT USE DAMAGE AREA AS FLOOR AREA:
+If the documents reference a small area (e.g. 4m², 6m²) this is likely the DAMAGE AREA or a single room, NOT the total property floor area. A typical 2-3 bed property is 50-80m². If multiple rooms are mentioned (hall, living room, kitchen, bathroom), the total affected floor area is the SUM of all room areas — typically 30-60m². NEVER set floor_area_m2 to less than 20m² for a multi-room project. If in doubt, estimate room sizes: hall ~4-8m², living room ~15-20m², kitchen ~8-12m², bathroom ~4-6m², bedroom ~10-14m².
+
+ROOM-BY-ROOM SCOPE — MANDATORY:
+You MUST create a SEPARATE SECTION for EACH affected room. Each room section needs 6-10 items:
+- Strip out: skirting boards, architraves, coving, ceiling; remove from site (£280-£380)
+- Floor: concrete floor prep, apply 2-part epoxy DPM, latex levelling screed (£320-£690 depending on size)
+- Floor finish: laminate/LVT flooring with underlay, all sundries, threshold strips (rate × area)
+- Walls: plasterboard and 3mm skim finish to walls where damaged (rate × wall area)
+- Skirting: supply and fix new softwood skirting to match existing (rate × room perimeter)
+- Architraves: supply and fix new softwood architraves to match existing (rate × Nr doors)
+- Ceiling: insulation between joists + plasterboard + scrim + skim (£220-£930 depending on area)
+- Door: ease and adjust to full operation OR supply new internal door
+- Coving: supply and install coving to ceiling perimeter (if room had coving)
+
+ESSENTIAL ITEMS — DO NOT MISS:
+1. PRELIMINARIES section (15-20 items): site supervision £2,500, site coordination £1,800, welfare/portaloo £350, small tools £400, hoardings/security £250, material storage £100, H&S compliance, CDM plan £300, road/footpath protection £100, insurances £250, lighting/power £150, water supply £50, temporary heating for drying £300, client liaison, professional cleaning £400, waste/skips £600, rectify damage — TOTAL PRELIMS typically £5,000-£8,000
+2. SERVICE INSTALLATION section: electrical inspection quotation £175, electrical provisional sum £2,500 (Prov Sum), gas/plumbing inspection quotation £175, gas/plumbing provisional sum £5,000 (Prov Sum) — these are ESSENTIAL safety items
+3. GENERAL ITEMS section: fungicidal sterilising treatment £275, asbestos survey £450, asbestos removal provisional sum £1,000 (Prov Sum), full decoration throughout £3,000-£5,000 (1 mist + 3 top coats new plaster, prep + 3 top coats existing, knot-stop/primer to joinery)
+4. Kitchen: strip out complete £450-530, kitchen supply PC Sum £5,000-£10,000, contractor's OHP on PC sum £700, kitchen installation £1,200-£1,400, ceramic floor tiles £740, skirting £215, architraves £140, ceiling insulation+board £525, door £85
+5. Bathroom: strip out tiles/ceiling/architraves £380-440, bathroom suite careful remove+refit £650-770, floor tiles £500, wall tiles £1,120, architraves £140, ceiling insulation+board £330, door £85
+6. COST TARGET: Preliminaries £5,000-£8,000. Services £7,000-£8,000. General items £5,000-£6,000. Each room £2,000-£12,000 depending on scope. Total for multi-room: £30,000-£80,000
+7. If your total construction cost (before contingency/OH&P/VAT) is under £25,000 for a multi-room water damage reinstatement, you are DEFINITELY missing scope. Go back and add items
 
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 
@@ -564,15 +586,13 @@ DETAIL EXPECTATIONS — MINIMUM STANDARDS:
 - Show working for key quantities: "External wall area: 2no. walls @ 5.0m x 2.7m = 27.0m2, less 2no. windows @ 1.2x1.5m = 3.6m2, net wall area = 23.4m2"
 
 REFURBISHMENT / DAMAGE REPAIR PROJECTS:
-- ALWAYS break down work ROOM BY ROOM — each affected room gets its own section
-- Each room section should include: strip-out, floor prep, floor finishes, replastering/lining, ceiling, skirting, architraves, door, decoration
-- Include separate sections for: Preliminaries, Service Installation (electrical + plumbing provisional sums), General Items (fungicidal treatment, asbestos survey, full decoration)
-- For water/flood/fire damage: include structural drying provisional sum, electrical testing, temporary heating, professional cleaning
-- Kitchen reinstatement: PC Sum for kitchen supply (£5,000-£10,000+), plus separate strip out, installation, plumbing and electrical
-- Bathroom reinstatement: suite removal/storage/reinstallation OR new suite provisional sum
-- Electrical and plumbing: include as PROVISIONAL SUMS subject to specialist contractor's report
-- Preliminaries for refurbs: site supervision, welfare, hoardings, storage, H&S, CDM, cleaning, waste, temporary heating — typically £5,000-£10,000
-- COST CHECK: Multi-room water damage reinstatement should be £30,000-£80,000+. If under £15,000, you are missing scope
+- ALWAYS break down work ROOM BY ROOM — each affected room gets its own section with 6-10 items
+- Each room section should include: strip-out (skirting, architraves, coving, ceiling), floor prep (DPM, levelling screed), floor finish (laminate/tiles), wall replastering, skirting boards, architraves, ceiling (insulation + plasterboard + skim), internal door, coving if applicable
+- Include separate sections for: Preliminaries (15-20 items, £5,000-£8,000), Service Installation (electrical + plumbing provisional sums £7,000-£8,000), General Items (fungicidal treatment, asbestos, full decoration £5,000-£6,000)
+- Kitchen reinstatement: strip out £450-530, kitchen supply PC Sum £5,000-£10,000, contractor's OHP on PC sum ~£700, installation £1,200-£1,400, floor tiles, skirting, ceiling, door — total kitchen section typically £10,000-£12,000
+- Bathroom reinstatement: strip out £380-440, suite removal/storage/refit £650-770, floor tiles £500, wall tiles £1,120, ceiling, door — total bathroom section typically £3,000-£4,000
+- FLOOR AREA: Do NOT confuse damage area with total property floor area. A multi-room project is 30-60m² total, not 4m²
+- COST CHECK: Multi-room water damage reinstatement should be £30,000-£80,000+. If under £25,000, you are MISSING entire rooms or sections — go back and add them
 
 ELEMENTAL BREAKDOWN (use these sections):
 1. Preliminaries & General — site setup, welfare, scaffolding, waste, insurance, PM
@@ -1655,13 +1675,23 @@ Respond with ONLY valid JSON:
 If the takeoff is accurate with no issues, return: { "corrections": [], "validation_notes": "Takeoff reviewed — no errors found", "items_checked": N, "errors_found": 0, "confidence": "high" }
 
 7. REFURBISHMENT / DAMAGE REPAIR SCOPE CHECK — For refurb/damage projects:
-   - Every affected room should have its OWN section with strip-out + new finishes
-   - Check for missing rooms — if project mentions hall, living room, kitchen, bathroom, each must have items
+   - Every affected room should have its OWN section with strip-out + new finishes (6-10 items per room)
+   - Check for missing rooms — if project mentions hall, living room, kitchen, bathroom, each MUST have its own section with items
    - Water damage projects MUST include: structural drying, fungicidal treatment, electrical testing, provisional sums for services
-   - Kitchen reinstatement needs: strip out + PC sum for supply + installation + plumbing + electrical (not just one lump sum)
-   - Bathroom needs: suite removal/storage/refit OR new suite provisional sum
-   - Preliminaries for refurbs should include 10-20 items (supervision, welfare, hoardings, storage, H&S, cleaning, waste, heating)
-   - If total item count is under 30 for a multi-room refurb, ADD missing items — scope is almost certainly incomplete
+   - Kitchen reinstatement needs: strip out + PC sum for supply (~£5,000-£10,000) + installation + plumbing + electrical + floor tiles + ceiling + door
+   - Bathroom needs: strip out + suite removal/storage/refit + floor tiles + wall tiles + ceiling + door
+   - Preliminaries for refurbs should include 15-20 items totalling £5,000-£8,000 (supervision, coordination, welfare, tools, hoardings, storage, H&S, CDM, protection, insurances, lighting, water, heating, client liaison, cleaning, waste, rectification)
+   - Service installation must include provisional sums for both electrical (£2,500) and plumbing (£5,000) subject to specialist reports
+   - If total item count is under 40 for a multi-room refurb, ADD missing items — scope is almost certainly incomplete
+   - If construction total is under £25,000 for a multi-room water damage project, the scope is INCOMPLETE — add missing rooms and items
+
+8. DO NOT REDUCE QUANTITIES FOR REFURBISHMENT PROJECTS UNLESS GENUINELY WRONG:
+   - Wall areas in refurbishment are often CORRECT — you need to replaster all damaged walls, not just the floor area
+   - A room with 3m × 4m floor (12m²) has ~28m² of wall area (14m perimeter × 2m height) — this is NOT inflated
+   - Ceiling area = floor area (correct)
+   - Do NOT reduce wall areas to match floor area — they are different measurements
+   - Do NOT reduce the scope just because the total seems high — refurbishments are expensive
+   - Only reduce quantities if the ARITHMETIC is genuinely wrong (e.g. 5m × 3m calculated as 25m² instead of 15m²)
 
 CRITICAL RULES:
 - item_index is 0-based matching the items array order
@@ -1669,7 +1699,8 @@ CRITICAL RULES:
 - Recalculate quantities yourself, don't just trust the working shown
 - Be especially strict on windows and doors — check every single one against the schedule
 - If floor area is stated, verify construction total is reasonable (£1,800-£3,000/m² for extensions, £800-£1,800/m² for refurbishments)
-- For water damage reinstatement: total should be £30,000-£80,000 for a 2-3 bed property. If under £15,000, flag as INCOMPLETE SCOPE`;
+- For water damage reinstatement: total should be £30,000-£80,000 for a 2-3 bed property. If under £25,000, flag as INCOMPLETE SCOPE and ADD missing items
+- NEVER reduce the total number of items below 40 for a multi-room refurbishment`;
 
               // Build the validation message with original drawings + extracted items
               const validationContent = [
