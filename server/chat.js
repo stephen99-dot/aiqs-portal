@@ -1906,6 +1906,8 @@ CRITICAL RULES:
                   ohp_pct: 12,
                   vat_rate: isIreland ? 13.5 : 20,
                   currency: isIreland ? 'EUR' : 'GBP',
+                  project_type: parsed.project_type || projectTypeGuess || '',
+                  floor_area: parsed.floor_area_m2 || null,
                 };
               })()
             );

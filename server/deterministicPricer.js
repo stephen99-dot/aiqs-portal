@@ -658,7 +658,12 @@ function crossValidateQuantities(items, projectType) {
   const isLoft = pType.includes('loft');
 
   // Maximum reasonable floor area per project type (single floor)
-  const maxFloorArea = isLoft ? 60 : isExtension ? 80 : null;
+  // For two-storey extensions or combined projects (extension + loft + refurb), allow larger area
+  const allItemDescs = items.map(i => (i.description || '').toLowerCase()).join(' ');
+  const isMultiStorey = pType.includes('two') || pType.includes('2') || allItemDescs.includes('two storey') || allItemDescs.includes('first floor');
+  const isHMO = pType.includes('hmo') || allItemDescs.includes('hmo') || allItemDescs.includes('house in multiple');
+  const isCombined = (isExtension && isLoft) || (isExtension && isRefurb) || isHMO;
+  const maxFloorArea = isCombined ? null : isLoft ? 60 : isExtension ? (isMultiStorey ? 120 : 80) : null;
 
   if (maxFloorArea) {
     // Cap concrete slab to max floor area for extensions
@@ -883,13 +888,15 @@ function crossValidateQuantities(items, projectType) {
   // ═══════════════════════════════════════════════════════════════════════
   // ELECTRICAL: HARD CAP at max per circuit type (#1 source of over-pricing)
   // ═══════════════════════════════════════════════════════════════════════
+  // HMO/multi-unit projects need more circuits than a single residential extension
+  const elecMax = isHMO || isCombined ? { light: 6, power: 6, fix: 4, cu: 2, smoke: 2 } : { light: 2, power: 2, fix: 2, cu: 1, smoke: 1 };
   const elecCaps = [
-    { key: 'lighting_installation', max: 2, label: 'Lighting circuits' },
-    { key: 'power_sockets_circuit', max: 2, label: 'Power circuits' },
-    { key: 'first_fix_electrical', max: 2, label: 'First fix electrical' },
-    { key: 'second_fix_electrical', max: 2, label: 'Second fix electrical' },
-    { key: 'consumer_unit_upgrade', max: 1, label: 'Consumer unit upgrade' },
-    { key: 'smoke_heat_detection', max: 1, label: 'Smoke/heat detection' },
+    { key: 'lighting_installation', max: elecMax.light, label: 'Lighting circuits' },
+    { key: 'power_sockets_circuit', max: elecMax.power, label: 'Power circuits' },
+    { key: 'first_fix_electrical', max: elecMax.fix, label: 'First fix electrical' },
+    { key: 'second_fix_electrical', max: elecMax.fix, label: 'Second fix electrical' },
+    { key: 'consumer_unit_upgrade', max: elecMax.cu, label: 'Consumer unit upgrade' },
+    { key: 'smoke_heat_detection', max: elecMax.smoke, label: 'Smoke/heat detection' },
   ];
   for (const ec of elecCaps) {
     const item = byKey[ec.key];
@@ -952,21 +959,37 @@ function crossValidateQuantities(items, projectType) {
     capQty(byKey['staircase'], 1, 'Only 1 staircase needed per project');
   }
 
+  // Cap stair openings — max 3 even for large projects (ground→first, first→loft, basement)
+  if (byKey['stair_opening_formation'] && byKey['stair_opening_formation'].qty > 3) {
+    capQty(byKey['stair_opening_formation'], 2, 'Stair openings capped at 2 — one per floor transition');
+  }
+
+  // Cap internal doors — max depends on project size
+  const maxDoors = isHMO ? 30 : isCombined ? 20 : 12;
+  for (const dk of ['internal_door_painted_solid_core', 'internal_door_glazed', 'internal_door_standard']) {
+    const doorItem = byKey[dk];
+    if (doorItem && doorItem.qty > maxDoors) {
+      capQty(doorItem, maxDoors, `Internal doors capped at ${maxDoors} for ${isHMO ? 'HMO' : 'residential'} project`);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // FIT-OUTS: Cap kitchen/bathroom quantities
+  // HMO/multi-unit projects legitimately need more kitchens and bathrooms
   // ═══════════════════════════════════════════════════════════════════════
+  const fitoutMax = isHMO ? { kitchen: 6, bathroom: 8, shower: 8, wc: 4 } : { kitchen: 2, bathroom: 3, shower: 3, wc: 2 };
   const fitoutCaps = [
-    { key: 'kitchen_fitout_mid', max: 2 },
-    { key: 'kitchen_fitout_high', max: 2 },
-    { key: 'bathroom_fitout_mid', max: 3 },
-    { key: 'bathroom_fitout_high', max: 3 },
-    { key: 'shower_room_fitout', max: 3 },
-    { key: 'wc_cloakroom_fitout', max: 2 },
+    { key: 'kitchen_fitout_mid', max: fitoutMax.kitchen },
+    { key: 'kitchen_fitout_high', max: fitoutMax.kitchen },
+    { key: 'bathroom_fitout_mid', max: fitoutMax.bathroom },
+    { key: 'bathroom_fitout_high', max: fitoutMax.bathroom },
+    { key: 'shower_room_fitout', max: fitoutMax.shower },
+    { key: 'wc_cloakroom_fitout', max: fitoutMax.wc },
   ];
   for (const fc of fitoutCaps) {
     const item = byKey[fc.key];
     if (item && item.qty > fc.max) {
-      capQty(item, fc.max, `${fc.key} capped at ${fc.max} for residential`);
+      capQty(item, fc.max, `${fc.key} capped at ${fc.max} for ${isHMO ? 'HMO' : 'residential'}`);
     }
   }
 
@@ -1236,14 +1259,20 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   let constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
 
   // Post-pricing cost/m² sanity check — estimate floor area from slab items
+  // IMPORTANT: For combined projects (extension + loft + refurb), slab area is only
+  // the extension footprint — NOT the total project scope. Use options.floor_area if available
   const slabItems = pricedItems.filter(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
-  const estimatedFloorArea = slabItems.reduce((s, i) => s + i.qty, 0);
+  const slabArea = slabItems.reduce((s, i) => s + i.qty, 0);
+  const estimatedFloorArea = options.floor_area || slabArea;
   if (estimatedFloorArea > 0) {
     const costPerM2 = constructionTotal / estimatedFloorArea;
     // UK residential extensions typically cost £1,800-£3,000/m² construction only
-    // Hard cap at £3,500/m² — if above this, scale ALL items down proportionally
-    const isResidentialExtension = projectType === 'residential_extension' || projectType === 'general';
-    if (costPerM2 > 3500 && isResidentialExtension) {
+    // Only apply cost cap for simple residential extensions — NOT for combined or HMO projects
+    const pTypeStr = (options.project_type || projectType || '').toLowerCase();
+    const isSimpleExtension = (projectType === 'residential_extension' || projectType === 'general')
+      && !pTypeStr.includes('loft') && !pTypeStr.includes('refurb') && !pTypeStr.includes('hmo')
+      && !pTypeStr.includes('outbuilding') && !pTypeStr.includes('conversion');
+    if (costPerM2 > 3500 && isSimpleExtension) {
       const targetCostPerM2 = 2800; // middle of typical range
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
       const cs = currency === 'EUR' ? '€' : '£';
@@ -1263,6 +1292,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         sec.subtotal = sec.items.reduce((ss, i) => ss + i.total, 0);
         return s + sec.subtotal;
       }, 0);
+    } else if (costPerM2 > 3500 && !isSimpleExtension) {
+      const cs = currency === 'EUR' ? '€' : '£';
+      warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — combined/HMO project types have higher typical costs.`);
     }
   }
 
