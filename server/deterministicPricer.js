@@ -144,6 +144,13 @@ const BASE_RATES = {
   'strip_out_plaster':                 { rate: 12,   unit: 'm²',  labour: 0.90, materials: 0.10, description: 'Hack off existing plaster to walls, cart away' },
   'strip_out_ceiling':                 { rate: 10,   unit: 'm²',  labour: 0.90, materials: 0.10, description: 'Strip out existing ceiling, lath and plaster or plasterboard' },
   'soft_strip_room':                   { rate: 350,  unit: 'Nr',  labour: 0.90, materials: 0.10, description: 'Soft strip single room - remove fittings, fixtures, finishes' },
+  'strip_out_skirting_architrave':      { rate: 320,  unit: 'Nr',  labour: 0.90, materials: 0.10, description: 'Strip out skirting boards, architraves and coving to room; remove from site and dispose' },
+  'structural_drying':                  { rate: 3500, unit: 'Item',labour: 0.70, materials: 0.30, description: 'Structural drying programme; industrial dehumidifiers and monitoring; provisional sum' },
+  'dehumidifier_hire':                  { rate: 150,  unit: 'Nr',  labour: 0.30, materials: 0.70, description: 'Industrial dehumidifier hire per week including power' },
+  'fungicidal_treatment':               { rate: 275,  unit: 'Item',labour: 0.70, materials: 0.30, description: 'Apply fungicidal sterilising solution and timber preservative to all remaining timbers; provide written guarantee' },
+  'bathroom_suite_remove_refit':        { rate: 770,  unit: 'Nr',  labour: 0.85, materials: 0.15, description: 'Carefully remove existing bathroom suite; protect and store; re-install on completion of floor and wall works; all trades, plumbing and connections included' },
+  'concrete_floor_prep_dpm':            { rate: 530,  unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'Concrete floor preparation; apply 2-part epoxy liquid DPM; supply and lay latex levelling screed; leave ready for floor covering' },
+  'ceiling_insulation_plasterboard':    { rate: 525,  unit: 'Nr',  labour: 0.60, materials: 0.40, description: '100mm Rockwool insulation between existing ceiling joists; 12.5mm plasterboard screwed to joists; scrim and fill joints; 3mm skim coat; all trims, beads and angles' },
   // Heritage masonry & lime
   'lime_mortar_repointing':            { rate: 85,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Rake out and repoint in NHL 3.5 lime mortar to match existing' },
   'lime_plaster_walls':                { rate: 48,   unit: 'm²',  labour: 0.65, materials: 0.35, description: 'Three-coat lime plaster to walls incl. scratch, float and set' },
