@@ -3,10 +3,23 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  NewProjectIcon, PipelineIcon, ClientsIcon,
-  ChatIcon, SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
+  NewProjectIcon, ClientsIcon, ChatIcon,
+  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
+
+// ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
+function MicIcon({ size = 16, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  );
+}
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -27,67 +40,92 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Projects', Icon: NewProjectIcon },
-    { path: '/chat', label: 'Chat', Icon: ChatIcon },
-    { path: '/my-rates', label: 'My Rates', Icon: RatesIcon, tourId: 'my-rates' },
+    { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
+    { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
+    { path: '/notetaker', label: 'AI Notetaker', Icon: MicIcon, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
-    { path: '/pricing', label: 'Pricing', Icon: ZapIcon },
+    { path: '/pricing',   label: 'Pricing',  Icon: ZapIcon },
   ];
 
   const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   const sidebarBg = mode === 'dark'
-    ? 'linear-gradient(180deg, #090D16 0%, #070A12 100%)'
-    : 'linear-gradient(180deg, #FAFBFD 0%, #F5F7FA 100%)';
+    ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
+    : '#FFFFFF';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
 
-      <header className="mobile-header-bar" style={{
+      {/* ── Mobile header ── */}
+      <header style={{
         display: 'none',
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        height: 56, alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 16px', background: t.surface,
-        borderBottom: `1px solid ${t.border}`, backdropFilter: 'blur(16px)',
-      }}>
-        <button onClick={() => setMobileOpen(!mobileOpen)} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: t.text, padding: 4, display: 'flex',
-        }}>
-          {mobileOpen ? <XIcon size={22} /> : <MenuIcon size={22} />}
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
+        height: 56, background: t.surface,
+        borderBottom: `1px solid ${t.border}`,
+        alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 16px',
+        '@media(maxWidth:768px)': { display: 'flex' },
+      }} className="mobile-header">
+        <button
+          onClick={() => setMobileOpen(o => !o)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: 8, borderRadius: 8, color: t.text,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            WebkitTapHighlightColor: 'transparent',
+          }}
+          aria-label="Toggle menu"
+        >
+          {mobileOpen
+            ? <XIcon size={22} color={t.text} />
+            : <MenuIcon size={22} color={t.text} />}
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
-            width: 26, height: 26, borderRadius: 7,
+            width: 28, height: 28, borderRadius: 7,
             background: 'linear-gradient(135deg, #F59E0B, #D97706)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <ZapIcon size={13} color="#0A0F1C" />
           </div>
-          <span style={{ fontWeight: 700, fontSize: 14, color: t.text }}>AI QS</span>
+          <span style={{ fontWeight: 800, fontSize: 15, color: t.text, letterSpacing: '-0.02em' }}>AI QS</span>
         </div>
         {isAdmin ? <NotificationBell /> : <div style={{ width: 30 }} />}
       </header>
 
+      {/* ── Mobile overlay ── */}
       {mobileOpen && (
-        <div className="mobile-overlay" onClick={() => setMobileOpen(false)} style={{
-          position: 'fixed', inset: 0, zIndex: 199,
-          background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
-        }} />
+        <div
+          className="mobile-overlay"
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 199,
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+          }}
+        />
       )}
 
-      <aside className={`sidebar-panel ${mobileOpen ? 'open' : ''}`} data-tour="sidebar-nav" style={{
-        position: 'fixed', top: 0, left: 0, bottom: 0, width: 240,
-        background: sidebarBg,
-        borderRight: `1px solid ${t.border}`,
-        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-        zIndex: 200, overflowY: 'auto',
-        transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
-      }}>
+      {/* ── Sidebar ── */}
+      <aside
+        className={`sidebar-panel ${mobileOpen ? 'open' : ''}`}
+        data-tour="sidebar-nav"
+        style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 240,
+          background: sidebarBg,
+          borderRight: `1px solid ${t.border}`,
+          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          zIndex: 200, overflowY: 'auto',
+          transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
+        }}
+      >
+        {/* Top section */}
         <div style={{ padding: '20px 12px 16px' }}>
+
+          {/* Logo */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 28, padding: '2px 6px 2px 6px',
+            marginBottom: 28, padding: '2px 6px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
@@ -116,12 +154,13 @@ export default function Layout() {
             {isAdmin && <NotificationBell />}
           </div>
 
+          {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => (
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === '/admin'}
+                end={item.path === '/dashboard'}
                 style={{ textDecoration: 'none' }}
                 onClick={(e) => {
                   if (window.__aiqs_chat_sending) {
@@ -129,34 +168,50 @@ export default function Layout() {
                     if (!window.confirm('The AI is still processing your request. If you leave now, the response will be lost.\n\nLeave anyway?')) return;
                     window.__aiqs_chat_sending = false;
                   }
+                  setMobileOpen(false);
                 }}
               >
                 {({ isActive }) => (
-                  <div className="sidebar-nav-item" data-tour={item.tourId || undefined} style={{
+                  <div style={{
                     display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 10px', borderRadius: 7,
+                    padding: '9px 12px', borderRadius: 8,
                     fontSize: 13, fontWeight: isActive ? 600 : 500,
-                    letterSpacing: '-0.005em',
+                    letterSpacing: '-0.01em',
                     color: isActive ? t.text : t.textMuted,
                     background: isActive
                       ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
                       : 'transparent',
-                    transition: 'all 0.12s ease',
+                    transition: 'all 0.15s ease',
                     position: 'relative',
-                  }}>
+                    cursor: 'pointer',
+                  }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                  >
                     {isActive && (
                       <div style={{
                         position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                        width: 2.5, height: 14, borderRadius: '0 2px 2px 0',
+                        width: 3, height: 16, borderRadius: '0 3px 3px 0',
                         background: '#F59E0B',
                       }} />
                     )}
-                    <item.Icon
-                      size={16}
-                      color={isActive ? '#F59E0B' : t.textMuted}
-                      style={{ opacity: isActive ? 1 : 0.65 }}
-                    />
-                    <span>{item.label}</span>
+                    <item.Icon size={16} color={isActive ? '#F59E0B' : t.textMuted} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                    {/* "New" badge */}
+                    {item.badge && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+                        textTransform: 'uppercase',
+                        background: 'rgba(245,158,11,0.15)',
+                        color: '#F59E0B',
+                        border: '1px solid rgba(245,158,11,0.3)',
+                        borderRadius: 5,
+                        padding: '1px 5px',
+                        lineHeight: 1.5,
+                      }}>
+                        {item.badge}
+                      </span>
+                    )}
                   </div>
                 )}
               </NavLink>
@@ -164,67 +219,81 @@ export default function Layout() {
           </nav>
         </div>
 
-        <div style={{ padding: '10px 12px 14px', borderTop: `1px solid ${t.border}` }}>
-          <button onClick={toggle} className="sidebar-btn" style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '7px 10px', borderRadius: 7,
-            background: mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.025)',
-            border: `1px solid ${t.border}`, cursor: 'pointer',
-            color: t.textMuted, fontSize: 12.5, fontWeight: 500,
-            width: '100%', marginBottom: 8, transition: 'all 0.12s',
-          }}>
-            {mode === 'dark' ? <SunIcon size={14} /> : <MoonIcon size={14} />}
-            <span>{mode === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </button>
+        {/* Bottom section */}
+        <div style={{ padding: '12px 12px 20px', borderTop: `1px solid ${t.border}` }}>
 
+          {/* User info */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '8px 6px', marginBottom: 2, borderRadius: 7,
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 10px', marginBottom: 8,
           }}>
             <div style={{
-              width: 30, height: 30, borderRadius: 7,
-              background: isAdmin
-                ? 'linear-gradient(135deg, rgba(212,168,83,0.12), rgba(212,168,83,0.04))'
-                : 'linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.04))',
-              border: `1px solid ${isAdmin ? 'rgba(212,168,83,0.12)' : 'rgba(37,99,235,0.12)'}`,
+              width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700,
-              color: isAdmin ? (t.gold || '#D4A853') : t.accent,
-              flexShrink: 0,
+              fontSize: 12, fontWeight: 700, color: 'white',
             }}>
-              {user?.fullName?.charAt(0)?.toUpperCase() || 'U'}
+              {(user?.fullName || user?.email || 'U')[0].toUpperCase()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: 12.5, fontWeight: 600, color: t.text,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                lineHeight: 1.25,
               }}>
-                {user?.fullName || user?.email || 'User'}
+                {user?.fullName || 'User'}
               </div>
-              <div style={{ fontSize: 10, fontWeight: 500, color: t.textMuted }}>
-                {isAdmin ? 'Admin' : 'Client'}
+              <div style={{
+                fontSize: 10.5, color: t.textMuted,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {user?.email}
               </div>
             </div>
           </div>
 
-          <button onClick={handleLogout} className="sidebar-logout-btn" style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '7px 10px', borderRadius: 7,
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: t.textMuted, fontSize: 12.5, fontWeight: 500,
-            width: '100%', transition: 'all 0.12s',
-          }}>
-            <LogOutIcon size={14} />
-            <span>Sign Out</span>
+          {/* Theme toggle */}
+          <button onClick={toggle} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            width: '100%', padding: '8px 12px', borderRadius: 8,
+            background: 'transparent', border: 'none',
+            fontSize: 12.5, fontWeight: 500, color: t.textMuted,
+            cursor: 'pointer', transition: 'all 0.15s',
+            marginBottom: 2,
+          }}
+            onMouseEnter={e => e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            {mode === 'dark'
+              ? <SunIcon size={15} color={t.textMuted} />
+              : <MoonIcon size={15} color={t.textMuted} />}
+            {mode === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+
+          {/* Logout */}
+          <button onClick={handleLogout} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            width: '100%', padding: '8px 12px', borderRadius: 8,
+            background: 'transparent', border: 'none',
+            fontSize: 12.5, fontWeight: 500, color: t.textMuted,
+            cursor: 'pointer', transition: 'all 0.15s',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.color = '#EF4444'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = t.textMuted; }}
+          >
+            <LogOutIcon size={15} color="currentColor" />
+            Sign out
           </button>
         </div>
       </aside>
 
-      <main className="main-panel" style={{
-        flex: 1, marginLeft: 240,
-        minHeight: '100vh', overflow: 'auto', background: t.bg,
-      }}>
+      {/* ── Main content ── */}
+      <main style={{
+        flex: 1,
+        marginLeft: 240,
+        minHeight: '100vh',
+        background: t.bg,
+        transition: 'background 0.2s',
+      }} className="main-content">
         <Outlet />
       </main>
     </div>
