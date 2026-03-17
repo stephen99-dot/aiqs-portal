@@ -58,15 +58,13 @@ export default function Layout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
 
       {/* ── Mobile header ── */}
-      <header style={{
-        display: 'none',
+      <header className="mobile-header" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
         height: 56, background: t.surface,
         borderBottom: `1px solid ${t.border}`,
         alignItems: 'center', justifyContent: 'space-between',
         padding: '0 16px',
-        '@media(maxWidth:768px)': { display: 'flex' },
-      }} className="mobile-header">
+      }}>
         <button
           onClick={() => setMobileOpen(o => !o)}
           style={{
