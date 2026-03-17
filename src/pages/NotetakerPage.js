@@ -77,14 +77,6 @@ const StarIcon = ({ size = 14, color = 'currentColor' }) => (
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
   </svg>
 );
-const WifiIcon = ({ size = 18, color = 'currentColor' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
-    <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
-    <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-    <line x1="12" y1="20" x2="12.01" y2="20"/>
-  </svg>
-);
 const VolumeIcon = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
@@ -93,145 +85,48 @@ const VolumeIcon = ({ size = 18, color = 'currentColor' }) => (
   </svg>
 );
 
-// ── Product device SVG illustration ──────────────────────────────────────────
-const ProductDevice = ({ isDark, accent, view = 'front', size = 280 }) => {
-  const bodyColor = isDark ? '#1A1F2E' : '#F0F0F0';
-  const bodyStroke = isDark ? '#2A3040' : '#D4D4D4';
-  const screenBg = isDark ? '#0D1117' : '#FAFAFA';
-  const textColor = isDark ? '#94A3B8' : '#64748B';
+// ── Inline SVG icons for "What's in the box" section ─────────────────────────
+const UsbIcon = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="10" cy="18" r="2"/><circle cx="20" cy="10" r="2"/><path d="M12 12V4l4 2"/><path d="M12 12l6-2"/><path d="M12 16v-4"/>
+    <rect x="6" y="2" width="4" height="4" rx="1"/>
+  </svg>
+);
+const BookIcon = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>
+  </svg>
+);
+const LinkIcon = ({ size = 18, color = 'currentColor' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+  </svg>
+);
 
-  if (view === 'side') {
-    return (
-      <svg width={size * 0.35} height={size} viewBox="0 0 60 200" fill="none">
-        <rect x="12" y="10" width="36" height="180" rx="10" fill={bodyColor} stroke={bodyStroke} strokeWidth="1.5"/>
-        <rect x="16" y="60" width="28" height="40" rx="4" fill={screenBg} stroke={bodyStroke} strokeWidth="0.5"/>
-        <text x="30" y="82" textAnchor="middle" fill={accent} fontSize="7" fontWeight="800" fontFamily="system-ui">AI QS</text>
-        <text x="30" y="92" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="600" fontFamily="system-ui">NOTETAKER</text>
-        <circle cx="30" cy="36" r="4" fill="none" stroke={accent} strokeWidth="1" opacity="0.5"/>
-        <circle cx="30" cy="36" r="1.5" fill={accent} opacity="0.6"/>
-        <rect x="22" y="160" width="16" height="3" rx="1.5" fill={bodyStroke}/>
-      </svg>
-    );
-  }
-
-  if (view === 'back') {
-    return (
-      <svg width={size * 0.65} height={size} viewBox="0 0 130 200" fill="none">
-        <rect x="10" y="10" width="110" height="180" rx="14" fill={bodyColor} stroke={bodyStroke} strokeWidth="1.5"/>
-        <rect x="32" y="30" width="66" height="20" rx="4" fill={isDark ? '#141822' : '#E8E8E8'}/>
-        <text x="65" y="43" textAnchor="middle" fill={textColor} fontSize="6" fontWeight="600" fontFamily="system-ui">4×MEMS MIC ARRAY</text>
-        <circle cx="45" cy="37" r="3" fill="none" stroke={accent} strokeWidth="0.8" opacity="0.4"/>
-        <circle cx="55" cy="37" r="3" fill="none" stroke={accent} strokeWidth="0.8" opacity="0.4"/>
-        <circle cx="75" cy="37" r="3" fill="none" stroke={accent} strokeWidth="0.8" opacity="0.4"/>
-        <circle cx="85" cy="37" r="3" fill="none" stroke={accent} strokeWidth="0.8" opacity="0.4"/>
-        <rect x="30" y="70" width="70" height="80" rx="8" fill={isDark ? '#141822' : '#E8E8E8'} stroke={bodyStroke} strokeWidth="0.5"/>
-        <text x="65" y="98" textAnchor="middle" fill={accent} fontSize="14" fontWeight="900" fontFamily="system-ui">AI QS</text>
-        <text x="65" y="112" textAnchor="middle" fill={textColor} fontSize="6" fontWeight="700" letterSpacing="3" fontFamily="system-ui">NOTETAKER</text>
-        <line x1="42" y1="120" x2="88" y2="120" stroke={accent} strokeWidth="0.6" opacity="0.3"/>
-        <text x="65" y="132" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="500" fontFamily="system-ui">64GB · 112 Languages</text>
-        <text x="65" y="140" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="500" fontFamily="system-ui">AI-Powered Voice Recorder</text>
-        <rect x="50" y="160" width="30" height="6" rx="3" fill={bodyStroke}/>
-        <text x="65" y="174" textAnchor="middle" fill={textColor} fontSize="4" fontWeight="500" fontFamily="system-ui">USB-C</text>
-        {/* Magnetic mount indicators */}
-        <circle cx="50" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
-        <circle cx="65" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
-        <circle cx="80" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
-        <text x="65" y="196" textAnchor="middle" fill={textColor} fontSize="4" fontWeight="500" fontFamily="system-ui">MAGNETIC MOUNT</text>
-      </svg>
-    );
-  }
-
-  // Front view (default)
-  return (
-    <svg width={size * 0.65} height={size} viewBox="0 0 130 200" fill="none">
-      {/* Device body */}
-      <defs>
-        <linearGradient id="deviceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={isDark ? '#1E2435' : '#FAFAFA'}/>
-          <stop offset="100%" stopColor={isDark ? '#151A28' : '#EEEEEE'}/>
-        </linearGradient>
-        <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#F59E0B"/>
-          <stop offset="100%" stopColor="#D97706"/>
-        </linearGradient>
-        <filter id="deviceShadow" x="-20%" y="-10%" width="140%" height="130%">
-          <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor={isDark ? '#000' : '#94A3B8'} floodOpacity="0.25"/>
-        </filter>
-      </defs>
-
-      <rect x="10" y="10" width="110" height="180" rx="14" fill="url(#deviceGrad)" stroke={bodyStroke} strokeWidth="1.5" filter="url(#deviceShadow)"/>
-
-      {/* Status LED */}
-      <circle cx="65" cy="24" r="3" fill={accent} opacity="0.8"/>
-      <circle cx="65" cy="24" r="5" fill={accent} opacity="0.15"/>
-
-      {/* Screen */}
-      <rect x="22" y="38" width="86" height="100" rx="8" fill={screenBg} stroke={bodyStroke} strokeWidth="0.5"/>
-
-      {/* Screen content - waveform */}
-      <rect x="28" y="46" width="74" height="16" rx="3" fill={isDark ? '#161B27' : '#F0F0F0'}/>
-      <g opacity="0.7">
-        {[0,6,12,18,24,30,36,42,48,54,60,66].map((x, i) => {
-          const heights = [4, 8, 12, 6, 10, 14, 8, 12, 5, 9, 11, 7];
-          return <rect key={i} x={32 + x} y={54 - heights[i] / 2} width="3" height={heights[i]} rx="1.5" fill={accent} opacity={0.4 + (i % 3) * 0.2}/>;
-        })}
-      </g>
-      <text x="65" y="50" textAnchor="middle" fill={accent} fontSize="4.5" fontWeight="700" fontFamily="system-ui" opacity="0.9">RECORDING</text>
-
-      {/* Transcript preview */}
-      <rect x="28" y="68" width="50" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-      <rect x="28" y="75" width="70" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-      <rect x="28" y="82" width="40" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-      <rect x="28" y="92" width="60" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-      <rect x="28" y="99" width="74" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-      <rect x="28" y="106" width="35" height="3" rx="1.5" fill={isDark ? '#2A3040' : '#E0E0E0'}/>
-
-      {/* Speaker labels */}
-      <rect x="28" y="116" width="22" height="8" rx="4" fill={accent} opacity="0.15"/>
-      <text x="39" y="122" textAnchor="middle" fill={accent} fontSize="4" fontWeight="700" fontFamily="system-ui">QS</text>
-      <rect x="54" y="116" width="28" height="8" rx="4" fill={isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.1)'}/>
-      <text x="68" y="122" textAnchor="middle" fill="#3B82F6" fontSize="4" fontWeight="700" fontFamily="system-ui">CLIENT</text>
-
-      {/* Time indicator */}
-      <text x="95" y="133" textAnchor="end" fill={textColor} fontSize="5" fontWeight="600" fontFamily="system-ui">02:34</text>
-
-      {/* AI QS branding on device */}
-      <text x="65" y="152" textAnchor="middle" fill={accent} fontSize="10" fontWeight="900" fontFamily="system-ui" letterSpacing="0.5">AI QS</text>
-      <text x="65" y="160" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="600" letterSpacing="2" fontFamily="system-ui">NOTETAKER</text>
-
-      {/* Record button */}
-      <circle cx="65" cy="175" r="8" fill="none" stroke={bodyStroke} strokeWidth="1"/>
-      <circle cx="65" cy="175" r="5" fill="#EF4444" opacity="0.9"/>
-      <circle cx="65" cy="175" r="8" fill="none" stroke="#EF4444" strokeWidth="0.5" opacity="0.3"/>
-
-      {/* Magnet indicator */}
-      <circle cx="65" cy="195" r="3" fill={bodyStroke} opacity="0.5"/>
-      <circle cx="55" cy="195" r="2" fill={bodyStroke} opacity="0.3"/>
-      <circle cx="75" cy="195" r="2" fill={bodyStroke} opacity="0.3"/>
-    </svg>
-  );
-};
+const PRODUCT_IMAGES = [
+  'https://m.media-amazon.com/images/I/61bPIiCFMrL._AC_SL1500_.jpg',
+  'https://m.media-amazon.com/images/I/71wkS3RRDEL._AC_SL1500_.jpg',
+  'https://m.media-amazon.com/images/I/71YCkz1QMIL._AC_SL1500_.jpg',
+];
 
 const STRIPE_URL = 'https://buy.stripe.com/14A6oH5Fe1B6cV21LK73G08';
 
 const USE_CASES = {
   site: {
     label: 'Site visits',
-    icon: '🏗️',
     title: 'Never miss a site instruction again',
     body: 'Attach it magnetically to the back of your phone and walk the job. When you get back to the car, your notes, snag list, and action items are already written. The AI flags any language that sounds like a variation instruction.',
     points: ['Full transcript in under 30 seconds', 'Variation flags highlighted automatically', 'Action items extracted with owner and deadline'],
   },
   client: {
     label: 'Client calls',
-    icon: '📞',
     title: 'Every agreement. On the record.',
     body: 'Record client briefings and phone calls and get a clean summary the moment they end. A follow-up email draft is generated automatically, referencing the right project, client name, and agreed actions.',
     points: ['Speaker-separated transcript', 'Follow-up email drafted instantly', 'Defensible record of every instruction'],
   },
   design: {
     label: 'Design team meetings',
-    icon: '📐',
     title: 'Track every decision across disciplines',
     body: 'Architects, engineers, planners — when everyone is talking, things get missed. The AI Notetaker captures the full conversation, attributes actions to the right party, and connects notes to your project in the portal.',
     points: ['Multi-speaker support up to 4 parties', 'Actions attributed by discipline', 'Links directly to your AI QS Portal project'],
@@ -240,7 +135,8 @@ const USE_CASES = {
 
 export default function NotetakerPage() {
   const { t, mode } = useTheme();
-  const [activeView, setActiveView] = useState('front');
+  const [activeImg, setActiveImg] = useState(0);
+  const [imgError, setImgError] = useState({});
   const [activeTab, setActiveTab] = useState('site');
   const [hoveredFeature, setHoveredFeature] = useState(null);
 
@@ -300,11 +196,6 @@ export default function NotetakerPage() {
   );
 
   const activeCase = USE_CASES[activeTab];
-  const deviceViews = [
-    { key: 'front', label: 'Front' },
-    { key: 'back', label: 'Back' },
-    { key: 'side', label: 'Side' },
-  ];
 
   return (
     <div style={{ minHeight: '100vh', background: c.bg, color: c.text }}>
@@ -371,9 +262,19 @@ export default function NotetakerPage() {
                 follow-up email delivered straight to your AI QS Portal.
               </p>
 
+              {/* Limited offer badge */}
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', borderRadius: 6, marginBottom: 16,
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#EF4444' }}>
+                  Limited offer: 50% off for new clients
+                </span>
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 36 }}>
-                <BuyButton label="Order Now — £150" large />
-                <BuyButton label="Learn More" secondary />
+                <BuyButton label="Order Now — £150 (was £299)" large />
               </div>
 
               {/* Trust strip */}
@@ -395,53 +296,73 @@ export default function NotetakerPage() {
               </div>
             </div>
 
-            {/* Right — product showcase */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            {/* Right — product images */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
               <div style={{
-                width: 300, height: 340, borderRadius: 20,
-                background: isDark
-                  ? 'linear-gradient(160deg, #111827 0%, #0F1929 100%)'
-                  : 'linear-gradient(160deg, #FFFFFF 0%, #F8F6F0 100%)',
-                border: `1px solid ${c.border}`,
+                width: 300, height: 340, borderRadius: 16,
+                background: isDark ? '#0F1929' : '#FFFFFF',
+                border: `1px solid ${c.border}`, overflow: 'hidden',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative', overflow: 'hidden',
                 boxShadow: isDark
                   ? '0 20px 50px rgba(0,0,0,0.4)'
                   : '0 20px 50px rgba(0,0,0,0.08)',
               }}>
-                {/* Glow effect */}
-                <div style={{
-                  position: 'absolute', top: -40, right: -40,
-                  width: 120, height: 120, borderRadius: '50%',
-                  background: `radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)`,
-                }} />
-                <ProductDevice isDark={isDark} accent={c.accent} view={activeView} size={280} />
+                {imgError[activeImg] ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <MicIcon size={40} color={c.accentBorder} />
+                    <span style={{ fontSize: 11, color: c.textMuted }}>AI QS Notetaker</span>
+                  </div>
+                ) : (
+                  <img
+                    src={PRODUCT_IMAGES[activeImg]}
+                    alt="AI QS Notetaker"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 16 }}
+                    onError={() => setImgError(prev => ({ ...prev, [activeImg]: true }))}
+                  />
+                )}
               </div>
 
-              {/* View selector */}
+              {/* Thumbnail selector */}
               <div style={{ display: 'flex', gap: 8 }}>
-                {deviceViews.map(v => (
-                  <button key={v.key} onClick={() => setActiveView(v.key)} style={{
-                    padding: '7px 18px', borderRadius: 8,
-                    background: activeView === v.key ? c.accent : c.surfaceAlt,
-                    color: activeView === v.key ? '#0A0F1C' : c.textMuted,
-                    border: `1px solid ${activeView === v.key ? c.accent : c.border}`,
-                    fontWeight: 600, fontSize: 12, cursor: 'pointer',
-                    transition: 'all 0.15s',
+                {PRODUCT_IMAGES.map((src, i) => (
+                  <button key={i} onClick={() => setActiveImg(i)} style={{
+                    width: 56, height: 56, borderRadius: 10, overflow: 'hidden',
+                    border: `2px solid ${activeImg === i ? c.accent : c.border}`,
+                    background: isDark ? '#0F1929' : '#FFFFFF', cursor: 'pointer', padding: 3,
+                    transition: 'border-color 0.15s',
                   }}>
-                    {v.label}
+                    {!imgError[i] ? (
+                      <img
+                        src={src} alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        onError={() => setImgError(prev => ({ ...prev, [i]: true }))}
+                      />
+                    ) : (
+                      <MicIcon size={16} color={c.textMuted} />
+                    )}
                   </button>
                 ))}
               </div>
 
-              {/* Price tag */}
+              {/* Price tag with discount */}
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 20px', borderRadius: 12,
-                background: c.surface, border: `1px solid ${c.border}`,
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 20px', borderRadius: 12,
+                background: c.surface, border: `1px solid ${c.accentBorder}`,
+                position: 'relative',
               }}>
-                <span style={{ fontSize: 24, fontWeight: 800, color: c.text, letterSpacing: '-0.03em' }}>£150</span>
-                <span style={{ fontSize: 11.5, color: c.textMuted, lineHeight: 1.3 }}>One-time purchase<br/>Free UK &amp; Ireland shipping</span>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontSize: 26, fontWeight: 800, color: c.accent, letterSpacing: '-0.03em' }}>£150</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: c.textMuted, textDecoration: 'line-through' }}>£299</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.3 }}>One-time purchase · Free UK &amp; Ireland shipping</span>
+                </div>
+                <div style={{
+                  position: 'absolute', top: -10, right: 12,
+                  background: '#EF4444', color: '#FFF', fontSize: 10, fontWeight: 800,
+                  padding: '3px 8px', borderRadius: 6, letterSpacing: '0.03em',
+                }}>50% OFF</div>
               </div>
             </div>
           </div>
@@ -721,18 +642,24 @@ export default function NotetakerPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
               {[
-                { item: 'AI QS Notetaker', detail: 'The device itself', icon: '🎙️' },
-                { item: 'Magnetic mount', detail: 'Snaps to your phone', icon: '🧲' },
-                { item: 'USB-C cable', detail: 'For charging', icon: '🔌' },
-                { item: 'Quick start guide', detail: 'Get running in 2 min', icon: '📖' },
-                { item: 'Portal access', detail: 'AI QS Portal included', icon: '⚡' },
+                { item: 'AI QS Notetaker', detail: 'The device itself', Icon: MicIcon },
+                { item: 'Magnetic mount', detail: 'Snaps to your phone', Icon: LinkIcon },
+                { item: 'USB-C cable', detail: 'For charging', Icon: UsbIcon },
+                { item: 'Quick start guide', detail: 'Get running in 2 min', Icon: BookIcon },
+                { item: 'Portal access', detail: 'AI QS Portal included', Icon: ZapIcon },
               ].map(b => (
                 <div key={b.item} style={{
                   textAlign: 'center', padding: '20px 12px',
                   background: c.surfaceAlt, borderRadius: 12,
                   border: `1px solid ${c.borderLight}`,
                 }}>
-                  <div style={{ fontSize: 28, marginBottom: 10 }}>{b.icon}</div>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10, margin: '0 auto 10px',
+                    background: c.accentDim, border: `1px solid ${c.accentBorder}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <b.Icon size={18} color={c.accent} />
+                  </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: c.text, marginBottom: 4 }}>{b.item}</div>
                   <div style={{ fontSize: 11.5, color: c.textMuted }}>{b.detail}</div>
                 </div>
@@ -752,7 +679,7 @@ export default function NotetakerPage() {
 
           <div style={{ maxWidth: 700, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              { q: 'Do I need a subscription?', a: 'No. The AI QS Notetaker is a one-time purchase of £150. Portal access is included at no extra cost.' },
+              { q: 'Do I need a subscription?', a: 'No. The AI QS Notetaker is a one-time purchase — currently £150 for new clients (50% off the regular £299 price). Portal access is included at no extra cost.' },
               { q: 'How does it connect to my AI QS Portal?', a: 'After recording, the device syncs via Bluetooth to the AI QS app, which uploads the transcript and summary directly to the relevant project in your portal.' },
               { q: 'Can I use it for phone calls?', a: 'Yes. The device magnetically attaches to the back of your phone, so it\'s always with you during calls. It captures both sides of the conversation clearly.' },
               { q: 'Is my data secure?', a: 'Audio is processed on-device. Transcripts are encrypted end-to-end when syncing to your portal. Nothing is shared with third parties.' },
@@ -799,10 +726,24 @@ export default function NotetakerPage() {
             <h2 style={{ fontSize: 28, fontWeight: 800, color: c.text, letterSpacing: '-0.03em', marginBottom: 8 }}>
               Ready to transform your meetings?
             </h2>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 14px', borderRadius: 6, marginBottom: 16,
+              background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+            }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#EF4444' }}>
+                Limited time: 50% off for new clients
+              </span>
+            </div>
             <p style={{ fontSize: 15, color: c.textMuted, marginBottom: 28, maxWidth: 460, margin: '0 auto 28px', lineHeight: 1.7 }}>
               Join hundreds of construction professionals who never miss a detail.
               One device. No subscription. Instant ROI.
             </p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 32, fontWeight: 800, color: c.accent }}>£150</span>
+              <span style={{ fontSize: 18, fontWeight: 600, color: c.textMuted, textDecoration: 'line-through' }}>£299</span>
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
               <BuyButton label="Order Now — £150" large />
