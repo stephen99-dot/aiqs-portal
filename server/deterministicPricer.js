@@ -120,6 +120,11 @@ const BASE_RATES = {
   // Structural steelwork & misc
   'custom_structural_steelwork':       { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
   'structural_steelwork':              { rate: 3500, unit: 'Item',labour: 0.50, materials: 0.50, description: 'Structural steelwork supply & fix UBs, SHS columns, base plates, bolts' },
+  'structural_steel_beam':             { rate: 450,  unit: 'm',   labour: 0.45, materials: 0.55, description: 'Structural steel beam UB section supply, fabricate, paint & fix' },
+  'steel_beam_universal':              { rate: 450,  unit: 'm',   labour: 0.45, materials: 0.55, description: 'Universal beam supply, fabricate, paint & fix to structural engineer spec' },
+  'radon_sump':                        { rate: 650,  unit: 'Nr',  labour: 0.65, materials: 0.35, description: 'Radon sump with passive ventilation pipe to ridge level' },
+  'radon_barrier':                     { rate: 18,   unit: 'm²',  labour: 0.50, materials: 0.50, description: 'Radon barrier membrane lapped and sealed to DPM' },
+  'garage_construction':               { rate: 15000,unit: 'Item', labour: 0.55, materials: 0.45, description: 'Detached single garage construction complete incl. foundations, walls, roof, door' },
   'custom_velux_940x1178':             { rate: 1850, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux roof window 940x1178mm double glazed incl. flashings' },
   'custom_velux_balcony':              { rate: 3800, unit: 'Nr',  labour: 0.40, materials: 0.60, description: 'Velux Cabrio balcony window system double glazed incl. flashings' },
   'custom_chipboard_first_floor':      { rate: 28,   unit: 'm²', labour: 0.45, materials: 0.55, description: '22mm moisture-resistant P5 chipboard flooring to joists' },
@@ -1043,6 +1048,60 @@ function crossValidateQuantities(items, projectType) {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // EXTERNAL WORKS / LANDSCAPING: Cap quantities for residential projects
+  // AI often hallucinates huge quantities (e.g. 3000 "items" of landscaping)
+  // ═══════════════════════════════════════════════════════════════════════
+  for (const item of items) {
+    if (item.removed) continue;
+    const k = (item.key || '').toLowerCase();
+    const d = (item.description || '').toLowerCase();
+    const isLandscape = k.includes('landscap') || k.includes('topsoil') || k.includes('seeding') ||
+      k.includes('planting') || k.includes('hedging') || k.includes('fencing') || k.includes('boundary') ||
+      (d.includes('landscap') && item.unit === 'Item');
+    const isDriveway = k.includes('driveway') || k.includes('tarmac') || k.includes('paving') || k.includes('gravel');
+    if (isLandscape && item.unit === 'Item' && item.qty > 5) {
+      capQty(item, 1, `Landscaping '${item.key}' capped to 1 lump sum — qty ${item.qty} was likely a currency value or error`);
+    } else if (isLandscape && item.unit === 'm²' && item.qty > 500) {
+      capQty(item, Math.min(item.qty, 500), `Landscaping area capped at 500m² — residential dwelling`);
+    } else if (isLandscape && item.unit === 'm' && item.qty > 300) {
+      capQty(item, Math.min(item.qty, 200), `Landscaping linear metres capped at 200m — residential boundary`);
+    } else if (isDriveway && item.unit === 'm²' && item.qty > 200) {
+      capQty(item, Math.min(item.qty, 200), `Driveway area capped at 200m² — residential dwelling`);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CURRENCY-AS-QUANTITY DETECTION
+  // AI sometimes puts price values as quantities (e.g. building control
+  // fees £450 → qty 450, heating £4200 → qty 4200). For lump-sum items
+  // (unit=Item/Nr), quantities >10 are suspicious for most building elements.
+  // ═══════════════════════════════════════════════════════════════════════
+  const lumpSumKeys = [
+    'building_control_fees', 'planning_fees', 'structural_engineer_fees',
+    'warranty_certificate', 'party_wall_surveyor', 'garage_construction',
+    'heating_system', 'boiler_installation', 'solar_panels', 'heat_pump',
+    'septic_tank', 'treatment_system', 'radon_sump', 'radon_barrier',
+  ];
+  for (const item of items) {
+    if (item.removed) continue;
+    const isLumpSum = (item.unit === 'Item' || item.unit === 'Nr');
+    const k = (item.key || '').toLowerCase();
+    const isKnownLumpSum = lumpSumKeys.some(lsk => k.includes(lsk));
+    // Known lump-sum items should never have qty > 5
+    if (isKnownLumpSum && item.qty > 5) {
+      capQty(item, 1, `'${item.key}' is a lump sum item — qty ${item.qty} was likely a currency value entered as quantity`);
+    }
+    // Any Item/Nr with qty > 100 is very suspicious for residential projects
+    if (isLumpSum && item.qty > 100 && !isHMO) {
+      const d = (item.description || '').toLowerCase();
+      // Exclude genuinely high-qty items like tiles, bricks (these should be m²/m³ not Item)
+      if (!d.includes('tile') && !d.includes('brick') && !d.includes('block') && !d.includes('socket') && !d.includes('fixing')) {
+        capQty(item, 1, `Qty ${item.qty} for '${item.key}' (unit: Item) looks like a currency value — capped to 1 lump sum`);
+      }
+    }
+  }
+
   return { warnings, corrections };
 }
 
@@ -1131,6 +1190,16 @@ function detectProjectType(items) {
   if (allDescs.includes('school') || allDescs.includes('office') || allDescs.includes('commercial') ||
       allDescs.includes('hospital') || allDescs.includes('church') || allDescs.includes('hotel')) {
     return 'commercial';
+  }
+
+  // New build dwelling — has full foundations, external walls, roof, AND garage/septic/radon (not just extension)
+  const newBuildIndicators = ['garage_construction', 'radon_sump', 'radon_barrier', 'septic_tank',
+    'treatment_system', 'heat_pump', 'solar_panels', 'percolation_area'];
+  const hasNewBuildItems = newBuildIndicators.some(k => keys.has(k));
+  const isNewBuildDesc = allDescs.includes('new build') || allDescs.includes('new dwelling') ||
+    allDescs.includes('new house') || allDescs.includes('detached dwelling');
+  if ((hasNewBuildItems || isNewBuildDesc) && (keys.has('concrete_slab_150mm') || keys.has('excavation_strip_foundation'))) {
+    return 'new_build';
   }
 
   // Has slab/foundation = likely residential extension
@@ -1301,12 +1370,19 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const pTypeStr = (options.project_type || projectType || '').toLowerCase();
     const isSimpleExtension = (projectType === 'residential_extension' || projectType === 'general')
       && !pTypeStr.includes('loft') && !pTypeStr.includes('refurb') && !pTypeStr.includes('hmo')
-      && !pTypeStr.includes('outbuilding') && !pTypeStr.includes('conversion');
-    if (costPerM2 > 3500 && isSimpleExtension) {
-      const targetCostPerM2 = 2800; // middle of typical range
+      && !pTypeStr.includes('outbuilding') && !pTypeStr.includes('conversion')
+      && !pTypeStr.includes('new build') && !pTypeStr.includes('new_build');
+    const isNewBuild = projectType === 'new_build' || pTypeStr.includes('new build') || pTypeStr.includes('new dwelling');
+    // New builds typically cost £1,500-£2,500/m² (Ireland €1,800-€3,000/m²)
+    // Extensions typically cost £2,000-£3,500/m²
+    const maxCostPerM2 = isNewBuild ? 3000 : 3500;
+    const targetCostPerM2 = isNewBuild ? 2200 : 2800;
+    const typicalRange = isNewBuild ? '€1,800-3,000' : '£2,000-3,500';
+    const projectLabel = isNewBuild ? 'new builds' : 'extensions';
+    if (costPerM2 > maxCostPerM2 && (isSimpleExtension || isNewBuild)) {
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
       const cs = currency === 'EUR' ? '€' : '£';
-      warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}3,500/m² cap. All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
+      warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}${maxCostPerM2}/m² cap. Typical ${projectLabel} cost ${typicalRange}/m². All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
 
       // Scale down every item total proportionally
       for (const item of pricedItems) {
@@ -1322,7 +1398,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         sec.subtotal = sec.items.reduce((ss, i) => ss + i.total, 0);
         return s + sec.subtotal;
       }, 0);
-    } else if (costPerM2 > 3500 && !isSimpleExtension) {
+    } else if (costPerM2 > maxCostPerM2 && !isSimpleExtension && !isNewBuild) {
       const cs = currency === 'EUR' ? '€' : '£';
       warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — combined/HMO project types have higher typical costs.`);
     }
