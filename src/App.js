@@ -1,8 +1,9 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { Navigate, Route, Routes, BrowserRouter } from 'react-router-dom';
+import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import Layout from './components/Layout';
+
+// Pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -13,20 +14,19 @@ import PipelinePage from './pages/PipelinePage';
 import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
-import MagicLinkPage from './pages/MagicLinkPage';
 import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
-import GoogleSuccessPage from './pages/GoogleSuccessPage';
-import VariationsPage from './pages/VariationsPage';
+import MagicLinkPage from './pages/MagicLinkPage';
+import NotetakerPage from './pages/NotetakerPage';
+import MagicLinkPage from './pages/MagicLinkPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div><div className="loading-text">Loading...</div></div>;
+  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
@@ -40,34 +40,30 @@ function GuestRoute({ children }) {
 
 function AppInner() {
   const { user } = useAuth();
-  const { t, mode } = useTheme();
+  const { t } = useTheme();
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Guest routes */}
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-        {/* Magic link — no auth guard, handles its own login */}
+        {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
-        {/* Google OAuth callback handler */}
-        <Route path="/auth/google/success" element={<GoogleSuccessPage />} />
-        {/* Force password change — needs to be outside Layout so it's full screen */}
-        <Route path="/change-password" element={<ChangePasswordPage />} />
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/new-project" element={<NewProjectPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
+          <Route path="/my-rates" element={<MyRatesPage />} />
+          <Route path="/ai-memory" element={<AIMemoryPage />} />
+          <Route path="/notetaker" element={<NotetakerPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
-          <Route path="/my-rates" element={<MyRatesPage />} />
-          <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
-          <Route path="/project/:id/variations" element={<VariationsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
