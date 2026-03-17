@@ -20,7 +20,6 @@ import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import NotetakerPage from './pages/NotetakerPage';
-import MagicLinkPage from './pages/MagicLinkPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
