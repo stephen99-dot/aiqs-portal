@@ -105,9 +105,9 @@ const LinkIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 const PRODUCT_IMAGES = [
-  'https://m.media-amazon.com/images/I/61bPIiCFMrL._AC_SL1500_.jpg',
-  'https://m.media-amazon.com/images/I/71wkS3RRDEL._AC_SL1500_.jpg',
-  'https://m.media-amazon.com/images/I/71YCkz1QMIL._AC_SL1500_.jpg',
+  '/notetaker-1.jpg',
+  '/notetaker-2.jpg',
+  '/notetaker-3.jpg',
 ];
 
 const STRIPE_URL = 'https://buy.stripe.com/14A6oH5Fe1B6cV21LK73G08';
