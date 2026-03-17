@@ -130,8 +130,13 @@ const ProductDevice = ({ isDark, accent, view = 'front', size = 280 }) => {
         <line x1="42" y1="120" x2="88" y2="120" stroke={accent} strokeWidth="0.6" opacity="0.3"/>
         <text x="65" y="132" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="500" fontFamily="system-ui">64GB · 112 Languages</text>
         <text x="65" y="140" textAnchor="middle" fill={textColor} fontSize="4.5" fontWeight="500" fontFamily="system-ui">AI-Powered Voice Recorder</text>
-        <rect x="50" y="168" width="30" height="6" rx="3" fill={bodyStroke}/>
-        <text x="65" y="182" textAnchor="middle" fill={textColor} fontSize="4" fontWeight="500" fontFamily="system-ui">USB-C</text>
+        <rect x="50" y="160" width="30" height="6" rx="3" fill={bodyStroke}/>
+        <text x="65" y="174" textAnchor="middle" fill={textColor} fontSize="4" fontWeight="500" fontFamily="system-ui">USB-C</text>
+        {/* Magnetic mount indicators */}
+        <circle cx="50" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
+        <circle cx="65" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
+        <circle cx="80" cy="185" r="3" fill={bodyStroke} opacity="0.4"/>
+        <text x="65" y="196" textAnchor="middle" fill={textColor} fontSize="4" fontWeight="500" fontFamily="system-ui">MAGNETIC MOUNT</text>
       </svg>
     );
   }
@@ -199,8 +204,10 @@ const ProductDevice = ({ isDark, accent, view = 'front', size = 280 }) => {
       <circle cx="65" cy="175" r="5" fill="#EF4444" opacity="0.9"/>
       <circle cx="65" cy="175" r="8" fill="none" stroke="#EF4444" strokeWidth="0.5" opacity="0.3"/>
 
-      {/* Magnetic clip indicator */}
-      <rect x="55" y="6" width="20" height="5" rx="2.5" fill={bodyStroke}/>
+      {/* Magnet indicator */}
+      <circle cx="65" cy="195" r="3" fill={bodyStroke} opacity="0.5"/>
+      <circle cx="55" cy="195" r="2" fill={bodyStroke} opacity="0.3"/>
+      <circle cx="75" cy="195" r="2" fill={bodyStroke} opacity="0.3"/>
     </svg>
   );
 };
@@ -212,7 +219,7 @@ const USE_CASES = {
     label: 'Site visits',
     icon: '🏗️',
     title: 'Never miss a site instruction again',
-    body: 'Clip it to your jacket and walk the job. When you get back to the car, your notes, snag list, and action items are already written. The AI flags any language that sounds like a variation instruction.',
+    body: 'Attach it magnetically to the back of your phone and walk the job. When you get back to the car, your notes, snag list, and action items are already written. The AI flags any language that sounds like a variation instruction.',
     points: ['Full transcript in under 30 seconds', 'Variation flags highlighted automatically', 'Action items extracted with owner and deadline'],
   },
   client: {
@@ -358,10 +365,10 @@ export default function NotetakerPage() {
                 fontSize: 16.5, color: c.textMuted,
                 lineHeight: 1.75, margin: '0 0 36px', maxWidth: 500,
               }}>
-                A pocket-sized AI voice recorder built for construction professionals.
-                Capture site visits, client calls, and design team meetings —
-                then get a full transcript, action items, and a draft follow-up
-                email delivered straight to your AI QS Portal.
+                A credit-card-sized AI voice recorder that magnetically attaches to the
+                back of your phone. Capture site visits, client calls, and design team
+                meetings — then get a full transcript, action items, and a draft
+                follow-up email delivered straight to your AI QS Portal.
               </p>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 36 }}>
@@ -494,7 +501,7 @@ export default function NotetakerPage() {
               { Icon: MailIcon,      title: 'Auto follow-up email',  desc: 'Draft written in your tone, linked to the right project in the portal.', color: c.green },
               { Icon: ShieldIcon,    title: 'Private by design',     desc: 'Audio processed on-device. Nothing shared with third-party servers.', color: c.green },
               { Icon: GlobeIcon,     title: '112 languages',         desc: 'Transcribes and summarises in English, Irish, Polish and 109 other languages.', color: c.blue },
-              { Icon: BatteryIcon,   title: 'Magnetic clip',         desc: 'Attaches to your jacket, collar, or high-vis vest. Stays out of the way.', color: c.textMuted },
+              { Icon: BatteryIcon,   title: 'Magnetic mount',        desc: 'Snaps magnetically to the back of your phone. Ultra-slim, lightweight, and always with you.', color: c.textMuted },
               { Icon: UsersIcon,     title: 'Multi-speaker',         desc: 'Separates up to 4 speakers automatically — so you always know who said what.', color: c.accent },
             ].map((f, idx) => (
               <div key={f.title}
@@ -547,7 +554,7 @@ export default function NotetakerPage() {
             }} />
 
             {[
-              { n: '01', Icon: MicIcon,      title: 'Record',     desc: 'Press record before you walk on site. The device clips to your clothes and captures everything hands-free, with background noise filtered out.', iconBg: 'linear-gradient(135deg, #F59E0B, #D97706)' },
+              { n: '01', Icon: MicIcon,      title: 'Record',     desc: 'Snap the device to the back of your phone and press record. It captures everything hands-free with background noise filtered out.', iconBg: 'linear-gradient(135deg, #F59E0B, #D97706)' },
               { n: '02', Icon: FileTextIcon,  title: 'Transcribe', desc: 'When you stop recording, the AI generates a full transcript with speaker labels and a clean bullet-point summary in under 30 seconds.', iconBg: 'linear-gradient(135deg, #3B82F6, #1D4ED8)' },
               { n: '03', Icon: MailIcon,      title: 'Action',     desc: 'Action items are extracted, a follow-up email is drafted, and everything syncs to the right project in your AI QS Portal.', iconBg: 'linear-gradient(135deg, #10B981, #059669)' },
             ].map(step => (
@@ -715,7 +722,7 @@ export default function NotetakerPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
               {[
                 { item: 'AI QS Notetaker', detail: 'The device itself', icon: '🎙️' },
-                { item: 'Magnetic clip', detail: 'Attaches to clothing', icon: '🧲' },
+                { item: 'Magnetic mount', detail: 'Snaps to your phone', icon: '🧲' },
                 { item: 'USB-C cable', detail: 'For charging', icon: '🔌' },
                 { item: 'Quick start guide', detail: 'Get running in 2 min', icon: '📖' },
                 { item: 'Portal access', detail: 'AI QS Portal included', icon: '⚡' },
@@ -747,7 +754,7 @@ export default function NotetakerPage() {
             {[
               { q: 'Do I need a subscription?', a: 'No. The AI QS Notetaker is a one-time purchase of £150. Portal access is included at no extra cost.' },
               { q: 'How does it connect to my AI QS Portal?', a: 'After recording, the device syncs via Bluetooth to the AI QS app, which uploads the transcript and summary directly to the relevant project in your portal.' },
-              { q: 'Can I use it for phone calls?', a: 'Yes. Place the device near your phone during calls, or attach it magnetically. It captures both sides of the conversation clearly.' },
+              { q: 'Can I use it for phone calls?', a: 'Yes. The device magnetically attaches to the back of your phone, so it\'s always with you during calls. It captures both sides of the conversation clearly.' },
               { q: 'Is my data secure?', a: 'Audio is processed on-device. Transcripts are encrypted end-to-end when syncing to your portal. Nothing is shared with third parties.' },
               { q: 'What if I\'m not satisfied?', a: 'We offer a 30-day money-back guarantee. If the Notetaker doesn\'t transform your workflow, return it for a full refund.' },
             ].map(faq => (
