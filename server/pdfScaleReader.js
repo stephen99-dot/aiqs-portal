@@ -239,9 +239,9 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
     // Use the first rendered image (usually floor plan or most important view)
     let mainImage = images[0];
 
-    // Resize if image exceeds Claude Vision 5MB limit
-    // Target ~4MB max to leave headroom
-    const MAX_BYTES = 4 * 1024 * 1024; // 4MB
+    // Resize if image exceeds Claude Vision 5MB limit (on base64-encoded data)
+    // Base64 encoding adds ~33% overhead, so 3.7MB raw ≈ 4.9MB base64
+    const MAX_BYTES = 3.7 * 1024 * 1024; // 3.7MB raw → ~4.9MB base64 (under 5MB API limit)
     if (mainImage.buffer.length > MAX_BYTES) {
       console.log(`[ScaleReader] Image too large (${(mainImage.buffer.length/1024/1024).toFixed(1)}MB) — resizing`);
       try {
@@ -284,9 +284,24 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
       }
     }
 
-    const base64 = mainImage.buffer.toString('base64');
-    
-    console.log(`[ScaleReader] Image: ${mainImage.width}x${mainImage.height}px (${(mainImage.buffer.length/1024/1024).toFixed(1)}MB), sending to Claude Vision`);
+    // Final safety check: if base64 will exceed 5MB, convert to JPEG (much smaller)
+    let imageMediaType = 'image/png';
+    let imageBuffer = mainImage.buffer;
+    const base64SizeEstimate = Math.ceil(imageBuffer.length * 4 / 3);
+    if (base64SizeEstimate > 5 * 1024 * 1024) {
+      console.log(`[ScaleReader] Base64 would be ${(base64SizeEstimate/1024/1024).toFixed(1)}MB — converting to JPEG`);
+      try {
+        const sharp = require('sharp');
+        imageBuffer = await sharp(mainImage.buffer).jpeg({ quality: 85 }).toBuffer();
+        imageMediaType = 'image/jpeg';
+        console.log(`[ScaleReader] JPEG conversion: ${(imageBuffer.length/1024/1024).toFixed(1)}MB`);
+      } catch(e) {
+        console.log(`[ScaleReader] JPEG conversion failed: ${e.message}`);
+      }
+    }
+    const base64 = imageBuffer.toString('base64');
+
+    console.log(`[ScaleReader] Image: ${mainImage.width}x${mainImage.height}px (${(imageBuffer.length/1024/1024).toFixed(1)}MB / ${(base64.length/1024/1024).toFixed(1)}MB base64), sending to Claude Vision`);
 
     // Classify drawing type from filename + text
     const dt = drawingType || classifyDrawing(filename, existingText || '');
@@ -310,7 +325,7 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
           content: [
             {
               type: 'image',
-              source: { type: 'base64', media_type: 'image/png', data: base64 }
+              source: { type: 'base64', media_type: imageMediaType, data: base64 }
             },
             {
               type: 'text',

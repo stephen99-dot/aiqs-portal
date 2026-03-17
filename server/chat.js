@@ -1605,7 +1605,27 @@ ${summary}`);
           const extractData = await extractResp.json();
           const rawText = extractData.content.filter(c => c.type === 'text').map(c => c.text).join('');
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          const parsed = JSON.parse(cleaned);
+          // Try direct parse first; if it fails, extract the JSON object from mixed prose
+          let parsed;
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch (directParseErr) {
+            // Claude sometimes wraps JSON in explanatory text like "Looking at the drawings..."
+            // Find the first '{' and last '}' to extract the JSON object
+            const firstBrace = cleaned.indexOf('{');
+            const lastBrace = cleaned.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              const jsonSubstring = cleaned.substring(firstBrace, lastBrace + 1);
+              try {
+                parsed = JSON.parse(jsonSubstring);
+                console.log(`[Stage 1] Recovered JSON from mixed text (prose before position ${firstBrace})`);
+              } catch (subParseErr) {
+                throw directParseErr; // rethrow original error if recovery also fails
+              }
+            } else {
+              throw directParseErr;
+            }
+          }
 
           pipelineLog.push({ stage: 'extract', label: 'Stage 1: Quantities extracted', detail: `${parsed.items?.length || 0} items across ${[...new Set((parsed.items || []).map(i => i.section))].length} sections` + (parsed.floor_area_m2 ? ` — ${parsed.floor_area_m2}m² floor area` : ''), ts: Date.now() });
 
