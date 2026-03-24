@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
@@ -836,15 +837,86 @@ function extractFromZip(zipPath) {
   return extracted;
 }
 
+// Max raw PDF size to send directly as base64 document (base64 adds ~33% overhead)
+// Anthropic API total request limit is ~25MB, so 9MB raw PDF ≈ 12MB base64 leaves room for prompt
+const MAX_PDF_DIRECT_BYTES = 9 * 1024 * 1024;
+
 function fileToContentBlock(filePath, ext) {
   try {
     const data = fs.readFileSync(filePath);
+    if (ext==='.pdf') {
+      if (data.length > 50*1024*1024) return null; // reject files over 50MB entirely
+      if (data.length <= MAX_PDF_DIRECT_BYTES) {
+        // Small enough to send as native PDF document
+        const b64 = data.toString('base64');
+        return {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}};
+      }
+      // Large PDF — render pages as JPEG images instead of sending raw PDF
+      // This reduces a 25MB PDF to ~2-4MB of page images
+      return renderLargePdfAsImages(filePath);
+    }
     const b64 = data.toString('base64');
-    if (ext==='.pdf') { if(data.length>30*1024*1024) return null; return {type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}; }
     const mm={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp'};
     if (mm[ext]) return {type:'image',source:{type:'base64',media_type:mm[ext],data:b64}};
-  } catch(e){}
+  } catch(e){ console.error('[FileToContent] Error:', e.message); }
   return null;
+}
+
+/**
+ * Render a large PDF to page images for the API.
+ * Returns an array of content blocks (one per page) instead of a single document block.
+ * Uses poppler pdftoppm to render, then sharp (if available) to convert to JPEG.
+ */
+function renderLargePdfAsImages(pdfPath) {
+  const tmpDir = path.join(path.dirname(pdfPath), `pdf_render_${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+  try {
+    const maxPages = 10; // construction drawings rarely exceed 10 pages
+    const dpi = 150; // lower than ScaleReader (200) to keep file sizes small
+    const result = spawnSync('pdftoppm', [
+      '-r', String(dpi), '-jpeg', '-jpegopt', 'quality=80',
+      '-f', '1', '-l', String(maxPages),
+      pdfPath, path.join(tmpDir, 'page')
+    ], { timeout: 60000, encoding: 'buffer' });
+
+    if (result.status !== 0 && result.status !== null) {
+      console.error(`[LargePDF] pdftoppm failed: ${result.stderr?.toString().substring(0, 200)}`);
+      return null;
+    }
+
+    const pageFiles = fs.readdirSync(tmpDir)
+      .filter(f => f.startsWith('page') && (f.endsWith('.jpg') || f.endsWith('.jpeg')))
+      .sort()
+      .slice(0, maxPages);
+
+    if (pageFiles.length === 0) {
+      console.log('[LargePDF] No pages rendered');
+      return null;
+    }
+
+    const blocks = [];
+    let totalB64Size = 0;
+    const maxTotalB64 = 15 * 1024 * 1024; // stop adding pages if we'd exceed 15MB base64
+
+    for (const f of pageFiles) {
+      const buf = fs.readFileSync(path.join(tmpDir, f));
+      const b64 = buf.toString('base64');
+      if (totalB64Size + b64.length > maxTotalB64 && blocks.length > 0) {
+        console.log(`[LargePDF] Stopping at page ${blocks.length} — would exceed 15MB base64`);
+        break;
+      }
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } });
+      totalB64Size += b64.length;
+    }
+
+    console.log(`[LargePDF] Rendered ${blocks.length} pages as JPEG (${(totalB64Size/1024/1024).toFixed(1)}MB base64)`);
+    return blocks;
+  } catch(e) {
+    console.error(`[LargePDF] Error: ${e.message}`);
+    return null;
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch(e) {}
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1281,14 +1353,14 @@ ${summary}`);
               console.error('[ZIP] Smart processor failed, falling back to legacy:', zipErr.message);
               // Fallback to old method
               const ex = extractFromZip(file.path);
-              for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
+              for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(Array.isArray(b)){for(const bl of b)currentContent.push(bl);fileNames.push(ef.name);}else if(b){currentContent.push(b);fileNames.push(ef.name);} }
               for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
               if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) — export as PDF and re-upload.`);
             }
           } else {
             // Legacy ZIP handler (fallback if zipProcessor not installed)
             const ex = extractFromZip(file.path);
-            for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(b){currentContent.push(b);fileNames.push(ef.name);} }
+            for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(Array.isArray(b)){for(const bl of b)currentContent.push(bl);fileNames.push(ef.name);}else if(b){currentContent.push(b);fileNames.push(ef.name);} }
             for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
             if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) (${ex.cad.join(', ')}) -- export as PDF and re-upload.`);
             if (ex.skipped.length > 0) zipNotes.push(`${ex.skipped.length} file(s) couldn't be processed.`);
@@ -1310,7 +1382,15 @@ ${summary}`);
 
         } else {
           const b = fileToContentBlock(file.path, ext);
-          if (b) { currentContent.push(b); fileNames.push(file.originalname); }
+          if (Array.isArray(b)) {
+            // Large PDF rendered as multiple page images
+            for (const block of b) currentContent.push(block);
+            fileNames.push(file.originalname);
+            console.log(`[Upload] Large PDF rendered as ${b.length} page images: ${file.originalname}`);
+          } else if (b) {
+            currentContent.push(b);
+            fileNames.push(file.originalname);
+          }
         }
       }
     }
