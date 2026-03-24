@@ -1396,7 +1396,7 @@ ${summary}`);
     const primaryBudget = hasFiles ? 8000 : 5000;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
 
-    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
+    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2025-04-15' };
 
     let response, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -1406,6 +1406,7 @@ ${summary}`);
       });
       if (response.ok) break;
       const err = await response.json().catch(() => ({}));
+      console.error(`[API] Attempt ${attempt} failed: status=${response.status} type=${err?.error?.type} msg=${err?.error?.message}`);
       if ((response.status === 529 || err?.error?.type === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
       } else if (response.status !== 529) {
