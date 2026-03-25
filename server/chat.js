@@ -1476,7 +1476,7 @@ ${summary}`);
     const primaryBudget = hasFiles ? 8000 : 5000;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
 
-    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2025-04-15' };
+    const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
     let response, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
