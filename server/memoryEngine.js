@@ -135,14 +135,71 @@ function initMemoryTables(db) {
   console.log('[Memory] All memory tables initialised');
 }
 
+// ─── RATE VALIDATION & CLEANUP ───────────────────────────────────────────────
+
+/**
+ * Validate a rate against known base rates before saving.
+ * Returns false (rejecting the rate) if it is >5x or <0.2x the base rate
+ * for a known item_key. Returns true if the rate is acceptable or the key
+ * is not found in baseRates.
+ */
+function validateAndCleanRate(db, itemKey, rate, baseRates) {
+  if (!baseRates || !itemKey || !rate || rate <= 0) return true;
+  const baseRate = baseRates[itemKey];
+  if (baseRate == null || baseRate <= 0) return true; // unknown key — allow
+
+  const ratio = rate / baseRate;
+  if (ratio > 5 || ratio < 0.2) {
+    console.warn(`[Memory] Rejected corrupted rate for "${itemKey}": ${rate} (base: ${baseRate}, ratio: ${ratio.toFixed(2)})`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Scan all rows in memory_rates and delete any where the stored rate
+ * is >5x or <0.2x the corresponding base rate.
+ * Returns { deleted, checked }.
+ */
+function cleanCorruptedRates(db, baseRates) {
+  if (!baseRates || typeof baseRates !== 'object') return { deleted: 0, checked: 0 };
+
+  try {
+    const rows = db.prepare('SELECT * FROM memory_rates').all();
+    let deleted = 0;
+    const checked = rows.length;
+
+    const deleteStmt = db.prepare('DELETE FROM memory_rates WHERE id = ?');
+
+    for (const row of rows) {
+      const baseRate = baseRates[row.item_key];
+      if (baseRate == null || baseRate <= 0) continue; // unknown key — skip
+
+      const ratio = row.rate / baseRate;
+      if (ratio > 5 || ratio < 0.2) {
+        console.log(`[Memory] Deleting corrupted rate: "${row.item_key}" rate=${row.rate} (base=${baseRate}, ratio=${ratio.toFixed(2)}, scope=${row.scope}, region=${row.region})`);
+        deleteStmt.run(row.id);
+        deleted++;
+      }
+    }
+
+    console.log(`[Memory] cleanCorruptedRates complete: checked=${checked}, deleted=${deleted}`);
+    return { deleted, checked };
+  } catch (e) {
+    console.error('[Memory] cleanCorruptedRates error:', e.message);
+    return { deleted: 0, checked: 0 };
+  }
+}
+
 // ─── RATE MEMORY ─────────────────────────────────────────────────────────────
 
 /**
  * Record a rate observation (from confirmed BOQ or correction)
  * Updates running stats: mean, min, max, stddev, confidence
  */
-function recordRate(db, { itemKey, rate, region = 'uk_average', projectType = 'any', userId = null, scope = 'global' }) {
+function recordRate(db, { itemKey, rate, region = 'uk_average', projectType = 'any', userId = null, scope = 'global', baseRates = null }) {
   if (!itemKey || !rate || rate <= 0) return;
+  if (!validateAndCleanRate(db, itemKey, rate, baseRates)) return;
   try {
     const existing = db.prepare(`
       SELECT * FROM memory_rates
@@ -679,6 +736,8 @@ function detectRegion(location) {
 
 module.exports = {
   initMemoryTables,
+  validateAndCleanRate,
+  cleanCorruptedRates,
   recordRate,
   getBestRate,
   recordQuantities,

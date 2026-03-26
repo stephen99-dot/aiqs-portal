@@ -18,13 +18,14 @@ function getBillingCycleStart(user) {
   return d.toISOString();
 }
 
-let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor;
+let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
 try { findingsGen = require('./findingsGenerator'); } catch (e) { console.log('[Chat] docx not installed — Findings generation disabled. Run: npm install docx'); }
 try { deterministicPricer = require('./deterministicPricer'); } catch (e) { console.log('[Chat] deterministicPricer not found — copy deterministicPricer.js to server/'); }
 try { benchmarkStore = require('./benchmarkStore'); } catch (e) { console.log('[Chat] benchmarkStore not found — copy benchmarkStore.js to server/'); }
 try { memoryEngine = require('./memoryEngine'); } catch (e) { console.log('[Chat] memoryEngine not found — copy memoryEngine.js to server/'); }
 try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat] zipProcessor not found — copy zipProcessor.js to server/'); }
+try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Chat] keyNormalizer not found — copy keyNormalizer.js to server/'); }
 
 const router = express.Router();
 
@@ -389,6 +390,53 @@ IRELAND-SPECIFIC:
 If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true.
 IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the BASE UK/Irish market rate (NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP (will be converted to EUR automatically for Ireland).
 CRITICAL: The assumed_rate must be a PER-UNIT rate matching the "unit" field. If unit is "m²", the rate is price per square metre (e.g. 42 not 4200). If unit is "Nr", it is price per number. Do NOT put the total cost in assumed_rate — put the rate per single unit only.
+
+═══════════════════════════════════════════════════════════
+QUANTITY SANITY RULES — READ CAREFULLY BEFORE OUTPUTTING
+═══════════════════════════════════════════════════════════
+
+RULE 1 — CURRENCY ≠ QUANTITY:
+If a specification says "building control fees £450" or "heating allowance £4,200", the QUANTITY is 1 (one lump sum), NOT 450 or 4200.
+✅ CORRECT: {"key": "building_control_fees", "unit": "Item", "qty": 1, "assumed_rate": 450}
+❌ WRONG:  {"key": "building_control_fees", "unit": "Item", "qty": 450, "assumed_rate": 1}
+
+RULE 2 — ELECTRICAL = PER CIRCUIT, NOT PER SOCKET:
+Electrical items are priced PER CIRCUIT (typically 1-4 circuits per extension). A "ring main" is 1 circuit. Do NOT count individual sockets as qty.
+✅ CORRECT: {"key": "power_sockets_circuit", "unit": "Item", "qty": 2, "working": "1 ground floor ring main + 1 kitchen circuit"}
+❌ WRONG:  {"key": "power_sockets_circuit", "unit": "Item", "qty": 24, "working": "24 double sockets"}
+
+RULE 3 — SCAFFOLDING = ELEVATION AREA:
+Scaffolding qty is the AREA of the building elevation in m² (height × width of each face). For a typical extension: perimeter × height ≈ 30-120m².
+Rate is ~£22/m². A residential extension scaffold costs £700-£3,000, NOT £200,000.
+✅ CORRECT: {"key": "scaffolding", "unit": "m²", "qty": 80, "working": "30m perimeter × 5m height ÷ 2 (not all faces) = 75m², rounded to 80"}
+❌ WRONG:  {"key": "scaffolding", "unit": "m²", "qty": 285}
+
+RULE 4 — LANDSCAPING = LUMP SUM OR MEASURED AREA:
+Landscaping is typically 1 lump sum (qty 1, unit Item) or measured in m² for specific areas. Never qty >5 for Item-based landscaping.
+✅ CORRECT: {"key": "landscaping_allowance", "unit": "Item", "qty": 1}
+❌ WRONG:  {"key": "landscaping_allowance", "unit": "Item", "qty": 3000}
+
+RULE 5 — USE EXISTING KEYS, NOT CUSTOM VARIANTS:
+Use the exact keys listed above. Do NOT invent new keys for items that already have a key.
+✅ CORRECT: "power_sockets_circuit"
+❌ WRONG:  "new_power_circuit", "power_circuit_ground_floor", "electrical_ring_main"
+✅ CORRECT: "scaffolding"
+❌ WRONG:  "scaffolding_independent", "independent_scaffolding_two_storey"
+✅ CORRECT: "structural_steelwork"
+❌ WRONG:  "structural_steel_beam", "steel_beam_rsj"
+
+RULE 6 — QUANTITY SANITY RANGES (residential):
+Check your quantities against these maximums:
+- Concrete slab: max 200m² (even large extensions)
+- External walls (brick + block): max 200m² each leaf
+- Scaffolding: max 300m² (even 4-sided 2-storey)
+- Electrical circuits: max 6 total across all types
+- Internal doors: max 15
+- Kitchen fit-outs: max 2
+- Bathroom fit-outs: max 4
+- Smoke/heat detection: 1 (it's a system, not per room)
+- Staircase: 1
+- Building control/planning/engineer fees: qty 1 each
 
 ${clientRateSection}
 ${benchmarkSection || ''}
@@ -1269,6 +1317,48 @@ router.post('/memory/correction', authMiddleware, (req, res) => {
 // MAIN CHAT ENDPOINT
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// SSE STREAMING ENDPOINT
+// Mirrors /chat but sends Server-Sent Events for real-time progress
+// ═══════════════════════════════════════════════════════════════════════
+function sseEvent(res, evt) {
+  if (res.writableEnded) return;
+  res.write(`data: ${JSON.stringify(evt)}\n\n`);
+}
+
+router.post('/chat/stream', authMiddleware, (req, res, next) => {
+  upload.array('files', 10)(req, res, (err) => {
+    if (err) {
+      res.writeHead(400, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      sseEvent(res, { type: 'error', message: err.code === 'LIMIT_FILE_SIZE' ? 'File too large — maximum upload size is 150MB.' : `Upload failed: ${err.message}` });
+      res.end();
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  req.streaming = true;
+  req.sseEmit = (evt) => sseEvent(res, evt);
+  // Delegate to the shared handler
+  try {
+    await chatHandler(req, res);
+  } catch (err) {
+    console.error('Stream chat error:', err);
+    sseEvent(res, { type: 'error', message: 'Something went wrong — please try again' });
+  }
+  if (!res.writableEnded) {
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+});
+
 router.post('/chat', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
@@ -1281,13 +1371,31 @@ router.post('/chat', authMiddleware, (req, res, next) => {
   });
 }, async (req, res) => {
   try {
+    await chatHandler(req, res);
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: 'Something went wrong -- please try again' });
+  }
+});
+
+async function chatHandler(req, res) {
+  try {
     const { message, history } = req.body;
     const userId = req.user.id;
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-    if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
+    // Helper for early error returns that works in both modes
+    const sendError = (status, data) => {
+      if (req.streaming) {
+        sseEvent(res, { type: 'error', message: data.error || 'Error', ...data });
+        return;
+      }
+      res.status(status).json(data);
+    };
+
+    if (!ANTHROPIC_API_KEY) return sendError(500, { error: 'Anthropic API key not configured' });
 
     if (req.user.suspended) {
-      return res.status(403).json({ error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
+      return sendError(403, { error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
     }
 
     const PLAN_LIMITS = {
@@ -1305,12 +1413,12 @@ router.post('/chat', authMiddleware, (req, res, next) => {
       const baseLimit = (req.user.monthly_quota != null && req.user.monthly_quota >= 0) ? req.user.monthly_quota : limits.messages;
       const effectiveLimit = baseLimit + bonusMsgs;
       if (effectiveLimit <= 0) {
-        return res.status(429).json({ error: `You have no message credits. Contact your admin to update your plan.`, limit_type: 'messages', used: 0, limit: 0, plan });
+        return sendError(429, { error: `You have no message credits. Contact your admin to update your plan.`, limit_type: 'messages', used: 0, limit: 0, plan });
       }
       const cycleStart = getBillingCycleStart(req.user);
       const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, cycleStart);
       if (used.c >= effectiveLimit) {
-        return res.status(429).json({ error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
+        return sendError(429, { error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
       }
     }
 
@@ -1321,9 +1429,11 @@ router.post('/chat', authMiddleware, (req, res, next) => {
     let fileNames = [], zipNotes = [];
 
     if (req.files && req.files.length > 0) {
+      if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'upload', detail: `Processing ${req.files.length} file(s)...` });
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
         console.log(`[Upload] ${file.originalname} (${(file.size/1024/1024).toFixed(2)}MB)`);
+        if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'upload', detail: `Reading ${file.originalname}...` });
 
         if (ext === '.zip') {
           // ── NEW: Smart ZIP pre-processor ────────────────────────────
@@ -1411,7 +1521,7 @@ ${summary}`);
     }
 
     if (textMessage) currentContent.push({ type: 'text', text: textMessage });
-    if (currentContent.length === 0) return res.status(400).json({ error: 'Please provide a message or upload a file' });
+    if (currentContent.length === 0) return sendError(400, { error: 'Please provide a message or upload a file' });
 
     messages.push({ role: 'user', content: currentContent });
 
@@ -1475,6 +1585,7 @@ ${summary}`);
     const primaryModel = hasFiles ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
     const primaryBudget = hasFiles ? 8000 : 5000;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
+    if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'analyse', detail: hasFiles ? 'Analysing drawings...' : 'Thinking...' });
 
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
@@ -1490,7 +1601,7 @@ ${summary}`);
       if ((response.status === 529 || err?.error?.type === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
       } else if (response.status !== 529) {
-        return res.status(500).json({ error: 'AI service error -- please try again' });
+        return sendError(500, { error: 'AI service error -- please try again' });
       }
     }
     if (!response.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
@@ -1499,10 +1610,10 @@ ${summary}`);
         method: 'POST', headers: apiHeaders,
         body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages })
       });
-      if (!response.ok) return res.status(500).json({ error: 'AI service busy -- try again shortly' });
+      if (!response.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
     } else if (!response.ok) {
-      return res.status(500).json({ error: 'AI service busy -- try again shortly' });
+      return sendError(500, { error: 'AI service busy -- try again shortly' });
     }
 
     const data = await response.json();
@@ -1599,6 +1710,7 @@ ${summary}`);
 
       if (shouldExtract) {
       console.log(`[Stage 1] Extracting quantities from ${hasFiles ? 'drawings' : 'text description'}...`);
+      if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'extract', detail: 'Measuring quantities from ' + (hasFiles ? 'drawings' : 'description') + '...' });
       pipelineLog = []; // Capture pipeline activity for frontend visibility
       try {
         // Get project type from conversation context
@@ -1716,6 +1828,7 @@ ${summary}`);
             // Like a senior QS checking a junior's takeoff
             // ═══════════════════════════════════════════════════════════
             console.log(`[Stage 1b] Validating ${parsed.items.length} extracted items...`);
+            if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'validate', detail: `QA review: checking ${parsed.items.length} items...` });
             try {
               const validationPrompt = `You are a SENIOR UK Quantity Surveyor reviewing a junior QS's quantity takeoff. Your job is to find errors, not confirm — be critical.
 
@@ -2006,6 +2119,19 @@ CRITICAL RULES:
               }
             }
 
+            // Normalise AI-generated keys to canonical BASE_RATES keys
+            if (keyNormalizer && deterministicPricer.BASE_RATES) {
+              const normResult = keyNormalizer.normalizeAllKeys(parsed.items, deterministicPricer.BASE_RATES);
+              if (normResult.changed > 0) {
+                console.log(`[KeyNorm] Normalised ${normResult.changed} keys`);
+                pipelineLog.push({ stage: 'normalize', label: 'Key normalization', detail: `${normResult.changed} keys matched to rate library`, ts: Date.now() });
+              }
+              if (normResult.unmatched.length > 0) {
+                console.log(`[KeyNorm] Unmatched keys: ${normResult.unmatched.join(', ')}`);
+              }
+            }
+
+            if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'price', detail: 'Calculating costs with deterministic pricing engine...' });
             const priced = deterministicPricer.priceLockedQuantities(
               parsed.items,
               parsed.location || '',
@@ -2195,6 +2321,7 @@ CRITICAL RULES:
     // Uses locked quantities from DB + deterministic pricing. AI only writes findings narrative.
     if (wantsDocuments && boqGen && findingsGen) {
       console.log('[Stage 3] Generating documents from locked quantities...');
+      if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'generate', detail: 'Generating Excel BOQ and Findings Report...' });
       const clientName = req.user.full_name || req.user.email;
 
       // Project name from takeoff location or drawings
@@ -2243,6 +2370,11 @@ CRITICAL RULES:
               }
             }
           }
+        }
+
+        // Normalise keys before Stage 3 pricing too
+        if (keyNormalizer && deterministicPricer.BASE_RATES) {
+          keyNormalizer.normalizeAllKeys(lockedTakeoff.items, deterministicPricer.BASE_RATES);
         }
 
         pricedResult = deterministicPricer.priceLockedQuantities(
@@ -2667,7 +2799,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       } catch(e) {}
     }
 
-    res.json({
+    const responsePayload = {
       reply,
       thinking: thinking || null,
       rateStats,
@@ -2678,12 +2810,43 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       takeoff_id: responseTakeoffId,
       takeoff_locked: responseTakeoffId ? true : false,
       pipeline_log: pipelineLog || null,
-    });
+    };
+
+    if (req.streaming) {
+      // Send the final reply as text chunks (simulated streaming for the response text)
+      if (reply) {
+        // Send text in chunks for streaming feel
+        const chunkSize = 80;
+        for (let i = 0; i < reply.length; i += chunkSize) {
+          sseEvent(res, { type: 'text', content: reply.slice(i, i + chunkSize) });
+        }
+      }
+      // Send the full done event with all metadata
+      sseEvent(res, {
+        type: 'done',
+        reply,
+        thinking: thinking || null,
+        rateStats,
+        files: downloadFiles,
+        quota: quotaInfo,
+        payment_required: paymentRequired,
+        session_id: responseSessionId,
+        takeoff_id: responseTakeoffId,
+        takeoff_locked: responseTakeoffId ? true : false,
+        pipeline_log: pipelineLog || null,
+      });
+    } else {
+      res.json(responsePayload);
+    }
 
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: 'Something went wrong -- please try again' });
+    if (req.streaming) {
+      sseEvent(res, { type: 'error', message: 'Something went wrong — please try again' });
+    } else {
+      res.status(500).json({ error: 'Something went wrong -- please try again' });
+    }
   }
-});
+}
 
 module.exports = router;
