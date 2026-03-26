@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, streamChat } from '../utils/api';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -15,11 +15,12 @@ const ICONS = {
 };
 
 const STAGES = [
-  { key: 'file',   text: 'Reading files...' },
-  { key: 'search', text: 'Analysing scope...' },
-  { key: 'ruler',  text: 'Measuring quantities...' },
-  { key: 'calc',   text: 'Calculating costs...' },
-  { key: 'check',  text: 'Preparing response...' },
+  { key: 'file',   text: 'Reading files...',           stage: 'upload' },
+  { key: 'search', text: 'Analysing scope...',         stage: 'analyse' },
+  { key: 'ruler',  text: 'Measuring quantities...',    stage: 'extract' },
+  { key: 'check',  text: 'QA review...',               stage: 'validate' },
+  { key: 'calc',   text: 'Calculating costs...',       stage: 'price' },
+  { key: 'lock',   text: 'Locking quantities...',      stage: 'done' },
 ];
 
 function useIsMobile() {
@@ -39,6 +40,8 @@ export default function ChatPage() {
   const [files, setFiles]             = useState([]);
   const [sending, setSending]         = useState(false);
   const [stage, setStage]             = useState(0);
+  const [stageDetail, setStageDetail] = useState('');
+  const [streamingText, setStreamingText] = useState('');
   const [expanded, setExpanded]       = useState({});
 
   // ── Session / takeoff tracking ─────────────────────────────────────
@@ -59,6 +62,7 @@ export default function ChatPage() {
   const timerRef    = useRef(null);
   const saveRef     = useRef(null);
   const hadFiles    = useRef(false);
+  const abortRef    = useRef(null);
 
   useEffect(() => { if (mobile) setSidebarOpen(false); }, [mobile]);
   useEffect(() => {
@@ -67,15 +71,19 @@ export default function ChatPage() {
       if (d) setQuotaInfo({ messages_used: d.messagesUsed || 0, messages_limit: d.messagesLimit || 0, docs_used: d.used || 0, docs_limit: d.quota || 0, plan: d.plan });
     }).catch(() => {});
   }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, stage]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, stage, streamingText]);
 
   useEffect(() => {
     if (sending) {
       setStage(0);
-      timerRef.current = setInterval(() => setStage(p => p < STAGES.length - 1 ? p + 1 : p), 2200);
+      setStageDetail('');
+      // Fallback timer in case SSE progress events don't arrive
+      timerRef.current = setInterval(() => setStage(p => p < STAGES.length - 1 ? p + 1 : p), 4500);
     } else {
       clearInterval(timerRef.current);
       setStage(0);
+      setStageDetail('');
+      setStreamingText('');
     }
     return () => clearInterval(timerRef.current);
   }, [sending]);
@@ -220,81 +228,96 @@ export default function ChatPage() {
     hadFiles.current = files.length > 0;
     setInput(''); setFiles([]); setSending(true);
 
-    try {
-      const history = messages.filter(m => m.content).map(m => ({ role: m.role, content: m.content }));
-      const fd = new FormData();
-      fd.append('message', savedInput);
-      fd.append('history', JSON.stringify(history));
+    const history = messages.filter(m => m.content).map(m => ({ role: m.role, content: m.content }));
+    const fd = new FormData();
+    fd.append('message', savedInput);
+    fd.append('history', JSON.stringify(history));
 
-      // ── CRITICAL: always send session_id and takeoff_id ──────────
-      // This is what links "generate documents" back to the locked quantities
-      if (currentSessionId) fd.append('session_id', currentSessionId);
-      if (currentTakeoffId) fd.append('takeoff_id', currentTakeoffId);
+    // ── CRITICAL: always send session_id and takeoff_id ──────────
+    if (currentSessionId) fd.append('session_id', currentSessionId);
+    if (currentTakeoffId) fd.append('takeoff_id', currentTakeoffId);
 
-      savedFiles.forEach(f => fd.append('files', f));
+    savedFiles.forEach(f => fd.append('files', f));
 
-      const data = await apiFetch('/chat', { method: 'POST', body: fd });
-
-      // ── Capture session_id and takeoff_id from response ──────────
-      // Backend may create/confirm these — always update local state
-      if (data.session_id && !currentSessionId) {
-        setCurrentSessionId(data.session_id);
-        console.log('[Chat] Session established:', data.session_id);
-      }
-      if (data.takeoff_id) {
-        setCurrentTakeoffId(data.takeoff_id);
-        console.log('[Chat] Takeoff locked:', data.takeoff_id);
-      }
-
-      const aiMsg = {
-        role: 'assistant',
-        content: data.reply,
-        thinking: data.thinking || null,
-        downloadFiles: data.files || null,
-        paymentRequired: data.payment_required || null,
-        quota: data.quota || null,
-        takeoffLocked: !!data.takeoff_id,
-        pipelineLog: data.pipeline_log || null,
-        sessionId: data.session_id,
-        takeoffId: data.takeoff_id,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(p => [...p, aiMsg]);
-      if (data.quota) setQuotaInfo(data.quota);
-      if (data.files?.length) setTimeout(loadSessions, 2000);
-
-    } catch (err) {
-      console.error('[Chat] Error:', err.status, err.message, err.data);
-      const isSuspended = err.data?.suspended || /suspend/i.test(err.message || '');
-      const isQuota = !isSuspended && (err.status === 429 || err.data?.limit_type
-        || /limit|upgrade|credits|quota|no message/i.test(err.message || ''));
-      const limitType = err.data?.limit_type || 'messages';
-      const userPlan = err.data?.plan || 'starter';
-      let displayMessage;
-      if (isSuspended) {
-        displayMessage = err.message || 'Your account has been suspended. Contact support.';
-      } else if (isQuota) {
-        displayMessage = err.message || 'You have reached your usage limit.';
-        if (!/upgrade|contact|plan/i.test(displayMessage)) {
-          displayMessage += ' Upgrade your plan for more credits.';
+    // Use SSE streaming for real-time progress
+    abortRef.current = streamChat(fd, {
+      onProgress: (stage, detail) => {
+        // Map backend stage names to STAGES array indices
+        const stageMap = { upload: 0, analyse: 1, extract: 2, validate: 3, price: 4, generate: 4, done: 5 };
+        const idx = stageMap[stage];
+        if (idx !== undefined) {
+          clearInterval(timerRef.current); // Stop fallback timer once real events arrive
+          setStage(idx);
         }
-      } else if (err.message && err.message !== 'Something went wrong' && !err.message.includes('Session expired')) {
-        displayMessage = err.message;
-      } else {
-        displayMessage = 'Something went wrong — please try again.';
-      }
-      setMessages(p => [...p, {
-        role: 'assistant',
-        content: displayMessage,
-        timestamp: new Date().toISOString(),
-        error: isSuspended || !isQuota,
-        paymentRequired: isQuota ? {
-          message: displayMessage,
-          type: limitType,
-          plan: userPlan,
-        } : null,
-      }]);
-    } finally { setSending(false); }
+        if (detail) setStageDetail(detail);
+      },
+      onText: (fullText) => {
+        setStreamingText(fullText);
+      },
+      onDone: (data) => {
+        // ── Capture session_id and takeoff_id from response ──────────
+        if (data.session_id && !currentSessionId) {
+          setCurrentSessionId(data.session_id);
+          console.log('[Chat] Session established:', data.session_id);
+        }
+        if (data.takeoff_id) {
+          setCurrentTakeoffId(data.takeoff_id);
+          console.log('[Chat] Takeoff locked:', data.takeoff_id);
+        }
+
+        const aiMsg = {
+          role: 'assistant',
+          content: data.reply,
+          thinking: data.thinking || null,
+          downloadFiles: data.files || null,
+          paymentRequired: data.payment_required || null,
+          quota: data.quota || null,
+          takeoffLocked: !!data.takeoff_id,
+          pipelineLog: data.pipeline_log || null,
+          sessionId: data.session_id,
+          takeoffId: data.takeoff_id,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(p => [...p, aiMsg]);
+        if (data.quota) setQuotaInfo(data.quota);
+        if (data.files?.length) setTimeout(loadSessions, 2000);
+        setSending(false);
+      },
+      onError: (err) => {
+        console.error('[Chat] Stream error:', err.message, err.data);
+        const errData = err.data || {};
+        const isSuspended = errData.suspended || /suspend/i.test(err.message || '');
+        const isQuota = !isSuspended && (errData.limit_type
+          || /limit|upgrade|credits|quota|no message/i.test(err.message || ''));
+        const limitType = errData.limit_type || 'messages';
+        const userPlan = errData.plan || 'starter';
+        let displayMessage;
+        if (isSuspended) {
+          displayMessage = err.message || 'Your account has been suspended. Contact support.';
+        } else if (isQuota) {
+          displayMessage = err.message || 'You have reached your usage limit.';
+          if (!/upgrade|contact|plan/i.test(displayMessage)) {
+            displayMessage += ' Upgrade your plan for more credits.';
+          }
+        } else if (err.message && err.message !== 'Something went wrong' && !err.message.includes('Session expired')) {
+          displayMessage = err.message;
+        } else {
+          displayMessage = 'Something went wrong — please try again.';
+        }
+        setMessages(p => [...p, {
+          role: 'assistant',
+          content: displayMessage,
+          timestamp: new Date().toISOString(),
+          error: isSuspended || !isQuota,
+          paymentRequired: isQuota ? {
+            message: displayMessage,
+            type: limitType,
+            plan: userPlan,
+          } : null,
+        }]);
+        setSending(false);
+      },
+    });
   }
 
   function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }
@@ -325,11 +348,18 @@ export default function ChatPage() {
                     ? <svg width="13" height="13" fill="none" stroke={c.stageDone} strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
                     : ICONS[s.key](col)}
                 </span>
-                <span style={{ fontSize:12.5, fontWeight:active?600:400, color:col, transition:'color 0.3s' }}>{s.text}</span>
+                <span style={{ fontSize:12.5, fontWeight:active?600:400, color:col, transition:'color 0.3s' }}>
+                  {active && stageDetail ? stageDetail : s.text}
+                </span>
                 {active && <span style={{ marginLeft:'auto', display:'flex', gap:3 }}>{[0,1,2].map(d => <span key={d} style={{ width:4, height:4, borderRadius:'50%', background:c.stageActiveText, animation:'dot 1.4s infinite', animationDelay:`${d*0.2}s` }}/>)}</span>}
               </div>
             );
           })}
+          {streamingText && (
+            <div style={{ marginTop:10, padding:'8px 10px', background:dark?'rgba(255,255,255,0.03)':'rgba(0,0,0,0.02)', borderRadius:8, maxHeight:120, overflowY:'auto' }}>
+              <pre style={{ margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word', fontSize:12, lineHeight:1.5, color:c.text, fontFamily:'inherit' }}>{streamingText.slice(-300)}</pre>
+            </div>
+          )}
         </div>
       </div>
     );
