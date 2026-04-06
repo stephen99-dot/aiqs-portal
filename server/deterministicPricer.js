@@ -349,6 +349,9 @@ const BASE_RATES = {
   'padstone':                          { rate: 65,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Precast concrete padstone 440x215x100mm bedded in mortar' },
   'wall_plate_timber':                 { rate: 14,   unit: 'm',  labour: 0.55, materials: 0.45, description: 'Timber wall plate 100x75mm treated softwood bolted to blockwork' },
   'joist_hanger':                      { rate: 8,    unit: 'Nr', labour: 0.60, materials: 0.40, description: 'Joist hanger galvanised steel for timber joist' },
+  'floor_joists_c24':                  { rate: 18,   unit: 'm',  labour: 0.55, materials: 0.45, description: 'C24 treated softwood floor joists 225x50mm at 400mm centres' },
+  'concrete_lintel':                   { rate: 55,   unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Precast concrete lintel to openings' },
+  'fascia_board_timber':               { rate: 45,   unit: 'm',  labour: 0.50, materials: 0.50, description: 'Timber fascia board 150mm with soffit and guttering' },
   // Misc commonly extracted items
   'threshold_strip':                   { rate: 25,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Threshold strip aluminium at door openings' },
   'architrave':                        { rate: 14,   unit: 'm',  labour: 0.65, materials: 0.35, description: 'Architrave MDF or softwood ogee profile' },
@@ -665,12 +668,14 @@ function crossValidateQuantities(items, projectType) {
     pType.includes('conversion') || pType.includes('fit') || pType.includes('apartment') || pType.includes('flat');
 
   // Maximum reasonable floor area per project type (single floor)
-  // For two-storey extensions or combined projects (extension + loft + refurb), allow larger area
+  // Combined projects (extension + loft) still need caps — just higher ones
   const allItemDescs = items.map(i => (i.description || '').toLowerCase()).join(' ');
   const isMultiStorey = pType.includes('two') || pType.includes('2') || allItemDescs.includes('two storey') || allItemDescs.includes('first floor');
   const isHMO = pType.includes('hmo') || allItemDescs.includes('hmo') || allItemDescs.includes('house in multiple');
   const isCombined = (isExtension && isLoft) || (isExtension && isRefurb) || isHMO;
-  const maxFloorArea = isCombined ? null : isLoft ? 60 : isExtension ? (isMultiStorey ? 120 : 80) : null;
+  // Combined extension+loft: extension footprint is still limited, allow up to 160m² total
+  // HMO: no cap (too variable). Loft only: 60m². Simple extension: 80-120m².
+  const maxFloorArea = isHMO ? null : isCombined ? 160 : isLoft ? 60 : isExtension ? (isMultiStorey ? 120 : 80) : null;
 
   if (maxFloorArea) {
     // Cap concrete slab to max floor area for extensions
@@ -1111,37 +1116,41 @@ function crossValidateQuantities(items, projectType) {
  */
 function detectDuplicatesAndOverlaps(items) {
   const warnings = [];
+  const keysToRemove = new Set();
 
-  // Define conflict groups — if both sides present, it's a double-count
+  // Define conflict groups — if lump-sum fitout present, remove individual items that overlap
   const conflictRules = [
-    { group: ['kitchen_fitout_mid', 'kitchen_fitout_high'], conflicts_with_desc: ['worktop', 'kitchen unit', 'kitchen cabinet', 'splashback', 'kitchen appliance'], label: 'kitchen fit-out' },
-    { group: ['bathroom_fitout_mid', 'bathroom_fitout_high'], conflicts_with_desc: ['sanitaryware', 'bath ', 'basin', 'wc ', 'toilet', 'shower valve', 'bathroom tap'], label: 'bathroom fit-out' },
-    { group: ['shower_room_fitout'], conflicts_with_desc: ['shower valve', 'shower screen', 'shower tray'], label: 'shower room fit-out' },
-    { group: ['wc_cloakroom_fitout'], conflicts_with_desc: ['cloakroom basin', 'cloakroom wc'], label: 'WC/cloakroom fit-out' },
-    { group: ['internal_decorations'], conflicts_with_keys: ['mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'], label: 'decoration' },
-    { group: ['full_electrical_rewire'], conflicts_with_keys: ['first_fix_electrical', 'second_fix_electrical', 'electrical_rewire_room'], label: 'electrical' },
+    { group: ['kitchen_fitout_mid', 'kitchen_fitout_high'], conflicts_with_desc: ['worktop', 'kitchen unit', 'kitchen cabinet', 'splashback', 'kitchen appliance'], conflicts_with_keys: [], label: 'kitchen fit-out' },
+    { group: ['bathroom_fitout_mid', 'bathroom_fitout_high'], conflicts_with_desc: ['sanitaryware', 'bath ', 'basin', 'wc ', 'toilet', 'shower valve', 'bathroom tap'], conflicts_with_keys: [], label: 'bathroom fit-out' },
+    { group: ['shower_room_fitout'], conflicts_with_desc: ['shower valve', 'shower screen', 'shower tray'], conflicts_with_keys: [], label: 'shower room fit-out' },
+    { group: ['wc_cloakroom_fitout'], conflicts_with_desc: ['cloakroom basin', 'cloakroom wc'], conflicts_with_keys: [], label: 'WC/cloakroom fit-out' },
+    { group: ['internal_decorations'], conflicts_with_desc: [], conflicts_with_keys: ['mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'], label: 'decoration' },
+    { group: ['full_electrical_rewire'], conflicts_with_desc: [], conflicts_with_keys: ['first_fix_electrical', 'second_fix_electrical', 'electrical_rewire_room'], label: 'electrical' },
   ];
 
   const presentKeys = new Set(items.map(i => i.key));
-  const allDescriptions = items.map(i => (i.description || '').toLowerCase());
 
   for (const rule of conflictRules) {
     const hasGroup = rule.group.some(k => presentKeys.has(k));
     if (!hasGroup) continue;
 
+    // Remove conflicting individual keys when lump-sum exists
     if (rule.conflicts_with_keys) {
       const conflicting = rule.conflicts_with_keys.filter(k => presentKeys.has(k));
       if (conflicting.length > 0) {
-        warnings.push(`Possible double-count in ${rule.label}: has lump-sum fit-out AND individual items (${conflicting.join(', ')}). Remove one or the other.`);
+        conflicting.forEach(k => keysToRemove.add(k));
+        warnings.push(`Double-count in ${rule.label}: removed individual items (${conflicting.join(', ')}) — lump-sum fit-out already covers these.`);
       }
     }
 
+    // Remove items whose description matches conflict patterns
     if (rule.conflicts_with_desc) {
-      for (const desc of allDescriptions) {
+      for (const item of items) {
+        const desc = (item.description || '').toLowerCase();
         const match = rule.conflicts_with_desc.find(d => desc.includes(d));
-        if (match) {
-          warnings.push(`Possible double-count in ${rule.label}: has lump-sum fit-out AND item containing "${match}". Check these are not overlapping.`);
-          break;
+        if (match && !rule.group.includes(item.key)) {
+          keysToRemove.add(item.key);
+          warnings.push(`Double-count in ${rule.label}: removed "${item.key}" (contains "${match}") — lump-sum fit-out already covers this.`);
         }
       }
     }
@@ -1159,6 +1168,17 @@ function detectDuplicatesAndOverlaps(items) {
         warnings.push(`Key "${key}" appears ${count} times — likely duplicated. Review and merge if same element.`);
       }
     }
+  }
+
+  // Actually remove the conflicting items from the array
+  if (keysToRemove.size > 0) {
+    const removedCount = keysToRemove.size;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (keysToRemove.has(items[i].key) && !conflictRules.some(r => r.group.includes(items[i].key))) {
+        items.splice(i, 1);
+      }
+    }
+    console.log(`[Pricer] Auto-removed ${removedCount} double-counted items: ${[...keysToRemove].join(', ')}`);
   }
 
   return warnings;
@@ -1365,21 +1385,30 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const estimatedFloorArea = options.floor_area || slabArea;
   if (estimatedFloorArea > 0) {
     const costPerM2 = constructionTotal / estimatedFloorArea;
-    // UK residential extensions typically cost £1,800-£3,000/m² construction only
-    // Only apply cost cap for simple residential extensions — NOT for combined or HMO projects
     const pTypeStr = (options.project_type || projectType || '').toLowerCase();
-    const isSimpleExtension = (projectType === 'residential_extension' || projectType === 'general')
-      && !pTypeStr.includes('loft') && !pTypeStr.includes('refurb') && !pTypeStr.includes('hmo')
-      && !pTypeStr.includes('outbuilding') && !pTypeStr.includes('conversion')
-      && !pTypeStr.includes('new build') && !pTypeStr.includes('new_build');
-    const isNewBuild = projectType === 'new_build' || pTypeStr.includes('new build') || pTypeStr.includes('new dwelling');
-    // New builds typically cost £1,500-£2,500/m² (Ireland €1,800-€3,000/m²)
-    // Extensions typically cost £2,000-£3,500/m²
-    const maxCostPerM2 = isNewBuild ? 3000 : 3500;
-    const targetCostPerM2 = isNewBuild ? 2200 : 2800;
-    const typicalRange = isNewBuild ? '€1,800-3,000' : '£2,000-3,500';
-    const projectLabel = isNewBuild ? 'new builds' : 'extensions';
-    if (costPerM2 > maxCostPerM2 && (isSimpleExtension || isNewBuild)) {
+    const capIsNewBuild = projectType === 'new_build' || pTypeStr.includes('new build') || pTypeStr.includes('new dwelling');
+    const capIsHMO = pTypeStr.includes('hmo');
+    const capIsInfra = projectType === 'infrastructure' || pTypeStr.includes('infrastructure');
+    // Combined residential projects (extension+loft, extension+refurb) still need cost caps
+    // — just with slightly higher thresholds than a simple single-trade extension
+    const capIsCombinedResidential = (pTypeStr.includes('loft') || pTypeStr.includes('refurb') || pTypeStr.includes('conversion'))
+      && (projectType === 'residential_extension' || pTypeStr.includes('extension'));
+    const capIsResidential = (projectType === 'residential_extension' || projectType === 'general' || capIsCombinedResidential) && !capIsHMO && !capIsInfra;
+
+    let maxCostPerM2, targetCostPerM2, typicalRange, projectLabel;
+    if (capIsNewBuild) {
+      maxCostPerM2 = 3000; targetCostPerM2 = 2200; typicalRange = '€1,800-3,000'; projectLabel = 'new builds';
+    } else if (capIsCombinedResidential) {
+      // Extension + loft/conversion: higher complexity but still residential — cap at £4,000/m²
+      maxCostPerM2 = 4000; targetCostPerM2 = 3000; typicalRange = '£2,500-4,000'; projectLabel = 'extension + loft/conversion projects';
+    } else if (capIsHMO || capIsInfra) {
+      maxCostPerM2 = 999999; targetCostPerM2 = 999999; typicalRange = 'variable'; projectLabel = 'HMO/infrastructure';
+    } else {
+      // Simple residential extensions
+      maxCostPerM2 = 3500; targetCostPerM2 = 2800; typicalRange = '£2,000-3,500'; projectLabel = 'extensions';
+    }
+
+    if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999) {
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
       const cs = currency === 'EUR' ? '€' : '£';
       warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}${maxCostPerM2}/m² cap. Typical ${projectLabel} cost ${typicalRange}/m². All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
@@ -1398,9 +1427,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         sec.subtotal = sec.items.reduce((ss, i) => ss + i.total, 0);
         return s + sec.subtotal;
       }, 0);
-    } else if (costPerM2 > maxCostPerM2 && !isSimpleExtension && !isNewBuild) {
+    } else if (costPerM2 > maxCostPerM2) {
       const cs = currency === 'EUR' ? '€' : '£';
-      warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — combined/HMO project types have higher typical costs.`);
+      warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — HMO/infrastructure project types have variable costs.`);
     }
   }
 
