@@ -802,8 +802,18 @@ router.post('/admin/users/:id/sync-stripe', authMiddleware, adminMiddleware, asy
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, sub.id, cycleStart, user.id);
 
-    console.log(`[Admin] Stripe sync for ${user.email}: ${planInfo.plan}, cycle start: ${cycleStart}`);
-    res.json({ success: true, plan: planInfo.plan, billing_cycle_start: cycleStart, subscription_id: sub.id });
+    // Recalculate usage with the new billing cycle
+    const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(user.id, cycleStart);
+    const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(user.id, cycleStart);
+    const docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0));
+    const msgsUsed = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(user.id, cycleStart)?.c || 0;
+
+    console.log(`[Admin] Stripe sync for ${user.email}: ${planInfo.plan}, cycle start: ${cycleStart}, docs reset: ${docsUsed}/${planInfo.boqQuota}, msgs reset: ${msgsUsed}/${planInfo.msgQuota}`);
+    res.json({
+      success: true, plan: planInfo.plan, billing_cycle_start: cycleStart, subscription_id: sub.id,
+      monthly_quota: planInfo.msgQuota, monthly_boq_quota: planInfo.boqQuota,
+      docs_used: docsUsed, messages_used: msgsUsed,
+    });
   } catch (err) {
     console.error('[Admin] Stripe sync error:', err);
     res.status(500).json({ error: 'Stripe sync failed: ' + err.message });

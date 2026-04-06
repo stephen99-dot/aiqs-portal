@@ -194,8 +194,20 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
 
   const syncStripe = () => doAction('sync', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/sync-stripe', { method: 'POST' });
-    onUpdate({ ...user, plan: res.plan, stripe_subscription_id: res.subscription_id, billing_cycle_start: res.billing_cycle_start });
-    showSuccess('Synced from Stripe: ' + res.plan + ' plan, billing cycle ' + new Date(res.billing_cycle_start).toLocaleDateString('en-GB'));
+    onUpdate({
+      ...user,
+      plan: res.plan,
+      stripe_subscription_id: res.subscription_id,
+      billing_cycle_start: res.billing_cycle_start,
+      monthly_quota: res.monthly_quota,
+      monthly_boq_quota: res.monthly_boq_quota,
+      docs_used: res.docs_used,
+      messages_used: res.messages_used,
+      quota: res.monthly_quota,
+    });
+    setMsgAllowance(res.monthly_quota);
+    setDocAllowance(res.monthly_boq_quota);
+    showSuccess(`Synced: ${res.plan} plan, ${res.messages_used}/${res.monthly_quota} msgs, ${res.docs_used}/${res.monthly_boq_quota} docs — cycle ${new Date(res.billing_cycle_start).toLocaleDateString('en-GB')}`);
   });
 
   const importRates = async (e) => {

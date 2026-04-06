@@ -53,7 +53,7 @@ module.exports = async function stripeWebhook(req, res) {
       // Subscription renewed or plan changed
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
-        await handleSubscriptionUpdate(subscription);
+        await handleSubscriptionUpdate(subscription, STRIPE_SECRET);
         break;
       }
 
@@ -88,6 +88,36 @@ module.exports = async function stripeWebhook(req, res) {
   res.json({ received: true });
 };
 
+// ─── Helper: find user by subscription ID, then by customer email ───────────
+// This is the key fix — if stripe_subscription_id wasn't set during checkout,
+// we fall back to finding the user by customer email from Stripe.
+async function findUserForSubscription(subscription, stripeSecret) {
+  // 1. Try by subscription ID (fast path)
+  let user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(subscription.id);
+  if (user) return user;
+
+  // 2. Try by customer email from Stripe
+  if (subscription.customer) {
+    try {
+      const stripe = require('stripe')(stripeSecret);
+      const customer = await stripe.customers.retrieve(subscription.customer);
+      if (customer && customer.email) {
+        user = db.prepare('SELECT * FROM users WHERE email = ?').get(customer.email.toLowerCase());
+        if (user) {
+          // Link the subscription ID for future lookups
+          console.log(`[Stripe] Linking subscription ${subscription.id} to ${user.email} (was missing)`);
+          db.prepare('UPDATE users SET stripe_subscription_id = ? WHERE id = ?').run(subscription.id, user.id);
+          return user;
+        }
+      }
+    } catch (err) {
+      console.error('[Stripe] Customer lookup failed:', err.message);
+    }
+  }
+
+  return null;
+}
+
 async function handleCheckoutComplete(session, stripeSecret) {
   const customerEmail = session.customer_email || session.customer_details?.email;
 
@@ -113,9 +143,22 @@ async function handleCheckoutComplete(session, stripeSecret) {
       console.error(`[Stripe] Unknown price ID: ${priceId} — customer: ${customerEmail}, amount: ${session.amount_total}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     }
   }
+
+  // Handle one-time payment (PAYG BOQ purchase)
+  if (session.mode === 'payment' && session.payment_status === 'paid') {
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(customerEmail.toLowerCase());
+    if (user) {
+      // Grant a doc credit
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare('INSERT INTO usage_log (id, user_id, action, detail) VALUES (?, ?, ?, ?)').run(
+        'ul_' + uuidv4().slice(0, 8), user.id, 'doc_paid', 'Stripe checkout ' + session.id
+      );
+      console.log(`[Stripe] PAYG doc credit granted to ${customerEmail}`);
+    }
+  }
 }
 
-async function handleSubscriptionUpdate(subscription) {
+async function handleSubscriptionUpdate(subscription, stripeSecret) {
   const priceId = subscription.items.data[0]?.price?.id;
 
   if (!priceId || !PRICE_TO_PLAN[priceId]) {
@@ -123,11 +166,11 @@ async function handleSubscriptionUpdate(subscription) {
     return;
   }
 
-  // Find user by stripe subscription ID
-  const user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(subscription.id);
+  // Find user — tries subscription ID first, then customer email
+  const user = await findUserForSubscription(subscription, stripeSecret);
 
   if (!user) {
-    console.log(`[Stripe] No user found for subscription: ${subscription.id}`);
+    console.log(`[Stripe] No user found for subscription: ${subscription.id} — tried sub ID and customer email`);
     return;
   }
 
@@ -136,8 +179,8 @@ async function handleSubscriptionUpdate(subscription) {
   if (subscription.status === 'active') {
     const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
     console.log(`[Stripe] Subscription active for ${user.email} — plan: ${planInfo.plan}, cycle start: ${cycleStart}`);
-    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, cycleStart, user.id);
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, billing_cycle_start = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, cycleStart, subscription.id, user.id);
   } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
     console.log(`[Stripe] Subscription ${subscription.status} for ${user.email}`);
     // Optionally downgrade or flag — for now just log
@@ -148,26 +191,41 @@ async function handleInvoicePaid(invoice, stripeSecret) {
   // Only handle subscription invoices (not one-off payments)
   if (!invoice.subscription) return;
 
-  const user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(invoice.subscription);
+  // Find user by subscription ID first
+  let user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(invoice.subscription);
 
   if (!user) {
     // Try finding by email as fallback
     const email = invoice.customer_email;
     if (email) {
-      const userByEmail = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
-      if (userByEmail) {
-        console.log(`[Stripe] invoice.paid — matched ${email} by email, updating subscription ID`);
-        db.prepare('UPDATE users SET stripe_subscription_id = ? WHERE id = ?').run(invoice.subscription, userByEmail.id);
-        // Now fetch subscription to get current_period_start
-        const stripe = require('stripe')(stripeSecret);
-        const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-        const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
-        db.prepare('UPDATE users SET billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(cycleStart, userByEmail.id);
-        console.log(`[Stripe] Billing cycle reset for ${email} — new cycle: ${cycleStart}`);
-        return;
+      user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+      if (user) {
+        console.log(`[Stripe] invoice.paid — matched ${email} by email, linking subscription ID`);
+        db.prepare('UPDATE users SET stripe_subscription_id = ? WHERE id = ?').run(invoice.subscription, user.id);
       }
     }
+  }
+
+  if (!user) {
+    // Last resort: look up the customer from Stripe to get their email
+    try {
+      const stripe = require('stripe')(stripeSecret);
+      if (invoice.customer) {
+        const customer = await stripe.customers.retrieve(invoice.customer);
+        if (customer && customer.email) {
+          user = db.prepare('SELECT * FROM users WHERE email = ?').get(customer.email.toLowerCase());
+          if (user) {
+            console.log(`[Stripe] invoice.paid — matched ${customer.email} via Stripe customer lookup, linking subscription`);
+            db.prepare('UPDATE users SET stripe_subscription_id = ? WHERE id = ?').run(invoice.subscription, user.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Stripe] Customer lookup for invoice.paid failed:', err.message);
+    }
+  }
+
+  if (!user) {
     console.log(`[Stripe] invoice.paid — no user found for subscription: ${invoice.subscription}`);
     return;
   }
@@ -176,11 +234,19 @@ async function handleInvoicePaid(invoice, stripeSecret) {
   const stripe = require('stripe')(stripeSecret);
   const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
   const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
+  const priceId = subscription.items.data[0]?.price?.id;
+  const planInfo = priceId ? PRICE_TO_PLAN[priceId] : null;
 
   console.log(`[Stripe] Invoice paid for ${user.email} — billing cycle reset to ${cycleStart}`);
 
-  db.prepare('UPDATE users SET billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(cycleStart, user.id);
+  // Update billing cycle AND ensure plan/quotas are correct
+  if (planInfo) {
+    db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, billing_cycle_start = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, cycleStart, invoice.subscription, user.id);
+  } else {
+    db.prepare('UPDATE users SET billing_cycle_start = ?, stripe_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(cycleStart, invoice.subscription, user.id);
+  }
 }
 
 async function handleSubscriptionCancelled(subscription) {
