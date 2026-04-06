@@ -39,6 +39,12 @@ if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
 // Init memory engine tables
 try { if (memoryEngine) memoryEngine.initMemoryTables(db); } catch(e) { console.error('[Memory] Init error:', e.message); }
+// Clean corrupted memory rates on startup (e.g. scaffolding at £2,245 vs base £22)
+try { if (memoryEngine && deterministicPricer && deterministicPricer.BASE_RATES) {
+  const baseRateValues = {};
+  for (const [k, v] of Object.entries(deterministicPricer.BASE_RATES)) { baseRateValues[k] = v.rate; }
+  memoryEngine.cleanCorruptedRates(db, baseRateValues);
+}} catch(e) { console.error('[Memory] Cleanup error:', e.message); }
 
 try {
   db.exec(`
@@ -1817,6 +1823,33 @@ ${summary}`);
               }
             } else {
               throw directParseErr;
+            }
+          }
+
+          // ═══════════════════════════════════════════════════════════
+          // POST-EXTRACTION: Programmatic floor area enforcement
+          // If ZIP pre-processing found a room schedule with total house area,
+          // and the project is an extension, ensure floor_area_m2 is the
+          // extension area (from slab qty) NOT the whole house
+          // ═══════════════════════════════════════════════════════════
+          if (parsed.items && parsed.items.length > 0) {
+            const pTypeLC = (parsed.project_type || projectTypeGuess || '').toLowerCase();
+            const isExtProj = /extension|conversion/i.test(pTypeLC);
+            if (isExtProj && parsed.floor_area_m2) {
+              // Find the slab item — its qty IS the actual extension footprint
+              const slabItem = parsed.items.find(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
+              const slabArea = slabItem ? slabItem.qty : 0;
+              // If AI set floor_area to whole-house area (much larger than slab), override
+              if (slabArea > 5 && parsed.floor_area_m2 > slabArea * 2.5) {
+                console.log(`[FloorArea] Override: AI said ${parsed.floor_area_m2}m² but slab is only ${slabArea}m² — using slab area for extension`);
+                parsed._original_floor_area = parsed.floor_area_m2;
+                parsed.floor_area_m2 = slabArea;
+              }
+              // Also: if floor_area_m2 is unreasonably large for any extension (>200m²), cap it
+              if (parsed.floor_area_m2 > 200) {
+                console.log(`[FloorArea] Cap: ${parsed.floor_area_m2}m² exceeds 200m² max for extension — capping`);
+                parsed.floor_area_m2 = slabArea > 5 ? slabArea : 200;
+              }
             }
           }
 
