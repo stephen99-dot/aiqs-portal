@@ -349,6 +349,9 @@ const BASE_RATES = {
   'padstone':                          { rate: 65,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Precast concrete padstone 440x215x100mm bedded in mortar' },
   'wall_plate_timber':                 { rate: 14,   unit: 'm',  labour: 0.55, materials: 0.45, description: 'Timber wall plate 100x75mm treated softwood bolted to blockwork' },
   'joist_hanger':                      { rate: 8,    unit: 'Nr', labour: 0.60, materials: 0.40, description: 'Joist hanger galvanised steel for timber joist' },
+  'floor_joists_c24':                  { rate: 18,   unit: 'm',  labour: 0.55, materials: 0.45, description: 'C24 treated softwood floor joists 225x50mm at 400mm centres' },
+  'concrete_lintel':                   { rate: 55,   unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Precast concrete lintel to openings' },
+  'fascia_board_timber':               { rate: 45,   unit: 'm',  labour: 0.50, materials: 0.50, description: 'Timber fascia board 150mm with soffit and guttering' },
   // Misc commonly extracted items
   'threshold_strip':                   { rate: 25,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Threshold strip aluminium at door openings' },
   'architrave':                        { rate: 14,   unit: 'm',  labour: 0.65, materials: 0.35, description: 'Architrave MDF or softwood ogee profile' },

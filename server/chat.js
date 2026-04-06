@@ -45,6 +45,22 @@ try { if (memoryEngine && deterministicPricer && deterministicPricer.BASE_RATES)
   for (const [k, v] of Object.entries(deterministicPricer.BASE_RATES)) { baseRateValues[k] = v.rate; }
   memoryEngine.cleanCorruptedRates(db, baseRateValues);
 }} catch(e) { console.error('[Memory] Cleanup error:', e.message); }
+// Also clean corrupted client_rate_library entries (e.g. scaffolding at £2,245 vs base £22)
+try { if (deterministicPricer && deterministicPricer.BASE_RATES) {
+  const rows = db.prepare('SELECT id, item_key, value FROM client_rate_library WHERE is_active = 1').all();
+  let cleaned = 0;
+  for (const row of rows) {
+    const base = deterministicPricer.BASE_RATES[row.item_key];
+    if (!base || base.rate <= 0) continue;
+    const ratio = row.value / base.rate;
+    if (ratio > 5 || ratio < 0.1) {
+      console.log(`[Startup] Deactivating corrupted client rate: "${row.item_key}" value=${row.value} (base=${base.rate}, ratio=${ratio.toFixed(1)}x)`);
+      db.prepare('UPDATE client_rate_library SET is_active = 0 WHERE id = ?').run(row.id);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) console.log(`[Startup] Deactivated ${cleaned} corrupted client rate(s)`);
+}} catch(e) { console.error('[Startup] Client rate cleanup error:', e.message); }
 
 try {
   db.exec(`
@@ -447,10 +463,20 @@ Check your quantities against these maximums:
 ${clientRateSection}
 ${benchmarkSection || ''}
 
+LOCATION EXTRACTION — CRITICAL:
+You MUST extract the project location from the drawings/documents. Check these sources IN ORDER:
+1. Drawing title block — almost always contains site address, town, and postcode
+2. Cover sheet or planning application reference
+3. Location plan or site plan annotations
+4. Any address, postcode, or town name visible anywhere in the documents
+5. Irish county references (Co. Dublin, Co. Cork etc.) or UK postcodes (e.g. SW1A 1AA, M1 2AB)
+6. If the user mentioned a location in their message, use that
+If you find ANY location info, include it in the "location" field. Only leave location empty if genuinely no location info exists anywhere in the documents or conversation.
+
 Respond with ONLY this JSON structure:
 {
   "project_type": "e.g. Single Storey Rear Extension",
-  "location": "full address or town/postcode",
+  "location": "full address or town/postcode — MUST extract from drawing title block if present",
   "floor_area_m2": 31.5,
   "items": [
     {
@@ -2278,7 +2304,9 @@ CRITICAL RULES:
               quantitySummary += `\n📐 ${req.zipData.all_openings.length} door/window sizes read directly from schedule (no estimation)`;
             }
             if (req.zipData && req.zipData.all_rooms.length > 0) {
-              quantitySummary += `\n🏠 Floor area confirmed from room schedule: ${req.zipData.summary.total_floor_area_m2.toFixed(1)}m²`;
+              const displayArea = parsed.floor_area_m2 || req.zipData.summary.total_floor_area_m2;
+              const wasOverridden = parsed._original_floor_area && parsed._original_floor_area !== parsed.floor_area_m2;
+              quantitySummary += `\n🏠 Floor area${wasOverridden ? ' (extension footprint)' : ' confirmed from room schedule'}: ${displayArea.toFixed(1)}m²`;
             }
             // If no address was provided, ask for it now alongside the quantities
             // Also check parsed.location — AI may have extracted it from drawings
