@@ -525,8 +525,9 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
     const originalPath = path.join(outputsDir, project.boq_filename);
     if (!require('fs').existsSync(originalPath)) return res.status(404).json({ error: 'Original BOQ file not found on server' });
 
-    // Uplift multiplier: compound the percentages
-    const multiplier = (1 + contingency / 100) * (1 + ohp / 100) * (1 + vat / 100);
+    // Uplift multiplier: contingency & OH&P are both on construction total (additive),
+    // then VAT applies to the combined sum — matches deterministicPricer.js formula
+    const multiplier = (1 + contingency / 100 + ohp / 100) * (1 + vat / 100);
 
     const srcWb = new ExcelJS.Workbook();
     await srcWb.xlsx.readFile(originalPath);
