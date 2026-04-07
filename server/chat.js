@@ -473,6 +473,19 @@ You MUST extract the project location from the drawings/documents. Check these s
 6. If the user mentioned a location in their message, use that
 If you find ANY location info, include it in the "location" field. Only leave location empty if genuinely no location info exists anywhere in the documents or conversation.
 
+SCOPE DETECTION — READ THE CLIENT'S BRIEF CAREFULLY:
+The user or their client may specify a LIMITED SCOPE. Look for these phrases:
+- "core build", "core finish", "to plaster", "ready for paint", "shell finish", "shell and core", "structural only"
+  → EXCLUDE: decoration, floor finishes (LVT, tiles, carpet), kitchen fitout, bathroom fitout, ensuite fitout
+  → INCLUDE: plasterboard + skim to walls/ceilings (this IS core finish), screed (floor base), first/second fix M&E
+- "excluding kitchen", "kitchen extra", "kitchen by others", "bathroom extra", "bathroom by others"
+  → EXCLUDE those specific fitout items
+- "to include kitchen", "turnkey", "full fitout"
+  → INCLUDE everything
+
+If the user states a TARGET FLOOR AREA (e.g. "25 sq mtr", "40m²"), use THAT as floor_area_m2 — NOT the room schedule total.
+If the user states a TARGET BUDGET (e.g. "land about 40k", "budget £50,000"), note this in your anomalies if your total differs significantly.
+
 Respond with ONLY this JSON structure:
 {
   "project_type": "e.g. Single Storey Rear Extension",
@@ -1960,6 +1973,53 @@ ${summary}`);
             }
           }
 
+          // POST-EXTRACTION: Scope detection — strip fitout items if "core to plaster" scope
+          const allConvForScope = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ').toLowerCase();
+          const isCoreFinish = /core\s*(build|finish)|to\s*plaster|ready\s*for\s*paint|shell\s*(finish|and\s*core)|structural\s*only|plaster\s*finish/i.test(allConvForScope);
+          const excludeKitchen = isCoreFinish || /kitchen.*extra|kitchen.*by\s*others|exclud.*kitchen|no\s*kitchen/i.test(allConvForScope);
+          const excludeBathroom = isCoreFinish || /bathroom.*extra|bathroom.*by\s*others|exclud.*bathroom|no\s*bathroom/i.test(allConvForScope);
+          const excludeDecoration = isCoreFinish;
+          const excludeFloorFinish = isCoreFinish;
+
+          if (parsed.items && (excludeKitchen || excludeBathroom || excludeDecoration || excludeFloorFinish)) {
+            const fitoutKeys = new Set();
+            if (excludeKitchen) ['kitchen_fitout_mid', 'kitchen_fitout_high', 'kitchen_fitout_budget'].forEach(k => fitoutKeys.add(k));
+            if (excludeBathroom) ['bathroom_fitout_mid', 'bathroom_fitout_high', 'ensuite_sanitary_plumbing', 'shower_room_fitout', 'wc_cloakroom_fitout'].forEach(k => fitoutKeys.add(k));
+            if (excludeDecoration) ['internal_decorations', 'mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'].forEach(k => fitoutKeys.add(k));
+            if (excludeFloorFinish) ['lvt_flooring_karndean', 'floor_tile_600x600', 'ceramic_wall_tiles_ensuite', 'carpet_underlay'].forEach(k => fitoutKeys.add(k));
+
+            const before = parsed.items.length;
+            parsed.items = parsed.items.filter(item => {
+              if (fitoutKeys.has(item.key)) return false;
+              // Also catch by section name for decoration/floor finish items
+              if (excludeDecoration && item.section && /decoration/i.test(item.section) && !/(plasterboard|skim|plaster)/i.test(item.key)) return false;
+              return true;
+            });
+            const removed = before - parsed.items.length;
+            if (removed > 0) {
+              console.log(`[Scope] Core-to-plaster finish detected — removed ${removed} fitout/decoration items`);
+              if (!parsed.anomalies) parsed.anomalies = [];
+              parsed.anomalies.push(`Scope: "core build to plaster" — ${removed} fitout/decoration items excluded (kitchen, bathroom, decoration, floor finishes are extras)`);
+            }
+          }
+
+          // POST-EXTRACTION: Client-stated floor area override
+          // If the user/client said "25 sq mtr" or "40m²", use that instead of room schedule
+          const statedAreaMatch = allConvForScope.match(/(\d+)\s*(?:sq\s*m(?:tr|eter|etre)?s?|m[2²])\b/);
+          if (statedAreaMatch && parsed.floor_area_m2) {
+            const statedArea = parseFloat(statedAreaMatch[1]);
+            if (statedArea > 5 && statedArea < 200 && Math.abs(statedArea - parsed.floor_area_m2) > statedArea * 0.3) {
+              console.log(`[FloorArea] Client stated ${statedArea}m² but AI extracted ${parsed.floor_area_m2}m² — using client's figure`);
+              parsed._original_floor_area = parsed.floor_area_m2;
+              parsed.floor_area_m2 = statedArea;
+              // Also adjust slab if needed
+              const slabItem = parsed.items.find(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
+              if (slabItem && slabItem.qty > statedArea * 1.2) {
+                slabItem.qty = statedArea;
+              }
+            }
+          }
+
           pipelineLog.push({ stage: 'extract', label: 'Stage 1: Quantities extracted', detail: `${parsed.items?.length || 0} items across ${[...new Set((parsed.items || []).map(i => i.section))].length} sections` + (parsed.floor_area_m2 ? ` — ${parsed.floor_area_m2}m² floor area` : ''), ts: Date.now() });
 
           if (parsed.items && parsed.items.length > 0) {
@@ -2353,6 +2413,22 @@ CRITICAL RULES:
                 quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — at the higher end of typical rates (${currSym}2,000-3,500/m²). Worth a quick review.`;
               } else {
                 quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — within typical range.`;
+              }
+            }
+
+            // Budget comparison — if client stated a target, compare
+            const budgetMatch = allConvForScope.match(/(?:land\s*(?:about|around|at)|budget\s*(?:of|is|around)?|target\s*(?:of|is|around)?|come\s*in\s*(?:at|around)|(?:about|around|roughly)\s*)\s*[£€]?\s*(\d+)\s*k\b/i)
+              || allConvForScope.match(/[£€]\s*(\d{4,6})\b/);
+            if (budgetMatch) {
+              const targetBudget = budgetMatch[1].length <= 3 ? parseFloat(budgetMatch[1]) * 1000 : parseFloat(budgetMatch[1]);
+              const grandTotal = priced.summary.grand_total;
+              const diff = ((grandTotal - targetBudget) / targetBudget * 100).toFixed(0);
+              if (grandTotal > targetBudget * 1.15) {
+                quantitySummary += `\n\n💰 **Budget note:** Client target was ${currSym}${targetBudget.toLocaleString('en-GB')} but estimate is ${currSym}${Math.round(grandTotal).toLocaleString('en-GB')} (${diff}% over). Review scope or adjust quantities to align.`;
+              } else if (grandTotal < targetBudget * 0.85) {
+                quantitySummary += `\n\n💰 **Budget note:** Client target was ${currSym}${targetBudget.toLocaleString('en-GB')} — estimate of ${currSym}${Math.round(grandTotal).toLocaleString('en-GB')} is well within budget.`;
+              } else {
+                quantitySummary += `\n\n💰 **Budget note:** Estimate aligns with client target of ${currSym}${targetBudget.toLocaleString('en-GB')}.`;
               }
             }
 
