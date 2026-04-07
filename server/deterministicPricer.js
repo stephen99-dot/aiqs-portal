@@ -358,6 +358,11 @@ const BASE_RATES = {
   'lintels_precast':                   { rate: 55,   unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Precast concrete lintel to openings' },
   'cavity_tray':                       { rate: 18,   unit: 'm',  labour: 0.40, materials: 0.60, description: 'Cavity tray DPC at lintels and abutments' },
   'ventilation_grille':                { rate: 35,   unit: 'Nr', labour: 0.50, materials: 0.50, description: 'Air brick / ventilation grille 215x140mm' },
+  'door_frames_hardwood':              { rate: 185,  unit: 'Nr', labour: 0.55, materials: 0.45, description: 'Hardwood door frame/lining set with stops and fixings' },
+  'window_cills_stone':                { rate: 85,   unit: 'Nr', labour: 0.45, materials: 0.55, description: 'Reconstituted stone window cill 150mm wide including bedding' },
+  'make_good_existing':                { rate: 450,  unit: 'Item',labour: 0.75, materials: 0.25, description: 'Make good to existing structure at junction with new works' },
+  'opening_formation':                 { rate: 650,  unit: 'Nr', labour: 0.70, materials: 0.30, description: 'Form new opening in existing wall including temporary support and making good' },
+  'stair_opening_formation':           { rate: 850,  unit: 'Nr', labour: 0.70, materials: 0.30, description: 'Form opening in existing floor for staircase including trimming joists' },
   // ============================================
   // INFRASTRUCTURE / UTILITIES / ESB RATES
   // ============================================
@@ -675,7 +680,7 @@ function crossValidateQuantities(items, projectType) {
   const isCombined = (isExtension && isLoft) || (isExtension && isRefurb) || isHMO;
   // Combined extension+loft: extension footprint is still limited, allow up to 160m² total
   // HMO: no cap (too variable). Loft only: 60m². Simple extension: 80-120m².
-  const maxFloorArea = isHMO ? null : isCombined ? 160 : isLoft ? 60 : isExtension ? (isMultiStorey ? 120 : 80) : null;
+  const maxFloorArea = isHMO ? null : isCombined ? 160 : isLoft ? 60 : isExtension ? (isMultiStorey ? 100 : 50) : null;
 
   if (maxFloorArea) {
     // Cap concrete slab to max floor area for extensions
@@ -1377,6 +1382,44 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   let constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // SECTION-LEVEL COST CAPS — catch over-pricing in individual sections
+  // Only for residential extensions (single/two storey)
+  // ═══════════════════════════════════════════════════════════════════════
+  const ptStr = (options.project_type || projectType || '').toLowerCase();
+  const isSingleStoreyExt = (ptStr.includes('single') || (!ptStr.includes('two') && !ptStr.includes('2'))) && ptStr.includes('extension');
+  const isTwoStoreyExt = (ptStr.includes('two') || ptStr.includes('2')) && ptStr.includes('extension');
+  if (isSingleStoreyExt || isTwoStoreyExt) {
+    const cs = currency === 'EUR' ? '€' : '£';
+    const sectionCaps = {
+      'roof':        { max: isTwoStoreyExt ? 18000 : 12000, target: isTwoStoreyExt ? 14000 : 9000 },
+      'electrical':  { max: isTwoStoreyExt ? 14000 : 10000, target: isTwoStoreyExt ? 11000 : 8000 },
+      'substructure':{ max: isTwoStoreyExt ? 22000 : 16000, target: isTwoStoreyExt ? 18000 : 12000 },
+      'mechanical':  { max: isTwoStoreyExt ? 10000 : 7000,  target: isTwoStoreyExt ? 8000  : 5500 },
+    };
+    for (const sec of sectionTotals) {
+      const secLower = sec.name.toLowerCase();
+      for (const [capKey, { max, target }] of Object.entries(sectionCaps)) {
+        if (secLower.includes(capKey)) {
+          if (sec.subtotal > max) {
+            const scale = target / sec.subtotal;
+            warnings.push(`Section "${sec.name}" was ${cs}${Math.round(sec.subtotal).toLocaleString()} — exceeds ${cs}${max.toLocaleString()} max for ${isSingleStoreyExt ? 'single' : 'two'} storey extension. Scaled to ${cs}${target.toLocaleString()}.`);
+            for (const item of sec.items) {
+              item.rate = Math.round(item.rate * scale * 100) / 100;
+              item.total = Math.round(item.qty * item.rate * 100) / 100;
+              const labourShare = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
+              item.labour = Math.round(item.total * labourShare * 100) / 100;
+              item.materials = Math.round((item.total - item.labour) * 100) / 100;
+            }
+            sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0);
+          }
+          break;
+        }
+      }
+    }
+    constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
+  }
+
   // Post-pricing cost/m² sanity check — estimate floor area from slab items
   // IMPORTANT: For combined projects (extension + loft + refurb), slab area is only
   // the extension footprint — NOT the total project scope. Use options.floor_area if available
@@ -1431,6 +1474,38 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       const cs = currency === 'EUR' ? '€' : '£';
       warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — HMO/infrastructure project types have variable costs.`);
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // ABSOLUTE CONSTRUCTION TOTAL CAP — final safety net for extensions
+  // Even after all per-m² and section caps, enforce an absolute max
+  // ═══════════════════════════════════════════════════════════════════════
+  if (isSingleStoreyExt && constructionTotal > 80000) {
+    const scale = 65000 / constructionTotal;
+    const cs = currency === 'EUR' ? '€' : '£';
+    warnings.push(`TOTAL CAP: Single storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} — exceeds ${cs}80,000 absolute max. Scaled to ~${cs}65,000.`);
+    for (const item of pricedItems) {
+      item.rate = Math.round(item.rate * scale * 100) / 100;
+      item.total = Math.round(item.qty * item.rate * 100) / 100;
+      const ls = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
+      item.labour = Math.round(item.total * ls * 100) / 100;
+      item.materials = Math.round((item.total - item.labour) * 100) / 100;
+    }
+    for (const sec of sectionTotals) { sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0); }
+    constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
+  } else if (isTwoStoreyExt && constructionTotal > 130000) {
+    const scale = 100000 / constructionTotal;
+    const cs = currency === 'EUR' ? '€' : '£';
+    warnings.push(`TOTAL CAP: Two storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} — exceeds ${cs}130,000 absolute max. Scaled to ~${cs}100,000.`);
+    for (const item of pricedItems) {
+      item.rate = Math.round(item.rate * scale * 100) / 100;
+      item.total = Math.round(item.qty * item.rate * 100) / 100;
+      const ls = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
+      item.labour = Math.round(item.total * ls * 100) / 100;
+      item.materials = Math.round((item.total - item.labour) * 100) / 100;
+    }
+    for (const sec of sectionTotals) { sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0); }
+    constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
   }
 
   const contingency = Math.round(constructionTotal * (contingency_pct / 100) * 100) / 100;

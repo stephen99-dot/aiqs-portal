@@ -198,6 +198,24 @@ const ALIASES = {
   'garage_demo': 'garage_demolition',
   'demolish_garage': 'garage_demolition',
 
+  // Structural openings
+  'opening_formation': 'opening_formation',
+  'new_opening': 'opening_formation',
+  'form_opening': 'opening_formation',
+  'structural_opening': 'opening_formation',
+  'stair_opening': 'stair_opening_formation',
+  'make_good': 'make_good_existing',
+  'making_good': 'make_good_existing',
+  'make_good_existing': 'make_good_existing',
+
+  // Door/window accessories
+  'door_frame': 'door_frames_hardwood',
+  'door_lining': 'door_frames_hardwood',
+  'window_cill': 'window_cills_stone',
+  'window_cills': 'window_cills_stone',
+  'window_sill': 'window_cills_stone',
+  'stone_cill': 'window_cills_stone',
+
   // Misc
   'staircase_new': 'staircase',
   'new_staircase': 'staircase',

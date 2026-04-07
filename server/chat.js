@@ -473,6 +473,19 @@ You MUST extract the project location from the drawings/documents. Check these s
 6. If the user mentioned a location in their message, use that
 If you find ANY location info, include it in the "location" field. Only leave location empty if genuinely no location info exists anywhere in the documents or conversation.
 
+SCOPE DETECTION — READ THE CLIENT'S BRIEF CAREFULLY:
+The user or their client may specify a LIMITED SCOPE. Look for these phrases:
+- "core build", "core finish", "to plaster", "ready for paint", "shell finish", "shell and core", "structural only"
+  → EXCLUDE: decoration, floor finishes (LVT, tiles, carpet), kitchen fitout, bathroom fitout, ensuite fitout
+  → INCLUDE: plasterboard + skim to walls/ceilings (this IS core finish), screed (floor base), first/second fix M&E
+- "excluding kitchen", "kitchen extra", "kitchen by others", "bathroom extra", "bathroom by others"
+  → EXCLUDE those specific fitout items
+- "to include kitchen", "turnkey", "full fitout"
+  → INCLUDE everything
+
+If the user states a TARGET FLOOR AREA (e.g. "25 sq mtr", "40m²"), use THAT as floor_area_m2 — NOT the room schedule total.
+If the user states a TARGET BUDGET (e.g. "land about 40k", "budget £50,000"), note this in your anomalies if your total differs significantly.
+
 Respond with ONLY this JSON structure:
 {
   "project_type": "e.g. Single Storey Rear Extension",
@@ -1812,6 +1825,25 @@ ${summary}`);
               { type: 'text', text: floorAreaNote },
             ];
           }
+
+          // Scan extracted text for location/address info to pass to AI
+          if (req.zipData && req.zipData.text_context && req.zipData.text_context.length > 0) {
+            const allZipText = req.zipData.text_context.join(' ');
+            // Look for UK postcodes, Irish Eircodes, or common address patterns in extracted PDF text
+            const postcodeMatch = allZipText.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b/);
+            const eircodeMatch = allZipText.match(/\b([A-Z]\d{2}\s?[A-Z0-9]{4})\b/);
+            const cityMatch = allZipText.match(/\b(London|Manchester|Birmingham|Bristol|Leeds|Edinburgh|Glasgow|Cardiff|Belfast|Liverpool|Sheffield|Newcastle|Nottingham|Dublin|Cork|Galway|Limerick|Waterford|Kilkenny|Wexford|Wicklow|Meath|Kildare)\b/i);
+            const countyMatch = allZipText.match(/\b(Co\.?\s*(?:Dublin|Cork|Galway|Limerick|Kerry|Tipperary|Waterford|Kilkenny|Wexford|Wicklow|Meath|Kildare|Louth|Monaghan|Cavan|Donegal|Sligo|Mayo|Roscommon|Longford|Westmeath|Offaly|Laois|Carlow|Clare))\b/i);
+            const addressHint = postcodeMatch ? postcodeMatch[1] : eircodeMatch ? eircodeMatch[1] : countyMatch ? countyMatch[1] : cityMatch ? cityMatch[1] : null;
+            if (addressHint) {
+              console.log(`[Location] Found address hint in ZIP text: "${addressHint}"`);
+              extractContent = Array.isArray(extractContent) ? extractContent : [{ type: 'text', text: extractContent }];
+              extractContent = [
+                ...extractContent,
+                { type: 'text', text: `\n\nLOCATION DETECTED FROM DRAWINGS: "${addressHint}" — use this as the project location in your JSON output.` }
+              ];
+            }
+          }
         }
 
         const extractMessages = [...messages, { role: 'user', content: extractContent }];
@@ -1854,27 +1886,136 @@ ${summary}`);
 
           // ═══════════════════════════════════════════════════════════
           // POST-EXTRACTION: Programmatic floor area enforcement
-          // If ZIP pre-processing found a room schedule with total house area,
-          // and the project is an extension, ensure floor_area_m2 is the
-          // extension area (from slab qty) NOT the whole house
+          // Prevents AI from using whole-house room schedule area instead
+          // of extension footprint. Multiple checks:
+          // 1. Cross-check floor_area vs room schedule total (if available)
+          // 2. Cross-check floor_area vs slab qty
+          // 3. Hard caps per project type
           // ═══════════════════════════════════════════════════════════
           if (parsed.items && parsed.items.length > 0) {
             const pTypeLC = (parsed.project_type || projectTypeGuess || '').toLowerCase();
-            const isExtProj = /extension|conversion/i.test(pTypeLC);
+            const isExtProj = /extension/i.test(pTypeLC);
+            const isMultiStorey = /two|2|double|multi/i.test(pTypeLC);
+            const isSingleStorey = isExtProj && !isMultiStorey;
+            const isLoftProj = /loft|conversion/i.test(pTypeLC);
+            const isCombinedProj = isExtProj && isLoftProj;
+
             if (isExtProj && parsed.floor_area_m2) {
-              // Find the slab item — its qty IS the actual extension footprint
               const slabItem = parsed.items.find(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
               const slabArea = slabItem ? slabItem.qty : 0;
-              // If AI set floor_area to whole-house area (much larger than slab), override
+
+              // Hard cap per project type — single storey extension rarely exceeds 50m²
+              const maxFloorArea = isCombinedProj ? 160 : isMultiStorey ? 100 : 50;
+
+              // Check 1: If room schedule exists, and floor_area matches it closely,
+              // the AI likely used whole-house area instead of extension footprint
+              const roomScheduleArea = (req.zipData && req.zipData.summary) ? req.zipData.summary.total_floor_area_m2 : 0;
+              if (roomScheduleArea > 0 && Math.abs(parsed.floor_area_m2 - roomScheduleArea) < roomScheduleArea * 0.15) {
+                // floor_area matches room schedule within 15% — almost certainly whole house, not extension
+                if (parsed.floor_area_m2 > maxFloorArea) {
+                  console.log(`[FloorArea] Room schedule match: AI said ${parsed.floor_area_m2}m² ≈ room schedule ${roomScheduleArea}m² — this is the whole house, not the extension`);
+                  parsed._original_floor_area = parsed.floor_area_m2;
+                  // Use slab if available, otherwise cap
+                  parsed.floor_area_m2 = (slabArea > 5 && slabArea <= maxFloorArea) ? slabArea : maxFloorArea;
+                  // Also cap the slab if it was inflated too
+                  if (slabItem && slabItem.qty > maxFloorArea) {
+                    console.log(`[FloorArea] Capping slab from ${slabItem.qty}m² to ${maxFloorArea}m²`);
+                    slabItem.qty = maxFloorArea;
+                  }
+                }
+              }
+
+              // Check 2: If floor_area is much larger than slab, use slab
               if (slabArea > 5 && parsed.floor_area_m2 > slabArea * 2.5) {
-                console.log(`[FloorArea] Override: AI said ${parsed.floor_area_m2}m² but slab is only ${slabArea}m² — using slab area for extension`);
+                console.log(`[FloorArea] Override: AI said ${parsed.floor_area_m2}m² but slab is only ${slabArea}m² — using slab area`);
                 parsed._original_floor_area = parsed.floor_area_m2;
                 parsed.floor_area_m2 = slabArea;
               }
-              // Also: if floor_area_m2 is unreasonably large for any extension (>200m²), cap it
-              if (parsed.floor_area_m2 > 200) {
-                console.log(`[FloorArea] Cap: ${parsed.floor_area_m2}m² exceeds 200m² max for extension — capping`);
-                parsed.floor_area_m2 = slabArea > 5 ? slabArea : 200;
+
+              // Check 3: Hard cap — even if slab is inflated, enforce project type limits
+              if (parsed.floor_area_m2 > maxFloorArea) {
+                console.log(`[FloorArea] Hard cap: ${parsed.floor_area_m2}m² exceeds ${maxFloorArea}m² max for ${isSingleStorey ? 'single storey' : isMultiStorey ? 'two storey' : 'combined'} extension — capping`);
+                parsed._original_floor_area = parsed._original_floor_area || parsed.floor_area_m2;
+                parsed.floor_area_m2 = maxFloorArea;
+                // Also cap the slab qty to match
+                if (slabItem && slabItem.qty > maxFloorArea) {
+                  slabItem.qty = maxFloorArea;
+                }
+              }
+
+              // Cap all area-dependent items to floor area (DPM, insulation, screed etc.)
+              if (parsed._original_floor_area) {
+                const areaDependentKeys = ['pir_insulation_under_slab', 'dpm_1200g', 'hardcore_fill',
+                  'screed_sand_cement_75mm', 'screed_ufh_75mm', 'chipboard_flooring', 'plywood_flooring',
+                  'floor_insulation_suspended', 'floor_joists_c24'];
+                for (const item of parsed.items) {
+                  if (areaDependentKeys.includes(item.key) && item.qty > parsed.floor_area_m2 * 1.1) {
+                    console.log(`[FloorArea] Capping ${item.key} from ${item.qty} to ${parsed.floor_area_m2}`);
+                    item.qty = parsed.floor_area_m2;
+                  }
+                }
+              }
+            }
+          }
+
+          // POST-EXTRACTION: Location fallback — if AI didn't extract location,
+          // try to find it from conversation text or zip data
+          if (!parsed.location || parsed.location.trim().length === 0 || /not\s*(specified|provided|shown|visible|available)/i.test(parsed.location)) {
+            // Try conversation text
+            const convLocationMatch = allTextForAddr.match(/\b([A-Z]{1,2}\d{1,2}[A-Z]?\s?\d[A-Z]{2})\b/) ||
+              allTextForAddr.match(/\b(London|Manchester|Birmingham|Bristol|Leeds|Edinburgh|Glasgow|Cardiff|Belfast|Liverpool|Sheffield|Newcastle|Nottingham|Dublin|Cork|Galway|Limerick)\b/i);
+            if (convLocationMatch) {
+              parsed.location = convLocationMatch[1];
+              console.log(`[Location] Fallback: set location from conversation text: "${parsed.location}"`);
+            } else if (locationGuess) {
+              parsed.location = locationGuess;
+              console.log(`[Location] Fallback: set location from locationGuess: "${parsed.location}"`);
+            }
+          }
+
+          // POST-EXTRACTION: Scope detection — strip fitout items if "core to plaster" scope
+          const allConvForScope = [message || '', ...messages.map(m => typeof m.content === 'string' ? m.content : '')].join(' ').toLowerCase();
+          const isCoreFinish = /core\s*(build|finish)|to\s*plaster|ready\s*for\s*paint|shell\s*(finish|and\s*core)|structural\s*only|plaster\s*finish/i.test(allConvForScope);
+          const excludeKitchen = isCoreFinish || /kitchen.*extra|kitchen.*by\s*others|exclud.*kitchen|no\s*kitchen/i.test(allConvForScope);
+          const excludeBathroom = isCoreFinish || /bathroom.*extra|bathroom.*by\s*others|exclud.*bathroom|no\s*bathroom/i.test(allConvForScope);
+          const excludeDecoration = isCoreFinish;
+          const excludeFloorFinish = isCoreFinish;
+
+          if (parsed.items && (excludeKitchen || excludeBathroom || excludeDecoration || excludeFloorFinish)) {
+            const fitoutKeys = new Set();
+            if (excludeKitchen) ['kitchen_fitout_mid', 'kitchen_fitout_high', 'kitchen_fitout_budget'].forEach(k => fitoutKeys.add(k));
+            if (excludeBathroom) ['bathroom_fitout_mid', 'bathroom_fitout_high', 'ensuite_sanitary_plumbing', 'shower_room_fitout', 'wc_cloakroom_fitout'].forEach(k => fitoutKeys.add(k));
+            if (excludeDecoration) ['internal_decorations', 'mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'].forEach(k => fitoutKeys.add(k));
+            if (excludeFloorFinish) ['lvt_flooring_karndean', 'floor_tile_600x600', 'ceramic_wall_tiles_ensuite', 'carpet_underlay'].forEach(k => fitoutKeys.add(k));
+
+            const before = parsed.items.length;
+            parsed.items = parsed.items.filter(item => {
+              if (fitoutKeys.has(item.key)) return false;
+              // Also catch by section name for decoration/floor finish items
+              if (excludeDecoration && item.section && /decoration/i.test(item.section) && !/(plasterboard|skim|plaster)/i.test(item.key)) return false;
+              return true;
+            });
+            const removed = before - parsed.items.length;
+            if (removed > 0) {
+              console.log(`[Scope] Core-to-plaster finish detected — removed ${removed} fitout/decoration items`);
+              if (!parsed.anomalies) parsed.anomalies = [];
+              parsed.anomalies.push(`Scope: "core build to plaster" — ${removed} fitout/decoration items excluded (kitchen, bathroom, decoration, floor finishes are extras)`);
+            }
+          }
+
+          // POST-EXTRACTION: Client-stated floor area override
+          // If the user/client said "25 sq mtr" or "40m²", use that instead of room schedule
+          const statedAreaMatch = allConvForScope.match(/(\d+)\s*(?:sq\s*m(?:tr|eter|etre)?s?|m[2²])\b/);
+          if (statedAreaMatch && parsed.floor_area_m2) {
+            const statedArea = parseFloat(statedAreaMatch[1]);
+            if (statedArea > 5 && statedArea < 200 && Math.abs(statedArea - parsed.floor_area_m2) > statedArea * 0.3) {
+              console.log(`[FloorArea] Client stated ${statedArea}m² but AI extracted ${parsed.floor_area_m2}m² — using client's figure`);
+              parsed._original_floor_area = parsed.floor_area_m2;
+              parsed.floor_area_m2 = statedArea;
+              // Also adjust slab if needed
+              const slabItem = parsed.items.find(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
+              if (slabItem && slabItem.qty > statedArea * 1.2) {
+                slabItem.qty = statedArea;
               }
             }
           }
@@ -2272,6 +2413,22 @@ CRITICAL RULES:
                 quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — at the higher end of typical rates (${currSym}2,000-3,500/m²). Worth a quick review.`;
               } else {
                 quantitySummary += `\n\n📊 Cost/m²: ${costPerM2Str} (floor area ${floorAreaForCheck.toFixed(1)}m²) — within typical range.`;
+              }
+            }
+
+            // Budget comparison — if client stated a target, compare
+            const budgetMatch = allConvForScope.match(/(?:land\s*(?:about|around|at)|budget\s*(?:of|is|around)?|target\s*(?:of|is|around)?|come\s*in\s*(?:at|around)|(?:about|around|roughly)\s*)\s*[£€]?\s*(\d+)\s*k\b/i)
+              || allConvForScope.match(/[£€]\s*(\d{4,6})\b/);
+            if (budgetMatch) {
+              const targetBudget = budgetMatch[1].length <= 3 ? parseFloat(budgetMatch[1]) * 1000 : parseFloat(budgetMatch[1]);
+              const grandTotal = priced.summary.grand_total;
+              const diff = ((grandTotal - targetBudget) / targetBudget * 100).toFixed(0);
+              if (grandTotal > targetBudget * 1.15) {
+                quantitySummary += `\n\n💰 **Budget note:** Client target was ${currSym}${targetBudget.toLocaleString('en-GB')} but estimate is ${currSym}${Math.round(grandTotal).toLocaleString('en-GB')} (${diff}% over). Review scope or adjust quantities to align.`;
+              } else if (grandTotal < targetBudget * 0.85) {
+                quantitySummary += `\n\n💰 **Budget note:** Client target was ${currSym}${targetBudget.toLocaleString('en-GB')} — estimate of ${currSym}${Math.round(grandTotal).toLocaleString('en-GB')} is well within budget.`;
+              } else {
+                quantitySummary += `\n\n💰 **Budget note:** Estimate aligns with client target of ${currSym}${targetBudget.toLocaleString('en-GB')}.`;
               }
             }
 
