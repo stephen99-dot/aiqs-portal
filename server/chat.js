@@ -1612,16 +1612,22 @@ ${summary}`);
           );
           const tkSym = tkPriced.summary.currency === 'EUR' ? '€' : '£';
           const sectionLines = tkPriced.sections.map(s => `${s.name}: ${tkSym}${s.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}`).join('\n');
-          systemPrompt += `\n\nLOCKED TAKEOFF PRICING (ref: ${existingTk.id}) — THESE ARE THE CORRECT FIGURES:\n` +
+          const tkIsDraft = existingTk.status === 'draft';
+          const tkStatusLabel = tkIsDraft ? 'DRAFT' : 'LOCKED';
+          systemPrompt += `\n\n${tkStatusLabel} TAKEOFF PRICING (ref: ${existingTk.id}) — THESE ARE THE CORRECT FIGURES:\n` +
             sectionLines + '\n' +
             `Construction Total: ${tkSym}${tkPriced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
             `Grand Total (incl contingency, OH&P, VAT): ${tkSym}${tkPriced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
             `CRITICAL: A deterministic pricer has already calculated costs for this project. Do NOT generate your own cost breakdown or section totals. ` +
-            `If the user asks about costs, ONLY reference these locked figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
+            `If the user asks about costs, ONLY reference these figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
             `The pricer's figures are authoritative and must not be contradicted.\n` +
+            (tkIsDraft
+              ? `STATUS: These quantities are in DRAFT — the user has not confirmed them yet. ` +
+                `Encourage the user to review quantities and say "confirm" when happy. Do NOT tell them to "generate documents" until they confirm.\n`
+              : '') +
             `QUANTITY ADJUSTMENTS: If the user flags a quantity as wrong (e.g. "plasterboard seems high", "electrical area should be 160m² not 309m²"), ` +
-            `you may agree and explain why. The system will automatically detect your agreement and update the locked takeoff. ` +
-            `Tell the user: "I've updated that quantity — say 'generate documents' to get the corrected BOQ." ` +
+            `you may agree and explain why. The system will automatically detect your agreement and update the ${tkIsDraft ? 'draft' : 'locked'} takeoff. ` +
+            `Tell the user: "I've updated that quantity` + (tkIsDraft ? ` — review the rest and say 'confirm' when you're happy."` : ` — say 'generate documents' to get the corrected BOQ."`) + ` ` +
             `Do NOT invent your own total or re-calculate the full BOQ yourself — the deterministic pricer will re-price with the corrected quantities.`;
         }
       } catch(e) { console.error('[Takeoff inject] Error:', e.message); }
@@ -1703,19 +1709,34 @@ ${summary}`);
     let takeoffData = null;
     let pipelineLog = null;
 
-    // If session has a locked takeoff and this is a short non-file message (e.g. "Dublin", "yes", "ok"),
-    // override the general AI reply with a focused response that acknowledges and moves forward
+    // If session has a takeoff (draft or confirmed) and this is a short non-file message,
+    // handle location updates, confirmations, and status-aware responses
     if (!hasFiles && !wantsDocuments && sessionId && benchmarkStore) {
       try {
         const existingTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId);
         if (existingTakeoff && existingTakeoff.items && existingTakeoff.items.length > 0) {
-          const msgLen = (message || '').trim().length;
+          const msgTrimmed = (message || '').trim();
+          const msgLen = msgTrimmed.length;
+          const isDraft = existingTakeoff.status === 'draft';
+
+          // Detect explicit confirmation phrases to lock a draft takeoff
+          const isConfirmLock = /^(confirm|lock|lock\s*it|looks?\s*good|happy|satisfied|all\s*good|that'?s?\s*(correct|right|fine|good)|approve|accept|yes.*confirm|go\s*ahead)/i.test(msgTrimmed);
+          const isLocation = /dublin|cork|galway|london|manchester|birmingham|edinburgh|glasgow|cardiff|belfast|bristol|leeds|sheffield|liverpool|ireland|uk/i.test(msgTrimmed);
+          const isSimpleAck = /^(yes|ok|okay|sure|fine|proceed|correct|sounds good|perfect|great)/i.test(msgTrimmed);
+
           if (msgLen < 80) {
-            const isLocation = /dublin|cork|galway|london|manchester|birmingham|edinburgh|glasgow|cardiff|belfast|bristol|leeds|sheffield|liverpool|ireland|uk/i.test(message || '');
-            const isConfirm = /^(yes|ok|okay|sure|fine|go|proceed|correct|sounds good|perfect|great)/i.test((message || '').trim());
-            if (isLocation || isConfirm) {
-              const locLabel = isLocation ? (message || '').trim() : (existingTakeoff.location || 'location noted');
-              reply = 'Got it - ' + locLabel + ' noted. Quantities locked (ref: ' + existingTakeoff.id + ') with ' + existingTakeoff.items.length + ' items. Say "generate documents" and I will produce your Excel BOQ and Word Findings Report.';
+            if (isDraft && (isConfirmLock || isSimpleAck)) {
+              // Upgrade draft to confirmed
+              benchmarkStore.updateTakeoff(db, existingTakeoff.id, { status: 'confirmed' });
+              console.log(`[Takeoff] Draft ${existingTakeoff.id} confirmed by user`);
+              reply = 'Quantities confirmed and locked (ref: ' + existingTakeoff.id + ') with ' + existingTakeoff.items.length + ' items. Say "generate documents" and I will produce your Excel BOQ and Word Findings Report.';
+            } else if (isLocation) {
+              const locLabel = msgTrimmed;
+              if (isDraft) {
+                reply = 'Got it — ' + locLabel + ' noted. Quantities ready for review (ref: ' + existingTakeoff.id + ') with ' + existingTakeoff.items.length + ' items. Check the figures and say "confirm" to lock them in.';
+              } else {
+                reply = 'Got it — ' + locLabel + ' noted. Quantities locked (ref: ' + existingTakeoff.id + ') with ' + existingTakeoff.items.length + ' items. Say "generate documents" and I will produce your Excel BOQ and Word Findings Report.';
+              }
             }
           }
         }
@@ -2472,7 +2493,7 @@ CRITICAL RULES:
               quantitySummary += `\n\n📍 **One thing needed:** What's the project address or town? This lets me apply the correct local rates and currency (UK £ or Ireland €). Reply with the location and I'll update the pricing before you generate.`;
             }
 
-            quantitySummary += `\n\nQuantities are now locked (ref: ${takeoffId}). Review the figures above. If anything needs adjusting, tell me now. When you are satisfied, say "generate documents" and I will produce the Excel BOQ and Findings Report — the total will be exactly as shown above.`;
+            quantitySummary += `\n\nQuantities are ready for review (ref: ${takeoffId}). Check the figures above — if anything needs adjusting, tell me now. When you're happy, say "confirm" to lock them in, then "generate documents" to produce your Excel BOQ and Findings Report.`;
 
             reply = quantitySummary;
             takeoffData = { takeoffId, priced, floorArea, projectType: parsed.project_type, sessionId: activeSessionId };
@@ -2543,12 +2564,18 @@ CRITICAL RULES:
       const clientName = req.user.full_name || req.user.email;
 
       // Project name from takeoff location or drawings
-    // Find locked takeoff for this session
+    // Find takeoff for this session — auto-confirm draft if user is generating
       let lockedTakeoff = null;
       let pricedResult = null;
 
       if (sessionId && benchmarkStore && deterministicPricer) {
         lockedTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId);
+        // Auto-confirm draft when user explicitly requests document generation
+        if (lockedTakeoff && lockedTakeoff.status === 'draft') {
+          benchmarkStore.updateTakeoff(db, lockedTakeoff.id, { status: 'confirmed' });
+          lockedTakeoff.status = 'confirmed';
+          console.log(`[Takeoff] Auto-confirmed draft ${lockedTakeoff.id} on document generation`);
+        }
       }
 
       if (lockedTakeoff && lockedTakeoff.items && lockedTakeoff.items.length > 0) {
@@ -3006,14 +3033,23 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     if (!responseTakeoffId && req.body.takeoff_id) {
       responseTakeoffId = req.body.takeoff_id; // frontend remembered it
     }
+    let responseTakeoffStatus = null;
     if (!responseTakeoffId && responseSessionId && benchmarkStore) {
       // Last resort: look up from DB by session_id
       try {
         const sessionTakeoff = benchmarkStore.getTakeoffBySession(db, responseSessionId);
         if (sessionTakeoff) {
           responseTakeoffId = sessionTakeoff.id;
-          console.log(`[Session] Recovered takeoff_id ${responseTakeoffId} from DB for session ${responseSessionId}`);
+          responseTakeoffStatus = sessionTakeoff.status || 'draft';
+          console.log(`[Session] Recovered takeoff_id ${responseTakeoffId} (${responseTakeoffStatus}) from DB for session ${responseSessionId}`);
         }
+      } catch(e) {}
+    }
+    // Resolve takeoff status if not already set
+    if (responseTakeoffId && !responseTakeoffStatus && benchmarkStore) {
+      try {
+        const tkLookup = benchmarkStore.getTakeoffById(db, responseTakeoffId);
+        if (tkLookup) responseTakeoffStatus = tkLookup.status || 'draft';
       } catch(e) {}
     }
 
@@ -3026,7 +3062,8 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       payment_required: paymentRequired,
       session_id: responseSessionId,
       takeoff_id: responseTakeoffId,
-      takeoff_locked: responseTakeoffId ? true : false,
+      takeoff_status: responseTakeoffStatus || (responseTakeoffId ? 'draft' : null),
+      takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
       pipeline_log: pipelineLog || null,
     };
 
@@ -3050,7 +3087,8 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
         payment_required: paymentRequired,
         session_id: responseSessionId,
         takeoff_id: responseTakeoffId,
-        takeoff_locked: responseTakeoffId ? true : false,
+        takeoff_status: responseTakeoffStatus || (responseTakeoffId ? 'draft' : null),
+        takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
         pipeline_log: pipelineLog || null,
       });
     } else {
