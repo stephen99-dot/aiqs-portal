@@ -48,6 +48,7 @@ export default function ChatPage() {
   // These are the two critical IDs that must persist through the conversation
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [currentTakeoffId, setCurrentTakeoffId] = useState(null);
+  const [takeoffStatus, setTakeoffStatus] = useState(null); // 'draft' | 'confirmed' | null
 
   // ── Quota tracking ────────────────────────────────────────────────
   const [quotaInfo, setQuotaInfo]     = useState(null);
@@ -109,6 +110,7 @@ export default function ChatPage() {
     stageDone: '#34D399', stageWait: '#1E2D40',
     topBar: '#080B13', topBorder: '#161E2E', overlay: 'rgba(0,0,0,0.65)',
     newBg: 'rgba(245,158,11,0.07)', newBorder: 'rgba(245,158,11,0.18)', newText: '#F59E0B',
+    draftBg: 'rgba(245,158,11,0.06)', draftBorder: 'rgba(245,158,11,0.2)', draftText: '#F59E0B',
     lockedBg: 'rgba(16,185,129,0.06)', lockedBorder: 'rgba(16,185,129,0.2)', lockedText: '#34D399',
     warnBg: 'rgba(245,158,11,0.06)', warnBorder: 'rgba(245,158,11,0.2)', warnText: '#F59E0B',
     scroll: '#1E293B', groupLabel: '#2D3E55',
@@ -124,6 +126,7 @@ export default function ChatPage() {
     stageDone: '#059669', stageWait: '#CBD5E1',
     topBar: '#FFFFFF', topBorder: '#E2E8F0', overlay: 'rgba(0,0,0,0.4)',
     newBg: 'rgba(245,158,11,0.06)', newBorder: 'rgba(245,158,11,0.2)', newText: '#D97706',
+    draftBg: 'rgba(245,158,11,0.05)', draftBorder: 'rgba(245,158,11,0.2)', draftText: '#D97706',
     lockedBg: 'rgba(16,185,129,0.05)', lockedBorder: 'rgba(16,185,129,0.2)', lockedText: '#059669',
     warnBg: 'rgba(245,158,11,0.05)', warnBorder: 'rgba(245,158,11,0.2)', warnText: '#D97706',
     scroll: '#CBD5E1', groupLabel: '#CBD5E1',
@@ -145,14 +148,16 @@ export default function ChatPage() {
       setCurrentSessionId(id);
       setExpanded({});
       if (mobile) setSidebarOpen(false);
-      // Recover takeoff_id from message history — critical for "generate" after page reload
+      // Recover takeoff_id and status from message history — critical for "generate" after page reload
       const lastWithTakeoff = [...msgs].reverse().find(m => m.takeoffId || m.takeoff_id);
       if (lastWithTakeoff) {
         const tid = lastWithTakeoff.takeoffId || lastWithTakeoff.takeoff_id;
         setCurrentTakeoffId(tid);
+        setTakeoffStatus(lastWithTakeoff.takeoffStatus || (lastWithTakeoff.takeoffLocked ? 'confirmed' : 'draft'));
         console.log('[Session] Recovered takeoff_id:', tid);
       } else {
         setCurrentTakeoffId(null);
+        setTakeoffStatus(null);
       }
     } catch (e) { console.error(e); }
   }
@@ -175,6 +180,7 @@ export default function ChatPage() {
         pipelineLog: m.pipelineLog || null,
         timestamp: m.timestamp, error: m.error || false,
         takeoffLocked: m.takeoffLocked || false,
+        takeoffStatus: m.takeoffStatus || null,
       }));
       const d = await apiFetch('/chat-sessions', {
         method: 'POST',
@@ -187,7 +193,7 @@ export default function ChatPage() {
   }, []);
 
   function newChat() {
-    setMessages([]); setCurrentSessionId(null); setCurrentTakeoffId(null);
+    setMessages([]); setCurrentSessionId(null); setCurrentTakeoffId(null); setTakeoffStatus(null);
     setExpanded({}); setFiles([]); setInput('');
     if (mobile) setSidebarOpen(false);
   }
@@ -262,7 +268,9 @@ export default function ChatPage() {
         }
         if (data.takeoff_id) {
           setCurrentTakeoffId(data.takeoff_id);
-          console.log('[Chat] Takeoff locked:', data.takeoff_id);
+          const status = data.takeoff_status || (data.takeoff_locked ? 'confirmed' : 'draft');
+          setTakeoffStatus(status);
+          console.log('[Chat] Takeoff:', data.takeoff_id, 'status:', status);
         }
 
         const aiMsg = {
@@ -272,7 +280,8 @@ export default function ChatPage() {
           downloadFiles: data.files || null,
           paymentRequired: data.payment_required || null,
           quota: data.quota || null,
-          takeoffLocked: !!data.takeoff_id,
+          takeoffLocked: data.takeoff_locked || false,
+          takeoffStatus: data.takeoff_status || (data.takeoff_id ? 'draft' : null),
           pipelineLog: data.pipeline_log || null,
           sessionId: data.session_id,
           takeoffId: data.takeoff_id,
@@ -431,11 +440,16 @@ export default function ChatPage() {
     );
   }
 
-  function LockedBanner() {
+  function TakeoffBanner() {
     if (!currentTakeoffId) return null;
+    const isDraft = takeoffStatus !== 'confirmed';
+    const bg = isDraft ? c.draftBg : c.lockedBg;
+    const border = isDraft ? c.draftBorder : c.lockedBorder;
+    const color = isDraft ? c.draftText : c.lockedText;
+    const label = isDraft ? 'Draft — review & confirm' : 'Quantities locked';
     return (
-      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 12px', background:c.lockedBg, border:`1px solid ${c.lockedBorder}`, borderRadius:8, fontSize:11.5, color:c.lockedText, fontWeight:600, whiteSpace:'nowrap' }}>
-        {ICONS.lock(c.lockedText)} Quantities locked
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 12px', background:bg, border:`1px solid ${border}`, borderRadius:8, fontSize:11.5, color, fontWeight:600, whiteSpace:'nowrap' }}>
+        {isDraft ? '📝' : ICONS.lock(color)} {label}
       </div>
     );
   }
@@ -474,10 +488,17 @@ export default function ChatPage() {
             <div>{(msg.content||'').split('\n').map((l,i,a) => <React.Fragment key={i}>{l}{i<a.length-1&&<br/>}</React.Fragment>)}</div>
 
             {/* Takeoff locked indicator */}
-            {msg.takeoffLocked && (
-              <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:c.lockedBg, border:`1px solid ${c.lockedBorder}`, borderRadius:8, fontSize:12, color:c.lockedText, fontWeight:600 }}>
-                {ICONS.lock(c.lockedText)}
-                Quantities locked — say "generate documents" to produce your Excel BOQ &amp; Word Report
+            {(msg.takeoffLocked || msg.takeoffStatus) && (
+              <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8, padding:'8px 12px',
+                background: msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? c.lockedBg : c.draftBg,
+                border: `1px solid ${msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? c.lockedBorder : c.draftBorder}`,
+                borderRadius:8, fontSize:12,
+                color: msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? c.lockedText : c.draftText,
+                fontWeight:600 }}>
+                {msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? ICONS.lock(c.lockedText) : '📝'}
+                {msg.takeoffStatus === 'confirmed' || msg.takeoffLocked
+                  ? 'Quantities locked — say "generate documents" to produce your Excel BOQ & Word Report'
+                  : 'Draft quantities — review above, then say "confirm" to lock them in'}
               </div>
             )}
 
@@ -615,7 +636,7 @@ export default function ChatPage() {
           <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:14, fontWeight:700, color:c.text, flexShrink:0 }}>AI Quantity Surveyor</span>
             {!mobile && <span style={{ fontSize:12, color:c.textMuted }}>Upload drawings · lock quantities · generate BOQs</span>}
-            {!mobile && currentTakeoffId && <LockedBanner/>}
+            {!mobile && currentTakeoffId && <TakeoffBanner/>}
           </div>
           {quotaInfo && quotaInfo.messages_limit > 0 && (() => {
             const used = quotaInfo.messages_used || 0;
@@ -707,8 +728,10 @@ export default function ChatPage() {
                 onChange={e => { if (e.target.files?.length) addFiles(e.target.files); }}/>
               <textarea className="ta" value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKey}
                 placeholder={
-                  currentTakeoffId
+                  currentTakeoffId && takeoffStatus === 'confirmed'
                     ? 'Quantities locked — say "generate documents" or ask to adjust...'
+                    : currentTakeoffId
+                    ? 'Review quantities above — say "confirm" to lock, or ask to adjust...'
                     : files.length > 0
                       ? 'Describe the scope or say "extract quantities"...'
                       : 'Upload drawings or ask a QS question...'
@@ -721,8 +744,10 @@ export default function ChatPage() {
               </button>
             </form>
             <div style={{ fontSize:11, color:c.textMuted, textAlign:'center', marginTop:7 }}>
-              {currentTakeoffId
+              {currentTakeoffId && takeoffStatus === 'confirmed'
                 ? `🔒 Takeoff locked (${currentTakeoffId.slice(0,12)}) · Total is deterministic · Say "generate documents" to produce files`
+                : currentTakeoffId
+                ? `📝 Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
                 : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Quantities locked before generating'}
             </div>
           </div>
