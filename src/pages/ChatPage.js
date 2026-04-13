@@ -234,7 +234,11 @@ export default function ChatPage() {
     hadFiles.current = files.length > 0;
     setInput(''); setFiles([]); setSending(true);
 
-    const history = messages.filter(m => m.content).map(m => ({ role: m.role, content: m.content }));
+    // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits
+    const history = messages.filter(m => m.content).slice(-20).map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' && m.content.length > 4000 ? m.content.slice(0, 4000) + '...' : m.content,
+    }));
     const fd = new FormData();
     fd.append('message', savedInput);
     fd.append('history', JSON.stringify(history));
