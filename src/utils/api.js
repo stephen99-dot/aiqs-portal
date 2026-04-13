@@ -78,7 +78,30 @@ function streamChat(formData, callbacks = {}) {
         return;
       }
 
-      if (!res.ok || !res.headers.get('content-type')?.includes('text/event-stream')) {
+      const isSSE = res.headers.get('content-type')?.includes('text/event-stream');
+
+      // SSE error response (e.g. multer field-size limit) — parse the SSE event
+      if (!res.ok && isSSE) {
+        try {
+          const text = await res.text();
+          const match = text.match(/^data:\s*(.+)$/m);
+          if (match) {
+            const evt = JSON.parse(match[1]);
+            const err = new Error(evt.message || 'Something went wrong');
+            err.status = res.status;
+            err.data = evt;
+            if (onError) onError(err);
+            return;
+          }
+        } catch(e) { /* fall through */ }
+        const err = new Error('Server error (' + res.status + ')');
+        err.status = res.status;
+        err.data = {};
+        if (onError) onError(err);
+        return;
+      }
+
+      if (!res.ok || !isSSE) {
         // Fallback to regular JSON response
         let data;
         try { data = await res.json(); } catch(e) { data = { error: 'Server error (' + res.status + ')' }; }
