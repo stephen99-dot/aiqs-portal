@@ -35,6 +35,17 @@ const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
+// Purge stale uploaded files on startup to free disk space (Render ephemeral storage)
+try {
+  const staleFiles = fs.readdirSync(uploadsDir);
+  if (staleFiles.length > 0) {
+    for (const f of staleFiles) {
+      try { fs.unlinkSync(path.join(uploadsDir, f)); } catch(e) {}
+    }
+    console.log(`[Startup] Purged ${staleFiles.length} old upload(s) from ${uploadsDir}`);
+  }
+} catch(e) { console.error('[Startup] Upload cleanup error:', e.message); }
+
 // Init benchmark/takeoff tables
 try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
 // Init memory engine tables
