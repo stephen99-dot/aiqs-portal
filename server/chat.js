@@ -35,6 +35,17 @@ const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
+// Purge stale uploaded files on startup to free disk space (Render ephemeral storage)
+try {
+  const staleFiles = fs.readdirSync(uploadsDir);
+  if (staleFiles.length > 0) {
+    for (const f of staleFiles) {
+      try { fs.unlinkSync(path.join(uploadsDir, f)); } catch(e) {}
+    }
+    console.log(`[Startup] Purged ${staleFiles.length} old upload(s) from ${uploadsDir}`);
+  }
+} catch(e) { console.error('[Startup] Upload cleanup error:', e.message); }
+
 // Init benchmark/takeoff tables
 try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
 // Init memory engine tables
@@ -1051,8 +1062,12 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
       db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
-    } else {
+    } else if (!id) {
+      // Only create new sessions when no id was provided (genuinely new chat).
+      // If an id WAS provided but doesn't exist, the session was deleted — skip silently.
       db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
+    } else {
+      return res.json({ id: sessionId, title: sessionTitle });
     }
     res.json({ id: sessionId, title: sessionTitle });
   } catch (e) { console.error('[ChatSessions] Save error:', e.message); res.status(500).json({ error: 'Failed to save session' }); }

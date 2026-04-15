@@ -164,6 +164,9 @@ export default function ChatPage() {
 
   async function deleteSession(id, e) {
     e.stopPropagation();
+    // Cancel any pending auto-save BEFORE deleting — prevents the save
+    // timer from re-inserting the session after it's been removed from DB
+    clearTimeout(saveRef.current);
     try {
       await apiFetch(`/chat-sessions/${id}`, { method: 'DELETE' });
       setSessions(p => p.filter(s => s.id !== id));
