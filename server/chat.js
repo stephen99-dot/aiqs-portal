@@ -1062,8 +1062,12 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
       db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
-    } else {
+    } else if (!id) {
+      // Only create new sessions when no id was provided (genuinely new chat).
+      // If an id WAS provided but doesn't exist, the session was deleted — skip silently.
       db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
+    } else {
+      return res.json({ id: sessionId, title: sessionTitle });
     }
     res.json({ id: sessionId, title: sessionTitle });
   } catch (e) { console.error('[ChatSessions] Save error:', e.message); res.status(500).json({ error: 'Failed to save session' }); }
