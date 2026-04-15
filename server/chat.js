@@ -80,12 +80,18 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
 });
 
+const ALLOWED_UPLOAD_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip', '.xlsx', '.xls', '.dwg', '.dxf'];
 const upload = multer({
   storage,
   limits: { fileSize: 150 * 1024 * 1024, fieldSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.zip', '.xlsx', '.xls'];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_UPLOAD_EXTS.includes(ext)) {
+      // Track rejected files so chatHandler can report them
+      if (!req._rejectedFiles) req._rejectedFiles = [];
+      req._rejectedFiles.push(file.originalname);
+    }
+    cb(null, ALLOWED_UPLOAD_EXTS.includes(ext));
   }
 });
 
@@ -1535,6 +1541,12 @@ ${summary}`);
             console.log(`[Upload] Excel parse failed, sending placeholder: ${file.originalname}`);
           }
 
+        } else if (ext === '.dwg' || ext === '.dxf') {
+          // CAD files can't be directly analysed — tell the user to export as PDF
+          fileNames.push(file.originalname);
+          zipNotes.push(`${file.originalname} is a ${ext.slice(1).toUpperCase()} CAD file — please export as PDF and re-upload for full analysis.`);
+          console.log(`[Upload] CAD file needs PDF export: ${file.originalname}`);
+
         } else {
           const b = fileToContentBlock(file.path, ext);
           if (Array.isArray(b)) {
@@ -1545,9 +1557,23 @@ ${summary}`);
           } else if (b) {
             currentContent.push(b);
             fileNames.push(file.originalname);
+          } else {
+            console.warn(`[Upload] Could not process file: ${file.originalname} (${ext})`);
           }
         }
       }
+    }
+
+    // If files were uploaded but none could be processed, give clear feedback
+    if (req.files && req.files.length > 0 && currentContent.length === 0 && fileNames.length === 0) {
+      const names = req.files.map(f => f.originalname).join(', ');
+      return sendError(400, { error: `Could not process: ${names}. Supported formats: PDF, PNG, JPG, ZIP, Excel (.xlsx/.xls). For CAD files (.dwg/.dxf), export as PDF first.` });
+    }
+
+    // If multer rejected some files, note it
+    if (req._rejectedFiles && req._rejectedFiles.length > 0) {
+      const rejected = req._rejectedFiles.join(', ');
+      zipNotes.push(`Unsupported file(s) skipped: ${rejected}. Supported: PDF, PNG, JPG, ZIP, Excel, DWG, DXF.`);
     }
 
     // Extract session ID from body for takeoff tracking
@@ -1566,7 +1592,13 @@ ${summary}`);
     }
 
     if (textMessage) currentContent.push({ type: 'text', text: textMessage });
-    if (currentContent.length === 0) return sendError(400, { error: 'Please provide a message or upload a file' });
+    if (currentContent.length === 0) {
+      // Give a specific error if files were submitted but all got rejected by multer
+      if (req._rejectedFiles && req._rejectedFiles.length > 0) {
+        return sendError(400, { error: `Unsupported file type: ${req._rejectedFiles.join(', ')}. Supported formats: PDF, PNG, JPG, ZIP, Excel (.xlsx/.xls), DWG, DXF.` });
+      }
+      return sendError(400, { error: 'Please provide a message or upload a file' });
+    }
 
     messages.push({ role: 'user', content: currentContent });
 
