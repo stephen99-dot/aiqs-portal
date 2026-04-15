@@ -1380,10 +1380,11 @@ function sseEvent(res, evt) {
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
-      res.writeHead(400, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-      sseEvent(res, { type: 'error', message: err.code === 'LIMIT_FILE_SIZE' ? 'File too large — maximum upload size is 150MB.' : `Upload failed: ${err.message}` });
-      res.end();
-      return;
+      console.error('[Multer] Upload error:', err.code || 'UNKNOWN', err.message);
+      const msg = err.code === 'LIMIT_FILE_SIZE'
+        ? 'File too large — maximum upload size is 150MB.'
+        : `Upload failed: ${err.message}`;
+      return res.status(400).json({ error: msg });
     }
     next();
   });
@@ -1408,6 +1409,12 @@ router.post('/chat/stream', authMiddleware, (req, res, next) => {
     res.write('data: [DONE]\n\n');
     res.end();
   }
+  // Clean up uploaded files to prevent disk exhaustion on Render
+  if (req.files && req.files.length > 0) {
+    for (const f of req.files) {
+      try { fs.unlinkSync(f.path); } catch(e) {}
+    }
+  }
 });
 
 router.post('/chat', authMiddleware, (req, res, next) => {
@@ -1426,6 +1433,12 @@ router.post('/chat', authMiddleware, (req, res, next) => {
   } catch (err) {
     console.error('Chat error:', err);
     res.status(500).json({ error: 'Something went wrong -- please try again' });
+  }
+  // Clean up uploaded files to prevent disk exhaustion
+  if (req.files && req.files.length > 0) {
+    for (const f of req.files) {
+      try { fs.unlinkSync(f.path); } catch(e) {}
+    }
   }
 });
 

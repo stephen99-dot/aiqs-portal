@@ -80,38 +80,39 @@ function streamChat(formData, callbacks = {}) {
 
       const isSSE = res.headers.get('content-type')?.includes('text/event-stream');
 
-      // SSE error response (e.g. multer field-size limit) — parse the SSE event
-      if (!res.ok && isSSE) {
+      // Handle error responses (both JSON and SSE formats)
+      if (!res.ok) {
+        let errMsg = null;
+        let errData = {};
         try {
           const text = await res.text();
-          const match = text.match(/^data:\s*(.+)$/m);
-          if (match) {
-            const evt = JSON.parse(match[1]);
-            const err = new Error(evt.message || 'Something went wrong');
-            err.status = res.status;
-            err.data = evt;
-            if (onError) onError(err);
-            return;
+          // Try SSE format first: data: {"type":"error","message":"..."}
+          const sseMatch = text.match(/^data:\s*(.+)$/m);
+          if (sseMatch) {
+            const evt = JSON.parse(sseMatch[1]);
+            errMsg = evt.message || evt.error;
+            errData = evt;
           }
-        } catch(e) { /* fall through */ }
-        const err = new Error('Server error (' + res.status + ')');
+          // Try JSON format: {"error":"..."}
+          if (!errMsg) {
+            try {
+              const json = JSON.parse(text);
+              errMsg = json.error || json.message;
+              errData = json;
+            } catch(e) {}
+          }
+        } catch(e) { /* body unreadable */ }
+        const err = new Error(errMsg || 'Something went wrong — please try again');
         err.status = res.status;
-        err.data = {};
+        err.data = errData;
         if (onError) onError(err);
         return;
       }
 
-      if (!res.ok || !isSSE) {
-        // Fallback to regular JSON response
+      if (!isSSE) {
+        // Fallback to regular JSON response (non-error, non-SSE)
         let data;
         try { data = await res.json(); } catch(e) { data = { error: 'Server error (' + res.status + ')' }; }
-        if (!res.ok) {
-          const err = new Error(data.error || 'Something went wrong');
-          err.status = res.status;
-          err.data = data;
-          if (onError) onError(err);
-          return;
-        }
         // Got a JSON response from the stream endpoint — treat as complete
         if (onDone) onDone(data);
         return;
