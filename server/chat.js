@@ -85,6 +85,17 @@ try {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Tombstone table: records deleted session IDs so a late-arriving save
+  // from a race condition (save fired then user deletes before it lands)
+  // can't resurrect a session the user just deleted. Cleaned up after 24h.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deleted_chat_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      deleted_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.prepare("DELETE FROM deleted_chat_sessions WHERE deleted_at < datetime('now', '-1 day')").run();
 } catch (e) { console.error('[DB] chat_sessions table error:', e.message); }
 
 const storage = multer.diskStorage({
@@ -768,18 +779,15 @@ Rule 3 — If ANY project information exists in the conversation (drawings, scop
 After providing analysis, always end with: "Just say 'generate documents' and I will create your Excel BOQ and Word Findings Report."
 
 COMMUNICATION STYLE — CRITICAL:
-You are writing as a professional quantity surveyor, not a chatbot. Follow these rules strictly:
-1. NEVER use markdown formatting: no **, no ##, no ---, no bullet points with -, no numbered lists with 1.
-2. NEVER use emojis or symbols like checkmarks, warning signs, or arrows
-3. Write in plain professional prose — paragraphs and sentences, like a proper QS report
-4. Use simple line breaks to separate sections, not markdown headers
-5. Present BOQ data as plain text tables using fixed-width spacing or tab-separated columns
-6. When listing items, use plain text: "Item 1.1 — Strip foundations 600x250mm, 9.74m at 87/m = 848"
-7. Keep the tone direct and professional — like an email from a senior QS to a contractor
-8. Do not include "How to use this BOQ" sections or chatbot-style prompts
-9. Do not ask multiple questions at the end — one follow-up at most
-10. Never say "Need me to..." with a list of options. Just say "Let me know if you want anything adjusted."
-11. State assumptions and exclusions in plain sentences, not bullet lists
+You are writing as a professional quantity surveyor. Formatting rules:
+1. Use markdown thoughtfully — **bold** for key figures and section names, bullet lists for measured items, tables for cost breakdowns, headers (##) for major sections. Don't over-format short answers.
+2. Do NOT use emojis, checkmarks, warning signs or arrows (keep it professional).
+3. Write in clear, direct QS prose — a senior QS briefing a contractor, not a chatbot.
+4. Present BOQ data as markdown tables when useful. Use fenced code blocks for any raw data the user will copy.
+5. Numbered items: prefer "Item 1.1 — Strip foundations..." style for BOQ line items; markdown numbered lists are fine for workflow steps.
+6. Keep the tone direct. Do not include meta-text like "How to use this BOQ" or "Need me to..." lists.
+7. Ask at most one follow-up question at the end, not several.
+8. State assumptions and exclusions as a compact bulleted list when there are more than two.
 
 RATE LEARNING: If a client corrects a rate or provides their own pricing, acknowledge it naturally in conversation. The system auto-learns from corrections.
 
@@ -1069,12 +1077,14 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
       const content = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : '') : '';
       sessionTitle = content.substring(0, 60).trim() || 'Chat ' + new Date().toLocaleDateString('en-GB');
     }
+    // Tombstone check: if this id was recently deleted by the user, don't
+    // resurrect it (guards against the save-then-delete race where an
+    // in-flight auto-save arrives after the DELETE request).
+    const tombstoned = db.prepare('SELECT 1 FROM deleted_chat_sessions WHERE id = ? AND user_id = ? LIMIT 1').get(sessionId, req.user.id);
+    if (tombstoned) {
+      return res.json({ id: sessionId, title: sessionTitle, skipped: 'deleted' });
+    }
     // Upsert: UPDATE if the row exists, otherwise INSERT.
-    // Previously we would silently skip if the caller provided an id that didn't
-    // exist, on the theory that it might have been deleted in the meantime —
-    // but that path also swallowed saves for session_ids the chat handler had
-    // auto-created for takeoffs, losing every message in those chats. The
-    // delete-race is rare and cosmetic; losing user data is not.
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
       db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
@@ -1088,6 +1098,12 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
 router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
   try {
     const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    // Always record a tombstone — even if the row was already gone — so a
+    // late-arriving save doesn't resurrect it. INSERT OR IGNORE to handle
+    // the case where someone deletes the same session twice quickly.
+    try {
+      db.prepare('INSERT OR IGNORE INTO deleted_chat_sessions (id, user_id) VALUES (?, ?)').run(req.params.id, req.user.id);
+    } catch (tErr) { console.error('[ChatSessions] Tombstone error:', tErr.message); }
     if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
     res.json({ success: true });
   } catch (e) { console.error('[ChatSessions] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete session' }); }
@@ -1444,6 +1460,85 @@ function sseEvent(res, evt) {
   res.write(`data: ${JSON.stringify(evt)}\n\n`);
 }
 
+// Call Anthropic's Messages API in streaming mode and forward text deltas to
+// the client in real-time via sseEmit. Aggregates the full reply + thinking
+// server-side so the rest of the pipeline (tag parsing, takeoff extraction,
+// usage logging) continues to work unchanged.
+//
+// Returns { ok, status, error, reply, thinking, tokensIn, tokensOut }.
+async function streamAnthropicMessage(headers, body, sseEmit) {
+  let resp;
+  try {
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+  } catch (fetchErr) {
+    return { ok: false, status: 0, error: { message: fetchErr.message } };
+  }
+
+  if (!resp.ok) {
+    let err = {};
+    try { err = await resp.json(); } catch (e) {}
+    return { ok: false, status: resp.status, error: err };
+  }
+
+  let reply = '';
+  let thinking = '';
+  let tokensIn = 0;
+  let tokensOut = 0;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+        let evt;
+        try { evt = JSON.parse(payload); } catch (e) { continue; }
+        switch (evt.type) {
+          case 'message_start':
+            if (evt.message && evt.message.usage) tokensIn = evt.message.usage.input_tokens || 0;
+            break;
+          case 'content_block_delta':
+            if (evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
+              reply += evt.delta.text;
+              if (sseEmit) {
+                try { sseEmit({ type: 'text', content: evt.delta.text }); } catch (e) {}
+              }
+            } else if (evt.delta && evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
+              thinking += evt.delta.thinking;
+            }
+            break;
+          case 'message_delta':
+            if (evt.usage && evt.usage.output_tokens != null) tokensOut = evt.usage.output_tokens;
+            break;
+          case 'error':
+            return { ok: false, status: 500, error: evt.error || evt, reply, thinking, tokensIn, tokensOut };
+          // message_stop / content_block_start / content_block_stop / ping — ignore
+        }
+      }
+    }
+  } catch (streamErr) {
+    console.error('[API] stream read error:', streamErr.message);
+    // If we got some reply text before the error, still return what we have
+    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, partial: true };
+    return { ok: false, status: 0, error: { message: streamErr.message } };
+  }
+
+  return { ok: true, reply, thinking, tokensIn, tokensOut };
+}
+
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
@@ -1795,37 +1890,42 @@ ${summary}`);
 
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
-    let response, usedFallback = false;
+    // Stream the primary LLM call — text deltas flow straight to the client
+    // via req.sseEmit, so the frontend sees text appear token-by-token (real
+    // claude.ai feel) rather than waiting for the full response. The server
+    // still aggregates `reply` + `thinking` for the post-processing pipeline.
+    let streamResult, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: apiHeaders,
-        body: JSON.stringify({ model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages })
-      });
-      if (response.ok) break;
-      const err = await response.json().catch(() => ({}));
-      console.error(`[API] Attempt ${attempt} failed: status=${response.status} type=${err?.error?.type} msg=${err?.error?.message}`);
-      if ((response.status === 529 || err?.error?.type === 'overloaded_error') && attempt < 3) {
+      streamResult = await streamAnthropicMessage(
+        apiHeaders,
+        { model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages },
+        req.sseEmit
+      );
+      if (streamResult.ok) break;
+      console.error(`[API] Attempt ${attempt} failed: status=${streamResult.status} type=${streamResult.error?.error?.type || streamResult.error?.type} msg=${streamResult.error?.error?.message || streamResult.error?.message}`);
+      if ((streamResult.status === 529 || streamResult.error?.error?.type === 'overloaded_error' || streamResult.error?.type === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
-      } else if (response.status !== 529) {
+      } else if (streamResult.status !== 529) {
         return sendError(500, { error: 'AI service error -- please try again' });
       }
     }
-    if (!response.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
+    if (!streamResult.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
       console.log('[API] Sonnet overloaded, falling back to Haiku...');
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: apiHeaders,
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages })
-      });
-      if (!response.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
+      streamResult = await streamAnthropicMessage(
+        apiHeaders,
+        { model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages },
+        req.sseEmit
+      );
+      if (!streamResult.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
-    } else if (!response.ok) {
+    } else if (!streamResult.ok) {
       return sendError(500, { error: 'AI service busy -- try again shortly' });
     }
 
-    const data = await response.json();
-
-    const tokensIn = data.usage ? data.usage.input_tokens : 0;
-    const tokensOut = data.usage ? data.usage.output_tokens : 0;
+    // Text was already streamed to the client in real time — don't re-send it later.
+    const streamedToClient = Boolean(req.streaming);
+    const tokensIn = streamResult.tokensIn || 0;
+    const tokensOut = streamResult.tokensOut || 0;
     const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
     const costPerIn = modelUsed.includes('haiku') ? 0.0000008 : 0.000003;
     const costPerOut = modelUsed.includes('haiku') ? 0.000004 : 0.000015;
@@ -1852,11 +1952,9 @@ ${summary}`);
       }
     } catch (aeErr) { /* activity logging is best-effort */ }
 
-    let thinking = '', reply = '';
-    for (const block of data.content) {
-      if (block.type === 'thinking') thinking += (thinking ? '\n' : '') + block.thinking;
-      else if (block.type === 'text') reply += (reply ? '\n' : '') + block.text;
-    }
+    // Reply + thinking were aggregated live during streamAnthropicMessage.
+    let thinking = streamResult.thinking || '';
+    let reply = streamResult.reply || '';
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
     // ═══════════════════════════════════════════════════════════════
@@ -2543,6 +2641,28 @@ CRITICAL RULES:
             }
 
             if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'price', detail: 'Calculating costs with deterministic pricing engine...' });
+            // Prefer user-confirmed intake answers over AI-extracted values — the user
+            // typed these in the intake modal, they're ground truth. Falls back to
+            // inline intake_json (first turn before session_id), then AI extraction.
+            const intakeRow = (memoryStore && sessionIdForTakeoff)
+              ? memoryStore.getProjectIntake(db, { userId, sessionId: sessionIdForTakeoff })
+              : null;
+            const intakeFloorArea = (inlineIntake && parseFloat(inlineIntake.floor_area_m2))
+              || (intakeRow && intakeRow.floor_area_m2)
+              || null;
+            const intakeProjectType = (inlineIntake && inlineIntake.project_type)
+              || (intakeRow && intakeRow.project_type)
+              || null;
+            const intakeScope = (inlineIntake && inlineIntake.scope)
+              || (intakeRow && intakeRow.scope)
+              || '';
+            // Build a project_type string that reflects the user's actual scope —
+            // so e.g. a "full house refurb with porch extension" isn't classified
+            // as a simple single-storey extension by the pricer's heuristics.
+            const mergedProjectType = intakeProjectType && intakeScope
+              ? (intakeProjectType + ' — ' + intakeScope).substring(0, 200)
+              : (intakeProjectType || parsed.project_type || projectTypeGuess || '');
+
             const priced = deterministicPricer.priceLockedQuantities(
               parsed.items,
               parsed.location || '',
@@ -2555,8 +2675,8 @@ CRITICAL RULES:
                   ohp_pct: 12,
                   vat_rate: isIreland ? 13.5 : 20,
                   currency: isIreland ? 'EUR' : 'GBP',
-                  project_type: parsed.project_type || projectTypeGuess || '',
-                  floor_area: parsed.floor_area_m2 || null,
+                  project_type: mergedProjectType,
+                  floor_area: intakeFloorArea || parsed.floor_area_m2 || null,
                 };
               })()
             );
@@ -3303,12 +3423,16 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     };
 
     if (req.streaming) {
-      // Send the final reply as text chunks (simulated streaming for the response text)
-      if (reply) {
-        // Send text in chunks for streaming feel
-        const chunkSize = 80;
+      // If we successfully streamed the reply live via streamAnthropicMessage,
+      // don't re-send it here or the client would see the text twice.
+      // Only fall back to chunked simulated streaming if real streaming
+      // didn't happen (e.g. the reply was rewritten downstream, or streaming
+      // failed and we somehow produced a reply without live deltas).
+      if (reply && !streamedToClient) {
+        const chunkSize = 18;
         for (let i = 0; i < reply.length; i += chunkSize) {
           sseEvent(res, { type: 'text', content: reply.slice(i, i + chunkSize) });
+          await new Promise(r => setTimeout(r, 12));
         }
       }
       // Send the full done event with all metadata
