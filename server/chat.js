@@ -1069,15 +1069,17 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
       const content = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : '') : '';
       sessionTitle = content.substring(0, 60).trim() || 'Chat ' + new Date().toLocaleDateString('en-GB');
     }
+    // Upsert: UPDATE if the row exists, otherwise INSERT.
+    // Previously we would silently skip if the caller provided an id that didn't
+    // exist, on the theory that it might have been deleted in the meantime —
+    // but that path also swallowed saves for session_ids the chat handler had
+    // auto-created for takeoffs, losing every message in those chats. The
+    // delete-race is rare and cosmetic; losing user data is not.
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
       db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
-    } else if (!id) {
-      // Only create new sessions when no id was provided (genuinely new chat).
-      // If an id WAS provided but doesn't exist, the session was deleted — skip silently.
-      db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
     } else {
-      return res.json({ id: sessionId, title: sessionTitle });
+      db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
     }
     res.json({ id: sessionId, title: sessionTitle });
   } catch (e) { console.error('[ChatSessions] Save error:', e.message); res.status(500).json({ error: 'Failed to save session' }); }
@@ -2456,6 +2458,13 @@ CRITICAL RULES:
             if (!activeSessionId) {
               activeSessionId = 'cs_' + require('crypto').randomBytes(6).toString('hex');
               console.log(`[Takeoff] No session_id — auto-created: ${activeSessionId}`);
+              // Also create the chat_sessions row up-front so the frontend's
+              // eventual auto-save (which will arrive with this id) UPDATEs
+              // an existing row instead of being silently dropped.
+              try {
+                const placeholderTitle = (message && message.substring(0, 60).trim()) || 'Chat ' + new Date().toLocaleDateString('en-GB');
+                db.prepare('INSERT OR IGNORE INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(activeSessionId, userId, placeholderTitle, '[]');
+              } catch (csErr) { console.error('[ChatSessions] Placeholder insert error:', csErr.message); }
             }
             const takeoffId = benchmarkStore.saveTakeoff(db, {
               userId,
