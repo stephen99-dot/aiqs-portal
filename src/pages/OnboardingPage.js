@@ -220,19 +220,15 @@ export default function OnboardingPage() {
           {textInput('regions', 'e.g. London, South East, Home Counties')}
         </Field>
 
-        <Field colors={c} label="5. Method of measurement" desc="Your standard — the AI will default to this.">
-          {pillSelect('method_of_measurement', MOM_OPTIONS)}
-        </Field>
-
-        <Field colors={c} label="6. Default contingency %" desc="Applied to every BOQ unless you override it on a project.">
+        <Field colors={c} label="5. Default contingency %" desc="The buffer added to every estimate for unknowns. 7.5% is standard for most projects.">
           {numberInput('contingency_pct', '7.5')}
         </Field>
 
-        <Field colors={c} label="7. Default OH&P / markup %" desc="Applied to every BOQ unless you override.">
+        <Field colors={c} label="6. Default markup / overhead %" desc="The margin added on top of costs (sometimes called OH&P — overheads & profit). 12% is typical.">
           {numberInput('ohp_pct', '12')}
         </Field>
 
-        <Field colors={c} label="8. Standard exclusions" desc="Items you always exclude (VAT, professional fees, site investigation, etc.)">
+        <Field colors={c} label="7. Standard exclusions" desc="Things you always leave out of estimates (VAT, planning fees, surveys, etc).">
           <textarea
             value={answers.standard_exclusions || ''}
             onChange={e => setSingle('standard_exclusions', e.target.value)}
@@ -260,11 +256,15 @@ export default function OnboardingPage() {
             }}
           >
             <span style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-            Advanced (optional)
+            Advanced (for QS firms)
           </button>
 
           {showAdvanced && (
             <div style={{ paddingTop: 12 }}>
+              <Field colors={c} label="Method of measurement" desc="RICS standard you follow. Leave blank if you don't follow a formal standard.">
+                {pillSelect('method_of_measurement', MOM_OPTIONS)}
+              </Field>
+
               <Field colors={c} label="Preferred spec level">
                 {pillSelect('spec_level', SPEC_OPTIONS)}
               </Field>
