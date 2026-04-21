@@ -1362,6 +1362,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       materials,
       total,
       rate_source: rateSource,
+      qty_source: item.qty_source || 'ai_extracted',
       section: item.section || 'General',
       working: item.working || '',
     });
