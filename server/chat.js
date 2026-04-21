@@ -2155,6 +2155,7 @@ ${summary}`);
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 16000,
+            temperature: 0,
             system: extractPrompt,
             messages: extractMessages
           })
@@ -2435,6 +2436,7 @@ CRITICAL RULES:
                 body: JSON.stringify({
                   model: 'claude-sonnet-4-20250514',
                   max_tokens: 12000,
+                  temperature: 0,
                   system: validationPrompt,
                   messages: [{ role: 'user', content: validationContent }]
                 })
@@ -3024,6 +3026,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             body: JSON.stringify({
               model: 'claude-haiku-4-5-20251001',
               max_tokens: 4000,
+              temperature: 0,
               system: findingsPrompt,
               messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }]
             })

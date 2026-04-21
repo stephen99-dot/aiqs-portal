@@ -332,6 +332,43 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
           ))}
         </div>
 
+        {/* Audit panel — exactly what fed the pricer, so the user can see
+            why this total is what it is. Deterministic given these inputs. */}
+        <details style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid ' + c.border, fontSize: 11 }}>
+          <summary style={{ cursor: 'pointer', color: c.textSub, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: 10, userSelect: 'none' }}>
+            How this total was calculated
+          </summary>
+          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'auto 1fr', rowGap: 4, columnGap: 10, fontSize: 11, color: c.textMuted }}>
+            <span>Takeoff ID</span>
+            <span style={{ color: c.text, fontFamily: 'ui-monospace, monospace' }}>{data.takeoff?.id || '—'}</span>
+            <span>Project type</span>
+            <span style={{ color: c.text }}>{data.takeoff?.project_type || summary.project_label || '—'}</span>
+            <span>Location</span>
+            <span style={{ color: c.text }}>{data.takeoff?.location || '—'}{summary.location_factor != null ? ` · factor ${(summary.location_factor * 100).toFixed(0)}%` : ''}</span>
+            <span>Currency</span>
+            <span style={{ color: c.text }}>{currency}{summary.vat_rate != null ? ` · VAT ${summary.vat_rate}%` : ''}</span>
+            <span>Items</span>
+            <span style={{ color: c.text }}>{(data.items_raw || []).length} raw · {sections.reduce((s, sec) => s + (sec.items?.length || 0), 0)} priced</span>
+            <span>Margins</span>
+            <span style={{ color: c.text }}>Contingency {summary.contingency_pct}% · OH&P {summary.ohp_pct}%</span>
+          </div>
+          {data.priced?.warnings && data.priced.warnings.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 10, color: c.textSub, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 4 }}>
+                Auto-corrections & caps ({data.priced.warnings.length})
+              </div>
+              <div style={{ fontSize: 11, color: c.textMuted, lineHeight: 1.5, maxHeight: 140, overflowY: 'auto' }}>
+                {data.priced.warnings.map((w, i) => (
+                  <div key={i} style={{ padding: '3px 0', borderBottom: i < data.priced.warnings.length - 1 ? '1px solid ' + c.border : 'none' }}>· {w}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ marginTop: 10, fontSize: 10, color: c.textSub, lineHeight: 1.5 }}>
+            Pricing is deterministic — given the same items, location, and intake answers, the total will always be identical. AI extraction is pinned to temperature 0 so re-running on the same drawings should give the same quantities.
+          </div>
+        </details>
+
         {onRegenerate && (
           <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button
