@@ -18,6 +18,7 @@ import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
+import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import NotetakerPage from './pages/NotetakerPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -56,6 +57,7 @@ function AppInner() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
+          <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/notetaker" element={<NotetakerPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
