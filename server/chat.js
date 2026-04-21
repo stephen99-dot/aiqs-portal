@@ -1311,7 +1311,36 @@ router.get('/takeoff/:sessionId', authMiddleware, (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to load takeoff' }); }
 });
 
-// Update takeoff items (user corrections before generating)
+// Get takeoff WITH deterministic pricing applied — used by the editable BOQ table.
+// Returns both raw items (with qty_source) and priced sections (with rate_source on each row).
+router.get('/takeoff/:sessionId/priced', authMiddleware, (req, res) => {
+  try {
+    if (!benchmarkStore || !deterministicPricer) return res.status(503).json({ error: 'Pricer not available' });
+    const takeoff = benchmarkStore.getTakeoffBySession(db, req.params.sessionId);
+    if (!takeoff) return res.status(404).json({ error: 'No takeoff found for this session' });
+    if (takeoff.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    const clientRates = {};
+    try {
+      const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
+      for (const r of dbRates) clientRates[r.item_key] = r.value;
+    } catch (e) {}
+    const priced = deterministicPricer.priceLockedQuantities(
+      takeoff.items || [], takeoff.location || '', clientRates,
+      { contingency_pct: 7.5, ohp_pct: 12, project_type: takeoff.project_type }
+    );
+    res.json({
+      takeoff: { id: takeoff.id, status: takeoff.status, location: takeoff.location, project_type: takeoff.project_type },
+      items_raw: takeoff.items || [],
+      priced,
+    });
+  } catch (e) {
+    console.error('[Takeoff] priced fetch error:', e.message);
+    res.status(500).json({ error: 'Failed to price takeoff' });
+  }
+});
+
+// Update takeoff items (user corrections before generating).
+// Merges incoming items with stored ones, marking edited quantities with qty_source='user_edited'.
 router.put('/takeoff/:id', authMiddleware, (req, res) => {
   try {
     if (!benchmarkStore) return res.status(503).json({ error: 'Benchmark store not available' });
@@ -1320,16 +1349,27 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
     const takeoff = benchmarkStore.getTakeoffById(db, req.params.id);
     if (!takeoff) return res.status(404).json({ error: 'Takeoff not found' });
     if (takeoff.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-    benchmarkStore.updateTakeoff(db, req.params.id, { items });
-    // Re-price with updated items
+
+    // Merge: preserve metadata from existing items, apply edits, tag qty_source
+    const existingByKey = {};
+    for (const it of (takeoff.items || [])) { if (it.key) existingByKey[it.key] = it; }
+    const merged = items.map(it => {
+      const prev = existingByKey[it.key];
+      let qty_source = it.qty_source || (prev && prev.qty_source) || 'ai_extracted';
+      if (prev && typeof prev.qty === 'number' && typeof it.qty === 'number' && Math.abs(prev.qty - it.qty) > 0.001) {
+        qty_source = 'user_edited';
+      }
+      return { ...(prev || {}), ...it, qty_source };
+    });
+
+    benchmarkStore.updateTakeoff(db, req.params.id, { items: merged });
     const clientRates = {};
     try {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
       for (const r of dbRates) clientRates[r.item_key] = r.value;
     } catch(e) {}
-    // Let the pricer auto-detect Ireland from location (sets EUR + 13.5% VAT automatically)
-    const priced = deterministicPricer.priceLockedQuantities(items, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12 });
-    res.json({ success: true, priced });
+    const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12, project_type: takeoff.project_type });
+    res.json({ success: true, priced, items_raw: merged });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
 });
 

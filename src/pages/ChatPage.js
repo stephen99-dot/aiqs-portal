@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
+import BoqTable from '../components/BoqTable';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -65,6 +66,12 @@ export default function ChatPage() {
   const [intakeOpen, setIntakeOpen]     = useState(false);
   const [intakeDone, setIntakeDone]     = useState(false); // per-session flag
   const [pendingIntake, setPendingIntake] = useState(null); // saved answers
+
+  // ── Editable BOQ table ────────────────────────────────────────────
+  // Shown below messages when a takeoff exists for the current session.
+  // Tracks a key so we can force the BoqTable to reload after an edit.
+  const [boqOpen, setBoqOpen] = useState(true);
+  const [boqRefreshKey, setBoqRefreshKey] = useState(0);
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -240,21 +247,25 @@ export default function ChatPage() {
   }
 
   // ── SEND ───────────────────────────────────────────────────────────
-  async function handleSend(e) {
-    e.preventDefault();
-    if (!input.trim() && files.length === 0) return;
+  // overrideText lets callers (e.g. Regenerate button on the BOQ table) send
+  // a specific message without needing to funnel it through the input state.
+  async function handleSend(e, overrideText) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const textToSend = overrideText != null ? overrideText : input;
+    if (!textToSend.trim() && files.length === 0) return;
 
     const userMsg = {
-      role: 'user', content: input,
+      role: 'user', content: textToSend,
       files: files.map(f => ({ name: f.name, size: f.size })),
       timestamp: new Date().toISOString(),
     };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
-    const savedInput = input;
+    const savedInput = textToSend;
     const savedFiles = [...files];
     hadFiles.current = files.length > 0;
-    setInput(''); setFiles([]); setSending(true);
+    if (overrideText == null) setInput('');
+    setFiles([]); setSending(true);
 
     // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits
     const history = messages.filter(m => m.content).slice(-20).map(m => ({
@@ -332,6 +343,9 @@ export default function ChatPage() {
         setMessages(p => [...p, aiMsg]);
         if (data.quota) setQuotaInfo(data.quota);
         if (data.files?.length) setTimeout(loadSessions, 2000);
+        // Refresh the BOQ table whenever the chat produces a new takeoff
+        // or triggers quantity adjustments server-side
+        if (data.takeoff_id) setBoqRefreshKey(k => k + 1);
         setSending(false);
       },
       onError: (err) => {
@@ -787,6 +801,36 @@ export default function ChatPage() {
 
             {messages.map((msg, i) => <Message key={i} msg={msg} idx={i}/>)}
             {sending && <Thinking/>}
+
+            {/* Editable BOQ table — appears once a takeoff exists for the session */}
+            {currentSessionId && currentTakeoffId && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <button
+                    onClick={() => setBoqOpen(v => !v)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: c.textSub, fontSize: 11, fontWeight: 600,
+                      padding: '4px 0', fontFamily: 'inherit',
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      textTransform: 'uppercase', letterSpacing: '0.05em',
+                    }}
+                  >
+                    <span style={{ transform: boqOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', fontSize: 9 }}>▶</span>
+                    {boqOpen ? 'Hide' : 'Show'} editable BOQ
+                  </button>
+                </div>
+                {boqOpen && (
+                  <BoqTable
+                    key={currentSessionId + '-' + boqRefreshKey}
+                    sessionId={currentSessionId}
+                    takeoffId={currentTakeoffId}
+                    onRegenerate={() => handleSend(null, 'generate documents')}
+                  />
+                )}
+              </div>
+            )}
+
             <div ref={bottomRef}/>
           </div>
 
