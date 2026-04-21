@@ -22,6 +22,18 @@ const SPEC_OPTIONS = ['Budget', 'Mid-range', 'Premium', 'Mixed — varies per pr
 const RATE_SOURCE_OPTIONS = ['My own rate library', "SPON's", 'BCIS', 'Client-supplied rates', 'Subcontractor quotes'];
 const SIZE_OPTIONS = ['< £50k', '£50k – £250k', '£250k – £1m', '£1m – £5m', '£5m+'];
 
+// Defined OUTSIDE the component so React doesn't treat it as a new component type
+// on every render — that was causing the input to lose focus after every keystroke.
+function Field({ label, desc, children, colors }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: colors.text, marginBottom: 4 }}>{label}</div>
+      {desc && <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>{desc}</div>}
+      {children}
+    </div>
+  );
+}
+
 export default function OnboardingPage() {
   const { t, mode } = useTheme();
   const navigate = useNavigate();
@@ -104,14 +116,6 @@ export default function OnboardingPage() {
     input: '#F8FAFC', inputBorder: '#CBD5E1', pill: '#F1F5F9',
     pillActive: 'rgba(245,158,11,0.15)',
   };
-
-  const Field = ({ label, desc, children }) => (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 4 }}>{label}</div>
-      {desc && <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 8 }}>{desc}</div>}
-      {children}
-    </div>
-  );
 
   const textInput = (key, placeholder) => (
     <input
@@ -200,35 +204,35 @@ export default function OnboardingPage() {
 
       <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: '24px 24px 8px' }}>
 
-        <Field label="1. Your role" desc="Are you solo, a firm, or in-house?">
+        <Field colors={c} label="1. Your role" desc="Are you solo, a firm, or in-house?">
           {pillSelect('role', ['Solo QS', 'QS Firm', 'In-house / client-side', 'Contractor', 'Developer'])}
         </Field>
 
-        <Field label="2. Company name (optional)">
+        <Field colors={c} label="2. Company name (optional)">
           {textInput('company_name', 'e.g. Smith & Co Quantity Surveyors')}
         </Field>
 
-        <Field label="3. Project types you typically work on" desc="Select all that apply.">
+        <Field colors={c} label="3. Project types you typically work on" desc="Select all that apply.">
           {pillSelect('project_types', PROJECT_TYPE_OPTIONS, true)}
         </Field>
 
-        <Field label="4. Primary region(s)" desc="Where do you mostly operate? A county, city, or region.">
+        <Field colors={c} label="4. Primary region(s)" desc="Where do you mostly operate? A county, city, or region.">
           {textInput('regions', 'e.g. London, South East, Home Counties')}
         </Field>
 
-        <Field label="5. Method of measurement" desc="Your standard — the AI will default to this.">
+        <Field colors={c} label="5. Method of measurement" desc="Your standard — the AI will default to this.">
           {pillSelect('method_of_measurement', MOM_OPTIONS)}
         </Field>
 
-        <Field label="6. Default contingency %" desc="Applied to every BOQ unless you override it on a project.">
+        <Field colors={c} label="6. Default contingency %" desc="Applied to every BOQ unless you override it on a project.">
           {numberInput('contingency_pct', '7.5')}
         </Field>
 
-        <Field label="7. Default OH&P / markup %" desc="Applied to every BOQ unless you override.">
+        <Field colors={c} label="7. Default OH&P / markup %" desc="Applied to every BOQ unless you override.">
           {numberInput('ohp_pct', '12')}
         </Field>
 
-        <Field label="8. Standard exclusions" desc="Items you always exclude (VAT, professional fees, site investigation, etc.)">
+        <Field colors={c} label="8. Standard exclusions" desc="Items you always exclude (VAT, professional fees, site investigation, etc.)">
           <textarea
             value={answers.standard_exclusions || ''}
             onChange={e => setSingle('standard_exclusions', e.target.value)}
@@ -261,19 +265,19 @@ export default function OnboardingPage() {
 
           {showAdvanced && (
             <div style={{ paddingTop: 12 }}>
-              <Field label="Preferred spec level">
+              <Field colors={c} label="Preferred spec level">
                 {pillSelect('spec_level', SPEC_OPTIONS)}
               </Field>
 
-              <Field label="Rate sources" desc="Where do your rates come from? Select all that apply.">
+              <Field colors={c} label="Rate sources" desc="Where do your rates come from? Select all that apply.">
                 {pillSelect('rate_sources', RATE_SOURCE_OPTIONS, true)}
               </Field>
 
-              <Field label="Team / day-rate setup (optional)" desc="Short description — used for prelims and labour sanity-checks.">
+              <Field colors={c} label="Team / day-rate setup (optional)" desc="Short description — used for prelims and labour sanity-checks.">
                 {textInput('team', 'e.g. 4 QS + 1 admin, site visits at £120/day')}
               </Field>
 
-              <Field label="Typical project size">
+              <Field colors={c} label="Typical project size">
                 {pillSelect('typical_project_size', SIZE_OPTIONS)}
               </Field>
             </div>
