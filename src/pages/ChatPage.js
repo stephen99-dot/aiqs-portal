@@ -966,7 +966,37 @@ export default function ChatPage() {
                     borderColor={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
                     mono="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
                   />
-                  <span style={{ display:'inline-block', width:7, height:14, background:c.amber, marginLeft:2, verticalAlign:'text-bottom', animation:'pulse 1s infinite' }} />
+
+                  {/* Live backend stage — shown once scope-analysis text is in
+                      and the deterministic pipeline (extract → validate → price
+                      → generate) is still working. Without this the user sees
+                      only a pulsing cursor and can't tell if the system is
+                      still doing something or has stalled. */}
+                  {stage >= 2 && STAGES[stage] ? (
+                    <div style={{
+                      marginTop: 12, padding: '8px 12px', borderRadius: 8,
+                      background: 'rgba(245,158,11,0.08)',
+                      border: '1px solid rgba(245,158,11,0.22)',
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      fontSize: 12.5, color: c.amber, fontWeight: 500,
+                    }}>
+                      {ICONS[STAGES[stage].key](c.amber)}
+                      <span style={{ flex: 1, lineHeight: 1.4 }}>
+                        {stageDetail || STAGES[stage].text}
+                      </span>
+                      <span style={{ display: 'flex', gap: 3 }}>
+                        {[0, 1, 2].map(d => (
+                          <span key={d} style={{
+                            width: 4, height: 4, borderRadius: '50%', background: c.amber,
+                            animation: 'dot 1.4s infinite',
+                            animationDelay: (d * 0.2) + 's',
+                          }} />
+                        ))}
+                      </span>
+                    </div>
+                  ) : (
+                    <span style={{ display:'inline-block', width:7, height:14, background:c.amber, marginLeft:2, verticalAlign:'text-bottom', animation:'pulse 1s infinite' }} />
+                  )}
                 </div>
               </div>
             )}
