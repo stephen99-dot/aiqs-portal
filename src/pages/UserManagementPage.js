@@ -425,10 +425,27 @@ export default function UserManagementPage({ theme }) {
     setActivityLoading(true);
     try {
       const data = await apiFetch('/admin/activity');
-      setActivity(data.activities || data.recent || []);
+      setActivity(data.activities || data.events || data.recent || []);
     }
     catch(e) { console.error(e); } finally { setActivityLoading(false); }
   }, [activity.length]);
+
+  const [backfilling, setBackfilling] = useState(false);
+  const runBackfill = useCallback(async () => {
+    if (!window.confirm('Backfill historical activity from users, chats, BOQs, variations, and projects? Safe to run multiple times — duplicates are skipped.')) return;
+    setBackfilling(true);
+    try {
+      const res = await apiFetch('/admin/backfill-activity', { method: 'POST' });
+      const c = res.counts || {};
+      alert(`Backfilled ${res.inserted || 0} events:\n• ${c.signup||0} signups\n• ${c.chat||0} chats\n• ${c.doc_generated||0} BOQs\n• ${c.variation||0} variations\n• ${c.project||0} projects\n• ${c.skipped||0} skipped (already present)`);
+      // Force a reload of the feed
+      setActivity([]);
+      const data = await apiFetch('/admin/activity');
+      setActivity(data.activities || data.events || []);
+    } catch(e) {
+      alert('Backfill failed: ' + (e.message || 'unknown error'));
+    } finally { setBackfilling(false); }
+  }, []);
 
   useEffect(() => { if (tab === 'activity') loadActivity(); }, [tab, loadActivity]);
 
@@ -469,9 +486,25 @@ export default function UserManagementPage({ theme }) {
       {/* Activity Tab */}
       {tab === 'activity' && (
         <div style={cardStyle}>
-          <div style={{padding:'14px 20px',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>
-            <div style={{fontSize:14,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>Recent Activity</div>
-            <div style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8'}}>All client actions across the platform</div>
+          <div style={{padding:'14px 20px',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>Recent Activity</div>
+              <div style={{fontSize:12,color:isDark?'#5A6E87':'#94A3B8'}}>All client actions across the platform</div>
+            </div>
+            <button
+              onClick={runBackfill}
+              disabled={backfilling}
+              title="Populate the feed with historical signups, chats, BOQs, variations, and projects"
+              style={{
+                padding:'7px 14px', borderRadius:8, border:'1px solid '+(isDark?'#1C2A44':'#CBD5E1'),
+                background: isDark ? 'transparent' : '#FFFFFF',
+                color: isDark ? '#94A3B8' : '#475569',
+                fontSize:12, fontWeight:600, cursor: backfilling ? 'not-allowed' : 'pointer',
+                opacity: backfilling ? 0.6 : 1, whiteSpace:'nowrap',
+              }}
+            >
+              {backfilling ? 'Backfilling...' : 'Backfill historical events'}
+            </button>
           </div>
           {activityLoading ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>Loading...</div> :
           activity.length === 0 ? <div style={{padding:40,textAlign:'center',color:isDark?'#5A6E87':'#94A3B8'}}>No activity yet</div> :

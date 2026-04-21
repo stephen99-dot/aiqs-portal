@@ -579,10 +579,27 @@ router.get('/admin/activity', authMiddleware, adminMiddleware, (req, res) => {
       docs_generated:      (() => { try { return db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE action = 'doc_generated'").get().c; } catch(e) { return 0; } })(),
     };
 
-    res.json({ events, total, summary });
+    res.json({ events, activities: events, total, summary });
   } catch (err) {
     console.error('Activity feed error:', err);
-    res.status(500).json({ error: 'Failed to load activity', events: [], total: 0, summary: {} });
+    res.status(500).json({ error: 'Failed to load activity', events: [], activities: [], total: 0, summary: {} });
+  }
+});
+
+// One-shot backfill: walk users, usage_log, variations, projects and populate
+// activity_log with historical events so the feed doesn't look empty for
+// deployments that existed before we started logging these event types.
+// Idempotent — can be re-run safely; dedupes on (event_type, user_id, created_at).
+router.post('/admin/backfill-activity', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { backfill } = require('./backfillActivity');
+    const counts = backfill(db);
+    const total = counts.signup + counts.chat + counts.doc_generated + counts.variation + counts.project;
+    console.log('[Backfill] counts:', counts);
+    res.json({ success: true, counts, inserted: total });
+  } catch (err) {
+    console.error('[Backfill] error:', err);
+    res.status(500).json({ error: 'Backfill failed: ' + err.message });
   }
 });
 

@@ -334,6 +334,20 @@ Respond ONLY with this JSON structure:
     }
 
     const variation = db.prepare('SELECT * FROM variations WHERE id = ?').get(id);
+
+    // Mirror to activity_log so the admin feed shows variations being raised
+    try {
+      const { logActivity } = require('./activityRoutes');
+      const sym = currency === 'EUR' ? '€' : '£';
+      const net = analysis.net_change || 0;
+      logActivity({
+        event_type: 'variation',
+        title: `${req.user.full_name || req.user.email} raised ${voNumber}`,
+        detail: `${project.title || projectId} — ${title} (net ${net >= 0 ? '+' : '−'}${sym}${Math.abs(Math.round(net)).toLocaleString('en-GB')})`,
+        user_id: req.user.id, user_name: req.user.full_name, user_email: req.user.email,
+      });
+    } catch (aeErr) { /* best-effort */ }
+
     res.json({ variation, analysis });
 
   } catch (err) {
