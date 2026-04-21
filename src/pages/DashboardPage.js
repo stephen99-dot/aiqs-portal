@@ -333,17 +333,32 @@ export default function DashboardPage() {
   const [showTour, setShowTour] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [adminMessages, setAdminMessages] = useState([]);
+  const [onboardingStatus, setOnboardingStatus] = useState(null);
 
   useEffect(() => {
-    Promise.all([apiFetch('/projects'), apiFetch('/usage').catch(() => null), apiFetch('/my-messages').catch(() => ({ messages: [] }))])
-      .then(([proj, usg, msgs]) => {
+    Promise.all([
+      apiFetch('/projects'),
+      apiFetch('/usage').catch(() => null),
+      apiFetch('/my-messages').catch(() => ({ messages: [] })),
+      apiFetch('/onboarding').catch(() => null),
+    ])
+      .then(([proj, usg, msgs, onb]) => {
         setProjects(proj.projects || proj || []);
         setUsage(usg);
         setAdminMessages(msgs.messages || []);
+        setOnboardingStatus(onb);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  async function dismissOnboardingBanner() {
+    if (!window.confirm('Skip onboarding for now? You can always complete it later from the AI Memory page.')) return;
+    try {
+      await apiFetch('/onboarding', { method: 'POST', body: JSON.stringify({ skipped: true }) });
+      setOnboardingStatus(s => ({ ...(s || {}), skipped: true }));
+    } catch {}
+  }
 
   const dismissMessage = async (msgId) => {
     try {
@@ -370,7 +385,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
-      const whatsNewKey = `aiqs_whats_new_v3_${user?.id || 'default'}`;
+      const whatsNewKey = `aiqs_whats_new_v4_${user?.id || 'default'}`;
       try {
         const seen = localStorage.getItem(tourKey);
         if (!seen) {
@@ -384,12 +399,61 @@ export default function DashboardPage() {
     }
   }, [loading, user?.id]);
 
+  const needsOnboarding = onboardingStatus
+    && !onboardingStatus.completed_at
+    && !onboardingStatus.skipped;
+
   const firstName = user?.fullName?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
   const projectList = Array.isArray(projects) ? projects : [];
 
   return (
     <div className="page" data-tour="welcome">
       {showTour && <OnboardingTour userId={user?.id} onComplete={() => setShowTour(false)} />}
+
+      {/* Persistent AI profile prompt — shows until user completes or skips */}
+      {needsOnboarding && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(217,119,6,0.04))',
+          border: '1px solid rgba(245,158,11,0.25)',
+          borderRadius: 12, padding: '18px 22px', marginBottom: 20, boxShadow: t.shadowSm,
+          borderLeft: '3px solid #F59E0B',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 240 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                background: 'rgba(245,158,11,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+              }}>🧠</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 3 }}>
+                  Teach the AI how you work — 2 minutes
+                </div>
+                <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.5 }}>
+                  Set your default contingency, standard exclusions, regions, and project types. Every future estimate will be grounded in your actual preferences.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <button onClick={dismissOnboardingBanner} style={{
+                background: 'none', border: 'none', color: t.textMuted, fontSize: 12, cursor: 'pointer',
+                padding: '8px 12px', borderRadius: 8, fontFamily: 'inherit',
+              }}>
+                Not now
+              </button>
+              <Link to="/onboarding" style={{
+                padding: '9px 18px', borderRadius: 8,
+                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
+                color: '#0A0F1C', textDecoration: 'none',
+                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+              }}>
+                Start onboarding
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showWhatsNew && (
         <div style={{
@@ -403,14 +467,18 @@ export default function DashboardPage() {
                 <ZapIcon size={14} color="#F59E0B" /> What's New
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: t.textSecondary, lineHeight: 1.8 }}>
+                <li>
+                  <strong style={{ color: t.text }}>AI Memory</strong> — the AI now remembers your preferences across every project.{' '}
+                  <Link to="/onboarding" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Set up your profile →</Link>
+                </li>
+                <li><strong style={{ color: t.text }}>Project intake</strong> — confirm scope and floor area when uploading drawings for a grounded BOQ</li>
                 <li><strong style={{ color: t.text }}>Variations</strong> — raise change orders directly from any project page</li>
                 <li><strong style={{ color: t.text }}>My Rates</strong> — build your own pricing library, auto-applied to every estimate</li>
-                <li><strong style={{ color: t.text }}>Usage tracking</strong> — hover the bars above to see your remaining messages and BOQ credits</li>
               </ul>
             </div>
             <button onClick={() => {
               setShowWhatsNew(false);
-              try { localStorage.setItem(`aiqs_whats_new_v3_${user?.id || 'default'}`, 'true'); } catch {}
+              try { localStorage.setItem(`aiqs_whats_new_v4_${user?.id || 'default'}`, 'true'); } catch {}
             }} style={{
               background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
               textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
