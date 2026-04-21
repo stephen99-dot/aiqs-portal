@@ -18,7 +18,7 @@ function getBillingCycleStart(user) {
   return d.toISOString();
 }
 
-let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer;
+let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
 try { findingsGen = require('./findingsGenerator'); } catch (e) { console.log('[Chat] docx not installed — Findings generation disabled. Run: npm install docx'); }
 try { deterministicPricer = require('./deterministicPricer'); } catch (e) { console.log('[Chat] deterministicPricer not found — copy deterministicPricer.js to server/'); }
@@ -26,6 +26,7 @@ try { benchmarkStore = require('./benchmarkStore'); } catch (e) { console.log('[
 try { memoryEngine = require('./memoryEngine'); } catch (e) { console.log('[Chat] memoryEngine not found — copy memoryEngine.js to server/'); }
 try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat] zipProcessor not found — copy zipProcessor.js to server/'); }
 try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Chat] keyNormalizer not found — copy keyNormalizer.js to server/'); }
+try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 
 const router = express.Router();
 
@@ -794,6 +795,15 @@ CLIENT INSIGHT TAGS (hidden from client — include at END of response when you 
 Valid insight categories: spec_preference, markup, supplier, scope, geography, trade, standard, feedback, workflow, exclusion, team, project_type, commercial
 
 Only output INSIGHT tags when the client EXPLICITLY states something — do not infer or guess.
+
+MEMORY TAGS (hidden from client — include at END of response to remember a durable fact/preference):
+[MEMORY|category|clear single-sentence fact to remember]
+
+Use MEMORY tags ONLY when the user states something durable that will matter on future projects — a supplier preference, a markup they always use, their typical project size, their team, their standard exclusions, etc. Do NOT emit MEMORY for one-off project details (floor areas, specific prices, job-specific scope) — those belong in the current conversation only.
+
+Valid memory categories: profile, project_type, region, method_of_measurement, spec_preference, markup, contingency, supplier, exclusion, team, commercial, workflow, tooling, rate_note, general
+
+Write the memory as a clear standalone sentence (e.g. "Client always uses 15% contingency on heritage projects", not "15%"). Max one or two MEMORY tags per reply. When you save a memory, briefly acknowledge it in plain prose ("Got it — I'll remember that.") so the user knows.
 
 All estimates are approximate, subject to detailed measurement and site conditions.
 
@@ -1633,6 +1643,49 @@ ${summary}`);
     let systemPrompt = buildSystemPrompt(userId, false);
     const hasFiles = fileNames.length > 0;
 
+    // ── USER MEMORIES: semantic/FTS retrieval of user-confirmed memories ──
+    // These are free-form memories from onboarding + chat capture, distinct from
+    // regex-extracted client_insights. Retrieved per-request against the current query.
+    let retrievedMemoryIds = [];
+    try {
+      if (memoryStore) {
+        const queryText = (message || '') + (fileNames.length > 0 ? ' ' + fileNames.join(' ') : '');
+        const mems = await memoryStore.retrieveRelevant(db, { userId, query: queryText, topK: 8 });
+        if (mems && mems.length > 0) {
+          systemPrompt += memoryStore.formatForPrompt(mems);
+          retrievedMemoryIds = mems.map(m => m.id);
+        }
+      }
+    } catch (memErr) { console.error('[Memory] retrieval error:', memErr.message); }
+
+    // ── PROJECT INTAKE: user-confirmed answers for this session's upload ──
+    // Priority 1: intake_json in body (just-filled-out, first turn before session_id exists)
+    // Priority 2: stored intake for current session_id
+    const sessionIdForIntake = req.body.session_id || null;
+    let inlineIntake = null;
+    if (req.body.intake_json) {
+      try {
+        const parsed = typeof req.body.intake_json === 'string' ? JSON.parse(req.body.intake_json) : req.body.intake_json;
+        if (parsed && typeof parsed === 'object') inlineIntake = parsed;
+      } catch (e) {}
+    }
+    try {
+      if (memoryStore) {
+        if (inlineIntake) {
+          systemPrompt += memoryStore.formatIntakeForPrompt(inlineIntake);
+          // Persist to DB if we already have a session_id; otherwise the frontend
+          // will re-post once the session is created.
+          if (sessionIdForIntake) {
+            try { memoryStore.saveProjectIntake(db, { userId, sessionId: sessionIdForIntake, data: inlineIntake }); }
+            catch (saveErr) { console.error('[Intake] save error:', saveErr.message); }
+          }
+        } else if (sessionIdForIntake) {
+          const intake = memoryStore.getProjectIntake(db, { userId, sessionId: sessionIdForIntake });
+          if (intake) systemPrompt += memoryStore.formatIntakeForPrompt(intake);
+        }
+      }
+    } catch (intakeErr) { console.error('[Intake] inject error:', intakeErr.message); }
+
     // When files are uploaded, the deterministic pricer will handle pricing via Stage 1.
     // Tell the LLM to focus on scope analysis only — do NOT generate a cost breakdown.
     // This prevents showing inflated LLM-generated prices if extraction fails.
@@ -1861,7 +1914,19 @@ ${summary}`);
 
         pipelineLog.push({ stage: 'detect', label: 'Project type detected', detail: projectTypeGuess + (locationGuess ? ' — ' + locationGuess : ''), ts: Date.now() });
 
-        const extractPrompt = buildSystemPrompt(userId, hasFiles ? 'extract_quantities' : 'extract_quantities_text', memoryCtx);
+        let extractPrompt = buildSystemPrompt(userId, hasFiles ? 'extract_quantities' : 'extract_quantities_text', memoryCtx);
+        // Inject project intake answers (floor area, scope, project type etc.) if user confirmed them.
+        // Prefer inline (just-filled modal) over DB lookup — inline is freshest.
+        try {
+          if (memoryStore) {
+            if (inlineIntake) {
+              extractPrompt += memoryStore.formatIntakeForPrompt(inlineIntake);
+            } else if (sessionId) {
+              const intake = memoryStore.getProjectIntake(db, { userId, sessionId });
+              if (intake) extractPrompt += memoryStore.formatIntakeForPrompt(intake);
+            }
+          }
+        } catch (piErr) { console.error('[Intake] extract inject error:', piErr.message); }
 
         // If ZIP was pre-processed, inject the structured data as additional context
         // This gives Claude pre-extracted dimensions/rooms/schedules as facts to work from
@@ -3011,6 +3076,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     try { extractInsightsFromMessage(userId, message); } catch (insExtErr) { console.error('[InsightExtract]', insExtErr.message); }
 
     // Parse tags
+    let capturedMemories = [];
     try {
       const addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of addMatches) {
@@ -3060,7 +3126,38 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
           }
         }
       }
-      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+      // ── [MEMORY|category|content] — free-form memory capture from chat ──
+      // Only Claude should emit this when the user states a durable preference.
+      // Saved to user_memories so it appears on /ai-memory and is injected into future prompts.
+      if (memoryStore) {
+        const memoryMatches = reply.match(/\[MEMORY\|([^|]+)\|([^\]]+)\]/g) || [];
+        for (const m of memoryMatches) {
+          const parts = m.replace(/^\[MEMORY\|/, '').replace(/\]$/, '').split('|');
+          if (parts.length < 2) continue;
+          const mCat = parts[0].trim();
+          const mContent = parts.slice(1).join('|').trim();
+          if (!mContent || mContent.length < 5 || mContent.length > 400) continue;
+          if (memoryStore.isDuplicate(db, { userId, content: mContent })) continue;
+          try {
+            const rec = await memoryStore.createMemory(db, {
+              userId,
+              content: mContent,
+              category: mCat,
+              source: 'chat',
+              confidence: 0.85,
+              sessionId: req.body.session_id || null,
+            });
+            capturedMemories.push(rec);
+          } catch (memCreateErr) { console.error('[Memory] capture error:', memCreateErr.message); }
+        }
+      }
+
+      reply = reply.replace(/\[RATE_ADD\|[^\]]*\]/g, '').replace(/\[RATE_UPDATE\|[^\]]*\]/g, '').replace(/\[INSIGHT\|[^\]]*\]/g, '').replace(/\[MEMORY\|[^\]]*\]/g, '').replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+
+      // Mark retrieved memories as used so we can track what's helping
+      if (memoryStore && retrievedMemoryIds.length > 0) {
+        try { memoryStore.markUsed(db, retrievedMemoryIds); } catch (e) {}
+      }
     } catch (tagErr) { console.error('[Tags] Error:', tagErr.message); }
 
     let rateStats = null;
@@ -3125,6 +3222,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       takeoff_status: responseTakeoffStatus || (responseTakeoffId ? 'draft' : null),
       takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
       pipeline_log: pipelineLog || null,
+      captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
     };
 
     if (req.streaming) {
@@ -3150,6 +3248,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
         takeoff_status: responseTakeoffStatus || (responseTakeoffId ? 'draft' : null),
         takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
         pipeline_log: pipelineLog || null,
+        captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
       });
     } else {
       res.json(responsePayload);

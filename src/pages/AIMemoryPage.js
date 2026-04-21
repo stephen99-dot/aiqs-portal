@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
@@ -22,21 +23,31 @@ export default function AIMemoryPage() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
   const [insights, setInsights] = useState([]);
+  const [memories, setMemories] = useState([]);
+  const [onboardingStatus, setOnboardingStatus] = useState(null);
   const [rateStats, setRateStats] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [addingMemory, setAddingMemory] = useState(false);
+  const [newMemoryText, setNewMemoryText] = useState('');
+  const [editingMemoryId, setEditingMemoryId] = useState(null);
+  const [editingText, setEditingText] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     try {
-      const [insightData, rateData] = await Promise.all([
-        apiFetch('/my-insights'),
-        apiFetch('/my-rates'),
+      const [insightData, rateData, memData, onbData] = await Promise.all([
+        apiFetch('/my-insights').catch(() => ({ insights: [], stats: null })),
+        apiFetch('/my-rates').catch(() => ({ stats: null })),
+        apiFetch('/memories').catch(() => ({ memories: [] })),
+        apiFetch('/onboarding').catch(() => null),
       ]);
       setInsights(insightData.insights || []);
       setStats(insightData.stats || { total: 0, categories: 0 });
       setRateStats(rateData.stats || { total: 0, avg_confidence: 0 });
+      setMemories(memData.memories || []);
+      setOnboardingStatus(onbData);
     } catch (err) {
       console.error('Load error:', err);
     }
@@ -49,6 +60,42 @@ export default function AIMemoryPage() {
       await apiFetch('/my-insights/' + id, { method: 'DELETE' });
       setInsights(prev => prev.filter(i => i.id !== id));
     } catch (err) { alert('Failed to delete'); }
+  }
+
+  async function handleDeleteMemory(id) {
+    if (!window.confirm('Forget this memory?')) return;
+    try {
+      await apiFetch('/memories/' + id, { method: 'DELETE' });
+      setMemories(prev => prev.filter(m => m.id !== id));
+    } catch (err) { alert('Failed to delete'); }
+  }
+
+  async function handleAddMemory() {
+    const content = newMemoryText.trim();
+    if (content.length < 5) { alert('Memory text is too short.'); return; }
+    try {
+      const res = await apiFetch('/memories', { method: 'POST', body: JSON.stringify({ content }) });
+      if (res.skipped) {
+        alert('A similar memory already exists.');
+      } else if (res.memory) {
+        setMemories(p => [res.memory, ...p]);
+        setNewMemoryText('');
+        setAddingMemory(false);
+      }
+    } catch (err) { alert(err.message || 'Failed to save memory'); }
+  }
+
+  async function handleSaveEdit(id) {
+    const content = editingText.trim();
+    if (content.length < 5) { alert('Memory text is too short.'); return; }
+    try {
+      const res = await apiFetch('/memories/' + id, { method: 'PUT', body: JSON.stringify({ content }) });
+      if (res.memory) {
+        setMemories(p => p.map(m => m.id === id ? res.memory : m));
+      }
+      setEditingMemoryId(null);
+      setEditingText('');
+    } catch (err) { alert(err.message || 'Failed to update'); }
   }
 
   // Group insights by category
@@ -81,7 +128,7 @@ export default function AIMemoryPage() {
     );
   }
 
-  const totalLearnings = (stats?.total || 0) + (rateStats?.total || 0);
+  const totalLearnings = (stats?.total || 0) + (rateStats?.total || 0) + (memories?.length || 0);
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 900, margin: '0 auto' }}>
@@ -132,6 +179,39 @@ export default function AIMemoryPage() {
         </div>
       </div>
 
+      {/* Onboarding CTA — only shown when not completed */}
+      {onboardingStatus && !onboardingStatus.completed_at && (
+        <div style={{
+          padding: '16px 20px', borderRadius: 10, marginBottom: 16,
+          background: colors.accentBg, border: '1px solid ' + colors.accentBorder,
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: colors.accent, marginBottom: 4 }}>
+              Teach the AI how you work — 2 minutes
+            </div>
+            <div style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.55 }}>
+              Answer a handful of fundamentals (contingency %, typical project types, regions, standard exclusions) and every estimate after this will be grounded in your actual preferences.
+            </div>
+          </div>
+          <Link to="/onboarding" style={{
+            padding: '9px 16px', borderRadius: 8,
+            background: 'linear-gradient(135deg,#F59E0B,#D97706)',
+            color: '#0A0F1C', textDecoration: 'none',
+            fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
+          }}>
+            Start onboarding
+          </Link>
+        </div>
+      )}
+      {onboardingStatus && onboardingStatus.completed_at && (
+        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <Link to="/onboarding" style={{ fontSize: 12, color: colors.accent, textDecoration: 'none', fontWeight: 600 }}>
+            Update your profile →
+          </Link>
+        </div>
+      )}
+
       {/* How it works */}
       <div style={{
         padding: '16px 20px', borderRadius: 10, marginBottom: 28,
@@ -141,15 +221,160 @@ export default function AIMemoryPage() {
           How AI Memory Works
         </div>
         <div style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>
-          Every time you chat with the AI QS, it picks up on your preferences, rates, suppliers, and working patterns. 
-          These get stored here and automatically applied to all your future projects. 
-          The more you use it, the more tailored your estimates become. 
+          Every time you chat with the AI QS, it picks up on your preferences, rates, suppliers, and working patterns.
+          These get stored here and automatically applied to all your future projects.
+          The more you use it, the more tailored your estimates become.
           You can remove anything here that you don't want the AI to remember.
         </div>
       </div>
 
+      {/* User memories section */}
+      <div style={{
+        padding: '18px 20px', borderRadius: 10, marginBottom: 20,
+        background: colors.card, border: '1px solid ' + colors.cardBorder,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 18 }}>🧠</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Memories</div>
+            <div style={{ fontSize: 12, color: colors.textMuted }}>
+              Facts and preferences you've confirmed, plus anything the AI has remembered from your chats.
+            </div>
+          </div>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            padding: '2px 8px', borderRadius: 10,
+            background: colors.accentBg, color: colors.accent,
+          }}>
+            {memories.length}
+          </div>
+          <button
+            onClick={() => setAddingMemory(v => !v)}
+            style={{
+              padding: '6px 12px', borderRadius: 7,
+              background: addingMemory ? 'transparent' : colors.accentBg,
+              border: '1px solid ' + colors.accentBorder,
+              color: colors.accent, fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {addingMemory ? 'Cancel' : '+ Add memory'}
+          </button>
+        </div>
+
+        {addingMemory && (
+          <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
+            <textarea
+              value={newMemoryText}
+              onChange={e => setNewMemoryText(e.target.value)}
+              placeholder="e.g. I always exclude asbestos surveys from refurb quotes."
+              rows={2}
+              style={{
+                flex: 1, padding: '8px 11px', borderRadius: 7,
+                background: isDark ? '#0F1520' : '#F8FAFC',
+                border: '1px solid ' + colors.cardBorder,
+                color: colors.text, fontSize: 13, outline: 'none', resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
+            <button
+              onClick={handleAddMemory}
+              style={{
+                padding: '8px 14px', borderRadius: 7,
+                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
+                border: 'none', color: '#0A0F1C', fontSize: 12.5, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              Save
+            </button>
+          </div>
+        )}
+
+        {memories.length === 0 ? (
+          <div style={{ padding: '18px 8px', fontSize: 12.5, color: colors.textMuted, textAlign: 'center' }}>
+            No memories yet. Complete onboarding or chat with the AI — durable preferences will appear here automatically.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {memories.map(m => {
+              const isEditing = editingMemoryId === m.id;
+              const sourceLabel = m.source === 'onboarding' ? 'Onboarding' :
+                m.source === 'user' ? 'Added by you' :
+                m.source === 'chat' ? 'From chat' : m.source;
+              return (
+                <div key={m.id} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                  padding: '10px 14px', borderRadius: 8,
+                  background: m.source === 'onboarding' ? colors.strong : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'),
+                  border: '1px solid ' + (m.source === 'onboarding' ? colors.strongBorder : 'transparent'),
+                }}>
+                  <div style={{ flex: 1 }}>
+                    {isEditing ? (
+                      <textarea
+                        value={editingText}
+                        onChange={e => setEditingText(e.target.value)}
+                        rows={2}
+                        style={{
+                          width: '100%', padding: '6px 9px', borderRadius: 6,
+                          background: isDark ? '#0F1520' : '#FFFFFF',
+                          border: '1px solid ' + colors.cardBorder,
+                          color: colors.text, fontSize: 13, resize: 'vertical',
+                          fontFamily: 'inherit',
+                        }}
+                      />
+                    ) : (
+                      <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>{m.content}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {m.category && <span>{m.category.replace(/_/g, ' ')}</span>}
+                      <span>· {sourceLabel}</span>
+                      {m.use_count > 0 && <span>· used {m.use_count}×</span>}
+                      <span>· {new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={() => handleSaveEdit(m.id)}
+                          title="Save"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, fontSize: 14, padding: '2px 6px', fontWeight: 700 }}
+                        >✓</button>
+                        <button
+                          onClick={() => { setEditingMemoryId(null); setEditingText(''); }}
+                          title="Cancel"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 16, padding: '2px 6px' }}
+                        >×</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setEditingMemoryId(m.id); setEditingText(m.content); }}
+                          title="Edit"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 13, padding: '2px 6px', opacity: 0.6 }}
+                          onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = colors.accent; }}
+                          onMouseLeave={e => { e.target.style.opacity = '0.6'; e.target.style.color = colors.textMuted; }}
+                        >✎</button>
+                        <button
+                          onClick={() => handleDeleteMemory(m.id)}
+                          title="Forget"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 16, padding: '2px 6px', opacity: 0.5 }}
+                          onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = '#EF4444'; }}
+                          onMouseLeave={e => { e.target.style.opacity = '0.5'; e.target.style.color = colors.textMuted; }}
+                        >×</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Insights by category */}
-      {Object.keys(grouped).length === 0 && (rateStats?.total || 0) === 0 ? (
+      {Object.keys(grouped).length === 0 && (rateStats?.total || 0) === 0 && (memories?.length || 0) === 0 ? (
         <div style={{
           padding: '48px 24px', borderRadius: 12, textAlign: 'center',
           background: colors.card, border: '1px solid ' + colors.cardBorder,

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, streamChat } from '../utils/api';
+import ProjectIntakeModal from '../components/ProjectIntakeModal';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -57,6 +58,13 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(!mobile);
   const [sessions, setSessions]       = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+
+  // ── Project intake modal ──────────────────────────────────────────
+  // Shown when files are first attached to a fresh chat — collects scope,
+  // floor area, project type etc. so the BOQ is grounded in user-confirmed answers.
+  const [intakeOpen, setIntakeOpen]     = useState(false);
+  const [intakeDone, setIntakeDone]     = useState(false); // per-session flag
+  const [pendingIntake, setPendingIntake] = useState(null); // saved answers
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -198,11 +206,22 @@ export default function ChatPage() {
   function newChat() {
     setMessages([]); setCurrentSessionId(null); setCurrentTakeoffId(null); setTakeoffStatus(null);
     setExpanded({}); setFiles([]); setInput('');
+    setIntakeDone(false); setPendingIntake(null); setIntakeOpen(false);
     if (mobile) setSidebarOpen(false);
   }
 
   // ── File helpers ───────────────────────────────────────────────────
-  const addFiles = fl => setFiles(p => [...p, ...Array.from(fl)].slice(0, 5));
+  const addFiles = fl => {
+    setFiles(p => {
+      const next = [...p, ...Array.from(fl)].slice(0, 5);
+      // First time files are attached to a fresh chat → open intake modal.
+      // Only open once per session: skip if already done or already has messages.
+      if (next.length > 0 && p.length === 0 && !intakeDone && messages.length === 0 && !currentSessionId) {
+        setIntakeOpen(true);
+      }
+      return next;
+    });
+  };
   const removeFile = i => setFiles(p => p.filter((_, j) => j !== i));
   const fileIcon = n => ({ pdf:'📄', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', zip:'📦', xlsx:'📊', xls:'📊', dwg:'📐', dxf:'📐' })[n?.split('.').pop()?.toLowerCase()] || '📎';
   const fmtSize = b => b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB';
@@ -250,6 +269,12 @@ export default function ChatPage() {
     if (currentSessionId) fd.append('session_id', currentSessionId);
     if (currentTakeoffId) fd.append('takeoff_id', currentTakeoffId);
 
+    // Attach project intake answers (if user filled them out before this send)
+    // so the backend can inject them into the system prompt for THIS turn.
+    if (pendingIntake) {
+      try { fd.append('intake_json', JSON.stringify(pendingIntake)); } catch (e) {}
+    }
+
     savedFiles.forEach(f => fd.append('files', f));
 
     // Use SSE streaming for real-time progress
@@ -280,6 +305,15 @@ export default function ChatPage() {
           console.log('[Chat] Takeoff:', data.takeoff_id, 'status:', status);
         }
 
+        // Persist project intake answers now that we have a session_id
+        if (pendingIntake && data.session_id) {
+          apiFetch('/project-intake', {
+            method: 'POST',
+            body: JSON.stringify({ session_id: data.session_id, ...pendingIntake }),
+          }).catch(() => {});
+          setPendingIntake(null);
+        }
+
         const aiMsg = {
           role: 'assistant',
           content: data.reply,
@@ -292,6 +326,7 @@ export default function ChatPage() {
           pipelineLog: data.pipeline_log || null,
           sessionId: data.session_id,
           takeoffId: data.takeoff_id,
+          capturedMemories: data.captured_memories || null,
           timestamp: new Date().toISOString(),
         };
         setMessages(p => [...p, aiMsg]);
@@ -494,6 +529,45 @@ export default function ChatPage() {
             {/* Message text */}
             <div>{(msg.content||'').split('\n').map((l,i,a) => <React.Fragment key={i}>{l}{i<a.length-1&&<br/>}</React.Fragment>)}</div>
 
+            {/* Remembered-memory chips */}
+            {!isUser && msg.capturedMemories && msg.capturedMemories.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {msg.capturedMemories.map((mem, mi) => (
+                  <div key={mem.id || mi} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 10px', borderRadius: 7,
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.25)',
+                    fontSize: 12, color: c.amber,
+                  }}>
+                    <span>🧠</span>
+                    <span style={{ flex: 1, lineHeight: 1.45 }}>
+                      <span style={{ fontWeight: 600 }}>Remembered:</span> {mem.content}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        if (!mem.id) return;
+                        if (!window.confirm('Forget this memory?')) return;
+                        try {
+                          await apiFetch('/memories/' + mem.id, { method: 'DELETE' });
+                          setMessages(p => p.map((pm, pi) => pi === idx
+                            ? { ...pm, capturedMemories: (pm.capturedMemories || []).filter(x => x.id !== mem.id) }
+                            : pm
+                          ));
+                        } catch (e) {}
+                      }}
+                      title="Forget this memory"
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: c.amber, fontSize: 14, padding: '0 2px',
+                        opacity: 0.6, lineHeight: 1,
+                      }}
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Takeoff locked indicator */}
             {(msg.takeoffLocked || msg.takeoffStatus) && (
               <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8, padding:'8px 12px',
@@ -574,6 +648,14 @@ export default function ChatPage() {
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
+    <>
+    <ProjectIntakeModal
+      open={intakeOpen}
+      fileNames={files.map(f => f.name)}
+      onClose={() => setIntakeOpen(false)}
+      onSkip={() => { setIntakeOpen(false); setIntakeDone(true); }}
+      onSubmit={(data) => { setPendingIntake(data); setIntakeOpen(false); setIntakeDone(true); }}
+    />
     <div style={{ height:'calc(100vh - 48px)', display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
@@ -761,5 +843,6 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

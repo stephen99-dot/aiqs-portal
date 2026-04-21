@@ -192,6 +192,59 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_user_messages_user ON user_messages(user_id);
+
+  -- Free-form system memories: seeded from onboarding, captured from chats, edited by user.
+  -- Distinct from client_insights (regex-extracted). Each memory can carry an embedding
+  -- for semantic retrieval.
+  CREATE TABLE IF NOT EXISTS user_memories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    category TEXT,
+    source TEXT DEFAULT 'chat',
+    confidence REAL DEFAULT 0.8,
+    embedding BLOB,
+    embedding_model TEXT,
+    is_active INTEGER DEFAULT 1,
+    use_count INTEGER DEFAULT 0,
+    last_used_at DATETIME,
+    source_session_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_user_memories_user ON user_memories(user_id, is_active);
+  CREATE INDEX IF NOT EXISTS idx_user_memories_category ON user_memories(user_id, category);
+
+  -- FTS5 fallback index for keyword retrieval when embeddings aren't available
+  CREATE VIRTUAL TABLE IF NOT EXISTS user_memories_fts USING fts5(
+    content, category, user_id UNINDEXED, memory_id UNINDEXED,
+    tokenize = 'porter unicode61'
+  );
+
+  -- Per-project intake answers captured when files are uploaded (scope, floor area, etc.)
+  -- Injected into the system prompt for that session so the BOQ output is grounded.
+  CREATE TABLE IF NOT EXISTS project_intake (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    session_id TEXT,
+    scope TEXT,
+    floor_area_m2 REAL,
+    project_type TEXT,
+    location TEXT,
+    spec_level TEXT,
+    budget_range TEXT,
+    timeline TEXT,
+    notes TEXT,
+    extra_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_project_intake_user ON project_intake(user_id);
+  CREATE INDEX IF NOT EXISTS idx_project_intake_session ON project_intake(session_id);
 `);
 
 // Migrations for existing databases
@@ -210,6 +263,8 @@ const migrations = [
   { column: 'force_password_change', table: 'users', sql: "ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0" },
   { column: 'billing_cycle_start', table: 'users', sql: "ALTER TABLE users ADD COLUMN billing_cycle_start TEXT" },
   { column: 'stripe_subscription_id', table: 'users', sql: "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT" },
+  { column: 'onboarding_completed_at', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_completed_at DATETIME" },
+  { column: 'onboarding_skipped', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_skipped INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
