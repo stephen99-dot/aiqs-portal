@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+// ─── Rate limiting (preserved from original) ────────────────────────────────
 const limiter = {};
 function checkRate(ip) {
   const now = Date.now();
@@ -11,33 +12,46 @@ function checkRate(ip) {
   return true;
 }
 
-const SYSTEM_PROMPT = `You are a quantity surveyor's intake assistant for a UK/Ireland BOQ service. Your job is to turn a client's rough brief into a structured, technical project description that goes directly into the BOQ estimation engine. Be specific and factual — no marketing language, no filler.
+// ═══════════════════════════════════════════════════════════════════════════
+//  TWO MODES: POLISH (grammar only) and EXPAND (structure into QS brief)
+//  Both have hard anti-hallucination rules.
+// ═══════════════════════════════════════════════════════════════════════════
 
-If a drawing is attached, examine it carefully for:
-- The PROJECT ADDRESS (title block, header, notes — look for street names, postcodes, towns)
-- Dimensions, room names, annotations, structural specs
-- Drawing references, revision numbers, architect details
-- Scale, orientation, and any specification notes
+const POLISH_SYSTEM_PROMPT = `You are a copy editor for a UK construction project brief. Your ONLY job is to improve the grammar, punctuation, capitalisation, and sentence structure of the user's text.
 
-OUTPUT FORMAT — follow this structure exactly:
+HARD RULES (do not break these):
+1. Do NOT add any information the user did not write.
+2. Do NOT invent dimensions, materials, locations, specifications, finishes, quantities, or scope items.
+3. Do NOT remove any information the user wrote.
+4. Do NOT expand the text — keep it roughly the same length.
+5. Use UK English spelling.
+6. Return ONLY the polished text. No preamble, no explanation, no quotes, no markdown headings.
 
-Project Location: [address from drawing or brief, or "Not specified" if unknown]
-Drawing Ref: [if visible, otherwise omit this line]
+Example:
+Input: "ext 5x4 flat roof bristol, bifolds, 2 bed ensuite"
+Output: "Extension, 5m x 4m, flat roof, Bristol. Bi-folds, 2 bed, ensuite."
 
-Scope: [1-2 sentences summarising what the project is]
+If the user's text is already well-written, return it unchanged.`;
 
-Key Elements:
-- [specific element with dimensions/quantities where possible, e.g. "Single-storey rear extension approx 6m x 4m, flat roof"]
-- [e.g. "2 nr bedrooms with Jack and Jill bathroom arrangement"]
-- [e.g. "New utility room, approx 2.5m x 2m"]
-- [e.g. "Structural opening to existing dwelling, steel beam TBC"]
-- [e.g. "Full M&E to new areas including UFH and MVHR"]
+const EXPAND_SYSTEM_PROMPT = `You are a UK Quantity Surveyor helping a client structure their project brief for a BOQ estimation team. You will organise what the user wrote into a clear brief — without inventing any details.
 
-Construction Assumptions: [1-2 sentences on assumed build method, e.g. "Traditional masonry cavity wall construction assumed. Trench fill foundations to BC approval."]
+HARD RULES — violating these will produce an inaccurate BOQ:
+1. You MUST NOT invent dimensions, materials, finishes, quantities, specifications, or locations the user did not state.
+2. You MUST NOT assume scope not mentioned by the user (e.g. if they said "extension" do not assume bi-folds, underfloor heating, or a specific roof type).
+3. For every piece of information a QS would need that is NOT stated by the user, add it to a "Missing Information" list as a question — do NOT fabricate it.
+4. Organise what they DID say under these headings, in this order:
+   Scope Summary: [1-2 sentences, user's own facts only]
+   Known Specifications: [bullet list of what they actually stated — dimensions, materials, rooms, locations]
+   Missing Information: [bullet list of questions the QS needs answered before pricing]
+5. If a drawing is attached, examine it. List anything visible on the drawing that the user did NOT mention under an extra heading:
+   Observed on Drawings (please confirm): [bullet list — items, dimensions, addresses, drawing refs visible in the title block]
+   Do NOT merge these into the main scope — they need the client to confirm.
+6. Use UK construction terminology.
+7. Return ONLY the structured brief. No preamble, no explanation, no markdown code fences.
 
-Keep it under 200 words. Use dimensions where the drawing shows them. Use "TBC" or "to be confirmed from drawings" where you can see something exists but can't read the detail. Do NOT pad with generic statements about Building Regulations compliance or property value — the QS already knows that.`;
+Keep it concise. If the user wrote very little, the output should also be short, with most items under Missing Information. Do not pad with generic Building Regs / NHBC statements — the QS already knows those apply.`;
 
-// POST /api/enhance-brief
+// ─── POST /api/enhance-brief ────────────────────────────────────────────────
 router.post('/enhance-brief', async (req, res) => {
   try {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -45,17 +59,33 @@ router.post('/enhance-brief', async (req, res) => {
       return res.status(429).json({ error: 'Too many requests. Please try again later.' });
     }
 
-    const { brief, project_type, drawing_base64, drawing_type, drawing_name } = req.body;
+    const {
+      mode = 'expand',
+      brief,
+      user_text,
+      project_type,
+      drawing_base64,
+      drawing_type,
+      drawing_name
+    } = req.body;
 
-    if (!brief || brief.trim().length < 10) {
+    // Accept either `brief` or `user_text` (frontend sends both)
+    const userInput = (brief || user_text || '').trim();
+
+    if (!userInput || userInput.length < 10) {
       return res.status(400).json({ error: 'Please provide a brief description (at least 10 characters).' });
     }
+
+    const isPolish = mode === 'polish';
+    const systemPrompt = isPolish ? POLISH_SYSTEM_PROMPT : EXPAND_SYSTEM_PROMPT;
+
+    console.log('[Enhance Brief] Mode:', mode, '| Input length:', userInput.length);
 
     // Build the user message content
     const userContent = [];
 
-    // If a drawing was sent, include it for Claude vision
-    if (drawing_base64 && drawing_type) {
+    // Drawings are only useful for EXPAND mode (polish is grammar-only)
+    if (!isPolish && drawing_base64 && drawing_type) {
       if (drawing_type === 'application/pdf') {
         userContent.push({
           type: 'document',
@@ -65,6 +95,7 @@ router.post('/enhance-brief', async (req, res) => {
             data: drawing_base64
           }
         });
+        console.log('[Enhance Brief] PDF attached:', drawing_name);
       } else {
         const validImageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
         if (validImageTypes.includes(drawing_type)) {
@@ -76,17 +107,26 @@ router.post('/enhance-brief', async (req, res) => {
               data: drawing_base64
             }
           });
+          console.log('[Enhance Brief] Image attached:', drawing_name, '(' + drawing_type + ')');
         }
       }
-      console.log('[Enhance Brief] Drawing attached:', drawing_name, '(' + drawing_type + ')');
     }
 
-    // Add the text prompt
-    userContent.push({
-      type: 'text',
-      text: 'Project type: ' + (project_type || 'Construction project') + '\n\nClient\'s brief description:\n' + brief.trim() + (drawing_base64 ? '\n\nI have also attached a drawing — please reference what you can see in it to improve the project description.' : '')
-    });
+    // Build the text prompt per mode
+    let userText;
+    if (isPolish) {
+      userText = 'Polish this project description (grammar, punctuation, structure only — do not add or remove information):\n\n' + userInput;
+    } else {
+      userText = 'Project type: ' + (project_type || '(not specified)')
+        + '\n\nClient\'s brief (in their own words):\n"""\n' + userInput + '\n"""';
+      if (drawing_base64) {
+        userText += '\n\nA drawing (' + (drawing_name || 'attached') + ') is provided above. Cross-reference it per the rules — items on the drawing but not in the client\'s text go under "Observed on Drawings (please confirm)".';
+      }
+    }
 
+    userContent.push({ type: 'text', text: userText });
+
+    // ─── Call Claude ────────────────────────────────────────────────────────
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -96,8 +136,9 @@ router.post('/enhance-brief', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 800,
-        system: SYSTEM_PROMPT,
+        max_tokens: isPolish ? 600 : 1200,
+        temperature: 0.2,              // LOW — suppresses creative invention
+        system: systemPrompt,
         messages: [
           {
             role: 'user',
@@ -117,9 +158,14 @@ router.post('/enhance-brief', async (req, res) => {
     const enhanced = data.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
-      .join('\n');
+      .join('\n')
+      .trim();
 
-    res.json({ enhanced });
+    if (!enhanced) {
+      return res.status(502).json({ error: 'AI returned an empty response. Please try again.' });
+    }
+
+    res.json({ enhanced, mode });
 
   } catch (err) {
     console.error('[Enhance Brief] Error:', err.message);
