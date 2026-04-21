@@ -247,21 +247,25 @@ export default function ChatPage() {
   }
 
   // ── SEND ───────────────────────────────────────────────────────────
-  async function handleSend(e) {
-    e.preventDefault();
-    if (!input.trim() && files.length === 0) return;
+  // overrideText lets callers (e.g. Regenerate button on the BOQ table) send
+  // a specific message without needing to funnel it through the input state.
+  async function handleSend(e, overrideText) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const textToSend = overrideText != null ? overrideText : input;
+    if (!textToSend.trim() && files.length === 0) return;
 
     const userMsg = {
-      role: 'user', content: input,
+      role: 'user', content: textToSend,
       files: files.map(f => ({ name: f.name, size: f.size })),
       timestamp: new Date().toISOString(),
     };
     const nextMessages = [...messages, userMsg];
     setMessages(nextMessages);
-    const savedInput = input;
+    const savedInput = textToSend;
     const savedFiles = [...files];
     hadFiles.current = files.length > 0;
-    setInput(''); setFiles([]); setSending(true);
+    if (overrideText == null) setInput('');
+    setFiles([]); setSending(true);
 
     // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits
     const history = messages.filter(m => m.content).slice(-20).map(m => ({
@@ -821,7 +825,7 @@ export default function ChatPage() {
                     key={currentSessionId + '-' + boqRefreshKey}
                     sessionId={currentSessionId}
                     takeoffId={currentTakeoffId}
-                    onRegenerate={() => { setInput('generate documents'); setTimeout(() => handleSend({ preventDefault: () => {} }), 0); }}
+                    onRegenerate={() => handleSend(null, 'generate documents')}
                   />
                 )}
               </div>
