@@ -799,37 +799,52 @@ export default function ChatPage() {
               </div>
             )}
 
-            {messages.map((msg, i) => <Message key={i} msg={msg} idx={i}/>)}
+            {messages.map((msg, i) => {
+              // The BOQ table renders inline, anchored to the most recent
+              // assistant message that carries a takeoffId. This keeps it
+              // in the natural conversation flow — new user/AI messages
+              // appear BELOW the table as expected.
+              const lastTakeoffIdx = (() => {
+                for (let j = messages.length - 1; j >= 0; j--) {
+                  if (messages[j].takeoffId || messages[j].takeoff_id) return j;
+                }
+                return -1;
+              })();
+              const showBoqHere = i === lastTakeoffIdx && currentSessionId && currentTakeoffId && boqOpen;
+              return (
+                <React.Fragment key={i}>
+                  <Message msg={msg} idx={i}/>
+                  {i === lastTakeoffIdx && currentSessionId && currentTakeoffId && (
+                    <div style={{ marginLeft: mobile ? 0 : 46, marginTop: -4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <button
+                          onClick={() => setBoqOpen(v => !v)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: c.textSub, fontSize: 11, fontWeight: 600,
+                            padding: '4px 0', fontFamily: 'inherit',
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            textTransform: 'uppercase', letterSpacing: '0.05em',
+                          }}
+                        >
+                          <span style={{ transform: boqOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', fontSize: 9 }}>▶</span>
+                          {boqOpen ? 'Hide' : 'Show'} editable BOQ — click any quantity to adjust
+                        </button>
+                      </div>
+                      {showBoqHere && (
+                        <BoqTable
+                          key={currentSessionId + '-' + boqRefreshKey}
+                          sessionId={currentSessionId}
+                          takeoffId={currentTakeoffId}
+                          onRegenerate={() => handleSend(null, 'generate documents')}
+                        />
+                      )}
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
             {sending && <Thinking/>}
-
-            {/* Editable BOQ table — appears once a takeoff exists for the session */}
-            {currentSessionId && currentTakeoffId && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <button
-                    onClick={() => setBoqOpen(v => !v)}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: c.textSub, fontSize: 11, fontWeight: 600,
-                      padding: '4px 0', fontFamily: 'inherit',
-                      display: 'inline-flex', alignItems: 'center', gap: 4,
-                      textTransform: 'uppercase', letterSpacing: '0.05em',
-                    }}
-                  >
-                    <span style={{ transform: boqOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', fontSize: 9 }}>▶</span>
-                    {boqOpen ? 'Hide' : 'Show'} editable BOQ
-                  </button>
-                </div>
-                {boqOpen && (
-                  <BoqTable
-                    key={currentSessionId + '-' + boqRefreshKey}
-                    sessionId={currentSessionId}
-                    takeoffId={currentTakeoffId}
-                    onRegenerate={() => handleSend(null, 'generate documents')}
-                  />
-                )}
-              </div>
-            )}
 
             <div ref={bottomRef}/>
           </div>

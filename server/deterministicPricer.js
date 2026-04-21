@@ -634,13 +634,18 @@ function detectLocationFactor(locationStr) {
  * Returns { warnings, corrections } so callers know what changed.
  * This is the last line of defence before pricing.
  */
-function crossValidateQuantities(items, projectType) {
+function crossValidateQuantities(items, projectType, opts = {}) {
   const warnings = [];
   const corrections = [];
   const byKey = {};
   for (const item of items) {
     byKey[item.key] = item;
   }
+  // When the user has given us an authoritative floor area via project
+  // intake (e.g. "180m² whole house"), use that as the anchor for all
+  // quantity caps — don't infer from a 10m² porch slab and then cap
+  // whole-house plasterboard to 30m².
+  const intakeFloorArea = (opts.floor_area && opts.floor_area > 20) ? opts.floor_area : null;
 
   // Helper: auto-correct a quantity and log it
   function capQty(item, maxQty, reason) {
@@ -779,9 +784,11 @@ function crossValidateQuantities(items, projectType) {
     }
   }
 
-  // Get total floor area from concrete slab items (AFTER any caps applied above)
+  // Get total floor area. Prefer the intake-provided value (user-confirmed whole
+  // area) over the slab, which for refurb+extension projects is only the new
+  // extension footprint and would over-cap whole-house items.
   const slabItem = byKey['concrete_slab_150mm'] || byKey['concrete_slab_100mm'];
-  const floorArea = slabItem ? slabItem.qty : null;
+  const floorArea = intakeFloorArea || (slabItem ? slabItem.qty : null);
 
   // For extensions, also cap total wall area based on reasonable perimeter
   // A two-storey extension has ~30-40m perimeter × ~5m height = 150-200m² max wall area
@@ -1272,7 +1279,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   let crossResult = { warnings: [], corrections: [] };
   const skipCrossValidation = projectType === 'infrastructure' || projectType === 'commercial';
   if (!skipCrossValidation) {
-    crossResult = crossValidateQuantities(lockedItems, projectType);
+    crossResult = crossValidateQuantities(lockedItems, projectType, { floor_area: options.floor_area });
   }
   // Detect duplicate/overlapping items
   const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
@@ -1388,8 +1395,15 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // Only for residential extensions (single/two storey)
   // ═══════════════════════════════════════════════════════════════════════
   const ptStr = (options.project_type || projectType || '').toLowerCase();
-  const isSingleStoreyExt = (ptStr.includes('single') || (!ptStr.includes('two') && !ptStr.includes('2'))) && ptStr.includes('extension');
-  const isTwoStoreyExt = (ptStr.includes('two') || ptStr.includes('2')) && ptStr.includes('extension');
+  // A "pure" extension is one that's NOT combined with a full-house refurb,
+  // renovation, conversion, or gut job. A "full house refurb with porch
+  // extension" has totally different economics from a single storey extension
+  // and must not be capped at single-storey-extension thresholds.
+  const isFullHouseProject = /\b(full|whole)\s*(house|home)\b|complete\s+(refurb|renovat)|\bgut\s+(reno|refurb)/i.test(ptStr);
+  const isRefurbProject = ptStr.includes('refurb') || ptStr.includes('renovation') || ptStr.includes('renovat');
+  const isPureExtension = ptStr.includes('extension') && !isFullHouseProject && !isRefurbProject;
+  const isSingleStoreyExt = isPureExtension && (ptStr.includes('single') || (!ptStr.includes('two') && !ptStr.includes('2')));
+  const isTwoStoreyExt = isPureExtension && (ptStr.includes('two') || ptStr.includes('2'));
   if (isSingleStoreyExt || isTwoStoreyExt) {
     const cs = currency === 'EUR' ? '€' : '£';
     const sectionCaps = {
@@ -1433,15 +1447,22 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const capIsNewBuild = projectType === 'new_build' || pTypeStr.includes('new build') || pTypeStr.includes('new dwelling');
     const capIsHMO = pTypeStr.includes('hmo');
     const capIsInfra = projectType === 'infrastructure' || pTypeStr.includes('infrastructure');
+    // Full-house / whole-house refurb has much higher £/m² envelope than a simple
+    // extension — premium finishes can legitimately hit £4-5k/m² without being wrong.
+    const capIsFullHouseRefurb = /\b(full|whole)\s*(house|home)\b|complete\s+(refurb|renovat)|\bgut\s+(reno|refurb)/i.test(pTypeStr);
     // Combined residential projects (extension+loft, extension+refurb) still need cost caps
     // — just with slightly higher thresholds than a simple single-trade extension
-    const capIsCombinedResidential = (pTypeStr.includes('loft') || pTypeStr.includes('refurb') || pTypeStr.includes('conversion'))
+    const capIsCombinedResidential = !capIsFullHouseRefurb
+      && (pTypeStr.includes('loft') || pTypeStr.includes('refurb') || pTypeStr.includes('conversion'))
       && (projectType === 'residential_extension' || pTypeStr.includes('extension'));
     const capIsResidential = (projectType === 'residential_extension' || projectType === 'general' || capIsCombinedResidential) && !capIsHMO && !capIsInfra;
 
     let maxCostPerM2, targetCostPerM2, typicalRange, projectLabel;
     if (capIsNewBuild) {
       maxCostPerM2 = 3000; targetCostPerM2 = 2200; typicalRange = '€1,800-3,000'; projectLabel = 'new builds';
+    } else if (capIsFullHouseRefurb) {
+      // Full/whole house refurbishment — premium spec can legitimately hit £4-5k/m²
+      maxCostPerM2 = 6000; targetCostPerM2 = 4000; typicalRange = '£2,000-6,000'; projectLabel = 'full house refurbishments';
     } else if (capIsCombinedResidential) {
       // Extension + loft/conversion: higher complexity but still residential — cap at £4,000/m²
       maxCostPerM2 = 4000; targetCostPerM2 = 3000; typicalRange = '£2,500-4,000'; projectLabel = 'extension + loft/conversion projects';

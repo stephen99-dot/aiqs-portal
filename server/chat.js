@@ -85,6 +85,17 @@ try {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Tombstone table: records deleted session IDs so a late-arriving save
+  // from a race condition (save fired then user deletes before it lands)
+  // can't resurrect a session the user just deleted. Cleaned up after 24h.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS deleted_chat_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      deleted_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.prepare("DELETE FROM deleted_chat_sessions WHERE deleted_at < datetime('now', '-1 day')").run();
 } catch (e) { console.error('[DB] chat_sessions table error:', e.message); }
 
 const storage = multer.diskStorage({
@@ -1069,12 +1080,14 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
       const content = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : '') : '';
       sessionTitle = content.substring(0, 60).trim() || 'Chat ' + new Date().toLocaleDateString('en-GB');
     }
+    // Tombstone check: if this id was recently deleted by the user, don't
+    // resurrect it (guards against the save-then-delete race where an
+    // in-flight auto-save arrives after the DELETE request).
+    const tombstoned = db.prepare('SELECT 1 FROM deleted_chat_sessions WHERE id = ? AND user_id = ? LIMIT 1').get(sessionId, req.user.id);
+    if (tombstoned) {
+      return res.json({ id: sessionId, title: sessionTitle, skipped: 'deleted' });
+    }
     // Upsert: UPDATE if the row exists, otherwise INSERT.
-    // Previously we would silently skip if the caller provided an id that didn't
-    // exist, on the theory that it might have been deleted in the meantime —
-    // but that path also swallowed saves for session_ids the chat handler had
-    // auto-created for takeoffs, losing every message in those chats. The
-    // delete-race is rare and cosmetic; losing user data is not.
     const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
       db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
@@ -1088,6 +1101,12 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
 router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
   try {
     const result = db.prepare('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    // Always record a tombstone — even if the row was already gone — so a
+    // late-arriving save doesn't resurrect it. INSERT OR IGNORE to handle
+    // the case where someone deletes the same session twice quickly.
+    try {
+      db.prepare('INSERT OR IGNORE INTO deleted_chat_sessions (id, user_id) VALUES (?, ?)').run(req.params.id, req.user.id);
+    } catch (tErr) { console.error('[ChatSessions] Tombstone error:', tErr.message); }
     if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
     res.json({ success: true });
   } catch (e) { console.error('[ChatSessions] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete session' }); }
@@ -2543,6 +2562,28 @@ CRITICAL RULES:
             }
 
             if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'price', detail: 'Calculating costs with deterministic pricing engine...' });
+            // Prefer user-confirmed intake answers over AI-extracted values — the user
+            // typed these in the intake modal, they're ground truth. Falls back to
+            // inline intake_json (first turn before session_id), then AI extraction.
+            const intakeRow = (memoryStore && sessionIdForTakeoff)
+              ? memoryStore.getProjectIntake(db, { userId, sessionId: sessionIdForTakeoff })
+              : null;
+            const intakeFloorArea = (inlineIntake && parseFloat(inlineIntake.floor_area_m2))
+              || (intakeRow && intakeRow.floor_area_m2)
+              || null;
+            const intakeProjectType = (inlineIntake && inlineIntake.project_type)
+              || (intakeRow && intakeRow.project_type)
+              || null;
+            const intakeScope = (inlineIntake && inlineIntake.scope)
+              || (intakeRow && intakeRow.scope)
+              || '';
+            // Build a project_type string that reflects the user's actual scope —
+            // so e.g. a "full house refurb with porch extension" isn't classified
+            // as a simple single-storey extension by the pricer's heuristics.
+            const mergedProjectType = intakeProjectType && intakeScope
+              ? (intakeProjectType + ' — ' + intakeScope).substring(0, 200)
+              : (intakeProjectType || parsed.project_type || projectTypeGuess || '');
+
             const priced = deterministicPricer.priceLockedQuantities(
               parsed.items,
               parsed.location || '',
@@ -2555,8 +2596,8 @@ CRITICAL RULES:
                   ohp_pct: 12,
                   vat_rate: isIreland ? 13.5 : 20,
                   currency: isIreland ? 'EUR' : 'GBP',
-                  project_type: parsed.project_type || projectTypeGuess || '',
-                  floor_area: parsed.floor_area_m2 || null,
+                  project_type: mergedProjectType,
+                  floor_area: intakeFloorArea || parsed.floor_area_m2 || null,
                 };
               })()
             );
