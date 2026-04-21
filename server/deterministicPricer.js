@@ -677,15 +677,22 @@ function crossValidateQuantities(items, projectType, opts = {}) {
   const isRefurb = pType.includes('refurb') || pType.includes('renovation') ||
     pType.includes('conversion') || pType.includes('fit') || pType.includes('apartment') || pType.includes('flat');
 
-  // Maximum reasonable floor area per project type (single floor)
-  // Combined projects (extension + loft) still need caps — just higher ones
+  // Maximum reasonable floor area per project type (single floor).
+  // These are outer bounds meant to catch the AI pasting a room-schedule
+  // whole-house total (e.g. 300m²) into a slab quantity. They are NOT the
+  // typical size — the old 50m² single-storey cap crushed legitimate
+  // 90-120m² extensions. Premium/heritage indicators skip the cap entirely.
   const allItemDescs = items.map(i => (i.description || '').toLowerCase()).join(' ');
   const isMultiStorey = pType.includes('two') || pType.includes('2') || allItemDescs.includes('two storey') || allItemDescs.includes('first floor');
   const isHMO = pType.includes('hmo') || allItemDescs.includes('hmo') || allItemDescs.includes('house in multiple');
   const isCombined = (isExtension && isLoft) || (isExtension && isRefurb) || isHMO;
-  // Combined extension+loft: extension footprint is still limited, allow up to 160m² total
-  // HMO: no cap (too variable). Loft only: 60m². Simple extension: 80-120m².
-  const maxFloorArea = isHMO ? null : isCombined ? 160 : isLoft ? 60 : isExtension ? (isMultiStorey ? 100 : 50) : null;
+  const hasPremium = /\b(heritage|listed|grade\s*(i|ii|1|2)|premium|high[\s-]?end|bespoke|traditional|period|conservation|cottage|aga\b|liscannor|natural\s+stone)\b/i.test(pType + ' ' + allItemDescs);
+  const defaultMaxFloorArea = (isHMO || hasPremium) ? null : isCombined ? 220 : isLoft ? 100 : isExtension ? (isMultiStorey ? 200 : 120) : null;
+  // If the user confirmed a larger floor area via intake, trust it outright —
+  // allow up to 110% as tolerance for AI measurement noise.
+  const maxFloorArea = (intakeFloorArea && defaultMaxFloorArea)
+    ? Math.max(defaultMaxFloorArea, Math.ceil(intakeFloorArea * 1.1))
+    : defaultMaxFloorArea;
 
   if (maxFloorArea) {
     // Cap concrete slab to max floor area for extensions
@@ -1404,13 +1411,22 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const isPureExtension = ptStr.includes('extension') && !isFullHouseProject && !isRefurbProject;
   const isSingleStoreyExt = isPureExtension && (ptStr.includes('single') || (!ptStr.includes('two') && !ptStr.includes('2')));
   const isTwoStoreyExt = isPureExtension && (ptStr.includes('two') || ptStr.includes('2'));
-  if (isSingleStoreyExt || isTwoStoreyExt) {
+  // Heritage / complex / premium indicators — these projects legitimately run
+  // much higher per-m² than a standard extension. Skip the hard caps below so
+  // they don't crush the result down to a suspiciously low number.
+  const hasPremiumIndicators = /\b(heritage|listed|grade\s*(i|ii|1|2)|premium|high[\s-]?end|bespoke|traditional|period|conservation|cottage|aga\b|liscannor|natural\s+stone)\b/i.test(ptStr);
+  // Scale the section caps by actual floor area — the old hardcoded numbers
+  // (£12k roof, £16k substructure) assumed a 30-40m² standard extension.
+  // For a 90m² extension those caps are ~3× too tight.
+  const extFloorArea = options.floor_area || 0;
+  const scaleFactor = extFloorArea > 40 ? Math.min(extFloorArea / 40, 3.0) : 1.0;
+  if ((isSingleStoreyExt || isTwoStoreyExt) && !hasPremiumIndicators) {
     const cs = currency === 'EUR' ? '€' : '£';
     const sectionCaps = {
-      'roof':        { max: isTwoStoreyExt ? 18000 : 12000, target: isTwoStoreyExt ? 14000 : 9000 },
-      'electrical':  { max: isTwoStoreyExt ? 14000 : 10000, target: isTwoStoreyExt ? 11000 : 8000 },
-      'substructure':{ max: isTwoStoreyExt ? 22000 : 16000, target: isTwoStoreyExt ? 18000 : 12000 },
-      'mechanical':  { max: isTwoStoreyExt ? 10000 : 7000,  target: isTwoStoreyExt ? 8000  : 5500 },
+      'roof':        { max: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 14000 :  9000) * scaleFactor) },
+      'electrical':  { max: Math.round((isTwoStoreyExt ? 14000 : 10000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 11000 :  8000) * scaleFactor) },
+      'substructure':{ max: Math.round((isTwoStoreyExt ? 22000 : 16000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor) },
+      'mechanical':  { max: Math.round((isTwoStoreyExt ? 10000 :  7000) * scaleFactor), target: Math.round((isTwoStoreyExt ?  8000 :  5500) * scaleFactor) },
     };
     for (const sec of sectionTotals) {
       const secLower = sec.name.toLowerCase();
@@ -1418,7 +1434,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         if (secLower.includes(capKey)) {
           if (sec.subtotal > max) {
             const scale = target / sec.subtotal;
-            warnings.push(`Section "${sec.name}" was ${cs}${Math.round(sec.subtotal).toLocaleString()} — exceeds ${cs}${max.toLocaleString()} max for ${isSingleStoreyExt ? 'single' : 'two'} storey extension. Scaled to ${cs}${target.toLocaleString()}.`);
+            warnings.push(`Section "${sec.name}" was ${cs}${Math.round(sec.subtotal).toLocaleString()} — exceeds ${cs}${max.toLocaleString()} max for ${isSingleStoreyExt ? 'single' : 'two'} storey extension${scaleFactor > 1 ? ' (scaled for ' + extFloorArea + 'm² floor area)' : ''}. Scaled to ${cs}${target.toLocaleString()}.`);
             for (const item of sec.items) {
               item.rate = Math.round(item.rate * scale * 100) / 100;
               item.total = Math.round(item.qty * item.rate * 100) / 100;
@@ -1499,35 +1515,37 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // ABSOLUTE CONSTRUCTION TOTAL CAP — final safety net for extensions
-  // Even after all per-m² and section caps, enforce an absolute max
+  // ABSOLUTE CONSTRUCTION TOTAL CAP — last-resort safety net for extensions.
+  // Scales with floor area instead of a hardcoded number — the old £80k /
+  // £130k absolute caps assumed a 30-40m² extension and crushed large or
+  // premium extensions (e.g. 90m² Irish cottage extension legitimately at
+  // €1,500/m² got nuked to €687/m²).
+  //
+  // Skipped entirely when the project has premium / heritage indicators —
+  // those legitimately exceed normal extension economics.
   // ═══════════════════════════════════════════════════════════════════════
-  if (isSingleStoreyExt && constructionTotal > 80000) {
-    const scale = 65000 / constructionTotal;
-    const cs = currency === 'EUR' ? '€' : '£';
-    warnings.push(`TOTAL CAP: Single storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} — exceeds ${cs}80,000 absolute max. Scaled to ~${cs}65,000.`);
-    for (const item of pricedItems) {
-      item.rate = Math.round(item.rate * scale * 100) / 100;
-      item.total = Math.round(item.qty * item.rate * 100) / 100;
-      const ls = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
-      item.labour = Math.round(item.total * ls * 100) / 100;
-      item.materials = Math.round((item.total - item.labour) * 100) / 100;
+  if (!hasPremiumIndicators && (isSingleStoreyExt || isTwoStoreyExt) && extFloorArea > 0) {
+    // Max £/m² for extension construction before we consider the pricer to
+    // have gone off the rails. Cost/m² cap above already handles the softer
+    // typical-range check; this is the hard ceiling.
+    const maxPerM2 = isTwoStoreyExt ? 4200 : 4000;
+    const targetPerM2 = isTwoStoreyExt ? 3200 : 3000;
+    const absoluteMax = maxPerM2 * extFloorArea;
+    const absoluteTarget = targetPerM2 * extFloorArea;
+    if (constructionTotal > absoluteMax) {
+      const scale = absoluteTarget / constructionTotal;
+      const cs = currency === 'EUR' ? '€' : '£';
+      warnings.push(`TOTAL CAP: ${isSingleStoreyExt ? 'Single' : 'Two'} storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} (${cs}${Math.round(constructionTotal / extFloorArea)}/m² over ${extFloorArea}m²) — exceeds ${cs}${maxPerM2}/m² ceiling. Scaled to ~${cs}${Math.round(absoluteTarget).toLocaleString()}.`);
+      for (const item of pricedItems) {
+        item.rate = Math.round(item.rate * scale * 100) / 100;
+        item.total = Math.round(item.qty * item.rate * 100) / 100;
+        const ls = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
+        item.labour = Math.round(item.total * ls * 100) / 100;
+        item.materials = Math.round((item.total - item.labour) * 100) / 100;
+      }
+      for (const sec of sectionTotals) { sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0); }
+      constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
     }
-    for (const sec of sectionTotals) { sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0); }
-    constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
-  } else if (isTwoStoreyExt && constructionTotal > 130000) {
-    const scale = 100000 / constructionTotal;
-    const cs = currency === 'EUR' ? '€' : '£';
-    warnings.push(`TOTAL CAP: Two storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} — exceeds ${cs}130,000 absolute max. Scaled to ~${cs}100,000.`);
-    for (const item of pricedItems) {
-      item.rate = Math.round(item.rate * scale * 100) / 100;
-      item.total = Math.round(item.qty * item.rate * 100) / 100;
-      const ls = (item.labour + item.materials > 0) ? item.labour / (item.labour + item.materials) : 0.5;
-      item.labour = Math.round(item.total * ls * 100) / 100;
-      item.materials = Math.round((item.total - item.labour) * 100) / 100;
-    }
-    for (const sec of sectionTotals) { sec.subtotal = sec.items.reduce((s, i) => s + i.total, 0); }
-    constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
   }
 
   const contingency = Math.round(constructionTotal * (contingency_pct / 100) * 100) / 100;
