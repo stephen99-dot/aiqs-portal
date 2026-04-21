@@ -779,18 +779,15 @@ Rule 3 — If ANY project information exists in the conversation (drawings, scop
 After providing analysis, always end with: "Just say 'generate documents' and I will create your Excel BOQ and Word Findings Report."
 
 COMMUNICATION STYLE — CRITICAL:
-You are writing as a professional quantity surveyor, not a chatbot. Follow these rules strictly:
-1. NEVER use markdown formatting: no **, no ##, no ---, no bullet points with -, no numbered lists with 1.
-2. NEVER use emojis or symbols like checkmarks, warning signs, or arrows
-3. Write in plain professional prose — paragraphs and sentences, like a proper QS report
-4. Use simple line breaks to separate sections, not markdown headers
-5. Present BOQ data as plain text tables using fixed-width spacing or tab-separated columns
-6. When listing items, use plain text: "Item 1.1 — Strip foundations 600x250mm, 9.74m at 87/m = 848"
-7. Keep the tone direct and professional — like an email from a senior QS to a contractor
-8. Do not include "How to use this BOQ" sections or chatbot-style prompts
-9. Do not ask multiple questions at the end — one follow-up at most
-10. Never say "Need me to..." with a list of options. Just say "Let me know if you want anything adjusted."
-11. State assumptions and exclusions in plain sentences, not bullet lists
+You are writing as a professional quantity surveyor. Formatting rules:
+1. Use markdown thoughtfully — **bold** for key figures and section names, bullet lists for measured items, tables for cost breakdowns, headers (##) for major sections. Don't over-format short answers.
+2. Do NOT use emojis, checkmarks, warning signs or arrows (keep it professional).
+3. Write in clear, direct QS prose — a senior QS briefing a contractor, not a chatbot.
+4. Present BOQ data as markdown tables when useful. Use fenced code blocks for any raw data the user will copy.
+5. Numbered items: prefer "Item 1.1 — Strip foundations..." style for BOQ line items; markdown numbered lists are fine for workflow steps.
+6. Keep the tone direct. Do not include meta-text like "How to use this BOQ" or "Need me to..." lists.
+7. Ask at most one follow-up question at the end, not several.
+8. State assumptions and exclusions as a compact bulleted list when there are more than two.
 
 RATE LEARNING: If a client corrects a rate or provides their own pricing, acknowledge it naturally in conversation. The system auto-learns from corrections.
 
@@ -3344,12 +3341,15 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     };
 
     if (req.streaming) {
-      // Send the final reply as text chunks (simulated streaming for the response text)
+      // Send the final reply as text chunks with small delays so it visibly
+      // types out on the client (simulated streaming until we move to true
+      // Anthropic stream forwarding). 18 chars / 12ms = ~1500 chars/sec —
+      // fast enough that 2-3k responses feel responsive (~1.5s typing).
       if (reply) {
-        // Send text in chunks for streaming feel
-        const chunkSize = 80;
+        const chunkSize = 18;
         for (let i = 0; i < reply.length; i += chunkSize) {
           sseEvent(res, { type: 'text', content: reply.slice(i, i + chunkSize) });
+          await new Promise(r => setTimeout(r, 12));
         }
       }
       // Send the full done event with all metadata

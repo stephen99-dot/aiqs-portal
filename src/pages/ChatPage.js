@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
@@ -29,6 +31,49 @@ function useIsMobile() {
   const [v, set] = useState(() => window.innerWidth <= 768);
   useEffect(() => { const h = () => set(window.innerWidth <= 768); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   return v;
+}
+
+// Markdown renderer with QS-appropriate typography. Overrides default HTML
+// components so spacing/styling matches the chat bubble look rather than
+// default browser defaults.
+function Markdown({ content, color, mutedColor, borderColor, mono }) {
+  const base = { color, fontSize: 'inherit', lineHeight: 1.65 };
+  const components = useMemo(() => ({
+    p:  ({node, ...p}) => <p {...p} style={{ margin: '0 0 10px', ...base }} />,
+    h1: ({node, ...p}) => <h1 {...p} style={{ fontSize: 17, fontWeight: 700, margin: '14px 0 8px', ...base }} />,
+    h2: ({node, ...p}) => <h2 {...p} style={{ fontSize: 15.5, fontWeight: 700, margin: '14px 0 6px', ...base }} />,
+    h3: ({node, ...p}) => <h3 {...p} style={{ fontSize: 14, fontWeight: 700, margin: '12px 0 4px', ...base }} />,
+    ul: ({node, ...p}) => <ul {...p} style={{ margin: '0 0 10px', paddingLeft: 20, ...base }} />,
+    ol: ({node, ...p}) => <ol {...p} style={{ margin: '0 0 10px', paddingLeft: 20, ...base }} />,
+    li: ({node, ...p}) => <li {...p} style={{ margin: '2px 0', ...base }} />,
+    strong: ({node, ...p}) => <strong {...p} style={{ fontWeight: 700, color }} />,
+    em: ({node, ...p}) => <em {...p} style={{ fontStyle: 'italic' }} />,
+    a:  ({node, ...p}) => <a {...p} style={{ color: '#60A5FA', textDecoration: 'underline', textUnderlineOffset: 2 }} target="_blank" rel="noopener noreferrer" />,
+    blockquote: ({node, ...p}) => <blockquote {...p} style={{ margin: '0 0 10px', padding: '6px 12px', borderLeft: '3px solid ' + borderColor, color: mutedColor, fontStyle: 'italic' }} />,
+    hr: ({node, ...p}) => <hr {...p} style={{ margin: '14px 0', border: 'none', borderTop: '1px solid ' + borderColor }} />,
+    code: ({node, inline, ...p}) => inline
+      ? <code {...p} style={{ padding: '1px 5px', borderRadius: 4, background: borderColor, fontFamily: mono, fontSize: '0.92em' }} />
+      : <code {...p} style={{ fontFamily: mono, fontSize: '0.9em', color }} />,
+    pre: ({node, ...p}) => <pre {...p} style={{ margin: '0 0 10px', padding: '10px 12px', borderRadius: 8, background: borderColor, overflowX: 'auto', fontFamily: mono, fontSize: 12.5, lineHeight: 1.5 }} />,
+    table: ({node, ...p}) => <div style={{ overflowX: 'auto', margin: '0 0 10px' }}><table {...p} style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%' }} /></div>,
+    thead: ({node, ...p}) => <thead {...p} style={{ background: borderColor }} />,
+    th: ({node, ...p}) => <th {...p} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid ' + borderColor, fontWeight: 700, color }} />,
+    td: ({node, ...p}) => <td {...p} style={{ padding: '6px 10px', borderBottom: '1px solid ' + borderColor, color }} />,
+  }), [color, mutedColor, borderColor, mono]);
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content || ''}</ReactMarkdown>;
+}
+
+function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  } catch (e) {}
+  // Fallback for insecure contexts
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  return Promise.resolve();
 }
 
 export default function ChatPage() {
@@ -73,6 +118,11 @@ export default function ChatPage() {
   const [boqOpen, setBoqOpen] = useState(true);
   const [boqRefreshKey, setBoqRefreshKey] = useState(0);
 
+  // ── Copy feedback + smart auto-scroll ──────────────────────────────
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const userScrolledUp = useRef(false);
+  const msgsRef = useRef(null);
+
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
   const timerRef    = useRef(null);
@@ -87,7 +137,27 @@ export default function ChatPage() {
       if (d) setQuotaInfo({ messages_used: d.messagesUsed || 0, messages_limit: d.messagesLimit || 0, docs_used: d.used || 0, docs_limit: d.quota || 0, plan: d.plan });
     }).catch(() => {});
   }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, stage, streamingText]);
+  // Smart auto-scroll — only follow new content if the user is already near the
+  // bottom. If they've scrolled up to read, leave them alone (claude.ai behaviour).
+  useEffect(() => {
+    const el = msgsRef.current;
+    if (!el) return;
+    if (!userScrolledUp.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, stage, streamingText]);
+
+  // Track whether the user has scrolled away from the bottom
+  useEffect(() => {
+    const el = msgsRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      userScrolledUp.current = distFromBottom > 120;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (sending) {
@@ -540,8 +610,46 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Message text */}
-            <div>{(msg.content||'').split('\n').map((l,i,a) => <React.Fragment key={i}>{l}{i<a.length-1&&<br/>}</React.Fragment>)}</div>
+            {/* Message text — markdown for assistant, plain for user (their input is literal) */}
+            {isUser ? (
+              <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content || ''}</div>
+            ) : (
+              <Markdown
+                content={msg.content || ''}
+                color={msg.error ? c.error : c.text}
+                mutedColor={c.textMuted}
+                borderColor={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
+                mono="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+              />
+            )}
+
+            {/* Copy + streaming indicator (assistant only) */}
+            {!isUser && msg.content && !msg.streaming && (
+              <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={async () => {
+                    await copyText(msg.content || '');
+                    setCopiedIdx(idx);
+                    setTimeout(() => setCopiedIdx(prev => prev === idx ? null : prev), 1400);
+                  }}
+                  title="Copy reply"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: c.textMuted, fontSize: 11, fontWeight: 500,
+                    padding: '3px 6px', borderRadius: 5, fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    opacity: 0.7,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
+                >
+                  {copiedIdx === idx ? '✓ Copied' : '⧉ Copy'}
+                </button>
+              </div>
+            )}
+            {!isUser && msg.streaming && (
+              <span style={{ display: 'inline-block', width: 7, height: 14, background: c.amber, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />
+            )}
 
             {/* Remembered-memory chips */}
             {!isUser && msg.capturedMemories && msg.capturedMemories.length > 0 && (
@@ -774,7 +882,7 @@ export default function ChatPage() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, background:c.chat }} onDragOver={e=>e.preventDefault()} onDrop={onDrop}>
 
           {/* Messages */}
-          <div className="msgs" style={{ flex:1, overflowY:'auto', padding: mobile?'16px 12px':'24px 28px', display:'flex', flexDirection:'column', gap:18 }}>
+          <div ref={msgsRef} className="msgs" style={{ flex:1, overflowY:'auto', padding: mobile?'16px 12px':'24px 28px', display:'flex', flexDirection:'column', gap:18 }}>
 
             {messages.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', padding:'0 16px' }}>
@@ -844,7 +952,43 @@ export default function ChatPage() {
                 </React.Fragment>
               );
             })}
-            {sending && <Thinking/>}
+            {/* While sending, show the progress stages OR the live streamed text. */}
+            {/* If text is streaming, render it as the actual assistant bubble (with markdown + cursor). */}
+            {sending && !streamingText && <Thinking/>}
+            {sending && streamingText && (
+              <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>📐</div>
+                <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius:'4px 16px 16px 16px', background:c.aiBubble, color:c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+                  <Markdown
+                    content={streamingText}
+                    color={c.text}
+                    mutedColor={c.textMuted}
+                    borderColor={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
+                    mono="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+                  />
+                  <span style={{ display:'inline-block', width:7, height:14, background:c.amber, marginLeft:2, verticalAlign:'text-bottom', animation:'pulse 1s infinite' }} />
+                </div>
+              </div>
+            )}
+
+            {/* Stop button — visible only while a response is in flight */}
+            {sending && (
+              <div style={{ display:'flex', justifyContent:'center', marginTop:4 }}>
+                <button
+                  onClick={() => { try { abortRef.current?.abort(); } catch (e) {} setSending(false); }}
+                  style={{
+                    padding:'5px 14px', borderRadius:999,
+                    background:'transparent', border:`1px solid ${c.chatBorder}`,
+                    color:c.textMuted, fontSize:11.5, fontWeight:600,
+                    cursor:'pointer', fontFamily:'inherit',
+                    display:'inline-flex', alignItems:'center', gap:6,
+                  }}
+                >
+                  <span style={{ width:8, height:8, background:c.error, borderRadius:2 }} />
+                  Stop
+                </button>
+              </div>
+            )}
 
             <div ref={bottomRef}/>
           </div>
