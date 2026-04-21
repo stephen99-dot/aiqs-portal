@@ -1460,6 +1460,85 @@ function sseEvent(res, evt) {
   res.write(`data: ${JSON.stringify(evt)}\n\n`);
 }
 
+// Call Anthropic's Messages API in streaming mode and forward text deltas to
+// the client in real-time via sseEmit. Aggregates the full reply + thinking
+// server-side so the rest of the pipeline (tag parsing, takeoff extraction,
+// usage logging) continues to work unchanged.
+//
+// Returns { ok, status, error, reply, thinking, tokensIn, tokensOut }.
+async function streamAnthropicMessage(headers, body, sseEmit) {
+  let resp;
+  try {
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...body, stream: true }),
+    });
+  } catch (fetchErr) {
+    return { ok: false, status: 0, error: { message: fetchErr.message } };
+  }
+
+  if (!resp.ok) {
+    let err = {};
+    try { err = await resp.json(); } catch (e) {}
+    return { ok: false, status: resp.status, error: err };
+  }
+
+  let reply = '';
+  let thinking = '';
+  let tokensIn = 0;
+  let tokensOut = 0;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+        let evt;
+        try { evt = JSON.parse(payload); } catch (e) { continue; }
+        switch (evt.type) {
+          case 'message_start':
+            if (evt.message && evt.message.usage) tokensIn = evt.message.usage.input_tokens || 0;
+            break;
+          case 'content_block_delta':
+            if (evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
+              reply += evt.delta.text;
+              if (sseEmit) {
+                try { sseEmit({ type: 'text', content: evt.delta.text }); } catch (e) {}
+              }
+            } else if (evt.delta && evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
+              thinking += evt.delta.thinking;
+            }
+            break;
+          case 'message_delta':
+            if (evt.usage && evt.usage.output_tokens != null) tokensOut = evt.usage.output_tokens;
+            break;
+          case 'error':
+            return { ok: false, status: 500, error: evt.error || evt, reply, thinking, tokensIn, tokensOut };
+          // message_stop / content_block_start / content_block_stop / ping — ignore
+        }
+      }
+    }
+  } catch (streamErr) {
+    console.error('[API] stream read error:', streamErr.message);
+    // If we got some reply text before the error, still return what we have
+    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, partial: true };
+    return { ok: false, status: 0, error: { message: streamErr.message } };
+  }
+
+  return { ok: true, reply, thinking, tokensIn, tokensOut };
+}
+
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
@@ -1811,37 +1890,42 @@ ${summary}`);
 
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
-    let response, usedFallback = false;
+    // Stream the primary LLM call — text deltas flow straight to the client
+    // via req.sseEmit, so the frontend sees text appear token-by-token (real
+    // claude.ai feel) rather than waiting for the full response. The server
+    // still aggregates `reply` + `thinking` for the post-processing pipeline.
+    let streamResult, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: apiHeaders,
-        body: JSON.stringify({ model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages })
-      });
-      if (response.ok) break;
-      const err = await response.json().catch(() => ({}));
-      console.error(`[API] Attempt ${attempt} failed: status=${response.status} type=${err?.error?.type} msg=${err?.error?.message}`);
-      if ((response.status === 529 || err?.error?.type === 'overloaded_error') && attempt < 3) {
+      streamResult = await streamAnthropicMessage(
+        apiHeaders,
+        { model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages },
+        req.sseEmit
+      );
+      if (streamResult.ok) break;
+      console.error(`[API] Attempt ${attempt} failed: status=${streamResult.status} type=${streamResult.error?.error?.type || streamResult.error?.type} msg=${streamResult.error?.error?.message || streamResult.error?.message}`);
+      if ((streamResult.status === 529 || streamResult.error?.error?.type === 'overloaded_error' || streamResult.error?.type === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
-      } else if (response.status !== 529) {
+      } else if (streamResult.status !== 529) {
         return sendError(500, { error: 'AI service error -- please try again' });
       }
     }
-    if (!response.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
+    if (!streamResult.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
       console.log('[API] Sonnet overloaded, falling back to Haiku...');
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST', headers: apiHeaders,
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages })
-      });
-      if (!response.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
+      streamResult = await streamAnthropicMessage(
+        apiHeaders,
+        { model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages },
+        req.sseEmit
+      );
+      if (!streamResult.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
-    } else if (!response.ok) {
+    } else if (!streamResult.ok) {
       return sendError(500, { error: 'AI service busy -- try again shortly' });
     }
 
-    const data = await response.json();
-
-    const tokensIn = data.usage ? data.usage.input_tokens : 0;
-    const tokensOut = data.usage ? data.usage.output_tokens : 0;
+    // Text was already streamed to the client in real time — don't re-send it later.
+    const streamedToClient = Boolean(req.streaming);
+    const tokensIn = streamResult.tokensIn || 0;
+    const tokensOut = streamResult.tokensOut || 0;
     const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
     const costPerIn = modelUsed.includes('haiku') ? 0.0000008 : 0.000003;
     const costPerOut = modelUsed.includes('haiku') ? 0.000004 : 0.000015;
@@ -1868,11 +1952,9 @@ ${summary}`);
       }
     } catch (aeErr) { /* activity logging is best-effort */ }
 
-    let thinking = '', reply = '';
-    for (const block of data.content) {
-      if (block.type === 'thinking') thinking += (thinking ? '\n' : '') + block.thinking;
-      else if (block.type === 'text') reply += (reply ? '\n' : '') + block.text;
-    }
+    // Reply + thinking were aggregated live during streamAnthropicMessage.
+    let thinking = streamResult.thinking || '';
+    let reply = streamResult.reply || '';
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
     // ═══════════════════════════════════════════════════════════════
@@ -3341,11 +3423,12 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     };
 
     if (req.streaming) {
-      // Send the final reply as text chunks with small delays so it visibly
-      // types out on the client (simulated streaming until we move to true
-      // Anthropic stream forwarding). 18 chars / 12ms = ~1500 chars/sec —
-      // fast enough that 2-3k responses feel responsive (~1.5s typing).
-      if (reply) {
+      // If we successfully streamed the reply live via streamAnthropicMessage,
+      // don't re-send it here or the client would see the text twice.
+      // Only fall back to chunked simulated streaming if real streaming
+      // didn't happen (e.g. the reply was rewritten downstream, or streaming
+      // failed and we somehow produced a reply without live deltas).
+      if (reply && !streamedToClient) {
         const chunkSize = 18;
         for (let i = 0; i < reply.length; i += chunkSize) {
           sseEvent(res, { type: 'text', content: reply.slice(i, i + chunkSize) });
