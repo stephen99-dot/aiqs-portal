@@ -1836,6 +1836,22 @@ ${summary}`);
       );
     } catch(ue) { console.error('[Usage] Log error:', ue.message); }
 
+    // Log to activity feed so admins can see what users are doing.
+    // Keep the detail short — the feed is for at-a-glance visibility, not transcripts.
+    try {
+      const { logActivity } = require('./activityRoutes');
+      const preview = (message || '').replace(/\s+/g, ' ').trim().substring(0, 100);
+      if (preview || fileNames.length > 0) {
+        const title = fileNames.length > 0
+          ? `${req.user.full_name || req.user.email} uploaded ${fileNames.length} file(s)`
+          : `${req.user.full_name || req.user.email} sent a message`;
+        const detail = fileNames.length > 0
+          ? `${fileNames.slice(0, 3).join(', ')}${fileNames.length > 3 ? ' +' + (fileNames.length - 3) + ' more' : ''}${preview ? ' — "' + preview + '"' : ''}`
+          : preview;
+        logActivity({ event_type: 'chat', title, detail, user_id: userId, user_name: req.user.full_name, user_email: req.user.email });
+      }
+    } catch (aeErr) { /* activity logging is best-effort */ }
+
     let thinking = '', reply = '';
     for (const block of data.content) {
       if (block.type === 'thinking') thinking += (thinking ? '\n' : '') + block.thinking;
@@ -2949,6 +2965,18 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
 
             db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
               .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
+
+            // Mirror to activity_log so the admin feed shows BOQ generations
+            try {
+              const { logActivity } = require('./activityRoutes');
+              const sym = projCurrency === 'EUR' ? '€' : '£';
+              logActivity({
+                event_type: 'doc_generated',
+                title: `${req.user.full_name || req.user.email} generated a BOQ`,
+                detail: `${projectName} — ${sym}${Math.round(grandTotal || 0).toLocaleString('en-GB')} (${itemCount} items)`,
+                user_id: userId, user_name: req.user.full_name, user_email: req.user.email,
+              });
+            } catch (aeErr) { /* best-effort */ }
 
             // ── FULL MEMORY LEARNING ────────────────────────────────────
             // Every confirmed project teaches the system.
