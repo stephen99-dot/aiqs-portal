@@ -67,7 +67,21 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
         next[idx] = { ...existing, thinking: (existing.thinking || '') + (evt.delta || '') };
         break;
       case 'step_complete':
-        next[idx] = { ...existing, status: 'complete', output: evt.output };
+        // If the step emitted an error payload, mark it as 'error' (not
+        // 'complete'). Previously we always set status='complete' here,
+        // which made failed steps show as green ticks despite having an
+        // error message in the output.
+        {
+          const isErr = evt.output && (evt.output.error || evt.output.failed);
+          next[idx] = {
+            ...existing,
+            status: isErr ? 'error' : 'complete',
+            output: evt.output,
+          };
+          if (isErr) {
+            next[idx].text = (existing.text || '') + (existing.text ? '\n\n' : '') + 'Error: ' + evt.output.error;
+          }
+        }
         break;
       default:
         return prevSteps;
@@ -239,7 +253,11 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
           <div style={{ padding: '18px 16px', fontSize: 12, color: c.muted }}>Connecting...</div>
         )}
         {steps.map(step => {
-          const isOpen = expanded[step.step_index];
+          // Auto-expand error steps so the user sees the failure message
+          // without having to click. Explicit clicks still override.
+          const isOpen = expanded[step.step_index] !== undefined
+            ? expanded[step.step_index]
+            : step.status === 'error';
           const colour = step.status === 'complete' ? c.done
             : step.status === 'running' ? c.accent
             : step.status === 'error' ? c.err
