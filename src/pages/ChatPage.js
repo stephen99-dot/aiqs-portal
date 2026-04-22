@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch, streamChat } from '../utils/api';
+import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
+import DeepBoqPanel from '../components/DeepBoqPanel';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -122,6 +123,40 @@ export default function ChatPage() {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const userScrolledUp = useRef(false);
   const msgsRef = useRef(null);
+
+  // ── Deep BOQ mode ──────────────────────────────────────────────────
+  const [deepJobId, setDeepJobId] = useState(null);
+  const [deepStarting, setDeepStarting] = useState(false);
+
+  async function startDeepBoq() {
+    if (files.length === 0 && !input.trim()) {
+      alert('Attach drawings or describe the project before starting Deep BOQ.');
+      return;
+    }
+    if (!window.confirm('Start Deep BOQ?\n\nThis uses multi-step reasoning (3-6 minutes). You can close the tab and come back — the job runs on the server.\n\nTakes longer than the fast chat but produces tender-quality output.')) return;
+    setDeepStarting(true);
+    try {
+      const fd = new FormData();
+      if (input.trim()) fd.append('scope', input.trim());
+      if (pendingIntake) fd.append('intake_json', JSON.stringify(pendingIntake));
+      files.forEach(f => fd.append('files', f));
+      const token = getToken();
+      const resp = await fetch('/api/deep-boq', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: fd,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to start');
+      setDeepJobId(data.job_id);
+      setInput('');
+      setFiles([]);
+    } catch (err) {
+      alert('Deep BOQ failed to start: ' + err.message);
+    } finally {
+      setDeepStarting(false);
+    }
+  }
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -908,21 +943,21 @@ export default function ChatPage() {
             )}
 
             {messages.map((msg, i) => {
-              // The BOQ table renders inline, anchored to the most recent
-              // assistant message that carries a takeoffId. This keeps it
-              // in the natural conversation flow — new user/AI messages
-              // appear BELOW the table as expected.
-              const lastTakeoffIdx = (() => {
-                for (let j = messages.length - 1; j >= 0; j--) {
+              // The BOQ table renders inline, anchored to the FIRST assistant
+              // message that introduced a takeoff — so it stays put, and any
+              // new messages (user edits, AI confirmations, further chat)
+              // appear BELOW the table like a normal conversation thread.
+              const firstTakeoffIdx = (() => {
+                for (let j = 0; j < messages.length; j++) {
                   if (messages[j].takeoffId || messages[j].takeoff_id) return j;
                 }
                 return -1;
               })();
-              const showBoqHere = i === lastTakeoffIdx && currentSessionId && currentTakeoffId && boqOpen;
+              const showBoqHere = i === firstTakeoffIdx && currentSessionId && currentTakeoffId && boqOpen;
               return (
                 <React.Fragment key={i}>
                   <Message msg={msg} idx={i}/>
-                  {i === lastTakeoffIdx && currentSessionId && currentTakeoffId && (
+                  {i === firstTakeoffIdx && currentSessionId && currentTakeoffId && (
                     <div style={{ marginLeft: mobile ? 0 : 46, marginTop: -4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <button
@@ -1020,6 +1055,15 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Deep BOQ progress panel — resumes on reload via SSE snapshot */}
+            {deepJobId && (
+              <DeepBoqPanel
+                jobId={deepJobId}
+                onClose={() => setDeepJobId(null)}
+                onCompleted={() => { /* job done — user can dismiss when ready */ }}
+              />
+            )}
+
             <div ref={bottomRef}/>
           </div>
 
@@ -1060,6 +1104,25 @@ export default function ChatPage() {
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
+              {/* Deep BOQ button — only when files attached or scope typed */}
+              {(files.length > 0 || input.trim()) && !deepJobId && !sending && (
+                <button
+                  type="button"
+                  onClick={startDeepBoq}
+                  disabled={deepStarting}
+                  title="Multi-step reasoning pipeline (3-6 min). Runs on the server — safe to close the tab."
+                  style={{
+                    background: 'transparent', border: '1px solid ' + c.amber,
+                    color: c.amber, borderRadius: 10, padding: '6px 10px',
+                    cursor: deepStarting ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                    fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit',
+                    opacity: deepStarting ? 0.5 : 1, whiteSpace: 'nowrap',
+                  }}
+                >
+                  🔬 {deepStarting ? 'Starting...' : 'Deep BOQ'}
+                </button>
+              )}
               <button type="submit" disabled={sending || (!input.trim() && files.length === 0)}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

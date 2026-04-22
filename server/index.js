@@ -16,6 +16,7 @@ const { router: pipelineRoutes } = require('./pipelineRoutes');
 const variationRoutes = require('./variationRoutes');
 const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
+const deepRoutes = require('./deepRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,6 +36,7 @@ app.use('/api', activityRoutes);
 app.use('/api', pipelineRoutes);
 app.use('/api', variationRoutes);
 app.use('/api', memoryRoutes);
+app.use('/api', deepRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
