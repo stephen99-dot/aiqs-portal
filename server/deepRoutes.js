@@ -55,25 +55,61 @@ function fileToContentBlocks(filePath, originalName) {
   return blocks;
 }
 
-// Build the initial user content array from uploaded files. Mirrors the
-// fast chat's ZIP handling — ZIPs get unpacked via zipProcessor so Claude
-// sees the extracted PDFs and images directly, plus any room schedules /
-// annotated dimensions the processor managed to pull out.
+// Build the initial user content array from uploaded files.
+//
+// For ZIPs we layer two sources together:
+// 1. zipProcessor gives us structured text context (rooms, dimensions,
+//    schedules) + vision blocks for scanned image files.
+// 2. On top of that we also push each extracted PDF as a raw document
+//    block, so Claude's native PDF vision can read the actual drawings
+//    instead of just seeing a note that says "this PDF has no text".
+//
+// zipProcessor.buildClaudeContent on its own only forwards images and a
+// text note for image-based PDFs, which is why the scope step kept
+// replying "I cannot access .zip drawings" even after unzipping.
 async function buildUserContentFromFiles(files) {
   const content = [];
   const extractedNames = [];
+  const MAX_PDF_BYTES = 25 * 1024 * 1024;  // Anthropic document upload limit
+  let pdfBytesTotal = 0;
+
   for (const f of files || []) {
     const ext = path.extname(f.originalname).toLowerCase();
     if (ext === '.zip' && zipProcessor) {
       try {
         const zipData = await zipProcessor.processZip(f.path, uploadsDir);
+
+        // (1) structured context + vision images from zipProcessor
         const zipContent = zipProcessor.buildClaudeContent(zipData, null);
         for (const block of zipContent) content.push(block);
+
+        // (2) raw PDF document blocks so Claude can actually see the drawings.
+        // Cap total PDF payload so we don't blow Anthropic's input limits on
+        // huge ZIPs. Skip PDFs whose path we can't resolve.
+        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf' && fi.filePath);
+        for (const pdf of zipPdfs) {
+          try {
+            const buf = fs.readFileSync(pdf.filePath);
+            if (pdfBytesTotal + buf.length > MAX_PDF_BYTES) {
+              content.push({ type: 'text', text: `[Skipping ${pdf.filename} — attached PDFs already at payload cap]` });
+              continue;
+            }
+            pdfBytesTotal += buf.length;
+            content.push({ type: 'text', text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''}]` });
+            content.push({
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') },
+            });
+          } catch (pdfErr) {
+            console.warn(`[DeepRoutes] couldn't attach PDF ${pdf.filename}:`, pdfErr.message);
+          }
+        }
+
         for (const entry of (zipData.drawing_index || [])) extractedNames.push(entry.filename);
         const summary = zipProcessor.buildUploadSummary(zipData);
         if (summary) content.push({ type: 'text', text: `[ZIP preprocessed — ${f.originalname}]\n${summary}` });
       } catch (zipErr) {
-        console.error('[DeepRoutes] ZIP processing failed:', zipErr.message);
+        console.error('[DeepRoutes] ZIP processing failed:', zipErr.stack || zipErr.message);
         content.push({ type: 'text', text: `(ZIP upload ${f.originalname} could not be extracted: ${zipErr.message})` });
       }
     } else {
@@ -105,44 +141,40 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
     if (req.body.intake_json) {
       try { intake = JSON.parse(req.body.intake_json); } catch (e) {}
     }
+    const scopeText = (intake && intake.scope) || req.body.scope || '';
 
-    // Build the initial user content that the scope step sees
-    let userContent;
-    let extractedNames = [];
-    if (files.length > 0) {
-      const built = await buildUserContentFromFiles(files);
-      userContent = built.content;
-      extractedNames = built.extractedNames;
-      const scopeText = (intake && intake.scope) || req.body.scope || '';
-      if (scopeText) userContent.push({ type: 'text', text: 'User scope notes: ' + scopeText });
-      if (intake) userContent.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
-    } else {
-      // Text-only: pure scope description
-      userContent = [{ type: 'text', text: req.body.scope || '' }];
-    }
-
-    // If the upload was a ZIP containing no extractable drawings, fail loudly
-    // instead of starting a job that the scope step will just complain about.
-    if (files.length > 0 && userContent.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
-      // Clean up originals
-      for (const f of files) { try { fs.unlinkSync(f.path); } catch (e) {} }
-      return res.status(400).json({
-        error: 'No viewable drawings found in the upload. Supported: PDF, PNG, JPG, WebP — either directly or inside a ZIP. DWG/DXF need to be exported to PDF first.',
+    let jobId;
+    if (files.length === 0) {
+      // Text-only: no prep needed, fire straight into pipeline
+      const userContent = [{ type: 'text', text: scopeText }];
+      jobId = await deepJobs.startJob({
+        userId: req.user.id, sessionId: req.body.session_id || null,
+        intake, fileNames, userContent, apiKey,
       });
-    }
-
-    const jobId = await deepJobs.startJob({
-      userId: req.user.id,
-      sessionId: req.body.session_id || null,
-      intake,
-      fileNames: extractedNames.length > 0 ? extractedNames : fileNames,
-      userContent,
-      apiKey,
-    });
-
-    // Clean up uploads — they're now base64'd into the job's user content
-    for (const f of files) {
-      try { fs.unlinkSync(f.path); } catch (e) {}
+    } else {
+      // With files: return job_id IMMEDIATELY, process in background so the
+      // user sees a live "Preparing drawings..." step instead of a frozen
+      // Starting... button while a 3MB ZIP gets unpacked server-side.
+      const paths = files.map(f => ({ path: f.path, originalname: f.originalname }));
+      const prepareContent = async (log) => {
+        if (log) log('Reading ' + paths.length + ' upload(s)...');
+        const built = await buildUserContentFromFiles(paths);
+        // Clean up originals once they've been base64'd into content blocks
+        for (const f of paths) { try { fs.unlinkSync(f.path); } catch (e) {} }
+        if (log) log('Extracted ' + built.extractedNames.length + ' drawing(s) / asset(s)');
+        const content = built.content.slice();
+        if (scopeText) content.push({ type: 'text', text: 'User scope notes: ' + scopeText });
+        if (intake) content.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
+        // Validate at least one viewable block exists
+        if (content.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
+          throw new Error('No viewable drawings found after upload. Supported: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.');
+        }
+        return { content, extractedNames: built.extractedNames };
+      };
+      jobId = await deepJobs.startJob({
+        userId: req.user.id, sessionId: req.body.session_id || null,
+        intake, fileNames, prepareContent, apiKey,
+      });
     }
 
     res.json({ success: true, job_id: jobId });

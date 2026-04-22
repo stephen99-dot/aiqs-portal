@@ -94,6 +94,7 @@ function emit(jobId, evt) {
 // is a plain object that subsequent steps can read from ctx.outputs[stepName].
 
 const STEPS = [
+  { name: 'prepare',      title: 'Preparing drawings (unzip / encode)' },
   { name: 'scope',        title: 'Reading drawings & identifying scope' },
   { name: 'measure',      title: 'Measuring quantities from drawings' },
   { name: 'qa',           title: 'QA review — cross-checking quantities' },
@@ -211,7 +212,7 @@ function extractJson(text) {
 
 // ── The pipeline itself ──────────────────────────────────────────────
 
-async function runPipeline(jobId, { userContent, apiKey }) {
+async function runPipeline(jobId, { userContent, apiKey, skipPrepare = false }) {
   const outputs = {};
   // Debounced writer for step text/thinking so we don't write on every token
   function makeFlusher(stepIndex) {
@@ -244,8 +245,10 @@ async function runPipeline(jobId, { userContent, apiKey }) {
     };
   }
 
-  updateJob(jobId, { status: 'running' });
-  emit(jobId, { type: 'job_started', job_id: jobId });
+  if (!skipPrepare) {
+    updateJob(jobId, { status: 'running' });
+    emit(jobId, { type: 'job_started', job_id: jobId });
+  }
 
   // Lazy-load the pricer, doc generators, and fs/path only once
   let pricer = null, boqGen = null, findingsGen = null;
@@ -260,6 +263,8 @@ async function runPipeline(jobId, { userContent, apiKey }) {
 
   for (let i = 0; i < STEPS.length; i++) {
     const step = STEPS[i];
+    // 'prepare' is handled in startJob BEFORE runPipeline is called — skip here
+    if (step.name === 'prepare') continue;
     const flusher = makeFlusher(i);
     updateStep(jobId, i, { status: 'running', started_at: new Date().toISOString() });
     emit(jobId, { type: 'step_started', step_index: i, step_name: step.name, step_title: step.title });
@@ -697,17 +702,60 @@ Write it as concise professional QS prose. Use markdown.`,
 
 // ── Public surface ────────────────────────────────────────────────────
 
-async function startJob({ userId, sessionId, intake, fileNames, userContent, apiKey }) {
+// startJob accepts EITHER pre-built userContent OR a prepareContent async
+// function that returns { content, extractedNames }. The prepareContent path
+// lets the HTTP handler return the job_id instantly while expensive work
+// (ZIP unpacking, base64 encoding) happens in the background as the first
+// pipeline step, so the UI shows "Preparing drawings..." with progress
+// instead of a dead "Starting..." button for 30-60 seconds.
+async function startJob({ userId, sessionId, intake, fileNames, userContent, prepareContent, apiKey }) {
   const jobId = createJob({ userId, sessionId, intake, fileNames });
-  // Fire and forget — pipeline runs in the background
-  setImmediate(() => {
-    runPipeline(jobId, { userContent, apiKey }).catch(err => {
-      console.error('[DeepJob] unhandled:', err.message);
+  setImmediate(async () => {
+    try {
+      let content = userContent;
+      let extractedNames = fileNames;
+      if (!content && prepareContent) {
+        // Prepare step runs first, visibly, as part of the pipeline
+        const prepareIdx = STEPS.findIndex(s => s.name === 'prepare');
+        updateStep(jobId, prepareIdx, { status: 'running', started_at: new Date().toISOString() });
+        updateJob(jobId, { status: 'running' });
+        emit(jobId, { type: 'job_started', job_id: jobId });
+        emit(jobId, { type: 'step_started', step_index: prepareIdx, step_name: 'prepare', step_title: STEPS[prepareIdx].title });
+        try {
+          const prep = await prepareContent((msg) => {
+            emit(jobId, { type: 'step_text', step_index: prepareIdx, delta: msg + '\n' });
+          });
+          content = prep.content;
+          extractedNames = prep.extractedNames || fileNames;
+          if (!content || content.length === 0) throw new Error('Prepare step produced empty content');
+          const summary = `Prepared ${extractedNames.length} file(s): ${extractedNames.slice(0, 5).join(', ')}${extractedNames.length > 5 ? `, +${extractedNames.length - 5} more` : ''}`;
+          updateStep(jobId, prepareIdx, {
+            status: 'complete', completed_at: new Date().toISOString(),
+            text: summary,
+          });
+          emit(jobId, { type: 'step_complete', step_index: prepareIdx, step_name: 'prepare', output: { extractedNames } });
+          // Also update the job's file_names so the admin feed shows what's really in there
+          try { updateJob(jobId, { file_names: JSON.stringify(extractedNames) }); } catch (e) {}
+        } catch (prepErr) {
+          console.error(`[DeepJob ${jobId}] prepare step failed:`, prepErr.stack || prepErr.message);
+          updateStep(jobId, prepareIdx, {
+            status: 'error', completed_at: new Date().toISOString(),
+            text: 'Error: ' + prepErr.message,
+          });
+          updateJob(jobId, { status: 'failed', error_message: prepErr.message, completed_at: new Date().toISOString() });
+          emit(jobId, { type: 'step_complete', step_index: prepareIdx, step_name: 'prepare', output: { error: prepErr.message } });
+          emit(jobId, { type: 'job_error', error: prepErr.message, at_step: 'prepare' });
+          return;
+        }
+      }
+      await runPipeline(jobId, { userContent: content, apiKey, skipPrepare: true });
+    } catch (err) {
+      console.error('[DeepJob] unhandled:', err.stack || err.message);
       try {
         updateJob(jobId, { status: 'failed', error_message: err.message, completed_at: new Date().toISOString() });
         emit(jobId, { type: 'job_error', error: err.message });
       } catch (e) {}
-    });
+    }
   });
   return jobId;
 }
