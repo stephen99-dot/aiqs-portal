@@ -149,6 +149,28 @@ export default function ChatPage() {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to start');
       setDeepJobId(data.job_id);
+
+      // Record the Deep BOQ run in the chat history so the session shows up
+      // in the sidebar and the panel can be restored on reload. The assistant
+      // message carries the deepJobId; loadSession re-hydrates it to reshow
+      // the live panel if the job is still running.
+      const fileSnap = files.map(f => ({ name: f.name, size: f.size }));
+      const scopeText = input.trim();
+      const userMsg = {
+        role: 'user',
+        content: scopeText
+          ? scopeText + (fileSnap.length > 0 ? `\n\n(Started Deep BOQ with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''})` : '\n\n(Started Deep BOQ)')
+          : `Started Deep BOQ${fileSnap.length > 0 ? ` with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
+        files: fileSnap,
+        timestamp: new Date().toISOString(),
+      };
+      const aiMsg = {
+        role: 'assistant',
+        content: 'Running Deep BOQ — multi-step reasoning on the server. Takes 3-6 minutes. Safe to close this tab and come back; the live panel will re-attach when you reopen the chat.',
+        deepJobId: data.job_id,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(p => [...p, userMsg, aiMsg]);
       setInput('');
       setFiles([]);
     } catch (err) {
@@ -157,6 +179,27 @@ export default function ChatPage() {
       setDeepStarting(false);
     }
   }
+
+  // On Deep BOQ completion, append a summary message + downloads to chat
+  const onDeepCompleted = useCallback((job) => {
+    if (!job) return;
+    let files = [];
+    try { files = (job.final_output ? JSON.parse(job.final_output).files : null) || []; } catch (e) {}
+    const sym = job.currency === 'EUR' ? '€' : '£';
+    const grand = job.grand_total ? `${sym}${Math.round(job.grand_total).toLocaleString('en-GB')}` : '(no total)';
+    setMessages(p => {
+      // Avoid dupes — don't append if the last assistant message is already a completion for this job
+      const last = p[p.length - 1];
+      if (last && last.role === 'assistant' && last.deepJobCompleted === job.id) return p;
+      return [...p, {
+        role: 'assistant',
+        content: `**Deep BOQ complete.** ${grand} grand total${job.floor_area_m2 ? ` · ${job.floor_area_m2}m²` : ''}${job.project_type ? ` · ${job.project_type}` : ''}. Documents below.`,
+        deepJobCompleted: job.id,
+        downloadFiles: files.length > 0 ? files : null,
+        timestamp: new Date().toISOString(),
+      }];
+    });
+  }, []);
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -279,6 +322,15 @@ export default function ChatPage() {
         setCurrentTakeoffId(null);
         setTakeoffStatus(null);
       }
+      // Recover deep BOQ job id from messages — re-attaches the live panel
+      // if the job is still running, or shows the completed state if done.
+      const lastWithDeepJob = [...msgs].reverse().find(m => m.deepJobId);
+      if (lastWithDeepJob) {
+        setDeepJobId(lastWithDeepJob.deepJobId);
+        console.log('[Session] Recovered deep_job_id:', lastWithDeepJob.deepJobId);
+      } else {
+        setDeepJobId(null);
+      }
     } catch (e) { console.error(e); }
   }
 
@@ -302,6 +354,8 @@ export default function ChatPage() {
         thinking: m.thinking || null, downloadFiles: m.downloadFiles || null,
         pipelineLog: m.pipelineLog || null,
         timestamp: m.timestamp, error: m.error || false,
+        deepJobId: m.deepJobId || null,
+        deepJobCompleted: m.deepJobCompleted || null,
         takeoffLocked: m.takeoffLocked || false,
         takeoffStatus: m.takeoffStatus || null,
       }));
@@ -1060,7 +1114,7 @@ export default function ChatPage() {
               <DeepBoqPanel
                 jobId={deepJobId}
                 onClose={() => setDeepJobId(null)}
-                onCompleted={() => { /* job done — user can dismiss when ready */ }}
+                onCompleted={onDeepCompleted}
               />
             )}
 
