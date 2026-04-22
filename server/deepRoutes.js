@@ -70,7 +70,11 @@ function fileToContentBlocks(filePath, originalName) {
 async function buildUserContentFromFiles(files) {
   const content = [];
   const extractedNames = [];
-  const MAX_PDF_BYTES = 25 * 1024 * 1024;  // Anthropic document upload limit
+  const pdfNotes = [];  // diagnostic: one line per PDF touched
+  // Anthropic limits: 32 MB per PDF, total request up to 100 MB.
+  // Keep per-file just under to leave headroom for other blocks.
+  const MAX_PDF_BYTES = 30 * 1024 * 1024;
+  const MAX_TOTAL_PDF_BYTES = 90 * 1024 * 1024;
   let pdfBytesTotal = 0;
 
   for (const f of files || []) {
@@ -78,30 +82,51 @@ async function buildUserContentFromFiles(files) {
     if (ext === '.zip' && zipProcessor) {
       try {
         const zipData = await zipProcessor.processZip(f.path, uploadsDir);
+        console.log(`[DeepRoutes] ZIP ${f.originalname} unpacked: total_files=${zipData.summary?.total_files}, pdf_count=${zipData.summary?.pdf_count}, image_count=${zipData.summary?.image_count}`);
 
         // (1) structured context + vision images from zipProcessor
         const zipContent = zipProcessor.buildClaudeContent(zipData, null);
         for (const block of zipContent) content.push(block);
 
         // (2) raw PDF document blocks so Claude can actually see the drawings.
-        // Cap total PDF payload so we don't blow Anthropic's input limits on
-        // huge ZIPs. Skip PDFs whose path we can't resolve.
-        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf' && fi.filePath);
+        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf');
+        console.log(`[DeepRoutes] Considering ${zipPdfs.length} PDF(s) for document-block attachment`);
         for (const pdf of zipPdfs) {
+          if (!pdf.filePath) {
+            const msg = `${pdf.filename}: no filePath from zipProcessor`;
+            console.warn('[DeepRoutes] ' + msg);
+            pdfNotes.push(msg);
+            continue;
+          }
           try {
             const buf = fs.readFileSync(pdf.filePath);
-            if (pdfBytesTotal + buf.length > MAX_PDF_BYTES) {
-              content.push({ type: 'text', text: `[Skipping ${pdf.filename} — attached PDFs already at payload cap]` });
+            const sizeMb = (buf.length / 1024 / 1024).toFixed(1);
+            if (buf.length > MAX_PDF_BYTES) {
+              const msg = `${pdf.filename} is ${sizeMb} MB — exceeds 30 MB per-PDF limit. Split into smaller sections or reduce the PDF resolution.`;
+              console.warn('[DeepRoutes] ' + msg);
+              pdfNotes.push(msg);
+              content.push({ type: 'text', text: `[SKIPPED ${pdf.filename} — ${sizeMb} MB exceeds per-PDF cap]` });
+              continue;
+            }
+            if (pdfBytesTotal + buf.length > MAX_TOTAL_PDF_BYTES) {
+              const msg = `${pdf.filename}: total attached PDFs would exceed 90 MB request cap`;
+              console.warn('[DeepRoutes] ' + msg);
+              pdfNotes.push(msg);
+              content.push({ type: 'text', text: `[SKIPPED ${pdf.filename} — request payload cap]` });
               continue;
             }
             pdfBytesTotal += buf.length;
+            console.log(`[DeepRoutes] Attached ${pdf.filename} (${sizeMb} MB, running total ${(pdfBytesTotal / 1024 / 1024).toFixed(1)} MB)`);
             content.push({ type: 'text', text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''}]` });
             content.push({
               type: 'document',
               source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') },
             });
+            pdfNotes.push(`${pdf.filename}: attached (${sizeMb} MB)`);
           } catch (pdfErr) {
-            console.warn(`[DeepRoutes] couldn't attach PDF ${pdf.filename}:`, pdfErr.message);
+            const msg = `${pdf.filename}: read failed — ${pdfErr.message}`;
+            console.warn('[DeepRoutes] ' + msg);
+            pdfNotes.push(msg);
           }
         }
 
@@ -117,7 +142,7 @@ async function buildUserContentFromFiles(files) {
       extractedNames.push(f.originalname);
     }
   }
-  return { content, extractedNames };
+  return { content, extractedNames, pdfNotes };
 }
 
 // ── POST /api/deep-boq — start a job ──────────────────────────────────
@@ -173,11 +198,13 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
           const nameList = built.extractedNames && built.extractedNames.length > 0
             ? built.extractedNames.slice(0, 10).join(', ') + (built.extractedNames.length > 10 ? ', ...' : '')
             : '(nothing extractable)';
-          // Categorise what we got so the message is actionable
           const exts = new Set(built.extractedNames.map(n => (n.split('.').pop() || '').toLowerCase()));
           const cadOnly = [...exts].every(e => ['dwg', 'dxf', 'rvt', 'ifc', 'skp'].includes(e)) && exts.size > 0;
           let hint;
-          if (cadOnly) {
+          if (built.pdfNotes && built.pdfNotes.length > 0) {
+            // PDFs were present — explain why each one didn't make it
+            hint = 'PDFs were found but none could be attached:\n' + built.pdfNotes.map(n => '• ' + n).join('\n');
+          } else if (cadOnly) {
             hint = 'Your ZIP only contains CAD files (' + [...exts].join(', ').toUpperCase() + '). Export each drawing to PDF and re-upload.';
           } else if (exts.has('docx') || exts.has('doc') || exts.has('xlsx') || exts.has('xls')) {
             hint = 'Your upload contains documents/spreadsheets but no drawings. Please add PDF, PNG, or JPG drawings.';
@@ -186,7 +213,7 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
           } else {
             hint = 'Supported formats: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.';
           }
-          throw new Error('No drawings Claude can read. Found in upload: ' + nameList + '. ' + hint);
+          throw new Error('No drawings Claude can read. Found in upload: ' + nameList + '.\n\n' + hint);
         }
         return { content, extractedNames: built.extractedNames };
       };
