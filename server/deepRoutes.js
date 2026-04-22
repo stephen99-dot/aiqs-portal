@@ -105,44 +105,40 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
     if (req.body.intake_json) {
       try { intake = JSON.parse(req.body.intake_json); } catch (e) {}
     }
+    const scopeText = (intake && intake.scope) || req.body.scope || '';
 
-    // Build the initial user content that the scope step sees
-    let userContent;
-    let extractedNames = [];
-    if (files.length > 0) {
-      const built = await buildUserContentFromFiles(files);
-      userContent = built.content;
-      extractedNames = built.extractedNames;
-      const scopeText = (intake && intake.scope) || req.body.scope || '';
-      if (scopeText) userContent.push({ type: 'text', text: 'User scope notes: ' + scopeText });
-      if (intake) userContent.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
-    } else {
-      // Text-only: pure scope description
-      userContent = [{ type: 'text', text: req.body.scope || '' }];
-    }
-
-    // If the upload was a ZIP containing no extractable drawings, fail loudly
-    // instead of starting a job that the scope step will just complain about.
-    if (files.length > 0 && userContent.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
-      // Clean up originals
-      for (const f of files) { try { fs.unlinkSync(f.path); } catch (e) {} }
-      return res.status(400).json({
-        error: 'No viewable drawings found in the upload. Supported: PDF, PNG, JPG, WebP — either directly or inside a ZIP. DWG/DXF need to be exported to PDF first.',
+    let jobId;
+    if (files.length === 0) {
+      // Text-only: no prep needed, fire straight into pipeline
+      const userContent = [{ type: 'text', text: scopeText }];
+      jobId = await deepJobs.startJob({
+        userId: req.user.id, sessionId: req.body.session_id || null,
+        intake, fileNames, userContent, apiKey,
       });
-    }
-
-    const jobId = await deepJobs.startJob({
-      userId: req.user.id,
-      sessionId: req.body.session_id || null,
-      intake,
-      fileNames: extractedNames.length > 0 ? extractedNames : fileNames,
-      userContent,
-      apiKey,
-    });
-
-    // Clean up uploads — they're now base64'd into the job's user content
-    for (const f of files) {
-      try { fs.unlinkSync(f.path); } catch (e) {}
+    } else {
+      // With files: return job_id IMMEDIATELY, process in background so the
+      // user sees a live "Preparing drawings..." step instead of a frozen
+      // Starting... button while a 3MB ZIP gets unpacked server-side.
+      const paths = files.map(f => ({ path: f.path, originalname: f.originalname }));
+      const prepareContent = async (log) => {
+        if (log) log('Reading ' + paths.length + ' upload(s)...');
+        const built = await buildUserContentFromFiles(paths);
+        // Clean up originals once they've been base64'd into content blocks
+        for (const f of paths) { try { fs.unlinkSync(f.path); } catch (e) {} }
+        if (log) log('Extracted ' + built.extractedNames.length + ' drawing(s) / asset(s)');
+        const content = built.content.slice();
+        if (scopeText) content.push({ type: 'text', text: 'User scope notes: ' + scopeText });
+        if (intake) content.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
+        // Validate at least one viewable block exists
+        if (content.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
+          throw new Error('No viewable drawings found after upload. Supported: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.');
+        }
+        return { content, extractedNames: built.extractedNames };
+      };
+      jobId = await deepJobs.startJob({
+        userId: req.user.id, sessionId: req.body.session_id || null,
+        intake, fileNames, prepareContent, apiKey,
+      });
     }
 
     res.json({ success: true, job_id: jobId });
