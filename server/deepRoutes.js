@@ -13,6 +13,9 @@ const { authMiddleware } = require('./auth');
 const deepJobs = require('./deepJobs');
 const db = require('./database');
 
+let zipProcessor = null;
+try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[DeepRoutes] zipProcessor not available — ZIP uploads will be skipped'); }
+
 const router = express.Router();
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
@@ -23,43 +26,62 @@ const upload = multer({
   limits: { fileSize: 150 * 1024 * 1024, fieldSize: 50 * 1024 * 1024 },
 });
 
-// ── Build the initial user content array from uploaded files ──────────
-// Reuses the same file→content-block logic as the fast chat so the deep
-// pipeline sees exactly the same drawings.
-function buildUserContentFromFiles(files) {
-  // Minimal re-implementation — supports PDFs and images as base64 blocks
-  // which is what Claude's vision needs. Unknown types get skipped with a
-  // text placeholder.
+// Convert one file (path on disk) into one or more Claude content blocks.
+// PDFs and images get inlined as base64 document/image blocks. Excel, DWG,
+// and other non-visual formats get a text placeholder so Claude at least
+// knows they exist.
+function fileToContentBlocks(filePath, originalName) {
+  const ext = path.extname(originalName).toLowerCase();
+  const blocks = [];
+  try {
+    const buf = fs.readFileSync(filePath);
+    const b64 = buf.toString('base64');
+    if (ext === '.pdf') {
+      blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
+      blocks.push({ type: 'text', text: `(file: ${originalName})` });
+    } else if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
+      const mediaType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.png' ? 'image/png'
+        : ext === '.gif' ? 'image/gif'
+        : 'image/webp';
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } });
+      blocks.push({ type: 'text', text: `(file: ${originalName})` });
+    } else {
+      blocks.push({ type: 'text', text: `(file uploaded but not directly viewable by Claude: ${originalName})` });
+    }
+  } catch (readErr) {
+    blocks.push({ type: 'text', text: `(failed to read file: ${originalName})` });
+  }
+  return blocks;
+}
+
+// Build the initial user content array from uploaded files. Mirrors the
+// fast chat's ZIP handling — ZIPs get unpacked via zipProcessor so Claude
+// sees the extracted PDFs and images directly, plus any room schedules /
+// annotated dimensions the processor managed to pull out.
+async function buildUserContentFromFiles(files) {
   const content = [];
+  const extractedNames = [];
   for (const f of files || []) {
     const ext = path.extname(f.originalname).toLowerCase();
-    try {
-      const buf = fs.readFileSync(f.path);
-      const b64 = buf.toString('base64');
-      if (ext === '.pdf') {
-        content.push({
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: b64 },
-        });
-        content.push({ type: 'text', text: `(file: ${f.originalname})` });
-      } else if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].includes(ext)) {
-        const mediaType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-          : ext === '.png' ? 'image/png'
-          : ext === '.gif' ? 'image/gif'
-          : 'image/webp';
-        content.push({
-          type: 'image',
-          source: { type: 'base64', media_type: mediaType, data: b64 },
-        });
-        content.push({ type: 'text', text: `(file: ${f.originalname})` });
-      } else {
-        content.push({ type: 'text', text: `(file uploaded but unsupported for deep mode: ${f.originalname})` });
+    if (ext === '.zip' && zipProcessor) {
+      try {
+        const zipData = await zipProcessor.processZip(f.path, uploadsDir);
+        const zipContent = zipProcessor.buildClaudeContent(zipData, null);
+        for (const block of zipContent) content.push(block);
+        for (const entry of (zipData.drawing_index || [])) extractedNames.push(entry.filename);
+        const summary = zipProcessor.buildUploadSummary(zipData);
+        if (summary) content.push({ type: 'text', text: `[ZIP preprocessed — ${f.originalname}]\n${summary}` });
+      } catch (zipErr) {
+        console.error('[DeepRoutes] ZIP processing failed:', zipErr.message);
+        content.push({ type: 'text', text: `(ZIP upload ${f.originalname} could not be extracted: ${zipErr.message})` });
       }
-    } catch (readErr) {
-      content.push({ type: 'text', text: `(failed to read file: ${f.originalname})` });
+    } else {
+      for (const block of fileToContentBlocks(f.path, f.originalname)) content.push(block);
+      extractedNames.push(f.originalname);
     }
   }
-  return content;
+  return { content, extractedNames };
 }
 
 // ── POST /api/deep-boq — start a job ──────────────────────────────────
@@ -86,8 +108,11 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
 
     // Build the initial user content that the scope step sees
     let userContent;
+    let extractedNames = [];
     if (files.length > 0) {
-      userContent = buildUserContentFromFiles(files);
+      const built = await buildUserContentFromFiles(files);
+      userContent = built.content;
+      extractedNames = built.extractedNames;
       const scopeText = (intake && intake.scope) || req.body.scope || '';
       if (scopeText) userContent.push({ type: 'text', text: 'User scope notes: ' + scopeText });
       if (intake) userContent.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
@@ -96,11 +121,21 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
       userContent = [{ type: 'text', text: req.body.scope || '' }];
     }
 
+    // If the upload was a ZIP containing no extractable drawings, fail loudly
+    // instead of starting a job that the scope step will just complain about.
+    if (files.length > 0 && userContent.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
+      // Clean up originals
+      for (const f of files) { try { fs.unlinkSync(f.path); } catch (e) {} }
+      return res.status(400).json({
+        error: 'No viewable drawings found in the upload. Supported: PDF, PNG, JPG, WebP — either directly or inside a ZIP. DWG/DXF need to be exported to PDF first.',
+      });
+    }
+
     const jobId = await deepJobs.startJob({
       userId: req.user.id,
       sessionId: req.body.session_id || null,
       intake,
-      fileNames,
+      fileNames: extractedNames.length > 0 ? extractedNames : fileNames,
       userContent,
       apiKey,
     });
