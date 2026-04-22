@@ -161,13 +161,32 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
         const built = await buildUserContentFromFiles(paths);
         // Clean up originals once they've been base64'd into content blocks
         for (const f of paths) { try { fs.unlinkSync(f.path); } catch (e) {} }
-        if (log) log('Extracted ' + built.extractedNames.length + ' drawing(s) / asset(s)');
+        if (log) log('Extracted ' + built.extractedNames.length + ' file(s)');
         const content = built.content.slice();
         if (scopeText) content.push({ type: 'text', text: 'User scope notes: ' + scopeText });
         if (intake) content.push({ type: 'text', text: 'Project intake answers: ' + JSON.stringify(intake) });
-        // Validate at least one viewable block exists
-        if (content.filter(b => b.type === 'document' || b.type === 'image').length === 0) {
-          throw new Error('No viewable drawings found after upload. Supported: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.');
+        // Validate at least one viewable block exists, with a helpful message
+        // that tells the user what was ACTUALLY in the upload — not just the
+        // generic "no viewable drawings" line.
+        const viewableCount = content.filter(b => b.type === 'document' || b.type === 'image').length;
+        if (viewableCount === 0) {
+          const nameList = built.extractedNames && built.extractedNames.length > 0
+            ? built.extractedNames.slice(0, 10).join(', ') + (built.extractedNames.length > 10 ? ', ...' : '')
+            : '(nothing extractable)';
+          // Categorise what we got so the message is actionable
+          const exts = new Set(built.extractedNames.map(n => (n.split('.').pop() || '').toLowerCase()));
+          const cadOnly = [...exts].every(e => ['dwg', 'dxf', 'rvt', 'ifc', 'skp'].includes(e)) && exts.size > 0;
+          let hint;
+          if (cadOnly) {
+            hint = 'Your ZIP only contains CAD files (' + [...exts].join(', ').toUpperCase() + '). Export each drawing to PDF and re-upload.';
+          } else if (exts.has('docx') || exts.has('doc') || exts.has('xlsx') || exts.has('xls')) {
+            hint = 'Your upload contains documents/spreadsheets but no drawings. Please add PDF, PNG, or JPG drawings.';
+          } else if (built.extractedNames.length === 0) {
+            hint = 'The ZIP could not be unpacked or contained no readable files. Try a different compression tool or upload the drawings directly.';
+          } else {
+            hint = 'Supported formats: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.';
+          }
+          throw new Error('No drawings Claude can read. Found in upload: ' + nameList + '. ' + hint);
         }
         return { content, extractedNames: built.extractedNames };
       };
