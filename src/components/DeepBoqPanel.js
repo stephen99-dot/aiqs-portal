@@ -146,6 +146,26 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
   const isComplete = job && job.status === 'completed';
   const isFailed = job && job.status === 'failed';
 
+  // Final-output files from the package step
+  const files = (() => {
+    if (!job || !job.final_output) return [];
+    try { return (JSON.parse(job.final_output).files) || []; } catch (e) { return []; }
+  })();
+
+  async function downloadFile(f) {
+    try {
+      const token = getToken();
+      const resp = await fetch(f.url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+      if (!resp.ok) throw new Error('Download failed');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = f.name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Download failed — try again.');
+    }
+  }
+
   return (
     <div style={{
       background: c.card, border: '1px solid ' + c.border, borderRadius: 12,
@@ -178,6 +198,33 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
           }}>×</button>
         )}
       </div>
+
+      {/* Download buttons — visible once the package step has produced files */}
+      {isComplete && files.length > 0 && (
+        <div style={{
+          padding: '12px 16px', borderBottom: '1px solid ' + c.border,
+          background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Documents ready
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {files.map((f, i) => (
+              <button key={i} onClick={() => downloadFile(f)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '9px 14px', borderRadius: 8, cursor: 'pointer',
+                background: f.type === 'xlsx' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)',
+                border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.28)' : 'rgba(59,130,246,0.28)'),
+                color: f.type === 'xlsx' ? c.done : '#3B82F6',
+                fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+              }}>
+                {f.type === 'xlsx' ? '📊' : '📝'} Download {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{ padding: '4px 4px 8px' }}>
         {steps.length === 0 && (

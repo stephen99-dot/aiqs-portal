@@ -101,6 +101,7 @@ const STEPS = [
   { name: 'price',        title: 'Applying deterministic pricing' },
   { name: 'sanity',       title: 'Sanity-checking against benchmarks' },
   { name: 'findings',     title: 'Drafting findings report' },
+  { name: 'package',      title: 'Producing Excel BOQ + Word findings' },
 ];
 
 // ── Persistence helpers ──────────────────────────────────────────────
@@ -246,15 +247,115 @@ async function runPipeline(jobId, { userContent, apiKey }) {
   updateJob(jobId, { status: 'running' });
   emit(jobId, { type: 'job_started', job_id: jobId });
 
-  // Lazy-load the pricer only once
-  let pricer = null;
+  // Lazy-load the pricer, doc generators, and fs/path only once
+  let pricer = null, boqGen = null, findingsGen = null;
   try { pricer = require('./deterministicPricer'); } catch (e) {}
+  try { boqGen = require('./boqGenerator'); } catch (e) {}
+  try { findingsGen = require('./findingsGenerator'); } catch (e) {}
+  const fs = require('fs');
+  const path = require('path');
+  const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+  const outputsDir = path.join(DATA_DIR, 'outputs');
+  if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
   for (let i = 0; i < STEPS.length; i++) {
     const step = STEPS[i];
     const flusher = makeFlusher(i);
     updateStep(jobId, i, { status: 'running', started_at: new Date().toISOString() });
     emit(jobId, { type: 'step_started', step_index: i, step_name: step.name, step_title: step.title });
+
+    // ───── Document package step (no Claude call — Excel + Word) ─────
+    if (step.name === 'package') {
+      try {
+        if (!pricer || !boqGen || !findingsGen) {
+          throw new Error('Document generators not installed — run npm install exceljs docx');
+        }
+        const priced = outputs.price;
+        if (!priced || !priced.sections) throw new Error('No priced output to package');
+        const scope = outputs.scope || {};
+        const projectName = scope.project_type || 'Project';
+        const safeName = (projectName).replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50) || 'Project';
+        const ts = Date.now();
+
+        const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
+        const downloads = [];
+
+        // Excel BOQ
+        try {
+          const buf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
+            contingency_pct: priced.summary.contingency_pct,
+            ohp_pct: priced.summary.ohp_pct,
+            vat_rate: priced.summary.vat_rate,
+            currency: priced.summary.currency === 'EUR' ? '€' : '£',
+          });
+          if (buf && buf.length > 100) {
+            const fname = `BOQ-${safeName}-${ts}.xlsx`;
+            fs.writeFileSync(path.join(outputsDir, fname), buf);
+            downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+          }
+        } catch (excelErr) {
+          console.error(`[DeepJob ${jobId}] Excel error:`, excelErr.message);
+        }
+
+        // Word findings — use the findings step text, which is already AI-written prose.
+        // findingsGen expects a structured findings object; we wrap the step text
+        // together with the deterministic cost summary it needs.
+        try {
+          const findingsText = (outputs.findings && outputs.findings.text) || '';
+          const findingsObj = {
+            reference: jobId.slice(-8).toUpperCase(),
+            project_type: projectName,
+            location: scope.location || '',
+            description: (scope.spec_notes || []).join(' '),
+            scope_summary: (scope.scope_items || []).join('; '),
+            key_findings: [{
+              title: 'Deep BOQ Analysis',
+              detail: findingsText,
+              items: scope.red_flags || [],
+            }],
+            assumptions: (outputs.qa && outputs.qa.qa_notes) || [],
+            exclusions: [],
+            recommendations: [outputs.sanity && outputs.sanity.text].filter(Boolean),
+            cost_summary: {
+              sections: priced.sections.map(s => ({ name: s.name, total: s.subtotal })),
+              net_total: priced.summary.net_total,
+              contingency_pct: priced.summary.contingency_pct,
+              contingency: priced.summary.contingency,
+              ohp_pct: priced.summary.ohp_pct,
+              ohp: priced.summary.ohp,
+              grand_total: priced.summary.grand_total,
+            },
+          };
+          const docBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName);
+          if (docBuf && docBuf.length > 100) {
+            const docName = `Findings-${safeName}-${ts}.docx`;
+            fs.writeFileSync(path.join(outputsDir, docName), docBuf);
+            downloads.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
+          }
+        } catch (wordErr) {
+          console.error(`[DeepJob ${jobId}] Word error:`, wordErr.message);
+        }
+
+        if (downloads.length === 0) throw new Error('Neither Excel nor Word generated');
+
+        outputs.package = { files: downloads };
+        const summaryLine = `Produced ${downloads.map(d => d.name).join(' + ')}`;
+        updateStep(jobId, i, {
+          status: 'complete',
+          completed_at: new Date().toISOString(),
+          output_json: JSON.stringify(outputs.package),
+          text: summaryLine,
+        });
+        emit(jobId, { type: 'step_text', step_index: i, delta: summaryLine });
+        emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: outputs.package });
+      } catch (err) {
+        console.error(`[DeepJob ${jobId}] package step failed:`, err.message);
+        updateStep(jobId, i, { status: 'error', completed_at: new Date().toISOString() });
+        // Packaging failure is non-fatal — the priced BOQ is still valid. Flag and continue.
+        emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: { error: err.message } });
+      }
+      continue;
+    }
 
     // ───── Deterministic price step (no Claude call) ─────
     if (step.name === 'price') {
@@ -358,7 +459,11 @@ async function runPipeline(jobId, { userContent, apiKey }) {
         project_type: priced.project_type || null,
         location: priced.location?.label || null,
         floor_area_m2: priced.floor_area || null,
-        final_output: JSON.stringify({ priced, findings: outputs.findings?.text || null }),
+        final_output: JSON.stringify({
+          priced,
+          findings: outputs.findings?.text || null,
+          files: (outputs.package && outputs.package.files) || [],
+        }),
       });
     }
   } catch (e) { console.error('[DeepJob] save summary error:', e.message); }
