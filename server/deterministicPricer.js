@@ -395,7 +395,6 @@ const BASE_RATES = {
 function estimateFallbackRate(item) {
   const desc = (item.description || item.key || '').toLowerCase();
   const unit = (item.unit || '').toLowerCase();
-
   // Per-item / lump sum items — estimate by description keywords
   if (unit === 'item' || unit === 'nr' || unit === 'no' || unit === 'nr.' || unit === 'each') {
     if (desc.includes('strip out') && desc.includes('roof'))       return 2200;
@@ -1275,6 +1274,58 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     locFactor = locationInfo.factor * GBP_TO_EUR; // e.g. 1.10 × 1.17 = 1.287 total uplift
   }
 
+  // ───── Merge duplicate items with the same key + unit ─────
+  // Without this, the AI can produce 3 separate `window_bespoke_narrow`
+  // lines and the pricer faithfully sums them as 3× the cost. Merge first.
+  (function dedupeItems() {
+    const merged = {};
+    const outOrder = [];
+    for (const it of lockedItems) {
+      if (!it || !it.key) { outOrder.push(it); continue; }
+      const unitKey = (it.unit || '').toLowerCase();
+      const dedupeKey = it.key + '|' + unitKey;
+      if (merged[dedupeKey]) {
+        merged[dedupeKey].qty = (merged[dedupeKey].qty || 0) + (it.qty || 0);
+        if (it.description && (!merged[dedupeKey].description || it.description.length > merged[dedupeKey].description.length)) {
+          merged[dedupeKey].description = it.description;
+        }
+      } else {
+        merged[dedupeKey] = { ...it };
+        outOrder.push(dedupeKey);
+      }
+    }
+    const deduped = outOrder.map(k => typeof k === 'string' ? merged[k] : k).filter(Boolean);
+    if (deduped.length < lockedItems.length) {
+      console.log(`[Pricer] Merged ${lockedItems.length - deduped.length} duplicate key(s)`);
+    }
+    // mutate in place
+    lockedItems.length = 0;
+    for (const d of deduped) lockedItems.push(d);
+  })();
+
+  // ───── Unit-based rate ceilings ─────
+  // Absolute upper bounds per unit type. Catches AI-hallucinated rates and
+  // stale client_rate_library entries with no matching base rate, regardless
+  // of which path produced the rate. Values are in GBP; Ireland prices get
+  // an additional GBP_TO_EUR multiplier before this check runs.
+  const RATE_CEILINGS_GBP = {
+    m:   500,     // any linear-metre item — lead flash and specialist piping cap out around here
+    lm:  500,
+    'm¹': 500,
+    m2:  800,     // any m² item — solid stone cladding max
+    'm²': 800,
+    sqm: 800,
+    m3:  500,    // m³ — reinforced concrete
+    'm³': 500,
+    kg:  20,
+    t:   2500,
+    tonne: 2500,
+  };
+  function ceilingFor(unit) {
+    const u = (unit || '').toLowerCase();
+    return RATE_CEILINGS_GBP[u] || null;  // unknown units (Item, Nr, ea) — no ceiling
+  }
+
   const pricedItems = [];
   const warnings = [];
 
@@ -1327,6 +1378,23 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
       const currSym = currency === 'EUR' ? '€' : '£';
       warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate ${currSym}${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
+    }
+
+    // ───── Unit ceiling check — applies to ALL rate paths ─────
+    // Catches cases the BASE_RATES vs clientRates ratio check can't, namely
+    // when a bad clientRate or AI assumed_rate exists for a key with NO
+    // corresponding BASE_RATE (e.g. `extend_private_drain_100mm_wavin` at
+    // €3,600/m which is physically impossible for a linear drainage run).
+    const unitCeilingGbp = ceilingFor(item.unit);
+    if (unitCeilingGbp) {
+      const ceilingLocal = unitCeilingGbp * locFactor;  // convert to target currency
+      if (rate > ceilingLocal) {
+        const cs = currency === 'EUR' ? '€' : '£';
+        const fallback = estimateFallbackRate(item) * locFactor;
+        warnings.push(`Rate for '${item.key}' (${cs}${Math.round(rate * 100) / 100}/${item.unit}) exceeds per-unit ceiling ${cs}${Math.round(ceilingLocal)} — clipped to fallback ${cs}${Math.round(fallback * 100) / 100}. Source was ${rateSource}.`);
+        rate = fallback;
+        rateSource = 'fallback_corrected';
+      }
     }
 
     // Sanity check: if AI assumed_rate looks like a total cost rather than a per-unit rate, cap it
