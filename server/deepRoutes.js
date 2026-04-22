@@ -55,25 +55,61 @@ function fileToContentBlocks(filePath, originalName) {
   return blocks;
 }
 
-// Build the initial user content array from uploaded files. Mirrors the
-// fast chat's ZIP handling — ZIPs get unpacked via zipProcessor so Claude
-// sees the extracted PDFs and images directly, plus any room schedules /
-// annotated dimensions the processor managed to pull out.
+// Build the initial user content array from uploaded files.
+//
+// For ZIPs we layer two sources together:
+// 1. zipProcessor gives us structured text context (rooms, dimensions,
+//    schedules) + vision blocks for scanned image files.
+// 2. On top of that we also push each extracted PDF as a raw document
+//    block, so Claude's native PDF vision can read the actual drawings
+//    instead of just seeing a note that says "this PDF has no text".
+//
+// zipProcessor.buildClaudeContent on its own only forwards images and a
+// text note for image-based PDFs, which is why the scope step kept
+// replying "I cannot access .zip drawings" even after unzipping.
 async function buildUserContentFromFiles(files) {
   const content = [];
   const extractedNames = [];
+  const MAX_PDF_BYTES = 25 * 1024 * 1024;  // Anthropic document upload limit
+  let pdfBytesTotal = 0;
+
   for (const f of files || []) {
     const ext = path.extname(f.originalname).toLowerCase();
     if (ext === '.zip' && zipProcessor) {
       try {
         const zipData = await zipProcessor.processZip(f.path, uploadsDir);
+
+        // (1) structured context + vision images from zipProcessor
         const zipContent = zipProcessor.buildClaudeContent(zipData, null);
         for (const block of zipContent) content.push(block);
+
+        // (2) raw PDF document blocks so Claude can actually see the drawings.
+        // Cap total PDF payload so we don't blow Anthropic's input limits on
+        // huge ZIPs. Skip PDFs whose path we can't resolve.
+        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf' && fi.filePath);
+        for (const pdf of zipPdfs) {
+          try {
+            const buf = fs.readFileSync(pdf.filePath);
+            if (pdfBytesTotal + buf.length > MAX_PDF_BYTES) {
+              content.push({ type: 'text', text: `[Skipping ${pdf.filename} — attached PDFs already at payload cap]` });
+              continue;
+            }
+            pdfBytesTotal += buf.length;
+            content.push({ type: 'text', text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''}]` });
+            content.push({
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') },
+            });
+          } catch (pdfErr) {
+            console.warn(`[DeepRoutes] couldn't attach PDF ${pdf.filename}:`, pdfErr.message);
+          }
+        }
+
         for (const entry of (zipData.drawing_index || [])) extractedNames.push(entry.filename);
         const summary = zipProcessor.buildUploadSummary(zipData);
         if (summary) content.push({ type: 'text', text: `[ZIP preprocessed — ${f.originalname}]\n${summary}` });
       } catch (zipErr) {
-        console.error('[DeepRoutes] ZIP processing failed:', zipErr.message);
+        console.error('[DeepRoutes] ZIP processing failed:', zipErr.stack || zipErr.message);
         content.push({ type: 'text', text: `(ZIP upload ${f.originalname} could not be extracted: ${zipErr.message})` });
       }
     } else {
