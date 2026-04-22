@@ -201,9 +201,16 @@ async function buildUserContentFromFiles(files) {
   for (const f of files || []) {
     const ext = path.extname(f.originalname).toLowerCase();
     if (ext === '.zip' && zipProcessor) {
+      let zipTmpDir = null;
       try {
-        const zipData = await zipProcessor.processZip(f.path, uploadsDir);
-        console.log(`[DeepRoutes] ZIP ${f.originalname} unpacked: total_files=${zipData.summary?.total_files}, pdf_count=${zipData.summary?.pdf_count}, image_count=${zipData.summary?.image_count}`);
+        // skipCleanup=true keeps the extracted PDFs on disk so we can read
+        // them below. zipProcessor normally removes its tmp dir before
+        // returning, which is why the fast chat (which only uses the
+        // pre-baked text/image context) works but Deep Mode was getting
+        // ENOENT when trying to reopen the PDFs.
+        const zipData = await zipProcessor.processZip(f.path, uploadsDir, { skipCleanup: true });
+        zipTmpDir = zipData.tmpDir;
+        console.log(`[DeepRoutes] ZIP ${f.originalname} unpacked: total_files=${zipData.summary?.total_files}, pdf_count=${zipData.summary?.pdf_count}, image_count=${zipData.summary?.image_count}, tmpDir=${zipTmpDir}`);
 
         // (1) structured context + vision images from zipProcessor
         const zipContent = zipProcessor.buildClaudeContent(zipData, null);
@@ -232,6 +239,14 @@ async function buildUserContentFromFiles(files) {
       } catch (zipErr) {
         console.error('[DeepRoutes] ZIP processing failed:', zipErr.stack || zipErr.message);
         content.push({ type: 'text', text: `(ZIP upload ${f.originalname} could not be extracted: ${zipErr.message})` });
+      } finally {
+        // We asked zipProcessor to skip its own cleanup so we could read
+        // the extracted PDFs off disk. Clean up the tmp dir ourselves now
+        // that every PDF has been turned into base64/rasterised blocks.
+        if (zipTmpDir) {
+          try { fs.rmSync(zipTmpDir, { recursive: true, force: true }); }
+          catch (e) { console.warn('[DeepRoutes] tmpDir cleanup failed:', e.message); }
+        }
       }
     } else {
       for (const block of fileToContentBlocks(f.path, f.originalname)) content.push(block);
