@@ -339,8 +339,9 @@ function extractFromImage(filePath, filename) {
 
 // ─── MAIN ZIP PROCESSOR ───────────────────────────────────────────────────────
 
-async function processZip(zipPath, extractDir) {
+async function processZip(zipPath, extractDir, options = {}) {
   ensureDeps();
+  const { skipCleanup = false } = options;
 
   const AdmZip = require('adm-zip');
   const zip = new AdmZip(zipPath);
@@ -548,9 +549,15 @@ async function processZip(zipPath, extractDir) {
     }
   }
 
-  // Clean up temp dir now that scale rendering is complete
-  try { fs.rmSync(tmpDir, { recursive: true }); } catch (e) {}
+  // Clean up temp dir now that scale rendering is complete — unless the
+  // caller asked to keep it (e.g. Deep Mode reads the extracted PDFs
+  // off disk AFTER this function returns, so needs them to survive).
+  // Callers that set skipCleanup must clean up tmpDir themselves.
+  if (!skipCleanup) {
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch (e) {}
+  }
 
+  results.tmpDir = tmpDir;
   return results;
 }
 
