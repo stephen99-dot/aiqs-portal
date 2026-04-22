@@ -124,7 +124,15 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
                 }
               } catch (e) {}
             } else if (evt.type === 'job_error') {
-              setError(evt.error || 'Job failed');
+              const errMsg = evt.error || 'Job failed';
+              setError(errMsg);
+              // Flip the currently-running step to 'error' so the UI doesn't
+              // leave it pulsing forever. Also writes the error message into
+              // the step text so expanding the row shows what went wrong.
+              setSteps(prev => prev.map(s => s.status === 'running'
+                ? { ...s, status: 'error', text: (s.text || '') + '\n\nError: ' + errMsg }
+                : s));
+              setJob(j => j ? { ...j, status: 'failed', error_message: errMsg } : j);
             } else {
               setSteps(prev => applyEvent(prev, evt));
             }
@@ -242,8 +250,13 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
             : '·';
           return (
             <div key={step.step_index} style={{
-              margin: '4px 8px', borderRadius: 8, background: step.status === 'running' ? c.accentBg : c.stepRowBg,
-              border: '1px solid ' + (step.status === 'running' ? 'rgba(245,158,11,0.2)' : 'transparent'),
+              margin: '4px 8px', borderRadius: 8,
+              background: step.status === 'running' ? c.accentBg
+                : step.status === 'error' ? (isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.05)')
+                : c.stepRowBg,
+              border: '1px solid ' + (step.status === 'running' ? 'rgba(245,158,11,0.2)'
+                : step.status === 'error' ? 'rgba(239,68,68,0.25)'
+                : 'transparent'),
             }}>
               <button
                 onClick={() => setExpanded(p => ({ ...p, [step.step_index]: !p[step.step_index] }))}

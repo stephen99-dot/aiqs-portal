@@ -360,36 +360,88 @@ async function runPipeline(jobId, { userContent, apiKey }) {
     // ───── Deterministic price step (no Claude call) ─────
     if (step.name === 'price') {
       try {
-        if (!pricer) throw new Error('Deterministic pricer not available');
-        const items = (outputs.rates && outputs.rates.items)
+        if (!pricer) throw new Error('Deterministic pricer not available — check that deterministicPricer.js loaded on server boot');
+        const rawItems = (outputs.rates && outputs.rates.items)
           || (outputs.qa && outputs.qa.items)
           || (outputs.measure && outputs.measure.items)
           || [];
-        if (items.length === 0) throw new Error('No items to price');
+        if (!Array.isArray(rawItems) || rawItems.length === 0) {
+          throw new Error(`No items to price. Rates step output shape: ${Object.keys(outputs.rates || {}).join(', ') || 'empty'}. QA step output shape: ${Object.keys(outputs.qa || {}).join(', ') || 'empty'}. Measure step output shape: ${Object.keys(outputs.measure || {}).join(', ') || 'empty'}.`);
+        }
+
+        // Sanitise items — the AI sometimes returns qty as a string ("50"),
+        // missing unit, or empty key. Normalise so the pricer doesn't choke
+        // on obviously malformed entries.
+        const items = [];
+        const dropped = [];
+        for (const raw of rawItems) {
+          if (!raw || typeof raw !== 'object') { dropped.push(raw); continue; }
+          const key = String(raw.key || '').trim().toLowerCase().replace(/\s+/g, '_');
+          const qty = typeof raw.qty === 'string' ? parseFloat(raw.qty) : raw.qty;
+          if (!key || !Number.isFinite(qty) || qty <= 0) { dropped.push(raw); continue; }
+          items.push({
+            ...raw,
+            key,
+            qty,
+            unit: raw.unit ? String(raw.unit).trim() : 'Item',
+            description: raw.description || raw.key,
+            section: raw.section || 'General',
+            assumed_rate: typeof raw.assumed_rate === 'string' ? parseFloat(raw.assumed_rate) : raw.assumed_rate,
+          });
+        }
+        if (dropped.length > 0) {
+          console.warn(`[DeepJob ${jobId}] Dropped ${dropped.length} malformed items before pricing`);
+        }
+        if (items.length === 0) {
+          throw new Error(`All ${rawItems.length} items had invalid key/qty — cannot price. Sample first item: ${JSON.stringify(rawItems[0]).slice(0, 300)}`);
+        }
+
         const scope = outputs.scope || {};
-        const priced = pricer.priceLockedQuantities(
-          items,
-          scope.location || '',
-          {},
-          {
-            project_type: scope.project_type || '',
-            floor_area: scope.total_project_area_m2 || scope.floor_area_new_m2 || null,
-          }
-        );
+        console.log(`[DeepJob ${jobId}] Pricing ${items.length} items (project_type="${scope.project_type || ''}", floor_area=${scope.total_project_area_m2 || scope.floor_area_new_m2 || 'null'})`);
+
+        let priced;
+        try {
+          priced = pricer.priceLockedQuantities(
+            items,
+            scope.location || '',
+            {},
+            {
+              project_type: scope.project_type || '',
+              floor_area: scope.total_project_area_m2 || scope.floor_area_new_m2 || null,
+            }
+          );
+        } catch (pricerErr) {
+          // Surface the pricer's stack + first couple of item keys so we can
+          // diagnose from the logs which item shape broke it.
+          const sampleKeys = items.slice(0, 3).map(i => `${i.key}(${i.unit}×${i.qty})`).join(', ');
+          console.error(`[DeepJob ${jobId}] Pricer threw:`, pricerErr.stack);
+          throw new Error(`Pricer failed on ${items.length} items (sample: ${sampleKeys}): ${pricerErr.message}`);
+        }
+
+        if (!priced || !priced.summary) {
+          throw new Error('Pricer returned empty result');
+        }
+
         outputs.price = priced;
         const summaryLine = `${priced.summary.currency === 'EUR' ? '€' : '£'}${Math.round(priced.summary.grand_total).toLocaleString('en-GB')} grand total · ${priced.sections.length} sections · ${(priced.warnings || []).length} warnings`;
         updateStep(jobId, i, {
           status: 'complete',
           completed_at: new Date().toISOString(),
           output_json: JSON.stringify(priced),
-          text: summaryLine,
+          text: summaryLine + (dropped.length > 0 ? ` (dropped ${dropped.length} malformed items)` : ''),
         });
         emit(jobId, { type: 'step_text', step_index: i, delta: summaryLine });
         emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: priced });
       } catch (err) {
-        console.error(`[DeepJob ${jobId}] price step failed:`, err.message);
-        updateStep(jobId, i, { status: 'error', completed_at: new Date().toISOString() });
+        console.error(`[DeepJob ${jobId}] price step failed:`, err.stack || err.message);
+        updateStep(jobId, i, {
+          status: 'error',
+          completed_at: new Date().toISOString(),
+          text: 'Error: ' + err.message,
+        });
         updateJob(jobId, { status: 'failed', error_message: err.message, completed_at: new Date().toISOString() });
+        emit(jobId, { type: 'step_text', step_index: i, delta: 'Error: ' + err.message });
+        emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: { error: err.message } });
         emit(jobId, { type: 'job_error', error: err.message, at_step: step.name });
         return;
       }
@@ -438,9 +490,16 @@ async function runPipeline(jobId, { userContent, apiKey }) {
       emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: outputs[step.name] });
     } catch (err) {
       flusher.flush();
-      console.error(`[DeepJob ${jobId}] step ${step.name} failed:`, err.message);
-      updateStep(jobId, i, { status: 'error', completed_at: new Date().toISOString() });
+      console.error(`[DeepJob ${jobId}] step ${step.name} failed:`, err.stack || err.message);
+      const errText = 'Error: ' + err.message;
+      updateStep(jobId, i, {
+        status: 'error',
+        completed_at: new Date().toISOString(),
+        text: errText,
+      });
       updateJob(jobId, { status: 'failed', error_message: err.message, completed_at: new Date().toISOString() });
+      emit(jobId, { type: 'step_text', step_index: i, delta: errText });
+      emit(jobId, { type: 'step_complete', step_index: i, step_name: step.name, output: { error: err.message } });
       emit(jobId, { type: 'job_error', error: err.message, at_step: step.name });
       return;
     }

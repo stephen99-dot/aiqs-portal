@@ -159,6 +159,7 @@ export default function Layout() {
                 key={item.path}
                 to={item.path}
                 end={item.path === '/dashboard'}
+                data-tour={item.path === '/my-rates' ? 'my-rates' : item.path === '/ai-memory' ? 'ai-memory' : undefined}
                 style={{ textDecoration: 'none' }}
                 onClick={(e) => {
                   if (window.__aiqs_chat_sending) {

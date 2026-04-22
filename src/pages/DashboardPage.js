@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-import OnboardingTour from '../components/OnboardingTour';
+import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
@@ -388,8 +388,11 @@ export default function DashboardPage() {
       const whatsNewKey = `aiqs_whats_new_v4_${user?.id || 'default'}`;
       try {
         const seen = localStorage.getItem(tourKey);
-        if (!seen) {
-          // Brand new user — show the full onboarding tour
+        // The stored value is the TOUR_VERSION the user last completed.
+        // Bumping TOUR_VERSION re-shows the tour so existing users see new
+        // features (Deep BOQ, intake, editable BOQ, AI Memory, Variations).
+        const seenVersion = seen ? parseInt(seen, 10) : 0;
+        if (seenVersion < TOUR_VERSION) {
           setShowTour(true);
         } else if (!localStorage.getItem(whatsNewKey)) {
           // Existing user who hasn't seen the latest updates — show What's New banner

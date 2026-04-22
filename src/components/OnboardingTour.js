@@ -2,48 +2,69 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 // Bump this version whenever tour content changes — existing users will see the updated tour
-export const TOUR_VERSION = 4;
+export const TOUR_VERSION = 5;
 
 const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
     title: 'Welcome to AI QS',
-    description: 'Your AI-powered quantity surveying portal. Upload drawings, chat with the AI, and get professional BOQ documents — Excel and Word — in minutes.',
+    description: 'Your AI-powered quantity surveying portal. Upload drawings, chat with the AI, and walk away with a priced BOQ — Excel and Word documents ready to send to clients. This short tour covers everything that is new.',
     position: 'center',
     icon: '\u2726',
   },
   {
     target: '[data-tour="start-chat"]',
-    title: 'Start a Project',
-    description: 'Click here to open the AI chat. Upload your drawings (PDF, ZIP, Excel, or images), describe the scope, and the AI will produce a full cost breakdown. Once it\'s ready, you\'ll be able to download your BOQ straight from the chat.',
+    title: 'Start a project — Fast or Deep BOQ',
+    description: 'Open the chat from here. When you attach drawings you will see two options: the Send button runs a fast single-pass estimate (30-60 seconds), or the Deep BOQ button next to it runs a tender-grade 8-step pipeline (scope, measurement, QA, rates, pricing, sanity check, findings, packaging) that takes 3-6 minutes. Deep Mode runs on the server, so you can close the tab and come back later — the job keeps going.',
     position: 'bottom',
     icon: '\u2197',
   },
   {
-    target: '[data-tour="usage-bar"]',
-    title: 'Messages & BOQ Credits',
-    description: 'These bars show your monthly usage — chat messages and BOQ generations. Hover over them to see exactly how many you have left. When you\'re running low you\'ll see a warning, and you can upgrade or buy top-ups anytime from your dashboard.',
-    position: 'bottom',
-    icon: '\u25CE',
+    target: '[data-tour="welcome"]',
+    title: 'A few questions when you upload',
+    description: 'The first time you attach drawings to a new chat, a short intake form pops up asking for scope, floor area, location and spec level. Your answers feed straight into the pricing so the total is grounded in your numbers instead of guessed from the drawings. Skippable if you would rather the AI infer it.',
+    position: 'center',
+    icon: '\u270E',
+  },
+  {
+    target: '[data-tour="welcome"]',
+    title: 'Editable BOQ with provenance',
+    description: 'After extraction an editable BOQ table appears inline in the chat. Click any quantity to change it and the deterministic pricer re-runs instantly. Every row carries colour-coded badges showing where the number came from — your rate library, SPON\'s base rates, AI estimate, or a manual edit — so you can see exactly what drove the total.',
+    position: 'center',
+    icon: '\u270F',
   },
   {
     target: '[data-tour="projects-list"]',
-    title: 'Your Projects & Variations',
-    description: 'Every BOQ you generate appears here. Click into any project to view the full cost breakdown, download your Excel and Word documents, and raise variations (change orders). If the scope changes mid-project, just open the project and add a variation — the costs update automatically.',
+    title: 'Projects & Variations',
+    description: 'Every confirmed BOQ lands here. Open any project to re-download the Excel + Word, view the full cost breakdown, or raise a Variation Order when the scope changes — the AI analyses the delta and the new totals flow through automatically. Approve, reject, and generate revised documents all from the Variations page on each project.',
     position: 'top',
     icon: '\u2630',
   },
   {
+    target: '[data-tour="ai-memory"]',
+    title: 'AI Memory — it remembers how you work',
+    description: 'Everything the AI has learned about you lives here: default contingency, preferred suppliers, standard exclusions, typical regions, project types. Memories get captured automatically from your chats (with visible undo buttons so you stay in control), added manually, or seeded in 2 minutes via the onboarding questionnaire linked from this page. Every future BOQ uses them as ground truth.',
+    position: 'right',
+    icon: '\u{1F9E0}',
+  },
+  {
     target: '[data-tour="my-rates"]',
-    title: 'My Rates — Your Pricing Library',
-    description: 'Build and manage your own rate library here. Add your preferred rates for materials, labour, and subcontractors. These rates are automatically applied every time the AI generates a BOQ — so your estimates always reflect your actual costs, not generic market rates.',
+    title: 'My Rates — your pricing library',
+    description: 'Build your own rate library here. Any rate you save, or correct while chatting, gets applied to every future BOQ and is badged "Your rate" on the editable table — so you can see exactly where your numbers are winning over the generic base rates.',
     position: 'right',
     icon: '\u00A3',
   },
   {
+    target: '[data-tour="usage-bar"]',
+    title: 'Messages & BOQ credits',
+    description: 'Your monthly usage at a glance — chat messages and BOQ generations. Hover for the exact numbers. When you run low you will see a warning; upgrade or top up anytime from the Pricing page.',
+    position: 'bottom',
+    icon: '\u25CE',
+  },
+  {
     target: '[data-tour="sidebar-nav"]',
-    title: 'You\'re All Set',
-    description: 'That\'s everything you need to get started. Upload your first set of drawings in the Chat, and you\'ll have a priced BOQ within minutes. If you need help, just ask — the AI is here to assist.',
+    title: 'You are all set',
+    description: 'That is the tour. Upload your first set of drawings in the Chat and you will have a priced BOQ in minutes. For tender submissions, use Deep BOQ — it produces tender-grade output. Any questions, just ask the AI.',
     position: 'right',
     icon: '\u2714',
   },
