@@ -1667,14 +1667,34 @@ async function chatHandler(req, res) {
           // from PDFs, Excel, Word, and images BEFORE Claude sees anything.
           // Claude gets pre-extracted facts, not raw pixels.
           if (zipProcessor) {
+            let zipTmpDirFast = null;
             try {
               console.log(`[ZIP] Running smart pre-processor on ${file.originalname}`);
-              const zipData = await zipProcessor.processZip(file.path, uploadsDir);
+              // skipCleanup so pdfAttach can read extracted PDFs off disk
+              const zipData = await zipProcessor.processZip(file.path, uploadsDir, { skipCleanup: true });
+              zipTmpDirFast = zipData.tmpDir;
               req.zipData = zipData; // stash for later use in extraction stage
 
               // Build structured Claude content from ZIP
               const zipContent = zipProcessor.buildClaudeContent(zipData, null);
               for (const block of zipContent) currentContent.push(block);
+
+              // Attach the actual PDFs so Claude can SEE the drawings, not
+              // just notes saying "this PDF has no text". Uses the same
+              // shared helper as Deep BOQ — document blocks for small PDFs,
+              // per-page rasterised JPEGs for over-30MB PDFs.
+              try {
+                const { attachZipPdfs } = require('./pdfAttach');
+                const pdfResult = attachZipPdfs(zipData, currentContent);
+                if (pdfResult.attached > 0) {
+                  console.log(`[ZIP] Attached ${pdfResult.attached} PDF(s) as document/image blocks for Claude`);
+                }
+                if (pdfResult.pdfNotes.length > 0) {
+                  zipNotes.push('PDF attachments: ' + pdfResult.pdfNotes.slice(0, 5).join(' | '));
+                }
+              } catch (attachErr) {
+                console.error('[ZIP] pdfAttach failed:', attachErr.message);
+              }
 
               // Add filenames for all files in zip
               for (const f of zipData.drawing_index) fileNames.push(f.filename);
@@ -1692,6 +1712,12 @@ ${summary}`);
               for (const ef of ex.visual) { const b=fileToContentBlock(ef.path,ef.ext); if(Array.isArray(b)){for(const bl of b)currentContent.push(bl);fileNames.push(ef.name);}else if(b){currentContent.push(b);fileNames.push(ef.name);} }
               for (const tf of ex.text) { currentContent.push({type:'text',text:`[${tf.name}]:\n${tf.content}`}); fileNames.push(tf.name); }
               if (ex.cad.length > 0) zipNotes.push(`Found ${ex.cad.length} CAD file(s) — export as PDF and re-upload.`);
+            } finally {
+              // Clean up tmp dir we asked zipProcessor to leave for us
+              if (zipTmpDirFast) {
+                try { fs.rmSync(zipTmpDirFast, { recursive: true, force: true }); }
+                catch (e) { console.warn('[ZIP] tmpDir cleanup failed:', e.message); }
+              }
             }
           } else {
             // Legacy ZIP handler (fallback if zipProcessor not installed)
