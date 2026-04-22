@@ -908,21 +908,21 @@ export default function ChatPage() {
             )}
 
             {messages.map((msg, i) => {
-              // The BOQ table renders inline, anchored to the most recent
-              // assistant message that carries a takeoffId. This keeps it
-              // in the natural conversation flow — new user/AI messages
-              // appear BELOW the table as expected.
-              const lastTakeoffIdx = (() => {
-                for (let j = messages.length - 1; j >= 0; j--) {
+              // The BOQ table renders inline, anchored to the FIRST assistant
+              // message that introduced a takeoff — so it stays put, and any
+              // new messages (user edits, AI confirmations, further chat)
+              // appear BELOW the table like a normal conversation thread.
+              const firstTakeoffIdx = (() => {
+                for (let j = 0; j < messages.length; j++) {
                   if (messages[j].takeoffId || messages[j].takeoff_id) return j;
                 }
                 return -1;
               })();
-              const showBoqHere = i === lastTakeoffIdx && currentSessionId && currentTakeoffId && boqOpen;
+              const showBoqHere = i === firstTakeoffIdx && currentSessionId && currentTakeoffId && boqOpen;
               return (
                 <React.Fragment key={i}>
                   <Message msg={msg} idx={i}/>
-                  {i === lastTakeoffIdx && currentSessionId && currentTakeoffId && (
+                  {i === firstTakeoffIdx && currentSessionId && currentTakeoffId && (
                     <div style={{ marginLeft: mobile ? 0 : 46, marginTop: -4 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <button

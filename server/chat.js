@@ -1872,8 +1872,12 @@ ${summary}`);
             `If the user asks about costs, ONLY reference these figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
             `The pricer's figures are authoritative and must not be contradicted.\n` +
             (tkIsDraft
-              ? `STATUS: These quantities are in DRAFT — the user has not confirmed them yet. ` +
-                `Encourage the user to review quantities and say "confirm" when happy. Do NOT tell them to "generate documents" until they confirm.\n`
+              // If the user's current message IS a generate request, they're
+              // explicitly confirming — don't tell them to "confirm first".
+              ? (/\bgenerate\b|produce\s*(the\s*)?(boq|report|document)|create\s*(the\s*)?(boq|report|document)|\.xlsx|\.docx/i.test(message || '')
+                ? `STATUS: The user is explicitly asking to generate the documents now. Treat this as confirmation — the quantities will be locked and the Excel BOQ + Word Findings Report produced this turn. Respond with a short acknowledgement describing what's being generated. Do NOT ask them to confirm again.\n`
+                : `STATUS: These quantities are in DRAFT — the user has not confirmed them yet. ` +
+                  `Encourage the user to review quantities and say "confirm" when happy. Do NOT tell them to "generate documents" until they confirm.\n`)
               : '') +
             `QUANTITY ADJUSTMENTS: If the user flags a quantity as wrong (e.g. "plasterboard seems high", "electrical area should be 160m² not 309m²"), ` +
             `you may agree and explain why. The system will automatically detect your agreement and update the ${tkIsDraft ? 'draft' : 'locked'} takeoff. ` +

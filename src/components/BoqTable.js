@@ -369,22 +369,44 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
           </div>
         </details>
 
-        {onRegenerate && (
-          <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button
-              onClick={onRegenerate}
-              style={{
-                padding: '7px 14px', borderRadius: 7,
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                border: 'none', color: '#0A0F1C',
-                fontSize: 12, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              Regenerate documents
-            </button>
-          </div>
-        )}
+        {onRegenerate && (() => {
+          // Status-aware button. For DRAFT takeoffs, make it explicit that
+          // clicking will lock the quantities and you can't edit after.
+          // For CONFIRMED takeoffs, allow a no-dialog regenerate.
+          const status = data?.takeoff?.status || 'draft';
+          const isDraft = status === 'draft';
+          return (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+              {isDraft && (
+                <span style={{ fontSize: 11, color: c.textMuted, marginRight: 4 }}>
+                  Draft · edit any quantity above first
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  if (isDraft) {
+                    const ok = window.confirm(
+                      'This will LOCK your quantities and generate the BOQ & findings report.\n\n'
+                      + 'Once locked you cannot edit quantities for this takeoff — you would need to start a new chat to re-measure.\n\n'
+                      + 'Lock quantities and generate documents now?'
+                    );
+                    if (!ok) return;
+                  }
+                  onRegenerate();
+                }}
+                style={{
+                  padding: '7px 14px', borderRadius: 7,
+                  background: 'linear-gradient(135deg,#F59E0B,#D97706)',
+                  border: 'none', color: '#0A0F1C',
+                  fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {isDraft ? 'Lock & generate documents' : 'Regenerate documents'}
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
