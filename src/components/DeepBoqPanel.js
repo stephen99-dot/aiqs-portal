@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
-
 // Deep BOQ progress timeline.
 //
 // Subscribes to /api/deep-boq/:id/stream which first replays a snapshot
@@ -35,6 +34,8 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({});
   const readerRef = useRef(null);
+  const stepsScrollRef = useRef(null);
+  const stepRowRefs = useRef({});  // step_index -> DOM element
 
   const c = isDark ? {
     bg: '#0F1520', border: 'rgba(255,255,255,0.08)',
@@ -163,6 +164,27 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
     };
   }, [jobId, onCompleted]);
 
+  // Whenever the running step changes, scroll the panel's internal container
+  // so that step is visible. Lets users watch progress without having to
+  // manually scroll, and prevents the "can't see step 6+" problem on long runs.
+  const runningStep = steps.find(s => s.status === 'running');
+  const runningIdx = runningStep ? runningStep.step_index : -1;
+  useEffect(() => {
+    if (runningIdx < 0) return;
+    const el = stepRowRefs.current[runningIdx];
+    const container = stepsScrollRef.current;
+    if (el && container) {
+      // Scroll within the panel's own scroll container, not the page.
+      const elTop = el.offsetTop;
+      const elBottom = elTop + el.offsetHeight;
+      const viewTop = container.scrollTop;
+      const viewBottom = viewTop + container.clientHeight;
+      if (elTop < viewTop || elBottom > viewBottom) {
+        container.scrollTo({ top: Math.max(0, elTop - 20), behavior: 'smooth' });
+      }
+    }
+  }, [runningIdx]);
+
   if (!jobId) return null;
 
   const isComplete = job && job.status === 'completed';
@@ -248,7 +270,18 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
         </div>
       )}
 
-      <div style={{ padding: '4px 4px 8px' }}>
+      <div
+        ref={stepsScrollRef}
+        style={{
+          padding: '4px 4px 8px',
+          // Cap the panel's height so a long run with lots of step text
+          // doesn't push the rest of the chat (and the input bar) off
+          // screen. Internal scroll inside the panel; auto-scrolls to
+          // whichever step is currently running.
+          maxHeight: 'min(60vh, 520px)',
+          overflowY: 'auto',
+        }}
+      >
         {steps.length === 0 && (
           <div style={{ padding: '18px 16px', fontSize: 12, color: c.muted }}>Connecting...</div>
         )}
@@ -267,7 +300,10 @@ export default function DeepBoqPanel({ jobId, onClose, onCompleted }) {
             : step.status === 'error' ? '✕'
             : '·';
           return (
-            <div key={step.step_index} style={{
+            <div
+              key={step.step_index}
+              ref={el => { if (el) stepRowRefs.current[step.step_index] = el; }}
+              style={{
               margin: '4px 8px', borderRadius: 8,
               background: step.status === 'running' ? c.accentBg
                 : step.status === 'error' ? (isDark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.05)')
