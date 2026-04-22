@@ -9,6 +9,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const { authMiddleware } = require('./auth');
 const deepJobs = require('./deepJobs');
 const db = require('./database');
@@ -25,6 +26,126 @@ const upload = multer({
   dest: uploadsDir,
   limits: { fileSize: 150 * 1024 * 1024, fieldSize: 50 * 1024 * 1024 },
 });
+
+// Rasterize a PDF into per-page JPEG image blocks. Used when a PDF exceeds
+// Anthropic's 30 MB per-document cap — individual pages at 150 DPI typically
+// come in well under 5 MB each, so a 40 MB vector-heavy drawing becomes
+// ~20 × 1.5 MB pages that fit cleanly as image blocks.
+//
+// Uses poppler's pdftoppm which is pre-installed on Render/Ubuntu Linux —
+// same renderer the fast chat uses for large PDFs, so we inherit that
+// reliability without taking on new dependencies.
+function renderPdfToImageBlocks(pdfPath, originalName) {
+  const tmpDir = path.join(path.dirname(pdfPath), `pdf_render_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  try {
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const maxPages = 40;   // covers typical engineering drawing sets
+    const dpi = 150;       // balance between readable dimensions and file size
+    const maxImageBytes = 4 * 1024 * 1024;  // Anthropic per-image cap is 5 MB; leave headroom
+    const maxTotalBytes = 60 * 1024 * 1024; // soft request-level ceiling
+
+    const result = spawnSync('pdftoppm', [
+      '-r', String(dpi), '-jpeg', '-jpegopt', 'quality=75',
+      '-f', '1', '-l', String(maxPages),
+      pdfPath, path.join(tmpDir, 'page'),
+    ], { timeout: 120000, encoding: 'buffer' });
+
+    if (result.status !== 0 && result.status !== null) {
+      const stderr = result.stderr ? result.stderr.toString().substring(0, 200) : '';
+      return { ok: false, reason: 'pdftoppm failed: ' + stderr };
+    }
+
+    const pageFiles = fs.readdirSync(tmpDir)
+      .filter(f => f.startsWith('page') && (f.endsWith('.jpg') || f.endsWith('.jpeg')))
+      .sort()
+      .slice(0, maxPages);
+
+    if (pageFiles.length === 0) {
+      return { ok: false, reason: 'no pages rendered — PDF may be corrupted' };
+    }
+
+    const blocks = [];
+    let totalBytes = 0;
+    let truncated = false;
+    for (const f of pageFiles) {
+      const buf = fs.readFileSync(path.join(tmpDir, f));
+      if (buf.length > maxImageBytes) {
+        // One page alone exceeds 4 MB — skip it rather than corrupt the request
+        continue;
+      }
+      if (totalBytes + buf.length > maxTotalBytes && blocks.length > 0) {
+        truncated = true;
+        break;
+      }
+      totalBytes += buf.length;
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: buf.toString('base64') } });
+    }
+
+    if (blocks.length === 0) {
+      return { ok: false, reason: 'every rendered page exceeded 4 MB' };
+    }
+
+    return {
+      ok: true,
+      blocks,
+      pageCount: blocks.length,
+      totalPages: pageFiles.length,
+      totalMb: (totalBytes / 1024 / 1024).toFixed(1),
+      truncated,
+    };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
+// Try to base64 a PDF as a native document block. Falls back to rasterising
+// via pdftoppm if the PDF is too large for Anthropic's 30 MB per-document cap.
+// Returns { blocks, note } where blocks is an array of content blocks to push
+// and note is a human-readable diagnostic for pdfNotes.
+function preparePdfForClaude(pdf, pdfBytesTotal, MAX_PDF_BYTES, MAX_TOTAL_PDF_BYTES) {
+  if (!pdf.filePath) return { blocks: [], note: `${pdf.filename}: no filePath from zipProcessor` };
+  let buf;
+  try { buf = fs.readFileSync(pdf.filePath); }
+  catch (err) { return { blocks: [], note: `${pdf.filename}: read failed — ${err.message}` }; }
+
+  const sizeMb = (buf.length / 1024 / 1024).toFixed(1);
+
+  // Path A: small enough for native document block
+  if (buf.length <= MAX_PDF_BYTES && pdfBytesTotal + buf.length <= MAX_TOTAL_PDF_BYTES) {
+    return {
+      blocks: [
+        { type: 'text', text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''}]` },
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') } },
+      ],
+      bytes: buf.length,
+      note: `${pdf.filename}: attached as PDF (${sizeMb} MB)`,
+    };
+  }
+
+  // Path B: too large — rasterise to per-page JPEGs
+  console.log(`[DeepRoutes] ${pdf.filename} is ${sizeMb} MB — rasterising to page images`);
+  const rendered = renderPdfToImageBlocks(pdf.filePath, pdf.filename);
+  if (!rendered.ok) {
+    return {
+      blocks: [],
+      note: `${pdf.filename} is ${sizeMb} MB (over ${(MAX_PDF_BYTES / 1024 / 1024).toFixed(0)} MB cap) and rasterisation failed: ${rendered.reason}. Try lowering the PDF resolution or splitting into smaller files.`,
+    };
+  }
+
+  const blocks = [{
+    type: 'text',
+    text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''} — rasterised to ${rendered.pageCount}${rendered.truncated ? '+' : ''} pages at 150 DPI because the source PDF is ${sizeMb} MB]`,
+  }];
+  for (const imgBlock of rendered.blocks) blocks.push(imgBlock);
+
+  return {
+    blocks,
+    bytes: Math.round(parseFloat(rendered.totalMb) * 1024 * 1024),
+    note: `${pdf.filename}: rasterised ${rendered.pageCount}${rendered.truncated ? '+' : ''} pages (source ${sizeMb} MB → ${rendered.totalMb} MB of JPEGs)`,
+  };
+}
 
 // Convert one file (path on disk) into one or more Claude content blocks.
 // PDFs and images get inlined as base64 document/image blocks. Excel, DWG,
@@ -70,7 +191,11 @@ function fileToContentBlocks(filePath, originalName) {
 async function buildUserContentFromFiles(files) {
   const content = [];
   const extractedNames = [];
-  const MAX_PDF_BYTES = 25 * 1024 * 1024;  // Anthropic document upload limit
+  const pdfNotes = [];  // diagnostic: one line per PDF touched
+  // Anthropic limits: 32 MB per PDF, total request up to 100 MB.
+  // Keep per-file just under to leave headroom for other blocks.
+  const MAX_PDF_BYTES = 30 * 1024 * 1024;
+  const MAX_TOTAL_PDF_BYTES = 90 * 1024 * 1024;
   let pdfBytesTotal = 0;
 
   for (const f of files || []) {
@@ -78,30 +203,26 @@ async function buildUserContentFromFiles(files) {
     if (ext === '.zip' && zipProcessor) {
       try {
         const zipData = await zipProcessor.processZip(f.path, uploadsDir);
+        console.log(`[DeepRoutes] ZIP ${f.originalname} unpacked: total_files=${zipData.summary?.total_files}, pdf_count=${zipData.summary?.pdf_count}, image_count=${zipData.summary?.image_count}`);
 
         // (1) structured context + vision images from zipProcessor
         const zipContent = zipProcessor.buildClaudeContent(zipData, null);
         for (const block of zipContent) content.push(block);
 
-        // (2) raw PDF document blocks so Claude can actually see the drawings.
-        // Cap total PDF payload so we don't blow Anthropic's input limits on
-        // huge ZIPs. Skip PDFs whose path we can't resolve.
-        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf' && fi.filePath);
+        // (2) attach each PDF as either a native document block (if under
+        // Anthropic's 30 MB per-doc cap) or rasterised per-page images
+        // (if over). Either way Claude's vision can read the drawing.
+        const zipPdfs = (zipData.files || []).filter(fi => fi.type === 'pdf');
+        console.log(`[DeepRoutes] Considering ${zipPdfs.length} PDF(s)`);
         for (const pdf of zipPdfs) {
-          try {
-            const buf = fs.readFileSync(pdf.filePath);
-            if (pdfBytesTotal + buf.length > MAX_PDF_BYTES) {
-              content.push({ type: 'text', text: `[Skipping ${pdf.filename} — attached PDFs already at payload cap]` });
-              continue;
-            }
-            pdfBytesTotal += buf.length;
-            content.push({ type: 'text', text: `[PDF drawing: ${pdf.filename}${pdf.doc_type ? ' — ' + pdf.doc_type : ''}]` });
-            content.push({
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') },
-            });
-          } catch (pdfErr) {
-            console.warn(`[DeepRoutes] couldn't attach PDF ${pdf.filename}:`, pdfErr.message);
+          const prep = preparePdfForClaude(pdf, pdfBytesTotal, MAX_PDF_BYTES, MAX_TOTAL_PDF_BYTES);
+          pdfNotes.push(prep.note);
+          if (prep.blocks && prep.blocks.length > 0) {
+            for (const b of prep.blocks) content.push(b);
+            if (prep.bytes) pdfBytesTotal += prep.bytes;
+            console.log(`[DeepRoutes] ${prep.note}`);
+          } else {
+            console.warn(`[DeepRoutes] ${prep.note}`);
           }
         }
 
@@ -117,7 +238,7 @@ async function buildUserContentFromFiles(files) {
       extractedNames.push(f.originalname);
     }
   }
-  return { content, extractedNames };
+  return { content, extractedNames, pdfNotes };
 }
 
 // ── POST /api/deep-boq — start a job ──────────────────────────────────
@@ -173,11 +294,13 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
           const nameList = built.extractedNames && built.extractedNames.length > 0
             ? built.extractedNames.slice(0, 10).join(', ') + (built.extractedNames.length > 10 ? ', ...' : '')
             : '(nothing extractable)';
-          // Categorise what we got so the message is actionable
           const exts = new Set(built.extractedNames.map(n => (n.split('.').pop() || '').toLowerCase()));
           const cadOnly = [...exts].every(e => ['dwg', 'dxf', 'rvt', 'ifc', 'skp'].includes(e)) && exts.size > 0;
           let hint;
-          if (cadOnly) {
+          if (built.pdfNotes && built.pdfNotes.length > 0) {
+            // PDFs were present — explain why each one didn't make it
+            hint = 'PDFs were found but none could be attached:\n' + built.pdfNotes.map(n => '• ' + n).join('\n');
+          } else if (cadOnly) {
             hint = 'Your ZIP only contains CAD files (' + [...exts].join(', ').toUpperCase() + '). Export each drawing to PDF and re-upload.';
           } else if (exts.has('docx') || exts.has('doc') || exts.has('xlsx') || exts.has('xls')) {
             hint = 'Your upload contains documents/spreadsheets but no drawings. Please add PDF, PNG, or JPG drawings.';
@@ -186,7 +309,7 @@ router.post('/deep-boq', authMiddleware, (req, res, next) => {
           } else {
             hint = 'Supported formats: PDF, PNG, JPG, WebP — directly or inside a ZIP. DWG/DXF must be exported to PDF first.';
           }
-          throw new Error('No drawings Claude can read. Found in upload: ' + nameList + '. ' + hint);
+          throw new Error('No drawings Claude can read. Found in upload: ' + nameList + '.\n\n' + hint);
         }
         return { content, extractedNames: built.extractedNames };
       };
