@@ -385,7 +385,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
-      const whatsNewKey = `aiqs_whats_new_v5_${user?.id || 'default'}`;
+      const whatsNewKey = `aiqs_whats_new_v4_${user?.id || 'default'}`;
       try {
         const seen = localStorage.getItem(tourKey);
         // The stored value is the TOUR_VERSION the user last completed.
@@ -471,9 +471,6 @@ export default function DashboardPage() {
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: t.textSecondary, lineHeight: 1.8 }}>
                 <li>
-                  <strong style={{ color: t.text }}>One Send button, tender-grade output</strong> — uploading drawings now auto-runs an 8-step server-side pipeline (scope → measure → QA → rates → price → sanity → findings → package). 3-6 minutes, safe to close the tab and come back. Previous "fast vs deep" split is gone.
-                </li>
-                <li>
                   <strong style={{ color: t.text }}>AI Memory</strong> — the AI now remembers your preferences across every project.{' '}
                   <Link to="/onboarding" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Set up your profile →</Link>
                 </li>
@@ -484,7 +481,7 @@ export default function DashboardPage() {
             </div>
             <button onClick={() => {
               setShowWhatsNew(false);
-              try { localStorage.setItem(`aiqs_whats_new_v5_${user?.id || 'default'}`, 'true'); } catch {}
+              try { localStorage.setItem(`aiqs_whats_new_v4_${user?.id || 'default'}`, 'true'); } catch {}
             }} style={{
               background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
               textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,

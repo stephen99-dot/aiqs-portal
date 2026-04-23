@@ -314,7 +314,7 @@ async function runPipeline(jobId, { userContent, apiKey, skipPrepare = false }) 
             description: (scope.spec_notes || []).join(' '),
             scope_summary: (scope.scope_items || []).join('; '),
             key_findings: [{
-              title: 'BOQ Analysis',
+              title: 'Deep BOQ Analysis',
               detail: findingsText,
               items: scope.red_flags || [],
             }],

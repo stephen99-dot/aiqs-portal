@@ -124,20 +124,16 @@ export default function ChatPage() {
   const userScrolledUp = useRef(false);
   const msgsRef = useRef(null);
 
-  // ── BOQ pipeline (invoked automatically when files are sent) ──────
-  // Unified UX: one Send button. When there are files attached, Send
-  // routes through the server-side multi-step pipeline (scope → measure
-  // → QA → rates → price → sanity → findings → package). Runs on the
-  // server so the user can close the tab and come back — the live
-  // progress panel re-attaches on reload.
+  // ── Deep BOQ mode ──────────────────────────────────────────────────
   const [deepJobId, setDeepJobId] = useState(null);
   const [deepStarting, setDeepStarting] = useState(false);
 
-  async function startBoqPipeline() {
+  async function startDeepBoq() {
     if (files.length === 0 && !input.trim()) {
-      alert('Attach drawings or describe the project before sending.');
-      return false;
+      alert('Attach drawings or describe the project before starting Deep BOQ.');
+      return;
     }
+    if (!window.confirm('Start Deep BOQ?\n\nThis uses multi-step reasoning (3-6 minutes). You can close the tab and come back — the job runs on the server.\n\nTakes longer than the fast chat but produces tender-quality output.')) return;
     setDeepStarting(true);
     try {
       const fd = new FormData();
@@ -154,38 +150,37 @@ export default function ChatPage() {
       if (!resp.ok) throw new Error(data.error || 'Failed to start');
       setDeepJobId(data.job_id);
 
-      // Record the run in the chat history so the session shows up in the
-      // sidebar and the panel can be restored on reload. The assistant
-      // message carries the deepJobId; loadSession re-hydrates it.
+      // Record the Deep BOQ run in the chat history so the session shows up
+      // in the sidebar and the panel can be restored on reload. The assistant
+      // message carries the deepJobId; loadSession re-hydrates it to reshow
+      // the live panel if the job is still running.
       const fileSnap = files.map(f => ({ name: f.name, size: f.size }));
       const scopeText = input.trim();
       const userMsg = {
         role: 'user',
         content: scopeText
-          ? scopeText + (fileSnap.length > 0 ? `\n\n(${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''} uploaded)` : '')
-          : `BOQ analysis${fileSnap.length > 0 ? ` — ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''} uploaded` : ''}.`,
+          ? scopeText + (fileSnap.length > 0 ? `\n\n(Started Deep BOQ with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''})` : '\n\n(Started Deep BOQ)')
+          : `Started Deep BOQ${fileSnap.length > 0 ? ` with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
         files: fileSnap,
         timestamp: new Date().toISOString(),
       };
       const aiMsg = {
         role: 'assistant',
-        content: 'Running multi-step BOQ pipeline on the server. Takes 3-6 minutes. Safe to close this tab and come back — the live panel will re-attach when you reopen the chat.',
+        content: 'Running Deep BOQ — multi-step reasoning on the server. Takes 3-6 minutes. Safe to close this tab and come back; the live panel will re-attach when you reopen the chat.',
         deepJobId: data.job_id,
         timestamp: new Date().toISOString(),
       };
       setMessages(p => [...p, userMsg, aiMsg]);
       setInput('');
       setFiles([]);
-      return true;
     } catch (err) {
-      alert('Failed to start BOQ: ' + err.message);
-      return false;
+      alert('Deep BOQ failed to start: ' + err.message);
     } finally {
       setDeepStarting(false);
     }
   }
 
-  // On completion, append a summary message + downloads to chat history
+  // On Deep BOQ completion, append a summary message + downloads to chat
   const onDeepCompleted = useCallback((job) => {
     if (!job) return;
     let files = [];
@@ -198,7 +193,7 @@ export default function ChatPage() {
       if (last && last.role === 'assistant' && last.deepJobCompleted === job.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `**BOQ complete.** ${grand} grand total${job.floor_area_m2 ? ` · ${job.floor_area_m2}m²` : ''}${job.project_type ? ` · ${job.project_type}` : ''}. Documents below.`,
+        content: `**Deep BOQ complete.** ${grand} grand total${job.floor_area_m2 ? ` · ${job.floor_area_m2}m²` : ''}${job.project_type ? ` · ${job.project_type}` : ''}. Documents below.`,
         deepJobCompleted: job.id,
         downloadFiles: files.length > 0 ? files : null,
         timestamp: new Date().toISOString(),
@@ -417,15 +412,6 @@ export default function ChatPage() {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     const textToSend = overrideText != null ? overrideText : input;
     if (!textToSend.trim() && files.length === 0) return;
-
-    // Route file uploads (when overrideText isn't forcing a specific text
-    // response) through the full multi-step BOQ pipeline. Text-only sends
-    // and programmatic overrides like "generate documents" stay on the
-    // fast path so follow-up chat / confirmations / corrections still work.
-    if (files.length > 0 && overrideText == null) {
-      await startBoqPipeline();
-      return;
-    }
 
     const userMsg = {
       role: 'user', content: textToSend,
@@ -1167,22 +1153,33 @@ export default function ChatPage() {
                     : currentTakeoffId
                     ? 'Review quantities above — say "confirm" to lock, or ask to adjust...'
                     : files.length > 0
-                      ? 'Add any extra scope notes, then Send to run the full BOQ pipeline (3-6 min)...'
+                      ? 'Describe the scope or say "extract quantities"...'
                       : 'Upload drawings or ask a QS question...'
                 }
-                rows={1} disabled={sending || deepStarting}
+                rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
-              <button
-                type="submit"
-                disabled={sending || deepStarting || (!input.trim() && files.length === 0)}
-                title={files.length > 0 ? 'Send — runs the full multi-step BOQ pipeline on the server' : 'Send message'}
-                style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: (sending||deepStarting||(!input.trim()&&files.length===0))?0.35:1, transition:'opacity 0.15s' }}
-              >
-                {deepStarting ? (
-                  <span style={{ color:'white', fontSize:11, fontWeight:700, padding:'0 4px' }}>…</span>
-                ) : (
-                  <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                )}
+              {/* Deep BOQ button — only when files attached or scope typed */}
+              {(files.length > 0 || input.trim()) && !deepJobId && !sending && (
+                <button
+                  type="button"
+                  onClick={startDeepBoq}
+                  disabled={deepStarting}
+                  title="Multi-step reasoning pipeline (3-6 min). Runs on the server — safe to close the tab."
+                  style={{
+                    background: 'transparent', border: '1px solid ' + c.amber,
+                    color: c.amber, borderRadius: 10, padding: '6px 10px',
+                    cursor: deepStarting ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                    fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit',
+                    opacity: deepStarting ? 0.5 : 1, whiteSpace: 'nowrap',
+                  }}
+                >
+                  🔬 {deepStarting ? 'Starting...' : 'Deep BOQ'}
+                </button>
+              )}
+              <button type="submit" disabled={sending || (!input.trim() && files.length === 0)}
+                style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
+                <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
               </button>
             </form>
             <div style={{ fontSize:11, color:c.textMuted, textAlign:'center', marginTop:7 }}>
@@ -1190,9 +1187,7 @@ export default function ChatPage() {
                 ? `🔒 Takeoff locked (${currentTakeoffId.slice(0,12)}) · Total is deterministic · Say "generate documents" to produce files`
                 : currentTakeoffId
                 ? `📝 Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
-                : files.length > 0
-                ? 'Drag & drop · ZIP, PDF, Excel, PNG supported · Send runs the full multi-step pipeline (3-6 min, server-side, resumable)'
-                : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Ask a QS question or upload drawings to start a BOQ'}
+                : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Quantities locked before generating'}
             </div>
           </div>
         </div>
