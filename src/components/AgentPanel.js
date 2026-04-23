@@ -81,6 +81,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   // run and again on submit_for_review.
   const [varianceNote, setVarianceNote] = useState(null);
   const [sanityWarnings, setSanityWarnings] = useState([]);  // [{ key, qty, expected, severity, message }]
+  const [genStep, setGenStep] = useState(null);  // 'reprice' | 'excel' | 'word' | null
 
   const readerAbortRef = useRef(null);
 
@@ -276,12 +277,26 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         setRun(r => r ? { ...r, status: 'awaiting_review' } : r);
         setActivity('Awaiting your review — edit items below then click Generate');
         break;
+      case 'generation_started':
+        setGenerating(true);
+        setGenStep('reprice');
+        setRun(r => r ? { ...r, status: 'generating' } : r);
+        setActivity('Generating Excel + Word deliverables');
+        break;
+      case 'generation_step':
+        setGenStep(evt.step);
+        if (evt.label) setActivity(evt.label);
+        break;
       case 'finalized':
         setDownloads(evt.downloads || []);
+        setGenerating(false);
+        setGenStep(null);
         break;
       case 'run_complete':
         setRun(r => r ? { ...r, status: 'completed' } : r);
         setActivity('Complete');
+        setGenerating(false);
+        setGenStep(null);
         (async () => {
           try {
             const d = await apiFetch('/agent/' + runId);
@@ -330,7 +345,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const iter = run?.iteration_count || 0;
   const isRunning = run?.status === 'running' || run?.status === 'queued';
   const isAwaitingReview = run?.status === 'awaiting_review';
-  const isGenerating = run?.status === 'generating';
+  const isGenerating = run?.status === 'generating' || generating;
   const isComplete = run?.status === 'completed';
   const isFailed = run?.status === 'failed';
 
@@ -443,6 +458,51 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       {!collapsed && (
         <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
 
+          {/* GENERATING BLOCK — large prominent progress UI while the
+              server produces the Excel + Word files. User explicitly
+              asked for this: without it, the UI looks frozen after
+              clicking Generate. */}
+          {isGenerating && !isComplete && (
+            <div style={{ padding: '20px 22px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.05)' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ display: 'inline-block', width: 16, height: 16, border: '2.5px solid rgba(59,130,246,0.25)', borderTopColor: '#3B82F6', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
+                Generating your documents
+              </div>
+              <div style={{ fontSize: 12.5, color: c.muted, marginBottom: 14 }}>
+                Usually takes 10-20 seconds. Safe to close the tab — the files will still be ready here on reload.
+              </div>
+              {/* Step tracker */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'reprice', label: '🧮 Re-pricing with edits' },
+                  { key: 'excel', label: '📊 Building Excel BOQ' },
+                  { key: 'word', label: '📝 Writing Word report' },
+                ].map(s => {
+                  const done = (genStep === 'excel' && s.key === 'reprice') || (genStep === 'word' && (s.key === 'reprice' || s.key === 'excel'));
+                  const active = genStep === s.key;
+                  return (
+                    <div key={s.key} style={{
+                      padding: '7px 12px', borderRadius: 7, fontSize: 12.5, fontWeight: 600,
+                      background: done ? (isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)') : active ? (isDark ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.10)') : 'transparent',
+                      color: done ? c.done : active ? '#3B82F6' : c.muted,
+                      border: '1px solid ' + (done ? 'rgba(16,185,129,0.3)' : active ? 'rgba(59,130,246,0.35)' : c.border),
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}>
+                      {done ? '✓ ' : ''}{s.label}
+                      {active && <span style={{ display: 'inline-flex', gap: 2, marginLeft: 4 }}>
+                        {[0,1,2].map(d => <span key={d} style={{ width: 3, height: 3, borderRadius: '50%', background: 'currentColor', animation: 'dot 1.4s infinite', animationDelay: (d*0.2)+'s' }} />)}
+                      </span>}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Indeterminate progress bar */}
+              <div style={{ marginTop: 14, height: 4, borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', overflow: 'hidden', position: 'relative' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '30%', background: '#3B82F6', borderRadius: 4, animation: 'slide 1.6s ease-in-out infinite' }} />
+              </div>
+            </div>
+          )}
+
           {/* Variance warning — shown whenever priced cost/m² is ±30% vs
               user's historical jobs for this project type. Surfaces both
               during running (after run_pricer) and in the review block. */}
@@ -465,7 +525,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {/* REVIEW BLOCK — shown when Atlas has paused for user approval.
               Pinned at the top so the user sees the summary + Generate
               button immediately. Items become editable below. */}
-          {isAwaitingReview && (
+          {isAwaitingReview && !isGenerating && (
             <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 240 }}>
@@ -677,6 +737,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       <style>{`
         @keyframes dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
         @keyframes pulse { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes slide { 0% { left: -30%; } 100% { left: 100%; } }
       `}</style>
     </div>
   );

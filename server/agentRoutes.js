@@ -337,6 +337,7 @@ router.post('/agent/:id/generate', authMiddleware, express.json(), async (req, r
     }
 
     agent.updateRun(req.params.id, { status: 'generating' });
+    agent.emit(req.params.id, { type: 'generation_started' });
     agent.emit(req.params.id, { type: 'activity', activity: 'Generating Excel + Word deliverables' });
 
     // Run generation in the background; respond immediately

@@ -585,6 +585,10 @@ async function runGenerationForRun(runId, opts = {}) {
   if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
     location = location ? `${location}, Ireland` : 'Ireland';
   }
+
+  setActivity(runId, 'Re-pricing with your edits');
+  emit(runId, { type: 'generation_step', step: 'reprice', label: 'Re-pricing with your edits' });
+
   const priced = pricer.priceLockedQuantities(items, location, clientRates, {
     project_type: run.project_type || '',
     floor_area: run.floor_area_m2 || null,
@@ -599,7 +603,8 @@ async function runGenerationForRun(runId, opts = {}) {
   const outputsDir = path.join(DATA_DIR, 'outputs');
   if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
 
-  setActivity(runId, 'Generating Excel + Word deliverables');
+  setActivity(runId, 'Building Excel BOQ');
+  emit(runId, { type: 'generation_step', step: 'excel', label: 'Building Excel BOQ' });
 
   const downloads = [];
   try {
@@ -616,6 +621,9 @@ async function runGenerationForRun(runId, opts = {}) {
       downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
     }
   } catch (excelErr) { console.error(`[Agent ${runId}] Excel gen error:`, excelErr.message); }
+
+  setActivity(runId, 'Writing Word findings report');
+  emit(runId, { type: 'generation_step', step: 'word', label: 'Writing Word findings report' });
 
   try {
     const findingsObj = {
