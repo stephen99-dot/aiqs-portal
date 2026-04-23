@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 // Bump this version whenever tour content changes — existing users will see the updated tour
-export const TOUR_VERSION = 6;
+export const TOUR_VERSION = 7;
 
 const TOUR_STEPS = [
   {
@@ -15,7 +15,7 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="start-chat"]',
     title: 'Start a project',
-    description: 'Open the chat from here. Attach your drawings (PDF, ZIP, Excel, images — up to 5 files, 150 MB each), add any scope notes, and hit Send. The portal runs a server-side 8-step pipeline — scope, measurement, QA, rates, pricing, sanity check, findings, packaging — that takes 3-6 minutes and produces tender-grade output. Safe to close the tab and come back; the live progress panel re-attaches on reload.',
+    description: 'Open the chat from here. Attach your drawings (PDF, ZIP, Excel, images — up to 5 files, 150 MB each), describe the scope, and hit Send. The AI extracts quantities, applies your trained rates, and produces a priced BOQ with Excel and Word downloads in under a minute.',
     position: 'bottom',
     icon: '\u2197',
   },
@@ -29,7 +29,7 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
     title: 'Editable BOQ with provenance',
-    description: 'After the pipeline finishes an editable BOQ table appears inline in the chat. Click any quantity to change it and the deterministic pricer re-runs instantly. Every row carries colour-coded badges showing where the number came from — your rate library, SPON\'s base rates, AI estimate, or a manual edit — so you can see exactly what drove the total.',
+    description: 'After extraction an editable BOQ table appears inline in the chat. Click any quantity to change it and the deterministic pricer re-runs instantly. Every row carries colour-coded badges showing where the number came from — your rate library, SPON\'s base rates, AI estimate, or a manual edit — so you can see exactly what drove the total.',
     position: 'center',
     icon: '\u270F',
   },
@@ -64,7 +64,7 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="sidebar-nav"]',
     title: 'You are all set',
-    description: 'That is the tour. Upload your first set of drawings in the Chat and you will have a tender-grade priced BOQ in minutes. Any questions, just ask the AI.',
+    description: 'That is the tour. Upload your first set of drawings in the Chat and you will have a priced BOQ in minutes. Any questions, just ask the AI.',
     position: 'right',
     icon: '\u2714',
   },

@@ -1680,9 +1680,8 @@ async function chatHandler(req, res) {
               for (const block of zipContent) currentContent.push(block);
 
               // Attach the actual PDFs so Claude can SEE the drawings, not
-              // just notes saying "this PDF has no text". Uses the same
-              // shared helper as Deep BOQ — document blocks for small PDFs,
-              // per-page rasterised JPEGs for over-30MB PDFs.
+              // just notes saying "this PDF has no text". Document blocks
+              // for PDFs under 30MB, per-page rasterised JPEGs for larger.
               try {
                 const { attachZipPdfs } = require('./pdfAttach');
                 const pdfResult = attachZipPdfs(zipData, currentContent);
