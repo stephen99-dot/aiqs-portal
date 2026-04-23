@@ -423,6 +423,15 @@ export default function ChatPage() {
     // and programmatic overrides like "generate documents" stay on the
     // fast path so follow-up chat / confirmations / corrections still work.
     if (files.length > 0 && overrideText == null) {
+      // If a pipeline is already running in this chat, make the user choose
+      // explicitly rather than silently orphaning the first job.
+      if (deepJobId) {
+        const goAhead = window.confirm(
+          'A BOQ pipeline is already attached to this chat. Starting a new one will hide the previous panel (the old job keeps running on the server but you will lose easy access to it).\n\n'
+          + 'Use "New" in the sidebar to start a fresh chat for this new upload, or click OK to replace the current run.'
+        );
+        if (!goAhead) return;
+      }
       await startBoqPipeline();
       return;
     }
