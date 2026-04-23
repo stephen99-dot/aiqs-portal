@@ -5,7 +5,6 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
-import DeepBoqPanel from '../components/DeepBoqPanel';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -123,83 +122,6 @@ export default function ChatPage() {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const userScrolledUp = useRef(false);
   const msgsRef = useRef(null);
-
-  // ── Deep BOQ mode ──────────────────────────────────────────────────
-  const [deepJobId, setDeepJobId] = useState(null);
-  const [deepStarting, setDeepStarting] = useState(false);
-
-  async function startDeepBoq() {
-    if (files.length === 0 && !input.trim()) {
-      alert('Attach drawings or describe the project before starting Deep BOQ.');
-      return;
-    }
-    if (!window.confirm('Start Deep BOQ?\n\nThis uses multi-step reasoning (3-6 minutes). You can close the tab and come back — the job runs on the server.\n\nTakes longer than the fast chat but produces tender-quality output.')) return;
-    setDeepStarting(true);
-    try {
-      const fd = new FormData();
-      if (input.trim()) fd.append('scope', input.trim());
-      if (pendingIntake) fd.append('intake_json', JSON.stringify(pendingIntake));
-      files.forEach(f => fd.append('files', f));
-      const token = getToken();
-      const resp = await fetch('/api/deep-boq', {
-        method: 'POST',
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-        body: fd,
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to start');
-      setDeepJobId(data.job_id);
-
-      // Record the Deep BOQ run in the chat history so the session shows up
-      // in the sidebar and the panel can be restored on reload. The assistant
-      // message carries the deepJobId; loadSession re-hydrates it to reshow
-      // the live panel if the job is still running.
-      const fileSnap = files.map(f => ({ name: f.name, size: f.size }));
-      const scopeText = input.trim();
-      const userMsg = {
-        role: 'user',
-        content: scopeText
-          ? scopeText + (fileSnap.length > 0 ? `\n\n(Started Deep BOQ with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''})` : '\n\n(Started Deep BOQ)')
-          : `Started Deep BOQ${fileSnap.length > 0 ? ` with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
-        files: fileSnap,
-        timestamp: new Date().toISOString(),
-      };
-      const aiMsg = {
-        role: 'assistant',
-        content: 'Running Deep BOQ — multi-step reasoning on the server. Takes 3-6 minutes. Safe to close this tab and come back; the live panel will re-attach when you reopen the chat.',
-        deepJobId: data.job_id,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(p => [...p, userMsg, aiMsg]);
-      setInput('');
-      setFiles([]);
-    } catch (err) {
-      alert('Deep BOQ failed to start: ' + err.message);
-    } finally {
-      setDeepStarting(false);
-    }
-  }
-
-  // On Deep BOQ completion, append a summary message + downloads to chat
-  const onDeepCompleted = useCallback((job) => {
-    if (!job) return;
-    let files = [];
-    try { files = (job.final_output ? JSON.parse(job.final_output).files : null) || []; } catch (e) {}
-    const sym = job.currency === 'EUR' ? '€' : '£';
-    const grand = job.grand_total ? `${sym}${Math.round(job.grand_total).toLocaleString('en-GB')}` : '(no total)';
-    setMessages(p => {
-      // Avoid dupes — don't append if the last assistant message is already a completion for this job
-      const last = p[p.length - 1];
-      if (last && last.role === 'assistant' && last.deepJobCompleted === job.id) return p;
-      return [...p, {
-        role: 'assistant',
-        content: `**Deep BOQ complete.** ${grand} grand total${job.floor_area_m2 ? ` · ${job.floor_area_m2}m²` : ''}${job.project_type ? ` · ${job.project_type}` : ''}. Documents below.`,
-        deepJobCompleted: job.id,
-        downloadFiles: files.length > 0 ? files : null,
-        timestamp: new Date().toISOString(),
-      }];
-    });
-  }, []);
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -322,15 +244,6 @@ export default function ChatPage() {
         setCurrentTakeoffId(null);
         setTakeoffStatus(null);
       }
-      // Recover deep BOQ job id from messages — re-attaches the live panel
-      // if the job is still running, or shows the completed state if done.
-      const lastWithDeepJob = [...msgs].reverse().find(m => m.deepJobId);
-      if (lastWithDeepJob) {
-        setDeepJobId(lastWithDeepJob.deepJobId);
-        console.log('[Session] Recovered deep_job_id:', lastWithDeepJob.deepJobId);
-      } else {
-        setDeepJobId(null);
-      }
     } catch (e) { console.error(e); }
   }
 
@@ -354,8 +267,6 @@ export default function ChatPage() {
         thinking: m.thinking || null, downloadFiles: m.downloadFiles || null,
         pipelineLog: m.pipelineLog || null,
         timestamp: m.timestamp, error: m.error || false,
-        deepJobId: m.deepJobId || null,
-        deepJobCompleted: m.deepJobCompleted || null,
         takeoffLocked: m.takeoffLocked || false,
         takeoffStatus: m.takeoffStatus || null,
       }));
@@ -1109,14 +1020,6 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Deep BOQ progress panel — resumes on reload via SSE snapshot */}
-            {deepJobId && (
-              <DeepBoqPanel
-                jobId={deepJobId}
-                onClose={() => setDeepJobId(null)}
-                onCompleted={onDeepCompleted}
-              />
-            )}
 
             <div ref={bottomRef}/>
           </div>
@@ -1158,25 +1061,6 @@ export default function ChatPage() {
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
-              {/* Deep BOQ button — only when files attached or scope typed */}
-              {(files.length > 0 || input.trim()) && !deepJobId && !sending && (
-                <button
-                  type="button"
-                  onClick={startDeepBoq}
-                  disabled={deepStarting}
-                  title="Multi-step reasoning pipeline (3-6 min). Runs on the server — safe to close the tab."
-                  style={{
-                    background: 'transparent', border: '1px solid ' + c.amber,
-                    color: c.amber, borderRadius: 10, padding: '6px 10px',
-                    cursor: deepStarting ? 'not-allowed' : 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                    fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit',
-                    opacity: deepStarting ? 0.5 : 1, whiteSpace: 'nowrap',
-                  }}
-                >
-                  🔬 {deepStarting ? 'Starting...' : 'Deep BOQ'}
-                </button>
-              )}
               <button type="submit" disabled={sending || (!input.trim() && files.length === 0)}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

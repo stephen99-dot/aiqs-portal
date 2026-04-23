@@ -390,7 +390,7 @@ export default function DashboardPage() {
         const seen = localStorage.getItem(tourKey);
         // The stored value is the TOUR_VERSION the user last completed.
         // Bumping TOUR_VERSION re-shows the tour so existing users see new
-        // features (Deep BOQ, intake, editable BOQ, AI Memory, Variations).
+        // features (intake, editable BOQ, AI Memory, Variations).
         const seenVersion = seen ? parseInt(seen, 10) : 0;
         if (seenVersion < TOUR_VERSION) {
           setShowTour(true);
