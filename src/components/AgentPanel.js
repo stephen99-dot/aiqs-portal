@@ -63,6 +63,13 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [now, setNow] = useState(Date.now());
   const [collapsed, setCollapsed] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
+  // narration = the prose Claude writes between tool calls ("Now I'll look at
+  // the ground floor plan to measure the extension footprint..."). Shown live
+  // so the user can see the agent reasoning out loud, claude.ai-style.
+  // narrationLog keeps prior iterations; narration is the currently-streaming
+  // block for the active iteration.
+  const [narration, setNarration] = useState('');
+  const [narrationLog, setNarrationLog] = useState([]);  // [{ iteration, text }]
 
   const readerAbortRef = useRef(null);
 
@@ -126,12 +133,20 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         break;
       case 'iteration_start':
         setRun(r => r ? { ...r, iteration_count: evt.iteration } : r);
+        // Roll the previous iteration's narration into the log, start fresh
+        setNarration(prev => {
+          if (prev && prev.trim()) {
+            setNarrationLog(log => [...log, { iteration: evt.iteration - 1, text: prev }]);
+          }
+          return '';
+        });
         break;
       case 'activity':
         setActivity(evt.activity);
         break;
       case 'text_delta':
-        // Skipped from UI — shown only if user opens reasoning
+        // Stream Claude's prose narration live — shown prominently in panel
+        setNarration(r => r + evt.delta);
         break;
       case 'thinking_delta':
         setReasoning(r => r + evt.delta);
@@ -218,6 +233,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const remainingSec = isRunning ? Math.max(0, totalEstSec - elapsedSec) : 0;
   const progressPct = isComplete ? 100 : isFailed ? 100 : Math.min(95, (elapsedSec / totalEstSec) * 100);
 
+  // "Initialising" state — SSE connected but no iteration has started yet.
+  // Covers the gap between button press (runId set) and first iteration_start
+  // event, which can be 3-8s while ZIPs unpack, Claude warms up, first response
+  // starts streaming.
+  const isInitialising = runId && (!run || run.status === 'queued' || (run.status === 'running' && iter === 0));
+
   if (!runId) return null;
 
   return (
@@ -226,10 +247,10 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       {/* Header */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : '🛠️'}</span>
+          <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isInitialising ? '🔌' : '🛠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-              BOQ Agent · {isComplete ? 'Complete' : isFailed ? 'Failed' : 'Running'}
+              BOQ Agent · {isComplete ? 'Complete' : isFailed ? 'Failed' : isInitialising ? 'Initialising' : 'Running'}
               {run?.project_type && <span style={{ fontWeight: 400, color: c.muted }}> · {run.project_type}</span>}
             </div>
             <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
@@ -237,6 +258,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · {iter} iterations · {fmtElapsed(elapsedSec)}</>
                 : isFailed
                 ? <>{error || run?.error_message || 'Agent failed'}</>
+                : isInitialising
+                ? <>Waking up Claude, preparing drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
                 : <>Iteration {iter} · elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
             </div>
           </div>
@@ -260,12 +283,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         )}
 
         {/* Current activity line */}
-        {isRunning && (
+        {(isRunning || isInitialising) && (
           <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 7, background: c.accentBg, border: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.accent, fontWeight: 500 }}>
             <span style={{ display: 'inline-flex', gap: 3 }}>
               {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.accent, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
             </span>
-            <span style={{ flex: 1 }}>{activity}</span>
+            <span style={{ flex: 1 }}>{isInitialising ? 'Connecting to Claude, preparing drawings for inspection…' : activity}</span>
           </div>
         )}
       </div>
@@ -275,6 +298,39 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           see the whole panel by scrolling down. */}
       {!collapsed && (
         <>
+          {/* Live narration — Claude's prose as it thinks through the job.
+              Streams in character-by-character. Prior iterations collapse
+              into a compact log above. This is the "claude.ai scoping it
+              out in a detailed message as it's working" experience. */}
+          {(narrationLog.length > 0 || narration) && (
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(96,165,250,0.04)' : 'rgba(96,165,250,0.035)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>💬</span><span>Agent working notes</span>
+              </div>
+              {/* Prior iterations — grouped under iteration number, muted */}
+              {narrationLog.map((entry, i) => (
+                <details key={i} style={{ marginBottom: 8 }}>
+                  <summary style={{ fontSize: 11.5, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
+                    Iteration {entry.iteration} · {entry.text.length} chars
+                  </summary>
+                  <div style={{ fontSize: 12.5, color: c.muted, lineHeight: 1.6, whiteSpace: 'pre-wrap', padding: '6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.85 }}>
+                    {entry.text}
+                  </div>
+                </details>
+              ))}
+              {/* Current iteration — streaming in live */}
+              {narration && (
+                <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {narrationLog.length > 0 && (
+                    <div style={{ fontSize: 11, color: c.accent, fontWeight: 600, marginBottom: 4 }}>Iteration {iter}</div>
+                  )}
+                  {narration}
+                  {isRunning && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Downloads row (if complete) */}
           {isComplete && downloads.length > 0 && (
             <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
@@ -388,6 +444,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
 
       <style>{`
         @keyframes dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+        @keyframes pulse { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
       `}</style>
     </div>
   );

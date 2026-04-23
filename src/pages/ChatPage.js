@@ -129,12 +129,39 @@ export default function ChatPage() {
       return;
     }
     setAgentStarting(true);
+
+    // Capture files + scope BEFORE we clear state so the POST has them.
+    const capturedFiles = [...files];
+    const fileSnap = capturedFiles.map(f => ({ name: f.name, size: f.size }));
+    const scopeText = input.trim();
+
+    // Optimistically drop the messages in FIRST so the user sees something
+    // happening immediately. The POST can take 5-15s to upload + unpack ZIPs,
+    // and during that gap we don't want the user staring at an unchanged UI.
+    const userMsg = {
+      role: 'user',
+      content: scopeText || `BOQ Agent run${fileSnap.length > 0 ? ` on ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
+      files: fileSnap,
+      timestamp: new Date().toISOString(),
+    };
+    // Placeholder AI message — replaced with a real agentRunId once the POST
+    // returns. Flag with agentStarting: true so UI can show spinner inline.
+    const placeholderMsg = {
+      role: 'assistant',
+      content: 'Starting the BOQ Agent — uploading your files and waking up Claude. The live panel will appear below in a few seconds.',
+      agentStarting: true,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages(p => [...p, userMsg, placeholderMsg]);
+    setInput('');
+    setFiles([]);
+
     try {
       const fd = new FormData();
-      if (input.trim()) fd.append('scope', input.trim());
+      if (scopeText) fd.append('scope', scopeText);
       if (pendingIntake) fd.append('intake_json', JSON.stringify(pendingIntake));
       if (currentSessionId) fd.append('session_id', currentSessionId);
-      files.forEach(f => fd.append('files', f));
+      capturedFiles.forEach(f => fd.append('files', f));
       const token = getToken();
       const resp = await fetch('/api/agent', {
         method: 'POST',
@@ -145,29 +172,18 @@ export default function ChatPage() {
       if (!resp.ok) throw new Error(data.error || 'Failed to start');
       setAgentRunId(data.run_id);
 
-      // Drop two messages into the chat history so the session shows up
-      // in the sidebar and on reload we can restore the panel.
-      const fileSnap = files.map(f => ({ name: f.name, size: f.size }));
-      const scopeText = input.trim();
-      const userMsg = {
-        role: 'user',
-        content: scopeText
-          ? scopeText + (fileSnap.length > 0 ? `\n\n(Agent run started with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''})` : '')
-          : `BOQ Agent run started${fileSnap.length > 0 ? ` with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
-        files: fileSnap,
-        timestamp: new Date().toISOString(),
-      };
-      const aiMsg = {
-        role: 'assistant',
-        content: 'BOQ Agent running on the server. Tender-grade multi-step pipeline, takes 3-6 minutes. The live panel below tracks every step — close the tab and come back any time, the panel re-attaches on reload.',
-        agentRunId: data.run_id,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages(p => [...p, userMsg, aiMsg]);
-      setInput('');
-      setFiles([]);
+      // Replace the placeholder with the real assistant message carrying
+      // the run id so it re-attaches on reload.
+      setMessages(p => p.map(m => m.agentStarting
+        ? { role: 'assistant', content: 'BOQ Agent running — watch the live panel below. Safe to close the tab and come back, the panel re-attaches on reload.', agentRunId: data.run_id, timestamp: m.timestamp }
+        : m
+      ));
     } catch (err) {
-      alert('BOQ Agent failed to start: ' + err.message);
+      // Replace placeholder with an error message the user can see in-line
+      setMessages(p => p.map(m => m.agentStarting
+        ? { role: 'assistant', content: `❌ BOQ Agent failed to start: ${err.message}`, timestamp: m.timestamp }
+        : m
+      ));
     } finally {
       setAgentStarting(false);
     }
@@ -717,6 +733,17 @@ export default function ChatPage() {
                 borderColor={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
                 mono="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
               />
+            )}
+
+            {/* Agent-starting spinner — shown inline while the POST is in
+                flight before the live panel attaches. */}
+            {msg.agentStarting && (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 7, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.amber, fontWeight: 500 }}>
+                <span style={{ display: 'inline-flex', gap: 3 }}>
+                  {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.amber, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
+                </span>
+                <span>Uploading files · initialising agent…</span>
+              </div>
             )}
 
             {/* Copy + streaming indicator (assistant only) */}
