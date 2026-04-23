@@ -255,13 +255,33 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   // starts streaming.
   const isInitialising = runId && (!run || run.status === 'queued' || (run.status === 'running' && iter === 0));
 
+  // Auto-scroll the panel body to the bottom as new content streams in,
+  // unless the user has scrolled up to read older content.
+  const bodyRef = useRef(null);
+  const userScrolledRef = useRef(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || userScrolledRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [items.length, toolCalls.length, narration, narrationLog.length, priced, downloads.length]);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      userScrolledRef.current = distFromBottom > 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
   if (!runId) return null;
 
   return (
-    <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12 }}>
+    <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12, display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
 
-      {/* Header */}
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
+      {/* Header — sticky at top of panel */}
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isInitialising ? '🔌' : '🛠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -309,11 +329,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         )}
       </div>
 
-      {/* Body — hidden when collapsed. All sections render fully, no inner
-          scroll boxes, so the outer page scrolls naturally and users can
-          see the whole panel by scrolling down. */}
+      {/* Body — hidden when collapsed. The panel itself caps at 70vh so
+          it never swallows the whole viewport; the body scrolls internally
+          and auto-follows new content (unless you've scrolled up to read
+          older notes). */}
       {!collapsed && (
-        <>
+        <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
           {/* Live narration — the agent's prose as it thinks through the
               job. Streams in character-by-character. Prior iterations
               collapse into compact log entries (silent ones flagged so
@@ -456,10 +477,10 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {/* Keep-alive message */}
           {isRunning && (
             <div style={{ padding: '8px 18px 14px', fontSize: 11, color: c.sub, fontStyle: 'italic' }}>
-              Agent runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
+              Atlas runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
             </div>
           )}
-        </>
+        </div>
       )}
 
       <style>{`

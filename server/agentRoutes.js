@@ -148,20 +148,36 @@ router.post('/agent', authMiddleware, (req, res, next) => {
   }
 });
 
+// SQLite's CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" (UTC) with no
+// timezone marker. Without a 'Z', browsers parse it as LOCAL time, causing
+// elapsed-time bugs on any non-UTC client (e.g. Europe/Dublin BST = +60min
+// drift). Normalise every timestamp field to ISO 8601 with explicit Z so
+// the client cannot misinterpret regardless of cache or version.
+function normaliseTimestamps(run) {
+  const fields = ['created_at', 'updated_at', 'completed_at'];
+  const out = { ...run };
+  for (const k of fields) {
+    const v = out[k];
+    if (typeof v === 'string' && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(v)) {
+      out[k] = (v.includes('T') ? v : v.replace(' ', 'T')) + 'Z';
+    }
+  }
+  return out;
+}
+
 // ── GET /api/agent/:id — snapshot ─────────────────────────────────────
 router.get('/agent/:id', authMiddleware, (req, res) => {
   try {
     const run = agent.getRun(req.params.id);
     if (!run) return res.status(404).json({ error: 'Run not found' });
     if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-    // Also return the takeoff items for the UI panel
     let items = [];
     try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
     let priced = null;
     try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
     let downloads = [];
     try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-    res.json({ run: { ...run, takeoff_items: items, priced, downloads } });
+    res.json({ run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
   } catch (err) {
     console.error('[AgentRoutes] snapshot error:', err.message);
     res.status(500).json({ error: 'Failed to load run' });
@@ -186,14 +202,13 @@ router.get('/agent/:id/stream', authMiddleware, (req, res) => {
     res.write(`data: ${JSON.stringify(evt)}\n\n`);
   }
 
-  // Snapshot first — frontend re-hydrates its state from this
   let items = [];
   try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
   let priced = null;
   try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
   let downloads = [];
   try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-  send({ type: 'snapshot', run: { ...run, takeoff_items: items, priced, downloads } });
+  send({ type: 'snapshot', run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
 
   if (run.status === 'completed' || run.status === 'failed') {
     send({ type: 'done' });
@@ -217,7 +232,7 @@ router.get('/agent', authMiddleware, (req, res) => {
       FROM agent_runs WHERE user_id = ?
       ORDER BY created_at DESC LIMIT 50
     `).all(req.user.id);
-    res.json({ runs: rows });
+    res.json({ runs: rows.map(normaliseTimestamps) });
   } catch (err) {
     res.status(500).json({ error: 'Failed to load runs' });
   }
