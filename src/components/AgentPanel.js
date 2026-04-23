@@ -133,10 +133,16 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         break;
       case 'iteration_start':
         setRun(r => r ? { ...r, iteration_count: evt.iteration } : r);
-        // Roll the previous iteration's narration into the log, start fresh
+        // Roll the previous iteration's narration into the log, start fresh.
+        // We also log silent iterations (Claude only called tools, no prose)
+        // so the user sees continuous progress, not a confusing gap.
         setNarration(prev => {
-          if (prev && prev.trim()) {
-            setNarrationLog(log => [...log, { iteration: evt.iteration - 1, text: prev }]);
+          const prevIter = evt.iteration - 1;
+          if (prevIter >= 1) {
+            setNarrationLog(log => [...log, {
+              iteration: prevIter,
+              text: prev && prev.trim() ? prev : null,
+            }]);
           }
           return '';
         });
@@ -221,7 +227,17 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
     row: 'rgba(0,0,0,0.02)',
   };
 
-  const startedAt = run?.created_at ? new Date(run.created_at).getTime() : null;
+  // SQLite's CURRENT_TIMESTAMP is UTC but returned without a 'Z' suffix,
+  // so JS Date parses it as LOCAL time — giving a ~1hr drift on BST/IST.
+  // Normalise by appending 'Z' when there's no explicit timezone indicator.
+  const parseUtc = (ts) => {
+    if (!ts) return null;
+    const hasTZ = /[zZ]|[+-]\d{2}:?\d{2}$/.test(ts);
+    const normalised = hasTZ ? ts : (ts.includes('T') ? ts + 'Z' : ts.replace(' ', 'T') + 'Z');
+    const t = new Date(normalised).getTime();
+    return Number.isFinite(t) ? t : null;
+  };
+  const startedAt = parseUtc(run?.created_at);
   const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
   const iter = run?.iteration_count || 0;
   const isRunning = run?.status === 'running' || run?.status === 'queued';
@@ -239,13 +255,33 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   // starts streaming.
   const isInitialising = runId && (!run || run.status === 'queued' || (run.status === 'running' && iter === 0));
 
+  // Auto-scroll the panel body to the bottom as new content streams in,
+  // unless the user has scrolled up to read older content.
+  const bodyRef = useRef(null);
+  const userScrolledRef = useRef(false);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || userScrolledRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [items.length, toolCalls.length, narration, narrationLog.length, priced, downloads.length]);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      userScrolledRef.current = distFromBottom > 80;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
   if (!runId) return null;
 
   return (
-    <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12 }}>
+    <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12, display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
 
-      {/* Header */}
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
+      {/* Header — sticky at top of panel */}
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isInitialising ? '🔌' : '🛠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -293,23 +329,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         )}
       </div>
 
-      {/* Body — hidden when collapsed. All sections render fully, no inner
-          scroll boxes, so the outer page scrolls naturally and users can
-          see the whole panel by scrolling down. */}
+      {/* Body — hidden when collapsed. The panel itself caps at 70vh so
+          it never swallows the whole viewport; the body scrolls internally
+          and auto-follows new content (unless you've scrolled up to read
+          older notes). */}
       {!collapsed && (
-        <>
-          {/* Live narration — Claude's prose as it thinks through the job.
-              Streams in character-by-character. Prior iterations collapse
-              into a compact log above. This is the "claude.ai scoping it
-              out in a detailed message as it's working" experience. */}
-          {(narrationLog.length > 0 || narration) && (
+        <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+          {/* Live narration — the agent's prose as it thinks through the
+              job. Streams in character-by-character. Prior iterations
+              collapse into compact log entries (silent ones flagged so
+              you see continuous progress). Current iteration always shown
+              inline with a blinking caret while running. */}
+          {(narrationLog.length > 0 || narration || isRunning) && (
             <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(96,165,250,0.04)' : 'rgba(96,165,250,0.035)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span>💬</span><span>Agent working notes</span>
               </div>
-              {/* Prior iterations — grouped under iteration number, muted */}
-              {narrationLog.map((entry, i) => (
-                <details key={i} style={{ marginBottom: 8 }}>
+              {/* Prior iterations */}
+              {narrationLog.map((entry, i) => entry.text ? (
+                <details key={i} style={{ marginBottom: 8 }} open={i === narrationLog.length - 1 && !narration}>
                   <summary style={{ fontSize: 11.5, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
                     Iteration {entry.iteration} · {entry.text.length} chars
                   </summary>
@@ -317,15 +355,18 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                     {entry.text}
                   </div>
                 </details>
+              ) : (
+                <div key={i} style={{ fontSize: 11.5, color: c.sub, marginBottom: 6, fontStyle: 'italic' }}>
+                  · Iteration {entry.iteration}: tool calls only (no narration)
+                </div>
               ))}
-              {/* Current iteration — streaming in live */}
-              {narration && (
-                <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {narrationLog.length > 0 && (
-                    <div style={{ fontSize: 11, color: c.accent, fontWeight: 600, marginBottom: 4 }}>Iteration {iter}</div>
-                  )}
-                  {narration}
-                  {isRunning && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
+              {/* Current iteration — always shown while running so the user
+                  never sees a dead panel. Shows "working..." if no text yet. */}
+              {isRunning && (
+                <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 10 : 0, paddingTop: narrationLog.length > 0 ? 10 : 0, borderTop: narrationLog.length > 0 ? '1px dashed ' + c.border : 'none' }}>
+                  <div style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>⟳ Iteration {iter || 1} — in progress</div>
+                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>Working… {activity || 'thinking'}</span>}
+                  {narration && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
                 </div>
               )}
             </div>
@@ -436,10 +477,10 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {/* Keep-alive message */}
           {isRunning && (
             <div style={{ padding: '8px 18px 14px', fontSize: 11, color: c.sub, fontStyle: 'italic' }}>
-              Agent runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
+              Atlas runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
             </div>
           )}
-        </>
+        </div>
       )}
 
       <style>{`
