@@ -50,6 +50,10 @@ db.exec(`
     download_files TEXT,
     current_activity TEXT,
     error_message TEXT,
+    findings_notes TEXT,
+    review_summary TEXT,
+    sanity_warnings TEXT,
+    variance_note TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT
@@ -67,6 +71,15 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_agent_messages_run ON agent_messages(run_id, iteration, id);
 `);
+
+// Lazy migrations for existing deployments
+try {
+  const cols = db.prepare("PRAGMA table_info(agent_runs)").all().map(c => c.name);
+  if (!cols.includes('findings_notes')) db.exec(`ALTER TABLE agent_runs ADD COLUMN findings_notes TEXT`);
+  if (!cols.includes('review_summary')) db.exec(`ALTER TABLE agent_runs ADD COLUMN review_summary TEXT`);
+  if (!cols.includes('sanity_warnings')) db.exec(`ALTER TABLE agent_runs ADD COLUMN sanity_warnings TEXT`);
+  if (!cols.includes('variance_note')) db.exec(`ALTER TABLE agent_runs ADD COLUMN variance_note TEXT`);
+} catch (e) { console.error('[Agent] migration error:', e.message); }
 
 // ── Event buses ──────────────────────────────────────────────────────
 // One EventEmitter per active run. Subscribers receive all deltas, tool
@@ -205,12 +218,24 @@ const TOOL_DEFINITIONS = [
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
-    name: 'finalize_boq',
-    description: 'Finalise the BOQ and produce the Excel + Word deliverables. Only call when satisfied with the current priced result. After this the run is marked complete.',
+    name: 'submit_for_review',
+    description: 'Submit the completed takeoff + pricer result to the USER for review. Call this INSTEAD of finalize_boq when you are ready. The user will then review the items in the panel, adjust any quantities or rates if needed, and click Generate to produce the Excel + Word deliverables themselves. Your work on the run finishes here — do not call more tools after this.',
     input_schema: {
       type: 'object',
       properties: {
-        findings_notes: { type: 'string', description: 'Short professional QS prose for the findings report — headline totals, key assumptions, standard exclusions, buildability risks, recommendations.' },
+        findings_notes: { type: 'string', description: 'Professional QS prose for the findings report — headline totals, key assumptions, standard exclusions, buildability risks, recommendations. Rendered in the Word report when the user generates.' },
+        review_summary: { type: 'string', description: 'A 2-3 sentence plain-English summary shown to the user at the top of the review panel. Explain what you did and any items they should pay special attention to.' },
+      },
+      required: ['findings_notes', 'review_summary'],
+    },
+  },
+  {
+    name: 'finalize_boq',
+    description: 'DEPRECATED — use submit_for_review instead. Kept only for backward compatibility. If called, behaves like submit_for_review (pauses for user approval, does not auto-generate documents).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        findings_notes: { type: 'string', description: 'Short professional QS prose for the findings report.' },
       },
       required: ['findings_notes'],
     },
@@ -376,13 +401,46 @@ async function executeTool(runId, toolName, toolInput, runState) {
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
       }
+      // Quantity sanity check — compare each recorded item against the
+      // user's historical quantity ranges for this project type. Surfaces
+      // "you recorded only 40m² of plasterboard for a 100m² extension,
+      // typical is 280-350m²" type warnings back to the agent.
+      let sanityWarnings = [];
+      try {
+        const memoryEngine = require('./memoryEngine');
+        sanityWarnings = memoryEngine.sanityCheckWithMemory(db, {
+          items: runState.items,
+          projectType: meta.project_type || '',
+          floorAreaM2: meta.floor_area_m2 || null,
+        }) || [];
+      } catch (e) {}
+
+      // Variance note — compare cost/m² against the user's past projects.
+      let varianceNote = null;
+      try {
+        const memoryEngine = require('./memoryEngine');
+        const region = memoryEngine.detectRegion(effectiveLocation);
+        const benchmarks = memoryEngine.getProjectBenchmarks(db, { projectType: meta.project_type || '', region });
+        if (benchmarks && benchmarks.cost_per_m2 && benchmarks.cost_per_m2.avg && meta.floor_area_m2) {
+          const thisCpm2 = priced.summary.construction_total / meta.floor_area_m2;
+          const avg = benchmarks.cost_per_m2.avg;
+          const deviation = (thisCpm2 - avg) / avg;
+          const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+          if (Math.abs(deviation) >= 0.3) {
+            varianceNote = `${deviation > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(deviation) * 100)}% ${deviation > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(avg)}/m² (range ${sym2}${Math.round(benchmarks.cost_per_m2.min)}–${sym2}${Math.round(benchmarks.cost_per_m2.max)}/m² over ${benchmarks.sample_count} past projects)`;
+          }
+        }
+      } catch (e) {}
+
       updateRun(runId, {
         priced_json: JSON.stringify(priced),
         construction_total: priced.summary.construction_total || null,
         grand_total: priced.summary.grand_total || null,
         currency: priced.summary.currency || null,
+        sanity_warnings: sanityWarnings.length > 0 ? JSON.stringify(sanityWarnings) : null,
+        variance_note: varianceNote,
       });
-      emit(runId, { type: 'priced', priced });
+      emit(runId, { type: 'priced', priced, sanity_warnings: sanityWarnings, variance_note: varianceNote });
 
       const sym = priced.summary.currency === 'EUR' ? '€' : '£';
       const costPerM2 = meta.floor_area_m2 ? Math.round(priced.summary.construction_total / meta.floor_area_m2) : null;
@@ -390,6 +448,8 @@ async function executeTool(runId, toolName, toolInput, runState) {
         `Construction total: ${sym}${Math.round(priced.summary.construction_total).toLocaleString('en-GB')}`,
         `Grand total (inc VAT): ${sym}${Math.round(priced.summary.grand_total).toLocaleString('en-GB')}`,
         costPerM2 ? `Cost per m²: ${sym}${costPerM2} (over ${meta.floor_area_m2}m²)` : null,
+        varianceNote ? `⚠️ Variance vs past projects: ${varianceNote}` : null,
+        sanityWarnings.length > 0 ? `⚠️ ${sanityWarnings.length} quantity sanity warning(s) — review before finalising` : null,
         `Sections: ${priced.sections.length}`,
         `Warnings: ${(priced.warnings || []).length}`,
       ].filter(Boolean);
@@ -398,112 +458,98 @@ async function executeTool(runId, toolName, toolInput, runState) {
         ? '\n\nWarnings from the pricer (review carefully — caps, auto-corrections, and rate clips are flagged here):\n' + priced.warnings.map(w => '- ' + w).join('\n')
         : '';
 
+      // Append the memory-based sanity warnings so the agent can investigate
+      // and fix any quantities that look off vs the user's historical jobs.
+      const sanityText = sanityWarnings.length > 0
+        ? '\n\nQUANTITY SANITY WARNINGS (vs user\'s past projects — consider fixing before submit_for_review):\n' + sanityWarnings.map(w => '- ' + w.message).join('\n')
+        : '';
+      const varianceText = varianceNote
+        ? `\n\nCOST VARIANCE vs past jobs: ${varianceNote}\nIf this is LOW, you may have missed items — prelims, M&E, external works, scaffolding. If HIGH, check for double-counts.`
+        : '';
+
       const sectionLines = priced.sections.map(s => `  - ${s.name}: ${sym}${Math.round(s.subtotal).toLocaleString('en-GB')}`).join('\n');
 
       return {
         type: 'tool_result',
-        content: summaryLines.join('\n') + '\n\nSections:\n' + sectionLines + warningsText,
+        content: summaryLines.join('\n') + '\n\nSections:\n' + sectionLines + warningsText + sanityText + varianceText,
       };
     }
 
+    case 'submit_for_review':
     case 'finalize_boq': {
-      setActivity(runId, 'Finalising — generating Excel + Word');
-      const pricer = require('./deterministicPricer');
-      const boqGen = require('./boqGenerator');
-      const findingsGen = require('./findingsGenerator');
+      // Both tool names now route here — finalize_boq kept as legacy alias.
+      // Rather than generating docs, we hand the takeoff to the USER for
+      // review. Docs are produced when the user clicks Generate (triggers
+      // runGenerationForRun below via POST /api/agent/:id/generate).
+      setActivity(runId, 'Ready for your review — tweak quantities if needed, then click Generate');
+      const notes = toolInput.findings_notes || '';
+      const summary = toolInput.review_summary || 'Takeoff complete. Please review items below, adjust any quantities if needed, then click Generate to produce the Excel and Word deliverables.';
 
-      if (!runState.lastPriced) {
-        // Re-run pricer once to get final figures
-        const meta = runState.metadata || {};
-        const clientRates = {};
+      // Make sure we have a current priced snapshot so the review panel
+      // can show headline totals even if the model hasn't just re-run.
+      if (!runState.lastPriced || !runState.lastPriced.summary) {
         try {
-          const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(runState.userId);
-          for (const r of rates) clientRates[r.item_key] = r.value;
-        } catch (e) {}
-        let effectiveLocation = meta.location || '';
-        if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
-          effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
-        }
-        runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
-          project_type: meta.project_type || '',
-          floor_area: meta.floor_area_m2 || null,
-          contingency_pct: 7.5, ohp_pct: 12,
-          ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
-        });
+          const meta = runState.metadata || {};
+          const pricer = require('./deterministicPricer');
+          const clientRates = {};
+          try {
+            const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(runState.userId);
+            for (const r of rates) clientRates[r.item_key] = r.value;
+          } catch (e) {}
+          let effectiveLocation = meta.location || '';
+          if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+            effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
+          }
+          runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
+            project_type: meta.project_type || '',
+            floor_area: meta.floor_area_m2 || null,
+            contingency_pct: 7.5, ohp_pct: 12,
+            ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
+          });
+        } catch (e) { console.error(`[Agent ${runId}] review pre-price error:`, e.message); }
       }
       const priced = runState.lastPriced;
-      if (!priced || !priced.summary) {
-        return { type: 'tool_result', content: 'Cannot finalise — pricer returned no summary.', is_error: true };
-      }
 
-      const projectName = (runState.metadata && runState.metadata.project_type) || 'Project';
-      const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50);
-      const ts = Date.now();
-      const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
-      const outputsDir = path.join(DATA_DIR, 'outputs');
-      if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
-
-      const downloads = [];
+      // Recompute sanity + variance at review time using current items so
+      // the user sees fresh warnings even if record/update happened after
+      // the last run_pricer call.
+      let sanityWarnings = [];
+      let varianceNote = null;
       try {
-        const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
-        const excelBuf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
-          contingency_pct: priced.summary.contingency_pct,
-          ohp_pct: priced.summary.ohp_pct,
-          vat_rate: priced.summary.vat_rate,
-          currency: priced.summary.currency === 'EUR' ? '€' : '£',
-        });
-        if (excelBuf && excelBuf.length > 100) {
-          const fname = `BOQ-${safeName}-${ts}.xlsx`;
-          fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
-          downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+        const memoryEngine = require('./memoryEngine');
+        sanityWarnings = memoryEngine.sanityCheckWithMemory(db, {
+          items: runState.items,
+          projectType: runState.metadata?.project_type || '',
+          floorAreaM2: runState.metadata?.floor_area_m2 || null,
+        }) || [];
+        if (priced?.summary && runState.metadata?.floor_area_m2) {
+          const region = memoryEngine.detectRegion(runState.metadata?.location || '');
+          const bench = memoryEngine.getProjectBenchmarks(db, { projectType: runState.metadata.project_type || '', region });
+          if (bench?.cost_per_m2?.avg) {
+            const thisCpm2 = priced.summary.construction_total / runState.metadata.floor_area_m2;
+            const dev = (thisCpm2 - bench.cost_per_m2.avg) / bench.cost_per_m2.avg;
+            const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+            if (Math.abs(dev) >= 0.3) {
+              varianceNote = `${dev > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(dev) * 100)}% ${dev > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(bench.cost_per_m2.avg)}/m² (range ${sym2}${Math.round(bench.cost_per_m2.min)}–${sym2}${Math.round(bench.cost_per_m2.max)}/m² over ${bench.sample_count} past projects)`;
+            }
+          }
         }
-      } catch (excelErr) {
-        console.error(`[Agent ${runId}] Excel gen error:`, excelErr.message);
-      }
-      try {
-        const findingsObj = {
-          reference: runId.slice(-8).toUpperCase(),
-          project_type: projectName,
-          location: (runState.metadata && runState.metadata.location) || '',
-          description: toolInput.findings_notes || '',
-          scope_summary: toolInput.findings_notes || '',
-          key_findings: [{ title: 'BOQ Findings', detail: toolInput.findings_notes || '', items: [] }],
-          assumptions: [],
-          exclusions: [],
-          recommendations: [],
-          cost_summary: {
-            sections: priced.sections.map(s => ({ name: s.name, total: s.subtotal })),
-            net_total: priced.summary.net_total,
-            contingency_pct: priced.summary.contingency_pct,
-            contingency: priced.summary.contingency,
-            ohp_pct: priced.summary.ohp_pct,
-            ohp: priced.summary.ohp,
-            grand_total: priced.summary.grand_total,
-          },
-        };
-        const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName);
-        if (wordBuf && wordBuf.length > 100) {
-          const fname = `Findings-${safeName}-${ts}.docx`;
-          fs.writeFileSync(path.join(outputsDir, fname), wordBuf);
-          downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}` });
-        }
-      } catch (wordErr) {
-        console.error(`[Agent ${runId}] Word gen error:`, wordErr.message);
-      }
+      } catch (e) {}
 
       updateRun(runId, {
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        download_files: JSON.stringify(downloads),
-        priced_json: JSON.stringify(priced),
-        construction_total: priced.summary.construction_total || null,
-        grand_total: priced.summary.grand_total || null,
-        currency: priced.summary.currency || null,
+        status: 'awaiting_review',
+        findings_notes: notes,
+        review_summary: summary,
+        priced_json: priced ? JSON.stringify(priced) : null,
+        construction_total: priced?.summary?.construction_total || null,
+        grand_total: priced?.summary?.grand_total || null,
+        currency: priced?.summary?.currency || null,
+        sanity_warnings: sanityWarnings.length > 0 ? JSON.stringify(sanityWarnings) : null,
+        variance_note: varianceNote,
       });
-      runState.finalized = true;
-      runState.downloads = downloads;
-      emit(runId, { type: 'finalized', downloads, priced: priced.summary });
-      return { type: 'tool_result', content: `Done. Generated ${downloads.length} document(s): ${downloads.map(d => d.name).join(', ')}` };
+      runState.finalized = true;  // signals runner to exit the tool-use loop
+      emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, priced: priced?.summary, sanity_warnings: sanityWarnings, variance_note: varianceNote });
+      return { type: 'tool_result', content: `Submitted to user for review. ${runState.items.length} items, ${priced?.summary ? (priced.summary.currency === 'EUR' ? '€' : '£') + Math.round(priced.summary.grand_total).toLocaleString('en-GB') : '(no total)'} grand total. The user will now review and approve generation — your work is complete.` };
     }
 
     default:
@@ -511,9 +557,111 @@ async function executeTool(runId, toolName, toolInput, runState) {
   }
 }
 
+// Run the actual Excel + Word generation for a run that's been through the
+// review flow. Called either by a user-triggered POST /api/agent/:id/generate
+// or by the auto-finalise safety net when a run times out without review.
+async function runGenerationForRun(runId, opts = {}) {
+  const run = getRun(runId);
+  if (!run) throw new Error('Run not found');
+
+  let items = [];
+  try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
+  if (items.length === 0) throw new Error('No items to generate from');
+
+  const notes = opts.findings_notes || run.findings_notes || '';
+  const pricer = require('./deterministicPricer');
+  const boqGen = require('./boqGenerator');
+  const findingsGen = require('./findingsGenerator');
+
+  // Re-price with current items so any user edits are reflected
+  const clientRates = {};
+  try {
+    const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(run.user_id);
+    for (const r of rates) clientRates[r.item_key] = r.value;
+  } catch (e) {}
+
+  let location = run.location || '';
+  const intakeIsIreland = run.currency === 'EUR' || /ireland/i.test(location);
+  if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
+    location = location ? `${location}, Ireland` : 'Ireland';
+  }
+  const priced = pricer.priceLockedQuantities(items, location, clientRates, {
+    project_type: run.project_type || '',
+    floor_area: run.floor_area_m2 || null,
+    contingency_pct: 7.5, ohp_pct: 12,
+    ...(intakeIsIreland ? { currency: 'EUR' } : {}),
+  });
+
+  const projectName = run.project_type || 'Project';
+  const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50);
+  const ts = Date.now();
+  const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+  const outputsDir = path.join(DATA_DIR, 'outputs');
+  if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
+
+  setActivity(runId, 'Generating Excel + Word deliverables');
+
+  const downloads = [];
+  try {
+    const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
+    const excelBuf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
+      contingency_pct: priced.summary.contingency_pct,
+      ohp_pct: priced.summary.ohp_pct,
+      vat_rate: priced.summary.vat_rate,
+      currency: priced.summary.currency === 'EUR' ? '€' : '£',
+    });
+    if (excelBuf && excelBuf.length > 100) {
+      const fname = `BOQ-${safeName}-${ts}.xlsx`;
+      fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
+      downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+    }
+  } catch (excelErr) { console.error(`[Agent ${runId}] Excel gen error:`, excelErr.message); }
+
+  try {
+    const findingsObj = {
+      reference: runId.slice(-8).toUpperCase(),
+      project_type: projectName,
+      location: run.location || '',
+      description: notes,
+      scope_summary: notes,
+      key_findings: [{ title: 'BOQ Findings', detail: notes, items: [] }],
+      assumptions: [], exclusions: [], recommendations: [],
+      cost_summary: {
+        sections: priced.sections.map(s => ({ name: s.name, total: s.subtotal })),
+        net_total: priced.summary.net_total,
+        contingency_pct: priced.summary.contingency_pct,
+        contingency: priced.summary.contingency,
+        ohp_pct: priced.summary.ohp_pct,
+        ohp: priced.summary.ohp,
+        grand_total: priced.summary.grand_total,
+      },
+    };
+    const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName);
+    if (wordBuf && wordBuf.length > 100) {
+      const fname = `Findings-${safeName}-${ts}.docx`;
+      fs.writeFileSync(path.join(outputsDir, fname), wordBuf);
+      downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}` });
+    }
+  } catch (wordErr) { console.error(`[Agent ${runId}] Word gen error:`, wordErr.message); }
+
+  updateRun(runId, {
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+    download_files: JSON.stringify(downloads),
+    priced_json: JSON.stringify(priced),
+    construction_total: priced.summary.construction_total || null,
+    grand_total: priced.summary.grand_total || null,
+    currency: priced.summary.currency || null,
+  });
+  emit(runId, { type: 'finalized', downloads, priced: priced.summary });
+  emit(runId, { type: 'run_complete', reason: 'user_generated' });
+  return { downloads, priced };
+}
+
 module.exports = {
   TOOL_DEFINITIONS,
   executeTool,
+  runGenerationForRun,
   updateRun,
   getRun,
   appendMessage,

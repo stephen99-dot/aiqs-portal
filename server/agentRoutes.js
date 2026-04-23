@@ -177,7 +177,9 @@ router.get('/agent/:id', authMiddleware, (req, res) => {
     try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
     let downloads = [];
     try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-    res.json({ run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
+    let sanity_warnings = [];
+    try { sanity_warnings = run.sanity_warnings ? JSON.parse(run.sanity_warnings) : []; } catch (e) {}
+    res.json({ run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads, sanity_warnings } });
   } catch (err) {
     console.error('[AgentRoutes] snapshot error:', err.message);
     res.status(500).json({ error: 'Failed to load run' });
@@ -208,7 +210,9 @@ router.get('/agent/:id/stream', authMiddleware, (req, res) => {
   try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
   let downloads = [];
   try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-  send({ type: 'snapshot', run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
+  let sanity_warnings = [];
+  try { sanity_warnings = run.sanity_warnings ? JSON.parse(run.sanity_warnings) : []; } catch (e) {}
+  send({ type: 'snapshot', run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads, sanity_warnings } });
 
   if (run.status === 'completed' || run.status === 'failed') {
     send({ type: 'done' });
@@ -222,6 +226,136 @@ router.get('/agent/:id/stream', authMiddleware, (req, res) => {
     clearInterval(heartbeat);
     unsubscribe();
   });
+});
+
+// ── POST /api/agent/:id/update-item — edit a single item's qty/rate ───
+// Used by the review panel so users can tweak quantities before generation.
+router.post('/agent/:id/update-item', authMiddleware, express.json(), (req, res) => {
+  try {
+    const run = agent.getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    if (run.status === 'completed' || run.status === 'failed') return res.status(400).json({ error: 'Run is not editable in its current state' });
+
+    const { key, qty, assumed_rate, description } = req.body || {};
+    if (!key) return res.status(400).json({ error: 'Missing item key' });
+
+    let items = [];
+    try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
+    const idx = items.findIndex(i => i.key === key);
+    if (idx < 0) return res.status(404).json({ error: 'Item not found in this run' });
+
+    if (typeof qty === 'number' && !isNaN(qty)) items[idx].qty = qty;
+    if (typeof assumed_rate === 'number' && !isNaN(assumed_rate)) items[idx].assumed_rate = assumed_rate;
+    if (typeof description === 'string' && description.trim()) items[idx].description = description;
+    items[idx].edited_by_user = true;
+
+    agent.updateRun(req.params.id, { takeoff_json: JSON.stringify(items) });
+    agent.emit(req.params.id, { type: 'takeoff_item', action: 'updated', item: items[idx] });
+    res.json({ success: true, item: items[idx] });
+  } catch (err) {
+    console.error('[AgentRoutes] update-item error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent/:id/remove-item — delete an item outright ─────────
+router.post('/agent/:id/remove-item', authMiddleware, express.json(), (req, res) => {
+  try {
+    const run = agent.getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    if (run.status === 'completed' || run.status === 'failed') return res.status(400).json({ error: 'Run is not editable' });
+    const { key } = req.body || {};
+    if (!key) return res.status(400).json({ error: 'Missing item key' });
+    let items = [];
+    try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
+    const removed = items.find(i => i.key === key);
+    items = items.filter(i => i.key !== key);
+    agent.updateRun(req.params.id, { takeoff_json: JSON.stringify(items) });
+    if (removed) agent.emit(req.params.id, { type: 'takeoff_item', action: 'removed', item: removed });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[AgentRoutes] remove-item error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent/:id/reprice — re-run the pricer with current items ─
+router.post('/agent/:id/reprice', authMiddleware, (req, res) => {
+  try {
+    const run = agent.getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+
+    const pricer = require('./deterministicPricer');
+    let items = [];
+    try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
+    if (items.length === 0) return res.status(400).json({ error: 'No items to price' });
+
+    const clientRates = {};
+    try {
+      const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(run.user_id);
+      for (const r of rates) clientRates[r.item_key] = r.value;
+    } catch (e) {}
+    let location = run.location || '';
+    const intakeIsIreland = run.currency === 'EUR' || /ireland/i.test(location);
+    if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
+      location = location ? `${location}, Ireland` : 'Ireland';
+    }
+    const priced = pricer.priceLockedQuantities(items, location, clientRates, {
+      project_type: run.project_type || '',
+      floor_area: run.floor_area_m2 || null,
+      contingency_pct: 7.5, ohp_pct: 12,
+      ...(intakeIsIreland ? { currency: 'EUR' } : {}),
+    });
+    agent.updateRun(req.params.id, {
+      priced_json: JSON.stringify(priced),
+      construction_total: priced.summary.construction_total || null,
+      grand_total: priced.summary.grand_total || null,
+      currency: priced.summary.currency || null,
+    });
+    agent.emit(req.params.id, { type: 'priced', priced });
+    res.json({ success: true, priced });
+  } catch (err) {
+    console.error('[AgentRoutes] reprice error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/agent/:id/generate — user approves → produce docs ──────
+router.post('/agent/:id/generate', authMiddleware, express.json(), async (req, res) => {
+  try {
+    const run = agent.getRun(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Run not found' });
+    if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    if (run.status === 'completed') {
+      // Already done — just return existing downloads
+      let downloads = [];
+      try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
+      return res.json({ success: true, already_generated: true, downloads });
+    }
+
+    agent.updateRun(req.params.id, { status: 'generating' });
+    agent.emit(req.params.id, { type: 'activity', activity: 'Generating Excel + Word deliverables' });
+
+    // Run generation in the background; respond immediately
+    res.json({ success: true, generating: true });
+
+    setImmediate(async () => {
+      try {
+        const findings_notes = (req.body && req.body.findings_notes) || run.findings_notes || '';
+        await agent.runGenerationForRun(req.params.id, { findings_notes });
+      } catch (err) {
+        console.error(`[Agent ${req.params.id}] generation failed:`, err.stack || err.message);
+        agent.updateRun(req.params.id, { status: 'failed', error_message: err.message, completed_at: new Date().toISOString() });
+        agent.emit(req.params.id, { type: 'error', message: 'Generation failed: ' + err.message });
+      }
+    });
+  } catch (err) {
+    console.error('[AgentRoutes] generate error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── GET /api/agent — list recent runs for current user ────────────────

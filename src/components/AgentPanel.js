@@ -62,6 +62,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [collapsed, setCollapsed] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
   // narration = the prose Claude writes between tool calls ("Now I'll look at
   // the ground floor plan to measure the extension footprint..."). Shown live
@@ -70,6 +71,16 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   // block for the active iteration.
   const [narration, setNarration] = useState('');
   const [narrationLog, setNarrationLog] = useState([]);  // [{ iteration, text }]
+  const [reviewSummary, setReviewSummary] = useState(null);
+  const [findingsNotes, setFindingsNotes] = useState('');
+  const [editingKey, setEditingKey] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  // Accuracy layer: variance_note compares grand total vs past projects;
+  // sanityWarnings flags individual items whose quantities look off vs
+  // historical ranges for this project type. Both refresh on each pricer
+  // run and again on submit_for_review.
+  const [varianceNote, setVarianceNote] = useState(null);
+  const [sanityWarnings, setSanityWarnings] = useState([]);  // [{ key, qty, expected, severity, message }]
 
   const readerAbortRef = useRef(null);
 
@@ -119,6 +130,64 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
     return () => { cancelled = true; ac.abort(); };
   }, [runId]);
 
+  // ── User review actions ─────────────────────────────────────────────
+  async function updateItem(key, patch) {
+    try {
+      const token = getToken();
+      const r = await fetch(`/api/agent/${runId}/update-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ key, ...patch }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Update failed');
+      setItems(prev => prev.map(i => i.key === key ? { ...i, ...patch, edited_by_user: true } : i));
+    } catch (e) { alert('Edit failed: ' + e.message); }
+  }
+  async function removeItem(key) {
+    if (!window.confirm('Remove this item from the BOQ?')) return;
+    try {
+      const token = getToken();
+      const r = await fetch(`/api/agent/${runId}/remove-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ key }),
+      });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Remove failed'); }
+      setItems(prev => prev.filter(i => i.key !== key));
+    } catch (e) { alert('Remove failed: ' + e.message); }
+  }
+  async function reprice() {
+    try {
+      const token = getToken();
+      const r = await fetch(`/api/agent/${runId}/reprice`, {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Reprice failed');
+      setPriced(data.priced);
+    } catch (e) { alert('Reprice failed: ' + e.message); }
+  }
+  async function generate() {
+    setGenerating(true);
+    try {
+      const token = getToken();
+      const r = await fetch(`/api/agent/${runId}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ findings_notes: findingsNotes }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Generate failed');
+      if (data.already_generated) {
+        setDownloads(data.downloads || []);
+        setRun(r => r ? { ...r, status: 'completed' } : r);
+      }
+      // else — server is generating in background, SSE will deliver finalized event
+    } catch (e) { alert('Generate failed: ' + e.message); setGenerating(false); }
+  }
+
   function handleEvent(evt) {
     switch (evt.type) {
       case 'snapshot':
@@ -126,7 +195,16 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         setItems(evt.run.takeoff_items || []);
         setPriced(evt.run.priced || null);
         setDownloads(evt.run.downloads || []);
-        setActivity(evt.run.current_activity || (evt.run.status === 'running' ? 'Thinking...' : evt.run.status === 'completed' ? 'Complete' : evt.run.status === 'failed' ? 'Failed' : 'Starting...'));
+        setSanityWarnings(evt.run.sanity_warnings || []);
+        setVarianceNote(evt.run.variance_note || null);
+        if (evt.run.review_summary) setReviewSummary(evt.run.review_summary);
+        if (evt.run.findings_notes) setFindingsNotes(evt.run.findings_notes);
+        setActivity(evt.run.current_activity || (
+          evt.run.status === 'running' ? 'Thinking...' :
+          evt.run.status === 'awaiting_review' ? 'Awaiting your review' :
+          evt.run.status === 'generating' ? 'Generating documents' :
+          evt.run.status === 'completed' ? 'Complete' :
+          evt.run.status === 'failed' ? 'Failed' : 'Starting...'));
         if (evt.run.error_message) setError(evt.run.error_message);
         break;
       case 'run_started':
@@ -187,6 +265,16 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         break;
       case 'priced':
         setPriced(evt.priced);
+        if (evt.sanity_warnings) setSanityWarnings(evt.sanity_warnings);
+        if (evt.variance_note !== undefined) setVarianceNote(evt.variance_note);
+        break;
+      case 'submitted_for_review':
+        setReviewSummary(evt.summary);
+        setFindingsNotes(evt.findings_notes || '');
+        if (evt.sanity_warnings) setSanityWarnings(evt.sanity_warnings);
+        if (evt.variance_note !== undefined) setVarianceNote(evt.variance_note);
+        setRun(r => r ? { ...r, status: 'awaiting_review' } : r);
+        setActivity('Awaiting your review — edit items below then click Generate');
         break;
       case 'finalized':
         setDownloads(evt.downloads || []);
@@ -241,6 +329,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
   const iter = run?.iteration_count || 0;
   const isRunning = run?.status === 'running' || run?.status === 'queued';
+  const isAwaitingReview = run?.status === 'awaiting_review';
+  const isGenerating = run?.status === 'generating';
   const isComplete = run?.status === 'completed';
   const isFailed = run?.status === 'failed';
 
@@ -277,16 +367,22 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
 
   if (!runId) return null;
 
+  // Outer positioning — fullscreen mode overlays the whole viewport; otherwise
+  // sits inline in the chat with a generous height cap so it's readable.
+  const rootStyle = fullscreen
+    ? { position: 'fixed', top: 20, left: 20, right: 20, bottom: 20, zIndex: 1000, background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }
+    : { background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12, display: 'flex', flexDirection: 'column', maxHeight: '85vh', minHeight: 520 };
+
   return (
-    <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12, display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
+    <div style={rootStyle}>
 
       {/* Header — sticky at top of panel */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isInitialising ? '🔌' : '🛠️'}</span>
+          <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isAwaitingReview ? '📋' : isGenerating ? '📄' : isInitialising ? '🔌' : '🛠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isInitialising ? 'Initialising' : 'Running'}
+              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isAwaitingReview ? 'Ready for review' : isGenerating ? 'Generating documents' : isInitialising ? 'Initialising' : 'Running'}
               {run?.project_type && <span style={{ fontWeight: 400, color: c.muted }}> · {run.project_type}</span>}
             </div>
             <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
@@ -294,11 +390,22 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · {iter} iterations · {fmtElapsed(elapsedSec)}</>
                 : isFailed
                 ? <>{error || run?.error_message || 'Agent failed'}</>
+                : isAwaitingReview
+                ? <>{items.length} items · {priced?.summary ? fmtMoney(priced.summary.grand_total, priced.summary.currency) + ' grand total' : 'priced'} · review and edit below, then click Generate</>
+                : isGenerating
+                ? <>Producing Excel + Word deliverables — this takes 10-20 seconds</>
                 : isInitialising
                 ? <>Spinning up Atlas, preparing drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
                 : <>Iteration {iter} · elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
             </div>
           </div>
+          <button
+            onClick={() => setFullscreen(v => !v)}
+            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 13, padding: '2px 8px', fontWeight: 600 }}
+          >
+            {fullscreen ? '⤢ Exit fullscreen' : '⤢ Fullscreen'}
+          </button>
           <button
             onClick={() => setCollapsed(v => !v)}
             title={collapsed ? 'Expand panel' : 'Collapse panel'}
@@ -329,12 +436,71 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         )}
       </div>
 
-      {/* Body — hidden when collapsed. The panel itself caps at 70vh so
+      {/* Body — hidden when collapsed. The panel itself caps at 85vh so
           it never swallows the whole viewport; the body scrolls internally
           and auto-follows new content (unless you've scrolled up to read
           older notes). */}
       {!collapsed && (
         <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+
+          {/* Variance warning — shown whenever priced cost/m² is ±30% vs
+              user's historical jobs for this project type. Surfaces both
+              during running (after run_pricer) and in the review block. */}
+          {varianceNote && !isComplete && (
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: /^HIGH/.test(varianceNote) ? (isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)') : (isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)'), borderLeft: '3px solid ' + (/^HIGH/.test(varianceNote) ? c.err : c.accent) }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: /^HIGH/.test(varianceNote) ? c.err : c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                ⚠️ Cost variance vs your past projects
+              </div>
+              <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.5 }}>
+                {varianceNote}
+              </div>
+              {/^LOW/.test(varianceNote) && (
+                <div style={{ fontSize: 11.5, color: c.muted, marginTop: 4, fontStyle: 'italic' }}>
+                  Typically means items missed — check prelims, M&E, external works, scaffolding.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* REVIEW BLOCK — shown when Atlas has paused for user approval.
+              Pinned at the top so the user sees the summary + Generate
+              button immediately. Items become editable below. */}
+          {isAwaitingReview && (
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>📋 Ready for your review</div>
+                  <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.55, marginBottom: 8 }}>{reviewSummary || 'Atlas has completed the takeoff. Review items below, tweak any quantities that look off, then click Generate to produce the Excel and Word deliverables.'}</div>
+                  {priced?.summary && (
+                    <div style={{ fontSize: 12, color: c.muted }}>
+                      {items.length} items · Construction {fmtMoney(priced.summary.construction_total, priced.summary.currency)} · Grand total <strong style={{ color: c.text }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</strong> ({priced.summary.currency === 'EUR' ? '€' : '£'}, {priced.summary.vat_rate}% VAT)
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={reprice} style={{ padding: '9px 14px', borderRadius: 8, background: 'transparent', border: '1px solid ' + c.border, color: c.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    🧮 Re-price
+                  </button>
+                  <button onClick={generate} disabled={generating} style={{ padding: '9px 18px', borderRadius: 8, background: c.done, border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1 }}>
+                    {generating ? 'Generating…' : '✓ Generate Excel + Word'}
+                  </button>
+                </div>
+              </div>
+              {/* Findings notes — editable textarea so user can tweak the
+                  Word report narrative before generation. */}
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ fontSize: 11.5, color: c.muted, cursor: 'pointer', fontWeight: 600 }}>
+                  Edit findings notes for the Word report ({findingsNotes.length} chars)
+                </summary>
+                <textarea
+                  value={findingsNotes}
+                  onChange={e => setFindingsNotes(e.target.value)}
+                  rows={6}
+                  style={{ width: '100%', marginTop: 8, padding: 10, borderRadius: 6, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.55, boxSizing: 'border-box' }}
+                />
+              </details>
+            </div>
+          )}
           {/* Live narration — the agent's prose as it thinks through the
               job. Streams in character-by-character. Prior iterations
               collapse into compact log entries (silent ones flagged so
@@ -401,13 +567,28 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             </div>
           )}
 
-          {/* Running takeoff items — render all, no inner scroll; for
-              huge takeoffs collapse to first 15 with a toggle. */}
+          {/* Takeoff items. Read-only while running; editable in the
+              awaiting_review state (user can click a qty to edit, or
+              remove the row entirely). */}
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
+            {sanityWarnings.length > 0 && !isComplete && (
+              <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                  ⚠️ {sanityWarnings.length} quantity warning{sanityWarnings.length !== 1 ? 's' : ''} vs your history
+                </div>
+                <div style={{ fontSize: 11.5, color: c.text, lineHeight: 1.55 }}>
+                  {sanityWarnings.slice(0, 4).map((w, i) => (
+                    <div key={i} style={{ padding: '2px 0' }}>{w.message}</div>
+                  ))}
+                  {sanityWarnings.length > 4 && <div style={{ color: c.muted, fontSize: 11 }}>+ {sanityWarnings.length - 4} more flagged below</div>}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
-              <span style={{ fontSize: 11, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
-              {items.length > 15 && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
+              <span style={{ fontSize: 12, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
+              {isAwaitingReview && <span style={{ fontSize: 11, color: c.accent, fontWeight: 600, marginLeft: 'auto' }}>✏️ click qty to edit</span>}
+              {!isAwaitingReview && items.length > 15 && (
                 <button onClick={() => setShowAllItems(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: c.accent, fontSize: 11, fontWeight: 600, padding: 0, fontFamily: 'inherit' }}>
                   {showAllItems ? `Show first 15` : `Show all ${items.length}`}
                 </button>
@@ -416,15 +597,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             {items.length === 0 ? (
               <div style={{ fontSize: 12, color: c.muted, padding: '6px 0' }}>Agent hasn't recorded any items yet.</div>
             ) : (
-              <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                {(showAllItems ? items : items.slice(0, 15)).map((it, i) => (
-                  <div key={it.key + '-' + i} style={{ padding: '5px 8px', borderRadius: 5, background: i % 2 === 0 ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center' }}>
-                    <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
-                    <span style={{ color: c.muted, whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</span>
-                    <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
-                  </div>
-                ))}
-                {!showAllItems && items.length > 15 && (
+              <div style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
+                {(isAwaitingReview || showAllItems ? items : items.slice(0, 15)).map((it, i) => {
+                  const warning = sanityWarnings.find(w => w.key === it.key);
+                  return (
+                    <ItemRow
+                      key={it.key + '-' + i}
+                      it={it} zebra={i % 2 === 0}
+                      c={c} isDark={isDark}
+                      warning={warning}
+                      editable={isAwaitingReview}
+                      editing={editingKey === it.key}
+                      onEdit={() => setEditingKey(it.key)}
+                      onCancel={() => setEditingKey(null)}
+                      onSave={(patch) => { updateItem(it.key, patch); setEditingKey(null); }}
+                      onRemove={() => removeItem(it.key)}
+                    />
+                  );
+                })}
+                {!isAwaitingReview && !showAllItems && items.length > 15 && (
                   <div style={{ fontSize: 11, color: c.muted, padding: '6px 8px', fontStyle: 'italic' }}>
                     … {items.length - 15} more items. Click "Show all {items.length}" above to expand.
                   </div>
@@ -487,6 +678,68 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         @keyframes dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
         @keyframes pulse { 0%,100% { opacity: 0.2; } 50% { opacity: 1; } }
       `}</style>
+    </div>
+  );
+}
+
+// ItemRow — one line in the takeoff list. In read-only (running) mode
+// it displays description/qty/section compactly. In review mode the
+// description wraps fully and the qty is click-to-edit with an inline
+// form, plus a remove button on hover.
+function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onCancel, onSave, onRemove }) {
+  const [qty, setQty] = useState(it.qty);
+  const [rate, setRate] = useState(it.assumed_rate || '');
+  const [desc, setDesc] = useState(it.description || '');
+  useEffect(() => { setQty(it.qty); setRate(it.assumed_rate || ''); setDesc(it.description || ''); }, [it.qty, it.assumed_rate, it.description, editing]);
+
+  const warnBorder = warning ? (warning.severity === 'high' ? c.err : c.accent) : null;
+
+  if (!editable) {
+    return (
+      <div style={{ padding: '5px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }}>
+        <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
+        <span style={{ color: warning ? warnBorder : c.muted, whiteSpace: 'nowrap', fontWeight: warning ? 700 : 400 }}>{it.qty} {it.unit}</span>
+        {warning ? <span title={warning.message} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>⚠️</span> : <span />}
+        <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
+      </div>
+    );
+  }
+  if (editing) {
+    return (
+      <div style={{ padding: 10, borderRadius: 6, background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.28)', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>{it.key} · {it.section}</div>
+        <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} style={{ width: '100%', padding: 7, borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', marginBottom: 6 }} placeholder="Description with measurement working" />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.muted }}>
+            Qty: <input type="number" step="any" value={qty} onChange={e => setQty(Number(e.target.value))} style={{ width: 90, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
+            <span>{it.unit}</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.muted }}>
+            Rate override: <input type="number" step="any" value={rate} onChange={e => setRate(e.target.value)} placeholder="auto" style={{ width: 100, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
+          </label>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button onClick={onCancel} style={{ padding: '5px 12px', borderRadius: 5, background: 'transparent', border: '1px solid ' + c.border, color: c.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={() => onSave({ qty, assumed_rate: rate ? Number(rate) : null, description: desc })} style={{ padding: '5px 14px', borderRadius: 5, background: c.accent, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: '7px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }} onClick={onEdit} title={warning ? warning.message : 'Click to edit'}>
+      <span style={{ color: c.text, lineHeight: 1.5, minWidth: 0, overflow: 'hidden' }}>
+        {warning && <span title={warning.message} style={{ marginRight: 6 }}>⚠️</span>}
+        {it.description || it.key}
+        {it.edited_by_user && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(59,130,246,0.15)', color: '#3B82F6', fontWeight: 600 }}>edited</span>}
+        {warning && (
+          <div style={{ fontSize: 11, color: warnBorder, marginTop: 3, fontStyle: 'italic' }}>
+            {warning.message}
+          </div>
+        )}
+      </span>
+      <span style={{ color: warning ? warnBorder : c.text, whiteSpace: 'nowrap', fontWeight: 700 }}>{it.qty} {it.unit}</span>
+      <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
+      <button onClick={e => { e.stopPropagation(); onRemove(); }} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.err, fontSize: 14, padding: '0 4px' }}>×</button>
     </div>
   );
 }
