@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
+import AgentPanel from '../components/AgentPanel';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -117,6 +118,89 @@ export default function ChatPage() {
   // Tracks a key so we can force the BoqTable to reload after an edit.
   const [boqOpen, setBoqOpen] = useState(true);
   const [boqRefreshKey, setBoqRefreshKey] = useState(0);
+
+  // ── BOQ Agent (opt-in, multi-step tool-use pipeline) ───────────────
+  const [agentRunId, setAgentRunId] = useState(null);
+  const [agentStarting, setAgentStarting] = useState(false);
+
+  async function startAgent() {
+    if (files.length === 0 && !input.trim()) {
+      alert('Attach drawings or describe the project before running the Agent.');
+      return;
+    }
+    const ok = window.confirm(
+      'Run the full BOQ Agent?\n\n'
+      + 'This runs a tender-grade multi-step pipeline:\n'
+      + '  • Inspects every drawing page-by-page\n'
+      + '  • Records items one at a time with measurement working\n'
+      + '  • Runs the pricer repeatedly and adjusts if results look off\n'
+      + '  • Generates Excel + Word when happy\n\n'
+      + 'Takes 3-6 minutes. Runs on the server — safe to close the tab and come back. Uses more credits than a normal chat.'
+    );
+    if (!ok) return;
+    setAgentStarting(true);
+    try {
+      const fd = new FormData();
+      if (input.trim()) fd.append('scope', input.trim());
+      if (pendingIntake) fd.append('intake_json', JSON.stringify(pendingIntake));
+      if (currentSessionId) fd.append('session_id', currentSessionId);
+      files.forEach(f => fd.append('files', f));
+      const token = getToken();
+      const resp = await fetch('/api/agent', {
+        method: 'POST',
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+        body: fd,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to start');
+      setAgentRunId(data.run_id);
+
+      // Drop two messages into the chat history so the session shows up
+      // in the sidebar and on reload we can restore the panel.
+      const fileSnap = files.map(f => ({ name: f.name, size: f.size }));
+      const scopeText = input.trim();
+      const userMsg = {
+        role: 'user',
+        content: scopeText
+          ? scopeText + (fileSnap.length > 0 ? `\n\n(Agent run started with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''})` : '')
+          : `BOQ Agent run started${fileSnap.length > 0 ? ` with ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
+        files: fileSnap,
+        timestamp: new Date().toISOString(),
+      };
+      const aiMsg = {
+        role: 'assistant',
+        content: 'BOQ Agent running on the server. Tender-grade multi-step pipeline, takes 3-6 minutes. The live panel below tracks every step — close the tab and come back any time, the panel re-attaches on reload.',
+        agentRunId: data.run_id,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(p => [...p, userMsg, aiMsg]);
+      setInput('');
+      setFiles([]);
+    } catch (err) {
+      alert('BOQ Agent failed to start: ' + err.message);
+    } finally {
+      setAgentStarting(false);
+    }
+  }
+
+  const onAgentCompleted = useCallback((run) => {
+    if (!run) return;
+    let downloads = [];
+    try { downloads = run.download_files ? (typeof run.download_files === 'string' ? JSON.parse(run.download_files) : run.download_files) : []; } catch (e) {}
+    const sym = run.currency === 'EUR' ? '€' : '£';
+    const grand = run.grand_total ? `${sym}${Math.round(run.grand_total).toLocaleString('en-GB')}` : '(no total)';
+    setMessages(p => {
+      const last = p[p.length - 1];
+      if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
+      return [...p, {
+        role: 'assistant',
+        content: `**BOQ Agent complete.** ${grand} grand total${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Documents below.`,
+        agentRunCompleted: run.id,
+        downloadFiles: downloads.length > 0 ? downloads : null,
+        timestamp: new Date().toISOString(),
+      }];
+    });
+  }, []);
 
   // ── Copy feedback + smart auto-scroll ──────────────────────────────
   const [copiedIdx, setCopiedIdx] = useState(null);
@@ -244,6 +328,15 @@ export default function ChatPage() {
         setCurrentTakeoffId(null);
         setTakeoffStatus(null);
       }
+      // Recover agent run id from the message history — re-attaches the
+      // live panel so tab close/reload doesn't lose progress view.
+      const lastWithAgent = [...msgs].reverse().find(m => m.agentRunId);
+      if (lastWithAgent) {
+        setAgentRunId(lastWithAgent.agentRunId);
+        console.log('[Session] Recovered agent_run_id:', lastWithAgent.agentRunId);
+      } else {
+        setAgentRunId(null);
+      }
     } catch (e) { console.error(e); }
   }
 
@@ -269,6 +362,9 @@ export default function ChatPage() {
         timestamp: m.timestamp, error: m.error || false,
         takeoffLocked: m.takeoffLocked || false,
         takeoffStatus: m.takeoffStatus || null,
+        agentRunId: m.agentRunId || null,
+        agentRunCompleted: m.agentRunCompleted || null,
+        files: m.files || null,
       }));
       const d = await apiFetch('/chat-sessions', {
         method: 'POST',
@@ -284,6 +380,7 @@ export default function ChatPage() {
     setMessages([]); setCurrentSessionId(null); setCurrentTakeoffId(null); setTakeoffStatus(null);
     setExpanded({}); setFiles([]); setInput('');
     setIntakeDone(false); setPendingIntake(null); setIntakeOpen(false);
+    setAgentRunId(null); setAgentStarting(false);
     if (mobile) setSidebarOpen(false);
   }
 
@@ -1020,6 +1117,16 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* BOQ Agent live panel — attached whenever there is a run in
+                progress or a completed run for this chat. Pulls the live SSE
+                stream, renders ETA, tool calls, takeoff items, downloads. */}
+            {agentRunId && (
+              <AgentPanel
+                runId={agentRunId}
+                onClose={() => setAgentRunId(null)}
+                onCompleted={onAgentCompleted}
+              />
+            )}
 
             <div ref={bottomRef}/>
           </div>
@@ -1061,6 +1168,24 @@ export default function ChatPage() {
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
+              {/* BOQ Agent — opt-in button, visible when there's something to run on */}
+              {(files.length > 0 || input.trim()) && !agentRunId && (
+                <button
+                  type="button"
+                  onClick={startAgent}
+                  disabled={sending || agentStarting}
+                  title="Run the full BOQ Agent pipeline (3-6 min, inspects every drawing, prices, generates Excel + Word)"
+                  style={{
+                    background:'transparent', border:`1px solid ${c.accent}`, borderRadius:10,
+                    padding:'6px 10px', cursor: agentStarting?'wait':'pointer',
+                    display:'flex', alignItems:'center', gap:5, flexShrink:0,
+                    color:c.accent, fontSize:12, fontWeight:600, fontFamily:'inherit',
+                    opacity: sending||agentStarting?0.5:1, transition:'opacity 0.15s',
+                  }}>
+                  <span style={{ fontSize:13 }}>🛠️</span>
+                  <span>{agentStarting ? 'Starting…' : 'BOQ Agent'}</span>
+                </button>
+              )}
               <button type="submit" disabled={sending || (!input.trim() && files.length === 0)}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
