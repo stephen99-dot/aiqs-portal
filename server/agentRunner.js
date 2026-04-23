@@ -20,38 +20,53 @@ const agent = require('./agent');
 const { TOOL_DEFINITIONS, executeTool, updateRun, appendMessage, setActivity, emit } = agent;
 
 const MODEL = 'claude-sonnet-4-20250514';
-const MAX_ITERATIONS = 40;
-const THINKING_BUDGET = 10000;
-const MAX_TOKENS = 16000;
+const MAX_ITERATIONS = 60;
+const THINKING_BUDGET = 8000;
+const MAX_TOKENS = 20000;
+
+// At these iterations we inject a budget-pressure note alongside the tool
+// results, telling the model to wrap up. At MAX-1 we force-finalise.
+const PRESSURE_MILESTONES = [25, 40, 50];
+const FORCE_FINALIZE_AT = MAX_ITERATIONS - 1;   // iteration 59
 
 // System prompt — tells Claude what it is, how to use the tools, and how
 // tender-grade QS work differs from a one-shot extraction.
-const SYSTEM_PROMPT = `You are a senior UK/Ireland Quantity Surveyor producing a tender-grade Bill of Quantities for a real client. You have been given uploaded drawings and an intake form. Your job is to:
+const SYSTEM_PROMPT = `You are a senior UK/Ireland Quantity Surveyor producing a tender-grade Bill of Quantities for a real client. You have been given uploaded drawings and an intake form.
 
-1. First, inspect EVERY uploaded drawing using view_pdf_page. Look at floor plans, elevations, sections, schedules, and any other relevant drawings. Build a clear picture of what's being built.
+**WORK EFFICIENTLY — you have a hard iteration budget.** Target 12-20 iterations. Each iteration costs the client money and makes them wait. Do NOT spread work across many iterations when you can batch.
 
-2. Record the project metadata using set_project_metadata as soon as you have a clear picture. CRITICAL: floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house.
+## How to be efficient
 
-3. Work through the BOQ element-by-element. Use standard item keys from the rate library where possible (concrete_slab_150mm, brick_outer_leaf, plasterboard_skim_walls, kitchen_fitout_high, etc.). For bespoke items, set a realistic assumed_rate in GBP (pre-location uplift). Every item description should include the measurement working — "2no. walls @ 5.0m × 2.7m less 2no. windows @ 1.2 × 1.5m = 23.4m²".
+**View drawings ONCE.** Call view_pdf_page for each relevant drawing at the start. Study it carefully in one look. Don't re-view the same page unless you're verifying one specific dimension that you clearly did not see.
 
-4. Partway through and near the end, call run_pricer to sanity-check. READ THE WARNINGS CAREFULLY. If:
-   - Any cap is firing and scaling your totals WAY down (e.g. a section cap or absolute construction cap), investigate — the pricer assumes typical extension economics. For barn conversions, heritage projects, large refurbs, the caps may be incorrectly tight. Use update_takeoff_item / remove_takeoff_item to fix obvious over-counts that triggered them.
-   - Any rate is getting clipped by the unit ceiling, the assumed_rate you provided was probably wrong for that unit — double-check or let the fallback apply.
-   - The cost per m² is wildly outside the typical range for the project type, something's off. Go back and check.
+**Batch record_takeoff_item calls.** In a single response you can emit MANY record_takeoff_item tool calls in parallel — do this. A single turn should typically record 15-40 items in one go, not one at a time. Think through the whole BOQ in your reasoning, then emit all the items together. This is the most important efficiency rule.
 
-5. Iterate. Run the pricer, adjust, run again. This is normal — a first-pass takeoff is rarely correct.
+**Run the pricer 1-2 times max.** Once to sanity-check after recording items, once more after any adjustments. Don't re-run it repeatedly.
 
-6. Only when the priced result makes QS sense (reasonable cost/m², sensible section proportions, no suspect warnings), call finalize_boq with your findings notes.
+**Call finalize_boq early.** As soon as the pricer result looks reasonable (sensible cost/m², sensible section split, no critical warnings), finalise. Do not keep polishing.
 
-IMPORTANT:
-- Do NOT rush straight to record_takeoff_item without looking at the drawings. The uploaded PDFs are attached as text summaries only — you MUST call view_pdf_page for each relevant drawing to actually see them.
-- Include prelims, scaffolding, skip hire, welfare — these are real costs.
-- For UK/Ireland residential: use NRM2-style sections (Preliminaries, Substructure, Superstructure, Roof, Windows & Doors, Internal Finishes, Floor Finishes, Decoration, Fit-Out, Drainage, M&E, External Works). Irish projects use €, 13.5% VAT.
-- If the intake form gave a floor area, TRUST IT over anything you infer from drawings.
-- State assumptions and exclusions explicitly in findings_notes.
-- The client pays for this work. Rigour matters more than speed.
+## The workflow
 
-You have up to 40 tool-use iterations; most good runs use 15-25. Work methodically.`;
+1. View each uploaded drawing once via view_pdf_page. Build a clear mental picture.
+2. Call set_project_metadata. CRITICAL: floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house. If the intake gave a floor area, TRUST IT.
+3. In ONE response, emit record_takeoff_item many times to build the full takeoff. Include prelims, substructure, superstructure, roof, windows & doors, internal finishes, floor finishes, decoration, fit-out, drainage, M&E, external works as appropriate. Every description must include measurement working — e.g. "External wall 8.2m × 2.7m = 22.1m² less 1 window 1.2m² = 20.9m²".
+4. Call run_pricer. Read warnings carefully:
+   - Cap-fired warnings: if a cap is scaling your totals WAY down, check for over-counts and use update_takeoff_item / remove_takeoff_item to fix them.
+   - Rate-clip warnings: if a rate was clipped, your assumed_rate was probably per-m² when it should have been per-m or vice versa — check the units.
+   - Cost/m² wildly outside typical range: go back and check for double-counts or missing items.
+5. Adjust if needed, re-price once, then call finalize_boq with findings notes.
+
+## Rate library hints
+
+Use standard item keys from the rate library where possible (concrete_slab_150mm, brick_outer_leaf, plasterboard_skim_walls, kitchen_fitout_high, etc.). For bespoke items, set a realistic assumed_rate in GBP (pre-location uplift).
+
+## Currency and format
+
+For UK/Ireland residential: use NRM2-style section names (Preliminaries, Substructure, Superstructure, Roof, Windows & Doors, Internal Finishes, Floor Finishes, Decoration, Fit-Out, Drainage, M&E, External Works). Irish projects auto-convert to €, 13.5% VAT.
+
+State assumptions and exclusions explicitly in findings_notes.
+
+**Remember: batch your record_takeoff_item calls in one turn. Most of your work happens in 2-3 big turns, not 20 small ones.**`;
 
 // Claude's streaming SSE parser (tool-use aware)
 async function callClaudeStreaming({ apiKey, system, messages, tools, runId, iteration }) {
@@ -189,6 +204,39 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   return content;
 }
 
+// Build a short nudge paragraph to inject alongside tool_results when the
+// iteration budget is getting tight. Shoved as an extra text content block
+// in the next user turn so Claude sees it before generating its reply.
+function budgetNudge(iteration, itemsCount) {
+  const left = MAX_ITERATIONS - iteration;
+  if (iteration >= 50) {
+    return `[BUDGET WARNING] Iteration ${iteration}/${MAX_ITERATIONS}. You have ${left} iterations left. STOP recording new items and STOP viewing drawings. In your NEXT response: if you haven't run_pricer recently, call it once, then call finalize_boq immediately. Currently ${itemsCount} items recorded — that's enough, finalize now.`;
+  }
+  if (iteration >= 40) {
+    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. Wrap up in the next 2-3 iterations. Currently ${itemsCount} items. Record any critical gaps in ONE batched response, then run_pricer, then finalize_boq.`;
+  }
+  if (iteration >= 25) {
+    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. You've used ${iteration} iterations. Currently ${itemsCount} items recorded. Please BATCH any remaining items into a single response (many record_takeoff_item calls in parallel), then run_pricer once, then finalize_boq. Don't spread work across more turns.`;
+  }
+  return null;
+}
+
+// When we've hit the cap without finalising, we invoke finalize_boq
+// programmatically so the user still gets downloads from whatever the
+// agent did manage to record. Better than "failed" with nothing to show.
+async function forceFinalise(runId, runState) {
+  const agent = require('./agent');
+  const itemsNote = `Agent reached iteration budget (${MAX_ITERATIONS}) without calling finalize_boq itself. Auto-finalising with ${runState.items.length} items as-is. Client should review.`;
+  try {
+    const result = await agent.executeTool(runId, 'finalize_boq', { findings_notes: itemsNote }, runState);
+    console.log(`[Agent ${runId}] force-finalised at cap: ${result?.content?.substring(0, 100)}`);
+    return true;
+  } catch (e) {
+    console.error(`[Agent ${runId}] force-finalise failed:`, e.message);
+    return false;
+  }
+}
+
 // Main runner — blocks until the run completes, fails, or hits the iteration cap.
 async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeText, intake, pdfNotes }) {
   const runState = {
@@ -210,7 +258,7 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     updateRun(runId, { iteration_count: iteration });
     emit(runId, { type: 'iteration_start', iteration });
-    setActivity(runId, `Thinking (iteration ${iteration})`);
+    setActivity(runId, `Thinking (iteration ${iteration}/${MAX_ITERATIONS})`);
 
     let result;
     try {
@@ -236,9 +284,15 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
     // Find any tool_use blocks
     const toolUseBlocks = result.blocks.filter(b => b.type === 'tool_use');
     if (toolUseBlocks.length === 0) {
-      // No tools called — Claude is done speaking
-      updateRun(runId, { status: 'completed', completed_at: new Date().toISOString() });
-      emit(runId, { type: 'run_complete', reason: 'no_more_tools' });
+      // No tools called — Claude is done speaking. If we have items but
+      // weren't finalised, force-finalise so the user gets downloads.
+      if (!runState.finalized && runState.items.length > 0) {
+        setActivity(runId, 'Auto-finalising (agent stopped without finalize_boq)');
+        await forceFinalise(runId, runState);
+      } else {
+        updateRun(runId, { status: 'completed', completed_at: new Date().toISOString() });
+      }
+      emit(runId, { type: 'run_complete', reason: runState.finalized ? 'finalized' : 'no_more_tools' });
       return;
     }
 
@@ -264,18 +318,48 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
       if (tu.name === 'finalize_boq' && runState.finalized) {
         messages.push({ role: 'user', content: toolResults });
         appendMessage(runId, iteration, 'user', toolResults);
+        emit(runId, { type: 'run_complete', reason: 'finalized' });
         return;
       }
     }
 
-    messages.push({ role: 'user', content: toolResults });
-    appendMessage(runId, iteration, 'user', toolResults);
+    // Inject a budget-pressure nudge if appropriate (as an extra text block
+    // in the user turn alongside the tool_results). This forces the model
+    // to see the warning before its next reply.
+    const nudge = PRESSURE_MILESTONES.includes(iteration) ? budgetNudge(iteration, runState.items.length) : null;
+    const userContent = nudge ? [...toolResults, { type: 'text', text: nudge }] : toolResults;
+    messages.push({ role: 'user', content: userContent });
+    appendMessage(runId, iteration, 'user', userContent);
+
+    // Safety net: if we're about to burn the last iteration and Claude
+    // still hasn't finalised, stop and force-finalise now so the user
+    // gets their downloads from whatever the agent did manage.
+    if (iteration >= FORCE_FINALIZE_AT && !runState.finalized && runState.items.length > 0) {
+      setActivity(runId, 'Hit iteration cap — auto-finalising with items collected so far');
+      const ok = await forceFinalise(runId, runState);
+      if (ok) {
+        emit(runId, { type: 'run_complete', reason: 'force_finalized' });
+      } else {
+        updateRun(runId, {
+          status: 'failed',
+          error_message: 'Hit iteration cap and force-finalise failed.',
+          completed_at: new Date().toISOString(),
+        });
+        emit(runId, { type: 'error', message: 'max_iterations_reached' });
+      }
+      return;
+    }
   }
 
-  // Hit the iteration cap without finalizing
+  // Ran the full loop without break — genuinely failed
+  if (!runState.finalized && runState.items.length > 0) {
+    await forceFinalise(runId, runState);
+    emit(runId, { type: 'run_complete', reason: 'force_finalized_end' });
+    return;
+  }
   updateRun(runId, {
     status: 'failed',
-    error_message: `Hit max iterations (${MAX_ITERATIONS}) without finalize_boq. Check agent_messages for trail.`,
+    error_message: `Hit max iterations (${MAX_ITERATIONS}) without items to salvage.`,
     completed_at: new Date().toISOString(),
   });
   emit(runId, { type: 'error', message: 'max_iterations_reached' });

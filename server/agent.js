@@ -482,6 +482,10 @@ async function executeTool(runId, toolName, toolInput, runState) {
         status: 'completed',
         completed_at: new Date().toISOString(),
         download_files: JSON.stringify(downloads),
+        priced_json: JSON.stringify(priced),
+        construction_total: priced.summary.construction_total || null,
+        grand_total: priced.summary.grand_total || null,
+        currency: priced.summary.currency || null,
       });
       runState.finalized = true;
       runState.downloads = downloads;

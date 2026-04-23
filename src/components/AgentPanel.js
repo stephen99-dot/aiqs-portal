@@ -61,6 +61,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [reasoning, setReasoning] = useState('');
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [collapsed, setCollapsed] = useState(false);
+  const [showAllItems, setShowAllItems] = useState(false);
 
   const readerAbortRef = useRef(null);
 
@@ -238,6 +240,13 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 : <>Iteration {iter} · elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
             </div>
           </div>
+          <button
+            onClick={() => setCollapsed(v => !v)}
+            title={collapsed ? 'Expand panel' : 'Collapse panel'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 13, padding: '2px 6px', fontWeight: 600 }}
+          >
+            {collapsed ? '▼ Expand' : '▲ Collapse'}
+          </button>
           {onClose && (
             <button onClick={onClose} title="Close panel (job keeps running on the server)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 20, padding: '0 4px' }}>×</button>
           )}
@@ -261,102 +270,120 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         )}
       </div>
 
-      {/* Downloads row (if complete) */}
-      {isComplete && downloads.length > 0 && (
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 7 }}>Documents ready</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {downloads.map((f, i) => <DownloadButton key={i} f={f} c={c} isDark={isDark} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Priced summary */}
-      {priced && priced.summary && (
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Current priced estimate</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 3, columnGap: 14, fontSize: 12.5, color: c.text }}>
-            <span style={{ color: c.muted }}>Construction</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.construction_total, priced.summary.currency)}</span>
-            <span style={{ color: c.muted }}>Contingency ({priced.summary.contingency_pct}%)</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.contingency, priced.summary.currency)}</span>
-            <span style={{ color: c.muted }}>OH&P ({priced.summary.ohp_pct}%)</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.ohp, priced.summary.currency)}</span>
-            <span style={{ color: c.muted }}>VAT ({priced.summary.vat_rate}%)</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.vat, priced.summary.currency)}</span>
-            <span style={{ color: c.text, fontWeight: 700, paddingTop: 4, borderTop: '1px solid ' + c.border, marginTop: 2 }}>Grand total</span>
-            <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', paddingTop: 4, borderTop: '1px solid ' + c.border, marginTop: 2 }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Running takeoff items */}
-      <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
-          <span style={{ fontSize: 11, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
-        </div>
-        {items.length === 0 ? (
-          <div style={{ fontSize: 12, color: c.muted, padding: '6px 0' }}>Agent hasn't recorded any items yet.</div>
-        ) : (
-          <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-            {items.map((it, i) => (
-              <div key={it.key + '-' + i} style={{ padding: '5px 8px', borderRadius: 5, background: i % 2 === 0 ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center' }}>
-                <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
-                <span style={{ color: c.muted, whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</span>
-                <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
+      {/* Body — hidden when collapsed. All sections render fully, no inner
+          scroll boxes, so the outer page scrolls naturally and users can
+          see the whole panel by scrolling down. */}
+      {!collapsed && (
+        <>
+          {/* Downloads row (if complete) */}
+          {isComplete && downloads.length > 0 && (
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 7 }}>Documents ready</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {downloads.map((f, i) => <DownloadButton key={i} f={f} c={c} isDark={isDark} />)}
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Priced summary */}
+          {priced && priced.summary && (
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Current priced estimate</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 3, columnGap: 14, fontSize: 12.5, color: c.text }}>
+                <span style={{ color: c.muted }}>Construction</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.construction_total, priced.summary.currency)}</span>
+                <span style={{ color: c.muted }}>Contingency ({priced.summary.contingency_pct}%)</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.contingency, priced.summary.currency)}</span>
+                <span style={{ color: c.muted }}>OH&P ({priced.summary.ohp_pct}%)</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.ohp, priced.summary.currency)}</span>
+                <span style={{ color: c.muted }}>VAT ({priced.summary.vat_rate}%)</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.vat, priced.summary.currency)}</span>
+                <span style={{ color: c.text, fontWeight: 700, paddingTop: 4, borderTop: '1px solid ' + c.border, marginTop: 2 }}>Grand total</span>
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', paddingTop: 4, borderTop: '1px solid ' + c.border, marginTop: 2 }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Running takeoff items — render all, no inner scroll; for
+              huge takeoffs collapse to first 15 with a toggle. */}
+          <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
+              <span style={{ fontSize: 11, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
+              {items.length > 15 && (
+                <button onClick={() => setShowAllItems(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: c.accent, fontSize: 11, fontWeight: 600, padding: 0, fontFamily: 'inherit' }}>
+                  {showAllItems ? `Show first 15` : `Show all ${items.length}`}
+                </button>
+              )}
+            </div>
+            {items.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.muted, padding: '6px 0' }}>Agent hasn't recorded any items yet.</div>
+            ) : (
+              <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                {(showAllItems ? items : items.slice(0, 15)).map((it, i) => (
+                  <div key={it.key + '-' + i} style={{ padding: '5px 8px', borderRadius: 5, background: i % 2 === 0 ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center' }}>
+                    <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
+                    <span style={{ color: c.muted, whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</span>
+                    <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
+                  </div>
+                ))}
+                {!showAllItems && items.length > 15 && (
+                  <div style={{ fontSize: 11, color: c.muted, padding: '6px 8px', fontStyle: 'italic' }}>
+                    … {items.length - 15} more items. Click "Show all {items.length}" above to expand.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Tool call log */}
-      <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent activity ({toolCalls.length})</div>
-        {toolCalls.length === 0 ? (
-          <div style={{ fontSize: 12, color: c.muted }}>No tool calls yet.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
-            {toolCalls.map((tc, i) => {
-              const label = TOOL_LABELS[tc.tool] || { emoji: '·', label: tc.tool };
-              const dotColor = tc.status === 'done' ? c.done : tc.status === 'error' ? c.err : c.accent;
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-                  <span>{label.emoji}</span>
-                  <span style={{ color: c.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {label.label}{tc.input && tc.tool === 'view_pdf_page' ? ` — ${tc.input.filename} p${tc.input.page}` : tc.input && tc.tool === 'record_takeoff_item' ? ` — ${tc.input.key}` : ''}
-                  </span>
-                  <span style={{ color: c.sub, fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(tc.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                </div>
-              );
-            })}
+          {/* Tool call log */}
+          <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent activity</div>
+            {toolCalls.length === 0 ? (
+              <div style={{ fontSize: 12, color: c.muted }}>No tool calls yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {toolCalls.map((tc, i) => {
+                  const label = TOOL_LABELS[tc.tool] || { emoji: '·', label: tc.tool };
+                  const dotColor = tc.status === 'done' ? c.done : tc.status === 'error' ? c.err : c.accent;
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                      <span>{label.emoji}</span>
+                      <span style={{ color: c.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {label.label}{tc.input && tc.tool === 'view_pdf_page' ? ` — ${tc.input.filename} p${tc.input.page}` : tc.input && tc.tool === 'record_takeoff_item' ? ` — ${tc.input.key}` : ''}
+                      </span>
+                      <span style={{ color: c.sub, fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(tc.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Reasoning toggle */}
-      <div style={{ padding: '10px 18px' }}>
-        <button
-          onClick={() => setShowReasoning(v => !v)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 11.5, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}
-        >
-          <span style={{ transform: showReasoning ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', display: 'inline-block', fontSize: 10 }}>▶</span>
-          🧠 {showReasoning ? 'Hide' : 'Show'} reasoning ({reasoning.length} chars)
-        </button>
-        {showReasoning && reasoning && (
-          <pre style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', fontSize: 11.5, color: c.muted, lineHeight: 1.5, maxHeight: 300, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
-            {reasoning}
-          </pre>
-        )}
-      </div>
+          {/* Reasoning toggle */}
+          <div style={{ padding: '10px 18px' }}>
+            <button
+              onClick={() => setShowReasoning(v => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 11.5, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}
+            >
+              <span style={{ transform: showReasoning ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', display: 'inline-block', fontSize: 10 }}>▶</span>
+              🧠 {showReasoning ? 'Hide' : 'Show'} reasoning ({reasoning.length} chars)
+            </button>
+            {showReasoning && reasoning && (
+              <pre style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', fontSize: 11.5, color: c.muted, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
+                {reasoning}
+              </pre>
+            )}
+          </div>
 
-      {/* Keep-alive message */}
-      {isRunning && (
-        <div style={{ padding: '8px 18px 14px', fontSize: 11, color: c.sub, fontStyle: 'italic' }}>
-          Agent runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
-        </div>
+          {/* Keep-alive message */}
+          {isRunning && (
+            <div style={{ padding: '8px 18px 14px', fontSize: 11, color: c.sub, fontStyle: 'italic' }}>
+              Agent runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
+            </div>
+          )}
+        </>
       )}
 
       <style>{`
