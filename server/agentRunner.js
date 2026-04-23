@@ -8,7 +8,7 @@
 //      tool_use). Emit deltas to clients as they arrive.
 //   4. If response has tool_use blocks: execute each, append tool_results,
 //      loop.
-//   5. If response has NO tool_use blocks (or finalize_boq was called):
+//   5. If response has NO tool_use blocks (or submit_for_review was called):
 //      we're done.
 //
 // Max 40 iterations as a safety cap; actual runs are typically 15-25.
@@ -55,7 +55,7 @@ You have a hard 60-iteration budget but you should aim for 12-20 iterations. Eac
 
 **Run the pricer 1-2 times max.** Once after recording items, once more after adjustments if needed. Don't re-run repeatedly.
 
-**Call finalize_boq early.** As soon as the pricer result looks reasonable (sensible cost/m², sensible section split, no critical warnings), finalise. Do not keep polishing.
+**Call submit_for_review early.** As soon as the pricer result looks reasonable (sensible cost/m², sensible section split, no critical warnings), submit it. The user reviews the items themselves and clicks Generate to produce the documents — you do NOT generate documents directly. Do not keep polishing beyond the obvious.
 
 ## The workflow
 
@@ -66,7 +66,7 @@ You have a hard 60-iteration budget but you should aim for 12-20 iterations. Eac
    - Cap-fired warnings: if a cap is scaling totals way down, check for over-counts and use update_takeoff_item / remove_takeoff_item to fix them.
    - Rate-clip warnings: your assumed_rate was probably per-m² when it should have been per-m or vice versa — check the units.
    - Cost/m² wildly outside typical range: check for double-counts or missing items.
-5. Adjust if needed (narrate why), re-price once, then call finalize_boq with comprehensive findings_notes.
+5. Adjust if needed (narrate why), re-price once, then call submit_for_review with comprehensive findings_notes and a 2-3 sentence review_summary for the user.
 
 ## Rate library hints
 
@@ -245,7 +245,7 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
 
   if (pdfNotes && pdfNotes.length > 0) introText += `\n\nPDF HANDLING NOTES:\n${pdfNotes.join('\n')}`;
 
-  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata (using the jurisdiction/location from the intake above), then build the takeoff in a batched response, sanity-check via run_pricer, iterate if needed, and finalize_boq when satisfied.`;
+  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata (using the jurisdiction/location from the intake above), then build the takeoff in a batched response, sanity-check via run_pricer, iterate if needed, and submit_for_review when satisfied. The user will then review the items and trigger document generation themselves — do NOT try to generate documents yourself.`;
 
   content.push({ type: 'text', text: introText });
   return content;
@@ -257,29 +257,31 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
 function budgetNudge(iteration, itemsCount) {
   const left = MAX_ITERATIONS - iteration;
   if (iteration >= 50) {
-    return `[BUDGET WARNING] Iteration ${iteration}/${MAX_ITERATIONS}. You have ${left} iterations left. STOP recording new items and STOP viewing drawings. In your NEXT response: if you haven't run_pricer recently, call it once, then call finalize_boq immediately. Currently ${itemsCount} items recorded — that's enough, finalize now.`;
+    return `[BUDGET WARNING] Iteration ${iteration}/${MAX_ITERATIONS}. You have ${left} iterations left. STOP recording new items and STOP viewing drawings. In your NEXT response: if you haven't run_pricer recently, call it once, then call submit_for_review immediately. Currently ${itemsCount} items recorded — that's enough, finalize now.`;
   }
   if (iteration >= 40) {
-    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. Wrap up in the next 2-3 iterations. Currently ${itemsCount} items. Record any critical gaps in ONE batched response, then run_pricer, then finalize_boq.`;
+    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. Wrap up in the next 2-3 iterations. Currently ${itemsCount} items. Record any critical gaps in ONE batched response, then run_pricer, then submit_for_review.`;
   }
   if (iteration >= 25) {
-    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. You've used ${iteration} iterations. Currently ${itemsCount} items recorded. Please BATCH any remaining items into a single response (many record_takeoff_item calls in parallel), then run_pricer once, then finalize_boq. Don't spread work across more turns.`;
+    return `[BUDGET NOTE] Iteration ${iteration}/${MAX_ITERATIONS}. You've used ${iteration} iterations. Currently ${itemsCount} items recorded. Please BATCH any remaining items into a single response (many record_takeoff_item calls in parallel), then run_pricer once, then submit_for_review. Don't spread work across more turns.`;
   }
   return null;
 }
 
-// When we've hit the cap without finalising, we invoke finalize_boq
-// programmatically so the user still gets downloads from whatever the
-// agent did manage to record. Better than "failed" with nothing to show.
-async function forceFinalise(runId, runState) {
+// When we've hit the cap without submitting for review, we invoke
+// submit_for_review programmatically so the user can still see the
+// takeoff, edit if needed, and generate. Better than "failed" with
+// nothing to show — they retain full control.
+async function forceSubmitForReview(runId, runState) {
   const agent = require('./agent');
-  const itemsNote = `Agent reached iteration budget (${MAX_ITERATIONS}) without calling finalize_boq itself. Auto-finalising with ${runState.items.length} items as-is. Client should review.`;
+  const notes = `Agent reached iteration budget (${MAX_ITERATIONS}) without calling submit_for_review itself. Auto-submitting the ${runState.items.length} items collected so far — please review carefully before generating.`;
+  const summary = `Takeoff paused at iteration cap with ${runState.items.length} items. Review below and adjust any quantities that look off before clicking Generate.`;
   try {
-    const result = await agent.executeTool(runId, 'finalize_boq', { findings_notes: itemsNote }, runState);
-    console.log(`[Agent ${runId}] force-finalised at cap: ${result?.content?.substring(0, 100)}`);
+    const result = await agent.executeTool(runId, 'submit_for_review', { findings_notes: notes, review_summary: summary }, runState);
+    console.log(`[Agent ${runId}] force-submitted for review: ${result?.content?.substring(0, 100)}`);
     return true;
   } catch (e) {
-    console.error(`[Agent ${runId}] force-finalise failed:`, e.message);
+    console.error(`[Agent ${runId}] force-submit failed:`, e.message);
     return false;
   }
 }
@@ -352,8 +354,8 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
       // No tools called — Claude is done speaking. If we have items but
       // weren't finalised, force-finalise so the user gets downloads.
       if (!runState.finalized && runState.items.length > 0) {
-        setActivity(runId, 'Auto-finalising (agent stopped without finalize_boq)');
-        await forceFinalise(runId, runState);
+        setActivity(runId, 'Auto-finalising (agent stopped without submit_for_review)');
+        await forceSubmitForReview(runId, runState);
       } else {
         updateRun(runId, { status: 'completed', completed_at: new Date().toISOString() });
       }
@@ -379,11 +381,13 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
       });
       emit(runId, { type: 'tool_result', tool: tu.name, is_error: !!result2.is_error });
 
-      // If finalize_boq was called, still add the tool result but exit after
-      if (tu.name === 'finalize_boq' && runState.finalized) {
+      // If submit_for_review (or legacy submit_for_review) was called and it
+      // set runState.finalized, log the result and exit — the run is now
+      // paused awaiting user approval in the UI.
+      if ((tu.name === 'submit_for_review' || tu.name === 'submit_for_review') && runState.finalized) {
         messages.push({ role: 'user', content: toolResults });
         appendMessage(runId, iteration, 'user', toolResults);
-        emit(runId, { type: 'run_complete', reason: 'finalized' });
+        emit(runId, { type: 'run_complete', reason: 'awaiting_review' });
         return;
       }
     }
@@ -401,7 +405,7 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
     // gets their downloads from whatever the agent did manage.
     if (iteration >= FORCE_FINALIZE_AT && !runState.finalized && runState.items.length > 0) {
       setActivity(runId, 'Hit iteration cap — auto-finalising with items collected so far');
-      const ok = await forceFinalise(runId, runState);
+      const ok = await forceSubmitForReview(runId, runState);
       if (ok) {
         emit(runId, { type: 'run_complete', reason: 'force_finalized' });
       } else {
@@ -418,7 +422,7 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
 
   // Ran the full loop without break — genuinely failed
   if (!runState.finalized && runState.items.length > 0) {
-    await forceFinalise(runId, runState);
+    await forceSubmitForReview(runId, runState);
     emit(runId, { type: 'run_complete', reason: 'force_finalized_end' });
     return;
   }
