@@ -103,7 +103,7 @@ async function callClaudeStreaming({ apiKey, system, messages, tools, runId, ite
   if (!resp.ok) {
     let err = {};
     try { err = await resp.json(); } catch (e) {}
-    throw new Error('Claude error ' + resp.status + ': ' + (err?.error?.message || resp.statusText));
+    throw new Error('Atlas engine error ' + resp.status + ': ' + (err?.error?.message || resp.statusText));
   }
 
   // Accumulators: per-block state during streaming

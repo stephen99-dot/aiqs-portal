@@ -11,7 +11,7 @@ const PLAN_OPTIONS = [
 
 const SYSTEM_SERVICES = [
   { label: 'Pipedream API', status: 'operational', uptime: '99.8%' },
-  { label: 'Claude API (Anthropic)', status: 'operational', uptime: '99.5%' },
+  { label: 'Atlas AI Engine', status: 'operational', uptime: '99.5%' },
   { label: 'Google Drive Sync', status: 'operational', uptime: '100%' },
   { label: 'Rate Library', status: 'operational', uptime: '100%' },
 ];

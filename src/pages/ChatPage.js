@@ -140,7 +140,7 @@ export default function ChatPage() {
     // and during that gap we don't want the user staring at an unchanged UI.
     const userMsg = {
       role: 'user',
-      content: scopeText || `BOQ Agent run${fileSnap.length > 0 ? ` on ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
+      content: scopeText || `Atlas run${fileSnap.length > 0 ? ` on ${fileSnap.length} file${fileSnap.length !== 1 ? 's' : ''}` : ''}.`,
       files: fileSnap,
       timestamp: new Date().toISOString(),
     };
@@ -148,7 +148,7 @@ export default function ChatPage() {
     // returns. Flag with agentStarting: true so UI can show spinner inline.
     const placeholderMsg = {
       role: 'assistant',
-      content: 'Starting the BOQ Agent — uploading your files and waking up Claude. The live panel will appear below in a few seconds.',
+      content: 'Starting Atlas — uploading your files and initialising the BOQ engine. The live panel will appear below in a few seconds.',
       agentStarting: true,
       timestamp: new Date().toISOString(),
     };
@@ -175,13 +175,13 @@ export default function ChatPage() {
       // Replace the placeholder with the real assistant message carrying
       // the run id so it re-attaches on reload.
       setMessages(p => p.map(m => m.agentStarting
-        ? { role: 'assistant', content: 'BOQ Agent running — watch the live panel below. Safe to close the tab and come back, the panel re-attaches on reload.', agentRunId: data.run_id, timestamp: m.timestamp }
+        ? { role: 'assistant', content: 'Atlas is running — watch the live panel below. Safe to close the tab and come back, the panel re-attaches on reload.', agentRunId: data.run_id, timestamp: m.timestamp }
         : m
       ));
     } catch (err) {
       // Replace placeholder with an error message the user can see in-line
       setMessages(p => p.map(m => m.agentStarting
-        ? { role: 'assistant', content: `❌ BOQ Agent failed to start: ${err.message}`, timestamp: m.timestamp }
+        ? { role: 'assistant', content: `❌ Atlas failed to start: ${err.message}`, timestamp: m.timestamp }
         : m
       ));
     } finally {
@@ -200,7 +200,7 @@ export default function ChatPage() {
       if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `**BOQ Agent complete.** ${grand} grand total${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Documents below.`,
+        content: `**Atlas complete.** ${grand} grand total${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Documents below.`,
         agentRunCompleted: run.id,
         downloadFiles: downloads.length > 0 ? downloads : null,
         timestamp: new Date().toISOString(),
@@ -1189,13 +1189,13 @@ export default function ChatPage() {
                     : currentTakeoffId
                     ? 'Review quantities above — say "confirm" to lock, or ask to adjust...'
                     : files.length > 0
-                      ? 'Scope notes (optional) — press Send to run the BOQ Agent on these drawings...'
+                      ? 'Scope notes (optional) — press Send to run Atlas on these drawings...'
                       : 'Upload drawings or ask a QS question...'
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
               <button type="submit" disabled={sending || agentStarting || (!input.trim() && files.length === 0)}
-                title={files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run BOQ Agent on uploaded files (3-6 min)' : 'Send'}
+                title={files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run Atlas on uploaded files (3-6 min)' : 'Send'}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||agentStarting||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 {agentStarting
                   ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2"><circle cx="12" cy="12" r="9" strokeDasharray="42" strokeDashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
@@ -1208,8 +1208,8 @@ export default function ChatPage() {
                 : currentTakeoffId
                 ? `📝 Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
                 : files.length > 0
-                  ? '🛠️ Send runs the full BOQ Agent — inspects every drawing, prices, generates Excel + Word (3-6 min)'
-                  : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = BOQ Agent'}
+                  ? '🛠️ Send runs Atlas — inspects every drawing, prices, generates Excel + Word (3-6 min)'
+                  : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = Atlas'}
             </div>
           </div>
         </div>

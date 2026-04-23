@@ -250,7 +250,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isInitialising ? '🔌' : '🛠️'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-              BOQ Agent · {isComplete ? 'Complete' : isFailed ? 'Failed' : isInitialising ? 'Initialising' : 'Running'}
+              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isInitialising ? 'Initialising' : 'Running'}
               {run?.project_type && <span style={{ fontWeight: 400, color: c.muted }}> · {run.project_type}</span>}
             </div>
             <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
@@ -259,7 +259,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 : isFailed
                 ? <>{error || run?.error_message || 'Agent failed'}</>
                 : isInitialising
-                ? <>Waking up Claude, preparing drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
+                ? <>Spinning up Atlas, preparing drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
                 : <>Iteration {iter} · elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
             </div>
           </div>
@@ -288,7 +288,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             <span style={{ display: 'inline-flex', gap: 3 }}>
               {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.accent, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
             </span>
-            <span style={{ flex: 1 }}>{isInitialising ? 'Connecting to Claude, preparing drawings for inspection…' : activity}</span>
+            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing drawings for inspection…' : activity}</span>
           </div>
         )}
       </div>
