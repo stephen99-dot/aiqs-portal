@@ -128,16 +128,6 @@ export default function ChatPage() {
       alert('Attach drawings or describe the project before running the Agent.');
       return;
     }
-    const ok = window.confirm(
-      'Run the full BOQ Agent?\n\n'
-      + 'This runs a tender-grade multi-step pipeline:\n'
-      + '  • Inspects every drawing page-by-page\n'
-      + '  • Records items one at a time with measurement working\n'
-      + '  • Runs the pricer repeatedly and adjusts if results look off\n'
-      + '  • Generates Excel + Word when happy\n\n'
-      + 'Takes 3-6 minutes. Runs on the server — safe to close the tab and come back. Uses more credits than a normal chat.'
-    );
-    if (!ok) return;
     setAgentStarting(true);
     try {
       const fd = new FormData();
@@ -420,6 +410,15 @@ export default function ChatPage() {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     const textToSend = overrideText != null ? overrideText : input;
     if (!textToSend.trim() && files.length === 0) return;
+
+    // ── Unified Send — if files are attached (drawings etc.) and there's
+    // no active takeoff/agent run yet, route to the BOQ agent. This is the
+    // one-button UX: upload + send = full tender-grade BOQ pipeline.
+    // Typed-only messages (no files) go through the fast chat path below.
+    if (files.length > 0 && !currentTakeoffId && !agentRunId && overrideText == null) {
+      await startAgent();
+      return;
+    }
 
     const userMsg = {
       role: 'user', content: textToSend,
@@ -1163,32 +1162,17 @@ export default function ChatPage() {
                     : currentTakeoffId
                     ? 'Review quantities above — say "confirm" to lock, or ask to adjust...'
                     : files.length > 0
-                      ? 'Describe the scope or say "extract quantities"...'
+                      ? 'Scope notes (optional) — press Send to run the BOQ Agent on these drawings...'
                       : 'Upload drawings or ask a QS question...'
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
-              {/* BOQ Agent — opt-in button, visible when there's something to run on */}
-              {(files.length > 0 || input.trim()) && !agentRunId && (
-                <button
-                  type="button"
-                  onClick={startAgent}
-                  disabled={sending || agentStarting}
-                  title="Run the full BOQ Agent pipeline (3-6 min, inspects every drawing, prices, generates Excel + Word)"
-                  style={{
-                    background:'transparent', border:`1px solid ${c.accent}`, borderRadius:10,
-                    padding:'6px 10px', cursor: agentStarting?'wait':'pointer',
-                    display:'flex', alignItems:'center', gap:5, flexShrink:0,
-                    color:c.accent, fontSize:12, fontWeight:600, fontFamily:'inherit',
-                    opacity: sending||agentStarting?0.5:1, transition:'opacity 0.15s',
-                  }}>
-                  <span style={{ fontSize:13 }}>🛠️</span>
-                  <span>{agentStarting ? 'Starting…' : 'BOQ Agent'}</span>
-                </button>
-              )}
-              <button type="submit" disabled={sending || (!input.trim() && files.length === 0)}
-                style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
-                <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              <button type="submit" disabled={sending || agentStarting || (!input.trim() && files.length === 0)}
+                title={files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run BOQ Agent on uploaded files (3-6 min)' : 'Send'}
+                style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||agentStarting||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
+                {agentStarting
+                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2"><circle cx="12" cy="12" r="9" strokeDasharray="42" strokeDashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
+                  : <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
               </button>
             </form>
             <div style={{ fontSize:11, color:c.textMuted, textAlign:'center', marginTop:7 }}>
@@ -1196,7 +1180,9 @@ export default function ChatPage() {
                 ? `🔒 Takeoff locked (${currentTakeoffId.slice(0,12)}) · Total is deterministic · Say "generate documents" to produce files`
                 : currentTakeoffId
                 ? `📝 Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
-                : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Quantities locked before generating'}
+                : files.length > 0
+                  ? '🛠️ Send runs the full BOQ Agent — inspects every drawing, prices, generates Excel + Word (3-6 min)'
+                  : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = BOQ Agent'}
             </div>
           </div>
         </div>
