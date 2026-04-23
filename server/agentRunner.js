@@ -195,10 +195,18 @@ async function callClaudeStreaming({ apiKey, system, messages, tools, runId, ite
   return { blocks: finalBlocks, usage };
 }
 
+// Heuristic: detect Ireland from any intake field so currency/defaults are
+// set correctly even when the user only types a town ("Dublin", "Galway"…).
+function intakeSuggestsIreland(intake) {
+  if (!intake) return false;
+  const blob = JSON.stringify(intake).toLowerCase();
+  return /(\bireland\b|\birish\b|\birl\b|\bdublin\b|\bcork\b|\bgalway\b|\blimerick\b|\bwaterford\b|\bkilkenny\b|\bwexford\b|\bdonegal\b|\bsligo\b|\bmayo\b|\bkerry\b|\btipperary\b|\bclare\b|\blaois\b|\bmeath\b|\bkildare\b|\bwicklow\b|\bcarlow\b|\boffaly\b|\blongford\b|\bcavan\b|\bmonaghan\b|\broscommon\b|\bleitrim\b|\bwestmeath\b|\blouth\b|eircode|€)/i.test(blob);
+}
+
 // Build the initial user message content from uploaded files.
 // For ZIPs we've already unpacked via zipProcessor; here we just describe
-// what's in the tmp directory so Claude knows which files to view_pdf_page.
-function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes }) {
+// what's in the tmp directory so the agent knows which files to view_pdf_page.
+function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland }) {
   const content = [];
   const fileList = extractedNames && extractedNames.length > 0
     ? extractedNames.map((n, i) => `  ${i + 1}. ${n}`).join('\n')
@@ -207,10 +215,37 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   let introText = `You have been given this BOQ request. Uploaded files have been extracted to a working directory; call view_pdf_page with the exact filename to inspect each drawing.\n\nFILES AVAILABLE:\n${fileList}`;
 
   if (scopeText) introText += `\n\nSCOPE NOTES FROM CLIENT:\n${scopeText}`;
-  if (intake) introText += `\n\nCLIENT INTAKE ANSWERS (treat as ground truth):\n${JSON.stringify(intake, null, 2)}`;
+
+  // Promote country/location into a prominent block the model cannot miss —
+  // otherwise it defaults to UK/GBP even when the user's intake or saved
+  // memories clearly indicate Ireland.
+  const isIreland = intakeSuggestsIreland(intake) || memoriesSuggestIreland;
+  if (isIreland) {
+    introText += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️  JURISDICTION: IRELAND (€ / 13.5% VAT)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nThis project is in IRELAND. When you call set_project_metadata:\n  • location MUST include "Ireland" and the Irish county/city (e.g. "Dublin, Ireland", "Cork, Ireland")\n  • Do NOT return a UK location even if the architecture looks Victorian/Edwardian — Irish cities are full of the same period stock\nAll outputs will be in Euros at 13.5% VAT.`;
+  }
+
+  if (intake) {
+    introText += `\n\nCLIENT INTAKE ANSWERS (treat as ground truth):\n${JSON.stringify(intake, null, 2)}`;
+  }
+
+  // User memories — the "this is who I am" context. Includes their default
+  // country, preferred spec level, rate-library signals, past projects.
+  if (userMemories && userMemories.length > 0) {
+    const byCategory = {};
+    for (const m of userMemories) {
+      const cat = m.category || 'general';
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push(m.content);
+    }
+    const lines = Object.entries(byCategory)
+      .map(([cat, items]) => `  ${cat}:\n${items.map(t => `    - ${t}`).join('\n')}`)
+      .join('\n');
+    introText += `\n\nUSER'S SAVED PROFILE / MEMORY (what this QS has told us about themselves):\n${lines}`;
+  }
+
   if (pdfNotes && pdfNotes.length > 0) introText += `\n\nPDF HANDLING NOTES:\n${pdfNotes.join('\n')}`;
 
-  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata, then build the takeoff item by item, sanity-check via run_pricer, iterate if needed, and finalize_boq when satisfied.`;
+  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata (using the jurisdiction/location from the intake above), then build the takeoff in a batched response, sanity-check via run_pricer, iterate if needed, and finalize_boq when satisfied.`;
 
   content.push({ type: 'text', text: introText });
   return content;
@@ -251,9 +286,27 @@ async function forceFinalise(runId, runState) {
 
 // Main runner — blocks until the run completes, fails, or hits the iteration cap.
 async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeText, intake, pdfNotes }) {
+  // Pull user memories so the agent picks up the user's home country /
+  // default rates / spec preferences. This is the "memory" wiring that
+  // makes the system feel like it knows the user, not a cold start.
+  let userMemories = [];
+  try {
+    const memoryStore = require('./memoryStore');
+    userMemories = memoryStore.listMemories(db, { userId }).filter(m => m.is_active);
+  } catch (e) { /* memory store may not be loaded */ }
+  const memoryBlob = userMemories.map(m => m.content).join(' ').toLowerCase();
+  const memoriesSuggestIreland = /(\bireland\b|\birish\b|\beur\b|€|dublin|cork|galway|limerick|waterford)/.test(memoryBlob);
+
+  // Pre-seed the runState with intake-derived hints (Ireland jurisdiction,
+  // suggested currency). The pricer falls back to these when the agent
+  // set_project_metadata with a weak or UK-looking location string.
+  const intakeCurrency = (intakeSuggestsIreland(intake) || memoriesSuggestIreland) ? 'EUR' : null;
+
   const runState = {
     userId,
     tmpDir,
+    intake,
+    intakeCurrency,
     metadata: null,
     items: [],
     lastPriced: null,
@@ -263,7 +316,7 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   updateRun(runId, { status: 'running' });
   emit(runId, { type: 'run_started', runId });
 
-  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes });
+  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland });
   const messages = [{ role: 'user', content: initialContent }];
   appendMessage(runId, 0, 'user', initialContent);
 

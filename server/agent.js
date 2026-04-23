@@ -357,13 +357,21 @@ async function executeTool(runId, toolName, toolInput, runState) {
       } catch (e) {}
 
       const meta = runState.metadata || {};
+      // Fold the intake's Ireland hint into the location string if the agent
+      // set a UK-only location (e.g. just "Dublin") so the pricer's Ireland
+      // detection fires. Also pass explicit currency as a last-resort override.
+      let effectiveLocation = meta.location || '';
+      if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+        effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
+      }
       let priced;
       try {
-        priced = pricer.priceLockedQuantities(runState.items, meta.location || '', clientRates, {
+        priced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
           project_type: meta.project_type || '',
           floor_area: meta.floor_area_m2 || null,
           contingency_pct: 7.5,
           ohp_pct: 12,
+          ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
         });
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
@@ -412,10 +420,15 @@ async function executeTool(runId, toolName, toolInput, runState) {
           const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(runState.userId);
           for (const r of rates) clientRates[r.item_key] = r.value;
         } catch (e) {}
-        runState.lastPriced = pricer.priceLockedQuantities(runState.items, meta.location || '', clientRates, {
+        let effectiveLocation = meta.location || '';
+        if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+          effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
+        }
+        runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
           project_type: meta.project_type || '',
           floor_area: meta.floor_area_m2 || null,
           contingency_pct: 7.5, ohp_pct: 12,
+          ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
         });
       }
       const priced = runState.lastPriced;
