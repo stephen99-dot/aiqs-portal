@@ -75,6 +75,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [findingsNotes, setFindingsNotes] = useState('');
   const [editingKey, setEditingKey] = useState(null);
   const [generating, setGenerating] = useState(false);
+  // Accuracy layer: variance_note compares grand total vs past projects;
+  // sanityWarnings flags individual items whose quantities look off vs
+  // historical ranges for this project type. Both refresh on each pricer
+  // run and again on submit_for_review.
+  const [varianceNote, setVarianceNote] = useState(null);
+  const [sanityWarnings, setSanityWarnings] = useState([]);  // [{ key, qty, expected, severity, message }]
 
   const readerAbortRef = useRef(null);
 
@@ -189,6 +195,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         setItems(evt.run.takeoff_items || []);
         setPriced(evt.run.priced || null);
         setDownloads(evt.run.downloads || []);
+        setSanityWarnings(evt.run.sanity_warnings || []);
+        setVarianceNote(evt.run.variance_note || null);
         if (evt.run.review_summary) setReviewSummary(evt.run.review_summary);
         if (evt.run.findings_notes) setFindingsNotes(evt.run.findings_notes);
         setActivity(evt.run.current_activity || (
@@ -257,10 +265,14 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
         break;
       case 'priced':
         setPriced(evt.priced);
+        if (evt.sanity_warnings) setSanityWarnings(evt.sanity_warnings);
+        if (evt.variance_note !== undefined) setVarianceNote(evt.variance_note);
         break;
       case 'submitted_for_review':
         setReviewSummary(evt.summary);
         setFindingsNotes(evt.findings_notes || '');
+        if (evt.sanity_warnings) setSanityWarnings(evt.sanity_warnings);
+        if (evt.variance_note !== undefined) setVarianceNote(evt.variance_note);
         setRun(r => r ? { ...r, status: 'awaiting_review' } : r);
         setActivity('Awaiting your review — edit items below then click Generate');
         break;
@@ -431,6 +443,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       {!collapsed && (
         <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
 
+          {/* Variance warning — shown whenever priced cost/m² is ±30% vs
+              user's historical jobs for this project type. Surfaces both
+              during running (after run_pricer) and in the review block. */}
+          {varianceNote && !isComplete && (
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: /^HIGH/.test(varianceNote) ? (isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)') : (isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)'), borderLeft: '3px solid ' + (/^HIGH/.test(varianceNote) ? c.err : c.accent) }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: /^HIGH/.test(varianceNote) ? c.err : c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                ⚠️ Cost variance vs your past projects
+              </div>
+              <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.5 }}>
+                {varianceNote}
+              </div>
+              {/^LOW/.test(varianceNote) && (
+                <div style={{ fontSize: 11.5, color: c.muted, marginTop: 4, fontStyle: 'italic' }}>
+                  Typically means items missed — check prelims, M&E, external works, scaffolding.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* REVIEW BLOCK — shown when Atlas has paused for user approval.
               Pinned at the top so the user sees the summary + Generate
               button immediately. Items become editable below. */}
@@ -540,6 +571,19 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               awaiting_review state (user can click a qty to edit, or
               remove the row entirely). */}
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
+            {sanityWarnings.length > 0 && !isComplete && (
+              <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                  ⚠️ {sanityWarnings.length} quantity warning{sanityWarnings.length !== 1 ? 's' : ''} vs your history
+                </div>
+                <div style={{ fontSize: 11.5, color: c.text, lineHeight: 1.55 }}>
+                  {sanityWarnings.slice(0, 4).map((w, i) => (
+                    <div key={i} style={{ padding: '2px 0' }}>{w.message}</div>
+                  ))}
+                  {sanityWarnings.length > 4 && <div style={{ color: c.muted, fontSize: 11 }}>+ {sanityWarnings.length - 4} more flagged below</div>}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
               <span style={{ fontSize: 12, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
@@ -554,19 +598,23 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               <div style={{ fontSize: 12, color: c.muted, padding: '6px 0' }}>Agent hasn't recorded any items yet.</div>
             ) : (
               <div style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>
-                {(isAwaitingReview || showAllItems ? items : items.slice(0, 15)).map((it, i) => (
-                  <ItemRow
-                    key={it.key + '-' + i}
-                    it={it} zebra={i % 2 === 0}
-                    c={c} isDark={isDark}
-                    editable={isAwaitingReview}
-                    editing={editingKey === it.key}
-                    onEdit={() => setEditingKey(it.key)}
-                    onCancel={() => setEditingKey(null)}
-                    onSave={(patch) => { updateItem(it.key, patch); setEditingKey(null); }}
-                    onRemove={() => removeItem(it.key)}
-                  />
-                ))}
+                {(isAwaitingReview || showAllItems ? items : items.slice(0, 15)).map((it, i) => {
+                  const warning = sanityWarnings.find(w => w.key === it.key);
+                  return (
+                    <ItemRow
+                      key={it.key + '-' + i}
+                      it={it} zebra={i % 2 === 0}
+                      c={c} isDark={isDark}
+                      warning={warning}
+                      editable={isAwaitingReview}
+                      editing={editingKey === it.key}
+                      onEdit={() => setEditingKey(it.key)}
+                      onCancel={() => setEditingKey(null)}
+                      onSave={(patch) => { updateItem(it.key, patch); setEditingKey(null); }}
+                      onRemove={() => removeItem(it.key)}
+                    />
+                  );
+                })}
                 {!isAwaitingReview && !showAllItems && items.length > 15 && (
                   <div style={{ fontSize: 11, color: c.muted, padding: '6px 8px', fontStyle: 'italic' }}>
                     … {items.length - 15} more items. Click "Show all {items.length}" above to expand.
@@ -638,17 +686,20 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
 // it displays description/qty/section compactly. In review mode the
 // description wraps fully and the qty is click-to-edit with an inline
 // form, plus a remove button on hover.
-function ItemRow({ it, zebra, c, isDark, editable, editing, onEdit, onCancel, onSave, onRemove }) {
+function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onCancel, onSave, onRemove }) {
   const [qty, setQty] = useState(it.qty);
   const [rate, setRate] = useState(it.assumed_rate || '');
   const [desc, setDesc] = useState(it.description || '');
   useEffect(() => { setQty(it.qty); setRate(it.assumed_rate || ''); setDesc(it.description || ''); }, [it.qty, it.assumed_rate, it.description, editing]);
 
+  const warnBorder = warning ? (warning.severity === 'high' ? c.err : c.accent) : null;
+
   if (!editable) {
     return (
-      <div style={{ padding: '5px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'center' }}>
+      <div style={{ padding: '5px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }}>
         <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
-        <span style={{ color: c.muted, whiteSpace: 'nowrap' }}>{it.qty} {it.unit}</span>
+        <span style={{ color: warning ? warnBorder : c.muted, whiteSpace: 'nowrap', fontWeight: warning ? 700 : 400 }}>{it.qty} {it.unit}</span>
+        {warning ? <span title={warning.message} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>⚠️</span> : <span />}
         <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
       </div>
     );
@@ -675,12 +726,18 @@ function ItemRow({ it, zebra, c, isDark, editable, editing, onEdit, onCancel, on
     );
   }
   return (
-    <div style={{ padding: '7px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', cursor: 'pointer' }} onClick={onEdit} title="Click to edit">
+    <div style={{ padding: '7px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }} onClick={onEdit} title={warning ? warning.message : 'Click to edit'}>
       <span style={{ color: c.text, lineHeight: 1.5, minWidth: 0, overflow: 'hidden' }}>
+        {warning && <span title={warning.message} style={{ marginRight: 6 }}>⚠️</span>}
         {it.description || it.key}
         {it.edited_by_user && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(59,130,246,0.15)', color: '#3B82F6', fontWeight: 600 }}>edited</span>}
+        {warning && (
+          <div style={{ fontSize: 11, color: warnBorder, marginTop: 3, fontStyle: 'italic' }}>
+            {warning.message}
+          </div>
+        )}
       </span>
-      <span style={{ color: c.text, whiteSpace: 'nowrap', fontWeight: 600 }}>{it.qty} {it.unit}</span>
+      <span style={{ color: warning ? warnBorder : c.text, whiteSpace: 'nowrap', fontWeight: 700 }}>{it.qty} {it.unit}</span>
       <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
       <button onClick={e => { e.stopPropagation(); onRemove(); }} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.err, fontSize: 14, padding: '0 4px' }}>×</button>
     </div>

@@ -177,7 +177,9 @@ router.get('/agent/:id', authMiddleware, (req, res) => {
     try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
     let downloads = [];
     try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-    res.json({ run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
+    let sanity_warnings = [];
+    try { sanity_warnings = run.sanity_warnings ? JSON.parse(run.sanity_warnings) : []; } catch (e) {}
+    res.json({ run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads, sanity_warnings } });
   } catch (err) {
     console.error('[AgentRoutes] snapshot error:', err.message);
     res.status(500).json({ error: 'Failed to load run' });
@@ -208,7 +210,9 @@ router.get('/agent/:id/stream', authMiddleware, (req, res) => {
   try { priced = run.priced_json ? JSON.parse(run.priced_json) : null; } catch (e) {}
   let downloads = [];
   try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-  send({ type: 'snapshot', run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads } });
+  let sanity_warnings = [];
+  try { sanity_warnings = run.sanity_warnings ? JSON.parse(run.sanity_warnings) : []; } catch (e) {}
+  send({ type: 'snapshot', run: { ...normaliseTimestamps(run), takeoff_items: items, priced, downloads, sanity_warnings } });
 
   if (run.status === 'completed' || run.status === 'failed') {
     send({ type: 'done' });

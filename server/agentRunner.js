@@ -206,7 +206,7 @@ function intakeSuggestsIreland(intake) {
 // Build the initial user message content from uploaded files.
 // For ZIPs we've already unpacked via zipProcessor; here we just describe
 // what's in the tmp directory so the agent knows which files to view_pdf_page.
-function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland }) {
+function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates }) {
   const content = [];
   const fileList = extractedNames && extractedNames.length > 0
     ? extractedNames.map((n, i) => `  ${i + 1}. ${n}`).join('\n')
@@ -245,7 +245,27 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
 
   if (pdfNotes && pdfNotes.length > 0) introText += `\n\nPDF HANDLING NOTES:\n${pdfNotes.join('\n')}`;
 
-  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata (using the jurisdiction/location from the intake above), then build the takeoff in a batched response, sanity-check via run_pricer, iterate if needed, and submit_for_review when satisfied. The user will then review the items and trigger document generation themselves — do NOT try to generate documents yourself.`;
+  // Learned rates — inject the user's highest-confidence rates observed on
+  // past jobs. Atlas should prefer these over library defaults when the
+  // matching item comes up.
+  if (topLearnedRates && topLearnedRates.length > 0) {
+    const sym = memoriesSuggestIreland || intakeSuggestsIreland(intake) ? '€' : '£';
+    const rateLines = topLearnedRates.slice(0, 20).map(r =>
+      `  ${r.item_key} = ${sym}${Math.round(r.rate)} (${r.project_type === 'any' ? 'all projects' : r.project_type}, ${r.region}, n=${r.sample_count})`
+    ).join('\n');
+    introText += `\n\nLEARNED RATES FROM THIS USER'S PAST PROJECTS (prefer these when applicable — they reflect their actual observed costs, not library defaults):\n${rateLines}`;
+  }
+
+  // Historical benchmarks + quantity ranges + corrections — the memoryEngine
+  // already formats this for prompt injection. It tells the agent the range
+  // of cost/m² this user has seen and the quantity ranges for each element
+  // across their past projects. Atlas should use these to sanity-check its
+  // own measurements and final total.
+  if (memoryContextBlob && memoryContextBlob.trim()) {
+    introText += `\n\nHISTORICAL CONTEXT FROM THIS USER'S PAST WORK (use these ranges to sanity-check your takeoff — flag and investigate anything that falls outside):${memoryContextBlob}`;
+  }
+
+  introText += `\n\nPlease proceed methodically: first view each PDF to understand the project, then set_project_metadata (using the jurisdiction/location from the intake above), then build the takeoff in a batched response, sanity-check via run_pricer, iterate if needed, and submit_for_review when satisfied. The user will then review the items and trigger document generation themselves — do NOT try to generate documents yourself.\n\nWhen you report back to the user in submit_for_review, state how the grand total compares to the ranges above if relevant (e.g. "at the top of your typical €X-Y/m² range" or "20% below your usual — I flagged the reason in findings"). This builds trust.`;
 
   content.push({ type: 'text', text: introText });
   return content;
@@ -299,6 +319,37 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   const memoryBlob = userMemories.map(m => m.content).join(' ').toLowerCase();
   const memoriesSuggestIreland = /(\bireland\b|\birish\b|\beur\b|€|dublin|cork|galway|limerick|waterford)/.test(memoryBlob);
 
+  // Pull past-project benchmarks, client history, quantity ranges, and
+  // learned rates from memoryEngine. This is what makes pricing accurate —
+  // Atlas sees "your last 3 barn conversions in Ireland came in at
+  // €1,950-2,150/m²" and measures / rates accordingly, instead of starting
+  // from generic library defaults every time.
+  let memoryContextBlob = '';
+  let topLearnedRates = [];
+  try {
+    const memoryEngine = require('./memoryEngine');
+    const region = memoryEngine.detectRegion(intake?.location || '');
+    const projectType = intake?.project_type || 'any';
+    memoryContextBlob = memoryEngine.buildMemoryContext(db, {
+      userId,
+      projectType,
+      floorAreaM2: intake?.floor_area_m2 || null,
+      region,
+    }) || '';
+    // Also pull the user's top-confidence rates so the agent picks the
+    // right assumed_rate first time rather than relying on library defaults.
+    try {
+      topLearnedRates = db.prepare(`
+        SELECT item_key, rate, region, project_type, sample_count, confidence
+        FROM memory_rates
+        WHERE (scope = 'client' AND user_id = ?)
+           OR (scope = 'regional' AND region = ?)
+        ORDER BY confidence DESC, sample_count DESC
+        LIMIT 25
+      `).all(userId, region);
+    } catch (e) {}
+  } catch (e) { /* memoryEngine optional — degrade gracefully */ }
+
   // Pre-seed the runState with intake-derived hints (Ireland jurisdiction,
   // suggested currency). The pricer falls back to these when the agent
   // set_project_metadata with a weak or UK-looking location string.
@@ -318,7 +369,7 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   updateRun(runId, { status: 'running' });
   emit(runId, { type: 'run_started', runId });
 
-  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland });
+  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates });
   const messages = [{ role: 'user', content: initialContent }];
   appendMessage(runId, 0, 'user', initialContent);
 

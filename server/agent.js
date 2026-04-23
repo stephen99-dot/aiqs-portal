@@ -52,6 +52,8 @@ db.exec(`
     error_message TEXT,
     findings_notes TEXT,
     review_summary TEXT,
+    sanity_warnings TEXT,
+    variance_note TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT
@@ -75,6 +77,8 @@ try {
   const cols = db.prepare("PRAGMA table_info(agent_runs)").all().map(c => c.name);
   if (!cols.includes('findings_notes')) db.exec(`ALTER TABLE agent_runs ADD COLUMN findings_notes TEXT`);
   if (!cols.includes('review_summary')) db.exec(`ALTER TABLE agent_runs ADD COLUMN review_summary TEXT`);
+  if (!cols.includes('sanity_warnings')) db.exec(`ALTER TABLE agent_runs ADD COLUMN sanity_warnings TEXT`);
+  if (!cols.includes('variance_note')) db.exec(`ALTER TABLE agent_runs ADD COLUMN variance_note TEXT`);
 } catch (e) { console.error('[Agent] migration error:', e.message); }
 
 // ── Event buses ──────────────────────────────────────────────────────
@@ -397,13 +401,46 @@ async function executeTool(runId, toolName, toolInput, runState) {
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
       }
+      // Quantity sanity check — compare each recorded item against the
+      // user's historical quantity ranges for this project type. Surfaces
+      // "you recorded only 40m² of plasterboard for a 100m² extension,
+      // typical is 280-350m²" type warnings back to the agent.
+      let sanityWarnings = [];
+      try {
+        const memoryEngine = require('./memoryEngine');
+        sanityWarnings = memoryEngine.sanityCheckWithMemory(db, {
+          items: runState.items,
+          projectType: meta.project_type || '',
+          floorAreaM2: meta.floor_area_m2 || null,
+        }) || [];
+      } catch (e) {}
+
+      // Variance note — compare cost/m² against the user's past projects.
+      let varianceNote = null;
+      try {
+        const memoryEngine = require('./memoryEngine');
+        const region = memoryEngine.detectRegion(effectiveLocation);
+        const benchmarks = memoryEngine.getProjectBenchmarks(db, { projectType: meta.project_type || '', region });
+        if (benchmarks && benchmarks.cost_per_m2 && benchmarks.cost_per_m2.avg && meta.floor_area_m2) {
+          const thisCpm2 = priced.summary.construction_total / meta.floor_area_m2;
+          const avg = benchmarks.cost_per_m2.avg;
+          const deviation = (thisCpm2 - avg) / avg;
+          const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+          if (Math.abs(deviation) >= 0.3) {
+            varianceNote = `${deviation > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(deviation) * 100)}% ${deviation > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(avg)}/m² (range ${sym2}${Math.round(benchmarks.cost_per_m2.min)}–${sym2}${Math.round(benchmarks.cost_per_m2.max)}/m² over ${benchmarks.sample_count} past projects)`;
+          }
+        }
+      } catch (e) {}
+
       updateRun(runId, {
         priced_json: JSON.stringify(priced),
         construction_total: priced.summary.construction_total || null,
         grand_total: priced.summary.grand_total || null,
         currency: priced.summary.currency || null,
+        sanity_warnings: sanityWarnings.length > 0 ? JSON.stringify(sanityWarnings) : null,
+        variance_note: varianceNote,
       });
-      emit(runId, { type: 'priced', priced });
+      emit(runId, { type: 'priced', priced, sanity_warnings: sanityWarnings, variance_note: varianceNote });
 
       const sym = priced.summary.currency === 'EUR' ? '€' : '£';
       const costPerM2 = meta.floor_area_m2 ? Math.round(priced.summary.construction_total / meta.floor_area_m2) : null;
@@ -411,6 +448,8 @@ async function executeTool(runId, toolName, toolInput, runState) {
         `Construction total: ${sym}${Math.round(priced.summary.construction_total).toLocaleString('en-GB')}`,
         `Grand total (inc VAT): ${sym}${Math.round(priced.summary.grand_total).toLocaleString('en-GB')}`,
         costPerM2 ? `Cost per m²: ${sym}${costPerM2} (over ${meta.floor_area_m2}m²)` : null,
+        varianceNote ? `⚠️ Variance vs past projects: ${varianceNote}` : null,
+        sanityWarnings.length > 0 ? `⚠️ ${sanityWarnings.length} quantity sanity warning(s) — review before finalising` : null,
         `Sections: ${priced.sections.length}`,
         `Warnings: ${(priced.warnings || []).length}`,
       ].filter(Boolean);
@@ -419,11 +458,20 @@ async function executeTool(runId, toolName, toolInput, runState) {
         ? '\n\nWarnings from the pricer (review carefully — caps, auto-corrections, and rate clips are flagged here):\n' + priced.warnings.map(w => '- ' + w).join('\n')
         : '';
 
+      // Append the memory-based sanity warnings so the agent can investigate
+      // and fix any quantities that look off vs the user's historical jobs.
+      const sanityText = sanityWarnings.length > 0
+        ? '\n\nQUANTITY SANITY WARNINGS (vs user\'s past projects — consider fixing before submit_for_review):\n' + sanityWarnings.map(w => '- ' + w.message).join('\n')
+        : '';
+      const varianceText = varianceNote
+        ? `\n\nCOST VARIANCE vs past jobs: ${varianceNote}\nIf this is LOW, you may have missed items — prelims, M&E, external works, scaffolding. If HIGH, check for double-counts.`
+        : '';
+
       const sectionLines = priced.sections.map(s => `  - ${s.name}: ${sym}${Math.round(s.subtotal).toLocaleString('en-GB')}`).join('\n');
 
       return {
         type: 'tool_result',
-        content: summaryLines.join('\n') + '\n\nSections:\n' + sectionLines + warningsText,
+        content: summaryLines.join('\n') + '\n\nSections:\n' + sectionLines + warningsText + sanityText + varianceText,
       };
     }
 
@@ -462,6 +510,32 @@ async function executeTool(runId, toolName, toolInput, runState) {
       }
       const priced = runState.lastPriced;
 
+      // Recompute sanity + variance at review time using current items so
+      // the user sees fresh warnings even if record/update happened after
+      // the last run_pricer call.
+      let sanityWarnings = [];
+      let varianceNote = null;
+      try {
+        const memoryEngine = require('./memoryEngine');
+        sanityWarnings = memoryEngine.sanityCheckWithMemory(db, {
+          items: runState.items,
+          projectType: runState.metadata?.project_type || '',
+          floorAreaM2: runState.metadata?.floor_area_m2 || null,
+        }) || [];
+        if (priced?.summary && runState.metadata?.floor_area_m2) {
+          const region = memoryEngine.detectRegion(runState.metadata?.location || '');
+          const bench = memoryEngine.getProjectBenchmarks(db, { projectType: runState.metadata.project_type || '', region });
+          if (bench?.cost_per_m2?.avg) {
+            const thisCpm2 = priced.summary.construction_total / runState.metadata.floor_area_m2;
+            const dev = (thisCpm2 - bench.cost_per_m2.avg) / bench.cost_per_m2.avg;
+            const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+            if (Math.abs(dev) >= 0.3) {
+              varianceNote = `${dev > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(dev) * 100)}% ${dev > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(bench.cost_per_m2.avg)}/m² (range ${sym2}${Math.round(bench.cost_per_m2.min)}–${sym2}${Math.round(bench.cost_per_m2.max)}/m² over ${bench.sample_count} past projects)`;
+            }
+          }
+        }
+      } catch (e) {}
+
       updateRun(runId, {
         status: 'awaiting_review',
         findings_notes: notes,
@@ -470,9 +544,11 @@ async function executeTool(runId, toolName, toolInput, runState) {
         construction_total: priced?.summary?.construction_total || null,
         grand_total: priced?.summary?.grand_total || null,
         currency: priced?.summary?.currency || null,
+        sanity_warnings: sanityWarnings.length > 0 ? JSON.stringify(sanityWarnings) : null,
+        variance_note: varianceNote,
       });
       runState.finalized = true;  // signals runner to exit the tool-use loop
-      emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, priced: priced?.summary });
+      emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, priced: priced?.summary, sanity_warnings: sanityWarnings, variance_note: varianceNote });
       return { type: 'tool_result', content: `Submitted to user for review. ${runState.items.length} items, ${priced?.summary ? (priced.summary.currency === 'EUR' ? '€' : '£') + Math.round(priced.summary.grand_total).toLocaleString('en-GB') : '(no total)'} grand total. The user will now review and approve generation — your work is complete.` };
     }
 
