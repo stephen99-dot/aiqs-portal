@@ -22,6 +22,7 @@ import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import NotetakerPage from './pages/NotetakerPage';
 import VariationsPage from './pages/VariationsPage';
+import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -54,6 +55,7 @@ function AppInner() {
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/new-project" element={<NewProjectPage />} />
+          <Route path="/submit-drawings" element={<SubmitDrawingsPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />

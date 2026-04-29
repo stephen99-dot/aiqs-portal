@@ -550,6 +550,85 @@ function LogsTab({ t }) {
 // SETTINGS TAB
 // ═══════════════════════════════════════════════════
 
+function SubmissionsTab({ t }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch('/submissions/admin/all')
+      .then(d => setRows(d.submissions || []))
+      .catch(e => console.error('Admin submissions load error:', e))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ padding: 24, color: t.textMuted, fontSize: 13 }}>Loading submissions…</div>;
+
+  if (rows.length === 0) {
+    return (
+      <div style={{
+        background: t.card, border: '1px solid ' + t.border, borderRadius: 14,
+        padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13.5,
+      }}>
+        No drawing submissions yet. They'll appear here once clients submit through <code style={{ background: t.surface, padding: '2px 6px', borderRadius: 4 }}>/submit-drawings</code>.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + t.border, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Portal Submissions</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>{rows.length} submission{rows.length === 1 ? '' : 's'} from paying clients</div>
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ background: t.surface }}>
+              {['When', 'Client', 'Project Type', 'Files', 'Credits Left', 'Submission ID', 'Status'].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: t.textMuted, fontWeight: 600, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid ' + t.border, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const ok = r.pipedream_status === 'ok';
+              return (
+                <tr key={r.id} style={{ borderBottom: '1px solid ' + t.border }}>
+                  <td style={{ padding: '10px 14px', color: t.textMuted, whiteSpace: 'nowrap' }}>
+                    {new Date(r.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: t.text }}>
+                    <div style={{ fontWeight: 600 }}>{r.user_name || '—'}</div>
+                    <div style={{ fontSize: 11, color: t.textMuted }}>{r.user_email}{r.user_company ? ' · ' + r.user_company : ''}</div>
+                  </td>
+                  <td style={{ padding: '10px 14px', color: t.text, whiteSpace: 'nowrap' }}>{r.project_type || '—'}</td>
+                  <td style={{ padding: '10px 14px', color: t.textMuted }} title={(r.file_names || []).join(', ')}>
+                    {r.file_count} file{r.file_count === 1 ? '' : 's'}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: t.text, fontFamily: 'JetBrains Mono, monospace' }}>{r.credits_remaining_after}</td>
+                  <td style={{ padding: '10px 14px', color: t.textMuted, fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5 }}>{r.submission_id}</td>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: 6,
+                      background: ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: ok ? '#10B981' : '#EF4444',
+                      fontSize: 11, fontWeight: 600,
+                    }}>
+                      {ok ? 'Forwarded' : 'Failed'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ t }) {
   const sections = [
     { title: 'API Configuration', items: [{ label: 'Anthropic API Key', value: 'sk-...7xQ4', type: 'secret' }, { label: 'Pipedream Webhook URL', value: 'https://eo...pipedream.net/...', type: 'url' }, { label: 'Google Drive Folder ID', value: '1abc...xyz', type: 'text' }] },
@@ -580,7 +659,7 @@ function SettingsTab({ t }) {
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: '📊 Overview' }, { key: 'clients', label: '👥 Clients' }, { key: 'rates', label: '📚 Rate Libraries' }, { key: 'logs', label: '📋 Activity Log' }, { key: 'settings', label: '⚙️ Settings' }];
+  const tabs = [{ key: 'overview', label: '📊 Overview' }, { key: 'clients', label: '👥 Clients' }, { key: 'submissions', label: '📥 Submissions' }, { key: 'rates', label: '📚 Rate Libraries' }, { key: 'logs', label: '📋 Activity Log' }, { key: 'settings', label: '⚙️ Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -593,6 +672,7 @@ export default function AdminPage() {
       </div>
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
+      {tab === 'submissions' && <SubmissionsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'settings' && <SettingsTab t={t} />}

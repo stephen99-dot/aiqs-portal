@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI QS Portal Bridge</title>
+</head>
+<body>
+<!--
+  Cross-origin bridge for the public theaiqs.co.uk form.
+  The public form embeds this page in a hidden iframe and listens for
+  a postMessage. We read the user's portal session and reply with the
+  current credit balance so the form can show "submit via portal" nudges.
+
+  Only echoes back to origins listed in ALLOWED_ORIGINS.
+-->
+<script>
+(function () {
+  var ALLOWED_ORIGINS = [
+    'https://theaiqs.co.uk',
+    'https://www.theaiqs.co.uk',
+    'http://localhost:3000',
+  ];
+
+  function getParentOrigin() {
+    try {
+      var ref = document.referrer || '';
+      var m = ref.match(/^https?:\/\/[^/]+/);
+      return m ? m[0] : null;
+    } catch (e) { return null; }
+  }
+
+  var parentOrigin = getParentOrigin();
+  if (!parentOrigin || ALLOWED_ORIGINS.indexOf(parentOrigin) === -1) return;
+
+  function reply(payload) {
+    try { window.parent.postMessage({ type: 'aiqs-portal-status', ...payload }, parentOrigin); } catch (e) {}
+  }
+
+  var token = null;
+  try { token = localStorage.getItem('aiqs_token'); } catch (e) {}
+
+  if (!token) { reply({ logged_in: false }); return; }
+
+  fetch('/api/credits', { headers: { Authorization: 'Bearer ' + token } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (!data) { reply({ logged_in: false }); return; }
+      reply({
+        logged_in: true,
+        free_credits: data.free_credits || 0,
+        is_admin: !!data.is_admin,
+      });
+    })
+    .catch(function () { reply({ logged_in: false }); });
+})();
+</script>
+</body>
+</html>

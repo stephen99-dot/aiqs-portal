@@ -1,0 +1,96 @@
+<!--
+  ═════════════════════════════════════════════════════════════════════════════
+  AI QS — Public form "submit via portal" nudge
+  ═════════════════════════════════════════════════════════════════════════════
+
+  Paste the snippet between <!-- BEGIN --> and <!-- END --> into the
+  theaiqs.co.uk send-drawings page, just before the closing </body> tag.
+
+  What it does:
+    - Detects whether the visitor is logged into aiqs-portal.onrender.com.
+    - If so, shows a sticky banner suggesting they submit through the portal
+      so it counts against their pre-paid 5-BOQ allowance.
+    - Does nothing for unauthenticated visitors (lead-gen flow unchanged).
+
+  How it works:
+    - A hidden iframe loads aiqs-portal.onrender.com/portal-bridge.html.
+    - That bridge reads the user's localStorage token (only readable on the
+      portal's own origin) and postMessages back the credit balance.
+    - The snippet renders a banner based on the reply.
+
+  Safe by default: the bridge only replies to whitelisted parent origins.
+  ═════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- BEGIN AI QS portal nudge — paste before </body> on theaiqs.co.uk send-drawings page -->
+<script>
+(function () {
+  var PORTAL_ORIGIN = 'https://aiqs-portal.onrender.com';
+
+  // Hidden iframe that asks the portal for the visitor's credit balance
+  var iframe = document.createElement('iframe');
+  iframe.src = PORTAL_ORIGIN + '/portal-bridge.html';
+  iframe.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden;';
+  iframe.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(iframe);
+
+  function buildBanner(creditsLeft) {
+    var wrap = document.createElement('div');
+    wrap.id = 'aiqs-portal-nudge';
+    wrap.style.cssText = [
+      'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:1000',
+      'padding:12px 18px', 'display:flex', 'align-items:center', 'gap:14px',
+      'flex-wrap:wrap', 'justify-content:center',
+      'background:linear-gradient(135deg,#F59E0B,#D97706)',
+      'color:#0A0F1C', 'font-family:Instrument Sans,-apple-system,sans-serif',
+      'font-size:14px', 'font-weight:600',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.18)',
+    ].join(';');
+
+    var msg = document.createElement('span');
+    if (creditsLeft > 0) {
+      msg.innerHTML = "You're logged in — you have <strong>" + creditsLeft +
+        " BOQ credit" + (creditsLeft === 1 ? '' : 's') +
+        "</strong> in your portal. Submit through the portal so they count against your allowance.";
+    } else {
+      msg.innerHTML = "You're logged in but have no BOQ credits left. Submit here as a one-off, or top up in your portal.";
+    }
+    wrap.appendChild(msg);
+
+    var cta = document.createElement('a');
+    cta.href = PORTAL_ORIGIN + '/submit-drawings';
+    cta.textContent = creditsLeft > 0 ? 'Open portal →' : 'Top up →';
+    cta.style.cssText = [
+      'background:#0A0F1C', 'color:#FBBF24', 'text-decoration:none',
+      'padding:7px 14px', 'border-radius:7px', 'font-weight:700',
+      'font-size:13px', 'white-space:nowrap',
+    ].join(';');
+    wrap.appendChild(cta);
+
+    var dismiss = document.createElement('button');
+    dismiss.textContent = '✕';
+    dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.style.cssText = [
+      'background:transparent', 'border:none', 'color:#0A0F1C',
+      'font-size:16px', 'cursor:pointer', 'padding:4px 8px', 'opacity:0.7',
+    ].join(';');
+    dismiss.onclick = function () {
+      try { sessionStorage.setItem('aiqs_nudge_dismissed', '1'); } catch (e) {}
+      wrap.remove();
+    };
+    wrap.appendChild(dismiss);
+
+    return wrap;
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.origin !== PORTAL_ORIGIN) return;
+    if (!e.data || e.data.type !== 'aiqs-portal-status') return;
+    if (!e.data.logged_in) return;
+    try { if (sessionStorage.getItem('aiqs_nudge_dismissed') === '1') return; } catch (err) {}
+    if (document.getElementById('aiqs-portal-nudge')) return;
+    document.body.appendChild(buildBanner(e.data.free_credits || 0));
+  });
+})();
+</script>
+<!-- END AI QS portal nudge -->

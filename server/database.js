@@ -245,6 +245,26 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_project_intake_user ON project_intake(user_id);
   CREATE INDEX IF NOT EXISTS idx_project_intake_session ON project_intake(session_id);
+
+  -- Drawings submitted via the in-portal "Submit Drawings" form. These mirror the
+  -- public theaiqs.co.uk form's Pipedream flow but are tied to a portal user and
+  -- consume one free_credit each.
+  CREATE TABLE IF NOT EXISTS drawing_submissions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    submission_id TEXT UNIQUE NOT NULL,
+    project_type TEXT,
+    message TEXT,
+    file_count INTEGER DEFAULT 0,
+    file_names TEXT,
+    pipedream_status TEXT,
+    credits_remaining_after INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_drawing_submissions_user ON drawing_submissions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_drawing_submissions_created ON drawing_submissions(created_at);
 `);
 
 // Migrations for existing databases
@@ -265,6 +285,8 @@ const migrations = [
   { column: 'stripe_subscription_id', table: 'users', sql: "ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT" },
   { column: 'onboarding_completed_at', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_completed_at DATETIME" },
   { column: 'onboarding_skipped', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_skipped INTEGER DEFAULT 0" },
+  { column: 'free_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN free_credits INTEGER DEFAULT 0" },
+  { column: 'total_projects', table: 'users', sql: "ALTER TABLE users ADD COLUMN total_projects INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
