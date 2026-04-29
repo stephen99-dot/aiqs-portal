@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
@@ -44,8 +43,6 @@ function fmtSize(b) {
 export default function SubmitDrawingsPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
-
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
   const [message, setMessage] = useState('');
@@ -226,21 +223,9 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* The actual <input type=file> is rendered via a portal directly into document.body —
-              the EXACT DOM position the user verified works (their console diagnostic created an
-              input on body and clicking it opened the picker). Inside our component tree something
-              blocks it. The button below calls .click() on the portaled input. */}
-          {createPortal(
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
-            />,
-            document.body
-          )}
-
+          {/* Recreate the EXACT pattern that worked in the user's console diagnostic:
+              create a fresh <input>, append to body, click it, read files from the change
+              event, then remove it. No React refs, no portals, no styled inputs. */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
             padding: '14px 16px', borderRadius: 12,
@@ -251,11 +236,18 @@ export default function SubmitDrawingsPage() {
             <button
               type="button"
               onClick={() => {
-                const inp = fileInputRef.current;
-                if (!inp) return;
-                if (typeof inp.showPicker === 'function') {
-                  try { inp.showPicker(); return; } catch (_) { /* fall through */ }
-                }
+                const inp = document.createElement('input');
+                inp.type = 'file';
+                inp.multiple = true;
+                inp.style.position = 'fixed';
+                inp.style.left = '0';
+                inp.style.top = '0';
+                inp.onchange = (e) => {
+                  const fl = e.target.files;
+                  if (fl && fl.length) addFiles(fl);
+                  setTimeout(() => inp.remove(), 0);
+                };
+                document.body.appendChild(inp);
                 inp.click();
               }}
               style={{
