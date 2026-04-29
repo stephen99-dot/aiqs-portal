@@ -225,30 +225,50 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* File input — UNSTYLED native browser default. The user's browser kills clicks on
-              ::file-selector-button-styled inputs, so we put pretty styling on the container,
-              not the input itself. */}
+          {/* Three independent paths to attach files. At least one will work past whatever
+              browser extension or content script is intercepting events:
+                1. The native default 'Choose File' button (works without any JS).
+                2. A pretty styled <button> that calls input.showPicker() — a newer browser API
+                   that is harder for extensions to intercept than .click().
+                3. Drag-and-drop on the dashed strip below. */}
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-            padding: '16px 18px', borderRadius: 12,
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            padding: '14px 16px', borderRadius: 12,
             background: t.surface, border: '1px solid ' + t.border,
             marginBottom: 8,
           }}>
             <PaperclipIcon size={18} color="#F59E0B" />
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, marginBottom: 4 }}>
-                Attach your drawings
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              />
-            </div>
-            <span style={{ fontSize: 11.5, color: t.textMuted }}>
-              PDF, DWG, images, Word, Excel
+            <button
+              type="button"
+              onClick={() => {
+                const inp = fileInputRef.current;
+                if (!inp) return;
+                if (typeof inp.showPicker === 'function') {
+                  try { inp.showPicker(); return; } catch (_) { /* fall through to .click() */ }
+                }
+                inp.click();
+              }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '9px 18px', borderRadius: 9,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C',
+                fontWeight: 700, fontSize: 13.5,
+                border: 'none', cursor: 'pointer',
+                boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+              }}
+            >
+              Choose files
+            </button>
+            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: 4 }}>
+              or use the native picker:
             </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            />
           </div>
 
           {/* Drag-and-drop area — separate sibling, no nested input */}
