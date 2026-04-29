@@ -187,7 +187,8 @@ export default function SubmitDrawingsPage() {
           <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
-          <div
+          <label
+            htmlFor="aiqs-file-input"
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -196,7 +197,7 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              position: 'relative',
+              display: 'block',
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
               background: dragOver ? 'rgba(245,158,11,0.04)' : t.surface,
               borderRadius: 12, padding: '28px 20px',
@@ -217,17 +218,19 @@ export default function SubmitDrawingsPage() {
             <div style={{ fontSize: 12, color: t.textMuted }}>
               PDF, DWG, images, Word, Excel — any file type accepted
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{
-                position: 'absolute', inset: 0, width: '100%', height: '100%',
-                opacity: 0, cursor: 'pointer',
-              }}
-            />
-          </div>
+          </label>
+          <input
+            ref={fileInputRef}
+            id="aiqs-file-input"
+            type="file"
+            multiple
+            onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            style={{
+              position: 'absolute', width: 1, height: 1, padding: 0,
+              margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)',
+              whiteSpace: 'nowrap', border: 0,
+            }}
+          />
 
           {files.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
