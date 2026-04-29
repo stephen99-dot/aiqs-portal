@@ -44,6 +44,9 @@ export default function SubmitDrawingsPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const fallbackInputRef = useRef(null);
+  const [debugLog, setDebugLog] = useState([]);
+  const log = (m) => setDebugLog(prev => [...prev.slice(-9), new Date().toLocaleTimeString() + ' — ' + m]);
 
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
@@ -62,7 +65,9 @@ export default function SubmitDrawingsPage() {
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
-    setFiles(prev => [...prev, ...Array.from(newFiles)]);
+    const arr = Array.from(newFiles || []);
+    log('addFiles called with ' + arr.length + ' file(s)');
+    setFiles(prev => [...prev, ...arr]);
   }
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
@@ -214,11 +219,13 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
           <div
+            onClick={() => log('dropzone wrapper click')}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
               e.preventDefault();
               setDragOver(false);
+              log('drop event with ' + (e.dataTransfer.files?.length || 0) + ' file(s)');
               addFiles(e.dataTransfer.files);
             }}
             style={{
@@ -248,7 +255,8 @@ export default function SubmitDrawingsPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+              onClick={() => log('overlay input click')}
+              onChange={e => { log('overlay input change: ' + (e.target.files?.length || 0) + ' file(s)'); addFiles(e.target.files); e.target.value = ''; }}
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -259,6 +267,46 @@ export default function SubmitDrawingsPage() {
                 fontSize: 0,
               }}
             />
+          </div>
+
+          {/* Diagnostic fallback — plain native button + visible input */}
+          <div style={{
+            marginTop: 10, padding: 10, borderRadius: 8,
+            background: '#FEF3C7', border: '1px dashed #F59E0B',
+          }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#78350F', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              Diagnostic fallback (testing)
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                ref={fallbackInputRef}
+                type="file"
+                multiple
+                onChange={e => { log('fallback native input change: ' + (e.target.files?.length || 0) + ' file(s)'); addFiles(e.target.files); e.target.value = ''; }}
+                style={{ fontSize: 12, color: '#0A0F1C' }}
+              />
+              <button
+                type="button"
+                onClick={() => { log('button -> fileInputRef.click()'); fileInputRef.current?.click(); }}
+                style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #F59E0B', background: '#fff', color: '#0A0F1C', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Trigger overlay input
+              </button>
+            </div>
+          </div>
+
+          {/* Live debug log */}
+          <div style={{
+            marginTop: 10, padding: 10, borderRadius: 8,
+            background: '#0A0F1C', color: '#FACC15',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
+            minHeight: 60, maxHeight: 140, overflowY: 'auto',
+          }}>
+            <div style={{ color: '#FACC15', fontWeight: 700, marginBottom: 4 }}>debug log — files in state: {files.length}</div>
+            {debugLog.length === 0
+              ? <div style={{ color: '#6B7280' }}>(no events yet)</div>
+              : debugLog.map((l, i) => <div key={i}>{l}</div>)
+            }
           </div>
 
           {files.length > 0 && (
