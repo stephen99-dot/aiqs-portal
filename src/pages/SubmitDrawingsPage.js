@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import {
-  XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
+  UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
 
@@ -225,30 +225,7 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* Native file input — plain, visible, guaranteed to open the picker */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-            padding: '14px 16px', borderRadius: 12,
-            background: t.surface, border: '1px solid ' + t.border,
-          }}>
-            <PaperclipIcon size={16} color="#F59E0B" />
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{
-                flex: 1, minWidth: 200,
-                fontSize: 13, color: t.text,
-                cursor: 'pointer',
-              }}
-            />
-            <span style={{ fontSize: 11.5, color: t.textMuted }}>
-              PDF, DWG, images, Word, Excel — any file type
-            </span>
-          </div>
-
-          {/* Drag-and-drop area (optional convenience — native input above is the primary path) */}
+          {/* Native file input styled via ::file-selector-button — visible, native, on-brand */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -258,16 +235,34 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              marginTop: 8,
+              borderRadius: 12,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.06)' : 'transparent',
-              borderRadius: 10, padding: '14px 16px',
+              background: dragOver ? 'rgba(245,158,11,0.06)' : t.surface,
+              padding: '24px 22px',
               textAlign: 'center',
-              fontSize: 12, color: t.textMuted,
               transition: 'all 0.15s',
             }}
           >
-            …or drag &amp; drop files here
+            <div style={{
+              width: 48, height: 48, borderRadius: 14, margin: '0 auto 12px',
+              background: 'rgba(245,158,11,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <UploadIcon size={22} color="#F59E0B" />
+            </div>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: t.text, marginBottom: 4 }}>
+              Drag &amp; drop your drawings here
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
+              PDF, DWG, images, Word, Excel — any file type accepted
+            </div>
+            <input
+              ref={fileInputRef}
+              className="aiqs-file-input"
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            />
           </div>
 
           {files.length > 0 && (
@@ -493,6 +488,36 @@ export default function SubmitDrawingsPage() {
           0%   { background-position: 0% 50%; }
           50%  { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
+        }
+
+        /* Style the native file input — keeps it real & clickable, just makes it look on-brand */
+        .aiqs-file-input {
+          display: inline-block;
+          max-width: 100%;
+          font-size: 13px;
+          color: ${t.textMuted};
+          cursor: pointer;
+        }
+        .aiqs-file-input::file-selector-button {
+          background: linear-gradient(135deg, #F59E0B, #D97706);
+          color: #0A0F1C;
+          font-weight: 700;
+          font-size: 13px;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 9px;
+          cursor: pointer;
+          margin-right: 12px;
+          box-shadow: 0 2px 10px rgba(245,158,11,0.25);
+          transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+        }
+        .aiqs-file-input::file-selector-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px rgba(245,158,11,0.35);
+          filter: brightness(1.05);
+        }
+        .aiqs-file-input::file-selector-button:active {
+          transform: translateY(0);
         }
       `}</style>
     </div>
