@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import {
-  UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
+  XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
 
@@ -224,10 +224,32 @@ export default function SubmitDrawingsPage() {
           <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
+
+          {/* Native file input — plain, visible, guaranteed to open the picker */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            padding: '14px 16px', borderRadius: 12,
+            background: t.surface, border: '1px solid ' + t.border,
+          }}>
+            <PaperclipIcon size={16} color="#F59E0B" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+              style={{
+                flex: 1, minWidth: 200,
+                fontSize: 13, color: t.text,
+                cursor: 'pointer',
+              }}
+            />
+            <span style={{ fontSize: 11.5, color: t.textMuted }}>
+              PDF, DWG, images, Word, Excel — any file type
+            </span>
+          </div>
+
+          {/* Drag-and-drop area (optional convenience — native input above is the primary path) */}
           <div
-            onClick={(e) => {
-              if (e.target.tagName !== 'INPUT') fileInputRef.current?.click();
-            }}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -236,61 +258,17 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              position: 'relative',
+              marginTop: 8,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.04)' : t.surface,
-              borderRadius: 12, padding: '28px 20px',
-              textAlign: 'center', cursor: 'pointer',
+              background: dragOver ? 'rgba(245,158,11,0.06)' : 'transparent',
+              borderRadius: 10, padding: '14px 16px',
+              textAlign: 'center',
+              fontSize: 12, color: t.textMuted,
               transition: 'all 0.15s',
             }}
           >
-            <div style={{
-              width: 44, height: 44, borderRadius: 12, margin: '0 auto 10px',
-              background: 'rgba(245,158,11,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              pointerEvents: 'none',
-            }}>
-              <UploadIcon size={20} color="#F59E0B" />
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 3, pointerEvents: 'none' }}>
-              Drag &amp; drop or <span style={{ color: '#F59E0B', textDecoration: 'underline' }}>browse</span>
-            </div>
-            <div style={{ fontSize: 12, color: t.textMuted, pointerEvents: 'none' }}>
-              PDF, DWG, images, Word, Excel — any file type accepted
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                cursor: 'pointer',
-                fontSize: 0,
-              }}
-            />
+            …or drag &amp; drop files here
           </div>
-
-          {/* Explicit fallback button — guarantees a working path even if the overlay click is interfered with */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              marginTop: 8,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', borderRadius: 8,
-              background: t.surface, color: t.text,
-              border: '1px solid ' + t.border,
-              fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <PaperclipIcon size={13} color={t.textMuted} />
-            Choose files…
-          </button>
 
           {files.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
