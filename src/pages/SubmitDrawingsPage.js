@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
@@ -225,12 +226,21 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* Three independent paths to attach files. At least one will work past whatever
-              browser extension or content script is intercepting events:
-                1. The native default 'Choose File' button (works without any JS).
-                2. A pretty styled <button> that calls input.showPicker() — a newer browser API
-                   that is harder for extensions to intercept than .click().
-                3. Drag-and-drop on the dashed strip below. */}
+          {/* The actual <input type=file> is rendered via a portal directly into document.body —
+              the EXACT DOM position the user verified works (their console diagnostic created an
+              input on body and clicking it opened the picker). Inside our component tree something
+              blocks it. The button below calls .click() on the portaled input. */}
+          {createPortal(
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+              style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
+            />,
+            document.body
+          )}
+
           <div style={{
             display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
             padding: '14px 16px', borderRadius: 12,
@@ -244,13 +254,13 @@ export default function SubmitDrawingsPage() {
                 const inp = fileInputRef.current;
                 if (!inp) return;
                 if (typeof inp.showPicker === 'function') {
-                  try { inp.showPicker(); return; } catch (_) { /* fall through to .click() */ }
+                  try { inp.showPicker(); return; } catch (_) { /* fall through */ }
                 }
                 inp.click();
               }}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '9px 18px', borderRadius: 9,
+                padding: '10px 22px', borderRadius: 9,
                 background: 'linear-gradient(135deg, #F59E0B, #D97706)',
                 color: '#0A0F1C',
                 fontWeight: 700, fontSize: 13.5,
@@ -260,15 +270,9 @@ export default function SubmitDrawingsPage() {
             >
               Choose files
             </button>
-            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: 4 }}>
-              or use the native picker:
+            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: 'auto' }}>
+              PDF, DWG, images, Word, Excel
             </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-            />
           </div>
 
           {/* Drag-and-drop area — separate sibling, no nested input */}
