@@ -148,4 +148,31 @@ router.get('/', (req, res) => {
   }
 });
 
+// Admin: list every submission across all users
+router.get('/admin/all', (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+
+    const rows = db.prepare(`
+      SELECT s.id, s.submission_id, s.project_type, s.message, s.file_count, s.file_names,
+             s.pipedream_status, s.credits_remaining_after, s.created_at,
+             u.full_name AS user_name, u.email AS user_email, u.company AS user_company
+      FROM drawing_submissions s
+      JOIN users u ON u.id = s.user_id
+      ORDER BY s.created_at DESC
+      LIMIT 500
+    `).all();
+
+    res.json({
+      submissions: rows.map(r => ({
+        ...r,
+        file_names: r.file_names ? JSON.parse(r.file_names) : [],
+      })),
+    });
+  } catch (err) {
+    console.error('[Submissions] Admin list error:', err);
+    res.status(500).json({ error: 'Failed to list submissions' });
+  }
+});
+
 module.exports = router;
