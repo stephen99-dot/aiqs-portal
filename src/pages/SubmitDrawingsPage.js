@@ -224,10 +224,9 @@ export default function SubmitDrawingsPage() {
           <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
+
+          {/* Native file input styled via ::file-selector-button — visible, native, on-brand */}
           <div
-            onClick={(e) => {
-              if (e.target.tagName !== 'INPUT') fileInputRef.current?.click();
-            }}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -236,61 +235,35 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              position: 'relative',
+              borderRadius: 12,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.04)' : t.surface,
-              borderRadius: 12, padding: '28px 20px',
-              textAlign: 'center', cursor: 'pointer',
+              background: dragOver ? 'rgba(245,158,11,0.06)' : t.surface,
+              padding: '24px 22px',
+              textAlign: 'center',
               transition: 'all 0.15s',
             }}
           >
             <div style={{
-              width: 44, height: 44, borderRadius: 12, margin: '0 auto 10px',
-              background: 'rgba(245,158,11,0.08)',
+              width: 48, height: 48, borderRadius: 14, margin: '0 auto 12px',
+              background: 'rgba(245,158,11,0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              pointerEvents: 'none',
             }}>
-              <UploadIcon size={20} color="#F59E0B" />
+              <UploadIcon size={22} color="#F59E0B" />
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 3, pointerEvents: 'none' }}>
-              Drag &amp; drop or <span style={{ color: '#F59E0B', textDecoration: 'underline' }}>browse</span>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: t.text, marginBottom: 4 }}>
+              Drag &amp; drop your drawings here
             </div>
-            <div style={{ fontSize: 12, color: t.textMuted, pointerEvents: 'none' }}>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
               PDF, DWG, images, Word, Excel — any file type accepted
             </div>
             <input
               ref={fileInputRef}
+              className="aiqs-file-input"
               type="file"
               multiple
               onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                cursor: 'pointer',
-                fontSize: 0,
-              }}
             />
           </div>
-
-          {/* Explicit fallback button — guarantees a working path even if the overlay click is interfered with */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              marginTop: 8,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', borderRadius: 8,
-              background: t.surface, color: t.text,
-              border: '1px solid ' + t.border,
-              fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            <PaperclipIcon size={13} color={t.textMuted} />
-            Choose files…
-          </button>
 
           {files.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -515,6 +488,36 @@ export default function SubmitDrawingsPage() {
           0%   { background-position: 0% 50%; }
           50%  { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
+        }
+
+        /* Style the native file input — keeps it real & clickable, just makes it look on-brand */
+        .aiqs-file-input {
+          display: inline-block;
+          max-width: 100%;
+          font-size: 13px;
+          color: ${t.textMuted};
+          cursor: pointer;
+        }
+        .aiqs-file-input::file-selector-button {
+          background: linear-gradient(135deg, #F59E0B, #D97706);
+          color: #0A0F1C;
+          font-weight: 700;
+          font-size: 13px;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 9px;
+          cursor: pointer;
+          margin-right: 12px;
+          box-shadow: 0 2px 10px rgba(245,158,11,0.25);
+          transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+        }
+        .aiqs-file-input::file-selector-button:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 16px rgba(245,158,11,0.35);
+          filter: brightness(1.05);
+        }
+        .aiqs-file-input::file-selector-button:active {
+          transform: translateY(0);
         }
       `}</style>
     </div>
