@@ -225,6 +225,9 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
           <div
+            onClick={(e) => {
+              if (e.target.tagName !== 'INPUT') fileInputRef.current?.click();
+            }}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -271,6 +274,23 @@ export default function SubmitDrawingsPage() {
               }}
             />
           </div>
+
+          {/* Explicit fallback button — guarantees a working path even if the overlay click is interfered with */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              marginTop: 8,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 8,
+              background: t.surface, color: t.text,
+              border: '1px solid ' + t.border,
+              fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            <PaperclipIcon size={13} color={t.textMuted} />
+            Choose files…
+          </button>
 
           {files.length > 0 && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
