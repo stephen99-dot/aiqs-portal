@@ -225,27 +225,9 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* Standalone native file input — NOT inside any drag/drop wrapper, so nothing
-              can intercept its click. Styled via ::file-selector-button. */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-            padding: '14px 16px', borderRadius: 12,
-            background: t.surface, border: '1px solid ' + t.border,
-            marginBottom: 8,
-          }}>
-            <input
-              ref={fileInputRef}
-              className="aiqs-file-input"
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-            />
-            <span style={{ fontSize: 11.5, color: t.textMuted }}>
-              PDF, DWG, images, Word, Excel — any file type
-            </span>
-          </div>
-
-          {/* Drag-and-drop area — separate sibling, no nested input */}
+          {/* Combined upload card — drag/drop area on top, hidden input + styled button row below.
+              The button uses a wrapped <label> so the click is delegated by the browser at the DOM
+              level (not via React/JS), which sidesteps whatever was eating the previous click. */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -255,19 +237,42 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              borderRadius: 12,
+              borderRadius: 14,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.06)' : 'transparent',
-              padding: '20px 18px',
-              textAlign: 'center',
+              background: dragOver ? 'rgba(245,158,11,0.08)' : t.surface,
+              padding: '22px 20px',
               transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              textAlign: 'center',
             }}
           >
-            <UploadIcon size={16} color="#F59E0B" />
-            <span style={{ fontSize: 13, color: t.textMuted }}>
-              …or drag &amp; drop drawings here
-            </span>
+            <div style={{
+              width: 46, height: 46, borderRadius: 14, margin: '0 auto 10px',
+              background: 'rgba(245,158,11,0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <UploadIcon size={20} color="#F59E0B" />
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 3 }}>
+              Drag &amp; drop your drawings here
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
+              PDF, DWG, images, Word, Excel — any file type accepted
+            </div>
+
+            {/* Two independent click paths so at least one works:
+                1. <label> wraps an input — browser delegates click natively (no JS).
+                2. Plain visible <input type="file"> below — guaranteed to work. */}
+            <input
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+              style={{
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+              className="aiqs-file-input"
+              ref={fileInputRef}
+            />
           </div>
 
           {files.length > 0 && (
@@ -358,90 +363,83 @@ export default function SubmitDrawingsPage() {
           )}
         </div>
 
-        {/* AI Enhance — prominent, multi-coloured, sits above Submit Enquiry */}
-        <div style={{
-          position: 'relative',
-          padding: 2,
-          borderRadius: 12,
-          background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981, #F59E0B)',
-          backgroundSize: '300% 300%',
-          animation: enhancing ? 'aiqs-rainbow 2s linear infinite' : 'aiqs-rainbow 8s linear infinite',
-          marginBottom: 12,
-        }}>
-          <button
-            type="button"
-            onClick={enhanceWriting}
-            disabled={enhancing || submitting || message.trim().length < 10}
-            title="Polish your description with AI — grammar, punctuation and structure only. Adds no new project information."
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              width: '100%', padding: '13px 20px', borderRadius: 10,
-              background: enhancing
-                ? 'linear-gradient(120deg, rgba(245,158,11,0.12), rgba(236,72,153,0.12), rgba(139,92,246,0.12))'
-                : (t.card || '#0A0F1C'),
-              color: t.text || '#fff',
-              fontWeight: 700, fontSize: 14.5, border: 'none',
-              cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
-              opacity: (submitting || message.trim().length < 10) && !enhancing ? 0.55 : 1,
-              transition: 'all 0.15s',
-            }}
-          >
-            {enhancing ? (
-              <>
-                <div style={{
-                  width: 16, height: 16, borderRadius: '50%',
-                  border: '2.5px solid rgba(245,158,11,0.25)',
-                  borderTopColor: '#EC4899',
-                  animation: 'spin 0.6s linear infinite',
-                }} />
-                <span style={{
-                  background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}>
-                  Polishing your brief…
-                </span>
-                <span style={{
-                  fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5,
-                  fontWeight: 600, color: t.textMuted, marginLeft: 4,
-                }}>
-                  {enhanceRemaining > 0
-                    ? '~' + enhanceRemaining + 's left'
-                    : 'almost done… (' + enhanceElapsed + 's)'}
-                </span>
-              </>
-            ) : (
-              <>
-                <SparklesIcon size={16} color="#EC4899" />
-                <span style={{
-                  background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  fontWeight: 800,
-                  letterSpacing: '0.01em',
-                }}>
-                  Enhance my writing with AI
-                </span>
-              </>
-            )}
-          </button>
-          {enhancing && (
-            <div style={{
-              position: 'absolute', left: 2, right: 2, bottom: 2, height: 3,
-              borderRadius: '0 0 10px 10px', overflow: 'hidden',
-              background: 'rgba(0,0,0,0.15)',
-            }}>
+        {/* AI Enhance — prominent, sits above Submit Enquiry */}
+        <button
+          type="button"
+          onClick={enhanceWriting}
+          disabled={enhancing || submitting || message.trim().length < 10}
+          title="Polish your description with AI — grammar, punctuation and structure only. Adds no new project information."
+          style={{
+            position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+            width: '100%', padding: '14px 22px', borderRadius: 12,
+            background: enhancing
+              ? 'linear-gradient(120deg, #4338CA, #7C3AED, #DB2777, #EA580C)'
+              : 'linear-gradient(120deg, #6366F1, #8B5CF6, #EC4899, #F59E0B)',
+            backgroundSize: enhancing ? '300% 100%' : '200% 100%',
+            animation: enhancing ? 'aiqs-rainbow 2.5s linear infinite' : 'none',
+            color: '#FFFFFF',
+            fontWeight: 700, fontSize: 14.5, border: 'none',
+            cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
+            opacity: (submitting || message.trim().length < 10) && !enhancing ? 0.45 : 1,
+            boxShadow: enhancing
+              ? '0 4px 24px rgba(139,92,246,0.35), 0 0 0 1px rgba(255,255,255,0.12) inset'
+              : '0 2px 14px rgba(139,92,246,0.25)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+            overflow: 'hidden',
+            marginBottom: 12,
+            transition: 'box-shadow 0.2s, opacity 0.2s',
+          }}
+        >
+          {enhancing ? (
+            <>
               <div style={{
-                height: '100%',
-                width: Math.min(100, (enhanceElapsed / ENHANCE_ESTIMATE_S) * 100) + '%',
-                background: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981)',
-                transition: 'width 0.25s linear',
+                width: 16, height: 16, borderRadius: '50%',
+                border: '2.5px solid rgba(255,255,255,0.3)',
+                borderTopColor: '#FFFFFF',
+                animation: 'spin 0.6s linear infinite',
+                flexShrink: 0,
               }} />
-            </div>
+              <span>Polishing your brief…</span>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 12.5, fontWeight: 600,
+                background: 'rgba(0,0,0,0.25)',
+                padding: '3px 9px', borderRadius: 999,
+                marginLeft: 4,
+              }}>
+                {enhanceRemaining > 0
+                  ? '~' + enhanceRemaining + 's left'
+                  : enhanceElapsed + 's elapsed'}
+              </span>
+              {/* progress bar */}
+              <div style={{
+                position: 'absolute', left: 0, right: 0, bottom: 0,
+                height: 3, background: 'rgba(0,0,0,0.2)',
+              }}>
+                <div style={{
+                  height: '100%',
+                  width: Math.min(100, (enhanceElapsed / ENHANCE_ESTIMATE_S) * 100) + '%',
+                  background: '#FFFFFF',
+                  transition: 'width 0.25s linear',
+                }} />
+              </div>
+            </>
+          ) : (
+            <>
+              <SparklesIcon size={17} color="#FFFFFF" />
+              <span>Enhance my writing with AI</span>
+              <span style={{
+                fontSize: 11, fontWeight: 600,
+                background: 'rgba(255,255,255,0.18)',
+                padding: '3px 8px', borderRadius: 999,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>
+                Free
+              </span>
+            </>
           )}
-        </div>
+        </button>
 
         {/* Submit */}
         <button
