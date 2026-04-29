@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
-  FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon,
+  FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
 
 const PROJECT_TYPES = [
@@ -44,9 +44,6 @@ export default function SubmitDrawingsPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-  const fallbackInputRef = useRef(null);
-  const [debugLog, setDebugLog] = useState([]);
-  const log = (m) => setDebugLog(prev => [...prev.slice(-9), new Date().toLocaleTimeString() + ' — ' + m]);
 
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
@@ -56,6 +53,8 @@ export default function SubmitDrawingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
   const [status, setStatus] = useState(null); // { type: 'success'|'error', msg: string }
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState(null);
 
   useEffect(() => {
     apiFetch('/credits').then(setCredits).catch(() => {});
@@ -65,12 +64,31 @@ export default function SubmitDrawingsPage() {
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
-    const arr = Array.from(newFiles || []);
-    log('addFiles called with ' + arr.length + ' file(s)');
-    setFiles(prev => [...prev, ...arr]);
+    setFiles(prev => [...prev, ...Array.from(newFiles || [])]);
   }
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function enhanceWriting() {
+    if (message.trim().length < 10) {
+      setEnhanceError('Write a few words first (min 10 characters) and I can polish it.');
+      return;
+    }
+    setEnhanceError(null);
+    setEnhancing(true);
+    try {
+      const data = await apiFetch('/enhance-brief', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'polish', brief: message.trim(), project_type: projectType }),
+      });
+      if (data.enhanced) setMessage(data.enhanced);
+      else setEnhanceError('AI returned an empty response — please try again.');
+    } catch (err) {
+      setEnhanceError(err.message || 'Could not enhance — please try again.');
+    } finally {
+      setEnhancing(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -114,34 +132,8 @@ export default function SubmitDrawingsPage() {
     }
   }
 
-  const stripes = 'repeating-linear-gradient(45deg, #FACC15 0 20px, #0A0F1C 20px 40px)';
-
   return (
-    <div style={{
-      padding: 14,
-      maxWidth: 920,
-      margin: '0 auto',
-      background: stripes,
-    }}>
-      <div style={{
-        background: '#FACC15',
-        color: '#0A0F1C',
-        textAlign: 'center',
-        fontWeight: 800,
-        fontSize: 13,
-        letterSpacing: '0.12em',
-        padding: '8px 12px',
-        marginBottom: 14,
-        borderRadius: 4,
-        textTransform: 'uppercase',
-      }}>
-        ⚠ Under construction — testing in progress ⚠
-      </div>
-      <div style={{
-        background: t.bg || '#0A0F1C',
-        padding: '32px 28px',
-        borderRadius: 6,
-      }}>
+    <div style={{ padding: '32px 28px', maxWidth: 880, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
@@ -219,13 +211,11 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
           <div
-            onClick={() => log('dropzone wrapper click')}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
               e.preventDefault();
               setDragOver(false);
-              log('drop event with ' + (e.dataTransfer.files?.length || 0) + ' file(s)');
               addFiles(e.dataTransfer.files);
             }}
             style={{
@@ -255,8 +245,7 @@ export default function SubmitDrawingsPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              onClick={() => log('overlay input click')}
-              onChange={e => { log('overlay input change: ' + (e.target.files?.length || 0) + ' file(s)'); addFiles(e.target.files); e.target.value = ''; }}
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -267,46 +256,6 @@ export default function SubmitDrawingsPage() {
                 fontSize: 0,
               }}
             />
-          </div>
-
-          {/* Diagnostic fallback — plain native button + visible input */}
-          <div style={{
-            marginTop: 10, padding: 10, borderRadius: 8,
-            background: '#FEF3C7', border: '1px dashed #F59E0B',
-          }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#78350F', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Diagnostic fallback (testing)
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input
-                ref={fallbackInputRef}
-                type="file"
-                multiple
-                onChange={e => { log('fallback native input change: ' + (e.target.files?.length || 0) + ' file(s)'); addFiles(e.target.files); e.target.value = ''; }}
-                style={{ fontSize: 12, color: '#0A0F1C' }}
-              />
-              <button
-                type="button"
-                onClick={() => { log('button -> fileInputRef.click()'); fileInputRef.current?.click(); }}
-                style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #F59E0B', background: '#fff', color: '#0A0F1C', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Trigger overlay input
-              </button>
-            </div>
-          </div>
-
-          {/* Live debug log */}
-          <div style={{
-            marginTop: 10, padding: 10, borderRadius: 8,
-            background: '#0A0F1C', color: '#FACC15',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
-            minHeight: 60, maxHeight: 140, overflowY: 'auto',
-          }}>
-            <div style={{ color: '#FACC15', fontWeight: 700, marginBottom: 4 }}>debug log — files in state: {files.length}</div>
-            {debugLog.length === 0
-              ? <div style={{ color: '#6B7280' }}>(no events yet)</div>
-              : debugLog.map((l, i) => <div key={i}>{l}</div>)
-            }
           </div>
 
           {files.length > 0 && (
@@ -350,23 +299,60 @@ export default function SubmitDrawingsPage() {
         </div>
 
         {/* Project details */}
-        <label style={{ display: 'block', marginBottom: 18 }}>
+        <div style={{ marginBottom: 18 }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em',
+            gap: 10,
           }}>
             <span>Project Details <span style={{ color: '#F59E0B' }}>*</span></span>
-            <span style={{
-              fontFamily: 'JetBrains Mono, monospace',
-              color: message.trim().length >= MIN_SUBMIT_CHARS ? '#10B981' : t.textMuted,
-            }}>
-              {message.trim().length}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                onClick={enhanceWriting}
+                disabled={enhancing || submitting || message.trim().length < 10}
+                title="Polish grammar and structure with AI (no new info added)"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '5px 10px', borderRadius: 7,
+                  background: enhancing ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.35)',
+                  color: '#F59E0B', fontSize: 11.5, fontWeight: 700,
+                  letterSpacing: '0.02em', textTransform: 'uppercase',
+                  cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
+                  opacity: (submitting || message.trim().length < 10) ? 0.5 : 1,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {enhancing ? (
+                  <>
+                    <div style={{
+                      width: 11, height: 11, borderRadius: '50%',
+                      border: '2px solid rgba(245,158,11,0.25)',
+                      borderTopColor: '#F59E0B',
+                      animation: 'spin 0.6s linear infinite',
+                    }} />
+                    Enhancing…
+                  </>
+                ) : (
+                  <>
+                    <SparklesIcon size={12} color="#F59E0B" />
+                    Enhance with AI
+                  </>
+                )}
+              </button>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                color: message.trim().length >= MIN_SUBMIT_CHARS ? '#10B981' : t.textMuted,
+              }}>
+                {message.trim().length}
+              </span>
+            </div>
           </div>
           <textarea
             value={message}
             onChange={e => setMessage(e.target.value)}
-            disabled={submitting}
+            disabled={submitting || enhancing}
             rows={6}
             placeholder="Describe your project: rooms, dimensions, materials, specifications, location, anything on the drawings. The more detail you add, the more accurate your BOQ will be."
             style={{
@@ -377,7 +363,14 @@ export default function SubmitDrawingsPage() {
               fontFamily: 'inherit', lineHeight: 1.6,
             }}
           />
-        </label>
+          {enhanceError && (
+            <div style={{
+              marginTop: 6, fontSize: 12, color: '#F87171',
+            }}>
+              {enhanceError}
+            </div>
+          )}
+        </div>
 
         {/* Submit */}
         <button
@@ -424,7 +417,6 @@ export default function SubmitDrawingsPage() {
       </form>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
     </div>
   );
 }
