@@ -225,7 +225,27 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* Native file input styled via ::file-selector-button — visible, native, on-brand */}
+          {/* Standalone native file input — NOT inside any drag/drop wrapper, so nothing
+              can intercept its click. Styled via ::file-selector-button. */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            padding: '14px 16px', borderRadius: 12,
+            background: t.surface, border: '1px solid ' + t.border,
+            marginBottom: 8,
+          }}>
+            <input
+              ref={fileInputRef}
+              className="aiqs-file-input"
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            />
+            <span style={{ fontSize: 11.5, color: t.textMuted }}>
+              PDF, DWG, images, Word, Excel — any file type
+            </span>
+          </div>
+
+          {/* Drag-and-drop area — separate sibling, no nested input */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -237,32 +257,17 @@ export default function SubmitDrawingsPage() {
             style={{
               borderRadius: 12,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.06)' : t.surface,
-              padding: '24px 22px',
+              background: dragOver ? 'rgba(245,158,11,0.06)' : 'transparent',
+              padding: '20px 18px',
               textAlign: 'center',
               transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             }}
           >
-            <div style={{
-              width: 48, height: 48, borderRadius: 14, margin: '0 auto 12px',
-              background: 'rgba(245,158,11,0.1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <UploadIcon size={22} color="#F59E0B" />
-            </div>
-            <div style={{ fontSize: 14.5, fontWeight: 600, color: t.text, marginBottom: 4 }}>
-              Drag &amp; drop your drawings here
-            </div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
-              PDF, DWG, images, Word, Excel — any file type accepted
-            </div>
-            <input
-              ref={fileInputRef}
-              className="aiqs-file-input"
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-            />
+            <UploadIcon size={16} color="#F59E0B" />
+            <span style={{ fontSize: 13, color: t.textMuted }}>
+              …or drag &amp; drop drawings here
+            </span>
           </div>
 
           {files.length > 0 && (
@@ -495,7 +500,7 @@ export default function SubmitDrawingsPage() {
           display: inline-block;
           max-width: 100%;
           font-size: 13px;
-          color: ${t.textMuted};
+          color: #94A3B8;
           cursor: pointer;
         }
         .aiqs-file-input::file-selector-button {
