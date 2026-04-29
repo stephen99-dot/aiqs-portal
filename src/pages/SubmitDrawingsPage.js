@@ -225,9 +225,26 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* Combined upload card — drag/drop area on top, hidden input + styled button row below.
-              The button uses a wrapped <label> so the click is delegated by the browser at the DOM
-              level (not via React/JS), which sidesteps whatever was eating the previous click. */}
+          {/* File input — its OWN sibling, NOT nested in any drag handler. */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            padding: '14px 16px', borderRadius: 12,
+            background: t.surface, border: '1px solid ' + t.border,
+            marginBottom: 8,
+          }}>
+            <input
+              ref={fileInputRef}
+              className="aiqs-file-input"
+              type="file"
+              multiple
+              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+            />
+            <span style={{ fontSize: 11.5, color: t.textMuted }}>
+              PDF, DWG, images, Word, Excel — any file type
+            </span>
+          </div>
+
+          {/* Drag-and-drop area — separate sibling, no nested input */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -237,42 +254,19 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
-              borderRadius: 14,
+              borderRadius: 12,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.08)' : t.surface,
-              padding: '22px 20px',
-              transition: 'all 0.15s',
+              background: dragOver ? 'rgba(245,158,11,0.08)' : 'transparent',
+              padding: '18px 18px',
               textAlign: 'center',
+              transition: 'background 0.15s, border-color 0.15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             }}
           >
-            <div style={{
-              width: 46, height: 46, borderRadius: 14, margin: '0 auto 10px',
-              background: 'rgba(245,158,11,0.1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <UploadIcon size={20} color="#F59E0B" />
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 3 }}>
-              Drag &amp; drop your drawings here
-            </div>
-            <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
-              PDF, DWG, images, Word, Excel — any file type accepted
-            </div>
-
-            {/* Two independent click paths so at least one works:
-                1. <label> wraps an input — browser delegates click natively (no JS).
-                2. Plain visible <input type="file"> below — guaranteed to work. */}
-            <input
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-              style={{
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-              className="aiqs-file-input"
-              ref={fileInputRef}
-            />
+            <UploadIcon size={16} color="#F59E0B" />
+            <span style={{ fontSize: 13, color: t.textMuted }}>
+              …or drag &amp; drop drawings here
+            </span>
           </div>
 
           {files.length > 0 && (
@@ -493,7 +487,9 @@ export default function SubmitDrawingsPage() {
           100% { background-position: 0% 50%; }
         }
 
-        /* Style the native file input — keeps it real & clickable, just makes it look on-brand */
+        /* Style the native file input — keeps it real & clickable, just makes it look on-brand.
+           No transforms or transitions on the file-selector-button — those have been observed to
+           interfere with the click hit-area in some Chromium builds. */
         .aiqs-file-input {
           display: inline-block;
           max-width: 100%;
@@ -512,15 +508,9 @@ export default function SubmitDrawingsPage() {
           cursor: pointer;
           margin-right: 12px;
           box-shadow: 0 2px 10px rgba(245,158,11,0.25);
-          transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
         }
         .aiqs-file-input::file-selector-button:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 16px rgba(245,158,11,0.35);
-          filter: brightness(1.05);
-        }
-        .aiqs-file-input::file-selector-button:active {
-          transform: translateY(0);
+          filter: brightness(1.08);
         }
       `}</style>
     </div>
