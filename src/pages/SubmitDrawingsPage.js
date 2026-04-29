@@ -225,22 +225,29 @@ export default function SubmitDrawingsPage() {
             Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
           </div>
 
-          {/* File input — its OWN sibling, NOT nested in any drag handler. */}
+          {/* File input — UNSTYLED native browser default. The user's browser kills clicks on
+              ::file-selector-button-styled inputs, so we put pretty styling on the container,
+              not the input itself. */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-            padding: '14px 16px', borderRadius: 12,
+            padding: '16px 18px', borderRadius: 12,
             background: t.surface, border: '1px solid ' + t.border,
             marginBottom: 8,
           }}>
-            <input
-              ref={fileInputRef}
-              className="aiqs-file-input"
-              type="file"
-              multiple
-              onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
-            />
+            <PaperclipIcon size={18} color="#F59E0B" />
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, marginBottom: 4 }}>
+                Attach your drawings
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={e => { addFiles(e.target.files); e.target.value = ''; }}
+              />
+            </div>
             <span style={{ fontSize: 11.5, color: t.textMuted }}>
-              PDF, DWG, images, Word, Excel — any file type
+              PDF, DWG, images, Word, Excel
             </span>
           </div>
 
@@ -487,31 +494,7 @@ export default function SubmitDrawingsPage() {
           100% { background-position: 0% 50%; }
         }
 
-        /* Style the native file input — keeps it real & clickable, just makes it look on-brand.
-           No transforms or transitions on the file-selector-button — those have been observed to
-           interfere with the click hit-area in some Chromium builds. */
-        .aiqs-file-input {
-          display: inline-block;
-          max-width: 100%;
-          font-size: 13px;
-          color: #94A3B8;
-          cursor: pointer;
-        }
-        .aiqs-file-input::file-selector-button {
-          background: linear-gradient(135deg, #F59E0B, #D97706);
-          color: #0A0F1C;
-          font-weight: 700;
-          font-size: 13px;
-          padding: 10px 20px;
-          border: none;
-          border-radius: 9px;
-          cursor: pointer;
-          margin-right: 12px;
-          box-shadow: 0 2px 10px rgba(245,158,11,0.25);
-        }
-        .aiqs-file-input::file-selector-button:hover {
-          filter: brightness(1.08);
-        }
+        /* No CSS on the file input — the native browser button is what works in this env. */
       `}</style>
     </div>
   );
