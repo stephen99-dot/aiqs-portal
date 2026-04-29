@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
+  UploadIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 
@@ -40,6 +41,7 @@ export default function Layout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Projects', Icon: NewProjectIcon },
+    { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon, badge: 'New' },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },

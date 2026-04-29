@@ -1,0 +1,151 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRAWING SUBMISSION ROUTES — server/submissionRoutes.js
+//
+// Handles the in-portal "Submit Drawings" form for paying clients.
+// Mirrors the public theaiqs.co.uk Pipedream flow: forwards files to the file
+// receiver and the JSON payload to the main webhook, decrements one free_credit
+// per submission, and records the submission row for tracking.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const express = require('express');
+const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
+const db = require('./database');
+
+const router = express.Router();
+
+const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
+const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 20 },
+});
+
+async function forwardFile(file, submissionId) {
+  const fd = new FormData();
+  const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
+  fd.append('file', blob, file.originalname);
+
+  const resp = await fetch(FILE_UPLOAD_URL, {
+    method: 'POST',
+    headers: { 'X-Submission-Id': submissionId },
+    body: fd,
+  });
+  if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
+}
+
+router.post('/', upload.array('files', 20), async (req, res) => {
+  try {
+    const user = db.prepare('SELECT id, email, full_name, company, phone, role, free_credits FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isAdmin = user.role === 'admin';
+    if (!isAdmin && (user.free_credits || 0) <= 0) {
+      return res.status(403).json({ error: 'No BOQ credits remaining', upgrade_required: true });
+    }
+
+    const projectType = (req.body.project_type || '').trim();
+    const message = (req.body.message || '').trim();
+    const files = req.files || [];
+
+    if (!projectType) return res.status(400).json({ error: 'Project type is required' });
+    if (message.length < 20) return res.status(400).json({ error: 'Please describe your project (min 20 characters)' });
+    if (files.length === 0) return res.status(400).json({ error: 'Please upload at least one drawing or document' });
+
+    const submissionId = 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+    let pipedreamStatus = 'ok';
+    try {
+      for (const file of files) {
+        await forwardFile(file, submissionId);
+      }
+
+      const payload = {
+        name: user.full_name,
+        email: user.email,
+        phone: user.phone || '',
+        company: user.company || '',
+        project_type: projectType,
+        message,
+        submission_id: submissionId,
+        file_names: files.map(f => f.originalname),
+        file_count: files.length,
+        submitted_at: new Date().toISOString(),
+        source: 'aiqs-portal/submit-drawings',
+        portal_user_id: user.id,
+      };
+
+      const resp = await fetch(MAIN_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) throw new Error('Pipedream main webhook failed: ' + resp.status);
+    } catch (err) {
+      console.error('[Submissions] Pipedream forward error:', err.message);
+      pipedreamStatus = 'failed: ' + err.message;
+      return res.status(502).json({ error: 'Could not forward your submission. Please try again or contact support — no credit has been used.' });
+    }
+
+    let creditsRemaining = isAdmin ? 999 : (user.free_credits || 0) - 1;
+    if (!isAdmin) {
+      db.prepare(`
+        UPDATE users
+        SET free_credits = free_credits - 1,
+            total_projects = total_projects + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(user.id);
+    }
+
+    db.prepare(`
+      INSERT INTO drawing_submissions
+        (id, user_id, submission_id, project_type, message, file_count, file_names, pipedream_status, credits_remaining_after)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      uuidv4(),
+      user.id,
+      submissionId,
+      projectType,
+      message,
+      files.length,
+      JSON.stringify(files.map(f => f.originalname)),
+      pipedreamStatus,
+      creditsRemaining
+    );
+
+    res.json({
+      success: true,
+      submission_id: submissionId,
+      credits_remaining: creditsRemaining,
+    });
+  } catch (err) {
+    console.error('[Submissions] Error:', err);
+    res.status(500).json({ error: 'Submission failed' });
+  }
+});
+
+router.get('/', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT id, submission_id, project_type, file_count, file_names, credits_remaining_after, created_at
+      FROM drawing_submissions
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).all(req.user.id);
+
+    res.json({
+      submissions: rows.map(r => ({
+        ...r,
+        file_names: r.file_names ? JSON.parse(r.file_names) : [],
+      })),
+    });
+  } catch (err) {
+    console.error('[Submissions] List error:', err);
+    res.status(500).json({ error: 'Failed to list submissions' });
+  }
+});
+
+module.exports = router;
