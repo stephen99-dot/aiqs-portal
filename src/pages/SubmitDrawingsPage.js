@@ -55,6 +55,10 @@ export default function SubmitDrawingsPage() {
   const [status, setStatus] = useState(null); // { type: 'success'|'error', msg: string }
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
+  const [enhanceElapsed, setEnhanceElapsed] = useState(0);
+
+  const ENHANCE_ESTIMATE_S = 9; // typical polish-mode latency
+  const enhanceRemaining = Math.max(0, ENHANCE_ESTIMATE_S - enhanceElapsed);
 
   useEffect(() => {
     apiFetch('/credits').then(setCredits).catch(() => {});
@@ -69,6 +73,16 @@ export default function SubmitDrawingsPage() {
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
   }
+
+  useEffect(() => {
+    if (!enhancing) return;
+    setEnhanceElapsed(0);
+    const start = Date.now();
+    const id = setInterval(() => {
+      setEnhanceElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 250);
+    return () => clearInterval(id);
+  }, [enhancing]);
 
   async function enhanceWriting() {
     if (message.trim().length < 10) {
@@ -303,71 +317,130 @@ export default function SubmitDrawingsPage() {
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em',
-            gap: 10,
           }}>
             <span>Project Details <span style={{ color: '#F59E0B' }}>*</span></span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                type="button"
-                onClick={enhanceWriting}
-                disabled={enhancing || submitting || message.trim().length < 10}
-                title="Polish grammar and structure with AI (no new info added)"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '5px 10px', borderRadius: 7,
-                  background: enhancing ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)',
-                  border: '1px solid rgba(245,158,11,0.35)',
-                  color: '#F59E0B', fontSize: 11.5, fontWeight: 700,
-                  letterSpacing: '0.02em', textTransform: 'uppercase',
-                  cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
-                  opacity: (submitting || message.trim().length < 10) ? 0.5 : 1,
-                  transition: 'all 0.15s',
-                }}
-              >
-                {enhancing ? (
-                  <>
-                    <div style={{
-                      width: 11, height: 11, borderRadius: '50%',
-                      border: '2px solid rgba(245,158,11,0.25)',
-                      borderTopColor: '#F59E0B',
-                      animation: 'spin 0.6s linear infinite',
-                    }} />
-                    Enhancing…
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon size={12} color="#F59E0B" />
-                    Enhance with AI
-                  </>
-                )}
-              </button>
-              <span style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                color: message.trim().length >= MIN_SUBMIT_CHARS ? '#10B981' : t.textMuted,
-              }}>
-                {message.trim().length}
-              </span>
-            </div>
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace',
+              color: message.trim().length >= MIN_SUBMIT_CHARS ? '#10B981' : t.textMuted,
+            }}>
+              {message.trim().length}
+            </span>
           </div>
-          <textarea
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            disabled={submitting || enhancing}
-            rows={6}
-            placeholder="Describe your project: rooms, dimensions, materials, specifications, location, anything on the drawings. The more detail you add, the more accurate your BOQ will be."
-            style={{
-              width: '100%', padding: '12px 14px', borderRadius: 9,
-              background: t.surface, color: t.text,
-              border: '1px solid ' + t.border, fontSize: 14,
-              outline: 'none', resize: 'vertical', minHeight: 120,
-              fontFamily: 'inherit', lineHeight: 1.6,
-            }}
-          />
+          {/* Animated multi-coloured gradient border around the textarea */}
+          <div style={{
+            padding: enhancing ? 3 : 2,
+            borderRadius: 12,
+            background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981, #F59E0B)',
+            backgroundSize: '300% 300%',
+            animation: enhancing ? 'aiqs-rainbow 3s linear infinite' : 'aiqs-rainbow 12s linear infinite',
+          }}>
+            <textarea
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              disabled={submitting || enhancing}
+              rows={6}
+              placeholder="Describe your project: rooms, dimensions, materials, specifications, location, anything on the drawings. The more detail you add, the more accurate your BOQ will be."
+              style={{
+                display: 'block',
+                width: '100%', padding: '12px 14px', borderRadius: 10,
+                background: t.surface, color: t.text,
+                border: 'none', fontSize: 14,
+                outline: 'none', resize: 'vertical', minHeight: 120,
+                fontFamily: 'inherit', lineHeight: 1.6,
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
           {enhanceError && (
             <div style={{
               marginTop: 6, fontSize: 12, color: '#F87171',
             }}>
               {enhanceError}
+            </div>
+          )}
+        </div>
+
+        {/* AI Enhance — prominent, multi-coloured, sits above Submit Enquiry */}
+        <div style={{
+          position: 'relative',
+          padding: 2,
+          borderRadius: 12,
+          background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981, #F59E0B)',
+          backgroundSize: '300% 300%',
+          animation: enhancing ? 'aiqs-rainbow 2s linear infinite' : 'aiqs-rainbow 8s linear infinite',
+          marginBottom: 12,
+        }}>
+          <button
+            type="button"
+            onClick={enhanceWriting}
+            disabled={enhancing || submitting || message.trim().length < 10}
+            title="Polish your description with AI — grammar, punctuation and structure only. Adds no new project information."
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              width: '100%', padding: '13px 20px', borderRadius: 10,
+              background: enhancing
+                ? 'linear-gradient(120deg, rgba(245,158,11,0.12), rgba(236,72,153,0.12), rgba(139,92,246,0.12))'
+                : (t.card || '#0A0F1C'),
+              color: t.text || '#fff',
+              fontWeight: 700, fontSize: 14.5, border: 'none',
+              cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
+              opacity: (submitting || message.trim().length < 10) && !enhancing ? 0.55 : 1,
+              transition: 'all 0.15s',
+            }}
+          >
+            {enhancing ? (
+              <>
+                <div style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  border: '2.5px solid rgba(245,158,11,0.25)',
+                  borderTopColor: '#EC4899',
+                  animation: 'spin 0.6s linear infinite',
+                }} />
+                <span style={{
+                  background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                  Polishing your brief…
+                </span>
+                <span style={{
+                  fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5,
+                  fontWeight: 600, color: t.textMuted, marginLeft: 4,
+                }}>
+                  {enhanceRemaining > 0
+                    ? '~' + enhanceRemaining + 's left'
+                    : 'almost done… (' + enhanceElapsed + 's)'}
+                </span>
+              </>
+            ) : (
+              <>
+                <SparklesIcon size={16} color="#EC4899" />
+                <span style={{
+                  background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  fontWeight: 800,
+                  letterSpacing: '0.01em',
+                }}>
+                  Enhance my writing with AI
+                </span>
+              </>
+            )}
+          </button>
+          {enhancing && (
+            <div style={{
+              position: 'absolute', left: 2, right: 2, bottom: 2, height: 3,
+              borderRadius: '0 0 10px 10px', overflow: 'hidden',
+              background: 'rgba(0,0,0,0.15)',
+            }}>
+              <div style={{
+                height: '100%',
+                width: Math.min(100, (enhanceElapsed / ENHANCE_ESTIMATE_S) * 100) + '%',
+                background: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981)',
+                transition: 'width 0.25s linear',
+              }} />
             </div>
           )}
         </div>
@@ -416,7 +489,14 @@ export default function SubmitDrawingsPage() {
         )}
       </form>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes aiqs-rainbow {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
     </div>
   );
 }
