@@ -109,8 +109,34 @@ export default function SubmitDrawingsPage() {
     }
   }
 
+  const stripes = 'repeating-linear-gradient(45deg, #FACC15 0 20px, #0A0F1C 20px 40px)';
+
   return (
-    <div style={{ padding: '32px 28px', maxWidth: 880, margin: '0 auto' }}>
+    <div style={{
+      padding: 14,
+      maxWidth: 920,
+      margin: '0 auto',
+      background: stripes,
+    }}>
+      <div style={{
+        background: '#FACC15',
+        color: '#0A0F1C',
+        textAlign: 'center',
+        fontWeight: 800,
+        fontSize: 13,
+        letterSpacing: '0.12em',
+        padding: '8px 12px',
+        marginBottom: 14,
+        borderRadius: 4,
+        textTransform: 'uppercase',
+      }}>
+        ⚠ Under construction — testing in progress ⚠
+      </div>
+      <div style={{
+        background: t.bg || '#0A0F1C',
+        padding: '32px 28px',
+        borderRadius: 6,
+      }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{
@@ -350,6 +376,7 @@ export default function SubmitDrawingsPage() {
       </form>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }
