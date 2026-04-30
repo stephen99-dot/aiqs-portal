@@ -153,15 +153,16 @@ async function handleCheckoutComplete(session, stripeSecret) {
         'ul_' + uuidv4().slice(0, 8), user.id, 'doc_paid', 'Stripe checkout ' + session.id
       );
 
-      // £250 = 25000 (Stripe smallest unit). Grants the 5-BOQ credit pack.
-      const PACK_AMOUNT = parseInt(process.env.STRIPE_BOQ_PACK_AMOUNT || '25000', 10);
+      // £300 = 30000 (Stripe smallest unit). Grants the 5-BOQ credit pack.
+      // Override via env if pricing changes.
+      const PACK_AMOUNT = parseInt(process.env.STRIPE_BOQ_PACK_AMOUNT || '30000', 10);
       const PACK_CREDITS = parseInt(process.env.STRIPE_BOQ_PACK_CREDITS || '5', 10);
       if (session.amount_total === PACK_AMOUNT) {
         db.prepare('UPDATE users SET free_credits = COALESCE(free_credits, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
           .run(PACK_CREDITS, user.id);
         console.log(`[Stripe] Granted ${PACK_CREDITS} BOQ credits to ${customerEmail} (£${(PACK_AMOUNT / 100).toFixed(2)} pack)`);
       } else {
-        console.log(`[Stripe] PAYG one-off payment from ${customerEmail} for ${session.amount_total} — no credit pack matched`);
+        console.log(`[Stripe] PAYG one-off payment from ${customerEmail} for ${session.amount_total} — no credit pack matched (expected ${PACK_AMOUNT})`);
       }
     }
   }
