@@ -7,11 +7,40 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 
+function getCycleStart(user) {
+  if (user && user.billing_cycle_start) return user.billing_cycle_start;
+  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+// Compute spendable BOQ credits across ALL the columns BOQ credits live in.
+// There are three independent sources, all of which look like 'credits' to the user:
+//   1. free_credits   — written by Stripe top-ups & signup
+//   2. bonus_docs     — written by the legacy admin grant UI
+//   3. monthly_boq_quota minus drawing_submissions this billing cycle
+//      — written by the User Management 'Documents / BOQs' allowance field
+function spendableBoqCredits(user) {
+  const free = user.free_credits || 0;
+  const bonus = user.bonus_docs || 0;
+  const monthlyQuota = user.monthly_boq_quota || 0;
+  let monthlyRemaining = 0;
+  if (monthlyQuota > 0) {
+    const cycleStart = getCycleStart(user);
+    const used = db.prepare(
+      'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
+    ).get(user.id, cycleStart).c;
+    monthlyRemaining = Math.max(0, monthlyQuota - used);
+  }
+  return { free, bonus, monthlyRemaining, total: free + bonus + monthlyRemaining };
+}
+
 // ─── GET /api/credits — Get current user's credit info ──────────────────────
 router.get('/', (req, res) => {
   try {
     const user = db.prepare(`
-      SELECT free_credits, bonus_docs, total_projects, role FROM users WHERE id = ?
+      SELECT id, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start,
+             total_projects, role
+      FROM users WHERE id = ?
     `).get(req.user.id);
 
     if (!user) {
@@ -28,10 +57,7 @@ router.get('/', (req, res) => {
       });
     }
 
-    // Both columns count as spendable BOQ credits — admin grants land in
-    // bonus_docs, Stripe top-ups land in free_credits, but to the user
-    // it's one pool.
-    const total = (user.free_credits || 0) + (user.bonus_docs || 0);
+    const { total } = spendableBoqCredits(user);
 
     res.json({
       free_credits: total,

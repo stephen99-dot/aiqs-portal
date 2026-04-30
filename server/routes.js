@@ -625,6 +625,22 @@ router.get('/usage', authMiddleware, (req, res) => {
   const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
   const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
 
+  // BOQ doc usage this billing cycle. Same formula the admin User Management
+  // page uses, plus drawing_submissions (Submit Drawings flow).
+  let boqUsed = 0;
+  try {
+    const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(req.user.id, cycleStart);
+    const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(req.user.id, cycleStart);
+    let dlSubs = 0;
+    try {
+      dlSubs = db.prepare('SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?').get(req.user.id, cycleStart).c || 0;
+    } catch(e) {}
+    boqUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
+  } catch(e) {}
+  const defaultBoqLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
+  const boqLimit = (user.monthly_boq_quota != null && user.monthly_boq_quota >= 0) ? user.monthly_boq_quota : defaultBoqLimit;
+  const boqRemaining = Math.max(0, boqLimit - boqUsed);
+
   // Calculate cycle dates for display
   const cycleStartDate = new Date(cycleStart);
   const cycleEndDate = new Date(cycleStartDate);
@@ -637,6 +653,8 @@ router.get('/usage', authMiddleware, (req, res) => {
     billingCycleEnd: cycleEndDate.toISOString(),
     messagesUsed, messagesLimit, messagesRemaining,
     messagesAtLimit: messagesLimit > 0 && messagesUsed >= messagesLimit,
+    boqUsed, boqLimit, boqRemaining,
+    boqAtLimit: boqLimit > 0 && boqUsed >= boqLimit,
   });
 });
 
