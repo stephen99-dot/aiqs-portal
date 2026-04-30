@@ -302,13 +302,30 @@ router.post('/admin/import-rates/:clientId', authMiddleware, upload.single('file
 // Admin: get clients list for dropdown
 router.get('/admin/clients-list', authMiddleware, function(req, res) {
   if (req.user.role !== 'admin') return res.status(403).json({error:'Admin only'});
-  res.json({clients: db.prepare("SELECT id,email,full_name,company FROM users WHERE role!='admin' ORDER BY full_name").all()});
+  res.json({clients: db.prepare("SELECT id,email,full_name,company FROM users WHERE role NOT IN ('admin','system') ORDER BY full_name").all()});
 });
 
 // ─── SYSTEM DEFAULT RATES — seed every new signup with these ────────────────
 // Stored as rows in client_rate_library under the synthetic user_id below.
 // New signups copy these rows into their own library via seedDefaultRates().
 const SYSTEM_DEFAULT_USER_ID = '__system_default__';
+
+// client_rate_library has a FK on user_id → users.id, so we need a placeholder
+// row in users for the synthetic id. The role 'system' keeps it out of admin
+// lists (which filter role != 'admin' for clients, so it shows nowhere meaningful).
+function ensureSystemDefaultUser() {
+  try {
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(SYSTEM_DEFAULT_USER_ID);
+    if (existing) return;
+    db.prepare(
+      "INSERT INTO users (id, email, password_hash, full_name, role, plan, monthly_quota) VALUES (?, ?, '', ?, 'system', 'starter', 0)"
+    ).run(SYSTEM_DEFAULT_USER_ID, '__system_default__@aiqs.internal', 'System Default Rates');
+  } catch (e) {
+    console.error('[SystemDefaults] Could not ensure placeholder user:', e.message);
+  }
+}
+// Run once on module load so the placeholder exists before any rate insert.
+ensureSystemDefaultUser();
 
 router.get('/admin/system-default-rates', authMiddleware, function(req, res) {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
@@ -448,7 +465,7 @@ router.post('/admin/reseed-all-clients', authMiddleware, function(req, res) {
     const sysRates = db.prepare('SELECT category, item_key, display_name, value, unit, client_note FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(SYSTEM_DEFAULT_USER_ID);
     if (sysRates.length === 0) return res.status(400).json({ error: 'No system default rates uploaded yet' });
 
-    const clients = db.prepare("SELECT id, email, full_name FROM users WHERE role != 'admin'").all();
+    const clients = db.prepare("SELECT id, email, full_name FROM users WHERE role NOT IN ('admin','system')").all();
     if (clients.length === 0) return res.json({ success: true, users: 0, added: 0, updated: 0 });
 
     let totalAdded = 0;

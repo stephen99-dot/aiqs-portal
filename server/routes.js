@@ -678,7 +678,7 @@ router.get('/usage', authMiddleware, (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
-  const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
+  const users = db.prepare("SELECT * FROM users WHERE role != 'system' ORDER BY created_at DESC").all();
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
     const userCycleStart = getBillingCycleStart(u);
