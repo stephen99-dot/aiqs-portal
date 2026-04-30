@@ -213,6 +213,21 @@ function getUserPlanInfo(user) {
 
 function seedDefaultRates(userId) {
   try {
+    // 1. If admin has uploaded a system-default rate library, copy from that.
+    const SYSTEM_DEFAULT_USER_ID = '__system_default__';
+    const sysCount = db.prepare('SELECT COUNT(*) AS c FROM client_rate_library WHERE user_id = ? AND is_active = 1').get(SYSTEM_DEFAULT_USER_ID).c;
+    if (sysCount > 0) {
+      const sysRates = db.prepare('SELECT category, item_key, display_name, value, unit, client_note FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(SYSTEM_DEFAULT_USER_ID);
+      const insert = db.prepare(`INSERT OR IGNORE INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.80, ?, 1)`);
+      const tx = db.transaction(() => {
+        for (const r of sysRates) insert.run('rl_' + uuidv4().slice(0, 8), userId, r.category, r.item_key, r.display_name, r.value, r.unit, r.client_note);
+      });
+      tx();
+      console.log(`[Rates] Seeded ${sysRates.length} rates from system defaults for user ${userId}`);
+      return;
+    }
+
+    // 2. Fallback: built-in hardcoded defaults (used until admin uploads a sheet).
     const defaults = [
       { category: 'groundworks',       item_key: 'strip_foundations',    display_name: 'Strip Foundations 600x250mm',         value: 87,    unit: '£/m'    },
       { category: 'groundworks',       item_key: 'concrete_slab_100mm',  display_name: 'Concrete Slab 100mm Reinforced',      value: 50,    unit: '£/m2'   },

@@ -305,4 +305,194 @@ router.get('/admin/clients-list', authMiddleware, function(req, res) {
   res.json({clients: db.prepare("SELECT id,email,full_name,company FROM users WHERE role!='admin' ORDER BY full_name").all()});
 });
 
+// ─── SYSTEM DEFAULT RATES — seed every new signup with these ────────────────
+// Stored as rows in client_rate_library under the synthetic user_id below.
+// New signups copy these rows into their own library via seedDefaultRates().
+const SYSTEM_DEFAULT_USER_ID = '__system_default__';
+
+router.get('/admin/system-default-rates', authMiddleware, function(req, res) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const count = db.prepare('SELECT COUNT(*) AS c FROM client_rate_library WHERE user_id = ? AND is_active = 1').get(SYSTEM_DEFAULT_USER_ID).c;
+    const sample = db.prepare('SELECT category, display_name, value, unit FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, display_name LIMIT 12').all(SYSTEM_DEFAULT_USER_ID);
+    const lastUpdated = db.prepare('SELECT MAX(updated_at) AS u FROM client_rate_library WHERE user_id = ?').get(SYSTEM_DEFAULT_USER_ID).u;
+    res.json({ count, sample, lastUpdated });
+  } catch (e) {
+    console.error('[SystemDefaultRates] List error:', e);
+    res.status(500).json({ error: 'Failed to load system default rates' });
+  }
+});
+
+router.post('/admin/import-system-default-rates', authMiddleware, upload.single('file'), async function(req, res) {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (!['.xlsx', '.xls', '.csv'].includes(ext)) return res.status(400).json({ error: 'Upload .xlsx or .csv' });
+
+    let ExcelJS;
+    try { ExcelJS = require('exceljs'); } catch (e) { return res.status(500).json({ error: 'Excel not available' }); }
+
+    const wb = new ExcelJS.Workbook();
+    if (ext === '.csv') await wb.csv.readFile(req.file.path);
+    else await wb.xlsx.readFile(req.file.path);
+
+    const skipSheets = ['index', 'summary', 'contents', 'cover', 'location factors'];
+    const imported = [];
+    const skipped = [];
+    const sheetsProcessed = [];
+
+    function detectCols(ws) {
+      const colMap = {};
+      let headerRow = null;
+      for (let r = 1; r <= Math.min(5, ws.rowCount); r++) {
+        const row = ws.getRow(r);
+        const vals = [];
+        row.eachCell({ includeEmpty: true }, function (cell, col) {
+          vals.push({ col, val: String(cell.value || '').toLowerCase().trim() });
+        });
+        const hasRate = vals.some(v => /\b(rate|value|price|cost|amount|total)\b/i.test(v.val));
+        const hasDesc = vals.some(v => /\b(desc|name|item|trade|element)\b/i.test(v.val));
+        if (hasRate || hasDesc) {
+          headerRow = r;
+          for (const v of vals) {
+            if (/total\s*rate|total\s*cost|all[\-\s]*in|combined/i.test(v.val) && !colMap.value) colMap.value = v.col;
+            else if (/^(desc|name|trade|element|display)/i.test(v.val) && !colMap.name) colMap.name = v.col;
+            else if (/categor|section|group/i.test(v.val) && !colMap.category) colMap.category = v.col;
+            else if (/\b(rate|value|price|cost|amount)\b/i.test(v.val) && !colMap.value) colMap.value = v.col;
+            else if (/\b(unit|uom|measure)\b/i.test(v.val) && !colMap.unit) colMap.unit = v.col;
+            else if (/\b(note|comment|remark)\b/i.test(v.val) && !colMap.note) colMap.note = v.col;
+            else if (/\blabour\b/i.test(v.val) && !colMap.labour) colMap.labour = v.col;
+            else if (/\bmateria/i.test(v.val) && !colMap.materials) colMap.materials = v.col;
+          }
+          if (!colMap.name) {
+            for (const v of vals) {
+              if (/\bitem\b/i.test(v.val)) colMap.item_code = v.col;
+              if (/\bdesc/i.test(v.val)) colMap.name = v.col;
+            }
+            if (!colMap.name && colMap.item_code) colMap.name = colMap.item_code;
+          }
+          break;
+        }
+      }
+      if (!headerRow) {
+        headerRow = 0;
+        const cc = ws.getRow(1).cellCount;
+        if (cc >= 2) { colMap.name = 1; colMap.value = 2; if (cc >= 3) colMap.unit = 3; }
+      }
+      return { headerRow, colMap };
+    }
+
+    const tx = db.transaction(function () {
+      // Replace semantics: wipe existing system defaults so the upload is the
+      // new source of truth (no stale rows from a previous upload).
+      db.prepare('DELETE FROM client_rate_library WHERE user_id = ?').run(SYSTEM_DEFAULT_USER_ID);
+
+      for (let si = 0; si < wb.worksheets.length; si++) {
+        const ws = wb.worksheets[si];
+        const sheetName = ws.name || 'Sheet ' + (si + 1);
+        if (skipSheets.indexOf(sheetName.toLowerCase().trim()) >= 0) continue;
+        if (ws.rowCount < 2) continue;
+
+        const { headerRow, colMap } = detectCols(ws);
+        if (!colMap.name && !colMap.value) continue;
+
+        const sheetCategory = sheetName.toLowerCase().replace(/&/g, '_and_').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').substring(0, 50) || 'general';
+        sheetsProcessed.push(sheetName);
+
+        for (let r2 = (headerRow || 0) + 1; r2 <= ws.rowCount; r2++) {
+          const dataRow = ws.getRow(r2);
+          const name = colMap.name ? String(dataRow.getCell(colMap.name).value || '').trim() : '';
+          const rawVal = colMap.value ? String(dataRow.getCell(colMap.value).value || '') : '';
+          let value = parseFloat(String(rawVal).replace(/[^0-9.\-]/g, ''));
+
+          if ((isNaN(value) || value <= 0) && colMap.labour && colMap.materials) {
+            const lab = parseFloat(String(dataRow.getCell(colMap.labour).value || '').replace(/[^0-9.\-]/g, '')) || 0;
+            const mat = parseFloat(String(dataRow.getCell(colMap.materials).value || '').replace(/[^0-9.\-]/g, '')) || 0;
+            if (lab + mat > 0) value = lab + mat;
+          }
+
+          const unit = colMap.unit ? String(dataRow.getCell(colMap.unit).value || '').trim() || 'unit' : 'unit';
+          const category = colMap.category ? String(dataRow.getCell(colMap.category).value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_') || sheetCategory : sheetCategory;
+          const note = colMap.note ? String(dataRow.getCell(colMap.note).value || '').trim() : null;
+
+          if (!name || isNaN(value) || value <= 0) { if (name && name.length > 2) skipped.push(name); continue; }
+
+          const ik = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
+          db.prepare('INSERT INTO client_rate_library(id,user_id,category,item_key,display_name,value,unit,confidence,client_note,is_active)VALUES(?,?,?,?,?,?,?,0.85,?,1)')
+            .run('rl_' + uuidv4().slice(0, 8), SYSTEM_DEFAULT_USER_ID, category, ik, name, value, unit, note);
+          imported.push({ name, value, category });
+        }
+      }
+    });
+    tx();
+
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+    console.log('[SystemDefaults] ' + imported.length + ' rates from ' + sheetsProcessed.length + ' sheet(s). Future signups will receive these.');
+    res.json({ success: true, imported: imported.length, skipped: skipped.length, sheets: sheetsProcessed, rates: imported.slice(0, 20) });
+  } catch (e) {
+    console.error('[SystemDefaults]', e);
+    res.status(500).json({ error: 'Import failed: ' + e.message });
+  }
+});
+
+// Apply the current system defaults to every existing client user. INSERT-only
+// — never touches a user's existing rate (so customisations are preserved).
+// Use the optional ?force=1 flag to also UPDATE existing rates' values to match
+// the system default (still preserves rates a user has that the defaults don't).
+router.post('/admin/reseed-all-clients', authMiddleware, function(req, res) {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+    const force = req.query.force === '1' || req.body.force === true;
+    const sysRates = db.prepare('SELECT category, item_key, display_name, value, unit, client_note FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(SYSTEM_DEFAULT_USER_ID);
+    if (sysRates.length === 0) return res.status(400).json({ error: 'No system default rates uploaded yet' });
+
+    const clients = db.prepare("SELECT id, email, full_name FROM users WHERE role != 'admin'").all();
+    if (clients.length === 0) return res.json({ success: true, users: 0, added: 0, updated: 0 });
+
+    let totalAdded = 0;
+    let totalUpdated = 0;
+    const perUser = [];
+
+    const tx = db.transaction(() => {
+      for (const u of clients) {
+        let added = 0;
+        let updated = 0;
+        for (const r of sysRates) {
+          const existing = db.prepare('SELECT id, value FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(u.id, r.category, r.item_key);
+          if (existing) {
+            if (force && existing.value !== r.value) {
+              db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                .run(r.value, r.unit, r.display_name, existing.id);
+              updated++;
+            }
+          } else {
+            db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.80, ?, 1)')
+              .run('rl_' + uuidv4().slice(0, 8), u.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.client_note);
+            added++;
+          }
+        }
+        totalAdded += added;
+        totalUpdated += updated;
+        perUser.push({ email: u.email, added, updated });
+      }
+    });
+    tx();
+
+    console.log('[SystemDefaults] Reseed: ' + clients.length + ' users, ' + totalAdded + ' rates added' + (force ? ', ' + totalUpdated + ' updated' : ''));
+    res.json({
+      success: true,
+      users: clients.length,
+      added: totalAdded,
+      updated: totalUpdated,
+      force,
+      per_user: perUser.slice(0, 30),
+    });
+  } catch (e) {
+    console.error('[SystemDefaults] Reseed error:', e);
+    res.status(500).json({ error: 'Reseed failed: ' + e.message });
+  }
+});
+
 module.exports = router;

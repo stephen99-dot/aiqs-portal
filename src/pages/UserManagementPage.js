@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send } from 'lucide-react';
 
 const API_BASE = '/api';
@@ -431,6 +431,157 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   );
 }
 
+function SystemDefaultRatesCard({ isDark }) {
+  const [info, setInfo] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [reseeding, setReseeding] = useState(false);
+  const [reseedResult, setReseedResult] = useState(null);
+  const fileRef = useRef(null);
+
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const bg2 = isDark ? '#0D1320' : '#F8FAFC';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await apiFetch('/admin/system-default-rates');
+      setInfo(data);
+    } catch (e) {
+      setInfo({ count: 0, sample: [], error: e.message });
+    }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setUploading(true); setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await apiFetch('/admin/import-system-default-rates', { method: 'POST', body: fd });
+      setResult({ ok: true, imported: data.imported, skipped: data.skipped, sheets: data.sheets });
+      await refresh();
+    } catch (err) {
+      setResult({ ok: false, error: err.message });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const reseedAll = async (force) => {
+    const msg = force
+      ? 'Push current defaults to ALL existing clients AND OVERWRITE any matching rate values they already have?\n\nRates a user has that are not in the system defaults will be kept untouched.'
+      : 'Push current defaults to ALL existing clients?\n\nOnly NEW rates will be added — anything they already have (including their customisations) is left untouched.';
+    if (!window.confirm(msg)) return;
+    setReseeding(true); setReseedResult(null);
+    try {
+      const data = await apiFetch('/admin/reseed-all-clients' + (force ? '?force=1' : ''), { method: 'POST' });
+      setReseedResult({ ok: true, ...data });
+    } catch (err) {
+      setReseedResult({ ok: false, error: err.message });
+    } finally {
+      setReseeding(false);
+    }
+  };
+
+  return (
+    <div style={{
+      padding: '14px 18px', marginBottom: 16, borderRadius: 12,
+      background: bg2, border: '1px solid ' + border,
+      display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+    }}>
+      <div style={{ flex: 1, minWidth: 240 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: text, marginBottom: 2 }}>
+          System default rates · seed every new signup
+        </div>
+        <div style={{ fontSize: 12, color: muted, lineHeight: 1.55 }}>
+          {info == null
+            ? 'Loading…'
+            : info.count > 0
+              ? <>Currently <strong style={{ color: text }}>{info.count}</strong> rates loaded. Every new signup is auto-seeded with these. Re-upload to replace.</>
+              : <>No system rates uploaded yet — new signups get the built-in fallback (~40 rates). Upload an Excel/CSV to override.</>
+          }
+        </div>
+        {result && (
+          <div style={{ marginTop: 6, fontSize: 12, color: result.ok ? '#10B981' : '#EF4444' }}>
+            {result.ok
+              ? 'Imported ' + result.imported + ' rates from ' + (result.sheets ? result.sheets.length : 0) + ' sheet(s)' + (result.skipped ? ', skipped ' + result.skipped : '')
+              : 'Error: ' + result.error}
+          </div>
+        )}
+        {reseedResult && (
+          <div style={{ marginTop: 6, fontSize: 12, color: reseedResult.ok ? '#10B981' : '#EF4444' }}>
+            {reseedResult.ok
+              ? 'Re-seeded ' + reseedResult.users + ' client(s): ' + reseedResult.added + ' new rate(s) added' + (reseedResult.force ? ', ' + reseedResult.updated + ' overwritten' : '')
+              : 'Error: ' + reseedResult.error}
+          </div>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => fileRef.current && fileRef.current.click()}
+          disabled={uploading}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '9px 16px', borderRadius: 9,
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+            color: '#0A0F1C', border: 'none',
+            fontWeight: 700, fontSize: 12.5,
+            cursor: uploading ? 'wait' : 'pointer',
+            opacity: uploading ? 0.6 : 1,
+          }}
+        >
+          <Upload size={13} /> {uploading ? 'Uploading…' : (info && info.count > 0 ? 'Replace defaults' : 'Upload defaults')}
+        </button>
+        {info && info.count > 0 && (
+          <>
+            <button
+              onClick={() => reseedAll(false)}
+              disabled={reseeding}
+              title="Add any system-default rates the user doesn't already have. Never overwrites existing values."
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 9,
+                background: isDark ? '#1C2A44' : '#FFF',
+                color: isDark ? '#E8EDF5' : '#0F172A',
+                border: '1px solid ' + (isDark ? '#1C2A44' : '#E2E8F0'),
+                fontWeight: 700, fontSize: 12.5,
+                cursor: reseeding ? 'wait' : 'pointer',
+                opacity: reseeding ? 0.6 : 1,
+              }}
+            >
+              <RefreshCw size={13} /> {reseeding ? 'Re-seeding…' : 'Push to all clients'}
+            </button>
+            <button
+              onClick={() => reseedAll(true)}
+              disabled={reseeding}
+              title="Same as 'Push to all clients' but ALSO overwrites users' existing values for any rate present in the system defaults."
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 9,
+                background: 'transparent',
+                color: '#EF4444',
+                border: '1px solid rgba(239,68,68,0.4)',
+                fontWeight: 700, fontSize: 12.5,
+                cursor: reseeding ? 'wait' : 'pointer',
+                opacity: reseeding ? 0.6 : 1,
+              }}
+            >
+              Force overwrite
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function UserManagementPage({ theme }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -505,6 +656,8 @@ export default function UserManagementPage({ theme }) {
         </div>
         <button onClick={() => setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}><UserPlus size={15} /> Add User</button>
       </div>
+
+      <SystemDefaultRatesCard isDark={isDark} />
 
       {/* Tabs */}
       <div style={{display:'flex',gap:4,marginBottom:16,background:isDark?'#0D1320':'#F1F5F9',borderRadius:10,padding:3}}>
