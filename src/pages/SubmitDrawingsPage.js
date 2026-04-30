@@ -54,9 +54,12 @@ export default function SubmitDrawingsPage() {
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceElapsed, setEnhanceElapsed] = useState(0);
+  const [submitElapsed, setSubmitElapsed] = useState(0);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const ENHANCE_ESTIMATE_S = 9; // typical polish-mode latency
   const enhanceRemaining = Math.max(0, ENHANCE_ESTIMATE_S - enhanceElapsed);
+  const SUBMIT_ESTIMATE_S = 30;
 
   useEffect(() => {
     apiFetch('/credits').then(setCredits).catch(() => {});
@@ -81,6 +84,29 @@ export default function SubmitDrawingsPage() {
     }, 250);
     return () => clearInterval(id);
   }, [enhancing]);
+
+  // Tick a submission elapsed timer and warn before unload while submitting,
+  // so accidental back/close clicks don't kill an in-flight upload.
+  useEffect(() => {
+    if (!submitting) return;
+    setSubmitElapsed(0);
+    const start = Date.now();
+    const id = setInterval(() => {
+      setSubmitElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 250);
+    const guard = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('beforeunload', guard);
+    };
+  }, [submitting]);
+
+  // Auto-open the top-up modal when the user runs out of credits, and re-open it
+  // when their balance hits zero after a successful submission.
+  useEffect(() => {
+    if (noCredits) setShowTopUpModal(true);
+  }, [noCredits]);
 
   async function enhanceWriting() {
     if (message.trim().length < 10) {
@@ -108,7 +134,7 @@ export default function SubmitDrawingsPage() {
     setStatus(null);
 
     if (noCredits) {
-      setStatus({ type: 'error', msg: "You're out of BOQ credits. Please upgrade to submit more drawings." });
+      setShowTopUpModal(true);
       return;
     }
     if (!projectType) return setStatus({ type: 'error', msg: 'Please select a project type.' });
@@ -120,6 +146,14 @@ export default function SubmitDrawingsPage() {
     setSubmitting(true);
     setProgressLabel('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
 
+    // Step the progress label so the user keeps seeing progress and doesn't
+    // assume it's hung. The actual API call drives completion.
+    const stepTimers = [
+      setTimeout(() => setProgressLabel('Sending to our QS team…'), 4000),
+      setTimeout(() => setProgressLabel('Almost there — finalising your submission…'), 12000),
+      setTimeout(() => setProgressLabel('Just a moment, large files take a little longer…'), 25000),
+    ];
+
     try {
       const fd = new FormData();
       fd.append('project_type', projectType);
@@ -127,6 +161,7 @@ export default function SubmitDrawingsPage() {
       for (const f of files) fd.append('files', f, f.name);
 
       const data = await apiFetch('/submissions', { method: 'POST', body: fd });
+      stepTimers.forEach(clearTimeout);
 
       setStatus({
         type: 'success',
@@ -137,6 +172,7 @@ export default function SubmitDrawingsPage() {
       setFiles([]);
       setCredits(c => c ? { ...c, free_credits: data.credits_remaining, can_submit: data.credits_remaining > 0 } : c);
     } catch (err) {
+      stepTimers.forEach(clearTimeout);
       setStatus({ type: 'error', msg: err.message || 'Submission failed — please try again.' });
     } finally {
       setSubmitting(false);
@@ -502,12 +538,196 @@ export default function SubmitDrawingsPage() {
         )}
       </form>
 
+      {/* Blocking submission overlay — keeps the user on the page during the upload
+          so they can't accidentally click back, and gives them lots of feedback. */}
+      {submitting && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(10,15,28,0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div style={{
+            background: t.card, border: '1px solid ' + t.border,
+            borderRadius: 16, padding: '28px 28px 22px',
+            width: '100%', maxWidth: 460,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px',
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.18))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              position: 'relative',
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                border: '3px solid rgba(245,158,11,0.25)',
+                borderTopColor: '#F59E0B',
+                animation: 'spin 0.7s linear infinite',
+              }} />
+            </div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: t.text, marginBottom: 6 }}>
+              Submitting your drawings
+            </div>
+            <div style={{ fontSize: 13.5, color: t.textMuted, marginBottom: 18, lineHeight: 1.55 }}>
+              {progressLabel || 'Uploading…'}
+            </div>
+            <div style={{
+              width: '100%', height: 6, borderRadius: 6, background: t.surface, overflow: 'hidden',
+              marginBottom: 10,
+            }}>
+              <div style={{
+                height: '100%', borderRadius: 6,
+                width: Math.min(95, (submitElapsed / SUBMIT_ESTIMATE_S) * 95) + '%',
+                background: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6)',
+                transition: 'width 0.25s linear',
+              }} />
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted, fontFamily: 'JetBrains Mono, monospace' }}>
+              {submitElapsed}s elapsed · please don't close this tab
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky 'buy 5 BOQs' offer — shown automatically on no credits, dismissible
+          but always reachable via the floating button at bottom-right. */}
+      {showTopUpModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'rgba(10,15,28,0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div style={{
+            position: 'relative',
+            background: t.card, border: '1px solid ' + t.border,
+            borderRadius: 18, padding: '32px 30px 26px',
+            width: '100%', maxWidth: 480,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+          }}>
+            <button
+              type="button"
+              onClick={() => setShowTopUpModal(false)}
+              aria-label="Close"
+              style={{
+                position: 'absolute', top: 12, right: 12,
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: 6, borderRadius: 7, color: t.textMuted,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <XIcon size={16} color={t.textMuted} />
+            </button>
+
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 999,
+              background: 'rgba(245,158,11,0.1)', color: '#F59E0B',
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              marginBottom: 14,
+            }}>
+              <ZapIcon size={11} color="#F59E0B" /> One-off top-up
+            </div>
+
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 700, color: t.text, lineHeight: 1.2, marginBottom: 8 }}>
+              Need more BOQs?
+            </div>
+            <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.55, marginBottom: 18 }}>
+              You're out of BOQ credits. Top up with a one-off pack — no subscription, no commitment.
+            </div>
+
+            <div style={{
+              padding: '18px 18px 16px', borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))',
+              border: '1px solid rgba(245,158,11,0.25)',
+              marginBottom: 18,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>
+                  5 BOQ pack
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#F59E0B', fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                  £300
+                </div>
+              </div>
+              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
+                That's just <strong style={{ color: t.text }}>£60 per BOQ</strong> — saves you £195 vs. PAYG.
+              </div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>
+                Credits never expire. Use them whenever you like.
+              </div>
+            </div>
+
+            <a
+              href="https://buy.stripe.com/5kQ8wPaZycfK5sAfCA73G0d"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', padding: '13px 22px', borderRadius: 11,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C',
+                fontWeight: 700, fontSize: 14.5,
+                textDecoration: 'none',
+                boxShadow: '0 4px 18px rgba(245,158,11,0.35)',
+              }}
+            >
+              <ZapIcon size={15} color="#0A0F1C" />
+              Buy 5 BOQs — £300
+              <ArrowRightIcon size={15} color="#0A0F1C" />
+            </a>
+
+            <button
+              type="button"
+              onClick={() => setShowTopUpModal(false)}
+              style={{
+                marginTop: 10, width: '100%', padding: '9px 14px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: t.textMuted,
+              }}
+            >
+              Maybe later
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Persistent floating offer — always reachable when credits are out */}
+      {noCredits && !showTopUpModal && !submitting && (
+        <button
+          type="button"
+          onClick={() => setShowTopUpModal(true)}
+          style={{
+            position: 'fixed', bottom: 24, right: 24, zIndex: 9990,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '12px 18px', borderRadius: 999,
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+            color: '#0A0F1C',
+            fontWeight: 700, fontSize: 13.5,
+            border: 'none', cursor: 'pointer',
+            boxShadow: '0 6px 24px rgba(245,158,11,0.45)',
+            animation: 'aiqs-pulse 2.4s ease-in-out infinite',
+          }}
+        >
+          <ZapIcon size={14} color="#0A0F1C" />
+          Buy 5 BOQs — £300
+        </button>
+      )}
+
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes aiqs-rainbow {
           0%   { background-position: 0% 50%; }
           50%  { background-position: 100% 50%; }
           100% { background-position: 0% 50%; }
+        }
+        @keyframes aiqs-pulse {
+          0%, 100% { box-shadow: 0 6px 24px rgba(245,158,11,0.45); transform: scale(1); }
+          50%      { box-shadow: 0 8px 32px rgba(245,158,11,0.7);  transform: scale(1.04); }
         }
 
         /* No CSS on the file input — the native browser button is what works in this env. */
