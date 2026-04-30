@@ -793,6 +793,8 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
       try { db.prepare('DELETE FROM usage_log WHERE user_id = ?').run(uid); } catch(e) {}
       try { db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid); } catch(e) {}
       try { db.prepare('DELETE FROM magic_links WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM drawing_submissions WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM user_messages WHERE user_id = ?').run(uid); } catch(e) {}
       db.prepare('DELETE FROM users WHERE id = ?').run(uid);
     });
     del();
