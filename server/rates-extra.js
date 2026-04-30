@@ -436,4 +436,63 @@ router.post('/admin/import-system-default-rates', authMiddleware, upload.single(
   }
 });
 
+// Apply the current system defaults to every existing client user. INSERT-only
+// — never touches a user's existing rate (so customisations are preserved).
+// Use the optional ?force=1 flag to also UPDATE existing rates' values to match
+// the system default (still preserves rates a user has that the defaults don't).
+router.post('/admin/reseed-all-clients', authMiddleware, function(req, res) {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+    const force = req.query.force === '1' || req.body.force === true;
+    const sysRates = db.prepare('SELECT category, item_key, display_name, value, unit, client_note FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(SYSTEM_DEFAULT_USER_ID);
+    if (sysRates.length === 0) return res.status(400).json({ error: 'No system default rates uploaded yet' });
+
+    const clients = db.prepare("SELECT id, email, full_name FROM users WHERE role != 'admin'").all();
+    if (clients.length === 0) return res.json({ success: true, users: 0, added: 0, updated: 0 });
+
+    let totalAdded = 0;
+    let totalUpdated = 0;
+    const perUser = [];
+
+    const tx = db.transaction(() => {
+      for (const u of clients) {
+        let added = 0;
+        let updated = 0;
+        for (const r of sysRates) {
+          const existing = db.prepare('SELECT id, value FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(u.id, r.category, r.item_key);
+          if (existing) {
+            if (force && existing.value !== r.value) {
+              db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                .run(r.value, r.unit, r.display_name, existing.id);
+              updated++;
+            }
+          } else {
+            db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.80, ?, 1)')
+              .run('rl_' + uuidv4().slice(0, 8), u.id, r.category, r.item_key, r.display_name, r.value, r.unit, r.client_note);
+            added++;
+          }
+        }
+        totalAdded += added;
+        totalUpdated += updated;
+        perUser.push({ email: u.email, added, updated });
+      }
+    });
+    tx();
+
+    console.log('[SystemDefaults] Reseed: ' + clients.length + ' users, ' + totalAdded + ' rates added' + (force ? ', ' + totalUpdated + ' updated' : ''));
+    res.json({
+      success: true,
+      users: clients.length,
+      added: totalAdded,
+      updated: totalUpdated,
+      force,
+      per_user: perUser.slice(0, 30),
+    });
+  } catch (e) {
+    console.error('[SystemDefaults] Reseed error:', e);
+    res.status(500).json({ error: 'Reseed failed: ' + e.message });
+  }
+});
+
 module.exports = router;
