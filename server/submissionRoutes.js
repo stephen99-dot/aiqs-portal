@@ -35,13 +35,34 @@ async function forwardFile(file, submissionId) {
   if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
 }
 
+function getCycleStart(user) {
+  if (user && user.billing_cycle_start) return user.billing_cycle_start;
+  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 router.post('/', upload.array('files', 20), async (req, res) => {
   try {
-    const user = db.prepare('SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare(
+      'SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
+    ).get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const isAdmin = user.role === 'admin';
-    const totalCredits = (user.free_credits || 0) + (user.bonus_docs || 0);
+
+    // Three credit sources: free_credits, bonus_docs, monthly_boq_quota (minus this-cycle submissions)
+    const free = user.free_credits || 0;
+    const bonus = user.bonus_docs || 0;
+    const monthlyQuota = user.monthly_boq_quota || 0;
+    let monthlyRemaining = 0;
+    if (monthlyQuota > 0) {
+      const cycleStart = getCycleStart(user);
+      const used = db.prepare(
+        'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
+      ).get(user.id, cycleStart).c;
+      monthlyRemaining = Math.max(0, monthlyQuota - used);
+    }
+    const totalCredits = free + bonus + monthlyRemaining;
     if (!isAdmin && totalCredits <= 0) {
       return res.status(403).json({ error: 'No BOQ credits remaining', upgrade_required: true });
     }
@@ -91,8 +112,9 @@ router.post('/', upload.array('files', 20), async (req, res) => {
 
     let creditsRemaining = isAdmin ? 999 : totalCredits - 1;
     if (!isAdmin) {
-      // Spend free_credits first, then fall back to bonus_docs (admin grants).
-      if ((user.free_credits || 0) > 0) {
+      // Spend free_credits first, then bonus_docs, then implicitly the monthly
+      // BOQ quota (which is tracked by counting drawing_submissions this cycle).
+      if (free > 0) {
         db.prepare(`
           UPDATE users
           SET free_credits = free_credits - 1,
@@ -100,11 +122,20 @@ router.post('/', upload.array('files', 20), async (req, res) => {
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `).run(user.id);
-      } else {
+      } else if (bonus > 0) {
         db.prepare(`
           UPDATE users
           SET bonus_docs = bonus_docs - 1,
               total_projects = total_projects + 1,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(user.id);
+      } else {
+        // Drawing on monthly_boq_quota — no column to decrement, the
+        // drawing_submissions row inserted below is the deduction.
+        db.prepare(`
+          UPDATE users
+          SET total_projects = total_projects + 1,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `).run(user.id);
