@@ -782,8 +782,13 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
     if (!user) return res.status(404).json({ error: 'User not found' });
     const uid = req.params.id;
     const del = db.transaction(() => {
+      // Defer FK checks until commit so insertion order doesn't matter, and a
+      // table I forget here surfaces as a clean error rather than mid-cascade.
+      try { db.pragma('defer_foreign_keys = ON'); } catch(e) {}
+
       db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid);
       try { db.prepare('DELETE FROM project_data WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM variations WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
       db.prepare('DELETE FROM projects WHERE user_id = ?').run(uid);
       try { db.prepare('DELETE FROM chat_projects WHERE user_id = ?').run(uid); } catch(e) {}
       try { db.prepare('DELETE FROM chat_sessions WHERE user_id = ?').run(uid); } catch(e) {}
@@ -795,6 +800,8 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
       try { db.prepare('DELETE FROM magic_links WHERE user_id = ?').run(uid); } catch(e) {}
       try { db.prepare('DELETE FROM drawing_submissions WHERE user_id = ?').run(uid); } catch(e) {}
       try { db.prepare('DELETE FROM user_messages WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM user_memories WHERE user_id = ?').run(uid); } catch(e) {}
+      try { db.prepare('DELETE FROM project_intake WHERE user_id = ?').run(uid); } catch(e) {}
       db.prepare('DELETE FROM users WHERE id = ?').run(uid);
     });
     del();
@@ -802,7 +809,7 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
     res.json({ success: true });
   } catch (err) {
     console.error('Delete user error:', err);
-    res.status(500).json({ error: 'Failed to delete user' });
+    res.status(500).json({ error: 'Failed to delete user: ' + (err.message || err) });
   }
 });
 
