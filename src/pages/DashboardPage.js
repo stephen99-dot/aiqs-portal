@@ -20,7 +20,13 @@ const STRIPE = {
 
 function UsageBar({ usage, t }) {
   if (!usage) return null;
-  const { plan, planLabel, quota, used, remaining, isPayg, atLimit, monthName } = usage;
+  // Pull BOQ-specific fields from /usage. Fall back to legacy quota/used/remaining
+  // (which were really project counts) only if the new fields aren't present yet.
+  const { plan, planLabel, isPayg, monthName } = usage;
+  const quota = usage.boqLimit != null ? usage.boqLimit : usage.quota;
+  const used = usage.boqUsed != null ? usage.boqUsed : usage.used;
+  const remaining = usage.boqRemaining != null ? usage.boqRemaining : usage.remaining;
+  const atLimit = usage.boqAtLimit != null ? usage.boqAtLimit : usage.atLimit;
 
   if (isPayg) {
     return (
