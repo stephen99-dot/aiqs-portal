@@ -667,13 +667,17 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
     const userCycleStart = getBillingCycleStart(u);
-    // Count BOQ docs generated this billing cycle (exclude revisions)
+    // Count BOQ docs generated this billing cycle (exclude revisions) PLUS
+    // Submit Drawings submissions, which also consume a BOQ credit.
     let docsUsed = 0;
     try {
       const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(u.id, userCycleStart);
       const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, userCycleStart);
-      docsUsed = (docsGen?.c || 0) - (docsRev?.c || 0);
-      if (docsUsed < 0) docsUsed = 0;
+      let dlSubs = 0;
+      try {
+        dlSubs = db.prepare('SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?').get(u.id, userCycleStart).c || 0;
+      } catch(e) {}
+      docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
     } catch(e) {}
     const plan = u.plan || 'starter';
     const defaultDocLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
@@ -837,10 +841,14 @@ router.post('/admin/users/:id/sync-stripe', authMiddleware, adminMiddleware, asy
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, sub.id, cycleStart, user.id);
 
-    // Recalculate usage with the new billing cycle
+    // Recalculate usage with the new billing cycle (include drawing_submissions)
     const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(user.id, cycleStart);
     const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(user.id, cycleStart);
-    const docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0));
+    let dlSubs = 0;
+    try {
+      dlSubs = db.prepare('SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?').get(user.id, cycleStart).c || 0;
+    } catch(e) {}
+    const docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
     const msgsUsed = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(user.id, cycleStart)?.c || 0;
 
     console.log(`[Admin] Stripe sync for ${user.email}: ${planInfo.plan}, cycle start: ${cycleStart}, docs reset: ${docsUsed}/${planInfo.boqQuota}, msgs reset: ${msgsUsed}/${planInfo.msgQuota}`);
