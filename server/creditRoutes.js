@@ -11,7 +11,7 @@ const db = require('./database');
 router.get('/', (req, res) => {
   try {
     const user = db.prepare(`
-      SELECT free_credits, total_projects, role FROM users WHERE id = ?
+      SELECT free_credits, bonus_docs, total_projects, role FROM users WHERE id = ?
     `).get(req.user.id);
 
     if (!user) {
@@ -28,10 +28,15 @@ router.get('/', (req, res) => {
       });
     }
 
+    // Both columns count as spendable BOQ credits — admin grants land in
+    // bonus_docs, Stripe top-ups land in free_credits, but to the user
+    // it's one pool.
+    const total = (user.free_credits || 0) + (user.bonus_docs || 0);
+
     res.json({
-      free_credits: user.free_credits || 0,
+      free_credits: total,
       total_projects: user.total_projects || 0,
-      can_submit: (user.free_credits || 0) > 0,
+      can_submit: total > 0,
       is_admin: false,
     });
   } catch (err) {
@@ -43,7 +48,7 @@ router.get('/', (req, res) => {
 // ─── POST /api/credits/use — Consume 1 credit (called when submitting a project)
 router.post('/use', (req, res) => {
   try {
-    const user = db.prepare('SELECT free_credits, role FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT free_credits, bonus_docs, role FROM users WHERE id = ?').get(req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -54,24 +59,37 @@ router.post('/use', (req, res) => {
       return res.json({ success: true, remaining: 999 });
     }
 
-    if ((user.free_credits || 0) <= 0) {
+    const free = user.free_credits || 0;
+    const bonus = user.bonus_docs || 0;
+    if (free + bonus <= 0) {
       return res.status(403).json({
         error: 'No free credits remaining',
         upgrade_required: true,
       });
     }
 
-    db.prepare(`
-      UPDATE users 
-      SET free_credits = free_credits - 1, 
-          total_projects = total_projects + 1,
-          updated_at = CURRENT_TIMESTAMP 
-      WHERE id = ?
-    `).run(req.user.id);
+    // Spend free_credits first, then bonus_docs.
+    if (free > 0) {
+      db.prepare(`
+        UPDATE users
+        SET free_credits = free_credits - 1,
+            total_projects = total_projects + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(req.user.id);
+    } else {
+      db.prepare(`
+        UPDATE users
+        SET bonus_docs = bonus_docs - 1,
+            total_projects = total_projects + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(req.user.id);
+    }
 
     res.json({
       success: true,
-      remaining: (user.free_credits || 0) - 1,
+      remaining: free + bonus - 1,
     });
   } catch (err) {
     console.error('Use credit error:', err);
