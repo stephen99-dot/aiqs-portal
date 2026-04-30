@@ -153,15 +153,24 @@ async function handleCheckoutComplete(session, stripeSecret) {
         'ul_' + uuidv4().slice(0, 8), user.id, 'doc_paid', 'Stripe checkout ' + session.id
       );
 
-      // £250 = 25000 (Stripe smallest unit). Grants the 5-BOQ credit pack.
-      const PACK_AMOUNT = parseInt(process.env.STRIPE_BOQ_PACK_AMOUNT || '25000', 10);
-      const PACK_CREDITS = parseInt(process.env.STRIPE_BOQ_PACK_CREDITS || '5', 10);
-      if (session.amount_total === PACK_AMOUNT) {
+      // Map of one-off Stripe payment amounts (pence) → BOQ credits granted.
+      // Overridable via STRIPE_BOQ_PACKS env var as JSON, e.g. '{"9900":1,"30000":5}'.
+      let PACKS = { 9900: 1, 7900: 1, 30000: 5 };
+      if (process.env.STRIPE_BOQ_PACKS) {
+        try {
+          const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
+          PACKS = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [parseInt(k, 10), parseInt(v, 10)]));
+        } catch (e) {
+          console.error('[Stripe] Bad STRIPE_BOQ_PACKS JSON, using defaults:', e.message);
+        }
+      }
+      const credits = PACKS[session.amount_total];
+      if (credits) {
         db.prepare('UPDATE users SET free_credits = COALESCE(free_credits, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(PACK_CREDITS, user.id);
-        console.log(`[Stripe] Granted ${PACK_CREDITS} BOQ credits to ${customerEmail} (£${(PACK_AMOUNT / 100).toFixed(2)} pack)`);
+          .run(credits, user.id);
+        console.log(`[Stripe] Granted ${credits} BOQ credit(s) to ${customerEmail} (£${(session.amount_total / 100).toFixed(2)} payment)`);
       } else {
-        console.log(`[Stripe] PAYG one-off payment from ${customerEmail} for ${session.amount_total} — no credit pack matched`);
+        console.log(`[Stripe] PAYG one-off payment from ${customerEmail} for ${session.amount_total} — no credit pack matched (known: ${Object.keys(PACKS).join(', ')})`);
       }
     }
   }

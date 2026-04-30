@@ -100,6 +100,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [plan, setPlan] = useState(user.plan || 'starter');
   const [msgAllowance, setMsgAllowance] = useState(user.monthly_quota || user.quota || 0);
   const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
+  const [grantAmount, setGrantAmount] = useState(1);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
@@ -156,6 +157,17 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     });
     onUpdate({ ...user, monthly_quota: msgs, quota: msgs, monthly_boq_quota: docs, boq_quota: docs });
     showSuccess('Allowances updated — ' + msgs + ' messages, ' + docs + ' documents');
+  });
+
+  const grantBoqCredits = () => doAction('grant', async () => {
+    const amount = Math.max(1, parseInt(grantAmount) || 1);
+    const res = await apiFetch('/admin/users/' + user.id + '/grant-doc', {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+    const newBonus = res.bonus_docs != null ? res.bonus_docs : (user.bonus_docs || 0) + amount;
+    onUpdate({ ...user, bonus_docs: newBonus });
+    showSuccess('Granted ' + amount + ' BOQ credit' + (amount === 1 ? '' : 's') + ' (bonus_docs now ' + newBonus + ')');
   });
 
   const toggleSuspend = () => doAction('suspend', async () => {
@@ -317,6 +329,26 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               <button onClick={saveAllowances} disabled={!!loading} style={{ ...btn('#2563EB'), marginTop: 2 }}>
                 <Save size={12} /> Save Allowances
               </button>
+            </div>
+
+            {/* One-off BOQ credit grant — for retroactively crediting a payment
+                the webhook missed, or as a goodwill gesture. Adds to bonus_docs,
+                which counts toward the user's spendable BOQ pool. */}
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed ' + border }}>
+              <div style={{ ...lbl, marginBottom: 6 }}>One-off BOQ Credit Grant</div>
+              <div style={{ fontSize: 11, color: muted, marginBottom: 8, lineHeight: 1.5 }}>
+                Adds credits on top of the monthly allowance. Use for a missed Stripe webhook
+                or a goodwill credit. Current bonus: <strong style={{ color: muted }}>{user.bonus_docs || 0}</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" min={1} max={999} value={grantAmount}
+                  onChange={e => setGrantAmount(e.target.value)}
+                  style={{ ...sInp, width: 70, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
+                <button onClick={grantBoqCredits} disabled={!!loading}
+                  style={{ ...btn('#10B981'), flex: 1 }}>
+                  + Grant {parseInt(grantAmount) || 1} BOQ credit{(parseInt(grantAmount) || 1) === 1 ? '' : 's'}
+                </button>
+              </div>
             </div>
           </div>
 
