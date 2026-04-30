@@ -1210,11 +1210,13 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
     const results = [];
     const tx = db.transaction(() => {
       for (const corr of corrections) {
-        const existing = db.prepare(`SELECT id, value FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ?`).get(userId, corr.category, corr.item_key);
+        const existing = db.prepare(`SELECT id, value, unit FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ?`).get(userId, corr.category, corr.item_key);
         if (existing) {
-          db.prepare(`UPDATE client_rate_library SET value = ?, client_note = ?, confidence = MIN(confidence + 0.1, 0.95), updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(corr.value, corr.note, existing.id);
+          // Persist unit changes too — UI lets users fix a wrongly-imported unit.
+          const newUnit = corr.unit && String(corr.unit).trim() ? corr.unit : existing.unit;
+          db.prepare(`UPDATE client_rate_library SET value = ?, unit = ?, client_note = ?, confidence = MIN(confidence + 0.1, 0.95), updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(corr.value, newUnit, corr.note, existing.id);
           db.prepare(`INSERT INTO rate_corrections_log (id, rate_id, user_id, old_value, new_value, correction_source, raw_message) VALUES (?, ?, ?, ?, ?, 'chat', ?)`).run('rc_'+uuidv4().slice(0,8), existing.id, userId, existing.value, corr.value, raw_message);
-          results.push({ display_name: corr.display_name, old: existing.value, new: corr.value, unit: corr.unit, action: 'updated' });
+          results.push({ display_name: corr.display_name, old: existing.value, new: corr.value, unit: newUnit, action: 'updated' });
         } else {
           const id = 'rl_'+uuidv4().slice(0,8);
           db.prepare(`INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, original_value, client_note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, userId, corr.category, corr.item_key, corr.display_name||corr.item_key, corr.value, corr.unit, corr.original_value, corr.note);

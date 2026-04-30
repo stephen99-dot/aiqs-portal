@@ -46,6 +46,7 @@ export default function MyRatesPage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [editUnit, setEditUnit] = useState('');
   const [search, setSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState({});
   const [showAddForm, setShowAddForm] = useState(false);
@@ -70,12 +71,27 @@ export default function MyRatesPage() {
 
   const handleSave = async (rate) => {
     const newVal = parseFloat(editValue);
-    if (isNaN(newVal) || newVal === rate.value) { setEditingId(null); return; }
+    const newUnit = (editUnit || '').trim() || rate.unit;
+    const valueChanged = !isNaN(newVal) && newVal !== rate.value;
+    const unitChanged = newUnit !== rate.unit;
+    if (!valueChanged && !unitChanged) { setEditingId(null); return; }
+    const finalVal = valueChanged ? newVal : rate.value;
     try {
       await apiFetch('/my-rates/corrections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ corrections: [{ category:rate.category, item_key:rate.item_key, display_name:rate.display_name, value:newVal, unit:rate.unit, original_value:rate.value, note:'Manual edit' }], raw_message:'Edit: '+rate.display_name+' '+rate.value+' -> '+newVal })
+        body: JSON.stringify({
+          corrections: [{
+            category: rate.category,
+            item_key: rate.item_key,
+            display_name: rate.display_name,
+            value: finalVal,
+            unit: newUnit,
+            original_value: rate.value,
+            note: 'Manual edit',
+          }],
+          raw_message: 'Edit: ' + rate.display_name + ' ' + rate.value + ' ' + rate.unit + ' -> ' + finalVal + ' ' + newUnit,
+        }),
       });
       setEditingId(null);
       loadRates();
@@ -268,7 +284,18 @@ export default function MyRatesPage() {
                           <span style={{fontSize:'13px',fontWeight:600,color:c.text,fontFamily:'monospace'}}>{typeof rate.value==='number'?rate.value.toLocaleString('en-GB'):rate.value}</span>
                         )}
                       </div>
-                      <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}} className="hide-mobile">{rate.unit}</div>
+                      <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}} className="hide-mobile">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editUnit}
+                            onChange={e => setEditUnit(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSave(rate); if (e.key === 'Escape') setEditingId(null); }}
+                            placeholder="£/m2"
+                            style={{ width: 64, padding: '4px 6px', textAlign: 'center', background: c.inputBg, border: '1px solid ' + c.accent, borderRadius: 6, color: c.text, fontSize: 12, outline: 'none' }}
+                          />
+                        ) : rate.unit}
+                      </div>
                       <div style={{textAlign:'center'}} className="hide-mobile"><span style={{fontSize:'10px',fontWeight:600,color:badge.color,background:badge.bg,border:'1px solid '+badge.border,borderRadius:'8px',padding:'2px 6px'}}>{badge.text}</span></div>
                       <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}} className="hide-mobile">
                         {isEditing ? (
@@ -278,7 +305,7 @@ export default function MyRatesPage() {
                           </>
                         ) : (
                           <>
-                            <button onClick={()=>{setEditingId(rate.id);setEditValue(String(rate.value));}} style={{background:'transparent',border:'1px solid '+c.cardBorder,borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.textSec,cursor:'pointer'}}>Edit</button>
+                            <button onClick={()=>{setEditingId(rate.id);setEditValue(String(rate.value));setEditUnit(rate.unit||'');}} style={{background:'transparent',border:'1px solid '+c.cardBorder,borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.textSec,cursor:'pointer'}}>Edit</button>
                             <button onClick={()=>handleDelete(rate)} style={{background:'transparent',border:'1px solid '+(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'),borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.danger,cursor:'pointer'}}>✕</button>
                           </>
                         )}
