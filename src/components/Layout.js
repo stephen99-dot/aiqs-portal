@@ -47,7 +47,6 @@ export default function Layout() {
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
     { path: '/notetaker', label: 'AI Notetaker', Icon: MicIcon, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
-    { path: '/pricing',   label: 'Pricing',  Icon: ZapIcon },
   ];
 
   const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);

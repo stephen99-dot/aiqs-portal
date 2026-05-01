@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import {
@@ -42,7 +41,6 @@ function fmtSize(b) {
 
 export default function SubmitDrawingsPage() {
   const { t } = useTheme();
-  const navigate = useNavigate();
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
   const [message, setMessage] = useState('');
@@ -216,14 +214,6 @@ export default function SubmitDrawingsPage() {
               <span><strong style={{ color: t.text }}>{credits.free_credits} BOQ credit{credits.free_credits === 1 ? '' : 's'}</strong> remaining {credits.total_projects > 0 ? '(used ' + credits.total_projects + ')' : ''}</span>
             )}
           </div>
-          {noCredits && (
-            <button onClick={() => navigate('/pricing')} style={{
-              padding: '7px 14px', borderRadius: 8, border: 'none',
-              background: '#F59E0B', color: '#0A0F1C',
-              fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}>Buy more <ArrowRightIcon size={13} color="#0A0F1C" /></button>
-          )}
         </div>
       )}
 

@@ -14,7 +14,6 @@ import PipelinePage from './pages/PipelinePage';
 import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
-import PricingPage from './pages/PricingPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
@@ -67,7 +66,6 @@ function AppInner() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
           <Route path="/project/:id/variations" element={<VariationsPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
