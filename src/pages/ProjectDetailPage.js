@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 
 // SVG icons for document types
@@ -19,14 +19,6 @@ const WordIcon = ({ size = 28 }) => (
   </svg>
 );
 
-const ClientCopyIcon = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-    <rect x="2" y="2" width="28" height="28" rx="4" fill="#7C3AED"/>
-    <path d="M16 10v4m0 0v4m0-4h4m-4 0h-4" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
-    <path d="M10 22h12" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
-
 const STATUS_MAP = {
   submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', desc: 'Your project has been received. We\'ll begin review shortly.' },
   in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', desc: 'We\'re reviewing your drawings and project brief.' },
@@ -42,10 +34,6 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null);
-  const [showClientCopyModal, setShowClientCopyModal] = useState(false);
-  const [clientCopySettings, setClientCopySettings] = useState({ contingency: 7.5, ohp: 12, vat: 0 });
-  const [generatingClientCopy, setGeneratingClientCopy] = useState(false);
-  const [clientCopyError, setClientCopyError] = useState('');
 
   useEffect(() => { loadProject(); }, [id]); // eslint-disable-line
 
@@ -81,36 +69,6 @@ export default function ProjectDetailPage() {
       alert('Download failed — the file may have expired. Please regenerate from the chat.');
     } finally {
       setDownloading(null);
-    }
-  }
-
-  async function handleGenerateClientCopy() {
-    setGeneratingClientCopy(true);
-    setClientCopyError('');
-    try {
-      const token = getToken();
-      const resp = await fetch(`/api/projects/${id}/client-copy`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify(clientCopySettings)
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || 'Failed to generate client copy');
-      }
-      const blob = await resp.blob();
-      const disposition = resp.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : `ClientCopy_${project.title}.xlsx`;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      setShowClientCopyModal(false);
-    } catch (err) {
-      setClientCopyError(err.message);
-    } finally {
-      setGeneratingClientCopy(false);
     }
   }
 
@@ -210,7 +168,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Deliverables — files the QS sends back into the customer's portal */}
-      <DeliverablesPanel projectId={id} />
+      <DeliverablesPanel projectId={id} project={project} />
 
       {/* Documents */}
       <div className="section-card">
@@ -368,34 +326,6 @@ export default function ProjectDetailPage() {
                 </Link>
               )}
 
-              {/* Client Copy button */}
-              {project.boq_filename && (
-                <button
-                  onClick={() => { setShowClientCopyModal(true); setClientCopyError(''); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
-                    background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)',
-                    textAlign: 'left', width: '100%', transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.12)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.06)'}
-                >
-                  <ClientCopyIcon />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-                      Client Copy (Excel)
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      Contingency & OH&P baked into rates — margin hidden
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#A855F7', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
-                    Configure
-                  </div>
-                </button>
-              )}
             </div>
           ) : (
             <div style={{ padding: '32px 0', textAlign: 'center' }}>
@@ -419,65 +349,6 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Client Copy Modal */}
-      {showClientCopyModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--card-bg)', borderRadius: 14, padding: 32, width: 420, maxWidth: '90vw', border: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Generate Client Copy</h3>
-            <p style={{ fontSize: 13, opacity: 0.6, marginBottom: 24, lineHeight: 1.5 }}>
-              Set your uplift percentages. These will be baked into each line item rate — the client sees final prices only, with no margin visible.
-            </p>
-
-            {[
-              { key: 'contingency', label: 'Contingency', hint: 'Risk allowance, typically 5–10%' },
-              { key: 'ohp', label: 'Overhead & Profit', hint: 'Your margin, typically 10–15%' },
-              { key: 'vat', label: 'VAT', hint: 'Set to 0 if quoting ex-VAT' },
-            ].map(({ key, label, hint }) => (
-              <div key={key} style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <label style={{ fontSize: 13, fontWeight: 600 }}>{label}</label>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }}>{clientCopySettings[key]}%</span>
-                </div>
-                <input
-                  type="range" min="0" max={key === 'vat' ? 25 : 30} step="0.5"
-                  value={clientCopySettings[key]}
-                  onChange={e => setClientCopySettings(s => ({ ...s, [key]: parseFloat(e.target.value) }))}
-                  style={{ width: '100%', accentColor: 'var(--primary)', marginBottom: 4 }}
-                />
-                <p style={{ fontSize: 11, opacity: 0.5, margin: 0 }}>{hint}</p>
-              </div>
-            ))}
-
-            {/* Live preview of total uplift */}
-            <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, opacity: 0.7 }}>Total uplift on base rates</span>
-              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--primary)' }}>
-                +{((((1 + clientCopySettings.contingency / 100 + clientCopySettings.ohp / 100) * (1 + clientCopySettings.vat / 100)) - 1) * 100).toFixed(1)}%
-              </span>
-            </div>
-
-            {clientCopyError && (
-              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 16, color: '#EF4444', fontSize: 13 }}>
-                {clientCopyError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                className="btn-primary"
-                style={{ flex: 1, background: '#A855F7', borderColor: '#A855F7' }}
-                onClick={handleGenerateClientCopy}
-                disabled={generatingClientCopy}
-              >
-                {generatingClientCopy ? '⏳ Generating...' : '↓ Generate & Download'}
-              </button>
-              <button className="btn-secondary" onClick={() => setShowClientCopyModal(false)} disabled={generatingClientCopy}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

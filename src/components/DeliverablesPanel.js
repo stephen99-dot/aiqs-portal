@@ -41,7 +41,7 @@ function fmtSize(b) {
   return (b / 1048576).toFixed(1) + ' MB';
 }
 
-export default function DeliverablesPanel({ projectId }) {
+export default function DeliverablesPanel({ projectId, project }) {
   const { user } = useAuth();
   const isAdmin = user && user.role === 'admin';
 
@@ -169,6 +169,45 @@ export default function DeliverablesPanel({ projectId }) {
         <h2>Documents from your QS{isAdmin ? ' · Admin upload' : ''}</h2>
       </div>
       <div className="card-body" style={{ padding: '14px 18px 18px' }}>
+
+        {/* Customer-context banner — admins need to know who they're sending to */}
+        {isAdmin && project && (project.owner_name || project.owner_email) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+            padding: '10px 14px', borderRadius: 9, marginBottom: 12,
+            background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)',
+          }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff', fontWeight: 700, fontSize: 13,
+            }}>
+              {(project.owner_name || project.owner_email || 'C')[0].toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Sending to
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {project.owner_name || project.owner_email}
+                {project.owner_company ? <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · {project.owner_company}</span> : null}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {project.owner_email && <a href={`mailto:${project.owner_email}`} style={{ color: 'inherit', textDecoration: 'none' }}>✉ {project.owner_email}</a>}
+                {project.owner_phone && <a href={`tel:${project.owner_phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>☎ {project.owner_phone}</a>}
+              </div>
+            </div>
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              padding: '4px 9px', borderRadius: 999,
+              background: 'rgba(16,185,129,0.15)', color: '#10B981',
+              border: '1px solid rgba(16,185,129,0.3)',
+            }}>
+              Files appear in their portal instantly
+            </span>
+          </div>
+        )}
 
         {/* Admin uploader */}
         {isAdmin && (

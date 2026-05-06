@@ -206,6 +206,42 @@ async function generateVODocument(variation, project, clientName) {
 // ═══════════════════════════════════════════════════════════════════════
 
 // GET /api/variations/:projectId — list all VOs for a project
+// Hub view: projects that have at least one variation, scoped to the user
+// (admins see everything). Used by the new top-level /variations page.
+router.get('/variations-hub', authMiddleware, (req, res) => {
+  try {
+    const params = [];
+    let where = '';
+    if (req.user.role !== 'admin') { where = 'WHERE p.user_id = ?'; params.push(req.user.id); }
+    const rows = db.prepare(`
+      SELECT
+        p.id          AS project_id,
+        p.title       AS project_title,
+        p.project_type,
+        p.status,
+        p.currency,
+        u.full_name   AS owner_name,
+        u.email       AS owner_email,
+        COUNT(v.id)   AS variation_count,
+        SUM(CASE WHEN v.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+        SUM(CASE WHEN v.status = 'draft'    THEN 1 ELSE 0 END) AS draft_count,
+        SUM(COALESCE(v.net_change, 0))   AS total_net_change,
+        MAX(v.updated_at)                AS last_change_at
+      FROM projects p
+      LEFT JOIN variations v ON v.project_id = p.id
+      LEFT JOIN users u      ON u.id = p.user_id
+      ${where}
+      GROUP BY p.id
+      HAVING variation_count > 0
+      ORDER BY last_change_at DESC
+    `).all(...params);
+    res.json({ projects: rows });
+  } catch (err) {
+    console.error('[Variations] hub error:', err);
+    res.status(500).json({ error: 'Failed to load variations hub' });
+  }
+});
+
 router.get('/variations/:projectId', authMiddleware, (req, res) => {
   try {
     const { projectId } = req.params;
