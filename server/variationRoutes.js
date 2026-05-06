@@ -670,6 +670,57 @@ function loadProjectForUser(req) {
   return project;
 }
 
+// Reshape an edited-sections payload from the client (description / qty / labour /
+// materials per item) into the parseBOQ() output. Recomputes per-item totals and
+// per-section subtotals from the edits so server output matches what the user saw
+// in the live preview.
+function rebuildFromEdits(editedSections) {
+  if (!Array.isArray(editedSections) || editedSections.length === 0) return null;
+  const sections = editedSections
+    .filter((s) => s && Array.isArray(s.items))
+    .map((s, idx) => {
+      const items = s.items
+        .filter((it) => it && (it.description || '').trim().length > 0)
+        .map((it) => {
+          const qty = parseFloat(it.qty) || 0;
+          const labour = parseFloat(it.labour) || 0;
+          const materials = parseFloat(it.materials) || 0;
+          const total = labour + materials;
+          const rate = qty > 0 ? total / qty : (parseFloat(it.rate) || 0);
+          return {
+            itemRef: it.itemRef || '',
+            description: String(it.description || '').trim(),
+            unit: String(it.unit || '').trim(),
+            qty, rate, labour, materials, total,
+          };
+        });
+      const subtotal = items.reduce(
+        (acc, i) => ({
+          labour: acc.labour + i.labour,
+          materials: acc.materials + i.materials,
+          total: acc.total + i.total,
+        }),
+        { labour: 0, materials: 0, total: 0 }
+      );
+      return {
+        number: s.number || String(idx + 1),
+        title: String(s.title || 'Section ' + (idx + 1)),
+        items,
+        subtotal,
+      };
+    })
+    .filter((s) => s.items.length > 0);
+  const grand = sections.reduce(
+    (acc, s) => ({
+      labour: acc.labour + s.subtotal.labour,
+      materials: acc.materials + s.subtotal.materials,
+      total: acc.total + s.subtotal.total,
+    }),
+    { labour: 0, materials: 0, total: 0 }
+  );
+  return { sections, grand };
+}
+
 // GET /api/projects/:projectId/builder-breakdown
 //   → { sections: [{ number, title, subtotal, item_count }], grand: {...} }
 router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req, res) => {
@@ -685,11 +736,13 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
     res.json({
       testing: true,
       currency: project.currency || 'GBP',
+      project_title: project.title,
       sections: parsed.sections.map((s) => ({
         number: s.number,
         title: s.title,
         item_count: s.items.length,
         subtotal: s.subtotal,
+        items: s.items, // full editable line items
       })),
       grand: parsed.grand,
     });
@@ -711,7 +764,7 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
     const filePath = path.join(outputsDir, project.boq_filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
-    const parsed = await parseBOQ(filePath);
+    const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
 
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
     const buffer = await generateBuilderPack(parsed, {
@@ -751,7 +804,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     const filePath = path.join(outputsDir, project.boq_filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
-    const parsed = await parseBOQ(filePath);
+    const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
 
     const buffer = await generateClientCopyPro(parsed, {
