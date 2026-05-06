@@ -1,0 +1,404 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { apiFetch, getToken } from '../utils/api';
+
+/**
+ * Deliverables panel — the return leg of the workflow.
+ *
+ * For customers (project owner): read-only list of files the QS has sent
+ *   back ("Documents from your QS"), latest version per kind, with version
+ *   history collapsible.
+ *
+ * For admins: same list, plus an inline uploader. Pick a kind, optionally add
+ *   a note ("v2 — revised after spec change"), drop files. Each upload bumps
+ *   the version for that kind and demotes the previous to history.
+ */
+
+const KIND_LABELS = {
+  boq: 'Bill of Quantities',
+  findings: 'Findings Report',
+  marked_drawing: 'Marked-up Drawing',
+  supplier_quote: 'Supplier Quote',
+  schedule: 'Schedule',
+  client_copy: 'Client Copy',
+  other: 'Other',
+};
+
+const KIND_OPTIONS = [
+  { value: 'boq', label: 'Bill of Quantities' },
+  { value: 'findings', label: 'Findings Report' },
+  { value: 'marked_drawing', label: 'Marked-up Drawing' },
+  { value: 'supplier_quote', label: 'Supplier Quote' },
+  { value: 'schedule', label: 'Schedule' },
+  { value: 'client_copy', label: 'Client Copy' },
+  { value: 'other', label: 'Other' },
+];
+
+function fmtSize(b) {
+  if (!b) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+export default function DeliverablesPanel({ projectId }) {
+  const { user } = useAuth();
+  const isAdmin = user && user.role === 'admin';
+
+  const [latest, setLatest] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Admin uploader state
+  const [kind, setKind] = useState('boq');
+  const [notes, setNotes] = useState('');
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadOk, setUploadOk] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await apiFetch(`/projects/${projectId}/deliverables`);
+      setLatest(data.latest || []);
+      setHistory(data.history || []);
+    } catch (err) {
+      setError(err.message || 'Failed to load deliverables');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function addFiles(fl) {
+    setFiles((prev) => [...prev, ...Array.from(fl || [])]);
+  }
+  function removeFile(idx) {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function doUpload() {
+    if (!files.length || !isAdmin) return;
+    setUploading(true);
+    setError('');
+    setUploadOk('');
+    try {
+      const fd = new FormData();
+      fd.append('kind', kind);
+      if (notes.trim()) fd.append('notes', notes.trim());
+      for (const f of files) fd.append('files', f, f.name);
+      const token = getToken();
+      const resp = await fetch(`/api/projects/${projectId}/deliverables`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd,
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      setFiles([]);
+      setNotes('');
+      setUploadOk('Uploaded ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '. Customer can now download.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteDeliverable(id) {
+    if (!isAdmin) return;
+    if (!window.confirm('Hide this file from the customer? The previous version (if any) will be promoted back to current.')) return;
+    try {
+      const token = getToken();
+      const resp = await fetch(`/api/deliverables/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || 'Delete failed');
+      }
+      load();
+    } catch (err) {
+      setError(err.message || 'Delete failed');
+    }
+  }
+
+  async function downloadFile(filename) {
+    try {
+      const token = getToken();
+      const resp = await fetch(`/api/downloads/${filename}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!resp.ok) throw new Error('Download failed');
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Download failed');
+    }
+  }
+
+  const byKind = latest.reduce((acc, d) => {
+    (acc[d.kind] = acc[d.kind] || []).push(d);
+    return acc;
+  }, {});
+  const groupOrder = ['boq', 'findings', 'marked_drawing', 'supplier_quote', 'schedule', 'client_copy', 'other'];
+  const orderedGroups = [
+    ...groupOrder.filter((k) => byKind[k]),
+    ...Object.keys(byKind).filter((k) => !groupOrder.includes(k)),
+  ];
+
+  return (
+    <div className="section-card">
+      <div className="section-card-header">
+        <h2>Documents from your QS{isAdmin ? ' · Admin upload' : ''}</h2>
+      </div>
+      <div className="card-body" style={{ padding: '14px 18px 18px' }}>
+
+        {/* Admin uploader */}
+        {isAdmin && (
+          <div style={{
+            padding: 14, borderRadius: 10, marginBottom: 14,
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(168,85,247,0.04))',
+            border: '1px solid rgba(59,130,246,0.25)',
+          }}>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                disabled={uploading}
+                style={{
+                  padding: '8px 12px', borderRadius: 8,
+                  background: 'var(--card-bg)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border)', fontSize: 13, outline: 'none',
+                }}
+              >
+                {KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                disabled={uploading}
+                placeholder="Optional note for the customer (e.g. 'v2 — revised pricing')"
+                style={{
+                  flex: 1, minWidth: 200,
+                  padding: '8px 12px', borderRadius: 8,
+                  background: 'var(--card-bg)', color: 'var(--text-primary)',
+                  border: '1px solid var(--border)', fontSize: 13, outline: 'none',
+                }}
+              />
+            </div>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); addFiles(e.dataTransfer.files); }}
+              style={{
+                borderRadius: 10,
+                border: '2px dashed ' + (dragOver ? '#3B82F6' : 'var(--border)'),
+                background: dragOver ? 'rgba(59,130,246,0.06)' : 'transparent',
+                padding: '14px 16px', textAlign: 'center',
+                fontSize: 12.5, color: 'var(--text-muted)',
+                marginBottom: 8,
+              }}
+            >
+              Drop files here or{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  const inp = document.createElement('input');
+                  inp.type = 'file';
+                  inp.multiple = true;
+                  inp.style.position = 'fixed';
+                  inp.onchange = (e) => {
+                    if (e.target.files && e.target.files.length) addFiles(e.target.files);
+                    setTimeout(() => inp.remove(), 0);
+                  };
+                  document.body.appendChild(inp);
+                  inp.click();
+                }}
+                style={{ background: 'none', border: 'none', color: '#3B82F6', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+              >browse</button>
+              {' '}— PDF, Excel, Word, drawings, ZIP. Max 100MB each.
+            </div>
+
+            {files.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                {files.map((f, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '6px 10px', borderRadius: 6,
+                    background: 'var(--card-bg)', border: '1px solid var(--border)',
+                    fontSize: 12,
+                  }}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                    <span style={{ color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>{fmtSize(f.size)}</span>
+                    <button
+                      onClick={() => removeFile(i)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}
+                      aria-label="Remove"
+                    >×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={doUpload}
+              disabled={uploading || files.length === 0}
+              style={{
+                padding: '9px 16px', borderRadius: 8, border: 'none',
+                background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+                color: '#fff', fontWeight: 700, fontSize: 13.5,
+                cursor: uploading || files.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: uploading || files.length === 0 ? 0.55 : 1,
+              }}
+            >
+              {uploading ? 'Uploading…' : 'Send ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ' to customer'}
+            </button>
+
+            {uploadOk && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#10B981' }}>{uploadOk}</div>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 8, marginBottom: 10,
+            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+            color: '#EF4444', fontSize: 12.5,
+          }}>{error}</div>
+        )}
+
+        {/* List */}
+        {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>Loading…</div>}
+        {!loading && latest.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
+            {isAdmin
+              ? 'No files sent to this customer yet. Use the uploader above to send their priced documents.'
+              : "Your QS hasn't uploaded any documents for this project yet."}
+          </div>
+        )}
+
+        {orderedGroups.map((k) => (
+          <div key={k} style={{ marginBottom: 12 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: 'var(--text-muted)',
+              padding: '6px 2px', marginBottom: 4,
+            }}>
+              {KIND_LABELS[k] || k}
+            </div>
+            {byKind[k].map((d) => (
+              <div key={d.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '11px 14px', borderRadius: 9,
+                background: 'rgba(16,185,129,0.05)',
+                border: '1px solid rgba(16,185,129,0.18)',
+                marginBottom: 6,
+              }}>
+                <div style={{
+                  width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                  background: 'rgba(16,185,129,0.18)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#10B981', fontWeight: 800, fontSize: 11,
+                }}>v{d.version}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {d.original_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                    {fmtSize(d.file_size)} · {new Date(d.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {d.uploaded_by ? ' · ' + d.uploaded_by : ''}
+                  </div>
+                  {d.notes && (
+                    <div style={{ fontSize: 12, color: 'var(--text-primary)', opacity: 0.85, marginTop: 4, fontStyle: 'italic' }}>
+                      “{d.notes}”
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => downloadFile(d.filename)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 7, border: 'none',
+                    background: 'rgba(16,185,129,0.18)', color: '#10B981',
+                    fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                  }}
+                >Download</button>
+                {isAdmin && (
+                  <button
+                    onClick={() => deleteDeliverable(d.id)}
+                    title="Hide from customer"
+                    style={{
+                      padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)',
+                      background: 'transparent', color: 'var(--text-muted)',
+                      fontSize: 12, cursor: 'pointer',
+                    }}
+                  >Hide</button>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {/* Version history */}
+        {history.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '6px 0', color: 'var(--text-muted)',
+                fontSize: 12, fontWeight: 600,
+              }}
+            >
+              {showHistory ? '▾' : '▸'} Version history ({history.length})
+            </button>
+            {showHistory && (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {history.map((d) => (
+                  <div key={d.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '7px 12px', borderRadius: 7,
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    fontSize: 11.5, color: 'var(--text-muted)',
+                  }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>v{d.version}</span>
+                    <span style={{
+                      padding: '1px 6px', borderRadius: 4,
+                      background: 'rgba(0,0,0,0.04)',
+                      fontSize: 10.5, fontWeight: 600,
+                    }}>{KIND_LABELS[d.kind] || d.kind}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', opacity: 0.7 }}>{d.original_name}</span>
+                    <span>{new Date(d.created_at).toLocaleDateString('en-GB')}</span>
+                    <button
+                      onClick={() => downloadFile(d.filename)}
+                      style={{ background: 'none', border: 'none', color: '#3B82F6', cursor: 'pointer', fontSize: 11.5, fontWeight: 600 }}
+                    >Download</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

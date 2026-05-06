@@ -199,7 +199,10 @@ router.get('/admin/all', (req, res) => {
     const rows = db.prepare(`
       SELECT s.id, s.submission_id, s.project_type, s.message, s.file_count, s.file_names,
              s.pipedream_status, s.credits_remaining_after, s.created_at,
-             u.full_name AS user_name, u.email AS user_email, u.company AS user_company
+             s.actioned_at, s.actioned_by, s.admin_notes, s.project_id,
+             u.id AS user_id,
+             u.full_name AS user_name, u.email AS user_email,
+             u.company AS user_company, u.phone AS user_phone
       FROM drawing_submissions s
       JOIN users u ON u.id = s.user_id
       ORDER BY s.created_at DESC
@@ -215,6 +218,58 @@ router.get('/admin/all', (req, res) => {
   } catch (err) {
     console.error('[Submissions] Admin list error:', err);
     res.status(500).json({ error: 'Failed to list submissions' });
+  }
+});
+
+// Admin: update a submission — toggle actioned state, edit notes, link to a project
+router.patch('/admin/:id', (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+
+    const existing = db.prepare('SELECT id FROM drawing_submissions WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Submission not found' });
+
+    const updates = [];
+    const params = [];
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'actioned')) {
+      if (req.body.actioned) {
+        updates.push('actioned_at = CURRENT_TIMESTAMP');
+        updates.push('actioned_by = ?');
+        params.push(req.user.email || req.user.id);
+      } else {
+        updates.push('actioned_at = NULL');
+        updates.push('actioned_by = NULL');
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'admin_notes')) {
+      updates.push('admin_notes = ?');
+      params.push(req.body.admin_notes || null);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'project_id')) {
+      updates.push('project_id = ?');
+      params.push(req.body.project_id || null);
+    }
+
+    if (updates.length === 0) return res.json({ ok: true, unchanged: true });
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE drawing_submissions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+
+    const updated = db.prepare(`
+      SELECT s.*, u.full_name AS user_name, u.email AS user_email,
+             u.company AS user_company, u.phone AS user_phone
+      FROM drawing_submissions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?
+    `).get(req.params.id);
+    if (updated && updated.file_names) {
+      try { updated.file_names = JSON.parse(updated.file_names); } catch (e) { updated.file_names = []; }
+    }
+    res.json({ ok: true, submission: updated });
+  } catch (err) {
+    console.error('[Submissions] Admin update error:', err);
+    res.status(500).json({ error: 'Failed to update submission' });
   }
 });
 
