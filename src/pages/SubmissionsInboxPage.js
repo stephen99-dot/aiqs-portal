@@ -18,6 +18,8 @@ export default function SubmissionsInboxPage() {
   const [search, setSearch] = useState('');
   const [savingId, setSavingId] = useState(null);
   const [notesDraft, setNotesDraft] = useState('');
+  const [driveDraft, setDriveDraft] = useState('');
+  const [statusMsg, setStatusMsg] = useState(null); // { kind: 'ok'|'err', text }
 
   const isAdmin = user && user.role === 'admin';
 
@@ -58,10 +60,27 @@ export default function SubmissionsInboxPage() {
 
   useEffect(() => {
     setNotesDraft(selected ? (selected.admin_notes || '') : '');
+    setDriveDraft(selected ? (selected.drive_link || '') : '');
+    setStatusMsg(null);
   }, [selectedId]); // eslint-disable-line
 
-  async function patchSubmission(id, body) {
+  // Auto-clear ephemeral status banner after 2.5s
+  useEffect(() => {
+    if (!statusMsg) return;
+    const t = setTimeout(() => setStatusMsg(null), 2500);
+    return () => clearTimeout(t);
+  }, [statusMsg]);
+
+  async function refreshList() {
+    try {
+      const data = await apiFetch('/submissions/admin/all');
+      setSubmissions(data.submissions || []);
+    } catch (e) { /* ignore */ }
+  }
+
+  async function patchSubmission(id, body, okMsg) {
     setSavingId(id);
+    setError('');
     try {
       const data = await apiFetch(`/submissions/admin/${id}`, {
         method: 'PATCH',
@@ -69,22 +88,35 @@ export default function SubmissionsInboxPage() {
       });
       if (data && data.submission) {
         setSubmissions((prev) => prev.map((s) => (s.id === id ? data.submission : s)));
+      } else {
+        // Belt-and-braces: if the response shape is unexpected, still refresh
+        await refreshList();
       }
+      if (okMsg) setStatusMsg({ kind: 'ok', text: okMsg });
     } catch (err) {
-      setError(err.message || 'Save failed');
+      const msg = err && err.message ? err.message : 'Save failed';
+      setError(msg);
+      setStatusMsg({ kind: 'err', text: msg });
     } finally {
       setSavingId(null);
     }
   }
 
   function toggleActioned(s) {
-    patchSubmission(s.id, { actioned: !s.actioned_at });
+    const next = !s.actioned_at;
+    patchSubmission(s.id, { actioned: next }, next ? 'Marked as actioned' : 'Reopened — back to unactioned');
   }
 
   function saveNotes() {
     if (!selected) return;
     if ((selected.admin_notes || '') === (notesDraft || '')) return;
-    patchSubmission(selected.id, { admin_notes: notesDraft });
+    patchSubmission(selected.id, { admin_notes: notesDraft }, 'Notes saved');
+  }
+
+  function saveDriveLink() {
+    if (!selected) return;
+    if ((selected.drive_link || '') === (driveDraft || '').trim()) return;
+    patchSubmission(selected.id, { drive_link: driveDraft.trim() }, 'Drive link saved');
   }
 
   if (!isAdmin) {
@@ -272,6 +304,19 @@ export default function SubmissionsInboxPage() {
                 </div>
               </div>
 
+              {/* Status banner — shows save confirmation or error from the last action */}
+              {statusMsg && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: 7, marginBottom: 12,
+                  background: statusMsg.kind === 'ok' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: '1px solid ' + (statusMsg.kind === 'ok' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'),
+                  color: statusMsg.kind === 'ok' ? '#10B981' : '#EF4444',
+                  fontSize: 12.5, fontWeight: 600,
+                }}>
+                  {statusMsg.kind === 'ok' ? '✓ ' : '⚠ '}{statusMsg.text}
+                </div>
+              )}
+
               {/* Meta strip */}
               <div style={{
                 display: 'flex', gap: 12, flexWrap: 'wrap',
@@ -304,6 +349,53 @@ export default function SubmissionsInboxPage() {
                 </div>
               </div>
 
+              {/* Drive link — files are uploaded to Google Drive (via Pipedream),
+                  not stored locally, so we keep the Drive folder URL here for one-click
+                  access from this inbox. */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Google Drive folder
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
+                  <input
+                    type="url"
+                    value={driveDraft}
+                    onChange={(e) => setDriveDraft(e.target.value)}
+                    onBlur={saveDriveLink}
+                    placeholder="https://drive.google.com/drive/folders/…  (paste here, saves on blur)"
+                    style={{
+                      flex: 1, minWidth: 280,
+                      padding: '10px 14px', borderRadius: 9,
+                      background: 'var(--bg)', color: 'var(--text-primary)',
+                      border: '1px solid var(--border)', fontSize: 13,
+                      outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                  {selected.drive_link ? (
+                    <a
+                      href={selected.drive_link}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '10px 16px', borderRadius: 9,
+                        background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+                        color: '#fff', fontSize: 13, fontWeight: 700,
+                        textDecoration: 'none',
+                        boxShadow: '0 2px 8px rgba(59,130,246,0.25)',
+                      }}
+                    >Open in Drive ↗</a>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      padding: '10px 14px', fontSize: 11.5, color: 'var(--text-muted)',
+                    }}>Saves on blur</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                  Pipedream uploads the customer's files to Drive — paste the Drive folder URL once and the file rows below become one-click links.
+                </div>
+              </div>
+
               {/* Files */}
               {Array.isArray(selected.file_names) && selected.file_names.length > 0 && (
                 <div style={{ marginBottom: 18 }}>
@@ -311,15 +403,36 @@ export default function SubmissionsInboxPage() {
                     Files ({selected.file_names.length})
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {selected.file_names.map((name, i) => (
-                      <li key={i} style={{
-                        padding: '7px 12px', borderRadius: 7,
+                    {selected.file_names.map((name, i) => {
+                      const baseStyle = {
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 12px', borderRadius: 7,
                         background: 'var(--bg)', border: '1px solid var(--border)',
                         fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
-                        color: 'var(--text-primary)',
-                        wordBreak: 'break-all',
-                      }}>{name}</li>
-                    ))}
+                        color: 'var(--text-primary)', wordBreak: 'break-all',
+                        textDecoration: 'none',
+                      };
+                      if (selected.drive_link) {
+                        return (
+                          <li key={i}>
+                            <a href={selected.drive_link} target="_blank" rel="noopener noreferrer"
+                              style={{ ...baseStyle, cursor: 'pointer' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.06)'; e.currentTarget.style.borderColor = 'rgba(59,130,246,0.35)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                            >
+                              <span style={{ flex: 1 }}>{name}</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', fontFamily: 'system-ui' }}>Open in Drive ↗</span>
+                            </a>
+                          </li>
+                        );
+                      }
+                      return (
+                        <li key={i} style={baseStyle}>
+                          <span style={{ flex: 1 }}>{name}</span>
+                          <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'system-ui', fontStyle: 'italic' }}>Add Drive link to open</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}

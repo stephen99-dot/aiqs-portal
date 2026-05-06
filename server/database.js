@@ -315,6 +315,10 @@ const migrations = [
   { column: 'actioned_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_by TEXT" },
   { column: 'admin_notes', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN admin_notes TEXT" },
   { column: 'project_id',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN project_id TEXT" },
+  // Builders' source files are uploaded to Google Drive (via Pipedream), not
+  // stored locally — so we keep a per-submission Drive URL the admin can paste
+  // once, and the inbox surfaces "Open in Drive" links.
+  { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

@@ -199,7 +199,7 @@ router.get('/admin/all', (req, res) => {
     const rows = db.prepare(`
       SELECT s.id, s.submission_id, s.project_type, s.message, s.file_count, s.file_names,
              s.pipedream_status, s.credits_remaining_after, s.created_at,
-             s.actioned_at, s.actioned_by, s.admin_notes, s.project_id,
+             s.actioned_at, s.actioned_by, s.admin_notes, s.project_id, s.drive_link,
              u.id AS user_id,
              u.full_name AS user_name, u.email AS user_email,
              u.company AS user_company, u.phone AS user_phone
@@ -249,6 +249,15 @@ router.patch('/admin/:id', (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'project_id')) {
       updates.push('project_id = ?');
       params.push(req.body.project_id || null);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'drive_link')) {
+      const link = (req.body.drive_link || '').trim();
+      // Bare-bones URL sanity check so we don't store junk
+      if (link && !/^https?:\/\//i.test(link)) {
+        return res.status(400).json({ error: 'Drive link must start with http:// or https://' });
+      }
+      updates.push('drive_link = ?');
+      params.push(link || null);
     }
 
     if (updates.length === 0) return res.json({ ok: true, unchanged: true });

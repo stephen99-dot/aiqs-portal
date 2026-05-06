@@ -1047,10 +1047,23 @@ router.get('/projects', authMiddleware, (req, res) => {
 });
 
 router.get('/projects/:id', authMiddleware, (req, res) => {
-  const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  // Admins can view any project; customers only their own.
+  const project = req.user.role === 'admin'
+    ? db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id)
+    : db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
   const files = db.prepare('SELECT * FROM files WHERE project_id = ? ORDER BY created_at DESC').all(project.id);
-  res.json({ ...project, files });
+  // Include the owner's contact info so admins see exactly which customer
+  // they're working on / sending docs to.
+  const owner = db.prepare('SELECT full_name, email, company, phone FROM users WHERE id = ?').get(project.user_id);
+  res.json({
+    ...project,
+    files,
+    owner_name:    owner ? owner.full_name : null,
+    owner_email:   owner ? owner.email     : null,
+    owner_company: owner ? owner.company   : null,
+    owner_phone:   owner ? owner.phone     : null,
+  });
 });
 
 router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res) => {

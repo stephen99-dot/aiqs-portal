@@ -49,12 +49,13 @@ export default function Layout() {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   const navItems = [
-    { path: '/dashboard', label: 'Projects', Icon: NewProjectIcon },
-    { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon, badge: 'New' },
+    { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
+    { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
+    { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
-    { path: '/notetaker', label: 'AI Notetaker', Icon: MicIcon, badge: 'New' },
+    { path: '/notetaker', label: 'AI Notetaker', Icon: MicIcon },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
   ];
