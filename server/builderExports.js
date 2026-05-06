@@ -193,9 +193,10 @@ async function parseBOQ(filePath) {
 
   // Detect which row holds the column headers ("Item", "Description", "Qty", "Rate"…)
   // so we can skip everything above it. Default to row 4 (matches our generator).
+  // Scans the top 30 rows so a tall branded hero block on the BOQ tab is fine.
   let headerRow = 4;
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber > 8) return;
+    if (rowNumber > 30) return;
     const joined = [1, 2, 3, 4, 5, 6, 7, 8].map((c) => cellText(row.getCell(c)).toLowerCase()).join(' | ');
     if (joined.includes('description') && (joined.includes('qty') || joined.includes('quantity'))) {
       headerRow = rowNumber;
@@ -664,102 +665,62 @@ async function generateClientCopyPro(parsed, opts = {}) {
     return defaultOhp;
   }
 
-  // ── Branding ─────────────────────────────────────────────────────────────
+  // ── Branding via the shared style pack ───────────────────────────────────
+  const docTpl = require('./docTemplates');
   const branding = opts.branding || {};
-  const tmpl = templateOpts(branding.template);
-  const PRIMARY = hexToArgb(branding.primary_colour) || 'FF1B2A4A';
-  const ACCENT  = hexToArgb(branding.accent_colour)  || 'FFF59E0B';
-  const SECTION_BG = hexToArgb(tintHex(branding.primary_colour || '#1B2A4A', tmpl.sectionTintPct)) || 'FFD6E4F0';
-  const SUBTOTAL_BG = hexToArgb(tintHex(branding.accent_colour || '#F59E0B', 0.85)) || 'FFFFF2CC';
+  const style = docTpl.styleFor(branding);
+  const f = style.flavour;
+  const PRIMARY = style.PRIMARY;
+  const ACCENT  = style.ACCENT;
+  const headingFont = f.headingFont;
+  const bodyFont = f.bodyFont;
   const BORDER_COL = 'FFCBD5E1';
   const thin = { style: 'thin', color: { argb: BORDER_COL } };
   const allBorders = { top: thin, bottom: thin, left: thin, right: thin };
   const currFmt = '#,##0.00';
-  const headingFont = tmpl.headingFont;
-  const bodyFont = tmpl.bodyFont;
 
   const wb = new ExcelJS.Workbook();
   wb.creator = (branding.company_name || 'The AI QS') + ' — Client Copy';
   wb.created = new Date();
 
-  // ── Cover sheet (first tab) ──────────────────────────────────────────────
-  const cover = wb.addWorksheet('Cover', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1 },
-  });
-  cover.columns = [
-    { width: 4 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 4 },
-  ];
-
-  // Logo block at top-left of the cover sheet
-  if (tryEmbedLogo(wb, cover, branding.logo_path, { tl: { col: 1, row: 1 }, ext: { width: 160, height: 60 } })) {
-    cover.getRow(1).height = 12;
-    cover.getRow(2).height = 12;
-    cover.getRow(3).height = 12;
-    cover.getRow(4).height = 12;
+  // We need totals to pass to the cover renderer up-front. Compute the full
+  // ex-VAT figure (construction net + prelims + day-rate + contingency) so the
+  // headline on the cover matches the bottom of the BOQ.
+  let preNet = 0, preLabour = 0, preMaterials = 0, preItemCount = 0;
+  for (const s of (parsed.sections || [])) {
+    const sectionOhp = ohpForSection(s.number);
+    const mult = 1 + sectionOhp / 100;
+    for (const it of (s.items || [])) {
+      preLabour += (parseFloat(it.labour) || 0);
+      preMaterials += (parseFloat(it.materials) || 0);
+      const base = (parseFloat(it.labour) || 0) + (parseFloat(it.materials) || 0) || (parseFloat(it.total) || 0);
+      preNet += roundMoney(base * mult);
+      preItemCount++;
+    }
   }
+  let preExVat = preNet;
+  if (prelimsAmount > 0) preExVat += prelimsAmount;
+  if (prelimsPct > 0)    preExVat += preNet * (prelimsPct / 100);
+  if (dayRate)           preExVat += dayRate.days * dayRate.rate_per_day;
+  if (contingency > 0)   preExVat += preNet * (contingency / 100);
+  const preInclVat = preExVat * (1 + (vat / 100));
 
-  // Company name block (top-right of the cover, opposite the logo)
-  if (branding.company_name) {
-    cover.mergeCells('C2:E2');
-    const cn = cover.getCell('C2');
-    cn.value = branding.company_name;
-    cn.font = { name: headingFont, size: 14, bold: true, color: { argb: PRIMARY } };
-    cn.alignment = { horizontal: 'right' };
-  }
-  if (branding.company_address) {
-    cover.mergeCells('C3:E5');
-    const ca = cover.getCell('C3');
-    ca.value = branding.company_address;
-    ca.font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
-    ca.alignment = { horizontal: 'right', vertical: 'top', wrapText: true };
-  }
-
-  // Title block (rows 7-9)
-  cover.getRow(7).height = 6;
-  cover.mergeCells('B8:E8');
-  const t1 = cover.getCell('B8');
-  t1.value = 'BILL OF QUANTITIES';
-  t1.font = { name: headingFont, size: 11, bold: true, color: { argb: ACCENT } };
-  cover.mergeCells('B9:E10');
-  const t2 = cover.getCell('B9');
-  t2.value = projectName;
-  t2.font = { name: headingFont, size: tmpl.titleSize, bold: true, color: { argb: PRIMARY } };
-  t2.alignment = { vertical: 'top', wrapText: true };
-  cover.getRow(9).height = 32;
-  cover.getRow(10).height = 22;
-
-  // Accent bar (row 11)
-  cover.mergeCells('B11:E11');
-  const bar = cover.getCell('B11');
-  bar.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
-  cover.getRow(11).height = 6;
-
-  // Meta panel (Prepared for / Date / etc.)
-  function coverMeta(rowNum, label, value) {
-    cover.getCell('B' + rowNum).value = label.toUpperCase();
-    cover.getCell('B' + rowNum).font = { name: bodyFont, size: 8.5, bold: true, color: { argb: 'FF94A3B8' } };
-    cover.mergeCells('C' + rowNum + ':E' + rowNum);
-    cover.getCell('C' + rowNum).value = value;
-    cover.getCell('C' + rowNum).font = { name: bodyFont, size: 11, bold: true, color: { argb: PRIMARY } };
-  }
-  cover.getRow(12).height = 14;
-  coverMeta(13, 'Prepared for', clientName);
-  coverMeta(14, 'Issued', new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }));
-  // Total value placeholder — filled at the end once we know the real number.
-  coverMeta(15, 'Total ex-VAT (provisional)', '—');
-
-  // Footer (cover sheet)
-  if (branding.footer_text) {
-    cover.mergeCells('B28:E28');
-    const f = cover.getCell('B28');
-    f.value = branding.footer_text;
-    f.font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF94A3B8' } };
-    f.alignment = { horizontal: 'center' };
-  }
+  // ── Cover sheet (shared renderer — same look as the QS-side BOQ) ─────────
+  docTpl.renderCoverSheet(wb, {
+    docKind: 'BILL OF QUANTITIES — CLIENT COPY',
+    projectName,
+    clientName,
+    issuedDate: new Date(),
+    currency,
+    totals: { exVat: preExVat, inclVat: preInclVat, labour: preLabour, materials: preMaterials },
+    itemCount: preItemCount,
+    sectionCount: (parsed.sections || []).length,
+  }, style);
 
   // ── Client Copy detail sheet ─────────────────────────────────────────────
   const ws = wb.addWorksheet('Client Copy', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    views: [{ showGridLines: false }],
   });
 
   ws.columns = [
@@ -771,36 +732,40 @@ async function generateClientCopyPro(parsed, opts = {}) {
     { key: 'total', width: 14 },
   ];
 
-  // Title block (with optional logo on the right)
-  ws.mergeCells('A1:F1');
-  ws.getCell('A1').value = 'Bill of Quantities — CLIENT COPY — ' + projectName;
-  ws.getCell('A1').font = { name: headingFont, size: 14, bold: true, color: { argb: PRIMARY } };
-  ws.getRow(1).height = 28;
-
-  ws.mergeCells('A2:F2');
-  ws.getCell('A2').value =
-    'Client: ' + clientName + '  |  Date: ' + new Date().toLocaleDateString('en-GB')
-    + (branding.company_name ? '  |  Issued by: ' + branding.company_name : '');
-  ws.getCell('A2').font = { name: bodyFont, size: 10, color: { argb: 'FF64748B' } };
-
-  // Accent strip across row 3
-  ws.mergeCells('A3:F3');
-  ws.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
-  ws.getRow(3).height = 4;
+  // Hero block (shared)
+  let r = docTpl.renderHeroBlock(ws, {
+    docKind: 'BILL OF QUANTITIES — CLIENT COPY',
+    projectName,
+    clientName,
+    extraMeta: branding.company_name ? 'Issued by ' + branding.company_name : '',
+  }, style, 'F');
+  ws.getRow(r).height = 6;
+  r++;
 
   // Header row
-  let r = 4;
   const hdr = ws.getRow(r);
   hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
   for (let c = 1; c <= 6; c++) {
     const cell = hdr.getCell(c);
-    cell.font = { name: headingFont, size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PRIMARY } };
-    cell.border = allBorders;
+    if (style.template === 'modern') {
+      cell.font = { name: headingFont, size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PRIMARY } };
+      cell.border = allBorders;
+    } else {
+      cell.font = { name: headingFont, size: 10.5, bold: true, color: { argb: PRIMARY } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: PRIMARY } },
+        bottom: { style: 'medium', color: { argb: PRIMARY } },
+      };
+    }
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
   }
-  hdr.height = 24;
+  hdr.height = 28;
   r++;
+
+  // Set sectionFill/subtotalFill to use flavour
+  const SECTION_BG = f.sectionFill;
+  const SUBTOTAL_BG = f.subtotalFill === style.WHITE ? PRIMARY : f.subtotalFill;
 
   // Per-section item rows. Each section has its own OH&P; line totals are
   // (labour + materials) × (1 + ohp/100), rounded as configured.
@@ -809,15 +774,21 @@ async function generateClientCopyPro(parsed, opts = {}) {
     const sectionOhp = ohpForSection(s.number);
     const sectionMult = 1 + sectionOhp / 100;
 
-    // Section header
+    // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
-    sec.getCell(1).value = s.number + '. ' + s.title.toUpperCase() +
+    sec.getCell(1).value = '   ' + s.number + '.   ' + s.title.toUpperCase() +
       (sectionOhp !== defaultOhp ? '   (OH&P ' + sectionOhp + '%)' : '');
-    sec.getCell(1).font = { name: headingFont, size: 10.5, bold: true, color: { argb: PRIMARY } };
-    sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
-    sec.getCell(1).border = allBorders;
-    sec.height = 22;
+    sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
+    if (f.sectionFill !== style.WHITE) {
+      sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.sectionFill } };
+    } else {
+      sec.getCell(1).border = {
+        top: { style: 'medium', color: { argb: PRIMARY } },
+        bottom: { style: 'thin', color: { argb: PRIMARY } },
+      };
+    }
+    sec.height = 26;
     r++;
 
     let sectionTotal = 0;
@@ -852,9 +823,16 @@ async function generateClientCopyPro(parsed, opts = {}) {
     sub.getCell(2).value = 'Sub-total — ' + s.title;
     sub.getCell(6).value = sectionTotal;
     for (let c = 1; c <= 6; c++) {
-      sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
-      sub.getCell(c).border = allBorders;
-      sub.getCell(c).font = { name: 'Arial', size: 10, bold: true };
+      if (f.subtotalFill !== style.WHITE) {
+        sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.subtotalFill } };
+        sub.getCell(c).border = allBorders;
+      } else {
+        sub.getCell(c).border = {
+          top: { style: 'thin', color: { argb: PRIMARY } },
+          bottom: { style: 'thin', color: { argb: PRIMARY } },
+        };
+      }
+      sub.getCell(c).font = { name: bodyFont, size: 10, bold: true, color: { argb: f.subtotalText } };
       if (c === 6) {
         sub.getCell(c).numFmt = currFmt;
         sub.getCell(c).alignment = { horizontal: 'right' };
