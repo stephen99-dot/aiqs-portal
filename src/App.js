@@ -19,13 +19,13 @@ import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
-import NotetakerPage from './pages/NotetakerPage';
 import VariationsPage from './pages/VariationsPage';
 import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
 import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import BuilderPackPage from './pages/BuilderPackPage';
 import VariationsHubPage from './pages/VariationsHubPage';
 import BrandingPage from './pages/BrandingPage';
+import FindingsEditorPage from './pages/FindingsEditorPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -64,7 +64,6 @@ function AppInner() {
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="/notetaker" element={<NotetakerPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
@@ -74,6 +73,7 @@ function AppInner() {
           <Route path="/branding" element={<BrandingPage />} />
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
+          <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

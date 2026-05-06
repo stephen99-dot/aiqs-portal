@@ -3084,7 +3084,11 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             };
           }
 
-          const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName);
+          // Apply customer branding to the findings doc so the .docx wears
+          // their logo / colours / footer.
+          let _findingsBranding = null;
+          try { _findingsBranding = require('./brandingRoutes').getBrandingForUser(userId); } catch (e) {}
+          const docBuf = await findingsGen.generateFindingsReport(findings, clientName, projectName, _findingsBranding);
           if (docBuf && docBuf.length > 100) {
             const docName = `Findings-${safeName}-${ts}.docx`;
             fs.writeFileSync(path.join(outputsDir, docName), docBuf);
@@ -3092,6 +3096,12 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             console.log(`[Stage 3] Word: ${docName}`);
           }
         } catch (wordErr) { console.error('[Stage 3] Word error:', wordErr.message); }
+
+        // Stash the structured findings JSON alongside the docx so the
+        // customer can edit and re-export it later from the Findings page.
+        // _pendingFindingsJSON is consumed when the project row is upserted below.
+        var _pendingFindingsJSON = null;
+        try { _pendingFindingsJSON = JSON.stringify(findings || {}); } catch (e) {}
 
         if (downloadFiles.length > 0) {
           const itemCount = pricedResult.item_count || 0;
@@ -3118,6 +3128,16 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
               try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
               db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
                 .run(projId, userId, projectName, grandTotal, projCurrency, itemCount, lockedTakeoff ? lockedTakeoff.project_type : null, boqF ? boqF.name : null, docF ? docF.name : null);
+              // Stash structured findings JSON so the customer can edit it later
+              // (Findings page reads from project_data and re-renders the .docx
+              // with their branding on demand).
+              if (_pendingFindingsJSON) {
+                try {
+                  db.prepare(
+                    'INSERT OR REPLACE INTO project_data (project_id, data_type, data) VALUES (?, ?, ?)'
+                  ).run(projId, 'findings_json', _pendingFindingsJSON);
+                } catch (pdErr) { console.error('[Findings] project_data insert error:', pdErr.message); }
+              }
             } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
 
             db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')

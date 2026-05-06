@@ -17,6 +17,7 @@ const { router: pipelineRoutes } = require('./pipelineRoutes');
 const variationRoutes = require('./variationRoutes');
 const deliverableRoutes = require('./deliverableRoutes');
 const brandingRoutes = require('./brandingRoutes');
+const findingsRoutes = require('./findingsRoutes');
 const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
 const agentRoutes = require('./agentRoutes');
@@ -45,6 +46,7 @@ app.use('/api', pipelineRoutes);
 app.use('/api', variationRoutes);
 app.use('/api', deliverableRoutes);
 app.use('/api', brandingRoutes);
+app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', agentRoutes);
 if (process.env.NODE_ENV === 'production') {
