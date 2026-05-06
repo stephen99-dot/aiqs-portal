@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
+import BuilderPackPanel from '../components/BuilderPackPanel';
 
 // SVG icons for document types
 const ExcelIcon = ({ size = 28 }) => (
@@ -324,6 +325,11 @@ export default function ProjectDetailPage() {
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
                 Need changes? Go back to the chat and say "regenerate documents" with any adjustments.
               </p>
+
+              {/* Builder Pack — granular trade-by-trade rollup, materials & labour schedules. TESTING. */}
+              {project.boq_filename && (
+                <BuilderPackPanel projectId={id} hasBoq={!!project.boq_filename} currency={project.currency} />
+              )}
 
               {/* Client Copy button */}
               {project.boq_filename && (
