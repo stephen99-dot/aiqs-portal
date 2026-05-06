@@ -468,4 +468,239 @@ async function generateBuilderPack(parsed, opts = {}) {
   return Buffer.from(buffer);
 }
 
-module.exports = { parseBOQ, generateBuilderPack };
+/**
+ * Generate an upgraded "Client Copy" — per-trade OH&P, optional flat prelims,
+ * optional day-rate / management-fee line, configurable rounding.
+ *
+ * opts:
+ *   currency:        '£' | '€'
+ *   contingency:     number  (% on construction net, default 0)
+ *   default_ohp:     number  (% applied unless a per-trade override exists)
+ *   vat:             number  (% on the post-OH&P, post-contingency total)
+ *   per_trade_ohp:   { [tradeNumber: string]: number }   override OH&P per section
+ *   prelims_amount:  number  (£ flat — appears as a separate summary line)
+ *   prelims_pct:     number  (% of net — alternative to flat amount)
+ *   day_rate:        { label: string, days: number, rate_per_day: number }
+ *   rounding:        0 | 1 | 10 | 100  (round each item total to nearest)
+ *   project_name, client_name
+ */
+async function generateClientCopyPro(parsed, opts = {}) {
+  const currency = opts.currency || '£';
+  const contingency = parseFloat(opts.contingency) || 0;
+  const defaultOhp = parseFloat(opts.default_ohp) || 0;
+  const vat = parseFloat(opts.vat) || 0;
+  const perTradeOhp = opts.per_trade_ohp || {};
+  const prelimsAmount = parseFloat(opts.prelims_amount) || 0;
+  const prelimsPct = parseFloat(opts.prelims_pct) || 0;
+  const rounding = [0, 1, 10, 100].includes(parseInt(opts.rounding, 10)) ? parseInt(opts.rounding, 10) : 0;
+  const dayRate = opts.day_rate && opts.day_rate.days > 0 && opts.day_rate.rate_per_day > 0
+    ? { label: opts.day_rate.label || 'Day-rate / management', days: parseFloat(opts.day_rate.days), rate_per_day: parseFloat(opts.day_rate.rate_per_day) }
+    : null;
+  const projectName = opts.project_name || 'Project';
+  const clientName = opts.client_name || 'Client';
+
+  function roundMoney(v) {
+    if (!rounding || rounding < 1) return Math.round(v * 100) / 100;
+    return Math.round(v / rounding) * rounding;
+  }
+  function ohpForSection(sectionNumber) {
+    if (Object.prototype.hasOwnProperty.call(perTradeOhp, sectionNumber)) {
+      const v = parseFloat(perTradeOhp[sectionNumber]);
+      if (Number.isFinite(v)) return v;
+    }
+    return defaultOhp;
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'The AI QS — Client Copy';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('Client Copy', {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+  });
+
+  ws.columns = [
+    { key: 'item', width: 8 },
+    { key: 'desc', width: 56 },
+    { key: 'unit', width: 7 },
+    { key: 'qty', width: 9 },
+    { key: 'rate', width: 12 },
+    { key: 'total', width: 14 },
+  ];
+
+  const NAVY = 'FF1B2A4A';
+  const SECTION_BG = 'FFD6E4F0';
+  const SUBTOTAL_BG = 'FFFFF2CC';
+  const BORDER_COL = 'FFCBD5E1';
+  const thin = { style: 'thin', color: { argb: BORDER_COL } };
+  const allBorders = { top: thin, bottom: thin, left: thin, right: thin };
+  const currFmt = '#,##0.00';
+
+  // Title block
+  ws.mergeCells('A1:F1');
+  ws.getCell('A1').value = 'Bill of Quantities — CLIENT COPY — ' + projectName;
+  ws.getCell('A1').font = { name: 'Arial', size: 14, bold: true, color: { argb: '1B2A4A' } };
+  ws.getRow(1).height = 28;
+
+  ws.mergeCells('A2:F2');
+  ws.getCell('A2').value =
+    'Client: ' + clientName + '  |  Date: ' + new Date().toLocaleDateString('en-GB');
+  ws.getCell('A2').font = { name: 'Arial', size: 10, color: { argb: '64748B' } };
+
+  // Header row
+  let r = 4;
+  const hdr = ws.getRow(r);
+  hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
+  for (let c = 1; c <= 6; c++) {
+    const cell = hdr.getCell(c);
+    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    cell.border = allBorders;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  }
+  hdr.height = 24;
+  r++;
+
+  // Per-section item rows. Each section has its own OH&P; line totals are
+  // (labour + materials) × (1 + ohp/100), rounded as configured.
+  const sectionTotals = []; // post-OH&P per section
+  parsed.sections.forEach((s, idx) => {
+    const sectionOhp = ohpForSection(s.number);
+    const sectionMult = 1 + sectionOhp / 100;
+
+    // Section header
+    const sec = ws.getRow(r);
+    ws.mergeCells('A' + r + ':F' + r);
+    sec.getCell(1).value = s.number + '. ' + s.title.toUpperCase() +
+      (sectionOhp !== defaultOhp ? '   (OH&P ' + sectionOhp + '%)' : '');
+    sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
+    sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+    sec.getCell(1).border = allBorders;
+    sec.height = 22;
+    r++;
+
+    let sectionTotal = 0;
+    for (const it of s.items) {
+      const baseLineTotal = (it.labour || 0) + (it.materials || 0) || (it.total || 0);
+      const upliftedTotal = roundMoney(baseLineTotal * sectionMult);
+      sectionTotal += upliftedTotal;
+      const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionMult;
+
+      const row = ws.getRow(r);
+      row.getCell(1).value = it.itemRef || '';
+      row.getCell(2).value = it.description;
+      row.getCell(3).value = it.unit;
+      row.getCell(4).value = it.qty;
+      row.getCell(5).value = Math.round(upliftedRate * 100) / 100;
+      row.getCell(6).value = upliftedTotal;
+      for (let c = 1; c <= 6; c++) {
+        row.getCell(c).border = allBorders;
+        row.getCell(c).font = { name: 'Arial', size: 10 };
+      }
+      row.getCell(2).alignment = { wrapText: true, vertical: 'top' };
+      row.getCell(4).numFmt = '#,##0.00';
+      row.getCell(5).numFmt = currFmt;
+      row.getCell(6).numFmt = currFmt;
+      row.getCell(5).alignment = { horizontal: 'right' };
+      row.getCell(6).alignment = { horizontal: 'right' };
+      r++;
+    }
+
+    // Section subtotal
+    const sub = ws.getRow(r);
+    sub.getCell(2).value = 'Sub-total — ' + s.title;
+    sub.getCell(6).value = sectionTotal;
+    for (let c = 1; c <= 6; c++) {
+      sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
+      sub.getCell(c).border = allBorders;
+      sub.getCell(c).font = { name: 'Arial', size: 10, bold: true };
+      if (c === 6) {
+        sub.getCell(c).numFmt = currFmt;
+        sub.getCell(c).alignment = { horizontal: 'right' };
+      }
+    }
+    r++;
+    r++; // blank
+    sectionTotals.push({ section: s, total: sectionTotal });
+  });
+
+  // ── Summary block ──────────────────────────────────────────────────────
+  const netConstruction = sectionTotals.reduce((a, x) => a + x.total, 0);
+
+  const sumHdr = ws.getRow(r);
+  ws.mergeCells('A' + r + ':F' + r);
+  sumHdr.getCell(1).value = 'PROJECT SUMMARY';
+  sumHdr.getCell(1).font = { name: 'Arial', size: 11, bold: true, color: { argb: '1B2A4A' } };
+  sumHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+  sumHdr.getCell(1).border = allBorders;
+  r++;
+
+  function addSummaryLine(label, value, opt = {}) {
+    const row = ws.getRow(r++);
+    row.getCell(2).value = label;
+    row.getCell(2).font = { name: 'Arial', size: 10, bold: !!opt.bold };
+    row.getCell(6).value = value;
+    row.getCell(6).numFmt = currFmt;
+    row.getCell(6).font = { name: 'Arial', size: 10, bold: !!opt.bold };
+    row.getCell(6).border = allBorders;
+    row.getCell(6).alignment = { horizontal: 'right' };
+    if (opt.fill) {
+      for (let c = 1; c <= 6; c++) {
+        row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
+        row.getCell(c).border = allBorders;
+      }
+    }
+    return row;
+  }
+
+  addSummaryLine('Net construction cost (incl. trade OH&P)', netConstruction);
+
+  let runningTotal = netConstruction;
+
+  if (prelimsAmount > 0) {
+    addSummaryLine('Preliminaries (flat)', prelimsAmount);
+    runningTotal += prelimsAmount;
+  }
+  if (prelimsPct > 0) {
+    const v = netConstruction * (prelimsPct / 100);
+    addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', v);
+    runningTotal += v;
+  }
+  if (dayRate) {
+    const v = dayRate.days * dayRate.rate_per_day;
+    addSummaryLine(dayRate.label + ' (' + dayRate.days + ' day' + (dayRate.days === 1 ? '' : 's') + ' @ ' + currency + dayRate.rate_per_day + ')', v);
+    runningTotal += v;
+  }
+  if (contingency > 0) {
+    const v = netConstruction * (contingency / 100);
+    addSummaryLine('Contingency (' + contingency + '% of net)', v);
+    runningTotal += v;
+  }
+
+  const exVat = runningTotal;
+  addSummaryLine('TOTAL (EXCL. VAT)', exVat, { bold: true, fill: true });
+
+  if (vat > 0) {
+    const vatVal = exVat * (vat / 100);
+    addSummaryLine('VAT @ ' + vat + '%', vatVal);
+    addSummaryLine('TOTAL (INCL. VAT)', exVat + vatVal, { bold: true, fill: true });
+  }
+
+  // Footer note
+  r++;
+  const note = ws.getRow(r);
+  note.getCell(2).value =
+    'This document is prepared for client use. Rates are final and inclusive of overheads, profit'
+    + (contingency > 0 ? ', contingency' : '')
+    + (vat > 0 ? ' and VAT' : '')
+    + '. No contractor margin is shown separately.';
+  note.getCell(2).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF888888' } };
+
+  ws.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
+  ws.headerFooter.oddFooter = '&LThe AI QS — CLIENT COPY&RPage &P of &N';
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+module.exports = { parseBOQ, generateBuilderPack, generateClientCopyPro };

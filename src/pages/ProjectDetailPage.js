@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
-import BuilderPackPanel from '../components/BuilderPackPanel';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 
 // SVG icons for document types
@@ -330,9 +329,43 @@ export default function ProjectDetailPage() {
                 Need changes? Go back to the chat and say "regenerate documents" with any adjustments.
               </p>
 
-              {/* Builder Pack — granular trade-by-trade rollup, materials & labour schedules. TESTING. */}
+              {/* Builder Pack — full workspace (trade rollup, schedules, client copy) lives on its own page now. */}
               {project.boq_filename && (
-                <BuilderPackPanel projectId={id} hasBoq={!!project.boq_filename} currency={project.currency} />
+                <Link
+                  to={`/project/${id}/builder-pack`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    padding: '14px 18px', borderRadius: 10,
+                    background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(168,85,247,0.06))',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    textDecoration: 'none', textAlign: 'left',
+                  }}
+                >
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                    background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                    color: '#0A0F1C', fontWeight: 800, fontSize: 13,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>BP</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Open Builder Pack & Client Copy
+                      </span>
+                      <span style={{
+                        fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
+                        padding: '2px 7px', borderRadius: 4,
+                        background: 'rgba(239,68,68,0.12)', color: '#EF4444',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        textTransform: 'uppercase',
+                      }}>Testing · Beta</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Trade rollup, materials & labour schedules, per-trade OH&P, prelims, rounding, live preview.
+                    </div>
+                  </div>
+                  <span style={{ color: '#F59E0B', fontSize: 18, fontWeight: 700 }}>→</span>
+                </Link>
               )}
 
               {/* Client Copy button */}

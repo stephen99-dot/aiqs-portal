@@ -6,7 +6,7 @@ const path = require('path');
 const multer = require('multer');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack } = require('./builderExports');
+const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -730,6 +730,52 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
   } catch (err) {
     console.error('[BuilderPack] pack error:', err);
     res.status(500).json({ error: 'Failed to generate Builder Pack: ' + err.message });
+  }
+});
+
+// POST /api/projects/:projectId/client-copy-pro
+//   Granular client copy with per-trade OH&P, prelims, day-rate, rounding.
+//   body: {
+//     contingency, default_ohp, vat,
+//     per_trade_ohp: { tradeNumber: ohpPct },
+//     prelims_amount, prelims_pct,
+//     day_rate: { label, days, rate_per_day },
+//     rounding: 0 | 1 | 10 | 100
+//   }
+router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
+
+    const filePath = path.join(outputsDir, project.boq_filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+
+    const parsed = await parseBOQ(filePath);
+    const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
+
+    const buffer = await generateClientCopyPro(parsed, {
+      currency: project.currency === 'EUR' ? '€' : '£',
+      contingency: req.body.contingency,
+      default_ohp: req.body.default_ohp,
+      vat: req.body.vat,
+      per_trade_ohp: req.body.per_trade_ohp || {},
+      prelims_amount: req.body.prelims_amount,
+      prelims_pct: req.body.prelims_pct,
+      day_rate: req.body.day_rate,
+      rounding: req.body.rounding,
+      project_name: project.title,
+      client_name: user ? user.full_name : 'Client',
+    });
+
+    const safeTitle = project.title.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = 'ClientCopy_' + safeTitle + '_' + Date.now() + '.xlsx';
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[ClientCopyPro] error:', err);
+    res.status(500).json({ error: 'Failed to generate client copy: ' + err.message });
   }
 });
 
