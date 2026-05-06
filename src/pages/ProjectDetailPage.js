@@ -247,6 +247,7 @@ export default function ProjectDetailPage() {
 
               {/* Findings Report Word doc */}
               {project.findings_filename && (
+                <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   onClick={() => handleDownload(project.findings_filename, 'Findings Report')}
                   disabled={downloading === project.findings_filename}
@@ -254,7 +255,7 @@ export default function ProjectDetailPage() {
                     display: 'flex', alignItems: 'center', gap: 14,
                     padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
                     background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
-                    textAlign: 'left', width: '100%',
+                    textAlign: 'left', flex: 1,
                     opacity: downloading === project.findings_filename ? 0.6 : 1,
                     transition: 'all 0.15s',
                   }}
@@ -281,10 +282,23 @@ export default function ProjectDetailPage() {
                     )}
                   </div>
                 </button>
+                <Link
+                  to={`/project/${id}/findings`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '0 16px', borderRadius: 10,
+                    background: 'rgba(59,130,246,0.12)',
+                    border: '1px solid rgba(59,130,246,0.3)',
+                    textDecoration: 'none', color: '#3B82F6',
+                    fontWeight: 700, fontSize: 12.5,
+                  }}
+                >Edit ↗</Link>
+                </div>
               )}
 
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
-                Need changes? Go back to the chat and say "regenerate documents" with any adjustments.
+                Need to tweak content? Use <strong>Edit</strong> beside the Findings Report or open the Builder Pack to edit the BOQ line items. Branding follows the colours and logo from{' '}
+                <Link to="/branding" style={{ color: '#A855F7', fontWeight: 600 }}>/branding</Link>.
               </p>
 
               {/* Builder Pack — full workspace (trade rollup, schedules, client copy) lives on its own page now. */}

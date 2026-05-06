@@ -639,12 +639,23 @@ async function runGenerationForRun(runId, opts = {}) {
         grand_total: priced.summary.grand_total,
       },
     };
-    const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName);
+    let _agentBranding = null;
+    try { _agentBranding = require('./brandingRoutes').getBrandingForUser(run.user_id); } catch (e) {}
+    const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName, _agentBranding);
     if (wordBuf && wordBuf.length > 100) {
       const fname = `Findings-${safeName}-${ts}.docx`;
       fs.writeFileSync(path.join(outputsDir, fname), wordBuf);
       downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}` });
     }
+    // Persist structured findings against the run's project (if it has one)
+    // so the customer can edit and re-export.
+    try {
+      if (run.project_id) {
+        db.prepare(
+          'INSERT OR REPLACE INTO project_data (project_id, data_type, data) VALUES (?, ?, ?)'
+        ).run(run.project_id, 'findings_json', JSON.stringify(findingsObj));
+      }
+    } catch (pdErr) { /* best-effort */ }
   } catch (wordErr) { console.error(`[Agent ${runId}] Word gen error:`, wordErr.message); }
 
   updateRun(runId, {

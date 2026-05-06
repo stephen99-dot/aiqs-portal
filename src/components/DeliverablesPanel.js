@@ -216,6 +216,32 @@ export default function DeliverablesPanel({ projectId, project }) {
             background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(168,85,247,0.04))',
             border: '1px solid rgba(59,130,246,0.25)',
           }}>
+            {/* Quick presets — 90% of uploads are BOQ / Findings / both, so make
+                those one-click. The dropdown below still covers the rest. */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {[
+                { v: 'boq',           l: 'BOQ',                 desc: 'Bill of Quantities' },
+                { v: 'findings',      l: 'Findings Report',     desc: 'Findings Report (.docx)' },
+                { v: 'marked_drawing',l: 'Marked-up drawing',   desc: 'PDF / image with marks' },
+                { v: 'supplier_quote',l: 'Supplier quote',      desc: 'Quote from a supplier' },
+              ].map((p) => (
+                <button
+                  key={p.v}
+                  type="button"
+                  onClick={() => setKind(p.v)}
+                  title={p.desc}
+                  style={{
+                    padding: '6px 11px', borderRadius: 7,
+                    fontSize: 11.5, fontWeight: 700,
+                    background: kind === p.v ? '#3B82F6' : 'transparent',
+                    color: kind === p.v ? '#fff' : 'var(--text-muted)',
+                    border: '1px solid ' + (kind === p.v ? '#3B82F6' : 'var(--border)'),
+                    cursor: 'pointer',
+                  }}
+                >{p.l}</button>
+              ))}
+            </div>
+
             <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
               <select
                 value={kind}
