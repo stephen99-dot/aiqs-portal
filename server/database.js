@@ -265,6 +265,29 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_drawing_submissions_user ON drawing_submissions(user_id);
   CREATE INDEX IF NOT EXISTS idx_drawing_submissions_created ON drawing_submissions(created_at);
+
+  -- Files the QS sends back into the customer's portal: priced BOQs,
+  -- marked-up drawings, findings reports, supplier quotes, etc.
+  -- Versioned per (project_id, kind) so revisions are kept, not overwritten.
+  CREATE TABLE IF NOT EXISTS project_deliverables (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    submission_id TEXT,
+    kind TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    file_size INTEGER,
+    mime_type TEXT,
+    version INTEGER DEFAULT 1,
+    notes TEXT,
+    uploaded_by TEXT,
+    is_latest INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_deliverables_project ON project_deliverables(project_id);
+  CREATE INDEX IF NOT EXISTS idx_deliverables_latest ON project_deliverables(project_id, is_latest);
 `);
 
 // Migrations for existing databases

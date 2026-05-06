@@ -245,6 +245,17 @@ export default function SubmissionsInboxPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {selected.project_id && (
+                    <Link
+                      to={`/project/${selected.project_id}`}
+                      style={{
+                        padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                        background: 'rgba(59,130,246,0.12)', color: '#3B82F6',
+                        border: '1px solid rgba(59,130,246,0.3)',
+                        textDecoration: 'none',
+                      }}
+                    >Open project →</Link>
+                  )}
                   <button
                     onClick={() => toggleActioned(selected)}
                     disabled={savingId === selected.id}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 import BuilderPackPanel from '../components/BuilderPackPanel';
+import DeliverablesPanel from '../components/DeliverablesPanel';
 
 // SVG icons for document types
 const ExcelIcon = ({ size = 28 }) => (
@@ -35,7 +36,7 @@ const STATUS_MAP = {
   delivered: { label: 'Delivered', color: '#10B981', bg: 'rgba(16,185,129,0.15)', desc: 'Your BOQ pack has been delivered.' },
 };
 
-const STEPS = ['submitted', 'in_review', 'in_progress', 'completed'];
+const STEPS = ['submitted', 'in_review', 'in_progress', 'completed', 'delivered'];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -208,6 +209,9 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Deliverables — files the QS sends back into the customer's portal */}
+      <DeliverablesPanel projectId={id} />
 
       {/* Documents */}
       <div className="section-card">
