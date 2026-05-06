@@ -61,6 +61,90 @@ function normaliseKind(raw) {
   return k.replace(/[^a-z0-9]+/g, '_').slice(0, 32) || 'other';
 }
 
+// Best-effort parser: pull the narrative out of an uploaded Findings Report
+// .docx so the customer can edit it. Splits the document on its section
+// headers (Project Description, Scope Summary, Key Findings, Assumptions,
+// Exclusions, Recommendations) and seeds project_data.findings_json.
+//
+// If mammoth fails (e.g. corrupt docx) we just skip — the file is still
+// available for download from the Documents from your QS panel.
+async function seedFindingsFromDocx(projectId, docxPath) {
+  if (!docxPath || !fs.existsSync(docxPath)) return;
+  let raw;
+  try {
+    const mammoth = require('mammoth');
+    const result = await mammoth.extractRawText({ path: docxPath });
+    raw = (result && result.value) || '';
+  } catch (e) {
+    console.error('[Findings seed] mammoth error:', e.message);
+    return;
+  }
+  if (!raw) return;
+
+  // Block headings we recognise — case-insensitive, optional leading numbering.
+  const SECTIONS = [
+    { key: 'description',     match: /project description/i },
+    { key: 'scope_summary',   match: /scope summary/i },
+    { key: 'key_findings',    match: /key findings/i },
+    { key: 'assumptions',     match: /assumptions/i },
+    { key: 'exclusions',      match: /exclusions/i },
+    { key: 'recommendations', match: /recommendations/i },
+  ];
+
+  function isHeading(line) {
+    const t = line.trim();
+    if (!t) return null;
+    // Strip leading "1.", "1.1", etc.
+    const stripped = t.replace(/^[\d.)\s]+/, '').trim();
+    for (const s of SECTIONS) {
+      if (s.match.test(stripped) && stripped.length < 60) return s.key;
+    }
+    return null;
+  }
+
+  const lines = raw.split(/\r?\n/);
+  const buckets = {};
+  let current = null;
+  for (const line of lines) {
+    const head = isHeading(line);
+    if (head) { current = head; buckets[current] = buckets[current] || []; continue; }
+    if (current && line.trim()) buckets[current].push(line.trim());
+  }
+
+  function collectBullets(arr) {
+    return (arr || [])
+      .map((s) => s.replace(/^[•\-*•\s]+/, '').trim())
+      .filter(Boolean);
+  }
+
+  const findings = {
+    description: (buckets.description || []).join(' ').trim() || '',
+    project_type: '',
+    location: '',
+    scope_summary: (buckets.scope_summary || []).join(' ').trim() || '',
+    key_findings: [],
+    assumptions: collectBullets(buckets.assumptions),
+    exclusions: collectBullets(buckets.exclusions),
+    recommendations: collectBullets(buckets.recommendations),
+    cost_summary: null,
+    reference: '',
+  };
+
+  // For "Key Findings" we treat each bullet as its own finding (title only).
+  // The customer can split into title + detail + sub-bullets in the editor.
+  findings.key_findings = collectBullets(buckets.key_findings).map((title) => ({
+    title, detail: '', items: [],
+  }));
+
+  try {
+    db.prepare(
+      'INSERT OR REPLACE INTO project_data (project_id, data_type, data) VALUES (?, ?, ?)'
+    ).run(projectId, 'findings_json', JSON.stringify(findings));
+  } catch (e) {
+    console.error('[Findings seed] db write error:', e.message);
+  }
+}
+
 function loadProject(projectId, user) {
   if (!projectId) return null;
   const proj = user.role === 'admin'
@@ -70,7 +154,7 @@ function loadProject(projectId, user) {
 }
 
 // ─── POST upload ──────────────────────────────────────────────────────────────
-router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('files', 20), (req, res) => {
+router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('files', 20), async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
 
   try {
@@ -130,6 +214,30 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
     });
 
     insertMany(rows);
+
+    // Wire the upload back into the project so the Builder Pack and the
+    // Findings editor work for manually-sent docs (i.e. when the QS uploads
+    // a hand-built BOQ.xlsx instead of generating one through the chat).
+    try {
+      const latest = inserted[inserted.length - 1];
+      if (latest && latest.kind === 'boq' && /\.xlsx?$/i.test(latest.filename)) {
+        db.prepare(
+          'UPDATE projects SET boq_filename = ?, status = CASE WHEN status IN (?, ?) THEN ? ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).run(latest.filename, 'submitted', 'in_review', 'completed', projectId);
+      }
+      if (latest && latest.kind === 'findings' && /\.docx?$/i.test(latest.filename)) {
+        db.prepare(
+          'UPDATE projects SET findings_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).run(latest.filename, projectId);
+
+        // Best-effort: extract the narrative from the .docx so the customer
+        // can edit it on the Findings page. If parsing fails we still leave
+        // the file in place and the editor will show "no findings stored".
+        await seedFindingsFromDocx(projectId, path.join(outputsDir, latest.filename));
+      }
+    } catch (syncErr) {
+      console.error('[Deliverables] sync to project error:', syncErr);
+    }
 
     // Flip project status to delivered (don't downgrade if it's already there)
     db.prepare(`

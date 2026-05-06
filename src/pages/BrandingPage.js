@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 
 /**
@@ -27,7 +27,8 @@ const DEFAULT_BRANDING = {
 
 export default function BrandingPage() {
   const [branding, setBranding] = useState(null);
-  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(null);          // blob URL for <img>
+  const [logoServerPath, setLogoServerPath] = useState(null); // /api/branding/logo/:id (for cache-busting)
   const [loading, setLoading] = useState(true);
   const [savingField, setSavingField] = useState(null);
   const [statusMsg, setStatusMsg] = useState(null);
@@ -35,17 +36,50 @@ export default function BrandingPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // The logo endpoint requires an Authorization header — <img src> doesn't
+  // send one, so we fetch the logo as a blob and use createObjectURL.
+  const loadLogoBlob = useCallback(async (urlPath) => {
+    if (!urlPath) { setLogoUrl(null); return; }
+    try {
+      const token = getToken();
+      const resp = await fetch(urlPath, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!resp.ok) { setLogoUrl(null); return; }
+      const blob = await resp.blob();
+      setLogoUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) {
+          try { URL.revokeObjectURL(prev); } catch (e) {}
+        }
+        return URL.createObjectURL(blob);
+      });
+    } catch (e) {
+      setLogoUrl(null);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     apiFetch('/branding')
       .then((data) => {
         if (cancelled) return;
         setBranding({ ...DEFAULT_BRANDING, ...(data.branding || {}) });
-        setLogoUrl(data.logo_url || null);
+        setLogoServerPath(data.logo_url || null);
+        if (data.logo_url) loadLogoBlob(data.logo_url);
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Failed to load branding'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, [loadLogoBlob]);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      setLogoUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) { try { URL.revokeObjectURL(prev); } catch (e) {} }
+        return null;
+      });
+    };
   }, []);
 
   useEffect(() => {
@@ -98,8 +132,9 @@ export default function BrandingPage() {
       }
       const data = await resp.json();
       if (data.branding) setBranding({ ...DEFAULT_BRANDING, ...data.branding });
-      // Cache-bust the preview by appending a timestamp
-      setLogoUrl((data.logo_url || '/api/branding/logo/me') + '?t=' + Date.now());
+      const path = (data.logo_url || '/api/branding/logo/me') + '?t=' + Date.now();
+      setLogoServerPath(path);
+      await loadLogoBlob(path);
       setStatusMsg('Logo updated');
     } catch (err) {
       setError(err.message || 'Upload failed');
@@ -119,7 +154,11 @@ export default function BrandingPage() {
         headers: { Authorization: 'Bearer ' + token },
       });
       if (!resp.ok) throw new Error('Delete failed');
-      setLogoUrl(null);
+      setLogoUrl((prev) => {
+        if (prev && prev.startsWith('blob:')) { try { URL.revokeObjectURL(prev); } catch (e) {} }
+        return null;
+      });
+      setLogoServerPath(null);
       setStatusMsg('Logo removed');
     } catch (err) {
       setError(err.message || 'Delete failed');

@@ -84,7 +84,14 @@ export default function BuilderPackPage() {
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
         if (br && br.branding) {
           setBranding(br.branding);
-          setLogoUrl(br.logo_url || null);
+          // Logo endpoint needs auth — fetch as blob so <img> can render it.
+          if (br.logo_url) {
+            const token = getToken();
+            fetch(br.logo_url, { headers: { Authorization: 'Bearer ' + token } })
+              .then((r) => r.ok ? r.blob() : null)
+              .then((blob) => { if (blob && !cancelled) setLogoUrl(URL.createObjectURL(blob)); })
+              .catch(() => {});
+          }
         }
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Failed to load BOQ'); })
