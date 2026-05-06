@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import DeliverablesPanel from '../components/DeliverablesPanel';
 
 /**
  * Admin-only inbox of all customer drawing submissions. Replaces the
@@ -14,7 +15,9 @@ export default function SubmissionsInboxPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all'); // all | unactioned | actioned
+  const [filter, setFilter] = useState('inbox'); // inbox | done | all
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [linkedProject, setLinkedProject] = useState(null); // { id, ... } loaded for the deliverables panel
   const [search, setSearch] = useState('');
   const [savingId, setSavingId] = useState(null);
   const [notesDraft, setNotesDraft] = useState('');
@@ -42,8 +45,9 @@ export default function SubmissionsInboxPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return submissions.filter((s) => {
-      if (filter === 'unactioned' && s.actioned_at) return false;
-      if (filter === 'actioned' && !s.actioned_at) return false;
+      if (filter === 'inbox' && s.actioned_at) return false; // Inbox = unactioned only
+      if (filter === 'done'  && !s.actioned_at) return false; // Done = actioned only
+      // 'all' shows everything
       if (!q) return true;
       const hay = [
         s.user_name, s.user_email, s.user_company,
@@ -62,6 +66,14 @@ export default function SubmissionsInboxPage() {
     setNotesDraft(selected ? (selected.admin_notes || '') : '');
     setDriveDraft(selected ? (selected.drive_link || '') : '');
     setStatusMsg(null);
+    // Load the linked project (if any) so the inline DeliverablesPanel
+    // shows the customer-context banner with the right contact info.
+    setLinkedProject(null);
+    if (selected && selected.project_id) {
+      apiFetch(`/projects/${selected.project_id}`)
+        .then((proj) => setLinkedProject(proj))
+        .catch(() => setLinkedProject(null));
+    }
   }, [selectedId]); // eslint-disable-line
 
   // Auto-clear ephemeral status banner after 2.5s
@@ -104,7 +116,11 @@ export default function SubmissionsInboxPage() {
 
   function toggleActioned(s) {
     const next = !s.actioned_at;
-    patchSubmission(s.id, { actioned: next }, next ? 'Marked as actioned' : 'Reopened — back to unactioned');
+    patchSubmission(
+      s.id,
+      { actioned: next },
+      next ? 'Marked as actioned — moved to Done' : 'Reopened — back in Inbox'
+    );
   }
 
   function saveNotes() {
@@ -117,6 +133,30 @@ export default function SubmissionsInboxPage() {
     if (!selected) return;
     if ((selected.drive_link || '') === (driveDraft || '').trim()) return;
     patchSubmission(selected.id, { drive_link: driveDraft.trim() }, 'Drive link saved');
+  }
+
+  async function createJobFromSubmission() {
+    if (!selected || creatingProject) return;
+    setCreatingProject(true);
+    setError('');
+    try {
+      const data = await apiFetch(`/submissions/admin/${selected.id}/create-project`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (data && data.project_id) {
+        // Refresh the submissions list so the row picks up the project_id
+        await refreshList();
+        // Load the new project so the deliverables panel can show it
+        const proj = await apiFetch(`/projects/${data.project_id}`);
+        setLinkedProject(proj);
+        setStatusMsg(data.created ? 'Job created — ready to upload' : 'Linked to existing job');
+      }
+    } catch (err) {
+      setError(err.message || 'Could not create job');
+    } finally {
+      setCreatingProject(false);
+    }
   }
 
   if (!isAdmin) {
@@ -157,9 +197,9 @@ export default function SubmissionsInboxPage() {
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 9, background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
           {[
-            { key: 'all', label: 'All', count: submissions.length },
-            { key: 'unactioned', label: 'Unactioned', count: unactionedCount },
-            { key: 'actioned', label: 'Done', count: submissions.length - unactionedCount },
+            { key: 'inbox', label: 'Inbox', count: unactionedCount },
+            { key: 'done',  label: 'Done',  count: submissions.length - unactionedCount },
+            { key: 'all',   label: 'All time', count: submissions.length },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -391,9 +431,60 @@ export default function SubmissionsInboxPage() {
                     }}>Saves on blur</span>
                   )}
                 </div>
-                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
-                  Pipedream uploads the customer's files to Drive — paste the Drive folder URL once and the file rows below become one-click links.
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.5 }}>
+                  Add a Pipedream HTTP step that POSTs <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>{'{ submission_id, drive_link, secret }'}</code> to <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>/api/submissions/webhook/drive-link</code> after upload — the link will appear here automatically. Or paste it manually for now (saves on blur).
                 </div>
+              </div>
+
+              {/* Send deliverables to this customer (the "return leg" — wires the
+                  inbox directly into the deliverables uploader so admin doesn't
+                  have to navigate to a project page first). */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  marginBottom: 6,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                    Send priced documents to {selected.user_name || 'customer'}
+                  </div>
+                  {selected.project_id && (
+                    <Link
+                      to={`/project/${selected.project_id}`}
+                      style={{ fontSize: 11.5, fontWeight: 700, color: '#3B82F6', textDecoration: 'none' }}
+                    >Open job →</Link>
+                  )}
+                </div>
+
+                {!selected.project_id ? (
+                  <div style={{
+                    padding: 16, borderRadius: 10,
+                    background: 'rgba(245,158,11,0.06)', border: '1px dashed rgba(245,158,11,0.4)',
+                    textAlign: 'center',
+                  }}>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                      No job exists for this submission yet. Create one to send priced BOQs, drawings, or supplier quotes to{' '}
+                      <strong>{selected.user_name || selected.user_email}</strong>.
+                    </p>
+                    <button
+                      onClick={createJobFromSubmission}
+                      disabled={creatingProject}
+                      style={{
+                        padding: '10px 18px', borderRadius: 9, border: 'none',
+                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                        color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
+                        cursor: creatingProject ? 'wait' : 'pointer',
+                        boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+                      }}
+                    >
+                      {creatingProject ? 'Creating job…' : 'Create job & start upload'}
+                    </button>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+                      The job will appear in the customer's portal immediately. Status: In progress.
+                    </div>
+                  </div>
+                ) : (
+                  <DeliverablesPanel projectId={selected.project_id} project={linkedProject} />
+                )}
               </div>
 
               {/* Files */}

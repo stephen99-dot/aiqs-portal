@@ -32,6 +32,10 @@ app.use('/api', chatRoutes);
 app.use('/api', webhookRoutes);
 app.use('/api', enhanceBrief);
 app.use('/api/credits', authMiddleware, creditRoutes);
+// Public Pipedream callback (no auth — secret-protected) MUST be registered
+// before the authMiddleware-guarded mount, otherwise the auth runs first and
+// rejects unauthenticated webhook calls.
+app.post('/api/submissions/webhook/drive-link', submissionRoutes.driveLinkWebhookHandler);
 app.use('/api/submissions', authMiddleware, submissionRoutes);
 app.use('/api', rateRoutes);
 app.use('/api', ratesExtra);

@@ -282,4 +282,80 @@ router.patch('/admin/:id', (req, res) => {
   }
 });
 
+// Admin: turn a submission into a project (so deliverables can be uploaded
+// against it). Idempotent — if the submission is already linked, returns the
+// existing project_id.
+router.post('/admin/:id/create-project', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const sub = db.prepare('SELECT * FROM drawing_submissions WHERE id = ? OR submission_id = ?').get(req.params.id, req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Submission not found' });
+
+    if (sub.project_id) {
+      // Already linked — make sure the project still exists, otherwise re-create
+      const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(sub.project_id);
+      if (existing) return res.json({ ok: true, project_id: sub.project_id, created: false });
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const projectId = uuidv4();
+    const title = (req.body && req.body.title) || (sub.project_type ? sub.project_type + ' — ' + new Date(sub.created_at).toLocaleDateString('en-GB') : 'Untitled job');
+    const description = sub.message || null;
+
+    db.prepare(`
+      INSERT INTO projects (id, user_id, title, project_type, description, status, source)
+      VALUES (?, ?, ?, ?, ?, 'in_progress', 'submission')
+    `).run(projectId, sub.user_id, title, sub.project_type || 'Other', description);
+
+    db.prepare('UPDATE drawing_submissions SET project_id = ? WHERE id = ?').run(projectId, sub.id);
+
+    res.json({ ok: true, project_id: projectId, created: true });
+  } catch (err) {
+    console.error('[Submissions] create-project error:', err);
+    res.status(500).json({ error: 'Failed to create project: ' + err.message });
+  }
+});
+
+// Inbound webhook: Pipedream calls this once it has finished uploading the
+// customer's drawings to Drive, posting the folder URL back so the inbox
+// auto-fills the "Open in Drive" link without any manual pasting.
+//
+// Configure the Pipedream HTTP step like this:
+//   POST  https://<your-portal>/api/submissions/webhook/drive-link
+//   Body: { "submission_id": "<the sub id>", "drive_link": "<folder URL>", "secret": "<shared secret>" }
+//
+// The secret must match DRIVE_LINK_WEBHOOK_SECRET in the portal's env.
+// This route does NOT use authMiddleware (it's mounted from index.js with
+// auth) — see the override at the bottom of this file.
+function driveLinkWebhookHandler(req, res) {
+  try {
+    const expected = process.env.DRIVE_LINK_WEBHOOK_SECRET;
+    if (!expected) {
+      console.error('[Drive webhook] DRIVE_LINK_WEBHOOK_SECRET is not set — refusing.');
+      return res.status(503).json({ error: 'Drive webhook not configured' });
+    }
+    const got = (req.body && req.body.secret) || req.get('x-aiqs-webhook-secret');
+    if (!got || got !== expected) {
+      return res.status(401).json({ error: 'Bad secret' });
+    }
+    const submissionId = (req.body && req.body.submission_id) || '';
+    const driveLink = ((req.body && req.body.drive_link) || '').trim();
+    if (!submissionId) return res.status(400).json({ error: 'submission_id is required' });
+    if (!driveLink || !/^https?:\/\//i.test(driveLink)) {
+      return res.status(400).json({ error: 'drive_link must be a http(s) URL' });
+    }
+    const result = db.prepare(
+      'UPDATE drawing_submissions SET drive_link = ? WHERE submission_id = ? OR id = ?'
+    ).run(driveLink, submissionId, submissionId);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'No matching submission for ' + submissionId });
+    }
+    res.json({ ok: true, updated: result.changes });
+  } catch (err) {
+    console.error('[Drive webhook] error:', err);
+    res.status(500).json({ error: 'Webhook failed' });
+  }
+}
+
 module.exports = router;
+module.exports.driveLinkWebhookHandler = driveLinkWebhookHandler;
