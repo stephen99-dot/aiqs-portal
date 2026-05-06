@@ -6,6 +6,7 @@ const path = require('path');
 const multer = require('multer');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
+const { parseBOQ, generateBuilderPack } = require('./builderExports');
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -652,6 +653,83 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
   } catch (err) {
     console.error('[ClientCopy] error:', err);
     res.status(500).json({ error: 'Failed to generate client copy: ' + err.message });
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Builder Pack (TESTING) — granular outputs for builders: trade summary,
+// materials schedule, labour schedule. The breakdown endpoint feeds an
+// on-screen preview, the pack endpoint streams a multi-tab XLSX download.
+// ───────────────────────────────────────────────────────────────────────────
+
+function loadProjectForUser(req) {
+  const { projectId } = req.params;
+  const project = req.user.role === 'admin'
+    ? db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId)
+    : db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
+  return project;
+}
+
+// GET /api/projects/:projectId/builder-breakdown
+//   → { sections: [{ number, title, subtotal, item_count }], grand: {...} }
+router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet — your QS pack is still being prepared.' });
+
+    const filePath = path.join(outputsDir, project.boq_filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+
+    const parsed = await parseBOQ(filePath);
+    res.json({
+      testing: true,
+      currency: project.currency || 'GBP',
+      sections: parsed.sections.map((s) => ({
+        number: s.number,
+        title: s.title,
+        item_count: s.items.length,
+        subtotal: s.subtotal,
+      })),
+      grand: parsed.grand,
+    });
+  } catch (err) {
+    console.error('[BuilderPack] breakdown error:', err);
+    res.status(500).json({ error: 'Failed to read BOQ: ' + err.message });
+  }
+});
+
+// POST /api/projects/:projectId/builder-pack
+//   body: { builder_margin?: number, materials_markup?: number }
+//   → XLSX stream
+router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
+
+    const filePath = path.join(outputsDir, project.boq_filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+
+    const parsed = await parseBOQ(filePath);
+
+    const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
+    const buffer = await generateBuilderPack(parsed, {
+      currency: project.currency === 'EUR' ? '€' : '£',
+      builder_margin: parseFloat(req.body.builder_margin) || 0,
+      materials_markup: parseFloat(req.body.materials_markup) || 0,
+      project_name: project.title,
+      client_name: user ? user.full_name : 'Client',
+    });
+
+    const safeTitle = project.title.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = 'BuilderPack_TESTING_' + safeTitle + '_' + Date.now() + '.xlsx';
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(buffer);
+  } catch (err) {
+    console.error('[BuilderPack] pack error:', err);
+    res.status(500).json({ error: 'Failed to generate Builder Pack: ' + err.message });
   }
 });
 
