@@ -3026,11 +3026,14 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
 
         // Generate Excel BOQ
         try {
+          let _branding = null;
+          try { _branding = require('./brandingRoutes').getBrandingForUser(req.user && req.user.id); } catch (e) { /* optional */ }
           const buf = await boqGen.generateBOQExcel(boqSections, projectName, clientName, {
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
             vat_rate: pricedResult.summary.vat_rate,
             currency: pricedResult.summary.currency === 'EUR' ? '€' : '£',
+            branding: _branding,
           });
           if (buf && buf.length > 100) {
             const fname = `BOQ-${safeName}-${ts}.xlsx`;

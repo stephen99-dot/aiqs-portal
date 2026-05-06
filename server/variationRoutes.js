@@ -7,6 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
 const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
+const { getBrandingForUser } = require('./brandingRoutes');
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
@@ -843,6 +844,11 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
 
+    // Apply the customer's branding (logo, colours, template) to the output.
+    // The customer is the project owner — so the doc the builder gives to
+    // *their* end-client wears the builder's brand, not ours.
+    const branding = getBrandingForUser(project.user_id);
+
     const buffer = await generateClientCopyPro(parsed, {
       currency: project.currency === 'EUR' ? '€' : '£',
       contingency: req.body.contingency,
@@ -855,6 +861,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
       rounding: req.body.rounding,
       project_name: project.title,
       client_name: user ? user.full_name : 'Client',
+      branding,
     });
 
     const safeTitle = project.title.replace(/[^a-zA-Z0-9]/g, '_');

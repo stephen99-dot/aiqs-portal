@@ -39,6 +39,8 @@ export default function BuilderPackPage() {
   const [project, setProject] = useState(null);
   const [sections, setSections] = useState([]);   // editable copy of breakdown.sections
   const [originalSections, setOriginalSections] = useState([]); // for "reset"
+  const [branding, setBranding] = useState(null); // { primary_colour, accent_colour, ... }
+  const [logoUrl, setLogoUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('builder');
@@ -67,8 +69,9 @@ export default function BuilderPackPage() {
     Promise.all([
       apiFetch(`/projects/${id}`),
       apiFetch(`/projects/${id}/builder-breakdown`),
+      apiFetch('/branding').catch(() => null),
     ])
-      .then(([proj, bd]) => {
+      .then(([proj, bd, br]) => {
         if (cancelled) return;
         setProject(proj);
         const seeded = (bd.sections || []).map((s) => ({
@@ -78,8 +81,11 @@ export default function BuilderPackPage() {
         }));
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
-        // Open first section by default
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
+        if (br && br.branding) {
+          setBranding(br.branding);
+          setLogoUrl(br.logo_url || null);
+        }
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Failed to load BOQ'); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -519,7 +525,8 @@ export default function BuilderPackPage() {
               {tab === 'builder'
                 ? <BuilderPreview rows={builderRows} totals={builderGrand} sym={sym} />
                 : <ClientPreview rows={clientRows} sym={sym}
-                    summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat} />
+                    summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
+                    branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
               }
             </div>
           </div>
@@ -816,12 +823,59 @@ function BuilderPreview({ rows, totals, sym }) {
   );
 }
 
-function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat }) {
+function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, branding, logoUrl, projectName }) {
+  const primary = (branding && branding.primary_colour) || '#1B2A4A';
+  const accent  = (branding && branding.accent_colour)  || '#A855F7';
+  const company = branding && branding.company_name;
+
   return (
     <>
-      <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px' }}>Client copy preview</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+        Reflects your branding from{' '}
+        <a href="/branding" style={{ color: accent, fontWeight: 600 }}>/branding</a>.
+      </p>
+
+      {/* Branded cover band */}
+      <div style={{
+        borderRadius: 10, overflow: 'hidden', marginBottom: 14,
+        background: '#fff', boxShadow: '0 4px 18px rgba(0,0,0,0.08)',
+      }}>
+        <div style={{
+          background: primary, color: '#fff',
+          padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14,
+          borderBottom: '4px solid ' + accent,
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 8, flexShrink: 0,
+            background: '#fff', border: '1px solid rgba(0,0,0,0.06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+          }}>
+            {logoUrl
+              ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              : <span style={{ fontSize: 9, color: '#888' }}>No logo</span>
+            }
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Bill of Quantities · Client Copy
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, marginTop: 2, color: '#fff' }}>
+              {projectName || 'Project'}
+            </div>
+            {company && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>Issued by {company}</div>}
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 9.5, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total ex-VAT</div>
+            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: accent }}>
+              {fmt(sym, exVat)}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <div style={{ ...previewHeaderStyle, gridTemplateColumns: '32px 1fr 80px 110px' }}>
+        <div style={{ ...previewHeaderStyle, gridTemplateColumns: '32px 1fr 80px 110px', background: primary, color: '#fff' }}>
           <div>#</div><div>Trade</div>
           <div style={{ textAlign: 'right' }}>OH&P</div>
           <div style={{ textAlign: 'right' }}>Sub-total</div>
@@ -830,7 +884,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat })
           <div key={s.number + '-' + i} style={{ ...previewRowStyle, gridTemplateColumns: '32px 1fr 80px 110px' }}>
             <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
             <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items</span></div>
-            <div style={moneyCell('#A855F7')}>{s.ohp}%</div>
+            <div style={moneyCell(accent)}>{s.ohp}%</div>
             <div style={{ ...moneyCell(), fontWeight: 600 }}>{fmt(sym, s.subtotal)}</div>
           </div>
         ))}
