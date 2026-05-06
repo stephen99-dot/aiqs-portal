@@ -287,6 +287,11 @@ const migrations = [
   { column: 'onboarding_skipped', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_skipped INTEGER DEFAULT 0" },
   { column: 'free_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN free_credits INTEGER DEFAULT 0" },
   { column: 'total_projects', table: 'users', sql: "ALTER TABLE users ADD COLUMN total_projects INTEGER DEFAULT 0" },
+  // Admin submissions inbox — actioned state + private notes
+  { column: 'actioned_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_at DATETIME" },
+  { column: 'actioned_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_by TEXT" },
+  { column: 'admin_notes', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN admin_notes TEXT" },
+  { column: 'project_id',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN project_id TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

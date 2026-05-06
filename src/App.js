@@ -22,6 +22,7 @@ import MagicLinkPage from './pages/MagicLinkPage';
 import NotetakerPage from './pages/NotetakerPage';
 import VariationsPage from './pages/VariationsPage';
 import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
+import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -65,6 +66,7 @@ function AppInner() {
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
+          <Route path="/admin/submissions" element={<SubmissionsInboxPage />} />
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
