@@ -288,6 +288,25 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_deliverables_project ON project_deliverables(project_id);
   CREATE INDEX IF NOT EXISTS idx_deliverables_latest ON project_deliverables(project_id, is_latest);
+
+  -- Per-customer branding applied to every generated Client Copy / Findings
+  -- doc, plus the on-screen preview. Logo is stored on disk and referenced
+  -- by filename. Template values must match the keys in PORTAL_SPEC.md
+  -- ("modern" | "professional" | "heritage" | "minimalist").
+  CREATE TABLE IF NOT EXISTS user_branding (
+    user_id          TEXT PRIMARY KEY,
+    logo_filename    TEXT,
+    logo_mime        TEXT,
+    primary_colour   TEXT DEFAULT '#1B2A4A',
+    accent_colour    TEXT DEFAULT '#F59E0B',
+    company_name     TEXT,
+    company_address  TEXT,
+    footer_text      TEXT,
+    template         TEXT DEFAULT 'modern',
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // Migrations for existing databases

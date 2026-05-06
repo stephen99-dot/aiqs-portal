@@ -93,6 +93,11 @@ else is a panel inside one of those pages.
 - `/memory` — AI Memory. Same.
 - `/chat` — Chat with the QS AI for one-off questions outside the
   job flow.
+- `/branding` — Branding. Customer's logo, brand colours, company
+  address, footer text, document template choice. Applied automatically
+  to every Client Copy XLSX and Findings DOCX, and reflected in the
+  on-screen preview on the Builder Pack page so the customer sees what
+  their client will see.
 
 ### Behind a "More" menu (rarely needed; flat sidebar lists 3-4 items)
 
@@ -120,11 +125,31 @@ Pick one word and use it everywhere:
 `projects`, `drawing_submissions`, and `project_deliverables` stay as
 DB tables — but the UI never says "submission" or "project". It says "job".
 
+## Document templates
+
+Generated XLSX and DOCX outputs use a small fixed set of templates,
+tinted by the customer's brand colours and stamped with their logo:
+
+- **Modern** — gradient headers, big numerics, navy/accent banding.
+- **Professional** — black/white, hairline borders, serif headings.
+- **Heritage** — warm beige/charcoal, tighter letter-spacing, classic.
+- **Minimalist** — no chrome, pure typography.
+
+Customers pick a template on `/branding`. They don't pick fonts, colours
+beyond their two brand colours, or layout — that keeps every output
+publishable. New templates ship as code, not user-editable files.
+
+Every BOQ-style output starts with a **cover sheet** (project, customer,
+total value, date, logo) and a **summary dashboard** (labour vs materials
+split, top trades by value) before the line items, so the recipient sees
+the headline before the detail.
+
 ## What's currently TESTING / BETA
 
-The Builder Pack workspace, the Client Copy Pro generator, and the
-deliverables upload flow are still test surfaces. Everything else
-(brief intake, projects table, chat, rates, memory) is production.
+The Builder Pack workspace, the Client Copy Pro generator, the
+deliverables upload flow, and the new branded BOQ / Client Copy
+templates are still test surfaces. Everything else (brief intake,
+projects table, chat, rates, memory) is production.
 
 The TESTING strip stays on every page until a human ships v1 sign-off.
 

@@ -56,6 +56,7 @@ export default function Layout() {
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
     { path: '/notetaker', label: 'AI Notetaker', Icon: MicIcon },
+    { path: '/branding',  label: 'Branding',     Icon: SparklesIcon, badge: 'New' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
   ];

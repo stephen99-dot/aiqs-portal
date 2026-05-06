@@ -25,6 +25,7 @@ import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
 import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import BuilderPackPage from './pages/BuilderPackPage';
 import VariationsHubPage from './pages/VariationsHubPage';
+import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -70,6 +71,7 @@ function AppInner() {
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
           <Route path="/admin/submissions" element={<SubmissionsInboxPage />} />
           <Route path="/variations" element={<VariationsHubPage />} />
+          <Route path="/branding" element={<BrandingPage />} />
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />

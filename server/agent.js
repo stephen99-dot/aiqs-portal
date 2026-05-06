@@ -604,11 +604,14 @@ async function runGenerationForRun(runId, opts = {}) {
   const downloads = [];
   try {
     const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
+    let _branding = null;
+    try { _branding = require('./brandingRoutes').getBrandingForUser(run.user_id); } catch (e) { /* optional */ }
     const excelBuf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
       contingency_pct: priced.summary.contingency_pct,
       ohp_pct: priced.summary.ohp_pct,
       vat_rate: priced.summary.vat_rate,
       currency: priced.summary.currency === 'EUR' ? '€' : '£',
+      branding: _branding,
     });
     if (excelBuf && excelBuf.length > 100) {
       const fname = `BOQ-${safeName}-${ts}.xlsx`;

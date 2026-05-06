@@ -19,6 +19,89 @@
  */
 
 const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
+
+// Convert "#RRGGBB" to ExcelJS argb ("FFRRGGBB"). Returns null if invalid.
+function hexToArgb(hex) {
+  if (typeof hex !== 'string') return null;
+  const m = hex.replace('#', '').toUpperCase();
+  if (!/^[0-9A-F]{6}$/.test(m)) return null;
+  return 'FF' + m;
+}
+
+// Return a much lighter tint of a hex colour, used for section row banding.
+// pct=0 returns the same colour; pct=0.85 is very pale.
+function tintHex(hex, pct) {
+  if (typeof hex !== 'string') return null;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return null;
+  const num = parseInt(h, 16);
+  let r = (num >> 16) & 0xff;
+  let g = (num >> 8) & 0xff;
+  let b = num & 0xff;
+  r = Math.round(r + (255 - r) * pct);
+  g = Math.round(g + (255 - g) * pct);
+  b = Math.round(b + (255 - b) * pct);
+  return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+
+// Per-template visual variants — controls heading font, section banding tint,
+// and the accent bar style. Logo + colours come from the user's branding.
+const TEMPLATES = {
+  modern: {
+    headingFont: 'Calibri',
+    bodyFont: 'Calibri',
+    sectionTintPct: 0.82,
+    titleSize: 22,
+    coverFlavour: 'gradient',
+  },
+  professional: {
+    headingFont: 'Cambria',
+    bodyFont: 'Calibri',
+    sectionTintPct: 0.92, // nearly white, hairline borders
+    titleSize: 20,
+    coverFlavour: 'classic',
+  },
+  heritage: {
+    headingFont: 'Cambria',
+    bodyFont: 'Calibri',
+    sectionTintPct: 0.88,
+    titleSize: 22,
+    coverFlavour: 'beige',
+  },
+  minimalist: {
+    headingFont: 'Calibri',
+    bodyFont: 'Calibri',
+    sectionTintPct: 0.95,
+    titleSize: 24,
+    coverFlavour: 'minimal',
+  },
+};
+
+function templateOpts(name) {
+  return TEMPLATES[name] || TEMPLATES.modern;
+}
+
+// Try to embed the customer's logo onto a worksheet. Returns the image id (or null).
+function tryEmbedLogo(wb, ws, logoPath, anchor) {
+  if (!logoPath || !fs.existsSync(logoPath)) return null;
+  try {
+    const ext = path.extname(logoPath).toLowerCase().replace('.', '') || 'png';
+    // ExcelJS supports png, jpeg, gif. Map jpg/webp/svg sensibly.
+    let extension = ext;
+    if (ext === 'jpg') extension = 'jpeg';
+    if (ext === 'webp' || ext === 'svg') {
+      // ExcelJS can't embed webp/svg directly — skip rather than fail the export.
+      return null;
+    }
+    const id = wb.addImage({ filename: logoPath, extension });
+    ws.addImage(id, anchor);
+    return id;
+  } catch (e) {
+    return null;
+  }
+}
 
 function cellText(cell) {
   if (cell == null) return '';
@@ -581,10 +664,100 @@ async function generateClientCopyPro(parsed, opts = {}) {
     return defaultOhp;
   }
 
+  // ── Branding ─────────────────────────────────────────────────────────────
+  const branding = opts.branding || {};
+  const tmpl = templateOpts(branding.template);
+  const PRIMARY = hexToArgb(branding.primary_colour) || 'FF1B2A4A';
+  const ACCENT  = hexToArgb(branding.accent_colour)  || 'FFF59E0B';
+  const SECTION_BG = hexToArgb(tintHex(branding.primary_colour || '#1B2A4A', tmpl.sectionTintPct)) || 'FFD6E4F0';
+  const SUBTOTAL_BG = hexToArgb(tintHex(branding.accent_colour || '#F59E0B', 0.85)) || 'FFFFF2CC';
+  const BORDER_COL = 'FFCBD5E1';
+  const thin = { style: 'thin', color: { argb: BORDER_COL } };
+  const allBorders = { top: thin, bottom: thin, left: thin, right: thin };
+  const currFmt = '#,##0.00';
+  const headingFont = tmpl.headingFont;
+  const bodyFont = tmpl.bodyFont;
+
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'The AI QS — Client Copy';
+  wb.creator = (branding.company_name || 'The AI QS') + ' — Client Copy';
   wb.created = new Date();
 
+  // ── Cover sheet (first tab) ──────────────────────────────────────────────
+  const cover = wb.addWorksheet('Cover', {
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1 },
+  });
+  cover.columns = [
+    { width: 4 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 4 },
+  ];
+
+  // Logo block at top-left of the cover sheet
+  if (tryEmbedLogo(wb, cover, branding.logo_path, { tl: { col: 1, row: 1 }, ext: { width: 160, height: 60 } })) {
+    cover.getRow(1).height = 12;
+    cover.getRow(2).height = 12;
+    cover.getRow(3).height = 12;
+    cover.getRow(4).height = 12;
+  }
+
+  // Company name block (top-right of the cover, opposite the logo)
+  if (branding.company_name) {
+    cover.mergeCells('C2:E2');
+    const cn = cover.getCell('C2');
+    cn.value = branding.company_name;
+    cn.font = { name: headingFont, size: 14, bold: true, color: { argb: PRIMARY } };
+    cn.alignment = { horizontal: 'right' };
+  }
+  if (branding.company_address) {
+    cover.mergeCells('C3:E5');
+    const ca = cover.getCell('C3');
+    ca.value = branding.company_address;
+    ca.font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
+    ca.alignment = { horizontal: 'right', vertical: 'top', wrapText: true };
+  }
+
+  // Title block (rows 7-9)
+  cover.getRow(7).height = 6;
+  cover.mergeCells('B8:E8');
+  const t1 = cover.getCell('B8');
+  t1.value = 'BILL OF QUANTITIES';
+  t1.font = { name: headingFont, size: 11, bold: true, color: { argb: ACCENT } };
+  cover.mergeCells('B9:E10');
+  const t2 = cover.getCell('B9');
+  t2.value = projectName;
+  t2.font = { name: headingFont, size: tmpl.titleSize, bold: true, color: { argb: PRIMARY } };
+  t2.alignment = { vertical: 'top', wrapText: true };
+  cover.getRow(9).height = 32;
+  cover.getRow(10).height = 22;
+
+  // Accent bar (row 11)
+  cover.mergeCells('B11:E11');
+  const bar = cover.getCell('B11');
+  bar.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
+  cover.getRow(11).height = 6;
+
+  // Meta panel (Prepared for / Date / etc.)
+  function coverMeta(rowNum, label, value) {
+    cover.getCell('B' + rowNum).value = label.toUpperCase();
+    cover.getCell('B' + rowNum).font = { name: bodyFont, size: 8.5, bold: true, color: { argb: 'FF94A3B8' } };
+    cover.mergeCells('C' + rowNum + ':E' + rowNum);
+    cover.getCell('C' + rowNum).value = value;
+    cover.getCell('C' + rowNum).font = { name: bodyFont, size: 11, bold: true, color: { argb: PRIMARY } };
+  }
+  cover.getRow(12).height = 14;
+  coverMeta(13, 'Prepared for', clientName);
+  coverMeta(14, 'Issued', new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }));
+  // Total value placeholder — filled at the end once we know the real number.
+  coverMeta(15, 'Total ex-VAT (provisional)', '—');
+
+  // Footer (cover sheet)
+  if (branding.footer_text) {
+    cover.mergeCells('B28:E28');
+    const f = cover.getCell('B28');
+    f.value = branding.footer_text;
+    f.font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF94A3B8' } };
+    f.alignment = { horizontal: 'center' };
+  }
+
+  // ── Client Copy detail sheet ─────────────────────────────────────────────
   const ws = wb.addWorksheet('Client Copy', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
   });
@@ -598,24 +771,22 @@ async function generateClientCopyPro(parsed, opts = {}) {
     { key: 'total', width: 14 },
   ];
 
-  const NAVY = 'FF1B2A4A';
-  const SECTION_BG = 'FFD6E4F0';
-  const SUBTOTAL_BG = 'FFFFF2CC';
-  const BORDER_COL = 'FFCBD5E1';
-  const thin = { style: 'thin', color: { argb: BORDER_COL } };
-  const allBorders = { top: thin, bottom: thin, left: thin, right: thin };
-  const currFmt = '#,##0.00';
-
-  // Title block
+  // Title block (with optional logo on the right)
   ws.mergeCells('A1:F1');
   ws.getCell('A1').value = 'Bill of Quantities — CLIENT COPY — ' + projectName;
-  ws.getCell('A1').font = { name: 'Arial', size: 14, bold: true, color: { argb: '1B2A4A' } };
+  ws.getCell('A1').font = { name: headingFont, size: 14, bold: true, color: { argb: PRIMARY } };
   ws.getRow(1).height = 28;
 
   ws.mergeCells('A2:F2');
   ws.getCell('A2').value =
-    'Client: ' + clientName + '  |  Date: ' + new Date().toLocaleDateString('en-GB');
-  ws.getCell('A2').font = { name: 'Arial', size: 10, color: { argb: '64748B' } };
+    'Client: ' + clientName + '  |  Date: ' + new Date().toLocaleDateString('en-GB')
+    + (branding.company_name ? '  |  Issued by: ' + branding.company_name : '');
+  ws.getCell('A2').font = { name: bodyFont, size: 10, color: { argb: 'FF64748B' } };
+
+  // Accent strip across row 3
+  ws.mergeCells('A3:F3');
+  ws.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
+  ws.getRow(3).height = 4;
 
   // Header row
   let r = 4;
@@ -623,8 +794,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
   hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
   for (let c = 1; c <= 6; c++) {
     const cell = hdr.getCell(c);
-    cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    cell.font = { name: headingFont, size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: PRIMARY } };
     cell.border = allBorders;
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
   }
@@ -643,7 +814,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     ws.mergeCells('A' + r + ':F' + r);
     sec.getCell(1).value = s.number + '. ' + s.title.toUpperCase() +
       (sectionOhp !== defaultOhp ? '   (OH&P ' + sectionOhp + '%)' : '');
-    sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
+    sec.getCell(1).font = { name: headingFont, size: 10.5, bold: true, color: { argb: PRIMARY } };
     sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
     sec.getCell(1).border = allBorders;
     sec.height = 22;
@@ -700,7 +871,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const sumHdr = ws.getRow(r);
   ws.mergeCells('A' + r + ':F' + r);
   sumHdr.getCell(1).value = 'PROJECT SUMMARY';
-  sumHdr.getCell(1).font = { name: 'Arial', size: 11, bold: true, color: { argb: '1B2A4A' } };
+  sumHdr.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: PRIMARY } };
   sumHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
   sumHdr.getCell(1).border = allBorders;
   r++;
@@ -764,10 +935,16 @@ async function generateClientCopyPro(parsed, opts = {}) {
     + (contingency > 0 ? ', contingency' : '')
     + (vat > 0 ? ' and VAT' : '')
     + '. No contractor margin is shown separately.';
-  note.getCell(2).font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF888888' } };
+  note.getCell(2).font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF888888' } };
 
   ws.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
-  ws.headerFooter.oddFooter = '&LThe AI QS — CLIENT COPY&RPage &P of &N';
+  const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
+  ws.headerFooter.oddFooter = '&L' + footerLeft + ' — CLIENT COPY&RPage &P of &N';
+
+  // Now that we know the headline number, fill in the cover sheet's total
+  const totalCell = cover.getCell('C15');
+  const symFmt = (currency === '€' ? '€' : '£');
+  totalCell.value = symFmt + Math.round(exVat).toLocaleString('en-GB');
 
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);

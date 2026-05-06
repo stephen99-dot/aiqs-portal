@@ -16,6 +16,7 @@ const { router: activityRoutes } = require('./activityRoutes');
 const { router: pipelineRoutes } = require('./pipelineRoutes');
 const variationRoutes = require('./variationRoutes');
 const deliverableRoutes = require('./deliverableRoutes');
+const brandingRoutes = require('./brandingRoutes');
 const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
 const agentRoutes = require('./agentRoutes');
@@ -31,6 +32,10 @@ app.use('/api', chatRoutes);
 app.use('/api', webhookRoutes);
 app.use('/api', enhanceBrief);
 app.use('/api/credits', authMiddleware, creditRoutes);
+// Public Pipedream callback (no auth — secret-protected) MUST be registered
+// before the authMiddleware-guarded mount, otherwise the auth runs first and
+// rejects unauthenticated webhook calls.
+app.post('/api/submissions/webhook/drive-link', submissionRoutes.driveLinkWebhookHandler);
 app.use('/api/submissions', authMiddleware, submissionRoutes);
 app.use('/api', rateRoutes);
 app.use('/api', ratesExtra);
@@ -39,6 +44,7 @@ app.use('/api', activityRoutes);
 app.use('/api', pipelineRoutes);
 app.use('/api', variationRoutes);
 app.use('/api', deliverableRoutes);
+app.use('/api', brandingRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', agentRoutes);
 if (process.env.NODE_ENV === 'production') {
