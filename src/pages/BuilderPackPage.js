@@ -839,8 +839,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        Reflects your branding from{' '}
-        <a href="/branding" style={{ color: accent, fontWeight: 600 }}>/branding</a>.
+        This is what your client will see. No margin shown separately.
       </p>
 
       {/* Branded cover band */}

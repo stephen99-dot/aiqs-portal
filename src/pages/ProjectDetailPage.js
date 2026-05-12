@@ -297,8 +297,7 @@ export default function ProjectDetailPage() {
               )}
 
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
-                Need to tweak content? Use <strong>Edit</strong> beside the Findings Report or open the Builder Pack to edit the BOQ line items. Branding follows the colours and logo from{' '}
-                <Link to="/branding" style={{ color: '#A855F7', fontWeight: 600 }}>/branding</Link>.
+                Need to tweak content? Use <strong>Edit</strong> beside the Findings Report or open the Builder Pack to edit the BOQ line items.
               </p>
 
               {/* Builder Pack — full workspace (trade rollup, schedules, client copy) lives on its own page now. */}
