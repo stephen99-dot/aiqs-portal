@@ -1541,7 +1541,14 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
   return { ok: true, reply, thinking, tokensIn, tokensOut };
 }
 
-router.post('/chat/stream', authMiddleware, (req, res, next) => {
+router.post('/chat/stream', authMiddleware, (req, res) => {
+  return res.status(503).json({
+    error: 'Chat is down for scheduled maintenance. Please try again later.',
+    maintenance: true,
+  });
+});
+
+router.post('/chat/stream/_disabled', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
       console.error('[Multer] Upload error:', err.code || 'UNKNOWN', err.message);
@@ -1581,7 +1588,14 @@ router.post('/chat/stream', authMiddleware, (req, res, next) => {
   }
 });
 
-router.post('/chat', authMiddleware, (req, res, next) => {
+router.post('/chat', authMiddleware, (req, res) => {
+  return res.status(503).json({
+    error: 'Chat is down for scheduled maintenance. Please try again later.',
+    maintenance: true,
+  });
+});
+
+router.post('/chat/_disabled', authMiddleware, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
