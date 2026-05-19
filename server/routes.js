@@ -1037,6 +1037,35 @@ router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
   res.json(projects.map(p => ({ id: p.id, title: p.title, projectType: p.project_type, description: p.description, location: p.location, status: p.status, clientName: p.client_name, clientEmail: p.client_email, fileCount: p.file_count, createdAt: p.created_at })));
 });
 
+// "View as customer" — returns the exact project list the customer would see
+// on their dashboard. Admin uses this to verify a freshly-uploaded job
+// actually reaches the customer's portal (mirrors the GET /projects shape so
+// the same UI can render it).
+router.get('/admin/users/:userId/projects', authMiddleware, adminMiddleware, (req, res) => {
+  const user = db.prepare('SELECT id, full_name, email, company FROM users WHERE id = ?').get(req.params.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const projects = db.prepare(`
+    SELECT p.*,
+           COUNT(DISTINCT f.id) AS file_count,
+           COUNT(DISTINCT CASE WHEN d.is_latest = 1 THEN d.id END) AS deliverable_count
+      FROM projects p
+      LEFT JOIN files f ON f.project_id = p.id
+      LEFT JOIN project_deliverables d ON d.project_id = p.id
+     WHERE p.user_id = ?
+     GROUP BY p.id
+     ORDER BY COALESCE(p.updated_at, p.created_at) DESC
+  `).all(user.id);
+  res.json({
+    user: { id: user.id, fullName: user.full_name, email: user.email, company: user.company },
+    projects: projects.map(p => ({
+      ...p,
+      fullName: undefined,
+      fileCount: p.file_count,
+      deliverableCount: p.deliverable_count,
+    })),
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROJECT ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════

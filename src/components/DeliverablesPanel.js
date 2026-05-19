@@ -51,6 +51,14 @@ export default function DeliverablesPanel({ projectId, project }) {
   const [error, setError] = useState('');
   const [showHistory, setShowHistory] = useState(false);
 
+  // Admin "View as customer" — fetches the project list the customer would
+  // see on their dashboard so the admin can confirm the current job is
+  // actually in their portal (and not lost to a user_id mismatch).
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewError, setPreviewError] = useState('');
+
   // Admin uploader state
   const [kind, setKind] = useState('boq');
   const [notes, setNotes] = useState('');
@@ -74,6 +82,26 @@ export default function DeliverablesPanel({ projectId, project }) {
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  async function loadCustomerPreview() {
+    if (!project || !project.user_id) {
+      setPreviewError('No customer attached to this project.');
+      setPreviewOpen(true);
+      return;
+    }
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPreviewData(null);
+    try {
+      const data = await apiFetch(`/admin/users/${project.user_id}/projects`);
+      setPreviewData(data);
+    } catch (err) {
+      setPreviewError(err.message || 'Failed to load customer dashboard');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   function addFiles(fl) {
     setFiles((prev) => [...prev, ...Array.from(fl || [])]);
@@ -207,21 +235,132 @@ export default function DeliverablesPanel({ projectId, project }) {
               }}>
                 Files appear in their portal instantly
               </span>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={loadCustomerPreview}
+                  title="See exactly what's in this customer's dashboard"
+                  style={{
+                    fontSize: 10.5, color: '#3B82F6',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: 0, textDecoration: 'underline', fontWeight: 600,
+                  }}
+                >View as customer</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = window.location.origin + '/project/' + projectId;
+                    try { navigator.clipboard.writeText(url); } catch (_) {}
+                    setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');
+                  }}
+                  title={'Customer sees this at /project/' + projectId}
+                  style={{
+                    fontSize: 10.5, color: 'var(--text-muted)',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: 0, textDecoration: 'underline',
+                  }}
+                >Copy URL</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Customer-dashboard preview — proves the job is (or isn't) visible. */}
+        {isAdmin && previewOpen && (
+          <div style={{
+            padding: '12px 14px', borderRadius: 9, marginBottom: 12,
+            background: 'var(--bg)', border: '1px solid var(--border)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 8, gap: 10, flexWrap: 'wrap',
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Customer dashboard preview
+                {previewData && previewData.user && (
+                  <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
+                    {' '}— what {previewData.user.fullName || previewData.user.email} sees
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  const url = window.location.origin + '/project/' + projectId;
-                  try { navigator.clipboard.writeText(url); } catch (_) {}
-                  setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');
-                }}
-                title={'Customer sees this at /project/' + projectId}
+                onClick={() => { setPreviewOpen(false); setPreviewData(null); setPreviewError(''); }}
                 style={{
-                  fontSize: 10.5, color: 'var(--text-muted)',
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  padding: 0, textDecoration: 'underline',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: 14, padding: 0,
                 }}
-              >Copy customer's URL</button>
+                aria-label="Close preview"
+              >×</button>
             </div>
+
+            {previewLoading && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading customer's projects…</div>
+            )}
+            {previewError && (
+              <div style={{ fontSize: 12, color: '#EF4444' }}>{previewError}</div>
+            )}
+
+            {previewData && !previewLoading && (() => {
+              const list = previewData.projects || [];
+              const here = list.find((p) => p.id === projectId);
+              return (
+                <>
+                  <div style={{
+                    padding: '8px 10px', borderRadius: 7, marginBottom: 8,
+                    fontSize: 12, fontWeight: 600,
+                    background: here ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)',
+                    color: here ? '#10B981' : '#EF4444',
+                    border: '1px solid ' + (here ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'),
+                  }}>
+                    {here
+                      ? `✓ This job is in their portal (${here.deliverableCount || 0} doc${here.deliverableCount === 1 ? '' : 's'} ready).`
+                      : '⚠ This job is NOT in the customer\'s dashboard. They will never see these files — recipient mismatch.'}
+                  </div>
+
+                  {list.length === 0 ? (
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 6, fontStyle: 'italic' }}>
+                      This customer has zero projects in their portal.
+                    </div>
+                  ) : (
+                    <div style={{
+                      maxHeight: 220, overflowY: 'auto',
+                      display: 'flex', flexDirection: 'column', gap: 4,
+                    }}>
+                      {list.map((p) => {
+                        const isHere = p.id === projectId;
+                        return (
+                          <div key={p.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '7px 10px', borderRadius: 6,
+                            background: isHere ? 'rgba(59,130,246,0.08)' : 'transparent',
+                            border: '1px solid ' + (isHere ? 'rgba(59,130,246,0.3)' : 'var(--border)'),
+                            fontSize: 11.5,
+                          }}>
+                            <span style={{
+                              flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              color: 'var(--text-primary)', fontWeight: isHere ? 700 : 500,
+                            }}>{p.title}</span>
+                            {p.deliverableCount > 0 && (
+                              <span style={{
+                                padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                                background: 'rgba(16,185,129,0.15)', color: '#10B981',
+                              }}>{p.deliverableCount} doc{p.deliverableCount === 1 ? '' : 's'}</span>
+                            )}
+                            <span style={{ color: 'var(--text-muted)', fontSize: 10.5, fontFamily: 'JetBrains Mono, monospace' }}>
+                              {p.status}
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 10.5 }}>
+                              {new Date(p.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 
