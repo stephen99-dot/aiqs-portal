@@ -169,6 +169,20 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
     const notes = (req.body.notes || '').trim() || null;
     const submissionId = req.body.submission_id || null;
 
+    // Sanity check: if this upload is tied to a submission, the project we're
+    // uploading to had better belong to the same customer. Otherwise the files
+    // land in someone else's portal and the intended recipient sees nothing.
+    if (submissionId) {
+      const sub = db.prepare('SELECT user_id FROM drawing_submissions WHERE id = ? OR submission_id = ?').get(submissionId, submissionId);
+      if (sub && sub.user_id && sub.user_id !== project.user_id) {
+        return res.status(409).json({
+          error: 'Recipient mismatch: this project belongs to a different customer than the submission. Re-link the submission and try again.',
+          submission_user_id: sub.user_id,
+          project_user_id: project.user_id,
+        });
+      }
+    }
+
     // Mark previous latest of the same kind as superseded
     db.prepare(
       'UPDATE project_deliverables SET is_latest = 0 WHERE project_id = ? AND kind = ?'

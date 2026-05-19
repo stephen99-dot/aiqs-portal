@@ -291,10 +291,22 @@ router.post('/admin/:id/create-project', (req, res) => {
     const sub = db.prepare('SELECT * FROM drawing_submissions WHERE id = ? OR submission_id = ?').get(req.params.id, req.params.id);
     if (!sub) return res.status(404).json({ error: 'Submission not found' });
 
+    // If we're already linked, only reuse that project when its user_id still
+    // matches the submission's user. Otherwise the customer can never see the
+    // deliverables — the project belongs to someone else's account. This guards
+    // against stale links (e.g. project_id pasted in by hand via PATCH, or the
+    // original customer's user_id changing). Re-create cleanly in that case.
     if (sub.project_id) {
-      // Already linked — make sure the project still exists, otherwise re-create
-      const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(sub.project_id);
-      if (existing) return res.json({ ok: true, project_id: sub.project_id, created: false });
+      const existing = db.prepare('SELECT id, user_id FROM projects WHERE id = ?').get(sub.project_id);
+      if (existing && existing.user_id === sub.user_id) {
+        return res.json({ ok: true, project_id: sub.project_id, created: false });
+      }
+      if (existing && existing.user_id !== sub.user_id) {
+        console.warn(
+          '[Submissions] stale link: submission %s pointed at project %s owned by %s, but submission belongs to %s — re-creating',
+          sub.id, existing.id, existing.user_id, sub.user_id
+        );
+      }
     }
 
     const { v4: uuidv4 } = require('uuid');

@@ -1042,8 +1042,28 @@ router.get('/admin/projects', authMiddleware, adminMiddleware, (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/projects', authMiddleware, (req, res) => {
-  const projects = db.prepare('SELECT p.*, COUNT(f.id) as file_count FROM projects p LEFT JOIN files f ON f.project_id = p.id WHERE p.user_id = ? GROUP BY p.id ORDER BY p.created_at DESC').all(req.user.id);
-  res.json(projects.map(p => ({ ...p, fullName: undefined, fileCount: p.file_count })));
+  // Order by most recent activity (deliverable upload bumps updated_at) so a
+  // freshly-delivered job appears at the top of the customer's list instead of
+  // being buried below older ones. deliverable_count exposes how many
+  // current-version files the QS has sent back, so the dashboard can show a
+  // "documents ready" indicator without a second round-trip per project.
+  const projects = db.prepare(`
+    SELECT p.*,
+           COUNT(DISTINCT f.id) AS file_count,
+           COUNT(DISTINCT CASE WHEN d.is_latest = 1 THEN d.id END) AS deliverable_count
+      FROM projects p
+      LEFT JOIN files f ON f.project_id = p.id
+      LEFT JOIN project_deliverables d ON d.project_id = p.id
+     WHERE p.user_id = ?
+     GROUP BY p.id
+     ORDER BY COALESCE(p.updated_at, p.created_at) DESC
+  `).all(req.user.id);
+  res.json(projects.map(p => ({
+    ...p,
+    fullName: undefined,
+    fileCount: p.file_count,
+    deliverableCount: p.deliverable_count,
+  })));
 });
 
 router.get('/projects/:id', authMiddleware, (req, res) => {
