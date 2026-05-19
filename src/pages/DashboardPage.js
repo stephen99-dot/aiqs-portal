@@ -342,20 +342,32 @@ export default function DashboardPage() {
   const [onboardingStatus, setOnboardingStatus] = useState(null);
 
   useEffect(() => {
-    Promise.all([
-      apiFetch('/projects'),
-      apiFetch('/usage').catch(() => null),
-      apiFetch('/my-messages').catch(() => ({ messages: [] })),
-      apiFetch('/onboarding').catch(() => null),
-    ])
-      .then(([proj, usg, msgs, onb]) => {
-        setProjects(proj.projects || proj || []);
-        setUsage(usg);
-        setAdminMessages(msgs.messages || []);
-        setOnboardingStatus(onb);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    function load(initial) {
+      if (initial) setLoading(true);
+      Promise.all([
+        apiFetch('/projects'),
+        apiFetch('/usage').catch(() => null),
+        apiFetch('/my-messages').catch(() => ({ messages: [] })),
+        apiFetch('/onboarding').catch(() => null),
+      ])
+        .then(([proj, usg, msgs, onb]) => {
+          if (cancelled) return;
+          setProjects(proj.projects || proj || []);
+          setUsage(usg);
+          setAdminMessages(msgs.messages || []);
+          setOnboardingStatus(onb);
+        })
+        .catch(console.error)
+        .finally(() => { if (!cancelled && initial) setLoading(false); });
+    }
+    load(true);
+    // Re-pull projects when the tab regains focus, so a customer who left their
+    // dashboard open in a background tab sees newly-delivered jobs as soon as
+    // they switch back instead of having to hard-refresh.
+    function onFocus() { load(false); }
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
   }, []);
 
   async function dismissOnboardingBanner() {
@@ -608,6 +620,15 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      {project.deliverableCount > 0 && (
+                        <span title="Files from your QS are ready to download" style={{
+                          padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700,
+                          color: '#10B981', background: 'rgba(16,185,129,0.12)',
+                          border: '1px solid rgba(16,185,129,0.3)', whiteSpace: 'nowrap',
+                        }}>
+                          {project.deliverableCount} doc{project.deliverableCount === 1 ? '' : 's'} ready
+                        </span>
+                      )}
                       <span style={{
                         padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
                         color: st.color, background: st.bg, whiteSpace: 'nowrap',

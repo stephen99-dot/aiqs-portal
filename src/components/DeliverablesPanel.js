@@ -198,14 +198,30 @@ export default function DeliverablesPanel({ projectId, project }) {
                 {project.owner_phone && <a href={`tel:${project.owner_phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>☎ {project.owner_phone}</a>}
               </div>
             </div>
-            <span style={{
-              fontSize: 11, fontWeight: 700,
-              padding: '4px 9px', borderRadius: 999,
-              background: 'rgba(16,185,129,0.15)', color: '#10B981',
-              border: '1px solid rgba(16,185,129,0.3)',
-            }}>
-              Files appear in their portal instantly
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <span style={{
+                fontSize: 11, fontWeight: 700,
+                padding: '4px 9px', borderRadius: 999,
+                background: 'rgba(16,185,129,0.15)', color: '#10B981',
+                border: '1px solid rgba(16,185,129,0.3)',
+              }}>
+                Files appear in their portal instantly
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = window.location.origin + '/project/' + projectId;
+                  try { navigator.clipboard.writeText(url); } catch (_) {}
+                  setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');
+                }}
+                title={'Customer sees this at /project/' + projectId}
+                style={{
+                  fontSize: 10.5, color: 'var(--text-muted)',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  padding: 0, textDecoration: 'underline',
+                }}
+              >Copy customer's URL</button>
+            </div>
           </div>
         )}
 
