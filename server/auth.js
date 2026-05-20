@@ -19,7 +19,7 @@ function authMiddleware(req, res, next) {
   try {
     var decoded = jwt.verify(token, JWT_SECRET);
     var freshUser = db.prepare(
-      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company FROM users WHERE id = ?'
+      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company, has_estimator FROM users WHERE id = ?'
     ).get(decoded.id);
     if (!freshUser) return res.status(401).json({ error: 'User not found' });
     req.user = freshUser;
@@ -34,4 +34,16 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
-module.exports = { generateToken, authMiddleware, adminMiddleware };
+// Estimator add-on gate. Admins always pass through so they can test the flow.
+function requireEstimator(req, res, next) {
+  if (req.user.role === 'admin') return next();
+  if (!req.user.has_estimator) {
+    return res.status(403).json({
+      error: 'Estimator add-on not enabled on this account. Contact support to enable it.',
+      code: 'ESTIMATOR_DISABLED',
+    });
+  }
+  next();
+}
+
+module.exports = { generateToken, authMiddleware, adminMiddleware, requireEstimator };
