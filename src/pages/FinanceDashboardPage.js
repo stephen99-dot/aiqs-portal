@@ -17,6 +17,7 @@ function Inner() {
   const { t } = useTheme();
   const nav = useNavigate();
   const [data, setData] = useState(null);
+  const [invoiceAgg, setInvoiceAgg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,6 +26,7 @@ function Inner() {
     try {
       const d = await apiFetch('/finance/dashboard');
       setData(d);
+      try { setInvoiceAgg(await apiFetch('/invoices/_aggregates/dashboard')); } catch (e) {}
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, []);
@@ -50,6 +52,7 @@ function Inner() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => nav('/finance/overheads')} style={btn(t)}>Overheads</button>
           <button onClick={() => nav('/finance/jobs')} style={btn(t)}>Jobs</button>
+          <button onClick={() => nav('/invoices')} style={btn(t)}>Invoices</button>
         </div>
       </div>
 
@@ -74,6 +77,15 @@ function Inner() {
           tone={actualVariance > 0 ? 'danger' : 'success'}
         />
       </div>
+
+      {/* Invoice cards */}
+      {invoiceAgg && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 20 }}>
+          <Card t={t} label="Outstanding" value={fmtMoney(invoiceAgg.outstanding.value)} sub={invoiceAgg.outstanding.count + ' invoice(s)'} onClick={() => nav('/invoices')} />
+          <Card t={t} label="Paid this month" value={fmtMoney(invoiceAgg.paid_this_month.value)} sub={invoiceAgg.paid_this_month.count + ' paid'} tone="success" onClick={() => nav('/invoices')} />
+          <Card t={t} label="Overdue" value={fmtMoney(invoiceAgg.overdue.value)} sub={invoiceAgg.overdue.count + ' overdue'} tone={invoiceAgg.overdue.count > 0 ? 'danger' : undefined} onClick={() => nav('/invoices')} highlight={invoiceAgg.overdue.count > 0} />
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <Block t={t} title="Jobs">

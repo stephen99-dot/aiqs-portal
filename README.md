@@ -167,10 +167,56 @@ POST  /api/public/variations/:token/decline   { reason? }
   in `App.js`; works without an account or password. Approve / decline buttons
   capture the audit fields.
 
+## Invoices & Payments (Wave 3)
+
+Branded invoices and a per-job payment schedule for cashflow visibility. Three
+new tables added by the idempotent schema block in `server/database.js`:
+`invoices`, `invoice_lines`, `payment_schedules`.
+
+### Invoices
+
+- **`/invoices`** — list with status filters (Draft / Sent / Paid / Void / Overdue).
+- **`/invoices/:id`** — editor. Bill-to block, line table, VAT %, discount,
+  payment terms, notes/bank details. Read-only when paid or void.
+- Can be created blank, **from a saved quote** (deep-copies the lines so the
+  invoice stays editable independently), or attached to an estimator job.
+- Auto-numbered per year per user: `INV-2026-0001`, `INV-2026-0002`, …
+- Status flow: `draft → sent → paid` (or `void`). **Paid invoices are immutable**
+  (server returns `423 INVOICE_PAID` on edit/delete; the UI hides controls).
+- Branded PDF via `pdfkit`, consistent with the quote / variation PDFs.
+- Overdue derived: `status === 'sent' && due_date < today` — shown in red on
+  the list and the dashboard.
+
+### Payment schedules
+
+Per-job staged payments (Deposit / Stage X / Retention / Final). Each stage has
+a label, amount (or % of contract), due date or trigger, paid/unpaid status,
+and an optional link to the invoice that billed it. Shown on `/finance/jobs/:id`
+in a compact panel with a `Paid £X of £Y` summary.
+
+This is cashflow visibility — **no payment processing**.
+
+### Stripe payment link (optional)
+
+If `STRIPE_SECRET_KEY` is set on the server, the invoice editor shows a
+"Generate Stripe link" button that creates a Stripe Checkout session and stamps
+the URL onto the invoice. If the env var is unset, the endpoint returns
+`503 STRIPE_NOT_CONFIGURED` and the button is hidden cleanly. **Live
+reconciliation (webhook → invoice paid) is a separate small follow-up** — see
+the `TODO: wire to billing` note in `server/invoiceRoutes.js`.
+
+### Finance dashboard additions
+
+The `/finance` dashboard now surfaces **Outstanding** (sum of sent-not-paid),
+**Paid this month**, and **Overdue** cards. Click-through to the invoices list.
+
+### Sidebar
+
+A new **Invoices** entry below Finance, gated on `hasEstimator` like the rest.
+
 ### Wave roadmap (still to ship)
 
-- **Wave 3** — Quotes → Invoices → Payments: invoice generator, payment schedules,
-  optional Stripe payment link.
+- **Wave 3.5** (optional) — Stripe webhook → automatic invoice paid status.
 - **Wave 4** — Variations & Change Orders: priced change orders, client e-approval
   with name/timestamp/IP audit trail, lock-on-approval.
 - **Wave 5** — Documents & Compliance library + builder calculators.

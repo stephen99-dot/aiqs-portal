@@ -482,6 +482,79 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_estimator_variation_lines_variation ON estimator_variation_lines(variation_id);
 
+  -- Wave 3: Invoices & Payments. Always per-user; optionally linked to a job
+  -- (recommended) and/or seeded from a quote. Paid invoices are immutable.
+  CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT,
+    quote_id TEXT,
+    invoice_number TEXT,
+    client_name TEXT,
+    client_email TEXT,
+    client_address TEXT,
+    currency TEXT DEFAULT 'GBP',
+    issue_date DATE,
+    due_date DATE,
+    payment_terms_days INTEGER DEFAULT 30,
+    notes TEXT,
+    net_total REAL DEFAULT 0,
+    discount_amount REAL DEFAULT 0,
+    vat_pct REAL DEFAULT 0,
+    vat_amount REAL DEFAULT 0,
+    grand_total REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    paid_at DATETIME,
+    paid_amount REAL DEFAULT 0,
+    stripe_payment_link TEXT,
+    stripe_payment_intent_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (quote_id) REFERENCES quotes(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoices_user ON invoices(user_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_job ON invoices(job_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(user_id, status);
+
+  CREATE TABLE IF NOT EXISTS invoice_lines (
+    id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    section TEXT,
+    item TEXT,
+    description TEXT,
+    unit TEXT,
+    qty REAL DEFAULT 0,
+    rate REAL DEFAULT 0,
+    line_total REAL DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoice_lines_invoice ON invoice_lines(invoice_id);
+
+  CREATE TABLE IF NOT EXISTS payment_schedules (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    stage_label TEXT,
+    amount REAL DEFAULT 0,
+    percent_of_contract REAL,
+    due_date DATE,
+    due_trigger TEXT,
+    status TEXT DEFAULT 'unpaid',
+    invoice_id TEXT,
+    paid_at DATETIME,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_payment_schedules_job ON payment_schedules(job_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_schedules_user ON payment_schedules(user_id, status);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,

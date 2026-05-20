@@ -54,6 +54,7 @@ export default function Layout() {
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/estimator', label: 'Estimator', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on' },
     { path: '/finance', label: 'Finance', Icon: RatesIcon, estimatorOnly: true },
+    { path: '/invoices', label: 'Invoices', Icon: RatesIcon, estimatorOnly: true },
     { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },

@@ -33,6 +33,8 @@ import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import VariationEditorPage from './pages/VariationEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
+import InvoicesPage from './pages/InvoicesPage';
+import InvoiceEditorPage from './pages/InvoiceEditorPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -91,6 +93,8 @@ function AppInner() {
           <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
           <Route path="/change-orders/new" element={<VariationEditorPage />} />
           <Route path="/change-orders/:id" element={<VariationEditorPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/invoices/:id" element={<InvoiceEditorPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

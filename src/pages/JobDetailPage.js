@@ -36,6 +36,9 @@ function Inner() {
   const [costError, setCostError] = useState('');
   const [variations, setVariations] = useState([]);
   const [variationsApproved, setVariationsApproved] = useState(0);
+  const [invoices, setInvoices] = useState([]);
+  const [schedule, setSchedule] = useState({ stages: [], total: 0, paid: 0, unpaid: 0 });
+  const [newStage, setNewStage] = useState({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
 
   const refresh = useCallback(async () => {
     setError('');
@@ -63,6 +66,14 @@ function Inner() {
         setVariations(vr.variations || []);
         setVariationsApproved(vr.approved_total || 0);
       } catch (e) { /* surface only the bigger error */ }
+      try {
+        const ir = await apiFetch('/invoices?job_id=' + id);
+        setInvoices(ir.invoices || []);
+      } catch (e) {}
+      try {
+        const sr = await apiFetch('/payment-schedules/job/' + id);
+        setSchedule(sr || { stages: [], total: 0, paid: 0, unpaid: 0 });
+      } catch (e) {}
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [id]);
@@ -275,6 +286,102 @@ function Inner() {
         )}
       </div>
 
+      {/* Invoices + payment schedule */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+            <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Invoices</div>
+            <button onClick={async () => {
+              try {
+                const r = await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ job_id: id, client_name: job.client_name }) });
+                nav('/invoices/' + r.id);
+              } catch (e) { setError(e.message); }
+            }} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ New invoice</button>
+          </div>
+          {invoices.length === 0 ? (
+            <div style={{ color: t.textMuted, fontSize: 13 }}>No invoices on this job yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {invoices.map(inv => {
+                const tone = inv.overdue ? { bg: t.dangerBg, fg: t.danger, label: 'Overdue' }
+                  : inv.status === 'paid' ? { bg: t.successBg, fg: t.success, label: 'Paid' }
+                  : inv.status === 'sent' ? { bg: t.warningBg, fg: t.warning, label: 'Sent' }
+                  : inv.status === 'void' ? { bg: 'rgba(148,163,184,0.15)', fg: t.textMuted, label: 'Void' }
+                  : { bg: 'rgba(148,163,184,0.15)', fg: t.textSecondary, label: 'Draft' };
+                return (
+                  <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid ' + t.border }}>
+                    <div>
+                      <a href="#" onClick={(e) => { e.preventDefault(); nav('/invoices/' + inv.id); }} style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}>{inv.invoice_number || inv.id.slice(0, 8)}</a>
+                      <span style={{ marginLeft: 8, background: tone.bg, color: tone.fg, padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>{tone.label}</span>
+                      <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>Due {inv.due_date || '—'}</div>
+                    </div>
+                    <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt0(inv.grand_total)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+            <div>
+              <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Payment schedule</div>
+              <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
+                Paid {fmt0(schedule.paid)} of {fmt0(schedule.total)}
+              </div>
+            </div>
+          </div>
+          {schedule.stages.length === 0 ? (
+            <div style={{ color: t.textMuted, fontSize: 13, marginBottom: 8 }}>No payment stages yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+              {schedule.stages.map(st => (
+                <div key={st.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid ' + t.border }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{st.stage_label || 'Stage'}</div>
+                    <div style={{ color: t.textMuted, fontSize: 12 }}>
+                      {st.due_date || st.due_trigger || '—'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt0(st.amount)}</div>
+                    {st.status === 'paid' ? (
+                      <span style={{ background: t.successBg, color: t.success, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600 }}>Paid</span>
+                    ) : (
+                      <button onClick={async () => {
+                        try { await apiFetch('/payment-schedules/' + st.id + '/mark-paid', { method: 'POST', body: JSON.stringify({}) }); refresh(); } catch (e) { setError(e.message); }
+                      }} style={{ background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>Mark paid</button>
+                    )}
+                    <button onClick={async () => {
+                      if (!window.confirm('Delete this stage?')) return;
+                      try { await apiFetch('/payment-schedules/' + st.id, { method: 'DELETE' }); refresh(); } catch (e) { setError(e.message); }
+                    }} style={{ background: 'transparent', color: t.danger, border: 'none', cursor: 'pointer', fontSize: 14 }}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Add stage row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 120px 90px', gap: 6, marginTop: 8 }}>
+            <input value={newStage.stage_label} onChange={e => setNewStage({ ...newStage, stage_label: e.target.value })} placeholder="Stage label" style={fldSmall(t)} />
+            <input type="number" step="any" value={newStage.amount} onChange={e => setNewStage({ ...newStage, amount: e.target.value })} placeholder="£" style={fldSmall(t)} />
+            <input type="date" value={newStage.due_date} onChange={e => setNewStage({ ...newStage, due_date: e.target.value })} style={fldSmall(t)} />
+            <button onClick={async () => {
+              if (!newStage.stage_label && !newStage.amount) return;
+              try {
+                await apiFetch('/payment-schedules', { method: 'POST', body: JSON.stringify({
+                  job_id: id, stage_label: newStage.stage_label, amount: parseFloat(newStage.amount) || 0,
+                  due_date: newStage.due_date || null, due_trigger: newStage.due_trigger || null,
+                }) });
+                setNewStage({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
+                refresh();
+              } catch (e) { setError(e.message); }
+            }} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
+          </div>
+        </div>
+      </div>
+
       {/* Costs */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
@@ -394,6 +501,7 @@ function BudgetField({ t, label, value, onChange, suffix, placeholder }) {
 }
 
 function fld(t, narrow) { return { width: '100%', boxSizing: 'border-box', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: narrow ? '6px 8px' : '8px 10px', fontSize: 13, outline: 'none' }; }
+function fldSmall(t) { return { width: '100%', boxSizing: 'border-box', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: '6px 8px', fontSize: 12, outline: 'none' }; }
 function ta(t)  { return { width: '100%', boxSizing: 'border-box', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: '8px 10px', fontSize: 13, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }; }
 function lbl(t, mt) { return { display: 'block', color: t.textSecondary, fontSize: 11, marginBottom: 4, marginTop: mt || 0 }; }
 function btn(t) { return { background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }; }
