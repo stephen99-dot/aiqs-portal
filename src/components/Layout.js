@@ -160,6 +160,7 @@ export default function Layout() {
   // builder workflow — quotes, finance, invoices, documents, calculators.
   // Routes are unchanged; only the sidebar presentation is nested.
   const officeInABoxChildren = [
+    { path: '/pm', label: 'Project Manager' },
     { path: '/estimator', label: 'Quotes' },
     { path: '/finance', label: 'Finance' },
     { path: '/invoices', label: 'Invoices' },
