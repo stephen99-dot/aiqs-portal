@@ -343,6 +343,238 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(user_id, status);
   CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
 
+  -- Wave 2: Finance Hub. A light "job" the estimator owns end-to-end. Kept
+  -- separate from the BOQ-pipeline projects table so the two systems don't
+  -- couple. Jobs are the umbrella for budgets, cost actuals and (later)
+  -- variations + invoices.
+  CREATE TABLE IF NOT EXISTS estimator_jobs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    client_name TEXT,
+    project_type TEXT,
+    location TEXT,
+    status TEXT DEFAULT 'planned',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_jobs_user ON estimator_jobs(user_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_jobs_status ON estimator_jobs(user_id, status);
+
+  -- Monthly overheads snapshot. One row per user per YYYY-MM.
+  CREATE TABLE IF NOT EXISTS overheads (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    line_items TEXT,
+    total REAL DEFAULT 0,
+    working_days REAL DEFAULT 20,
+    working_hours_per_day REAL DEFAULT 8,
+    break_even_day REAL DEFAULT 0,
+    break_even_hour REAL DEFAULT 0,
+    target_margin_pct REAL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, month),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_overheads_user ON overheads(user_id, month);
+
+  -- Planned budget for a job (one row per job).
+  CREATE TABLE IF NOT EXISTS job_budgets (
+    job_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    planned_labour REAL DEFAULT 0,
+    planned_materials REAL DEFAULT 0,
+    planned_overheads REAL DEFAULT 0,
+    planned_other REAL DEFAULT 0,
+    planned_margin_pct REAL DEFAULT 0,
+    planned_revenue REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  -- Actual costs recorded against a job, line by line.
+  CREATE TABLE IF NOT EXISTS job_costs (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    description TEXT,
+    qty REAL DEFAULT 0,
+    unit TEXT,
+    unit_cost REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    vendor TEXT,
+    occurred_on DATE,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_job_costs_job ON job_costs(job_id);
+  CREATE INDEX IF NOT EXISTS idx_job_costs_user_kind ON job_costs(user_id, kind);
+
+  -- Wave 4: Variations / Change Orders. A priced change against an
+  -- estimator_job, optionally sent to the client for e-approval via a random
+  -- token. Once approved, locked=1 and the row becomes the audit record.
+  -- Named with the estimator_ prefix to avoid colliding with the BOQ-pipeline
+  -- variations table which has a different schema and is owned by the
+  -- existing /variations route in routes.js.
+  CREATE TABLE IF NOT EXISTS estimator_variations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    vo_number TEXT,
+    title TEXT,
+    reason TEXT,
+    notes TEXT,
+    currency TEXT DEFAULT 'GBP',
+    net_total REAL DEFAULT 0,
+    ohp_pct REAL DEFAULT 0,
+    ohp_amount REAL DEFAULT 0,
+    vat_pct REAL DEFAULT 0,
+    vat_amount REAL DEFAULT 0,
+    grand_total REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    locked INTEGER DEFAULT 0,
+    approval_token TEXT UNIQUE,
+    sent_at DATETIME,
+    approval_name TEXT,
+    approval_email TEXT,
+    approval_signature TEXT,
+    approval_ip TEXT,
+    approval_user_agent TEXT,
+    approval_at DATETIME,
+    decline_reason TEXT,
+    decline_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_user ON estimator_variations(user_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_job ON estimator_variations(job_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_token ON estimator_variations(approval_token);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_status ON estimator_variations(user_id, status);
+
+  CREATE TABLE IF NOT EXISTS estimator_variation_lines (
+    id TEXT PRIMARY KEY,
+    variation_id TEXT NOT NULL,
+    section TEXT,
+    item TEXT,
+    description TEXT,
+    unit TEXT,
+    qty REAL DEFAULT 0,
+    rate REAL DEFAULT 0,
+    labour REAL DEFAULT 0,
+    materials REAL DEFAULT 0,
+    line_total REAL DEFAULT 0,
+    est_rate INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (variation_id) REFERENCES estimator_variations(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_variation_lines_variation ON estimator_variation_lines(variation_id);
+
+  -- Wave 3: Invoices & Payments. Always per-user; optionally linked to a job
+  -- (recommended) and/or seeded from a quote. Paid invoices are immutable.
+  CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT,
+    quote_id TEXT,
+    invoice_number TEXT,
+    client_name TEXT,
+    client_email TEXT,
+    client_address TEXT,
+    currency TEXT DEFAULT 'GBP',
+    issue_date DATE,
+    due_date DATE,
+    payment_terms_days INTEGER DEFAULT 30,
+    notes TEXT,
+    net_total REAL DEFAULT 0,
+    discount_amount REAL DEFAULT 0,
+    vat_pct REAL DEFAULT 0,
+    vat_amount REAL DEFAULT 0,
+    grand_total REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    paid_at DATETIME,
+    paid_amount REAL DEFAULT 0,
+    stripe_payment_link TEXT,
+    stripe_payment_intent_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (quote_id) REFERENCES quotes(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoices_user ON invoices(user_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_job ON invoices(job_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(user_id, status);
+
+  CREATE TABLE IF NOT EXISTS invoice_lines (
+    id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    section TEXT,
+    item TEXT,
+    description TEXT,
+    unit TEXT,
+    qty REAL DEFAULT 0,
+    rate REAL DEFAULT 0,
+    line_total REAL DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_invoice_lines_invoice ON invoice_lines(invoice_id);
+
+  CREATE TABLE IF NOT EXISTS payment_schedules (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    stage_label TEXT,
+    amount REAL DEFAULT 0,
+    percent_of_contract REAL,
+    due_date DATE,
+    due_trigger TEXT,
+    status TEXT DEFAULT 'unpaid',
+    invoice_id TEXT,
+    paid_at DATETIME,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_payment_schedules_job ON payment_schedules(job_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_schedules_user ON payment_schedules(user_id, status);
+
+  -- Wave 5: Documents & Compliance library. The user picks a code-defined
+  -- template (contract / T&Cs / scope of work / payment terms / RAMS), fills
+  -- the schema, exports a branded PDF. fields holds the user's filled values
+  -- as JSON; the template_id points at code that knows the schema + how to
+  -- render. Optionally attached to a job for context.
+  CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT,
+    template_id TEXT NOT NULL,
+    title TEXT,
+    fields TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
+  CREATE INDEX IF NOT EXISTS idx_documents_job ON documents(job_id);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,
@@ -390,6 +622,8 @@ const migrations = [
   { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
   // Estimator add-on capability flag
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
+  // Wave 2: optional link from a quote to an estimator_job (umbrella for budgets/actuals/variations)
+  { column: 'job_id', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN job_id TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

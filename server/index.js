@@ -22,6 +22,11 @@ const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
 const agentRoutes = require('./agentRoutes');
 const estimatorRoutes = require('./estimatorRoutes');
+const financeRoutes = require('./financeRoutes');
+const estimatorVariationRoutes = require('./estimatorVariationRoutes');
+const invoiceRoutes = require('./invoiceRoutes');
+const paymentScheduleRoutes = require('./paymentScheduleRoutes');
+const documentsRoutes = require('./documentsRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +56,18 @@ app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', agentRoutes);
 app.use('/api/estimator', estimatorRoutes);
+app.use('/api/finance', financeRoutes);
+// Wave 4: Variations / Change Orders. Owner side is /api/change-orders to
+// avoid colliding with the BOQ-pipeline /api/variations/:projectId routes.
+// /api/public/variations is unauthenticated by design — that's the path the
+// client opens via the shareable approval link.
+app.use('/api/change-orders', estimatorVariationRoutes.ownerRouter);
+app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
+// Wave 3: Invoices & payment schedules.
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/payment-schedules', paymentScheduleRoutes);
+// Wave 5: Documents & Compliance — fillable templates -> branded PDF.
+app.use('/api/documents', documentsRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));

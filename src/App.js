@@ -27,6 +27,17 @@ import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
 import EstimatorPage from './pages/EstimatorPage';
 import EstimatorBuilderPage from './pages/EstimatorBuilderPage';
+import FinanceDashboardPage from './pages/FinanceDashboardPage';
+import OverheadsPage from './pages/OverheadsPage';
+import JobsPage from './pages/JobsPage';
+import JobDetailPage from './pages/JobDetailPage';
+import VariationEditorPage from './pages/VariationEditorPage';
+import VariationApprovalPage from './pages/VariationApprovalPage';
+import InvoicesPage from './pages/InvoicesPage';
+import InvoiceEditorPage from './pages/InvoiceEditorPage';
+import DocumentsPage from './pages/DocumentsPage';
+import DocumentEditorPage from './pages/DocumentEditorPage';
+import CalculatorsPage from './pages/CalculatorsPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -55,6 +66,8 @@ function AppInner() {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
+        {/* Public variation approval — outside ProtectedRoute on purpose. */}
+        <Route path="/v/:token" element={<VariationApprovalPage />} />
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -77,6 +90,17 @@ function AppInner() {
           <Route path="/estimator" element={<EstimatorPage />} />
           <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
           <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
+          <Route path="/finance" element={<FinanceDashboardPage />} />
+          <Route path="/finance/overheads" element={<OverheadsPage />} />
+          <Route path="/finance/jobs" element={<JobsPage />} />
+          <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
+          <Route path="/change-orders/new" element={<VariationEditorPage />} />
+          <Route path="/change-orders/:id" element={<VariationEditorPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/invoices/:id" element={<InvoiceEditorPage />} />
+          <Route path="/documents" element={<DocumentsPage />} />
+          <Route path="/documents/:id" element={<DocumentEditorPage />} />
+          <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
