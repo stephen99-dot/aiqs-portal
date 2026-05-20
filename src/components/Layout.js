@@ -86,7 +86,14 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
           paddingLeft: 12, borderLeft: '1px solid ' + t.border,
         }}>
           {item.children.map(c => {
-            const isChildActive = location.pathname === c.path || location.pathname.startsWith(c.path + '/');
+            // Dashboard (/office) should only highlight when EXACTLY on that
+            // path — /office/jobs and /office/settings are siblings, not
+            // children. For the other two, prefix-match so deep links (e.g.
+            // /office/jobs/:id/estimate or /office/settings/overheads) still
+            // light up their parent.
+            const isChildActive = c.path === '/office'
+              ? location.pathname === '/office'
+              : (location.pathname === c.path || location.pathname.startsWith(c.path + '/'));
             return (
               <NavLink
                 key={c.path}
@@ -159,15 +166,17 @@ export default function Layout() {
   // The "Office in a Box" add-on is a parent group containing the whole
   // builder workflow — quotes, finance, invoices, documents, calculators.
   // Routes are unchanged; only the sidebar presentation is nested.
+  // Office in a Box — exactly 3 children. Everything else (overheads,
+  // branding, rates, document templates, calculators, PM thresholds)
+  // lives inside Settings as tiles. Old paths (/finance, /invoices,
+  // /documents, /estimator, /pm) redirect via App.js — no nav entries.
   const officeInABoxChildren = [
-    { path: '/pm', label: 'Project Manager' },
-    { path: '/estimator', label: 'Quotes' },
-    { path: '/finance', label: 'Finance' },
-    { path: '/invoices', label: 'Invoices' },
-    { path: '/documents', label: 'Documents' },
-    { path: '/calculators', label: 'Calculators' },
+    { path: '/office',          label: 'Dashboard' },
+    { path: '/office/jobs',     label: 'Jobs' },
+    { path: '/office/settings', label: 'Settings' },
   ];
-  const isOfficeRouteActive = officeInABoxChildren.some(c => location.pathname.startsWith(c.path));
+  const isOfficeRouteActive = location.pathname.startsWith('/office')
+    || ['/pm','/finance','/invoices','/documents','/calculators','/change-orders','/estimator'].some(p => location.pathname.startsWith(p));
 
   const navItems = [
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },

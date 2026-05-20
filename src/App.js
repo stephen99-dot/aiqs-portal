@@ -39,6 +39,17 @@ import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import CalculatorsPage from './pages/CalculatorsPage';
 import ProjectManagerPage from './pages/ProjectManagerPage';
+
+// Office in a Box — new 3-item structure (Dashboard / Jobs / Settings).
+// The old /finance, /invoices, /documents, /change-orders, /estimator/quote/:id,
+// /pm routes still resolve via the redirect helpers, so existing bookmarks
+// keep working. The features themselves move in chunk 2.
+import OfficeDashboardPage from './pages/office/OfficeDashboardPage';
+import OfficeJobsPage from './pages/office/OfficeJobsPage';
+import OfficeSettingsPage from './pages/office/OfficeSettingsPage';
+import JobWorkspacePage from './pages/office/JobWorkspacePage';
+import { OverviewTab, EstimateTab, VariationsTab, InvoicesTab, DocumentsTab } from './pages/office/JobTabPlaceholder';
+import { RedirectVariation, RedirectInvoice, RedirectQuote, RedirectDocument, RedirectJob } from './pages/office/RedirectHelpers';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -88,21 +99,51 @@ function AppInner() {
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
-          <Route path="/estimator" element={<EstimatorPage />} />
-          <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
-          <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
-          <Route path="/finance" element={<FinanceDashboardPage />} />
-          <Route path="/finance/overheads" element={<OverheadsPage />} />
-          <Route path="/finance/jobs" element={<JobsPage />} />
-          <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
-          <Route path="/change-orders/new" element={<VariationEditorPage />} />
-          <Route path="/change-orders/:id" element={<VariationEditorPage />} />
-          <Route path="/invoices" element={<InvoicesPage />} />
-          <Route path="/invoices/:id" element={<InvoiceEditorPage />} />
-          <Route path="/documents" element={<DocumentsPage />} />
-          <Route path="/documents/:id" element={<DocumentEditorPage />} />
-          <Route path="/calculators" element={<CalculatorsPage />} />
-          <Route path="/pm" element={<ProjectManagerPage />} />
+          {/* Old Office in a Box routes — all redirected below. The page
+              components are still imported because the redirect map below
+              renders some of them under /office/settings (overheads, my
+              rates, documents-as-templates, calculators, PM-as-alerts). */}
+          <Route path="/pm" element={<Navigate to="/office" replace />} />
+
+          {/* ─── Office in a Box — new 3-item structure ──────────────────── */}
+          <Route path="/office" element={<OfficeDashboardPage />} />
+          <Route path="/office/jobs" element={<OfficeJobsPage />} />
+          <Route path="/office/jobs/:id" element={<JobWorkspacePage />}>
+            <Route index element={<OverviewTab />} />
+            <Route path="overview"   element={<OverviewTab />} />
+            <Route path="estimate"   element={<EstimateTab />} />
+            <Route path="estimate/:quoteId" element={<EstimateTab />} />
+            <Route path="variations" element={<VariationsTab />} />
+            <Route path="variations/:variationId" element={<VariationsTab />} />
+            <Route path="invoices"   element={<InvoicesTab />} />
+            <Route path="invoices/:invoiceId" element={<InvoicesTab />} />
+            <Route path="documents"  element={<DocumentsTab />} />
+            <Route path="documents/:documentId" element={<DocumentsTab />} />
+          </Route>
+          <Route path="/office/settings" element={<OfficeSettingsPage />} />
+          <Route path="/office/settings/overheads"   element={<OverheadsPage />} />
+          <Route path="/office/settings/branding"    element={<Navigate to="/onboarding?step=branding" replace />} />
+          <Route path="/office/settings/rates"       element={<MyRatesPage />} />
+          <Route path="/office/settings/templates"   element={<DocumentsPage />} />
+          <Route path="/office/settings/calculators" element={<CalculatorsPage />} />
+          <Route path="/office/settings/alerts"      element={<ProjectManagerPage />} />
+
+          {/* ─── Legacy redirects — keep old bookmarks working ───────────── */}
+          <Route path="/finance"              element={<Navigate to="/office" replace />} />
+          <Route path="/finance/jobs"         element={<Navigate to="/office/jobs" replace />} />
+          <Route path="/finance/jobs/:id"     element={<RedirectJob />} />
+          <Route path="/finance/overheads"    element={<Navigate to="/office/settings/overheads" replace />} />
+          <Route path="/estimator"            element={<Navigate to="/office/jobs" replace />} />
+          <Route path="/estimator/new"        element={<Navigate to="/office?action=new-job" replace />} />
+          <Route path="/estimator/quote/:id"  element={<RedirectQuote />} />
+          <Route path="/invoices"             element={<Navigate to="/office/jobs" replace />} />
+          <Route path="/invoices/:id"         element={<RedirectInvoice />} />
+          <Route path="/documents"            element={<Navigate to="/office/settings/templates" replace />} />
+          <Route path="/documents/:id"        element={<RedirectDocument />} />
+          <Route path="/change-orders/new"    element={<Navigate to="/office/jobs" replace />} />
+          <Route path="/change-orders/:id"    element={<RedirectVariation />} />
+          <Route path="/calculators"          element={<Navigate to="/office/settings/calculators" replace />} />
+
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
