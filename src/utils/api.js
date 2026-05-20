@@ -8,11 +8,30 @@ function setToken(token) {
 function clearToken() {
   localStorage.removeItem('aiqs_token');
 }
+
+// Estimator add-on is gated by a shared password set by the operator.
+// The key lives in localStorage so the user only enters it once per browser.
+const ESTIMATOR_KEY_STORAGE = 'aiqs_estimator_key';
+function getEstimatorKey() {
+  return localStorage.getItem(ESTIMATOR_KEY_STORAGE) || '';
+}
+function setEstimatorKey(key) {
+  if (key) localStorage.setItem(ESTIMATOR_KEY_STORAGE, key);
+  else localStorage.removeItem(ESTIMATOR_KEY_STORAGE);
+}
+function clearEstimatorKey() {
+  localStorage.removeItem(ESTIMATOR_KEY_STORAGE);
+}
 async function apiFetch(endpoint, options = {}) {
   const token = getToken();
   const headers = { ...options.headers };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  // Estimator endpoints share an extra password header.
+  if (endpoint.startsWith('/estimator')) {
+    const eKey = getEstimatorKey();
+    if (eKey) headers['x-estimator-key'] = eKey;
   }
   // Don't set Content-Type for FormData (browser sets it with boundary)
   if (!(options.body instanceof FormData)) {
@@ -191,4 +210,7 @@ function streamChat(formData, callbacks = {}) {
   return controller;
 }
 
-export { apiFetch, getToken, setToken, clearToken, streamChat };
+export {
+  apiFetch, getToken, setToken, clearToken, streamChat,
+  getEstimatorKey, setEstimatorKey, clearEstimatorKey,
+};

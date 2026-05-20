@@ -25,6 +25,8 @@ import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import BuilderPackPage from './pages/BuilderPackPage';
 import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
+import EstimatorPage from './pages/EstimatorPage';
+import EstimatorBuilderPage from './pages/EstimatorBuilderPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -72,6 +74,9 @@ function AppInner() {
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
+          <Route path="/estimator" element={<EstimatorPage />} />
+          <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
+          <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -48,9 +48,11 @@ export default function Layout() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
+  const hasEstimator = !!user?.hasEstimator || isAdmin;
   const navItems = [
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
+    { path: '/estimator', label: 'Estimator', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on' },
     { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
@@ -59,7 +61,11 @@ export default function Layout() {
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
   ];
 
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleNavItems = navItems.filter(item => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (item.estimatorOnly && !hasEstimator) return false;
+    return true;
+  });
 
   const sidebarBg = mode === 'dark'
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'

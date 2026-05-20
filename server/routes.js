@@ -361,7 +361,7 @@ router.post('/auth/register', async (req, res) => {
       sendClientWelcomeEmail({ fullName, email: email.toLowerCase() }).catch(err => console.error('[Welcome email] Failed:', err.message));
     }
 
-    res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit } });
+    res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!newUser.has_estimator } });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -380,7 +380,7 @@ router.post('/auth/login', async (req, res) => {
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1 } });
+    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1, hasEstimator: !!user.has_estimator } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -391,7 +391,7 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const planInfo = getUserPlanInfo(user);
-  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit });
+  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator });
 });
 
 router.put('/auth/change-password', authMiddleware, async (req, res) => {
@@ -423,7 +423,7 @@ router.get('/auth/magic', (req, res) => {
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || user.email) + ' logged in via magic link', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit } });
+    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator } });
   } catch (err) {
     console.error('Magic link login error:', err);
     res.status(500).json({ error: 'Failed to process magic link' });
@@ -708,6 +708,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0,
       monthly_boq_quota: u.monthly_boq_quota || 0,
       docs_used: docsUsed, docs_limit: docsLimit,
+      has_estimator: u.has_estimator ? 1 : 0,
       created_at: u.created_at, project_count: 0,
     };
   }) });
@@ -831,6 +832,25 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
   } catch (err) {
     console.error('Update plan error:', err);
     res.status(500).json({ error: 'Failed to update plan' });
+  }
+});
+
+// Toggle estimator add-on for a user (admin only).
+// TODO: wire to billing — when the £50/mo estimator add-on price ID is provisioned
+// in Stripe, set this flag from the customer.subscription.updated webhook instead of
+// (or alongside) the manual admin toggle.
+router.put('/admin/users/:id/estimator', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const value = enabled ? 1 : 0;
+    db.prepare('UPDATE users SET has_estimator = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(value, req.params.id);
+    logActivity({ event_type: 'estimator_toggled', title: (user.full_name || user.email) + (value ? ' — estimator enabled' : ' — estimator disabled'), user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ id: user.id, hasEstimator: !!value });
+  } catch (err) {
+    console.error('Toggle estimator error:', err);
+    res.status(500).json({ error: 'Failed to update estimator access' });
   }
 });
 

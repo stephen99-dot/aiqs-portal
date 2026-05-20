@@ -21,3 +21,55 @@ npm install && npm run build
 
 ### Start Command
 node server/index.js
+
+## Estimator add-on
+
+A lightweight quote generator that lives at `/estimator`. Builder describes a job in
+plain English (or fills a short form), Claude drafts an itemised quote, the rate
+library prices each line, the builder edits, and a branded PDF / Excel is exported.
+
+This is **separate from the heavy drawings -> BOQ pipeline** (which still lives at
+`/submit-drawings` and goes through `server/boqGenerator.js`). The estimator never
+touches that flow.
+
+### Feature flag
+
+All estimator routes and UI are gated behind `users.has_estimator`:
+- Backend: `requireEstimator` middleware in `server/auth.js` (admins pass through).
+- Frontend: sidebar entry + page content render only when `user.hasEstimator` is true.
+- Toggle for a user via `PUT /api/admin/users/:id/estimator` with `{ "enabled": true }`.
+
+### Environment variables (in addition to the existing ones)
+
+- `ANTHROPIC_API_KEY` — required for the AI draft step. (Already used by chat.)
+- `ESTIMATOR_PASSWORD` — **required**. A shared password that locks every estimator
+  page and API route. If this env var is unset, the entire estimator returns a 503
+  (`ESTIMATOR_LOCKED`) — fail safe. Users enter the password once per browser; it's
+  stored in `localStorage` and sent as the `x-estimator-key` header on every estimator
+  request. To rotate, change the env var and redeploy — every browser will be
+  reprompted on next use. Remove the env var to take the lock off (and reopen access
+  via the `has_estimator` flag only).
+
+### Stripe wiring (Phase 2 TODO)
+
+The £50/month add-on is currently flag-only. To self-serve subscribers, add the new
+price ID to the `PRICE_TO_PLAN` map in `server/stripe-webhook.js` and set
+`has_estimator = 1` from the `customer.subscription.updated` handler. Search for
+`TODO: wire to billing` in `server/routes.js` for the hook point.
+
+### Render notes
+
+- The `quotes` and `quote_lines` tables are created automatically by the idempotent
+  schema block in `server/database.js`; the `has_estimator` column is added by the
+  migrations array. No manual migration step is needed.
+- `pdfkit` is included as a dependency — no extra buildpack required.
+- PDFs are generated server-side and streamed straight to the browser; nothing is
+  persisted to disk.
+
+### Phase 2 TODOs (not built)
+
+- Stripe self-serve billing for the add-on.
+- Client login / approval portal for issued quotes.
+- Bulk import of historical rates per user (`client_rate_library` is already there
+  but isn't yet consulted by the estimator — easy follow-up).
+

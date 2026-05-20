@@ -293,6 +293,56 @@ db.exec(`
   -- doc, plus the on-screen preview. Logo is stored on disk and referenced
   -- by filename. Template values must match the keys in PORTAL_SPEC.md
   -- ("modern" | "professional" | "heritage" | "minimalist").
+  -- Estimator add-on: lightweight quote generator (separate from the BOQ pipeline).
+  -- Builder describes a job, gets a sectioned itemised quote, edits, exports PDF/XLSX.
+  -- Gated behind users.has_estimator (added in the migrations array below).
+  CREATE TABLE IF NOT EXISTS quotes (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    client_name TEXT,
+    project_name TEXT,
+    project_type TEXT,
+    currency TEXT DEFAULT 'GBP',
+    input_text TEXT,
+    net_total REAL DEFAULT 0,
+    ohp_pct REAL DEFAULT 0,
+    ohp_amount REAL DEFAULT 0,
+    contingency_pct REAL DEFAULT 0,
+    contingency_amount REAL DEFAULT 0,
+    vat_pct REAL DEFAULT 0,
+    vat_amount REAL DEFAULT 0,
+    grand_total REAL DEFAULT 0,
+    target_margin_pct REAL DEFAULT 0,
+    margin_pct REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    notes TEXT,
+    quote_number TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS quote_lines (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
+    section TEXT,
+    item TEXT,
+    description TEXT,
+    unit TEXT,
+    qty REAL DEFAULT 0,
+    rate REAL DEFAULT 0,
+    labour REAL DEFAULT 0,
+    materials REAL DEFAULT 0,
+    line_total REAL DEFAULT 0,
+    est_rate INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (quote_id) REFERENCES quotes(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_quotes_user ON quotes(user_id);
+  CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(user_id, status);
+  CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,
@@ -338,6 +388,8 @@ const migrations = [
   // stored locally — so we keep a per-submission Drive URL the admin can paste
   // once, and the inbox surfaces "Open in Drive" links.
   { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
+  // Estimator add-on capability flag
+  { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
