@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import RateAutocomplete from '../components/RateAutocomplete';
 
 // Two-mode page:
 //   /estimator/new          — input flow -> draft -> edit -> save
@@ -26,6 +27,110 @@ function num(v, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+// ─── Site-measurement element types ─────────────────────────────────────────
+// Each element type defines its inputs and how the quantity is computed from them.
+// The output is fed to the AI as structured measurements so prices are based on
+// real numbers, not guesses.
+const ELEMENT_TYPES = {
+  floor_area: {
+    label: 'Floor area', unit: 'm²',
+    fields: [
+      { key: 'length', label: 'Length (m)' },
+      { key: 'width',  label: 'Width (m)' },
+    ],
+    compute: (d) => num(d.length) * num(d.width),
+  },
+  wall_area: {
+    label: 'Wall area', unit: 'm²',
+    fields: [
+      { key: 'perimeter', label: 'Perimeter (m)' },
+      { key: 'height',    label: 'Height (m)' },
+    ],
+    compute: (d) => num(d.perimeter) * num(d.height),
+  },
+  ceiling_area: {
+    label: 'Ceiling area', unit: 'm²',
+    fields: [
+      { key: 'length', label: 'Length (m)' },
+      { key: 'width',  label: 'Width (m)' },
+    ],
+    compute: (d) => num(d.length) * num(d.width),
+  },
+  roof_area: {
+    label: 'Roof area', unit: 'm²',
+    fields: [
+      { key: 'length', label: 'Plan length (m)' },
+      { key: 'width',  label: 'Plan width (m)' },
+      { key: 'pitchFactor', label: 'Pitch factor (1.0 flat, 1.15 typical)' },
+    ],
+    compute: (d) => num(d.length) * num(d.width) * (num(d.pitchFactor) || 1),
+  },
+  linear: {
+    label: 'Linear (m)', unit: 'm',
+    fields: [
+      { key: 'length', label: 'Length (m)' },
+    ],
+    compute: (d) => num(d.length),
+  },
+  volume: {
+    label: 'Volume', unit: 'm³',
+    fields: [
+      { key: 'length', label: 'Length (m)' },
+      { key: 'width',  label: 'Width (m)' },
+      { key: 'depth',  label: 'Depth (m)' },
+    ],
+    compute: (d) => num(d.length) * num(d.width) * num(d.depth),
+  },
+  count: {
+    label: 'Count (nr)', unit: 'nr',
+    fields: [
+      { key: 'count', label: 'Number' },
+    ],
+    compute: (d) => num(d.count),
+  },
+  custom: {
+    label: 'Custom', unit: 'item',
+    fields: [
+      { key: 'qty',  label: 'Quantity' },
+      { key: 'unit', label: 'Unit (e.g. m, m², item)' },
+    ],
+    compute: (d) => num(d.qty),
+    unitFromData: (d) => (d.unit || 'item'),
+  },
+};
+
+function newElement(type = 'floor_area') {
+  return { id: Math.random().toString(36).slice(2), type, name: '', dims: {} };
+}
+
+function elementQty(el) {
+  const def = ELEMENT_TYPES[el.type];
+  if (!def) return 0;
+  return def.compute(el.dims || {});
+}
+function elementUnit(el) {
+  const def = ELEMENT_TYPES[el.type];
+  if (!def) return 'item';
+  return def.unitFromData ? def.unitFromData(el.dims || {}) : def.unit;
+}
+
+function measurementsToPrompt(elements, notes) {
+  const lines = elements
+    .map(el => {
+      const def = ELEMENT_TYPES[el.type];
+      if (!def) return null;
+      const qty = elementQty(el);
+      if (!qty) return null;
+      const u = elementUnit(el);
+      const name = el.name ? el.name : def.label;
+      return '- ' + name + ': ' + qty.toFixed(2) + ' ' + u;
+    })
+    .filter(Boolean);
+  let out = 'Site measurements (use these quantities directly in the quote):\n' + lines.join('\n');
+  if (notes && notes.trim()) out += '\n\nNotes: ' + notes.trim();
+  return out;
+}
+
 export default function EstimatorBuilderPage() {
   return <EstimatorGate><EstimatorBuilderPageInner /></EstimatorGate>;
 }
@@ -38,12 +143,14 @@ function EstimatorBuilderPageInner() {
   const nav = useNavigate();
 
   // Input phase
-  const [inputMode, setInputMode] = useState('describe'); // 'describe' | 'form'
+  const [inputMode, setInputMode] = useState('describe'); // 'describe' | 'form' | 'measure'
   const [inputText, setInputText] = useState('');
   const [projectType, setProjectType] = useState('extension');
   const [formSize, setFormSize] = useState('');
   const [formLocation, setFormLocation] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [elements, setElements] = useState([newElement('floor_area')]);
+  const [measureNotes, setMeasureNotes] = useState('');
   const [currency, setCurrency] = useState('GBP');
   const [vatPct, setVatPct] = useState(20);
   const [ohpPct, setOhpPct] = useState(15);
@@ -133,6 +240,13 @@ function EstimatorBuilderPageInner() {
       if (formLocation) parts.push('Location: ' + formLocation);
       if (formNotes) parts.push('Notes: ' + formNotes);
       payloadText = parts.join('. ');
+    } else if (inputMode === 'measure') {
+      const valid = elements.filter(el => elementQty(el) > 0);
+      if (valid.length === 0) {
+        setError('Add at least one element with a non-zero quantity.');
+        return;
+      }
+      payloadText = 'Project type: ' + projectType + '\n\n' + measurementsToPrompt(valid, measureNotes);
     }
     if (payloadText.length < 10) {
       setError('Please describe the job in a bit more detail.');
@@ -288,13 +402,14 @@ function EstimatorBuilderPageInner() {
         </div>
 
         {/* Mode toggle */}
-        <div style={{ display: 'inline-flex', background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 4, marginBottom: 16 }}>
+        <div style={{ display: 'inline-flex', background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 4, marginBottom: 16, flexWrap: 'wrap' }}>
           <ToggleBtn t={t} active={inputMode === 'describe'} onClick={() => setInputMode('describe')}>Describe the job</ToggleBtn>
           <ToggleBtn t={t} active={inputMode === 'form'} onClick={() => setInputMode('form')}>Quick form</ToggleBtn>
+          <ToggleBtn t={t} active={inputMode === 'measure'} onClick={() => setInputMode('measure')}>Site measurements</ToggleBtn>
         </div>
 
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          {inputMode === 'describe' ? (
+          {inputMode === 'describe' && (
             <>
               <label style={lbl(t)}>Describe the job</label>
               <textarea
@@ -320,7 +435,8 @@ function EstimatorBuilderPageInner() {
                 </div>
               </div>
             </>
-          ) : (
+          )}
+          {inputMode === 'form' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -354,6 +470,15 @@ function EstimatorBuilderPageInner() {
                 style={txtarea(t)}
               />
             </>
+          )}
+          {inputMode === 'measure' && (
+            <MeasurementEditor
+              t={t}
+              projectType={projectType} setProjectType={setProjectType}
+              currency={currency} setCurrency={setCurrency}
+              elements={elements} setElements={setElements}
+              notes={measureNotes} setNotes={setMeasureNotes}
+            />
           )}
         </div>
 
@@ -482,7 +607,21 @@ function EstimatorBuilderPageInner() {
                   return (
                     <tr key={idx} style={{ borderTop: '1px solid ' + t.border }}>
                       <td style={tdCell}>
-                        <input value={ln.item || ''} onChange={e => updateLine(idx, { item: e.target.value })} placeholder="Item" style={inputInline(t, true)} />
+                        <RateAutocomplete
+                          value={ln.item || ''}
+                          unit={ln.unit}
+                          onChange={(v) => updateLine(idx, { item: v })}
+                          onPick={(r) => updateLine(idx, {
+                            item: r.description.split(',')[0].slice(0, 80),
+                            description: r.description,
+                            unit: r.unit || ln.unit || 'item',
+                            rate: r.rate,
+                            labour: r.labour,
+                            materials: r.materials,
+                            est_rate: false,
+                          })}
+                          placeholder="Item — type to search rate library"
+                        />
                         <input value={ln.description || ''} onChange={e => updateLine(idx, { description: e.target.value })} placeholder="Description" style={inputInline(t)} />
                       </td>
                       <td style={{ ...tdCell, textAlign: 'right' }}>
@@ -595,6 +734,103 @@ function PctField({ t, label, value, onChange }) {
         style={input(t)}
       />
     </div>
+  );
+}
+
+function MeasurementEditor({ t, projectType, setProjectType, currency, setCurrency, elements, setElements, notes, setNotes }) {
+  const updateEl = (id, patch) => setElements(prev => prev.map(el => el.id === id ? { ...el, ...patch } : el));
+  const updateDim = (id, k, v) => setElements(prev => prev.map(el => el.id === id ? { ...el, dims: { ...el.dims, [k]: v } } : el));
+  const removeEl = (id) => setElements(prev => prev.filter(el => el.id !== id));
+  const addEl = () => setElements(prev => [...prev, newElement('floor_area')]);
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <label style={lbl(t)}>Project type</label>
+          <select value={projectType} onChange={e => setProjectType(e.target.value)} style={input(t)}>
+            {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl(t)}>Currency</label>
+          <select value={currency} onChange={e => setCurrency(e.target.value)} style={input(t)}>
+            <option value="GBP">GBP (£)</option>
+            <option value="EUR">EUR (€)</option>
+          </select>
+        </div>
+      </div>
+
+      <label style={lbl(t)}>Elements — add the parts of the job, enter dimensions, we compute the quantities.</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {elements.map(el => {
+          const def = ELEMENT_TYPES[el.type];
+          const qty = elementQty(el);
+          return (
+            <div key={el.id} style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px', gap: 8, alignItems: 'end' }}>
+                <div>
+                  <label style={lbl(t)}>Type</label>
+                  <select
+                    value={el.type}
+                    onChange={e => updateEl(el.id, { type: e.target.value, dims: {} })}
+                    style={input(t)}
+                  >
+                    {Object.entries(ELEMENT_TYPES).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl(t)}>Name (optional)</label>
+                  <input value={el.name} onChange={e => updateEl(el.id, { name: e.target.value })} placeholder={def.label} style={input(t)} />
+                </div>
+                <button onClick={() => removeEl(el.id)} title="Remove" style={{
+                  background: 'transparent', color: t.danger, border: '1px solid ' + t.border,
+                  borderRadius: 8, padding: '8px 10px', cursor: 'pointer',
+                }}>Remove</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr)) 140px', gap: 8, marginTop: 10 }}>
+                {def.fields.map(f => (
+                  <div key={f.key}>
+                    <label style={lbl(t)}>{f.label}</label>
+                    <input
+                      type={f.key === 'unit' ? 'text' : 'number'} step="any"
+                      value={el.dims[f.key] != null ? el.dims[f.key] : ''}
+                      onChange={e => updateDim(el.id, f.key, e.target.value)}
+                      style={input(t)}
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label style={lbl(t)}>Quantity</label>
+                  <div style={{
+                    background: t.bg, border: '1px solid ' + t.border, borderRadius: 6,
+                    padding: '8px 10px', fontSize: 14, fontWeight: 600, color: qty > 0 ? t.accent : t.textMuted,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {qty > 0 ? qty.toFixed(2) + ' ' + elementUnit(el) : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={addEl} style={{
+          background: 'transparent', color: t.accent, border: '1px dashed ' + t.border,
+          borderRadius: 8, padding: '10px 14px', fontSize: 14, cursor: 'pointer',
+        }}>+ Add element</button>
+      </div>
+
+      <label style={{ ...lbl(t), marginTop: 14 }}>Notes (optional)</label>
+      <textarea
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        rows={3}
+        placeholder="Scope details, finishes, spec level — anything the AI should know beyond the dimensions"
+        style={txtarea(t)}
+      />
+    </>
   );
 }
 

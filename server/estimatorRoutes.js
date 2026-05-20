@@ -435,6 +435,67 @@ router.get('/stats', (req, res) => {
   }
 });
 
+// GET /api/estimator/rates/search?q=plaster&unit=m2&limit=10
+// Read-only autocomplete against the seeded `rates` table. Used by the line
+// editor to suggest priced items as the builder types.
+router.get('/rates/search', (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (q.length < 2) return res.json({ results: [] });
+    const unit = String(req.query.unit || '').trim().toLowerCase();
+    const limit = Math.min(parseInt(req.query.limit, 10) || 8, 25);
+
+    // Split into tokens (length >= 2) so "double plaster" matches "two-coat plaster"
+    // via a multi-LIKE.
+    const tokens = q.split(/[^a-z0-9]+/).filter(w => w.length >= 2).slice(0, 4);
+    if (tokens.length === 0) return res.json({ results: [] });
+
+    let candidates;
+    try {
+      const where = tokens.map(() => '(LOWER(description) LIKE ? OR LOWER(trade) LIKE ? OR LOWER(code) LIKE ?)').join(' AND ');
+      const params = [];
+      for (const tok of tokens) {
+        const like = '%' + tok + '%';
+        params.push(like, like, like);
+      }
+      candidates = db.prepare(
+        'SELECT code, trade, description, unit, labour_rate, material_rate, total_rate '
+        + 'FROM rates WHERE ' + where + ' LIMIT 60'
+      ).all(...params);
+    } catch (err) {
+      return res.json({ results: [] });
+    }
+
+    // Score: token hits in description (3pt) + trade (1pt), bonus when the unit matches.
+    const scored = candidates.map(c => {
+      const cd = (c.description || '').toLowerCase();
+      const ct = (c.trade || '').toLowerCase();
+      let score = 0;
+      for (const tok of tokens) {
+        if (cd.includes(tok)) score += 3;
+        if (ct.includes(tok)) score += 1;
+      }
+      if (unit && (c.unit || '').toLowerCase() === unit) score += 2;
+      return { c, score };
+    }).sort((a, b) => b.score - a.score).slice(0, limit);
+
+    res.json({
+      results: scored.map(({ c }) => ({
+        code: c.code,
+        trade: c.trade,
+        description: c.description,
+        unit: c.unit,
+        rate: num(c.total_rate) || (num(c.labour_rate) + num(c.material_rate)),
+        labour: num(c.labour_rate),
+        materials: num(c.material_rate),
+      })),
+    });
+  } catch (err) {
+    console.error('[Estimator] rate search error:', err);
+    res.status(500).json({ error: 'Search failed.' });
+  }
+});
+
 // POST /api/estimator/quotes  — save a new quote
 router.post('/quotes', (req, res) => {
   try {

@@ -66,10 +66,39 @@ price ID to the `PRICE_TO_PLAN` map in `server/stripe-webhook.js` and set
 - PDFs are generated server-side and streamed straight to the browser; nothing is
   persisted to disk.
 
-### Phase 2 TODOs (not built)
+### Input modes
 
-- Stripe self-serve billing for the add-on.
-- Client login / approval portal for issued quotes.
+The estimator builder offers three ways to start a quote:
+
+1. **Describe the job** — paste a plain-English description; AI drafts the lines.
+2. **Quick form** — a few dropdowns and fields when you'd rather not type prose.
+3. **Site measurements** — add elements (Floor / Wall / Ceiling / Roof / Linear /
+   Volume / Count / Custom), enter dimensions, and the tool computes quantities
+   automatically (e.g. wall = perimeter × height). Those structured measurements
+   are sent to Claude so the quote uses your real numbers, not guesses.
+
+### Rate autocomplete
+
+The line editor's **item** field is a typeahead over the seeded `rates` table:
+start typing ("plaster", "concrete C25", etc.) and pick a suggestion to fill the
+item, description, unit, rate and labour/materials split in one click. Picking a
+suggestion clears the `est_rate` flag on that line. Endpoint:
+`GET /api/estimator/rates/search?q=<terms>&unit=<unit>&limit=<n>`.
+
+### Wave roadmap (not built yet)
+
+- **Wave 2** — Finance Hub: monthly overheads tracker, break-even rate, financial
+  dashboard, commercial budget tool, material & labour tracker.
+- **Wave 3** — Quotes → Invoices → Payments: invoice generator, payment schedules,
+  optional Stripe payment link.
+- **Wave 4** — Variations & Change Orders: priced change orders, client e-approval
+  with name/timestamp/IP audit trail, lock-on-approval.
+- **Wave 5** — Documents & Compliance library + builder calculators.
+
+### Earlier Phase 2 TODOs (still open)
+
+- Stripe self-serve billing for the £50 add-on.
+- Client login / approval portal for issued quotes (will be revisited in Wave 4).
 - Bulk import of historical rates per user (`client_rate_library` is already there
   but isn't yet consulted by the estimator — easy follow-up).
 
