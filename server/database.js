@@ -575,6 +575,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
   CREATE INDEX IF NOT EXISTS idx_documents_job ON documents(job_id);
 
+  -- AI Project Manager — per-user thresholds for the deterministic alerts engine.
+  -- Pure config, no business data. One row per user; INSERT OR IGNORE on first
+  -- read seeds defaults.
+  CREATE TABLE IF NOT EXISTS pm_alert_thresholds (
+    user_id TEXT PRIMARY KEY,
+    variation_stale_days INTEGER DEFAULT 7,
+    quote_stale_days INTEGER DEFAULT 14,
+    budget_overrun_pct REAL DEFAULT 10,
+    payment_due_horizon_days INTEGER DEFAULT 3,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,

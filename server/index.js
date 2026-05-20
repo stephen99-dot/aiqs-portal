@@ -27,6 +27,7 @@ const estimatorVariationRoutes = require('./estimatorVariationRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
 const documentsRoutes = require('./documentsRoutes');
+const projectManagerRoutes = require('./projectManagerRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -68,6 +69,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
 // Wave 5: Documents & Compliance — fillable templates -> branded PDF.
 app.use('/api/documents', documentsRoutes);
+// AI Project Manager — deterministic alerts engine (Part A) + LLM-grounded Q&A (Part B).
+app.use('/api/pm', projectManagerRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
