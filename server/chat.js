@@ -2159,6 +2159,30 @@ ${summary}`);
             ];
           }
 
+          // Inject scale-measured quantities (pdfScaleReader output). These are
+          // the high-accuracy measurements taken from rendered drawing images
+          // using the scale bar — without this, that work is wasted and Claude
+          // has to visually re-estimate every dimension from the drawing pixels.
+          if (req.zipData.scale_context && req.zipData.scale_context.length > 0) {
+            const measuredCount = (req.zipData.scale_measurements || [])
+              .reduce((s, m) => s + (m && m.measurements ? m.measurements.filter(x => x.confidence === 'HIGH').length : 0), 0);
+            console.log(`[Extract] Injecting scale-measured quantities (${measuredCount} HIGH-confidence elements across ${(req.zipData.scale_measurements || []).length} drawings)`);
+            extractContent = Array.isArray(extractContent) ? extractContent : [{ type: 'text', text: extractContent }];
+            extractContent = [
+              ...extractContent,
+              { type: 'text', text: '\n\n' + req.zipData.scale_context +
+                '\n\nCRITICAL: For any element marked HIGH confidence above, you MUST use that measured value verbatim in your "qty" field. Do NOT visually re-estimate from the drawing pixels — the scale-bar measurement is more accurate than visual inspection. Reference the measurement in your "working" field, e.g. "(Scale-measured: 15.66m²)".' },
+            ];
+            if (pipelineLog) {
+              pipelineLog.push({
+                stage: 'measure',
+                label: 'Scale-bar measurements injected',
+                detail: `${measuredCount} HIGH-confidence element(s) from ${(req.zipData.scale_measurements || []).length} drawing(s)`,
+                ts: Date.now(),
+              });
+            }
+          }
+
           // Scan extracted text for location/address info to pass to AI
           if (req.zipData && req.zipData.text_context && req.zipData.text_context.length > 0) {
             const allZipText = req.zipData.text_context.join(' ');
@@ -2821,6 +2845,17 @@ CRITICAL RULES:
             const confidencePct = totalItems > 0 ? Math.round((confirmedCount / totalItems) * 100) : 0;
 
             quantitySummary += `\n\n📊 Confidence: ${confidencePct}% from annotated dimensions (${confirmedCount}/${totalItems} items) | ${flaggedCount} flagged for review`;
+            if (req.zipData && req.zipData.scale_measurements && req.zipData.scale_measurements.length > 0) {
+              const confirmed = req.zipData.scale_measurements.filter(m => m && m.scale_bar_found).length;
+              const totalDr = req.zipData.scale_measurements.length;
+              const highCount = req.zipData.scale_measurements.reduce(
+                (s, m) => s + (m && m.measurements ? m.measurements.filter(x => x.confidence === 'HIGH').length : 0), 0);
+              if (highCount > 0) {
+                quantitySummary += `\n📏 ${highCount} element(s) scale-measured from ${confirmed}/${totalDr} drawing(s) with confirmed scale bar`;
+              } else if (confirmed === 0) {
+                quantitySummary += `\n⚠️ No scale bar detected on drawings — measurements rely on annotated dimensions only. If dimensions are missing, totals may be off; flag any value that looks wrong and I'll correct it.`;
+              }
+            }
             if (req.zipData && req.zipData.all_openings.length > 0) {
               quantitySummary += `\n📐 ${req.zipData.all_openings.length} door/window sizes read directly from schedule (no estimation)`;
             }
