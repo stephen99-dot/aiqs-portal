@@ -214,9 +214,54 @@ The `/finance` dashboard now surfaces **Outstanding** (sum of sent-not-paid),
 
 A new **Invoices** entry below Finance, gated on `hasEstimator` like the rest.
 
-### Wave roadmap (still to ship)
+## Documents & Calculators (Wave 5)
 
-- **Wave 3.5** (optional) — Stripe webhook → automatic invoice paid status.
+Branded, fillable document templates plus a set of client-side material
+calculators. One new table (`documents`) added by the idempotent schema block;
+calculators are stateless and need no schema.
+
+### Document templates
+
+Five code-defined templates render via `pdfkit` with the user's branding:
+
+- **Contract for works** — parties, scope, sum, programme, retention, payment, variations, governing law, signatures.
+- **Terms & Conditions** — small-builder boilerplate with merge fields for jurisdiction, payment days, warranty period.
+- **Scope of work** — overview + inclusions / exclusions / assumptions; ideal as a quote attachment.
+- **Payment terms** — schedule + retention + late-payment clauses; auto-converts `10%` to `£X` when the contract sum is filled.
+- **Health & Safety / RAMS** — task, hazards, controls, PPE, emergency arrangements.
+
+Templates are **fixed in code**, not user-editable (same approach as the
+existing XLSX/DOCX templates in `PORTAL_SPEC.md`). Each template has a JSON
+field schema (text / textarea / date / number / checkbox / list); the user's
+filled values are stored as a JSON blob on the `documents` row, so the same
+doc can be reopened, edited, and re-exported.
+
+### UI
+
+- **`/documents`** — list with template-tile picker (with optional job attach).
+- **`/documents/:id`** — generated form from the template's schema, save / PDF / duplicate / delete. Editable title.
+- **`/finance/jobs/:id`** — new "Documents" panel mirrors the picker, scoped to the job.
+
+### Calculators
+
+`/calculators` — five client-side, stateless tools (no API, no DB):
+
+- **Brick / block** — wall L × H × bricks-per-m² (60 / 10) + waste %
+- **Concrete volume** — L × W × D + waste %
+- **Plaster / drylining** — wall + ceiling area ÷ coverage per 25kg bag
+- **Roof area** — plan L × W × pitch factor; tile count × per-m² × waste %
+- **Paint** — area × coats ÷ spread rate (default 12 m²/L) × waste %
+
+Coverage / pitch / spread-rate values are editable inputs so the user can override defaults for their preferred products.
+
+### Sidebar additions
+
+Two new entries below Invoices: **Documents** and **Calculators**, both gated on `hasEstimator`.
+
+### Wave roadmap (optional follow-ups)
+
+- **Wave 3.5** — Stripe webhook → automatic invoice-paid status.
+- **Public calculator mirror** — same components at `/calc/<name>` outside `ProtectedRoute` for SEO / top-of-funnel.
 - **Wave 4** — Variations & Change Orders: priced change orders, client e-approval
   with name/timestamp/IP audit trail, lock-on-approval.
 - **Wave 5** — Documents & Compliance library + builder calculators.

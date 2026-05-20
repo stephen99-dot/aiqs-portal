@@ -26,6 +26,7 @@ const financeRoutes = require('./financeRoutes');
 const estimatorVariationRoutes = require('./estimatorVariationRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
+const documentsRoutes = require('./documentsRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -65,6 +66,8 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
+// Wave 5: Documents & Compliance — fillable templates -> branded PDF.
+app.use('/api/documents', documentsRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));

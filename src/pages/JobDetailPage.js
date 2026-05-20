@@ -39,6 +39,9 @@ function Inner() {
   const [invoices, setInvoices] = useState([]);
   const [schedule, setSchedule] = useState({ stages: [], total: 0, paid: 0, unpaid: 0 });
   const [newStage, setNewStage] = useState({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
+  const [documents, setDocuments] = useState([]);
+  const [docTemplates, setDocTemplates] = useState([]);
+  const [docPickerOpen, setDocPickerOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -73,6 +76,14 @@ function Inner() {
       try {
         const sr = await apiFetch('/payment-schedules/job/' + id);
         setSchedule(sr || { stages: [], total: 0, paid: 0, unpaid: 0 });
+      } catch (e) {}
+      try {
+        const [dr, tr] = await Promise.all([
+          apiFetch('/documents?job_id=' + id),
+          apiFetch('/documents/templates'),
+        ]);
+        setDocuments(dr.documents || []);
+        setDocTemplates(tr.templates || []);
       } catch (e) {}
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -380,6 +391,46 @@ function Inner() {
             }} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
           </div>
         </div>
+      </div>
+
+      {/* Documents */}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Documents</div>
+          <button onClick={() => setDocPickerOpen(v => !v)} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {docPickerOpen ? 'Cancel' : '+ New document'}
+          </button>
+        </div>
+        {docPickerOpen && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, marginBottom: 12 }}>
+            {docTemplates.map(tpl => (
+              <button key={tpl.id} onClick={async () => {
+                try {
+                  const r = await apiFetch('/documents', { method: 'POST', body: JSON.stringify({ template_id: tpl.id, job_id: id }) });
+                  nav('/documents/' + r.id);
+                } catch (e) { setError(e.message); }
+              }} style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 12, textAlign: 'left', cursor: 'pointer', color: t.text }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{tpl.label}</div>
+                <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>{tpl.description}</div>
+              </button>
+            ))}
+          </div>
+        )}
+        {documents.length === 0 ? (
+          <div style={{ color: t.textMuted, fontSize: 13 }}>No documents on this job yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {documents.map(d => (
+              <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: '1px solid ' + t.border }}>
+                <div>
+                  <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}>{d.title}</a>
+                  <div style={{ color: t.textMuted, fontSize: 12 }}>{d.template_label} · {(d.updated_at || d.created_at || '').slice(0, 10)}</div>
+                </div>
+                <button onClick={() => nav('/documents/' + d.id)} style={{ background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Open</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Costs */}

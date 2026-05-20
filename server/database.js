@@ -555,6 +555,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_payment_schedules_job ON payment_schedules(job_id);
   CREATE INDEX IF NOT EXISTS idx_payment_schedules_user ON payment_schedules(user_id, status);
 
+  -- Wave 5: Documents & Compliance library. The user picks a code-defined
+  -- template (contract / T&Cs / scope of work / payment terms / RAMS), fills
+  -- the schema, exports a branded PDF. fields holds the user's filled values
+  -- as JSON; the template_id points at code that knows the schema + how to
+  -- render. Optionally attached to a job for context.
+  CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT,
+    template_id TEXT NOT NULL,
+    title TEXT,
+    fields TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
+  CREATE INDEX IF NOT EXISTS idx_documents_job ON documents(job_id);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,
