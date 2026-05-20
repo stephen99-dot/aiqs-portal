@@ -53,6 +53,7 @@ export default function Layout() {
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/estimator', label: 'Estimator', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on' },
+    { path: '/finance', label: 'Finance', Icon: RatesIcon, estimatorOnly: true },
     { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },

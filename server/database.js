@@ -343,6 +343,84 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(user_id, status);
   CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
 
+  -- Wave 2: Finance Hub. A light "job" the estimator owns end-to-end. Kept
+  -- separate from the BOQ-pipeline projects table so the two systems don't
+  -- couple. Jobs are the umbrella for budgets, cost actuals and (later)
+  -- variations + invoices.
+  CREATE TABLE IF NOT EXISTS estimator_jobs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    client_name TEXT,
+    project_type TEXT,
+    location TEXT,
+    status TEXT DEFAULT 'planned',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_jobs_user ON estimator_jobs(user_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_jobs_status ON estimator_jobs(user_id, status);
+
+  -- Monthly overheads snapshot. One row per user per YYYY-MM.
+  CREATE TABLE IF NOT EXISTS overheads (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    line_items TEXT,
+    total REAL DEFAULT 0,
+    working_days REAL DEFAULT 20,
+    working_hours_per_day REAL DEFAULT 8,
+    break_even_day REAL DEFAULT 0,
+    break_even_hour REAL DEFAULT 0,
+    target_margin_pct REAL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, month),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_overheads_user ON overheads(user_id, month);
+
+  -- Planned budget for a job (one row per job).
+  CREATE TABLE IF NOT EXISTS job_budgets (
+    job_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    planned_labour REAL DEFAULT 0,
+    planned_materials REAL DEFAULT 0,
+    planned_overheads REAL DEFAULT 0,
+    planned_other REAL DEFAULT 0,
+    planned_margin_pct REAL DEFAULT 0,
+    planned_revenue REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  -- Actual costs recorded against a job, line by line.
+  CREATE TABLE IF NOT EXISTS job_costs (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    description TEXT,
+    qty REAL DEFAULT 0,
+    unit TEXT,
+    unit_cost REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    vendor TEXT,
+    occurred_on DATE,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_job_costs_job ON job_costs(job_id);
+  CREATE INDEX IF NOT EXISTS idx_job_costs_user_kind ON job_costs(user_id, kind);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,
@@ -390,6 +468,8 @@ const migrations = [
   { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
   // Estimator add-on capability flag
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
+  // Wave 2: optional link from a quote to an estimator_job (umbrella for budgets/actuals/variations)
+  { column: 'job_id', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN job_id TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

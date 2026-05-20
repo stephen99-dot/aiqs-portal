@@ -27,6 +27,10 @@ import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
 import EstimatorPage from './pages/EstimatorPage';
 import EstimatorBuilderPage from './pages/EstimatorBuilderPage';
+import FinanceDashboardPage from './pages/FinanceDashboardPage';
+import OverheadsPage from './pages/OverheadsPage';
+import JobsPage from './pages/JobsPage';
+import JobDetailPage from './pages/JobDetailPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -77,6 +81,10 @@ function AppInner() {
           <Route path="/estimator" element={<EstimatorPage />} />
           <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
           <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
+          <Route path="/finance" element={<FinanceDashboardPage />} />
+          <Route path="/finance/overheads" element={<OverheadsPage />} />
+          <Route path="/finance/jobs" element={<JobsPage />} />
+          <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

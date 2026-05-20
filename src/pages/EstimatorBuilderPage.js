@@ -172,6 +172,11 @@ function EstimatorBuilderPageInner() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
 
+  // Wave 2 — overheads + jobs awareness
+  const [overheads, setOverheads] = useState(null);    // { break_even_day, break_even_hour, total } or null
+  const [jobs, setJobs] = useState([]);                // list of available jobs to link this quote to
+  const [jobId, setJobId] = useState(null);
+
   // Load existing quote
   useEffect(() => {
     if (isNew) return;
@@ -192,6 +197,7 @@ function EstimatorBuilderPageInner() {
         setStatus(q.status || 'draft');
         setNotes(q.notes || '');
         setLines((r.lines || []).map(l => ({ ...l, est_rate: !!l.est_rate })));
+        setJobId(q.job_id || null);
         setPhase('ready');
       } catch (e) {
         setError(e.message);
@@ -199,6 +205,15 @@ function EstimatorBuilderPageInner() {
       }
     })();
   }, [id, isNew]);
+
+  // Fetch current overheads + jobs once (best-effort; ignore errors so the editor
+  // still works for users who haven't set overheads yet).
+  useEffect(() => {
+    (async () => {
+      try { const oh = await apiFetch('/finance/overheads/current'); setOverheads(oh.exists ? oh : null); } catch (e) {}
+      try { const j = await apiFetch('/finance/jobs'); setJobs(j.jobs || []); } catch (e) {}
+    })();
+  }, []);
 
   // Recompute totals client-side as the builder edits
   const totals = useMemo(() => {
@@ -327,6 +342,11 @@ function EstimatorBuilderPageInner() {
         });
         setQuoteId(r.id);
         setQuoteNumber(r.quote_number || '');
+        // Link to job after creation if the picker is set (job_id isn't on the
+        // POST schema; we use the finance link endpoint to keep concerns separate).
+        if (jobId) {
+          try { await apiFetch('/finance/jobs/' + jobId + '/link-quote', { method: 'POST', body: JSON.stringify({ quote_id: r.id }) }); } catch (e) {}
+        }
         setSavedAt(new Date());
         // Move to the saved URL so reload works.
         nav('/estimator/quote/' + r.id, { replace: true });
@@ -350,6 +370,10 @@ function EstimatorBuilderPageInner() {
           method: 'PUT',
           body: JSON.stringify({ lines }),
         });
+        // Re-link to job (or unlink and relink to a different one).
+        if (jobId) {
+          try { await apiFetch('/finance/jobs/' + jobId + '/link-quote', { method: 'POST', body: JSON.stringify({ quote_id: quoteId }) }); } catch (e) {}
+        }
         setSavedAt(new Date());
       }
     } catch (e) {
@@ -567,6 +591,13 @@ function EstimatorBuilderPageInner() {
               <option value="EUR">EUR (€)</option>
             </select>
           </div>
+          <div>
+            <label style={lbl(t)}>Link to job</label>
+            <select value={jobId || ''} onChange={e => setJobId(e.target.value || null)} style={input(t)}>
+              <option value="">— Not linked —</option>
+              {jobs.map(j => <option key={j.id} value={j.id}>{j.name}{j.client_name ? ' · ' + j.client_name : ''}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -681,6 +712,25 @@ function EstimatorBuilderPageInner() {
             Margin: {totals.margin.toFixed(1)}% (target {num(targetMarginPct).toFixed(1)}%)
             {totals.marginBelow && ' — below target'}
           </div>
+          {overheads && overheads.break_even_day > 0 && (() => {
+            const profit = totals.ohp;
+            const breakDay = overheads.break_even_day;
+            const days = profit / breakDay;
+            const clears = profit > breakDay;
+            return (
+              <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: clears ? t.successBg : t.warningBg, color: clears ? t.success : t.warning, fontSize: 12 }}>
+                {clears
+                  ? <>This quote's OH&P covers {days.toFixed(1)} day{days >= 1.05 ? 's' : ''} of your {fmtMoney(breakDay, 'GBP')}/day overhead.</>
+                  : <>OH&P doesn't cover one full day of overhead ({fmtMoney(breakDay, 'GBP')}/day). Consider lifting the markup.</>
+                }
+              </div>
+            );
+          })()}
+          {!overheads && (
+            <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: t.surface, color: t.textMuted, fontSize: 12 }}>
+              Set <a href="/finance/overheads" style={{ color: t.accent }}>your overheads</a> to see whether this quote clears your break-even rate.
+            </div>
+          )}
         </div>
       </div>
     </div>

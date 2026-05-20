@@ -85,10 +85,32 @@ item, description, unit, rate and labour/materials split in one click. Picking a
 suggestion clears the `est_rate` flag on that line. Endpoint:
 `GET /api/estimator/rates/search?q=<terms>&unit=<unit>&limit=<n>`.
 
-### Wave roadmap (not built yet)
+## Finance Hub (Wave 2)
 
-- **Wave 2** — Finance Hub: monthly overheads tracker, break-even rate, financial
-  dashboard, commercial budget tool, material & labour tracker.
+A second section gated behind the same estimator capability flag + password. Lives
+at `/finance` in the UI and `/api/finance/*` on the backend. Five new tables, all
+created by the idempotent schema block in `server/database.js`:
+`estimator_jobs`, `overheads`, `job_budgets`, `job_costs`, plus a nullable
+`quotes.job_id` link.
+
+- **`/finance`** — dashboard cards: quotes this month, win rate, current
+  break-even rate, planned vs actual, jobs by status, and a margin-creep list
+  flagging jobs where actual cost is closing on (or above) planned.
+- **`/finance/overheads`** — monthly fixed-cost line items + working days/hours.
+  Computes total overhead, break-even day rate, break-even hour rate. Saves a
+  snapshot per month so you can compare months.
+- **`/finance/jobs`** — list of jobs with planned cost, actual, variance and
+  status. Create new jobs inline.
+- **`/finance/jobs/:id`** — single job: editable planned budget (labour /
+  materials / overheads / other / margin %), actual cost log (material / labour /
+  other rows with vendor + date), variance strip, linked quotes list.
+
+The estimator builder is now overhead-aware: on every quote it shows whether the
+chosen OH&P clears one day of overhead, and the quote header has a "Link to job"
+picker so the saved quote appears on its job's page.
+
+### Wave roadmap (still to ship)
+
 - **Wave 3** — Quotes → Invoices → Payments: invoice generator, payment schedules,
   optional Stripe payment link.
 - **Wave 4** — Variations & Change Orders: priced change orders, client e-approval

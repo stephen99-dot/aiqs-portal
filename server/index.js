@@ -22,6 +22,7 @@ const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
 const agentRoutes = require('./agentRoutes');
 const estimatorRoutes = require('./estimatorRoutes');
+const financeRoutes = require('./financeRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -51,6 +52,7 @@ app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', agentRoutes);
 app.use('/api/estimator', estimatorRoutes);
+app.use('/api/finance', financeRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
