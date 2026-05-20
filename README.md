@@ -42,6 +42,13 @@ All estimator routes and UI are gated behind `users.has_estimator`:
 ### Environment variables (in addition to the existing ones)
 
 - `ANTHROPIC_API_KEY` — required for the AI draft step. (Already used by chat.)
+- `ESTIMATOR_PASSWORD` — **required**. A shared password that locks every estimator
+  page and API route. If this env var is unset, the entire estimator returns a 503
+  (`ESTIMATOR_LOCKED`) — fail safe. Users enter the password once per browser; it's
+  stored in `localStorage` and sent as the `x-estimator-key` header on every estimator
+  request. To rotate, change the env var and redeploy — every browser will be
+  reprompted on next use. Remove the env var to take the lock off (and reopen access
+  via the `has_estimator` flag only).
 
 ### Stripe wiring (Phase 2 TODO)
 

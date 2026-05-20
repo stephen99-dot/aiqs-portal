@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
+import EstimatorGate from '../components/EstimatorGate';
 
 // Two-mode page:
 //   /estimator/new          — input flow -> draft -> edit -> save
@@ -26,6 +27,10 @@ function num(v, fallback = 0) {
 }
 
 export default function EstimatorBuilderPage() {
+  return <EstimatorGate><EstimatorBuilderPageInner /></EstimatorGate>;
+}
+
+function EstimatorBuilderPageInner() {
   const { id } = useParams();
   const isNew = !id;
   const { t } = useTheme();
@@ -243,7 +248,7 @@ export default function EstimatorBuilderPage() {
   const download = (kind) => {
     if (!quoteId) { alert('Save the quote first.'); return; }
     const url = '/api/estimator/quotes/' + quoteId + '/' + kind;
-    fetch(url, { headers: { Authorization: 'Bearer ' + getToken() } })
+    fetch(url, { headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() } })
       .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
       .then(blob => {
         const a = document.createElement('a');

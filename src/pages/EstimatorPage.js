@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
+import EstimatorGate from '../components/EstimatorGate';
 
 // Quotes dashboard — list + stats strip. The "build a new quote" flow lives in
 // EstimatorBuilderPage. Both are gated on user.hasEstimator.
@@ -25,6 +26,10 @@ function fmtMoney(n, currency) {
 }
 
 export default function EstimatorPage() {
+  return <EstimatorGate><EstimatorPageInner /></EstimatorGate>;
+}
+
+function EstimatorPageInner() {
   const { t } = useTheme();
   const { user } = useAuth();
   const nav = useNavigate();
@@ -76,7 +81,8 @@ export default function EstimatorPage() {
 
   const downloadPdf = (id) => {
     const tok = getToken();
-    fetch('/api/estimator/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok } })
+    const eKey = getEstimatorKey();
+    fetch('/api/estimator/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok, 'x-estimator-key': eKey } })
       .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
       .then(blob => {
         const a = document.createElement('a');

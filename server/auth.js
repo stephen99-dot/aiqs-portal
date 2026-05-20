@@ -46,4 +46,34 @@ function requireEstimator(req, res, next) {
   next();
 }
 
-module.exports = { generateToken, authMiddleware, adminMiddleware, requireEstimator };
+// Temporary password lock — applies to everyone, including admins. Set
+// ESTIMATOR_PASSWORD in the environment to turn it on; if it's not set,
+// the estimator is locked entirely (fail safe).
+function requireEstimatorPassword(req, res, next) {
+  const expected = process.env.ESTIMATOR_PASSWORD;
+  if (!expected) {
+    return res.status(503).json({
+      error: 'Estimator is temporarily locked. Set ESTIMATOR_PASSWORD on the server to enable it.',
+      code: 'ESTIMATOR_LOCKED',
+    });
+  }
+  const provided = req.headers['x-estimator-key']
+    || (req.query && req.query.estimator_key)
+    || '';
+  if (!provided || !safeEqual(String(provided), String(expected))) {
+    return res.status(403).json({
+      error: 'Estimator password required.',
+      code: 'ESTIMATOR_PASSWORD_REQUIRED',
+    });
+  }
+  next();
+}
+
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+module.exports = { generateToken, authMiddleware, adminMiddleware, requireEstimator, requireEstimatorPassword };

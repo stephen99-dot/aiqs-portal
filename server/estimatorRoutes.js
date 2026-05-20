@@ -29,7 +29,7 @@ const { v4: uuidv4 } = require('uuid');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 const db = require('./database');
-const { authMiddleware, requireEstimator } = require('./auth');
+const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 
 const router = express.Router();
 
@@ -332,7 +332,7 @@ function logEstimatorUsage(userId, action, usage, model) {
 //  ROUTES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.use(authMiddleware, requireEstimator);
+router.use(authMiddleware, requireEstimator, requireEstimatorPassword);
 
 // POST /api/estimator/draft
 // Body: { input_text, project_type?, currency?, ohp_pct?, contingency_pct?, vat_pct?, target_margin_pct? }
