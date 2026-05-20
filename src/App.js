@@ -31,6 +31,8 @@ import FinanceDashboardPage from './pages/FinanceDashboardPage';
 import OverheadsPage from './pages/OverheadsPage';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
+import VariationEditorPage from './pages/VariationEditorPage';
+import VariationApprovalPage from './pages/VariationApprovalPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -59,6 +61,8 @@ function AppInner() {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
+        {/* Public variation approval — outside ProtectedRoute on purpose. */}
+        <Route path="/v/:token" element={<VariationApprovalPage />} />
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
@@ -85,6 +89,8 @@ function AppInner() {
           <Route path="/finance/overheads" element={<OverheadsPage />} />
           <Route path="/finance/jobs" element={<JobsPage />} />
           <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
+          <Route path="/change-orders/new" element={<VariationEditorPage />} />
+          <Route path="/change-orders/:id" element={<VariationEditorPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

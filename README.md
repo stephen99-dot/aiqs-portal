@@ -109,6 +109,64 @@ The estimator builder is now overhead-aware: on every quote it shows whether the
 chosen OH&P clears one day of overhead, and the quote header has a "Link to job"
 picker so the saved quote appears on its job's page.
 
+## Variations & Change Orders (Wave 4)
+
+Priced change orders against a job, with a defensible client e-approval audit
+trail. Two new tables, `estimator_variations` and `estimator_variation_lines`,
+created by the idempotent schema block in `server/database.js`. Named with the
+`estimator_` prefix so they don't collide with the BOQ-pipeline `variations`
+table that's owned by the existing `/api/variations/:projectId` route.
+
+### Status flow
+
+`draft` (fully editable) → `sent` (locked from editing, approval link issued)
+→ `approved` (server-side locked, audit row written) **or** `declined` (still
+editable; revise and re-send, or duplicate).
+
+### Approval audit
+
+When a client opens the public link `/v/<token>` and approves, the server
+captures (and refuses to let the builder change afterwards):
+
+- `approval_name` — typed by the client
+- `approval_signature` — typed signature
+- `approval_email` — optional
+- `approval_ip` — read from `x-forwarded-for` / `req.ip`
+- `approval_user_agent`
+- `approval_at` — server timestamp
+
+Once approved, `locked = 1` and any PATCH / PUT / DELETE on the row returns
+`423 Locked`. The branded PDF carries the audit footer.
+
+### Routes
+
+```
+# Owner — mounted at /api/change-orders to avoid colliding with the existing
+# /api/variations/:projectId BOQ route. The UI label is still "Variations".
+GET/POST/PATCH/PUT/DELETE under /api/change-orders/*
+POST  /api/change-orders/:id/send             mints the approval token
+GET   /api/change-orders/:id/pdf              branded PDF (audit footer if approved)
+
+# Public — no auth, no estimator gate
+GET   /api/public/variations/:token           payload for the approval page
+GET   /api/public/variations/:token/logo      builder's logo, scoped to the token
+POST  /api/public/variations/:token/approve   { name, email?, signature }
+POST  /api/public/variations/:token/decline   { reason? }
+```
+
+### UI
+
+- `/finance/jobs/:id` — a "Variations / change orders" panel under the costs
+  table. Lists every variation with status pill, total and approver. Shows the
+  approved-variations roll-up as `+£X approved` next to "+ New variation".
+- `/change-orders/new?job=<id>` — variation editor (uses the same
+  `RateAutocomplete` as the quote editor).
+- `/change-orders/:id` — same editor for drafts; read-only with audit panel
+  once approved.
+- `/v/:token` — public branded approval page. Renders outside `ProtectedRoute`
+  in `App.js`; works without an account or password. Approve / decline buttons
+  capture the audit fields.
+
 ### Wave roadmap (still to ship)
 
 - **Wave 3** — Quotes → Invoices → Payments: invoice generator, payment schedules,

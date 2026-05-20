@@ -421,6 +421,67 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_job_costs_job ON job_costs(job_id);
   CREATE INDEX IF NOT EXISTS idx_job_costs_user_kind ON job_costs(user_id, kind);
 
+  -- Wave 4: Variations / Change Orders. A priced change against an
+  -- estimator_job, optionally sent to the client for e-approval via a random
+  -- token. Once approved, locked=1 and the row becomes the audit record.
+  -- Named with the estimator_ prefix to avoid colliding with the BOQ-pipeline
+  -- variations table which has a different schema and is owned by the
+  -- existing /variations route in routes.js.
+  CREATE TABLE IF NOT EXISTS estimator_variations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    vo_number TEXT,
+    title TEXT,
+    reason TEXT,
+    notes TEXT,
+    currency TEXT DEFAULT 'GBP',
+    net_total REAL DEFAULT 0,
+    ohp_pct REAL DEFAULT 0,
+    ohp_amount REAL DEFAULT 0,
+    vat_pct REAL DEFAULT 0,
+    vat_amount REAL DEFAULT 0,
+    grand_total REAL DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    locked INTEGER DEFAULT 0,
+    approval_token TEXT UNIQUE,
+    sent_at DATETIME,
+    approval_name TEXT,
+    approval_email TEXT,
+    approval_signature TEXT,
+    approval_ip TEXT,
+    approval_user_agent TEXT,
+    approval_at DATETIME,
+    decline_reason TEXT,
+    decline_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_user ON estimator_variations(user_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_job ON estimator_variations(job_id);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_token ON estimator_variations(approval_token);
+  CREATE INDEX IF NOT EXISTS idx_estimator_variations_status ON estimator_variations(user_id, status);
+
+  CREATE TABLE IF NOT EXISTS estimator_variation_lines (
+    id TEXT PRIMARY KEY,
+    variation_id TEXT NOT NULL,
+    section TEXT,
+    item TEXT,
+    description TEXT,
+    unit TEXT,
+    qty REAL DEFAULT 0,
+    rate REAL DEFAULT 0,
+    labour REAL DEFAULT 0,
+    materials REAL DEFAULT 0,
+    line_total REAL DEFAULT 0,
+    est_rate INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    FOREIGN KEY (variation_id) REFERENCES estimator_variations(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_variation_lines_variation ON estimator_variation_lines(variation_id);
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,

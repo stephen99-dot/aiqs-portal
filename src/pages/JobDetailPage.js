@@ -34,6 +34,8 @@ function Inner() {
   const [costs, setCosts] = useState([]);
   const [newCost, setNewCost] = useState({ kind: 'material', description: '', qty: 1, unit: 'item', unit_cost: 0, vendor: '', occurred_on: todayIso() });
   const [costError, setCostError] = useState('');
+  const [variations, setVariations] = useState([]);
+  const [variationsApproved, setVariationsApproved] = useState(0);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -56,6 +58,11 @@ function Inner() {
         });
       }
       setCosts(costsR.costs || []);
+      try {
+        const vr = await apiFetch('/change-orders/job/' + id);
+        setVariations(vr.variations || []);
+        setVariationsApproved(vr.approved_total || 0);
+      } catch (e) { /* surface only the bigger error */ }
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [id]);
@@ -202,6 +209,70 @@ function Inner() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Variations / change orders */}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Variations / change orders</div>
+            <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
+              Approved variations add to the contract value. Original quote + variations = total contract.
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {variationsApproved > 0 && (
+              <div style={{ color: t.success, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                +{fmt0(variationsApproved)} approved
+              </div>
+            )}
+            <button onClick={() => nav('/change-orders/new?job=' + id)} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ New variation</button>
+          </div>
+        </div>
+        {variations.length === 0 ? (
+          <div style={{ color: t.textMuted, fontSize: 13, padding: '8px 0' }}>No variations on this job yet.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ color: t.textSecondary }}>
+                  <th style={{ textAlign: 'left', padding: '6px 0' }}>VO</th>
+                  <th style={{ textAlign: 'left', padding: '6px 0' }}>Title</th>
+                  <th style={{ textAlign: 'left', padding: '6px 0' }}>Status</th>
+                  <th style={{ textAlign: 'right', padding: '6px 0' }}>Total</th>
+                  <th style={{ textAlign: 'left', padding: '6px 0' }}>Approved by</th>
+                  <th style={{ padding: '6px 0' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {variations.map(v => {
+                  const tone = v.status === 'approved' ? { bg: t.successBg, fg: t.success }
+                    : v.status === 'declined' ? { bg: t.dangerBg, fg: t.danger }
+                    : v.status === 'sent' ? { bg: t.warningBg, fg: t.warning }
+                    : { bg: 'rgba(148,163,184,0.15)', fg: t.textSecondary };
+                  return (
+                    <tr key={v.id} style={{ borderTop: '1px solid ' + t.border }}>
+                      <td style={{ padding: '10px 0', fontWeight: 600 }}>
+                        <a href="#" onClick={(e) => { e.preventDefault(); nav('/change-orders/' + v.id); }} style={{ color: t.accent, textDecoration: 'none' }}>{v.vo_number}</a>
+                      </td>
+                      <td style={{ padding: '10px 0' }}>{v.title || <span style={{ color: t.textMuted }}>—</span>}</td>
+                      <td style={{ padding: '10px 0' }}>
+                        <span style={{ background: tone.bg, color: tone.fg, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>{v.status}</span>
+                      </td>
+                      <td style={{ padding: '10px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt0(v.grand_total)}</td>
+                      <td style={{ padding: '10px 0', color: t.textSecondary }}>
+                        {v.approval_name ? <>{v.approval_name} · <span style={{ fontSize: 11 }}>{v.approval_at}</span></> : '—'}
+                      </td>
+                      <td style={{ padding: '10px 0', textAlign: 'right' }}>
+                        <button onClick={() => nav('/change-orders/' + v.id)} style={{ background: 'transparent', border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>Open</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Costs */}
