@@ -102,10 +102,10 @@ function EstimatorPageInner() {
           background: t.card, border: '1px solid ' + t.border, textAlign: 'center',
         }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
-          <h2 style={{ margin: 0, fontSize: 22, color: t.text }}>Estimator add-on</h2>
+          <h2 style={{ margin: 0, fontSize: 22, color: t.text }}>Office in a Box</h2>
           <p style={{ color: t.textSecondary, marginTop: 12 }}>
-            The fast quote generator is available as a £50/month add-on. It turns a one-line
-            job description into a branded, itemised quote in seconds.
+            The complete builder office add-on — quotes, finance tracking, invoices,
+            documents, calculators, and variations — for £50/month.
           </p>
           <p style={{ color: t.textMuted, fontSize: 13 }}>
             Contact support to enable it on your account.
@@ -119,6 +119,7 @@ function EstimatorPageInner() {
     <div style={{ padding: 24, color: t.text }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <div>
+          <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Office in a Box</div>
           <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>Quotes</h1>
           <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 4 }}>
             Fast itemised quotes — describe a job, get a branded PDF.

@@ -22,6 +22,112 @@ function MicIcon({ size = 16, color = 'currentColor' }) {
   );
 }
 
+// Office in a Box — expandable parent containing the add-on workflow pages.
+// Clicking the header toggles expand/collapse; clicking a child navigates.
+function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobileOpen, location }) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 12px', borderRadius: 8,
+          fontSize: 13, fontWeight: isAnyActive ? 600 : 500,
+          letterSpacing: '-0.01em',
+          color: isAnyActive ? t.text : t.textMuted,
+          background: isAnyActive
+            ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
+            : 'transparent',
+          transition: 'all 0.15s ease',
+          position: 'relative',
+          cursor: 'pointer',
+          border: 'none',
+          textAlign: 'left',
+        }}
+        onMouseEnter={e => { if (!isAnyActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+        onMouseLeave={e => { if (!isAnyActive) e.currentTarget.style.background = 'transparent'; }}
+      >
+        {isAnyActive && (
+          <div style={{
+            position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+            width: 3, height: 16, borderRadius: '0 3px 3px 0',
+            background: '#F59E0B',
+          }} />
+        )}
+        <item.Icon size={16} color={isAnyActive ? '#F59E0B' : t.textMuted} />
+        <span style={{ flex: 1 }}>{item.label}</span>
+        {item.badge && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+            background: 'rgba(245,158,11,0.15)',
+            color: '#F59E0B',
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: 5,
+            padding: '1px 5px',
+            lineHeight: 1.5,
+            marginRight: 4,
+          }}>
+            {item.badge}
+          </span>
+        )}
+        <span style={{
+          color: t.textMuted,
+          fontSize: 10,
+          transition: 'transform 0.18s ease',
+          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>▶</span>
+      </button>
+      {expanded && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 1,
+          marginLeft: 14, marginTop: 2, marginBottom: 4,
+          paddingLeft: 12, borderLeft: '1px solid ' + t.border,
+        }}>
+          {item.children.map(c => {
+            const isChildActive = location.pathname === c.path || location.pathname.startsWith(c.path + '/');
+            return (
+              <NavLink
+                key={c.path}
+                to={c.path}
+                style={{ textDecoration: 'none' }}
+                onClick={() => setMobileOpen(false)}
+              >
+                <div style={{
+                  padding: '7px 10px',
+                  borderRadius: 6,
+                  fontSize: 12.5,
+                  fontWeight: isChildActive ? 600 : 500,
+                  color: isChildActive ? t.text : t.textMuted,
+                  background: isChildActive
+                    ? (mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)')
+                    : 'transparent',
+                  transition: 'all 0.15s ease',
+                  cursor: 'pointer',
+                  position: 'relative',
+                }}
+                  onMouseEnter={e => { if (!isChildActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.018)'; }}
+                  onMouseLeave={e => { if (!isChildActive) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {isChildActive && (
+                    <div style={{
+                      position: 'absolute', left: -13, top: '50%', transform: 'translateY(-50%)',
+                      width: 5, height: 5, borderRadius: '50%',
+                      background: '#F59E0B',
+                    }} />
+                  )}
+                  {c.label}
+                </div>
+              </NavLink>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const { t, mode, toggle } = useTheme();
@@ -49,14 +155,23 @@ export default function Layout() {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   const hasEstimator = !!user?.hasEstimator || isAdmin;
+
+  // The "Office in a Box" add-on is a parent group containing the whole
+  // builder workflow — quotes, finance, invoices, documents, calculators.
+  // Routes are unchanged; only the sidebar presentation is nested.
+  const officeInABoxChildren = [
+    { path: '/estimator', label: 'Quotes' },
+    { path: '/finance', label: 'Finance' },
+    { path: '/invoices', label: 'Invoices' },
+    { path: '/documents', label: 'Documents' },
+    { path: '/calculators', label: 'Calculators' },
+  ];
+  const isOfficeRouteActive = officeInABoxChildren.some(c => location.pathname.startsWith(c.path));
+
   const navItems = [
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
-    { path: '/estimator', label: 'Estimator', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on' },
-    { path: '/finance', label: 'Finance', Icon: RatesIcon, estimatorOnly: true },
-    { path: '/invoices', label: 'Invoices', Icon: RatesIcon, estimatorOnly: true },
-    { path: '/documents', label: 'Documents', Icon: RatesIcon, estimatorOnly: true },
-    { path: '/calculators', label: 'Calculators', Icon: RatesIcon, estimatorOnly: true },
+    { group: 'office', label: 'Office in a Box', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive },
     { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
@@ -70,6 +185,11 @@ export default function Layout() {
     if (item.estimatorOnly && !hasEstimator) return false;
     return true;
   });
+
+  // Expanded state for each group. Persists across renders within a session.
+  const [officeExpanded, setOfficeExpanded] = useState(isOfficeRouteActive);
+  // Auto-open when navigating to one of the children.
+  useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
 
   const sidebarBg = mode === 'dark'
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
@@ -175,67 +295,84 @@ export default function Layout() {
 
           {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {visibleNavItems.map(item => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/dashboard'}
-                data-tour={item.path === '/my-rates' ? 'my-rates' : item.path === '/ai-memory' ? 'ai-memory' : undefined}
-                style={{ textDecoration: 'none' }}
-                onClick={(e) => {
-                  if (window.__aiqs_chat_sending) {
-                    e.preventDefault();
-                    if (!window.confirm('The AI is still processing your request. If you leave now, the response will be lost.\n\nLeave anyway?')) return;
-                    window.__aiqs_chat_sending = false;
-                  }
-                  setMobileOpen(false);
-                }}
-              >
-                {({ isActive }) => (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 12px', borderRadius: 8,
-                    fontSize: 13, fontWeight: isActive ? 600 : 500,
-                    letterSpacing: '-0.01em',
-                    color: isActive ? t.text : t.textMuted,
-                    background: isActive
-                      ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
-                      : 'transparent',
-                    transition: 'all 0.15s ease',
-                    position: 'relative',
-                    cursor: 'pointer',
+            {visibleNavItems.map(item => {
+              if (item.group === 'office') {
+                return (
+                  <OfficeGroup
+                    key="office"
+                    item={item}
+                    t={t}
+                    mode={mode}
+                    expanded={officeExpanded}
+                    onToggle={() => setOfficeExpanded(v => !v)}
+                    isAnyActive={isOfficeRouteActive}
+                    setMobileOpen={setMobileOpen}
+                    location={location}
+                  />
+                );
+              }
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === '/dashboard'}
+                  data-tour={item.path === '/my-rates' ? 'my-rates' : item.path === '/ai-memory' ? 'ai-memory' : undefined}
+                  style={{ textDecoration: 'none' }}
+                  onClick={(e) => {
+                    if (window.__aiqs_chat_sending) {
+                      e.preventDefault();
+                      if (!window.confirm('The AI is still processing your request. If you leave now, the response will be lost.\n\nLeave anyway?')) return;
+                      window.__aiqs_chat_sending = false;
+                    }
+                    setMobileOpen(false);
                   }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    {isActive && (
-                      <div style={{
-                        position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                        width: 3, height: 16, borderRadius: '0 3px 3px 0',
-                        background: '#F59E0B',
-                      }} />
-                    )}
-                    <item.Icon size={16} color={isActive ? '#F59E0B' : t.textMuted} />
-                    <span style={{ flex: 1 }}>{item.label}</span>
-                    {/* "New" badge */}
-                    {item.badge && (
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-                        textTransform: 'uppercase',
-                        background: 'rgba(245,158,11,0.15)',
-                        color: '#F59E0B',
-                        border: '1px solid rgba(245,158,11,0.3)',
-                        borderRadius: 5,
-                        padding: '1px 5px',
-                        lineHeight: 1.5,
-                      }}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </NavLink>
-            ))}
+                >
+                  {({ isActive }) => (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 12px', borderRadius: 8,
+                      fontSize: 13, fontWeight: isActive ? 600 : 500,
+                      letterSpacing: '-0.01em',
+                      color: isActive ? t.text : t.textMuted,
+                      background: isActive
+                        ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
+                        : 'transparent',
+                      transition: 'all 0.15s ease',
+                      position: 'relative',
+                      cursor: 'pointer',
+                    }}
+                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
+                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {isActive && (
+                        <div style={{
+                          position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                          width: 3, height: 16, borderRadius: '0 3px 3px 0',
+                          background: '#F59E0B',
+                        }} />
+                      )}
+                      <item.Icon size={16} color={isActive ? '#F59E0B' : t.textMuted} />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {/* "New" badge */}
+                      {item.badge && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          background: 'rgba(245,158,11,0.15)',
+                          color: '#F59E0B',
+                          border: '1px solid rgba(245,158,11,0.3)',
+                          borderRadius: 5,
+                          padding: '1px 5px',
+                          lineHeight: 1.5,
+                        }}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
         </div>
 
