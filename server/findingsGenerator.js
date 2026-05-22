@@ -98,6 +98,10 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
   // Cost Summary Table
   if (findings.cost_summary) {
     var cs = findings.cost_summary;
+    // Use the currency symbol supplied with the cost summary; only fall back
+    // to \u00a3 when nothing was passed. This stops Irish/Euro projects from
+    // rendering with sterling totals on the report.
+    var cur = (typeof cs.currency === 'string' && cs.currency) ? cs.currency : '\u00a3';
     children.push(new Paragraph({ text: '4. COST SUMMARY', heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 100 } }));
 
     var tableRows = [];
@@ -117,7 +121,7 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
         tableRows.push(new TableRow({
           children: [
             new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: sec.name || 'Section', size: 20, font: docFont })], alignment: AlignmentType.LEFT })], shading: { type: ShadingType.SOLID, color: bg } }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '\u00a3' + (sec.total || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: { type: ShadingType.SOLID, color: bg } })
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cur + (sec.total || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: { type: ShadingType.SOLID, color: bg } })
           ]
         }));
       }
@@ -128,7 +132,7 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
       tableRows.push(new TableRow({
         children: [
           new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: label, bold: bold, size: 20, font: docFont })], alignment: AlignmentType.LEFT })], shading: bg ? { type: ShadingType.SOLID, color: bg } : undefined }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '\u00a3' + (value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), bold: bold, size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: bg ? { type: ShadingType.SOLID, color: bg } : undefined })
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cur + (value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), bold: bold, size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: bg ? { type: ShadingType.SOLID, color: bg } : undefined })
         ]
       }));
     };
@@ -136,6 +140,7 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
     addSummaryRow('Net Total', cs.net_total, true, 'E8E8E8');
     if (cs.contingency) addSummaryRow('Contingency (' + (cs.contingency_pct || 7.5) + '%)', cs.contingency, false);
     if (cs.ohp) addSummaryRow('Overheads & Profit (' + (cs.ohp_pct || 12) + '%)', cs.ohp, false);
+    if (cs.vat) addSummaryRow('VAT (' + (cs.vat_rate != null ? cs.vat_rate : 20) + '%)', cs.vat, false);
     addSummaryRow('GRAND TOTAL', cs.grand_total, true, 'D6E4F0');
 
     children.push(new Table({

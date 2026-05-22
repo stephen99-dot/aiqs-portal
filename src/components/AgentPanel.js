@@ -326,13 +326,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
     return Number.isFinite(t) ? t : null;
   };
   const startedAt = parseUtc(run?.created_at);
-  const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
+  const completedAt = parseUtc(run?.completed_at);
+  const updatedAt = parseUtc(run?.updated_at);
   const iter = run?.iteration_count || 0;
   const isRunning = run?.status === 'running' || run?.status === 'queued';
   const isAwaitingReview = run?.status === 'awaiting_review';
   const isGenerating = run?.status === 'generating';
   const isComplete = run?.status === 'completed';
   const isFailed = run?.status === 'failed';
+  // Freeze elapsed once the run is no longer actively progressing — otherwise
+  // the panel keeps ticking forever even after Atlas has stopped working.
+  // For awaiting_review we pin to the last updated_at (when submit_for_review fired).
+  const frozenEnd = isComplete || isFailed
+    ? (completedAt || updatedAt)
+    : isAwaitingReview
+      ? updatedAt
+      : null;
+  const elapsedSec = startedAt
+    ? Math.max(0, Math.floor(((frozenEnd || now) - startedAt) / 1000))
+    : 0;
 
   // ETA: estimate remaining iterations * seconds per iteration, minus what we've done
   const totalEstSec = TYPICAL_ITERATIONS * SECONDS_PER_ITERATION;
