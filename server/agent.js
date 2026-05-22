@@ -79,6 +79,7 @@ try {
   if (!cols.includes('review_summary')) db.exec(`ALTER TABLE agent_runs ADD COLUMN review_summary TEXT`);
   if (!cols.includes('sanity_warnings')) db.exec(`ALTER TABLE agent_runs ADD COLUMN sanity_warnings TEXT`);
   if (!cols.includes('variance_note')) db.exec(`ALTER TABLE agent_runs ADD COLUMN variance_note TEXT`);
+  if (!cols.includes('findings_structured')) db.exec(`ALTER TABLE agent_runs ADD COLUMN findings_structured TEXT`);
 } catch (e) { console.error('[Agent] migration error:', e.message); }
 
 // ── Event buses ──────────────────────────────────────────────────────
@@ -219,14 +220,32 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'submit_for_review',
-    description: 'Submit the completed takeoff + pricer result to the USER for review. Call this INSTEAD of finalize_boq when you are ready. The user will then review the items in the panel, adjust any quantities or rates if needed, and click Generate to produce the Excel + Word deliverables themselves. Your work on the run finishes here — do not call more tools after this.',
+    description: 'Submit the completed takeoff + pricer result to the USER for review. Call this INSTEAD of finalize_boq when you are ready. The user will then review the items in the panel, adjust any quantities or rates if needed, and click Generate to produce the Excel + Word deliverables themselves. Your work on the run finishes here — do not call more tools after this. Provide the structured findings fields so the Word findings report reads like real QS work, not a single blob of text.',
     input_schema: {
       type: 'object',
       properties: {
-        findings_notes: { type: 'string', description: 'Professional QS prose for the findings report — headline totals, key assumptions, standard exclusions, buildability risks, recommendations. Rendered in the Word report when the user generates.' },
         review_summary: { type: 'string', description: 'A 2-3 sentence plain-English summary shown to the user at the top of the review panel. Explain what you did and any items they should pay special attention to.' },
+        scope_summary: { type: 'string', description: 'One to two paragraphs describing what is included in this BOQ — the physical scope of works, the floors/rooms/elements affected, and any notable design intent.' },
+        project_description: { type: 'string', description: 'A short description of the project itself (one paragraph). What kind of building, what is being done, any heritage/structural context.' },
+        key_findings: {
+          type: 'array',
+          description: '3-6 grouped observations. Each finding has a title, a detail paragraph, and optional bullet items. Examples of titles: "Headline cost", "Spec assumptions", "Buildability risks", "Items the client should price-check", "Significant variations from typical".',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              detail: { type: 'string' },
+              items: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['title', 'detail'],
+          },
+        },
+        assumptions: { type: 'array', items: { type: 'string' }, description: 'Bulleted list of assumptions made (one short sentence each). Cover spec levels, drainage routing, structural takes, finishes, services, etc.' },
+        exclusions: { type: 'array', items: { type: 'string' }, description: 'Standard exclusions. Cover at minimum: VAT (if applicable), professional fees, statutory fees & approvals, party-wall costs, surveys, FF&E, items outside the curtilage, abnormals not visible from drawings.' },
+        recommendations: { type: 'array', items: { type: 'string' }, description: 'Practical next steps for the client — e.g. "obtain a structural engineer\'s report before tender", "confirm window schedule reflects revised mullion spacing", etc.' },
+        findings_notes: { type: 'string', description: 'OPTIONAL — legacy single-blob notes field, kept for fallback when the structured fields aren\'t available. Prefer the structured fields above.' },
       },
-      required: ['findings_notes', 'review_summary'],
+      required: ['review_summary', 'scope_summary', 'key_findings', 'assumptions', 'exclusions', 'recommendations'],
     },
   },
   {
@@ -482,8 +501,40 @@ async function executeTool(runId, toolName, toolInput, runState) {
       // review. Docs are produced when the user clicks Generate (triggers
       // runGenerationForRun below via POST /api/agent/:id/generate).
       setActivity(runId, 'Ready for your review — tweak quantities if needed, then click Generate');
-      const notes = toolInput.findings_notes || '';
       const summary = toolInput.review_summary || 'Takeoff complete. Please review items below, adjust any quantities if needed, then click Generate to produce the Excel and Word deliverables.';
+
+      // Capture structured findings if the agent provided them (preferred);
+      // fall back to the legacy single-blob notes. Persist as one JSON object
+      // so runGenerationForRun can rebuild a proper findings report rather
+      // than dumping the same string into every section.
+      const structured = {
+        review_summary: summary,
+        scope_summary: toolInput.scope_summary || '',
+        project_description: toolInput.project_description || '',
+        key_findings: Array.isArray(toolInput.key_findings) ? toolInput.key_findings : [],
+        assumptions: Array.isArray(toolInput.assumptions) ? toolInput.assumptions : [],
+        exclusions: Array.isArray(toolInput.exclusions) ? toolInput.exclusions : [],
+        recommendations: Array.isArray(toolInput.recommendations) ? toolInput.recommendations : [],
+      };
+      // Build a human-readable notes blob from the structured fields so
+      // legacy consumers (and any saved findings prompts) still get sensible
+      // text. If the agent ONLY supplied findings_notes, keep that text too.
+      const noteLines = [];
+      if (structured.scope_summary) noteLines.push(structured.scope_summary);
+      if (structured.key_findings.length) {
+        for (const kf of structured.key_findings) {
+          if (!kf || typeof kf !== 'object') continue;
+          if (kf.title) noteLines.push('\n' + kf.title);
+          if (kf.detail) noteLines.push(kf.detail);
+          if (Array.isArray(kf.items)) noteLines.push(kf.items.map(x => '• ' + x).join('\n'));
+        }
+      }
+      if (structured.assumptions.length) noteLines.push('\nAssumptions:\n' + structured.assumptions.map(x => '• ' + x).join('\n'));
+      if (structured.exclusions.length)  noteLines.push('\nExclusions:\n'  + structured.exclusions.map(x => '• ' + x).join('\n'));
+      if (structured.recommendations.length) noteLines.push('\nRecommendations:\n' + structured.recommendations.map(x => '• ' + x).join('\n'));
+      const composed = noteLines.join('\n').trim();
+      const notes = composed || toolInput.findings_notes || '';
+      structured.findings_notes_text = notes;
 
       // Make sure we have a current priced snapshot so the review panel
       // can show headline totals even if the model hasn't just re-run.
@@ -539,6 +590,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
       updateRun(runId, {
         status: 'awaiting_review',
         findings_notes: notes,
+        findings_structured: JSON.stringify(structured),
         review_summary: summary,
         priced_json: priced ? JSON.stringify(priced) : null,
         construction_total: priced?.summary?.construction_total || null,
@@ -547,8 +599,40 @@ async function executeTool(runId, toolName, toolInput, runState) {
         sanity_warnings: sanityWarnings.length > 0 ? JSON.stringify(sanityWarnings) : null,
         variance_note: varianceNote,
       });
+
+      // Mirror the takeoff into quantity_takeoffs so the chat session sees a
+      // locked takeoff and "generate documents" works in the chat flow. The
+      // run is session-scoped — without this row chat.js says "I can't find
+      // the locked quantities for this session" and asks the user to upload
+      // their drawings again.
+      try {
+        const run = getRun(runId);
+        if (run && run.session_id) {
+          const benchmarkStore = require('./benchmarkStore');
+          const existing = benchmarkStore.getTakeoffBySession(db, run.session_id);
+          const meta = runState.metadata || {};
+          const projectName = meta.project_type || run.project_type || 'Atlas project';
+          if (existing) {
+            benchmarkStore.updateTakeoff(db, existing.id, {
+              items: runState.items,
+              status: 'confirmed',
+            });
+          } else {
+            benchmarkStore.saveTakeoff(db, {
+              userId: run.user_id,
+              sessionId: run.session_id,
+              projectName,
+              projectType: meta.project_type || run.project_type || null,
+              location: meta.location || run.location || '',
+              items: runState.items,
+              status: 'confirmed',
+            });
+          }
+        }
+      } catch (mirrorErr) { console.error(`[Agent ${runId}] takeoff mirror error:`, mirrorErr.message); }
+
       runState.finalized = true;  // signals runner to exit the tool-use loop
-      emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, priced: priced?.summary, sanity_warnings: sanityWarnings, variance_note: varianceNote });
+      emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, structured, priced: priced?.summary, sanity_warnings: sanityWarnings, variance_note: varianceNote });
       return { type: 'tool_result', content: `Submitted to user for review. ${runState.items.length} items, ${priced?.summary ? (priced.summary.currency === 'EUR' ? '€' : '£') + Math.round(priced.summary.grand_total).toLocaleString('en-GB') : '(no total)'} grand total. The user will now review and approve generation — your work is complete.` };
     }
 
@@ -568,7 +652,17 @@ async function runGenerationForRun(runId, opts = {}) {
   try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
   if (items.length === 0) throw new Error('No items to generate from');
 
-  const notes = opts.findings_notes || run.findings_notes || '';
+  // The agent stores the readable narrative in findings_notes and the
+  // structured object (assumptions / exclusions / etc.) in
+  // findings_structured. The user can override the narrative through the
+  // review-panel textarea; in that case we use their text but keep the
+  // structured sections as the agent supplied them.
+  let structuredNotes = null;
+  try {
+    if (run.findings_structured) structuredNotes = JSON.parse(run.findings_structured);
+  } catch (e) { structuredNotes = null; }
+  const notesText = (opts.findings_notes != null ? opts.findings_notes : (run.findings_notes || '')).toString();
+
   const pricer = require('./deterministicPricer');
   const boqGen = require('./boqGenerator');
   const findingsGen = require('./findingsGenerator');
@@ -601,62 +695,114 @@ async function runGenerationForRun(runId, opts = {}) {
 
   setActivity(runId, 'Generating Excel + Word deliverables');
 
+  const sym = priced.summary.currency === 'EUR' ? '€' : '£';
   const downloads = [];
+  const genErrors = [];
+  let _branding = null;
+  try { _branding = require('./brandingRoutes').getBrandingForUser(run.user_id); } catch (e) { /* optional */ }
+
   try {
     const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
-    let _branding = null;
-    try { _branding = require('./brandingRoutes').getBrandingForUser(run.user_id); } catch (e) { /* optional */ }
     const excelBuf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
       contingency_pct: priced.summary.contingency_pct,
       ohp_pct: priced.summary.ohp_pct,
       vat_rate: priced.summary.vat_rate,
-      currency: priced.summary.currency === 'EUR' ? '€' : '£',
+      currency: sym,
       branding: _branding,
     });
     if (excelBuf && excelBuf.length > 100) {
       const fname = `BOQ-${safeName}-${ts}.xlsx`;
       fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
       downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+    } else {
+      genErrors.push('Excel BOQ buffer was empty.');
     }
-  } catch (excelErr) { console.error(`[Agent ${runId}] Excel gen error:`, excelErr.message); }
+  } catch (excelErr) {
+    console.error(`[Agent ${runId}] Excel gen error:`, excelErr.stack || excelErr.message);
+    genErrors.push('Excel BOQ failed: ' + excelErr.message);
+  }
+
+  // Build the structured findings object the docx renderer expects.
+  // Prefer the agent's structured fields. If only the legacy single-blob
+  // text is available, fall back to one rolled-up finding and a sensible
+  // default exclusions list rather than three duplicate notes blobs.
+  const findingsObj = {
+    reference: runId.slice(-8).toUpperCase(),
+    project_type: projectName,
+    location: run.location || '',
+    description: structuredNotes?.project_description || projectName,
+    scope_summary: structuredNotes?.scope_summary || notesText || '',
+    key_findings: Array.isArray(structuredNotes?.key_findings) && structuredNotes.key_findings.length
+      ? structuredNotes.key_findings
+      : (notesText ? [{ title: 'Atlas working notes', detail: notesText, items: [] }] : []),
+    assumptions: Array.isArray(structuredNotes?.assumptions) && structuredNotes.assumptions.length
+      ? structuredNotes.assumptions
+      : [
+          'Quantities are taken from the drawings supplied; subject to verification on site.',
+          'Specifications follow the floor plan / elevation notes provided, with standard finishes where unspecified.',
+        ],
+    exclusions: Array.isArray(structuredNotes?.exclusions) && structuredNotes.exclusions.length
+      ? structuredNotes.exclusions
+      : [
+          'Professional fees (architect, engineer, planning).',
+          'Statutory fees and approvals.',
+          'Surveys and site investigations.',
+          'FF&E, white goods and loose furnishings.',
+          'Abnormal ground conditions or other items not visible from the drawings.',
+        ],
+    recommendations: Array.isArray(structuredNotes?.recommendations) ? structuredNotes.recommendations : [],
+    cost_summary: {
+      sections: priced.sections.map(s => ({ name: s.name, total: s.subtotal })),
+      net_total: priced.summary.net_total,
+      contingency_pct: priced.summary.contingency_pct,
+      contingency: priced.summary.contingency,
+      ohp_pct: priced.summary.ohp_pct,
+      ohp: priced.summary.ohp,
+      vat_rate: priced.summary.vat_rate,
+      vat: priced.summary.vat,
+      grand_total: priced.summary.grand_total,
+      currency: sym,
+    },
+  };
 
   try {
-    const findingsObj = {
-      reference: runId.slice(-8).toUpperCase(),
-      project_type: projectName,
-      location: run.location || '',
-      description: notes,
-      scope_summary: notes,
-      key_findings: [{ title: 'BOQ Findings', detail: notes, items: [] }],
-      assumptions: [], exclusions: [], recommendations: [],
-      cost_summary: {
-        sections: priced.sections.map(s => ({ name: s.name, total: s.subtotal })),
-        net_total: priced.summary.net_total,
-        contingency_pct: priced.summary.contingency_pct,
-        contingency: priced.summary.contingency,
-        ohp_pct: priced.summary.ohp_pct,
-        ohp: priced.summary.ohp,
-        grand_total: priced.summary.grand_total,
-      },
-    };
-    let _agentBranding = null;
-    try { _agentBranding = require('./brandingRoutes').getBrandingForUser(run.user_id); } catch (e) {}
-    const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName, _agentBranding);
+    const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName, _branding);
     if (wordBuf && wordBuf.length > 100) {
       const fname = `Findings-${safeName}-${ts}.docx`;
       fs.writeFileSync(path.join(outputsDir, fname), wordBuf);
       downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}` });
+    } else {
+      genErrors.push('Findings Word buffer was empty.');
     }
-    // Persist structured findings against the run's project (if it has one)
-    // so the customer can edit and re-export.
-    try {
-      if (run.project_id) {
-        db.prepare(
-          'INSERT OR REPLACE INTO project_data (project_id, data_type, data) VALUES (?, ?, ?)'
-        ).run(run.project_id, 'findings_json', JSON.stringify(findingsObj));
-      }
-    } catch (pdErr) { /* best-effort */ }
-  } catch (wordErr) { console.error(`[Agent ${runId}] Word gen error:`, wordErr.message); }
+  } catch (wordErr) {
+    console.error(`[Agent ${runId}] Word gen error:`, wordErr.stack || wordErr.message);
+    genErrors.push('Findings Word failed: ' + wordErr.message);
+  }
+
+  // Persist structured findings against the run's project (if it has one)
+  // so the customer can edit and re-export.
+  try {
+    if (run.project_id) {
+      db.prepare(
+        'INSERT OR REPLACE INTO project_data (project_id, data_type, data) VALUES (?, ?, ?)'
+      ).run(run.project_id, 'findings_json', JSON.stringify(findingsObj));
+    }
+  } catch (pdErr) { /* best-effort */ }
+
+  // If BOTH outputs failed, mark the run failed instead of pretending
+  // it completed — the user has no deliverables, so saying "Complete"
+  // would be a lie.
+  if (downloads.length === 0) {
+    const msg = genErrors.length ? genErrors.join(' ') : 'No deliverables were produced.';
+    updateRun(runId, {
+      status: 'failed',
+      error_message: msg,
+      completed_at: new Date().toISOString(),
+      priced_json: JSON.stringify(priced),
+    });
+    emit(runId, { type: 'error', message: msg });
+    return { downloads, priced, errors: genErrors };
+  }
 
   updateRun(runId, {
     status: 'completed',
@@ -666,10 +812,11 @@ async function runGenerationForRun(runId, opts = {}) {
     construction_total: priced.summary.construction_total || null,
     grand_total: priced.summary.grand_total || null,
     currency: priced.summary.currency || null,
+    error_message: genErrors.length ? genErrors.join(' ') : null,
   });
-  emit(runId, { type: 'finalized', downloads, priced: priced.summary });
+  emit(runId, { type: 'finalized', downloads, priced: priced.summary, errors: genErrors });
   emit(runId, { type: 'run_complete', reason: 'user_generated' });
-  return { downloads, priced };
+  return { downloads, priced, errors: genErrors };
 }
 
 module.exports = {

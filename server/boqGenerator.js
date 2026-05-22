@@ -41,7 +41,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const grandInclVat = grandExVat * (1 + vatRate / 100);
 
   // \u2500\u2500 Cover sheet (shared renderer) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  renderCoverSheet(wb, {
+  const cover = renderCoverSheet(wb, {
     docKind: 'BILL OF QUANTITIES',
     projectName,
     clientName,

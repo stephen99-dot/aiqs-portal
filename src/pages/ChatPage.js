@@ -157,10 +157,23 @@ export default function ChatPage() {
     setFiles([]);
 
     try {
+      // Ensure the agent run is linked to a chat session from the start.
+      // Without this, atlas finishes "headless" and a follow-up "generate
+      // documents" in the chat can't find the takeoff. Mint a session_id
+      // client-side if one doesn't exist yet; saveSession will upsert it.
+      let sessId = currentSessionId;
+      if (!sessId) {
+        try {
+          sessId = 'cs_' + (window.crypto?.randomUUID ? window.crypto.randomUUID().replace(/-/g, '').slice(0, 12) : Math.random().toString(36).slice(2, 14));
+        } catch (e) {
+          sessId = 'cs_' + Math.random().toString(36).slice(2, 14);
+        }
+        setCurrentSessionId(sessId);
+      }
       const fd = new FormData();
       if (scopeText) fd.append('scope', scopeText);
       if (pendingIntake) fd.append('intake_json', JSON.stringify(pendingIntake));
-      if (currentSessionId) fd.append('session_id', currentSessionId);
+      fd.append('session_id', sessId);
       capturedFiles.forEach(f => fd.append('files', f));
       const token = getToken();
       const resp = await fetch('/api/agent', {

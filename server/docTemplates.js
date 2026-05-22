@@ -230,13 +230,18 @@ function renderCoverSheet(wb, opts, style) {
   }
 
   // ── HERO BAND (rows 7-16) ──────────────────────────────────────────────────
+  // Fill each hero cell individually rather than merging A:H per row — merging
+  // here collides with the eyebrow/title merges below ("Cannot merge already
+  // merged cells") and the whole Excel generation crashes, so the user only
+  // ever sees the Word findings doc.
   const heroStart = 7;
   const heroEnd = 16;
   for (let r = heroStart; r <= heroEnd; r++) {
     cover.getRow(r).height = 22;
     if (f.heroFill !== style.WHITE) {
-      cover.mergeCells('A' + r + ':H' + r);
-      cover.getCell('A' + r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.heroFill } };
+      for (const col of ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']) {
+        cover.getCell(col + r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.heroFill } };
+      }
     }
   }
 
@@ -301,14 +306,12 @@ function renderCoverSheet(wb, opts, style) {
     vc.font = { name: f.headingFont, size: 18, bold: true, color: { argb: f.statTileText } };
     vc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
     if (f.statTileFill !== style.WHITE) {
-      // Fill across both rows for a "card" feel
-      for (const row of [labelRow, valueRow]) {
-        cover.mergeCells(startCol + row + ':' + endCol + row);
-        cover.getCell(startCol + row).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.statTileFill } };
-      }
-      // Set values again because mergeCells can clear
-      cover.getCell(startCol + labelRow).value = label;
-      cover.getCell(startCol + valueRow).value = value;
+      // Cells are already merged above; just fill the top-left cell of each
+      // merged range — re-calling mergeCells on an already-merged range
+      // throws "Cannot merge already merged cells" and aborts the whole
+      // workbook (the symptom was: only the Word findings doc got produced).
+      cover.getCell(startCol + labelRow).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.statTileFill } };
+      cover.getCell(startCol + valueRow).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.statTileFill } };
     }
   }
 
@@ -371,11 +374,20 @@ function renderHeroBlock(ws, opts, style, lastCol) {
   const { docKind = 'BILL OF QUANTITIES', projectName = 'Project', clientName = 'Client', extraMeta = '' } = opts;
   const last = lastCol || 'I';
 
-  // Rows 1-3: hero fill, big title
+  // Rows 1-3: hero fill, big title. Fill the cells individually rather than
+  // merging A:I per row — the rows below re-merge the same ranges for the
+  // eyebrow / title / meta / accent stripe, and double-merging crashes
+  // ExcelJS ("Cannot merge already merged cells").
+  const heroCols = [];
+  {
+    const lastCharCode = last.charCodeAt(0);
+    for (let cc = 'A'.charCodeAt(0); cc <= lastCharCode; cc++) heroCols.push(String.fromCharCode(cc));
+  }
   for (let r = 1; r <= 4; r++) {
     if (f.boqTitleFill !== style.WHITE) {
-      ws.mergeCells('A' + r + ':' + last + r);
-      ws.getCell('A' + r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.boqTitleFill } };
+      for (const col of heroCols) {
+        ws.getCell(col + r).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.boqTitleFill } };
+      }
     }
   }
 
