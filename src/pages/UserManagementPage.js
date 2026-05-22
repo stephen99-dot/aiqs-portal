@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check } from 'lucide-react';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -582,6 +582,61 @@ function SystemDefaultRatesCard({ isDark }) {
   );
 }
 
+function SignupLinkCard({ isDark }) {
+  // Public sign-up URL — works for any new client who hasn't been pre-invited
+  // through the Add User flow. Just paste into an email/WhatsApp/etc.
+  const url = (typeof window !== 'undefined' ? window.location.origin : '') + '/register';
+  const [copied, setCopied] = useState(false);
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#94A3B8' : '#64748B';
+  const bg = isDark ? '#131B2E' : '#FFF';
+  const fieldBg = isDark ? '#0D1320' : '#F8FAFC';
+
+  const copy = async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (e) {}
+  };
+
+  return (
+    <div style={{ background: bg, border: '1px solid ' + border, borderRadius: 14, padding: 16, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(37,99,235,0.1)', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Link2 size={18} />
+      </div>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: text, marginBottom: 2 }}>Public sign-up link</div>
+        <div style={{ fontSize: 12, color: muted, lineHeight: 1.5 }}>Share with new clients — they can register themselves and you'll see them appear below.</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 320px', minWidth: 260 }}>
+        <input
+          readOnly
+          value={url}
+          onFocus={e => e.target.select()}
+          style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1px solid ' + border, background: fieldBg, color: text, fontSize: 13, fontFamily: "'JetBrains Mono', ui-monospace, monospace", outline: 'none' }}
+        />
+        <button
+          onClick={copy}
+          title="Copy link"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: 'none', background: copied ? '#10B981' : '#2563EB', color: '#FFF', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+        >
+          {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy link</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function UserManagementPage({ theme }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -656,6 +711,8 @@ export default function UserManagementPage({ theme }) {
         </div>
         <button onClick={() => setShowAddModal(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}><UserPlus size={15} /> Add User</button>
       </div>
+
+      <SignupLinkCard isDark={isDark} />
 
       <SystemDefaultRatesCard isDark={isDark} />
 
