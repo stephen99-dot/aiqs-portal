@@ -52,8 +52,15 @@ async function forwardFile(file, submissionId) {
   const fd = new FormData();
   const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
   fd.append('file', blob, file.originalname);
+  // Pipedream's HTTP trigger often leaves event.body empty for multipart
+  // uploads, so a workflow step reading event.body.submission_id throws. Send
+  // the id every way the step might read it: form field + query param, on top
+  // of the X-Submission-Id header. The file receiver keys the Drive folder off it.
+  fd.append('submission_id', submissionId);
+  fd.append('file_name', file.originalname);
 
-  const resp = await fetch(FILE_UPLOAD_URL, {
+  const url = FILE_UPLOAD_URL + (FILE_UPLOAD_URL.includes('?') ? '&' : '?') + 'submission_id=' + encodeURIComponent(submissionId);
+  const resp = await fetch(url, {
     method: 'POST',
     headers: { 'X-Submission-Id': submissionId },
     body: fd,
