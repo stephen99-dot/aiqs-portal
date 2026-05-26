@@ -17,10 +17,36 @@ const router = express.Router();
 const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
 const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';
 
+const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
+const MAX_FILES = 20;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024, files: 20 },
+  limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES },
 });
+
+// Run multer and translate its errors into clean JSON. Without this, a multer
+// error (oversized file, too many files) bypasses the route's try/catch and
+// falls through to Express's default handler, which returns an opaque 500 —
+// exactly what a client uploading a large ZIP would hit.
+function uploadFiles(req, res, next) {
+  upload.array('files', MAX_FILES)(req, res, (err) => {
+    if (!err) return next();
+    console.error('[Submissions] Upload error:', err.code || 'UNKNOWN', err.message);
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          error: 'A file is too large — the maximum size is 100 MB per file. Please compress the ZIP, split it into smaller files, or share a download link in the project details.',
+        });
+      }
+      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ error: 'Too many files — please upload at most ' + MAX_FILES + ' files per submission.' });
+      }
+      return res.status(400).json({ error: 'Upload failed: ' + err.message });
+    }
+    return res.status(500).json({ error: 'Upload failed — please try again.' });
+  });
+}
 
 async function forwardFile(file, submissionId) {
   const fd = new FormData();
@@ -41,7 +67,7 @@ function getCycleStart(user) {
   return d.toISOString();
 }
 
-router.post('/', upload.array('files', 20), async (req, res) => {
+router.post('/', uploadFiles, async (req, res) => {
   try {
     const user = db.prepare(
       'SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
