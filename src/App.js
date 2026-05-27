@@ -39,6 +39,7 @@ import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import CalculatorsPage from './pages/CalculatorsPage';
 import ProjectManagerPage from './pages/ProjectManagerPage';
+import OfficeInABoxPage from './pages/OfficeInABoxPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 
@@ -103,6 +104,7 @@ function AppInner() {
           <Route path="/documents/:id" element={<DocumentEditorPage />} />
           <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/pm" element={<ProjectManagerPage />} />
+          <Route path="/office-in-a-box" element={<OfficeInABoxPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
