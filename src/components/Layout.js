@@ -8,6 +8,7 @@ import {
   UploadIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
+import OfficeInABoxPopup from './OfficeInABoxPopup';
 
 // ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
 function MicIcon({ size = 16, color = 'currentColor' }) {
@@ -169,10 +170,16 @@ export default function Layout() {
   ];
   const isOfficeRouteActive = officeInABoxChildren.some(c => location.pathname.startsWith(c.path));
 
+  // Subscribers (and admins) get the working tool group. Everyone else sees a
+  // single "Office in a Box" entry that opens the Coming Soon / upsell page.
+  const officeNavItem = hasEstimator
+    ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
+    : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'Soon' };
+
   const navItems = [
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
-    { group: 'office', label: 'Office in a Box', Icon: ZapIcon, estimatorOnly: true, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive },
+    officeNavItem,
     { path: '/variations', label: 'Variations', Icon: RatesIcon },
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
@@ -488,6 +495,9 @@ export default function Layout() {
         )}
         <Outlet />
       </main>
+
+      {/* Office in a Box upsell — only for non-subscribers, and not on the page itself */}
+      {!hasEstimator && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
     </div>
   );
 }

@@ -162,6 +162,105 @@ async function sendClientWelcomeEmail({ fullName, email }) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// OFFICE IN A BOX — interest capture (paid add-on, coming soon)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS office_interest (
+      user_id TEXT PRIMARY KEY,
+      full_name TEXT,
+      email TEXT,
+      company TEXT,
+      status TEXT DEFAULT 'interested',
+      source TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  console.log('[OfficeInterest] Table ready');
+} catch (err) {
+  console.error('[OfficeInterest] Failed to create table:', err.message);
+}
+
+async function sendOfficeInterestEmail({ fullName, email, company, plan, source }) {
+  const companyLine = company ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Company</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${company}</td></tr>` : '';
+  const planLine = plan ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Current plan</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${plan}</td></tr>` : '';
+  await sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `💡 Office in a Box interest: ${fullName || email}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#0F172A;border-radius:16px;">
+        <div style="text-align:center;margin-bottom:28px;">
+          <div style="font-size:28px;font-weight:800;color:#F1F5F9;">AI <span style="color:#F59E0B;">QS</span></div>
+          <div style="font-size:10px;letter-spacing:3px;color:#64748B;text-transform:uppercase;margin-top:2px;">Office in a Box — Lead</div>
+        </div>
+        <div style="background:#1E293B;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:20px;">
+          <div style="font-size:16px;font-weight:700;color:#F59E0B;margin-bottom:16px;">💡 A logged-in client registered interest</div>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Name</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${fullName || '—'}</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Email</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;"><a href="mailto:${email}" style="color:#38BDF8;text-decoration:none;">${email}</a></td></tr>
+            ${companyLine}${planLine}
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Add-on</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#10B981;">Office in a Box — £50/month</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Asked from</td><td style="padding:6px 12px;font-size:14px;color:#F1F5F9;">${source === 'popup' ? 'In-portal popup' : 'Coming soon page'}</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Time</td><td style="padding:6px 12px;font-size:14px;color:#F1F5F9;">${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td></tr>
+          </table>
+        </div>
+        <div style="text-align:center;">
+          <a href="mailto:${email}" style="display:inline-block;padding:12px 28px;background:#F59E0B;color:#0F172A;font-size:14px;font-weight:700;text-decoration:none;border-radius:8px;">Reply to ${(fullName || '').split(' ')[0] || 'them'}</a>
+        </div>
+        <p style="font-size:11px;color:#475569;text-align:center;margin-top:24px;">AI QS Portal — Automated Quantity Surveying</p>
+      </div>
+    `,
+  });
+}
+
+// Has the logged-in user already responded? Drives whether the popup shows.
+router.get('/office-in-a-box/interest', authMiddleware, (req, res) => {
+  try {
+    const row = db.prepare('SELECT status, created_at FROM office_interest WHERE user_id = ?').get(req.user.id);
+    res.json({ responded: !!row, status: row ? row.status : null });
+  } catch (err) {
+    res.json({ responded: false, status: null });
+  }
+});
+
+// Register interest (or "not now"). Idempotent — the team is only emailed the
+// first time a user says they're interested, so repeated clicks don't spam.
+router.post('/office-in-a-box/interest', authMiddleware, async (req, res) => {
+  try {
+    const status = req.body && req.body.status === 'not_now' ? 'not_now' : 'interested';
+    const source = req.body && req.body.source === 'popup' ? 'popup' : 'page';
+    const user = db.prepare('SELECT id, full_name, email, company, plan FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const existing = db.prepare('SELECT status FROM office_interest WHERE user_id = ?').get(user.id);
+    const alreadyInterested = existing && existing.status === 'interested';
+
+    db.prepare(`
+      INSERT INTO office_interest (user_id, full_name, email, company, status, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id) DO UPDATE SET status = excluded.status, source = excluded.source, updated_at = CURRENT_TIMESTAMP
+    `).run(user.id, user.full_name || null, user.email, user.company || null, status, source);
+
+    if (status === 'interested' && !alreadyInterested) {
+      notifyAdmin({
+        type: 'office_interest',
+        title: `Office in a Box interest: ${user.full_name || user.email}`,
+        detail: [user.email, user.company].filter(Boolean).join(' · '),
+        icon: 'sparkles',
+      });
+      logActivity({ event_type: 'office_interest', title: (user.full_name || user.email) + ' is interested in Office in a Box', detail: user.company || '', user_id: user.id, user_name: user.full_name, user_email: user.email });
+      sendOfficeInterestEmail({ fullName: user.full_name, email: user.email, company: user.company, plan: user.plan, source });
+    }
+    res.json({ ok: true, status });
+  } catch (err) {
+    console.error('Office interest error:', err);
+    res.status(500).json({ error: 'Failed to record interest' });
+  }
+});
+
 // ── File Upload Config ────────────────────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
