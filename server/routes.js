@@ -869,36 +869,114 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
+// Delete a user and everything they own. Rather than a hardcoded list of child
+// tables (which silently rots every time a feature adds a new table and then
+// fails with "FOREIGN KEY constraint failed"), this walks the actual foreign-key
+// graph from the users row downward — projects→files/deliverables,
+// estimator_jobs→invoices→invoice_lines, quotes→quote_lines, and so on — then
+// sweeps any table that tracks the user via a plain user_id column without a
+// formal FK (memory, chat sessions, office interest, …).
+function cascadeDeleteUser(uid) {
+  const plainTables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE 'CREATE TABLE%' AND name NOT LIKE 'sqlite_%'"
+  ).all().map(r => r.name);
+
+  const childrenOf = {};   // referenced table -> [{ table, from, to }]
+  const colsCache = {};
+  for (const tbl of plainTables) {
+    let fks = [];
+    try { fks = db.prepare(`PRAGMA foreign_key_list("${tbl}")`).all(); } catch (e) { /* skip */ }
+    for (const fk of fks) {
+      (childrenOf[fk.table] = childrenOf[fk.table] || []).push({ table: tbl, from: fk.from, to: fk.to });
+    }
+    try { colsCache[tbl] = db.prepare(`PRAGMA table_info("${tbl}")`).all().map(c => c.name); } catch (e) { colsCache[tbl] = []; }
+  }
+
+  const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+
+  const toDelete = {};   // table -> Set(rowid)
+  const visited = {};    // table -> Set(rowid)
+  function queue(table, rowids, collect) {
+    visited[table] = visited[table] || new Set();
+    if (collect) toDelete[table] = toDelete[table] || new Set();
+    const fresh = [];
+    for (const r of rowids) {
+      if (visited[table].has(r)) continue;
+      visited[table].add(r);
+      if (collect) toDelete[table].add(r);
+      fresh.push(r);
+    }
+    return fresh;
+  }
+
+  const seed = db.prepare('SELECT rowid AS rid FROM users WHERE id = ?').get(uid);
+  if (!seed) return false;
+
+  let frontier = [{ table: 'users', rowids: queue('users', [seed.rid], false) }];
+  while (frontier.length) {
+    const next = [];
+    for (const { table, rowids } of frontier) {
+      const kids = childrenOf[table];
+      if (!kids || !kids.length || !rowids.length) continue;
+      const byTo = {};
+      for (const k of kids) (byTo[k.to] = byTo[k.to] || []).push(k);
+      for (const toCol of Object.keys(byTo)) {
+        const vals = new Set();
+        for (const part of chunk(rowids, 400)) {
+          const ph = part.map(() => '?').join(',');
+          for (const row of db.prepare(`SELECT DISTINCT "${toCol}" AS v FROM "${table}" WHERE rowid IN (${ph})`).all(...part)) {
+            if (row.v !== null && row.v !== undefined) vals.add(row.v);
+          }
+        }
+        if (!vals.size) continue;
+        const valArr = [...vals];
+        for (const k of byTo[toCol]) {
+          const childRowids = [];
+          for (const part of chunk(valArr, 400)) {
+            const ph = part.map(() => '?').join(',');
+            for (const row of db.prepare(`SELECT rowid AS rid FROM "${k.table}" WHERE "${k.from}" IN (${ph})`).all(...part)) {
+              childRowids.push(row.rid);
+            }
+          }
+          const fresh = queue(k.table, childRowids, true);
+          if (fresh.length) next.push({ table: k.table, rowids: fresh });
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  const run = db.transaction(() => {
+    // Defer FK checks to commit so delete order within the txn doesn't matter.
+    try { db.pragma('defer_foreign_keys = ON'); } catch (e) {}
+    for (const tbl of Object.keys(toDelete)) {
+      const ids = [...toDelete[tbl]];
+      for (const part of chunk(ids, 400)) {
+        const ph = part.map(() => '?').join(',');
+        db.prepare(`DELETE FROM "${tbl}" WHERE rowid IN (${ph})`).run(...part);
+      }
+    }
+    // Belt-and-braces: clear tables that reference the user by a plain user_id
+    // column but declare no formal FK (so they're not in the graph above).
+    for (const tbl of plainTables) {
+      if (tbl === 'users') continue;
+      if ((colsCache[tbl] || []).includes('user_id')) {
+        try { db.prepare(`DELETE FROM "${tbl}" WHERE user_id = ?`).run(uid); } catch (e) {}
+      }
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+  });
+  run();
+  return true;
+}
+
 router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) => {
   try {
     if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account' });
     const user = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const uid = req.params.id;
-    const del = db.transaction(() => {
-      // Defer FK checks until commit so insertion order doesn't matter, and a
-      // table I forget here surfaces as a clean error rather than mid-cascade.
-      try { db.pragma('defer_foreign_keys = ON'); } catch(e) {}
-
-      db.prepare('DELETE FROM files WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid);
-      try { db.prepare('DELETE FROM project_data WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM variations WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?)').run(uid); } catch(e) {}
-      db.prepare('DELETE FROM projects WHERE user_id = ?').run(uid);
-      try { db.prepare('DELETE FROM chat_projects WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM chat_sessions WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM rate_corrections_log WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM client_rate_library WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM client_insights WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM usage_log WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM magic_links WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM drawing_submissions WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM user_messages WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM user_memories WHERE user_id = ?').run(uid); } catch(e) {}
-      try { db.prepare('DELETE FROM project_intake WHERE user_id = ?').run(uid); } catch(e) {}
-      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
-    });
-    del();
+    cascadeDeleteUser(uid);
     logActivity({ event_type: 'user_deleted', title: (user.full_name || user.email) + ' deleted by admin', detail: user.email, user_id: null, user_name: 'Admin', user_email: null });
     res.json({ success: true });
   } catch (err) {
