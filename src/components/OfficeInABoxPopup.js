@@ -2,9 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-import { ZapIcon, XIcon, ArrowRightIcon, CheckCircleIcon } from './Icons';
+import {
+  XIcon, ArrowRightIcon, CheckCircleIcon,
+  RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon, FileTextIcon,
+} from './Icons';
+import OfficeBoxArt from './OfficeBoxArt';
 
-// One-time, dismissible prompt asking non-subscribers whether Office in a Box
+// Centered, high-impact prompt asking non-subscribers whether Office in a Box
 // would interest them. "I'm interested" emails the team (the user is logged in,
 // so no details are captured here). Persisted via localStorage + a server check
 // so it never nags a user who has already responded.
@@ -12,6 +16,14 @@ import { ZapIcon, XIcon, ArrowRightIcon, CheckCircleIcon } from './Icons';
 const STORAGE_KEY = 'aiqs_office_interest_v1';
 const AMBER = '#F59E0B';
 const AMBER_DIM = '#D97706';
+
+const CHIPS = [
+  { Icon: RulerIcon,      label: 'Quotes' },
+  { Icon: BuildingIcon,   label: 'Projects' },
+  { Icon: TrendingUpIcon, label: 'Finance' },
+  { Icon: CreditCardIcon, label: 'Invoices' },
+  { Icon: FileTextIcon,   label: 'Documents' },
+];
 
 export default function OfficeInABoxPopup() {
   const { t, mode } = useTheme();
@@ -36,15 +48,20 @@ export default function OfficeInABoxPopup() {
           try { localStorage.setItem(STORAGE_KEY, d.status || 'responded'); } catch (e) {}
           return;
         }
-        timer = setTimeout(() => { if (alive) setVisible(true); }, 2500);
+        timer = setTimeout(() => { if (alive) setVisible(true); }, 1800);
       })
-      .catch(() => {
-        // If the check fails, still show it after the delay.
-        timer = setTimeout(() => { if (alive) setVisible(true); }, 2500);
-      });
+      .catch(() => { timer = setTimeout(() => { if (alive) setVisible(true); }, 1800); });
 
     return () => { alive = false; if (timer) clearTimeout(timer); };
   }, []);
+
+  // Lock body scroll while the modal is open.
+  useEffect(() => {
+    if (!visible) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [visible]);
 
   function persist(value) {
     try { localStorage.setItem(STORAGE_KEY, value); } catch (e) {}
@@ -65,7 +82,7 @@ export default function OfficeInABoxPopup() {
     persist('interested');
     setSubmitting(false);
     setThanks(true);
-    setTimeout(() => setVisible(false), 2600);
+    setTimeout(() => setVisible(false), 2800);
   }
 
   function onLater() {
@@ -82,117 +99,189 @@ export default function OfficeInABoxPopup() {
 
   if (!visible) return null;
 
-  const cardBg = isDark ? '#111827' : '#FFFFFF';
-  const border = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const cardBg = isDark ? '#0E1626' : '#FFFFFF';
+  const border = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(15,23,42,0.08)';
+  const heroBg = isDark
+    ? 'radial-gradient(120% 100% at 50% 0%, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.05) 55%, transparent 100%)'
+    : 'radial-gradient(120% 100% at 50% 0%, rgba(245,158,11,0.20) 0%, rgba(245,158,11,0.06) 55%, transparent 100%)';
 
   return (
-    <div style={{
-      position: 'fixed', right: 20, bottom: 20, zIndex: 400,
-      width: 'min(360px, calc(100vw - 32px))',
-      background: cardBg, border: `1px solid ${border}`,
-      borderRadius: 16, boxShadow: '0 18px 50px rgba(0,0,0,0.35)',
-      overflow: 'hidden',
-      animation: 'oiab-pop-in 0.32s cubic-bezier(0.22,1,0.36,1)',
-    }}>
+    <div
+      onClick={onLater}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(6,10,20,0.66)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+        animation: 'oiab-overlay-in 0.22s ease',
+      }}
+    >
       <style>{`
-        @keyframes oiab-pop-in {
-          from { opacity: 0; transform: translateY(14px) scale(0.98); }
+        @keyframes oiab-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes oiab-card-in {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
+        @keyframes oiab-cta-glow {
+          0%,100% { box-shadow: 0 8px 22px rgba(245,158,11,0.35), 0 0 0 0 rgba(245,158,11,0.30); }
+          50%     { box-shadow: 0 10px 30px rgba(245,158,11,0.50), 0 0 0 8px rgba(245,158,11,0); }
+        }
+        @keyframes oiab-check-pop { 0% { transform: scale(0); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+        .oiab-cta { animation: oiab-cta-glow 2.2s ease-in-out infinite; transition: transform .12s ease; }
+        .oiab-cta:hover { transform: translateY(-2px); }
+        .oiab-cta:active { transform: translateY(0); }
+        @media (prefers-reduced-motion: reduce) { .oiab-cta { animation: none; } }
       `}</style>
 
-      {/* Accent strip */}
-      <div style={{ height: 4, background: `linear-gradient(90deg, ${AMBER}, ${AMBER_DIM})` }} />
-
-      <div style={{ padding: 18 }}>
-        {!thanks && (
-          <button
-            onClick={onLater}
-            aria-label="Dismiss"
-            style={{
-              position: 'absolute', top: 12, right: 12,
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              padding: 4, borderRadius: 6, lineHeight: 0,
-            }}
-          >
-            <XIcon size={16} color={t.textMuted} />
-          </button>
-        )}
+      <div
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Office in a Box"
+        style={{
+          position: 'relative',
+          width: 'min(468px, 100%)',
+          maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
+          background: cardBg, border: `1px solid ${border}`, borderRadius: 22,
+          boxShadow: '0 30px 80px rgba(0,0,0,0.55)',
+          animation: 'oiab-card-in 0.34s cubic-bezier(0.22,1,0.36,1)',
+        }}
+      >
+        {/* Close */}
+        <button
+          onClick={onLater}
+          aria-label="Dismiss"
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 2,
+            width: 30, height: 30, borderRadius: '50%',
+            background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
+            border: 'none', cursor: 'pointer', lineHeight: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <XIcon size={16} color={t.textMuted} />
+        </button>
 
         {thanks ? (
-          <div style={{ textAlign: 'center', padding: '8px 4px' }}>
+          <div style={{ padding: '44px 28px 38px', textAlign: 'center' }}>
             <div style={{
-              width: 44, height: 44, borderRadius: '50%', margin: '0 auto 12px',
+              width: 64, height: 64, borderRadius: '50%', margin: '0 auto 18px',
               background: t.successBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: 'oiab-check-pop 0.4s cubic-bezier(0.22,1,0.36,1)',
             }}>
-              <CheckCircleIcon size={24} color={t.success} />
+              <CheckCircleIcon size={34} color={t.success} />
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 4 }}>
-              Thanks — you're on the list!
+            <div style={{ fontSize: 22, fontWeight: 800, color: t.text, marginBottom: 8, letterSpacing: '-0.02em' }}>
+              You're on the list!
             </div>
-            <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.45 }}>
-              We'll be in touch the moment Office in a Box is ready.
+            <div style={{ fontSize: 14, color: t.textSecondary, lineHeight: 1.5, maxWidth: 320, margin: '0 auto' }}>
+              Brilliant — we've got your interest. We'll be in touch the moment Office in a Box
+              goes live, with your founder pricing locked in.
             </div>
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+            {/* Hero */}
+            <div style={{
+              position: 'relative', background: heroBg,
+              padding: '22px 24px 8px',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+            }}>
+              <span style={{
+                fontSize: 10.5, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: AMBER_DIM, background: 'rgba(245,158,11,0.14)',
+                border: `1px solid rgba(245,158,11,0.35)`, borderRadius: 999, padding: '4px 12px',
               }}>
-                <ZapIcon size={17} color="#0A0F1C" />
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: t.text, paddingRight: 16 }}>
-                New: Office in a Box
-              </div>
+                New add-on · Coming soon
+              </span>
+              <OfficeBoxArt size={210} style={{ marginTop: 4 }} />
             </div>
 
-            <div style={{ fontSize: 13, lineHeight: 1.5, color: t.textSecondary, marginBottom: 14 }}>
-              Run your whole back-office from the portal — quoting, project management,
-              invoicing, cashflow and documents — for <strong style={{ color: t.text }}>£50/month</strong>.
-              Would that be useful for your business?
-            </div>
+            {/* Body */}
+            <div style={{ padding: '6px 26px 26px', textAlign: 'center' }}>
+              <h2 style={{
+                margin: '0 0 8px', fontSize: 25, fontWeight: 800, lineHeight: 1.12,
+                letterSpacing: '-0.03em', color: t.text,
+              }}>
+                Your whole office,{' '}
+                <span style={{
+                  background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                  WebkitBackgroundClip: 'text', backgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent', color: AMBER,
+                }}>in one tab.</span>
+              </h2>
+              <p style={{ margin: '0 auto 16px', fontSize: 14.5, lineHeight: 1.5, color: t.textSecondary, maxWidth: 360 }}>
+                Quoting, project management, invoicing, cashflow and documents —
+                all powered by your AI QS pricing. Stop juggling spreadsheets.
+              </p>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+              {/* Feature chips */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, justifyContent: 'center', marginBottom: 18 }}>
+                {CHIPS.map(c => (
+                  <span key={c.label} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontSize: 11.5, fontWeight: 600, color: t.textSecondary,
+                    background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.035)',
+                    border: `1px solid ${border}`, borderRadius: 999, padding: '5px 10px',
+                  }}>
+                    <c.Icon size={13} color={AMBER} /> {c.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Price */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                marginBottom: 16,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£50</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: t.textSecondary }}>/month</span>
+                </div>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, color: t.success,
+                  background: t.successBg, borderRadius: 6, padding: '4px 8px',
+                }}>
+                  Founder pricing
+                </span>
+              </div>
+
+              {/* CTA */}
               <button
+                className="oiab-cta"
                 onClick={onInterested}
                 disabled={submitting}
                 style={{
-                  flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none',
+                  width: '100%', padding: '15px 18px', borderRadius: 13, border: 'none',
                   background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                  color: '#0A0F1C', fontSize: 13, fontWeight: 700,
-                  cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.7 : 1,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                  cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.75 : 1,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9,
                 }}
               >
-                {submitting ? 'Saving…' : "I'm interested"}
+                {submitting ? 'Saving…' : 'Yes — count me in'}
+                {!submitting && <ArrowRightIcon size={18} color="#0A0F1C" />}
               </button>
-              <button
-                onClick={onTellMore}
-                style={{
-                  padding: '10px 12px', borderRadius: 10,
-                  background: 'transparent', border: `1px solid ${border}`,
-                  color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Tell me more <ArrowRightIcon size={13} color={t.text} />
-              </button>
-            </div>
+              <div style={{ fontSize: 11.5, color: t.textMuted, marginTop: 11, lineHeight: 1.4 }}>
+                One tap — we already know it's you. No forms, no card.
+              </div>
 
-            <button
-              onClick={onLater}
-              style={{
-                width: '100%', marginTop: 8, padding: '6px',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                fontSize: 12, color: t.textMuted, fontWeight: 500,
-              }}
-            >
-              Maybe later
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 16 }}>
+                <button onClick={onTellMore} style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 700, color: AMBER_DIM,
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  See everything it does <ArrowRightIcon size={13} color={AMBER_DIM} />
+                </button>
+                <button onClick={onLater} style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 500, color: t.textMuted,
+                }}>
+                  Maybe later
+                </button>
+              </div>
+            </div>
           </>
         )}
       </div>

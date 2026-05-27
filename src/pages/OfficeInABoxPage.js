@@ -7,6 +7,7 @@ import {
   ZapIcon, RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon,
   FileTextIcon, LayersIcon, CheckCircleIcon, ArrowRightIcon, ClockIcon,
 } from '../components/Icons';
+import OfficeBoxArt from '../components/OfficeBoxArt';
 
 // Amber accent — matches the "Office in a Box" branding in the sidebar,
 // rather than the portal's default blue accent.
@@ -40,6 +41,7 @@ export default function OfficeInABoxPage() {
   const [error, setError] = useState('');
 
   const hasAddon = !!user?.hasEstimator || user?.role === 'admin';
+  const isInterested = status === 'interested';
 
   useEffect(() => {
     let alive = true;
@@ -67,11 +69,34 @@ export default function OfficeInABoxPage() {
   }
 
   const cardBg = t.card;
-  const softAmberBg = isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.07)';
+  const softAmberBg = isDark ? 'rgba(245,158,11,0.07)' : 'rgba(245,158,11,0.06)';
   const amberBorder = isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.35)';
+  const heroBg = isDark
+    ? 'radial-gradient(90% 120% at 85% 0%, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.05) 45%, transparent 75%), #0E1626'
+    : 'radial-gradient(90% 120% at 85% 0%, rgba(245,158,11,0.20) 0%, rgba(245,158,11,0.06) 45%, transparent 75%), #FFFFFF';
+
+  const ctaLabel = submitting ? 'Saving…' : "Yes — I'm interested";
 
   return (
-    <div style={{ padding: 24, color: t.text, maxWidth: 1040, margin: '0 auto' }}>
+    <div style={{ padding: 24, color: t.text, maxWidth: 1060, margin: '0 auto' }}>
+      <style>{`
+        @keyframes oiab-cta-glow {
+          0%,100% { box-shadow: 0 8px 22px rgba(245,158,11,0.35), 0 0 0 0 rgba(245,158,11,0.30); }
+          50%     { box-shadow: 0 10px 30px rgba(245,158,11,0.50), 0 0 0 8px rgba(245,158,11,0); }
+        }
+        @keyframes oiab-sheen { 0% { transform: translateX(-60%); } 100% { transform: translateX(160%); } }
+        .oiab-cta { animation: oiab-cta-glow 2.2s ease-in-out infinite; transition: transform .12s ease; }
+        .oiab-cta:hover { transform: translateY(-2px); }
+        .oiab-feat { transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease; }
+        .oiab-feat:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.12); }
+        @media (prefers-reduced-motion: reduce) { .oiab-cta { animation: none; } }
+        @media (max-width: 880px) {
+          .oiab-hero { grid-template-columns: 1fr !important; text-align: center; }
+          .oiab-hero-art { order: -1; margin: 0 auto; }
+          .oiab-hero-cta-row { justify-content: center; }
+          .oiab-price-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
 
       {hasAddon && (
         <div style={{
@@ -95,62 +120,108 @@ export default function OfficeInABoxPage() {
       {/* ── Hero ── */}
       <div style={{
         position: 'relative', overflow: 'hidden',
-        borderRadius: 20, padding: '40px 32px',
-        background: softAmberBg, border: `1px solid ${amberBorder}`,
-        marginBottom: 24,
+        borderRadius: 24, padding: '36px 34px',
+        background: heroBg, border: `1px solid ${amberBorder}`,
+        marginBottom: 26,
       }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: AMBER_DIM, background: 'rgba(245,158,11,0.14)',
-          border: `1px solid ${amberBorder}`, borderRadius: 999, padding: '4px 12px',
-          marginBottom: 16,
+        {/* moving sheen */}
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%',
+          background: 'linear-gradient(100deg, transparent, rgba(255,255,255,0.10), transparent)',
+          animation: 'oiab-sheen 6s ease-in-out infinite', pointerEvents: 'none',
+        }} />
+        <div className="oiab-hero" style={{
+          position: 'relative',
+          display: 'grid', gridTemplateColumns: '1.25fr 0.75fr', gap: 24, alignItems: 'center',
         }}>
-          <ClockIcon size={13} color={AMBER_DIM} /> Coming soon
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-            background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 16px rgba(245,158,11,0.3)',
-          }}>
-            <ZapIcon size={24} color="#0A0F1C" />
+          <div>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: AMBER_DIM, background: 'rgba(245,158,11,0.14)',
+              border: `1px solid ${amberBorder}`, borderRadius: 999, padding: '5px 13px',
+              marginBottom: 18,
+            }}>
+              <ClockIcon size={13} color={AMBER_DIM} /> Coming soon · Founder pricing
+            </span>
+            <h1 style={{ margin: '0 0 14px', fontSize: 40, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.05 }}>
+              Your whole office,{' '}
+              <span style={{
+                background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                WebkitBackgroundClip: 'text', backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent', color: AMBER,
+              }}>in one tab.</span>
+            </h1>
+            <p style={{ margin: '0 0 22px', fontSize: 16.5, lineHeight: 1.55, color: t.textSecondary, maxWidth: 540 }}>
+              Stop stitching together spreadsheets, Word templates and accounting apps.
+              Quoting, project management, invoicing, cashflow and documents — all inside
+              your AI QS portal, powered by the same pricing that builds your BOQs.
+            </p>
+            <div className="oiab-hero-cta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
+              {isInterested ? (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  fontSize: 15, fontWeight: 700, color: t.success,
+                  background: t.successBg, border: `1px solid ${t.success}`,
+                  borderRadius: 12, padding: '12px 18px',
+                }}>
+                  <CheckCircleIcon size={18} color={t.success} /> You're on the list — we'll be in touch
+                </span>
+              ) : (
+                <>
+                  <button
+                    className="oiab-cta"
+                    onClick={registerInterest}
+                    disabled={submitting}
+                    style={{
+                      padding: '14px 26px', borderRadius: 13, border: 'none',
+                      background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                      color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                      cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.75 : 1,
+                      display: 'inline-flex', alignItems: 'center', gap: 9,
+                    }}
+                  >
+                    {ctaLabel} {!submitting && <ArrowRightIcon size={18} color="#0A0F1C" />}
+                  </button>
+                  <span style={{ fontSize: 13, color: t.textMuted, maxWidth: 230, lineHeight: 1.4 }}>
+                    One tap — we already know it's you. No forms, no card.
+                  </span>
+                </>
+              )}
+            </div>
+            {error && <div style={{ fontSize: 12.5, color: t.danger, marginTop: 10 }}>{error}</div>}
           </div>
-          <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em' }}>
-            Office in a Box
-          </h1>
+
+          <div className="oiab-hero-art">
+            <OfficeBoxArt size={260} style={{ display: 'block', margin: '0 auto' }} />
+          </div>
         </div>
-        <p style={{ margin: 0, fontSize: 17, lineHeight: 1.55, color: t.textSecondary, maxWidth: 680 }}>
-          Your entire building back-office, run from one place. Stop stitching together
-          spreadsheets, Word templates and accounting apps — quoting, project management,
-          invoicing, cashflow and documents all live inside your AI QS portal, powered by
-          the same pricing intelligence that builds your BOQs.
-        </p>
       </div>
 
-      {/* ── Price + CTA ── */}
-      <div style={{
+      {/* ── Features + price ── */}
+      <div className="oiab-price-grid" style={{
         display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
         gap: 16, marginBottom: 28,
-      }} className="oiab-price-grid">
+      }}>
         {/* Features grid */}
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12,
+          alignContent: 'start',
         }}>
           {FEATURES.map(f => (
-            <div key={f.title} style={{
-              background: cardBg, border: `1px solid ${t.border}`, borderRadius: 14,
-              padding: 16,
+            <div key={f.title} className="oiab-feat" style={{
+              background: cardBg, border: `1px solid ${t.border}`, borderRadius: 16,
+              padding: 17,
             }}>
               <div style={{
-                width: 36, height: 36, borderRadius: 9, marginBottom: 10,
-                background: softAmberBg, border: `1px solid ${amberBorder}`,
+                width: 40, height: 40, borderRadius: 11, marginBottom: 11,
+                background: `linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.12))`,
+                border: `1px solid ${amberBorder}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <f.Icon size={18} color={AMBER} />
+                <f.Icon size={19} color={AMBER} />
               </div>
-              <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 5 }}>{f.title}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{f.title}</div>
               <div style={{ fontSize: 12.5, lineHeight: 1.5, color: t.textSecondary }}>{f.blurb}</div>
             </div>
           ))}
@@ -158,21 +229,31 @@ export default function OfficeInABoxPage() {
 
         {/* Price card */}
         <div style={{
-          background: cardBg, border: `1px solid ${amberBorder}`, borderRadius: 16,
+          background: cardBg, border: `1px solid ${amberBorder}`, borderRadius: 18,
           padding: 24, alignSelf: 'start', position: 'sticky', top: 16,
+          boxShadow: isDark ? '0 12px 36px rgba(0,0,0,0.3)' : '0 12px 36px rgba(245,158,11,0.10)',
         }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Add-on price
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+              background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(245,158,11,0.3)',
+            }}>
+              <ZapIcon size={18} color="#0A0F1C" />
+            </div>
+            <div style={{ fontSize: 14.5, fontWeight: 700 }}>Office in a Box</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '6px 0 4px' }}>
-            <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£50</span>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£50</span>
             <span style={{ fontSize: 16, fontWeight: 600, color: t.textSecondary }}>/ month</span>
           </div>
           <div style={{ fontSize: 12.5, color: t.textSecondary, marginBottom: 18 }}>
-            One flat price for everything below. Added to your existing AI QS account — cancel anytime.
+            One flat price for everything. Added to your existing AI QS account — cancel anytime.
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             {BENEFITS.map(b => (
               <div key={b} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
                 <CheckCircleIcon size={16} color={t.success} />
@@ -181,12 +262,12 @@ export default function OfficeInABoxPage() {
             ))}
           </div>
 
-          {status === 'interested' ? (
+          {isInterested ? (
             <div style={{
               background: t.successBg, border: `1px solid ${t.success}`, borderRadius: 12,
-              padding: '14px 16px', textAlign: 'center',
+              padding: '16px', textAlign: 'center',
             }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 4 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 4 }}>
                 You're on the list 🎉
               </div>
               <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.45 }}>
@@ -196,22 +277,21 @@ export default function OfficeInABoxPage() {
           ) : (
             <>
               <button
+                className="oiab-cta"
                 onClick={registerInterest}
                 disabled={submitting}
                 style={{
-                  width: '100%', padding: '13px 18px', borderRadius: 11, border: 'none',
+                  width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
                   background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                  color: '#0A0F1C', fontSize: 14.5, fontWeight: 700, cursor: submitting ? 'wait' : 'pointer',
-                  opacity: submitting ? 0.7 : 1,
+                  color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: submitting ? 'wait' : 'pointer',
+                  opacity: submitting ? 0.75 : 1,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  boxShadow: '0 4px 16px rgba(245,158,11,0.25)',
                 }}
               >
-                {submitting ? 'Saving…' : "I'm interested"}
-                {!submitting && <ArrowRightIcon size={16} color="#0A0F1C" />}
+                {ctaLabel} {!submitting && <ArrowRightIcon size={17} color="#0A0F1C" />}
               </button>
               <div style={{ fontSize: 11.5, color: t.textMuted, textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
-                You're logged in, so one tap is all it takes — we'll know it's you and get in touch with founder pricing.
+                Register now and lock in founder pricing for early access.
               </div>
               {error && (
                 <div style={{ fontSize: 12, color: t.danger, textAlign: 'center', marginTop: 8 }}>{error}</div>
@@ -220,12 +300,6 @@ export default function OfficeInABoxPage() {
           )}
         </div>
       </div>
-
-      <style>{`
-        @media (max-width: 860px) {
-          .oiab-price-grid { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
     </div>
   );
 }
