@@ -11,6 +11,7 @@ const express = require('express');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
+const { getBillingCycleStart } = require('./billingCycle');
 
 const router = express.Router();
 
@@ -61,12 +62,6 @@ async function forwardFile(file, submissionId) {
   if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
 }
 
-function getCycleStart(user) {
-  if (user && user.billing_cycle_start) return user.billing_cycle_start;
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
 router.post('/', uploadFiles, async (req, res) => {
   try {
     const user = db.prepare(
@@ -82,7 +77,7 @@ router.post('/', uploadFiles, async (req, res) => {
     const monthlyQuota = user.monthly_boq_quota || 0;
     let monthlyRemaining = 0;
     if (monthlyQuota > 0) {
-      const cycleStart = getCycleStart(user);
+      const cycleStart = getBillingCycleStart(user);
       const used = db.prepare(
         'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
       ).get(user.id, cycleStart).c;

@@ -1,6 +1,7 @@
 const express = require('express');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
+const { getBillingCycleStart } = require('./billingCycle');
 const router = express.Router();
 
 router.get('/projects', authMiddleware, function(req, res) {
@@ -41,7 +42,7 @@ router.get('/usage', authMiddleware, function(req, res) {
       stats.rate_training = db.prepare("SELECT u.full_name, u.email, u.company, COUNT(r.id) as total_rates, ROUND(AVG(r.confidence),2) as avg_confidence, SUM(r.times_confirmed) as total_corrections FROM users u LEFT JOIN client_rate_library r ON u.id = r.user_id AND r.is_active = 1 WHERE u.role != 'admin' GROUP BY u.id ORDER BY total_rates DESC").all();
     } else {
       var user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-      var cycleStart = (user && user.billing_cycle_start) ? user.billing_cycle_start : calendarMonthStr;
+      var cycleStart = getBillingCycleStart(user);
       stats.total_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message'").get(userId).c;
       stats.total_docs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
       stats.month_messages = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, cycleStart).c;

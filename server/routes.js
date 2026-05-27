@@ -10,6 +10,7 @@ const db = require('./database');
 const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
 const { logActivity } = require('./activityRoutes');
 const { startPipelineRun } = require('./pipelineRoutes');
+const { getBillingCycleStart } = require('./billingCycle');
 
 const router = express.Router();
 
@@ -181,13 +182,6 @@ const upload = multer({
     else cb(new Error(`File type ${ext} not supported. Allowed: ${allowed.join(', ')}`));
   }
 });
-
-// Returns the start of the user's billing cycle (Stripe renewal date, or 1st of month fallback)
-function getBillingCycleStart(user) {
-  if (user && user.billing_cycle_start) return user.billing_cycle_start;
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
 
 function getMonthlyUsage(userId, user) {
   const cycleStart = getBillingCycleStart(user);
