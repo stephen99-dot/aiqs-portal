@@ -6,17 +6,7 @@ const { spawnSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
-
-// Returns the start of the user's current billing cycle.
-// Subscribers: uses billing_cycle_start set by Stripe webhook on each renewal.
-// Non-subscribers / fallback: 1st of calendar month.
-function getBillingCycleStart(user) {
-  if (user.billing_cycle_start) {
-    return user.billing_cycle_start;
-  }
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
+const { getBillingCycleStart } = require('./billingCycle');
 
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }

@@ -6,12 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
-
-function getCycleStart(user) {
-  if (user && user.billing_cycle_start) return user.billing_cycle_start;
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
+const { getBillingCycleStart } = require('./billingCycle');
 
 // Compute spendable BOQ credits across ALL the columns BOQ credits live in.
 // There are three independent sources, all of which look like 'credits' to the user:
@@ -25,7 +20,7 @@ function spendableBoqCredits(user) {
   const monthlyQuota = user.monthly_boq_quota || 0;
   let monthlyRemaining = 0;
   if (monthlyQuota > 0) {
-    const cycleStart = getCycleStart(user);
+    const cycleStart = getBillingCycleStart(user);
     const used = db.prepare(
       'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
     ).get(user.id, cycleStart).c;
