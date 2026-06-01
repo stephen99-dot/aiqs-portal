@@ -103,6 +103,10 @@ function MaterialsPageInner() {
   };
 
   const listToShow = query.trim().length >= 2 ? results : browseAll;
+  // Catalogue can run to 1000+ items — cap what we render so the list stays
+  // snappy; the search bar is the way to reach the rest.
+  const RENDER_CAP = 400;
+  const shownList = listToShow.slice(0, RENDER_CAP);
 
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 1180, margin: '0 auto' }}>
@@ -147,6 +151,7 @@ function MaterialsPageInner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px', borderBottom: '1px solid ' + t.border, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, color: t.textSecondary }}>
             {query.trim().length >= 2 ? `Matches (${listToShow.length})` : `Catalogue (${listToShow.length})`}
+            {listToShow.length > shownList.length && <span style={{ textTransform: 'none', letterSpacing: 0, color: t.textMuted }}> · showing first {shownList.length}, search to narrow</span>}
           </div>
           <div style={{ maxHeight: 560, overflowY: 'auto' }}>
             {listToShow.length === 0 && (
@@ -154,7 +159,7 @@ function MaterialsPageInner() {
                 {query.trim().length >= 2 ? 'No matches. Try a different term or add a new material.' : 'No materials yet.'}
               </div>
             )}
-            {listToShow.map(m => {
+            {shownList.map(m => {
               const active = m.id === selectedId;
               return (
                 <button key={m.id} onClick={() => selectMaterial(m.id)} style={{
