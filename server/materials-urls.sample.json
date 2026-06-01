@@ -1,0 +1,29 @@
+[
+  {
+    "material": "Thistle Finishing Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle finishing,finish plaster,skim plaster,7.5kg plaster",
+    "urls": [
+      "https://www.toolstation.com/thistle-finishing-plaster/p12407"
+    ]
+  },
+  {
+    "material": "Thistle One Coat Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle one coat,one coat plaster,7.5kg one coat",
+    "urls": [
+      "https://www.toolstation.com/thistle-one-coat-plaster/p65753"
+    ]
+  },
+  {
+    "material": "No Nonsense C44 Concrete 20kg",
+    "category": "Cement & Aggregates",
+    "unit": "bag",
+    "aliases": "concrete,c44,ready mix concrete,20kg concrete",
+    "urls": [
+      "https://www.screwfix.com/p/no-nonsense-c44-concrete-grey-20kg/748hn"
+    ]
+  }
+]

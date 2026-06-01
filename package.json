@@ -7,7 +7,8 @@
     "server": "node server/index.js",
     "client": "react-scripts start",
     "build": "react-scripts build",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "scrape:materials": "node server/scrapeMaterials.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

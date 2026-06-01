@@ -319,7 +319,10 @@ function seedIfEmpty() {
         if (!supId) continue;
         const capturedAt = daysAgo(p.d);
         const stale = p.d > STALE_DAYS ? 1 : 0;
-        insPrice.run(uuidv4(), mid, supId, p.price, p.unit, p.url, capturedAt, p.via, p.stock, stale, null, 'seed');
+        // NB: seed rows carry NO source_url on purpose — these are illustrative
+        // sample prices, not real captures, so there is nothing to "Verify".
+        // Real source links arrive via scrape / CSV import / manual entry.
+        insPrice.run(uuidv4(), mid, supId, p.price, p.unit, null, capturedAt, p.via, p.stock, stale, 'Sample seed price — not a verified source', 'seed');
       }
     }
   });
@@ -327,7 +330,24 @@ function seedIfEmpty() {
   console.log('[Materials] Seeded ' + materials.length + ' materials.');
 }
 
+// One-time repair: an earlier seed shipped illustrative (fabricated) product
+// URLs that 404 on the live supplier sites. Strip them from seed rows so the
+// "Verify" link only ever points at a genuinely captured source. Idempotent —
+// after the first run no seed row has an http source_url left to match.
+function repairFabricatedSeedUrls() {
+  try {
+    const info = db.prepare(
+      "UPDATE price_entries SET source_url = NULL, notes = 'Sample seed price — not a verified source' "
+      + "WHERE created_by = 'seed' AND source_url LIKE 'http%'"
+    ).run();
+    if (info.changes) console.log('[Materials] cleared ' + info.changes + ' fabricated seed source URLs');
+  } catch (err) {
+    console.error('[Materials] seed URL repair failed:', err.message);
+  }
+}
+
 seedIfEmpty();
+repairFabricatedSeedUrls();
 refreshStaleFlags();
 // Re-run the stale flag every 6h while the server is up.
 const STALE_JOB_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -681,6 +701,68 @@ router.post('/scrape', async (req, res) => {
   } catch (err) {
     console.error('[Materials] scrape error:', err);
     res.status(500).json({ error: 'Scrape failed.' });
+  }
+});
+
+// ─── Bulk scrape from a list of public product URLs ────────────────────────────
+// Runs SERVER-SIDE, so on a deployment with open outbound (e.g. Render) this
+// captures real prices + working Verify links without any shell access. SSRF is
+// bounded: scrapeUrl/adapterFor only ever fetch the recognised public-supplier
+// hosts; anything else is skipped.
+//
+// Body: { items: [ { material, category?, unit?, aliases?, urls:[...] } ] }
+// (same shape as server/materials-urls.sample.json)
+router.post('/scrape-batch', async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (items.length === 0) return res.status(400).json({ error: 'No items to scrape.' });
+    if (items.length > 100) return res.status(400).json({ error: 'Too many items (max 100 per batch).' });
+    const totalUrls = items.reduce((n, it) => n + (Array.isArray(it.urls) ? it.urls.length : (it.url ? 1 : 0)), 0);
+    if (totalUrls > 200) return res.status(400).json({ error: 'Too many URLs (max 200 per batch).' });
+
+    const result = { materials: 0, captured: 0, skipped: 0, failed: 0, details: [] };
+    const insPrice = db.prepare(
+      'INSERT INTO price_entries (id, material_id, supplier_id, price, unit, source_url, captured_via, in_stock, stale, notes, image_url, created_by) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)'
+    );
+
+    for (const it of items) {
+      const name = String(it.material || '').trim();
+      if (!name) { result.details.push({ error: 'Missing material name' }); continue; }
+      let material = db.prepare('SELECT * FROM materials WHERE LOWER(canonical_name) = LOWER(?)').get(name);
+      if (!material) {
+        const mid = uuidv4();
+        db.prepare('INSERT INTO materials (id, canonical_name, category, default_unit, search_aliases, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(mid, name, it.category || null, it.unit || null, it.aliases || null, req.user.id);
+        material = db.prepare('SELECT * FROM materials WHERE id = ?').get(mid);
+      }
+      result.materials++;
+      const urls = Array.isArray(it.urls) ? it.urls : (it.url ? [it.url] : []);
+      for (const url of urls) {
+        const adapter = adapterFor(url);
+        if (!adapter) { result.skipped++; result.details.push({ material: name, url, status: 'skipped (no public scraper)' }); continue; }
+        try {
+          const s = await scrapeUrl(url);
+          const sup = resolveSupplier(s.supplier, { account_type: 'retail', website: 'https://www.' + adapter.hosts[0] }, req.user.id);
+          insPrice.run(uuidv4(), material.id, sup.id, s.price, material.default_unit || null,
+            s.source_url, 'scrape', s.inStock === false ? 0 : 1, 'Auto-captured from ' + s.supplier, s.image || null, req.user.id);
+          if (s.image && !material.image_url) {
+            db.prepare('UPDATE materials SET image_url = ? WHERE id = ?').run(s.image, material.id);
+            material.image_url = s.image;
+          }
+          result.captured++;
+          result.details.push({ material: name, supplier: s.supplier, price: s.price, status: 'ok' });
+        } catch (e) {
+          result.failed++;
+          result.details.push({ material: name, url, status: 'failed', error: e.message });
+        }
+      }
+    }
+    refreshStaleFlags();
+    res.json(result);
+  } catch (err) {
+    console.error('[Materials] scrape-batch error:', err);
+    res.status(500).json({ error: 'Bulk scrape failed.' });
   }
 });
 
