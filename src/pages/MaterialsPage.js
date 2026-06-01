@@ -41,6 +41,7 @@ function MaterialsPageInner() {
   const [feasibility, setFeasibility] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [showNewMaterial, setShowNewMaterial] = useState(false);
+  const [showBulkScrape, setShowBulkScrape] = useState(false);
   const debounceRef = useRef(null);
 
   const loadMeta = useCallback(async () => {
@@ -117,6 +118,7 @@ function MaterialsPageInner() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => setShowNewMaterial(true)} style={btn(t, 'ghost')}>+ New material</button>
           <button onClick={() => setShowImport(true)} style={btn(t, 'ghost')}>Import CSV</button>
+          <button onClick={() => setShowBulkScrape(true)} style={btn(t, 'ghost')}>Bulk scrape</button>
           <button onClick={() => setFeasOpen(o => !o)} style={btn(t, 'ghost')}>Supplier feasibility</button>
         </div>
       </div>
@@ -201,6 +203,7 @@ function MaterialsPageInner() {
 
       {showImport && <ImportModal t={t} onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); afterMutation(); }} />}
       {showNewMaterial && <NewMaterialModal t={t} onClose={() => setShowNewMaterial(false)} onCreated={(id) => { setShowNewMaterial(false); loadBrowse(); if (id) selectMaterial(id); }} />}
+      {showBulkScrape && <BulkScrapeModal t={t} onClose={() => setShowBulkScrape(false)} onDone={() => { afterMutation(); }} />}
     </div>
   );
 }
@@ -637,6 +640,68 @@ function ImportModal({ t, onClose, onDone }) {
           <button onClick={onDone} style={btn(t, 'primary')}>Done</button>
         </div>
       )}
+    </Modal>
+  );
+}
+
+// ─── Bulk scrape modal ──────────────────────────────────────────────────────
+const BULK_SAMPLE = JSON.stringify([
+  { material: 'Portland Cement 25kg', category: 'Cement & Aggregates', unit: 'bag', urls: ['https://www.screwfix.com/p/your-product-code'] },
+], null, 2);
+
+function BulkScrapeModal({ t, onClose, onDone }) {
+  const [text, setText] = useState(BULK_SAMPLE);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+
+  const run = async () => {
+    let items;
+    try { items = JSON.parse(text); } catch (e) { setErr('That is not valid JSON.'); return; }
+    if (!Array.isArray(items) || items.length === 0) { setErr('Provide a non-empty JSON array of items.'); return; }
+    setBusy(true); setErr(''); setResult(null);
+    try {
+      const res = await apiFetch('/materials/scrape-batch', { method: 'POST', body: JSON.stringify({ items }) });
+      setResult(res);
+      onDone();
+    } catch (e) { setErr(e.message || 'Bulk scrape failed.'); } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal t={t} title="Bulk scrape from product URLs" onClose={onClose} wide>
+      <p style={{ color: t.textSecondary, fontSize: 13, marginTop: 0 }}>
+        Runs on the server. Each public product URL (Screwfix, Toolstation, Wickes, B&Q, Selco) is
+        fetched live and stored with its real source link. Paste a JSON array of items — one per
+        material, each with a <code>urls</code> list. Non-public suppliers are skipped automatically.
+      </p>
+      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 6 }}>
+        Note: this only works where the server can reach those sites (your live deployment), not inside a network-restricted sandbox.
+      </div>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        spellCheck={false}
+        style={{ width: '100%', boxSizing: 'border-box', minHeight: 200, fontFamily: 'monospace', fontSize: 12,
+          background: t.inputBg, border: '1px solid ' + t.border, color: t.text, borderRadius: 8, padding: 10, outline: 'none' }}
+      />
+      {err && <div style={{ color: t.danger, fontSize: 12, marginTop: 8 }}>{err}</div>}
+      {result && (
+        <div style={{ marginTop: 10, fontSize: 13 }}>
+          <div style={{ color: t.success }}>
+            Captured {result.captured} price{result.captured === 1 ? '' : 's'} across {result.materials} material{result.materials === 1 ? '' : 's'}.
+            {result.skipped ? ' Skipped ' + result.skipped + '.' : ''}{result.failed ? ' Failed ' + result.failed + '.' : ''}
+          </div>
+          {result.failed > 0 && (
+            <ul style={{ margin: '6px 0', paddingLeft: 18, color: t.warning, fontSize: 12 }}>
+              {result.details.filter(d => d.status === 'failed').slice(0, 8).map((d, i) => <li key={i}>{d.material}: {d.error}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <button onClick={run} disabled={busy} style={btn(t, 'primary')}>{busy ? 'Scraping…' : 'Run bulk scrape'}</button>
+        <button onClick={onClose} style={btn(t, 'ghost')}>Close</button>
+      </div>
     </Modal>
   );
 }
