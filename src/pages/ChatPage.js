@@ -6,6 +6,12 @@ import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
 import AgentPanel from '../components/AgentPanel';
+import {
+  RulerIcon, BrainIcon, SettingsIcon, AlertTriangleIcon, EditIcon,
+  UserIcon, CheckIcon, StarIcon, CrownIcon, ChatIcon, SearchIcon,
+  CheckCircleIcon, CoinsIcon, FileTextIcon, ImageIcon, PackageIcon,
+  BarChartIcon, PaperclipIcon, ClipboardIcon,
+} from '../components/Icons';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -194,7 +200,7 @@ export default function ChatPage() {
     } catch (err) {
       // Replace placeholder with an error message the user can see in-line
       setMessages(p => p.map(m => m.agentStarting
-        ? { role: 'assistant', content: `❌ Atlas failed to start: ${err.message}`, timestamp: m.timestamp }
+        ? { role: 'assistant', content: `Atlas failed to start: ${err.message}`, timestamp: m.timestamp }
         : m
       ));
     } finally {
@@ -416,7 +422,7 @@ export default function ChatPage() {
     });
   };
   const removeFile = i => setFiles(p => p.filter((_, j) => j !== i));
-  const fileIcon = n => ({ pdf:'📄', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', zip:'📦', xlsx:'📊', xls:'📊', dwg:'📐', dxf:'📐' })[n?.split('.').pop()?.toLowerCase()] || '📎';
+  const fileIcon = n => ({ pdf:FileTextIcon, png:ImageIcon, jpg:ImageIcon, jpeg:ImageIcon, zip:PackageIcon, xlsx:BarChartIcon, xls:BarChartIcon, dwg:RulerIcon, dxf:RulerIcon })[n?.split('.').pop()?.toLowerCase()] || PaperclipIcon;
   const fmtSize = b => b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB';
 
   function groupSessions(list) {
@@ -587,7 +593,7 @@ export default function ChatPage() {
   function Thinking() {
     return (
       <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-        <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>📐</div>
+        <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}><RulerIcon size={16} /></div>
         <div style={{ maxWidth:'72%', borderRadius:'4px 16px 16px 16px', background:c.aiBubble, padding:'14px 18px' }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
             <span style={{ width:7, height:7, borderRadius:'50%', background:c.amber, display:'inline-block', animation:'pulse 1.5s infinite' }}/>
@@ -633,7 +639,7 @@ export default function ChatPage() {
         <button onClick={() => setExpanded(p => ({...p, [idx]: !p[idx]}))}
           style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:dark?'#0D1117':'#F1F5F9', border:'none', cursor:'pointer', fontSize:12, fontWeight:600, color:c.amber }}>
           <span style={{ transform:open?'rotate(90deg)':'rotate(0)', transition:'transform 0.2s', fontSize:10 }}>▶</span>
-          🧠 <span>View reasoning</span>
+          <BrainIcon size={14} /> <span>View reasoning</span>
           <span style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:c.textMuted }}>{open?'Collapse':'Expand'}</span>
         </button>
         {open && (
@@ -648,22 +654,24 @@ export default function ChatPage() {
   function PipelineLog({ log, idx }) {
     if (!log || !log.length) return null;
     const open = expanded['pl_'+idx];
-    const stageIcons = { detect: '🔍', extract: '📐', validate: '✅', price: '💰' };
+    const stageIcons = { detect: SearchIcon, extract: RulerIcon, validate: CheckCircleIcon, price: CoinsIcon };
     return (
       <div style={{ marginBottom:8, borderRadius:10, border:`1px solid ${c.thinkBorder}`, overflow:'hidden' }}>
         <button onClick={() => setExpanded(p => ({...p, ['pl_'+idx]: !p['pl_'+idx]}))}
           style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:dark?'#0D1117':'#F1F5F9', border:'none', cursor:'pointer', fontSize:12, fontWeight:600, color:'#3B82F6' }}>
           <span style={{ transform:open?'rotate(90deg)':'rotate(0)', transition:'transform 0.2s', fontSize:10 }}>▶</span>
-          <span style={{ fontSize:13 }}>⚙️</span> <span>View pipeline</span>
+          <span style={{ fontSize:13 }}><SettingsIcon size={13} /></span> <span>View pipeline</span>
           <span style={{ marginLeft:'auto', fontSize:11, fontWeight:400, color:c.textMuted }}>
             {log.length} stage{log.length !== 1 ? 's' : ''} · {open?'Collapse':'Expand'}
           </span>
         </button>
         {open && (
           <div style={{ padding:'10px 14px', background:c.thinkBg, borderTop:`1px solid ${c.thinkBorder}` }}>
-            {log.map((entry, i) => (
+            {log.map((entry, i) => {
+              const SIco = stageIcons[entry.stage] || SettingsIcon;
+              return (
               <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom: i < log.length-1 ? `1px solid ${c.thinkBorder}` : 'none' }}>
-                <span style={{ fontSize:15, flexShrink:0, marginTop:1 }}>{stageIcons[entry.stage] || '⚙️'}</span>
+                <span style={{ fontSize:15, flexShrink:0, marginTop:1 }}><SIco size={15} /></span>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:c.text, marginBottom:2 }}>{entry.label}</div>
                   <div style={{ fontSize:11.5, color:c.textMuted, lineHeight:1.5 }}>{entry.detail}</div>
@@ -678,13 +686,14 @@ export default function ChatPage() {
                   {entry.warnings && entry.warnings.length > 0 && (
                     <div style={{ marginTop:4 }}>
                       {entry.warnings.map((w, wi) => (
-                        <div key={wi} style={{ fontSize:11, color:c.amber, lineHeight:1.5 }}>⚠ {w}</div>
+                        <div key={wi} style={{ fontSize:11, color:c.amber, lineHeight:1.5 }}><AlertTriangleIcon size={14} style={{ verticalAlign:'middle' }} /> {w}</div>
                       ))}
                     </div>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -700,7 +709,7 @@ export default function ChatPage() {
     const label = isDraft ? 'Draft — review & confirm' : 'Quantities locked';
     return (
       <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 12px', background:bg, border:`1px solid ${border}`, borderRadius:8, fontSize:11.5, color, fontWeight:600, whiteSpace:'nowrap' }}>
-        {isDraft ? '📝' : ICONS.lock(color)} {label}
+        {isDraft ? <EditIcon size={13} color={color} /> : ICONS.lock(color)} {label}
       </div>
     );
   }
@@ -720,18 +729,21 @@ export default function ChatPage() {
         )}
         <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexDirection:isUser?'row-reverse':'row' }}>
           <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
-            {isUser ? '👤' : '📐'}
+            {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
           <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? '#F1F5F9' : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
 
             {/* User file chips */}
             {isUser && msg.files?.length > 0 && (
               <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:8 }}>
-                {msg.files.map((f,i) => (
+                {msg.files.map((f,i) => {
+                  const FIco = fileIcon(f.name);
+                  return (
                   <span key={i} style={{ background:'rgba(255,255,255,0.12)', borderRadius:6, padding:'3px 9px', fontSize:12, display:'flex', alignItems:'center', gap:4 }}>
-                    {fileIcon(f.name)} {f.name}
+                    <FIco size={14} /> {f.name}
                   </span>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -779,7 +791,7 @@ export default function ChatPage() {
                   onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
                 >
-                  {copiedIdx === idx ? '✓ Copied' : '⧉ Copy'}
+                  {copiedIdx === idx ? <><CheckIcon size={14} style={{ verticalAlign:'middle' }} /> Copied</> : '⧉ Copy'}
                 </button>
               </div>
             )}
@@ -798,7 +810,7 @@ export default function ChatPage() {
                     border: '1px solid rgba(245,158,11,0.25)',
                     fontSize: 12, color: c.amber,
                   }}>
-                    <span>🧠</span>
+                    <BrainIcon size={14} />
                     <span style={{ flex: 1, lineHeight: 1.45 }}>
                       <span style={{ fontWeight: 600 }}>Remembered:</span> {mem.content}
                     </span>
@@ -834,7 +846,7 @@ export default function ChatPage() {
                 borderRadius:8, fontSize:12,
                 color: msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? c.lockedText : c.draftText,
                 fontWeight:600 }}>
-                {msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? ICONS.lock(c.lockedText) : '📝'}
+                {msg.takeoffStatus === 'confirmed' || msg.takeoffLocked ? ICONS.lock(c.lockedText) : <EditIcon size={13} color={c.draftText} />}
                 {msg.takeoffStatus === 'confirmed' || msg.takeoffLocked
                   ? 'Quantities locked — say "generate documents" to produce your Excel BOQ & Word Report'
                   : 'Draft quantities — review above, then say "confirm" to lock them in'}
@@ -875,11 +887,11 @@ export default function ChatPage() {
                   <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                     <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer"
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(245,158,11,0.06)', border:`1px solid ${c.warnBorder}`, color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
-                      ⭐ Professional £347/mo
+                      <StarIcon size={14} style={{ verticalAlign:'middle' }} /> Professional £347/mo
                     </a>
                     <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer"
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.2)', color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
-                      👑 Premium £447/mo
+                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> Premium £447/mo
                     </a>
                   </div>
                 </div>
@@ -946,7 +958,7 @@ export default function ChatPage() {
             <div style={{ padding:'28px 12px', textAlign:'center', color:c.textMuted, fontSize:12 }}>Loading...</div>
           ) : sessions.length === 0 ? (
             <div style={{ padding:'40px 16px', textAlign:'center' }}>
-              <div style={{ fontSize:28, opacity:0.4, marginBottom:8 }}>💬</div>
+              <div style={{ opacity:0.4, marginBottom:8 }}><ChatIcon size={28} /></div>
               <div style={{ fontSize:12, color:c.textMuted, lineHeight:1.6 }}>No chats yet</div>
             </div>
           ) : groupSessions(sessions).map(([label, items]) => (
@@ -1022,21 +1034,21 @@ export default function ChatPage() {
 
             {messages.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', padding:'0 16px' }}>
-                <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:30, marginBottom:18 }}>📐</div>
+                <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:18 }}><RulerIcon size={30} /></div>
                 <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>Ready to analyse your project</h3>
                 <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 24px', maxWidth:460, lineHeight:1.65 }}>
                   Upload drawings (PDF, ZIP, Excel, images) and describe your scope. Quantities get locked before you generate — so totals stay consistent. Download BOQs as Excel or Word, then raise variations from the project page.
                 </p>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', maxWidth:520 }}>
                   {[
-                    ['📐','Extract quantities','Please extract all quantities from these drawings with full working shown.'],
-                    ['💰','Cost estimate','Can you give me a rough cost estimate for this project?'],
-                    ['⚠️','Identify risks','What are the key risks or issues you can see?'],
-                    ['📋','Building regs','What building regulations apply to this project?'],
-                  ].map(([icon,label,text],i) => (
+                    [RulerIcon,'Extract quantities','Please extract all quantities from these drawings with full working shown.'],
+                    [CoinsIcon,'Cost estimate','Can you give me a rough cost estimate for this project?'],
+                    [AlertTriangleIcon,'Identify risks','What are the key risks or issues you can see?'],
+                    [ClipboardIcon,'Building regs','What building regulations apply to this project?'],
+                  ].map(([Ico,label,text],i) => (
                     <button key={i} className="chip" onClick={() => setInput(text)}
                       style={{ background:dark?'#0F1520':'#F8FAFC', border:`1px solid ${c.topBorder}`, borderRadius:10, padding:'9px 15px', fontSize:13, color:c.text, cursor:'pointer', transition:'all 0.15s' }}>
-                      {icon} {label}
+                      <Ico size={14} style={{ verticalAlign:'middle' }} /> {label}
                     </button>
                   ))}
                 </div>
@@ -1093,7 +1105,7 @@ export default function ChatPage() {
             {sending && !streamingText && <Thinking/>}
             {sending && streamingText && (
               <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-                <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>📐</div>
+                <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}><RulerIcon size={15} /></div>
                 <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius:'4px 16px 16px 16px', background:c.aiBubble, color:c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
                   <Markdown
                     content={streamingText}
@@ -1173,14 +1185,17 @@ export default function ChatPage() {
           {/* File chips */}
           {files.length > 0 && (
             <div style={{ display:'flex', gap:8, padding:'8px 16px', background:dark?'#0D1117':'#F8FAFC', borderTop:`1px solid ${c.chatBorder}`, overflowX:'auto', flexShrink:0 }}>
-              {files.map((f,i) => (
+              {files.map((f,i) => {
+                const FIco = fileIcon(f.name);
+                return (
                 <div key={i} style={{ display:'flex', alignItems:'center', gap:6, background:c.chipBg, border:`1px solid ${c.chipBorder}`, borderRadius:10, padding:'5px 10px', fontSize:12, color:c.text, whiteSpace:'nowrap' }}>
-                  <span>{fileIcon(f.name)}</span>
+                  <span><FIco size={14} /></span>
                   <span style={{ maxWidth:120, overflow:'hidden', textOverflow:'ellipsis' }}>{f.name}</span>
                   <span style={{ color:c.textMuted }}>{fmtSize(f.size)}</span>
                   <button onClick={() => removeFile(i)} style={{ background:'none', border:'none', color:c.textMuted, cursor:'pointer', fontSize:16, padding:'0 0 0 4px', lineHeight:1 }}>×</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -1217,11 +1232,11 @@ export default function ChatPage() {
             </form>
             <div style={{ fontSize:11, color:c.textMuted, textAlign:'center', marginTop:7 }}>
               {currentTakeoffId && takeoffStatus === 'confirmed'
-                ? `🔒 Takeoff locked (${currentTakeoffId.slice(0,12)}) · Total is deterministic · Say "generate documents" to produce files`
+                ? `Takeoff locked (${currentTakeoffId.slice(0,12)}) · Total is deterministic · Say "generate documents" to produce files`
                 : currentTakeoffId
-                ? `📝 Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
+                ? `Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
                 : files.length > 0
-                  ? '🛠️ Send runs Atlas — inspects every drawing, prices, generates Excel + Word (3-6 min)'
+                  ? 'Send runs Atlas — inspects every drawing, prices, generates Excel + Word (3-6 min)'
                   : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = Atlas'}
             </div>
           </div>

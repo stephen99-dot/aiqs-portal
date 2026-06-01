@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import EstimatorGate from '../components/EstimatorGate';
+import { BrickIcon, CubeIcon, PaletteIcon, HomeIcon, BucketIcon, AlertTriangleIcon } from '../components/Icons';
 
 // Five client-side, stateless calculators for common material quantities.
 // All maths is local — no API calls, no DB writes.
@@ -9,11 +10,11 @@ function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n
 function round(n, dp) { const m = Math.pow(10, dp); return Math.round(n * m) / m; }
 
 const TABS = [
-  { id: 'brick-block',  label: 'Brick / Block',     icon: '🧱', blurb: 'Wall area to brick or block count' },
-  { id: 'concrete',     label: 'Concrete',          icon: '🪨', blurb: 'Volume for footings and pads' },
-  { id: 'plaster',      label: 'Plaster',           icon: '🎨', blurb: 'Bag count for skim and bonding' },
-  { id: 'roof',         label: 'Roof',              icon: '🏠', blurb: 'Sloped area and tile count' },
-  { id: 'paint',        label: 'Paint',             icon: '🪣', blurb: 'Litres at any spread rate' },
+  { id: 'brick-block',  label: 'Brick / Block',     icon: BrickIcon, blurb: 'Wall area to brick or block count' },
+  { id: 'concrete',     label: 'Concrete',          icon: CubeIcon, blurb: 'Volume for footings and pads' },
+  { id: 'plaster',      label: 'Plaster',           icon: PaletteIcon, blurb: 'Bag count for skim and bonding' },
+  { id: 'roof',         label: 'Roof',              icon: HomeIcon, blurb: 'Sloped area and tile count' },
+  { id: 'paint',        label: 'Paint',             icon: BucketIcon, blurb: 'Litres at any spread rate' },
 ];
 
 export default function CalculatorsPage() {
@@ -43,6 +44,7 @@ function Inner() {
       }}>
         {TABS.map(x => {
           const isActive = tab === x.id;
+          const Ico = x.icon;
           return (
             <button key={x.id} onClick={() => setTab(x.id)} style={{
               background: isActive ? t.accent : t.card,
@@ -56,7 +58,7 @@ function Inner() {
               boxShadow: isActive ? '0 4px 14px rgba(0,0,0,0.18)' : 'none',
               transform: isActive ? 'translateY(-1px)' : 'none',
             }}>
-              <div style={{ fontSize: 22, marginBottom: 6 }}>{x.icon}</div>
+              <div style={{ marginBottom: 6 }}>{Ico && <Ico size={22} />}</div>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{x.label}</div>
               <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{x.blurb}</div>
             </button>
@@ -69,8 +71,8 @@ function Inner() {
         <div style={{
           width: 44, height: 44, borderRadius: 10,
           background: t.accent + '22', color: t.accent,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
-        }}>{active.icon}</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{(() => { const Ico = active.icon; return Ico && <Ico size={22} />; })()}</div>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{active.label}</div>
           <div style={{ color: t.textSecondary, fontSize: 13 }}>{active.blurb}</div>
@@ -89,7 +91,7 @@ function Inner() {
         borderRadius: 8, fontSize: 12, color: t.warning,
         display: 'flex', alignItems: 'center', gap: 8,
       }}>
-        <span style={{ fontSize: 16 }}>⚠️</span>
+        <AlertTriangleIcon size={16} />
         These are quick estimates. Always cross-check against your supplier's coverage figures for the specific product.
       </div>
     </div>

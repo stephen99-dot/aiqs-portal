@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
+import { CheckIcon } from '../components/Icons';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -209,7 +210,7 @@ export default function BrandingPage() {
           padding: '8px 14px', marginBottom: 12, borderRadius: 8,
           background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
           color: '#10B981', fontSize: 12.5, fontWeight: 600,
-        }}>✓ {statusMsg}</div>
+        }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}</div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 460px) 1fr', gap: 18, alignItems: 'flex-start' }}>
@@ -347,7 +348,7 @@ export default function BrandingPage() {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                       <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t.label}</span>
-                      {active && <span style={{ fontSize: 11, color: '#F59E0B', fontWeight: 700 }}>✓ Selected</span>}
+                      {active && <span style={{ fontSize: 11, color: '#F59E0B', fontWeight: 700 }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Selected</span>}
                     </div>
                     <span style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>{t.desc}</span>
                   </button>

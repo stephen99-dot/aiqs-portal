@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import { EditIcon, PoundIcon, BarChartIcon, AlertTriangleIcon, CheckIcon, SettingsIcon, RefreshIcon, ClockIcon } from '../components/Icons';
 
 // AI Project Manager — Part A
 // Deterministic "needs attention this week" panel. Cards come from
@@ -19,11 +20,11 @@ const RULE_LABELS = {
 };
 
 const RULE_ICONS = {
-  variation_stale: '📝',
-  payment_due: '💷',
-  budget_overrun: '📊',
-  quote_stale: '⏳',
-  day_rate_below_breakeven: '⚠️',
+  variation_stale: EditIcon,
+  payment_due: PoundIcon,
+  budget_overrun: BarChartIcon,
+  quote_stale: ClockIcon,
+  day_rate_below_breakeven: AlertTriangleIcon,
 };
 
 export default function ProjectManagerPage() {
@@ -104,9 +105,11 @@ function Inner() {
 
       {/* Toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <button onClick={refresh} style={btnSecondary(t)}>↻ Refresh</button>
-        <button onClick={() => setShowThresholds(v => !v)} style={btnSecondary(t)}>
-          {showThresholds ? 'Hide thresholds' : '⚙ Adjust thresholds'}
+        <button onClick={refresh} style={{ ...btnSecondary(t), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <RefreshIcon size={14} /> Refresh
+        </button>
+        <button onClick={() => setShowThresholds(v => !v)} style={{ ...btnSecondary(t), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {showThresholds ? 'Hide thresholds' : <><SettingsIcon size={14} /> Adjust thresholds</>}
         </button>
       </div>
 
@@ -137,7 +140,7 @@ function Inner() {
           border: '1px solid ' + (t.success || '#10B981') + '44',
           borderRadius: 12, padding: 40, textAlign: 'center',
         }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>✓</div>
+          <div style={{ marginBottom: 8, color: t.success || '#10B981' }}><CheckIcon size={40} /></div>
           <div style={{ color: t.success || '#10B981', fontWeight: 700, fontSize: 18 }}>All clear</div>
           <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 6 }}>
             Nothing across your jobs needs attention right now.
@@ -149,7 +152,7 @@ function Inner() {
       {ruleKeys.map(rk => (
         <div key={rk} style={{ marginBottom: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div style={{ fontSize: 18 }}>{RULE_ICONS[rk]}</div>
+            {(() => { const Ico = RULE_ICONS[rk]; return Ico && <Ico size={18} />; })()}
             <div style={{ color: t.textSecondary, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
               {RULE_LABELS[rk]}
             </div>

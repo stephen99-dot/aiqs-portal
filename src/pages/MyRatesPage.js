@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { BuildingIcon, BoltIcon, ClipboardIcon, PickaxeIcon, BrickIcon, PlankIcon, HomeIcon, BucketIcon, CubeIcon, ZapIcon, WrenchIcon, ThermometerIcon, PaletteIcon, FryingPanIcon, DropletIcon, BurstIcon, PackageIcon, BrainIcon, FileTextIcon, XIcon, CheckCircleIcon, XCircleIcon, RulerIcon, LightbulbIcon } from '../components/Icons';
 
 const CATEGORY_OPTIONS = [
   { value: 'structural_steel', label: 'Structural Steel' },
@@ -24,10 +25,10 @@ const CATEGORY_OPTIONS = [
   { value: 'general', label: 'General' },
 ];
 
-const CAT_ICONS = { structural_steel:'🏗️', architectural_metalwork:'🔩', preliminaries:'📋', groundworks:'⛏️', masonry:'🧱', carpentry:'🪵', roofing:'🏠', plastering:'🪣', flooring:'🪨', electrical:'⚡', plumbing:'🔧', mechanical:'🌡️', decorating:'🎨', kitchen:'🍳', bathroom:'🚿', demolition:'💥', partitions:'🧱', general:'📦' };
+const CAT_ICONS = { structural_steel:BuildingIcon, architectural_metalwork:BoltIcon, preliminaries:ClipboardIcon, groundworks:PickaxeIcon, masonry:BrickIcon, carpentry:PlankIcon, roofing:HomeIcon, plastering:BucketIcon, flooring:CubeIcon, electrical:ZapIcon, plumbing:WrenchIcon, mechanical:ThermometerIcon, decorating:PaletteIcon, kitchen:FryingPanIcon, bathroom:DropletIcon, demolition:BurstIcon, partitions:BrickIcon, general:PackageIcon };
 
 function getCatLabel(cat) { const f = CATEGORY_OPTIONS.find(c => c.value === cat); return f ? f.label : cat.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
-function getCatIcon(cat) { return CAT_ICONS[cat] || '📦'; }
+function getCatIcon(cat) { return CAT_ICONS[cat] || PackageIcon; }
 
 function confidenceBadge(conf, isDark) {
   if (conf >= 0.85) return { text:'Verified', bg:isDark?'rgba(16,185,129,0.15)':'rgba(16,185,129,0.1)', color:isDark?'#34D399':'#059669', border:isDark?'rgba(16,185,129,0.3)':'rgba(16,185,129,0.2)' };
@@ -151,14 +152,14 @@ export default function MyRatesPage() {
   };
   const inputStyle = { padding:'8px 12px', background:c.inputBg, border:'1px solid '+c.inputBorder, borderRadius:'8px', color:c.text, fontSize:'13px', outline:'none', width:'100%' };
 
-  if (loading) return <div style={{padding:'40px',textAlign:'center',color:c.textSec}}><div style={{fontSize:'32px',marginBottom:'12px'}}>🧠</div>Loading your rate library...</div>;
+  if (loading) return <div style={{padding:'40px',textAlign:'center',color:c.textSec}}><div style={{marginBottom:'12px'}}><BrainIcon size={32} /></div>Loading your rate library...</div>;
 
   return (
     <div style={{padding:'24px',maxWidth:'1000px',margin:'0 auto'}}>
       <div style={{marginBottom:'24px'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'12px'}}>
           <div>
-            <h1 style={{fontSize:'22px',fontWeight:700,color:c.text,margin:0}}>🧠 My Rate Library</h1>
+            <h1 style={{fontSize:'22px',fontWeight:700,color:c.text,margin:0}}><BrainIcon size={20} style={{ verticalAlign:'middle', marginRight:6 }} />My Rate Library</h1>
             <p style={{fontSize:'13px',color:c.textSec,margin:'4px 0 0'}}>{isAdmin?'Master rate library — defaults for all projects.':'Your trained rates — used automatically by the AI QS.'}</p>
           </div>
           {stats && stats.total > 0 && (
@@ -180,18 +181,18 @@ export default function MyRatesPage() {
           <input type="text" placeholder="Search rates..." value={search} onChange={e=>setSearch(e.target.value)} style={{...inputStyle,maxWidth:'260px',flex:'1 1 200px'}} />
           <button onClick={()=>{setShowAddForm(!showAddForm);setAddError('');}} style={{padding:'8px 16px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>+ Add Rate</button>
           <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleImport} style={{display:'none'}} />
-          <button onClick={()=>fileInputRef.current?.click()} disabled={importing} style={{padding:'8px 16px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:importing?'wait':'pointer',opacity:importing?0.6:1}}>
-            {importing?'Importing...':'📄 Import from Excel'}
+          <button onClick={()=>fileInputRef.current?.click()} disabled={importing} style={{padding:'8px 16px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:importing?'wait':'pointer',opacity:importing?0.6:1,display:'inline-flex',alignItems:'center',gap:6}}>
+            {importing?'Importing...':<><FileTextIcon size={14} /> Import from Excel</>}
           </button>
         </div>
 
         {/* Import result */}
         {importResult && (
           <div style={{marginTop:'12px',padding:'12px 16px',borderRadius:'8px',background:importResult.error?(isDark?'rgba(239,68,68,0.1)':'rgba(239,68,68,0.05)'):(isDark?'rgba(16,185,129,0.1)':'rgba(16,185,129,0.05)'),border:'1px solid '+(importResult.error?(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'):(isDark?'rgba(16,185,129,0.3)':'rgba(16,185,129,0.2)')),display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div style={{fontSize:'13px',color:importResult.error?c.danger:(isDark?'#34D399':'#059669')}}>
-              {importResult.error ? '❌ '+importResult.error : '✅ Imported '+importResult.imported+' rates'+(importResult.skipped>0?' ('+importResult.skipped+' skipped)':'')}
+            <div style={{fontSize:'13px',color:importResult.error?c.danger:(isDark?'#34D399':'#059669'),display:'flex',alignItems:'center',gap:6}}>
+              {importResult.error ? <><XCircleIcon size={16} /> {importResult.error}</> : <><CheckCircleIcon size={16} /> Imported {importResult.imported} rates{importResult.skipped>0?' ('+importResult.skipped+' skipped)':''}</>}
             </div>
-            <button onClick={()=>setImportResult(null)} style={{background:'none',border:'none',color:c.textMut,cursor:'pointer',fontSize:'16px'}}>✕</button>
+            <button onClick={()=>setImportResult(null)} style={{background:'none',border:'none',color:c.textMut,cursor:'pointer',display:'inline-flex',alignItems:'center'}}><XIcon size={16} /></button>
           </div>
         )}
 
@@ -235,12 +236,12 @@ export default function MyRatesPage() {
       {/* Empty state */}
       {rates.length === 0 && !showAddForm && (
         <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',padding:'48px 24px',textAlign:'center'}}>
-          <div style={{fontSize:'48px',marginBottom:'16px'}}>📐</div>
+          <div style={{marginBottom:'16px'}}><RulerIcon size={48} /></div>
           <h3 style={{color:c.text,fontSize:'16px',fontWeight:600,margin:'0 0 8px'}}>No rates yet</h3>
           <p style={{color:c.textSec,fontSize:'13px',maxWidth:'420px',margin:'0 auto 20px'}}>Add rates manually, import from Excel, or correct rates in chat.</p>
           <div style={{display:'flex',gap:'10px',justifyContent:'center'}}>
             <button onClick={()=>setShowAddForm(true)} style={{padding:'10px 20px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>+ Add Your First Rate</button>
-            <button onClick={()=>fileInputRef.current?.click()} style={{padding:'10px 20px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>📄 Import from Excel</button>
+            <button onClick={()=>fileInputRef.current?.click()} style={{padding:'10px 20px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><FileTextIcon size={14} /> Import from Excel</button>
           </div>
         </div>
       )}
@@ -254,7 +255,7 @@ export default function MyRatesPage() {
           <div key={cat} style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',marginBottom:'12px',overflow:'hidden'}}>
             <div onClick={()=>toggleCat(cat)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 20px',cursor:'pointer',background:c.catBg,borderBottom:isExpanded?'1px solid '+c.catBorder:'none'}}>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                <span style={{fontSize:'18px'}}>{getCatIcon(cat)}</span>
+                {(()=>{const Ico=getCatIcon(cat);return <Ico size={18} />;})()}
                 <span style={{fontSize:'14px',fontWeight:600,color:c.text}}>{getCatLabel(cat)}</span>
                 <span style={{fontSize:'12px',color:c.textMut,background:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.04)',borderRadius:'10px',padding:'2px 8px'}}>{catRates.length} rate{catRates.length!==1?'s':''}</span>
               </div>
@@ -306,7 +307,7 @@ export default function MyRatesPage() {
                         ) : (
                           <>
                             <button onClick={()=>{setEditingId(rate.id);setEditValue(String(rate.value));setEditUnit(rate.unit||'');}} style={{background:'transparent',border:'1px solid '+c.cardBorder,borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.textSec,cursor:'pointer'}}>Edit</button>
-                            <button onClick={()=>handleDelete(rate)} style={{background:'transparent',border:'1px solid '+(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'),borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.danger,cursor:'pointer'}}>✕</button>
+                            <button onClick={()=>handleDelete(rate)} style={{background:'transparent',border:'1px solid '+(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'),borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.danger,cursor:'pointer',display:'inline-flex',alignItems:'center'}}><XIcon size={14} /></button>
                           </>
                         )}
                       </div>
@@ -321,7 +322,7 @@ export default function MyRatesPage() {
 
       {rates.length > 0 && (
         <div style={{marginTop:'20px',padding:'16px 20px',background:isDark?'rgba(37,99,235,0.06)':'rgba(37,99,235,0.03)',border:'1px solid '+(isDark?'rgba(37,99,235,0.15)':'rgba(37,99,235,0.1)'),borderRadius:'10px'}}>
-          <div style={{fontSize:'13px',color:c.text,fontWeight:500,marginBottom:'6px'}}>💡 How rate training works</div>
+          <div style={{fontSize:'13px',color:c.text,fontWeight:500,marginBottom:'6px'}}><LightbulbIcon size={16} style={{ verticalAlign:'middle', marginRight:6 }} />How rate training works</div>
           <div style={{fontSize:'12px',color:c.textSec,lineHeight:'1.6'}}>The AI QS uses your trained rates instead of generic UK averages. Add rates manually, import from Excel, or correct rates in chat. The more you use it, the higher the confidence.</div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken } from '../utils/api';
+import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
 
 /**
  * Deliverables panel — the return leg of the workflow.
@@ -222,8 +223,8 @@ export default function DeliverablesPanel({ projectId, project }) {
                 {project.owner_company ? <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · {project.owner_company}</span> : null}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                {project.owner_email && <a href={`mailto:${project.owner_email}`} style={{ color: 'inherit', textDecoration: 'none' }}>✉ {project.owner_email}</a>}
-                {project.owner_phone && <a href={`tel:${project.owner_phone}`} style={{ color: 'inherit', textDecoration: 'none' }}>☎ {project.owner_phone}</a>}
+                {project.owner_email && <a href={`mailto:${project.owner_email}`} style={{ color: 'inherit', textDecoration: 'none' }}><MailIcon size={14} style={{ verticalAlign: 'middle' }} /> {project.owner_email}</a>}
+                {project.owner_phone && <a href={`tel:${project.owner_phone}`} style={{ color: 'inherit', textDecoration: 'none' }}><PhoneIcon size={14} style={{ verticalAlign: 'middle' }} /> {project.owner_phone}</a>}
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
@@ -314,8 +315,8 @@ export default function DeliverablesPanel({ projectId, project }) {
                     border: '1px solid ' + (here ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'),
                   }}>
                     {here
-                      ? `✓ This job is in their portal (${here.deliverableCount || 0} doc${here.deliverableCount === 1 ? '' : 's'} ready).`
-                      : '⚠ This job is NOT in the customer\'s dashboard. They will never see these files — recipient mismatch.'}
+                      ? <><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {`This job is in their portal (${here.deliverableCount || 0} doc${here.deliverableCount === 1 ? '' : 's'} ready).`}</>
+                      : <><AlertTriangleIcon size={14} style={{ verticalAlign: 'middle' }} /> This job is NOT in the customer's dashboard. They will never see these files — recipient mismatch.</>}
                   </div>
 
                   {list.length === 0 ? (

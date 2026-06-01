@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
+import { CheckIcon } from '../components/Icons';
 
 /**
  * Findings editor — every narrative section of the Findings Report is
@@ -185,7 +186,7 @@ export default function FindingsEditorPage() {
           padding: '8px 14px', marginBottom: 12, borderRadius: 8,
           background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
           color: '#10B981', fontSize: 12.5, fontWeight: 600,
-        }}>✓ {statusMsg}</div>
+        }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}</div>
       )}
 
       {/* Top fields */}

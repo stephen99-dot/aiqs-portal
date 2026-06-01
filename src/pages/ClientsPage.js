@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { ClientsIcon } from '../components/Icons';
 
 const MOCK_CLIENTS = [
   { id: 'CLI-001', name: 'Paul Metalwork', email: 'paul@metalwork.co.uk', plan: 'Pro', drawingsUsed: 14, drawingsLimit: 50, projects: 8, totalSpend: 4250, joined: '2025-11-01', rateCard: 'Metalwork v2' },
@@ -116,7 +117,7 @@ export default function ClientsPage() {
 
       {filtered.length === 0 && (
         <div style={{ textAlign: 'center', padding: 60, color: t.textMuted }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
+          <div style={{ marginBottom: 12 }}><ClientsIcon size={40} /></div>
           <div style={{ fontSize: 16, fontWeight: 600, color: t.textSecondary }}>No clients found</div>
           <div style={{ fontSize: 13, marginTop: 4 }}>Try adjusting your filters or search</div>
         </div>

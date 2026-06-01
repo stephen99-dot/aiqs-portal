@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
+import { CheckIcon, XIcon } from '../components/Icons';
 
 const STATUS_COLOURS = {
   draft:    { bg: 'rgba(245,158,11,0.12)', color: '#F59E0B', label: 'Draft' },
@@ -326,18 +327,18 @@ export default function VariationsPage() {
                     <>
                       <button className="btn-primary" style={{ fontSize: 13, background: '#10B981', borderColor: '#10B981' }}
                         onClick={() => handleApprove(selected.id)}>
-                        ✓ Approve Variation
+                        <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approve Variation
                       </button>
                       <button className="btn-secondary" style={{ fontSize: 13, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}
                         onClick={() => { setRejectModal(selected.id); setRejectReason(''); }}>
-                        ✕ Reject
+                        <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Reject
                       </button>
                     </>
                   )}
                   {selected.status === 'approved' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                        ✓ Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
+                        <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
                       </div>
                       {!selected.revised_boq_filename ? (
                         <button
@@ -356,7 +357,7 @@ export default function VariationsPage() {
                   )}
                   {selected.status === 'rejected' && (
                     <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#EF4444', fontSize: 13 }}>
-                      ✕ Rejected{selected.rejection_reason ? ` — ${selected.rejection_reason}` : ''}
+                      <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Rejected{selected.rejection_reason ? ` — ${selected.rejection_reason}` : ''}
                     </div>
                   )}
                 </div>
