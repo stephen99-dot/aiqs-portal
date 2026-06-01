@@ -602,6 +602,61 @@ db.exec(`
     updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  -- ─── UK Materials Pricing module ──────────────────────────────────────────
+  -- A shared (global) materials catalogue that plugs into the quote builder.
+  -- One material has many price_entries across suppliers; that one-to-many is
+  -- what powers the cheapest↔most-expensive comparison. Every price entry stores
+  -- source_url + captured_at so any figure is auditable. A background job marks
+  -- entries older than 30 days as stale (the stale column); reads also compute
+  -- staleness live so the flag is never wrong even between job runs.
+  CREATE TABLE IF NOT EXISTS materials (
+    id TEXT PRIMARY KEY,
+    canonical_name TEXT NOT NULL,
+    category TEXT,
+    default_unit TEXT,
+    search_aliases TEXT,   -- comma/pipe-separated: "4x2,4 by 2,47x100,two by four"
+    spec_notes TEXT,
+    image_url TEXT,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    region TEXT,
+    account_type TEXT DEFAULT 'retail',   -- 'retail' | 'trade'
+    website TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS price_entries (
+    id TEXT PRIMARY KEY,
+    material_id TEXT NOT NULL,
+    supplier_id TEXT NOT NULL,
+    price REAL NOT NULL,
+    unit TEXT,
+    source_url TEXT,
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    captured_via TEXT DEFAULT 'manual',   -- 'manual' | 'csv' | 'scrape'
+    in_stock INTEGER DEFAULT 1,
+    stale INTEGER DEFAULT 0,
+    notes TEXT,
+    image_url TEXT,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (material_id) REFERENCES materials(id),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category);
+  CREATE INDEX IF NOT EXISTS idx_price_entries_material ON price_entries(material_id);
+  CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
+  CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 `);
 
 // Migrations for existing databases
@@ -637,6 +692,11 @@ const migrations = [
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
   // Wave 2: optional link from a quote to an estimator_job (umbrella for budgets/actuals/variations)
   { column: 'job_id', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN job_id TEXT" },
+  // Materials Pricing: store the audit link of a chosen price entry against the BOQ line.
+  { column: 'source_url', table: 'quote_lines', sql: "ALTER TABLE quote_lines ADD COLUMN source_url TEXT" },
+  // Materials Pricing: product thumbnails (catalogue default + per-supplier listing image).
+  { column: 'image_url', table: 'materials', sql: "ALTER TABLE materials ADD COLUMN image_url TEXT" },
+  { column: 'image_url', table: 'price_entries', sql: "ALTER TABLE price_entries ADD COLUMN image_url TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

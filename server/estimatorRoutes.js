@@ -524,8 +524,8 @@ router.post('/quotes', (req, res) => {
         b.status || 'draft', b.notes || null, quoteNumber
       );
       const ins = db.prepare(
-        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let order = 0;
       for (const ln of lines) {
@@ -542,7 +542,8 @@ router.post('/quotes', (req, res) => {
           num(ln.materials),
           num(ln.line_total) || round2(num(ln.qty) * num(ln.rate)),
           ln.est_rate ? 1 : 0,
-          ln.sort_order != null ? num(ln.sort_order) : order++
+          ln.sort_order != null ? num(ln.sort_order) : order++,
+          ln.source_url || null
         );
       }
     });
@@ -610,8 +611,8 @@ router.put('/quotes/:id/lines', (req, res) => {
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM quote_lines WHERE quote_id = ?').run(q.id);
       const ins = db.prepare(
-        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let order = 0;
       for (const ln of lines) {
@@ -628,7 +629,8 @@ router.put('/quotes/:id/lines', (req, res) => {
           num(ln.materials),
           num(ln.line_total) || round2(num(ln.qty) * num(ln.rate)),
           ln.est_rate ? 1 : 0,
-          ln.sort_order != null ? num(ln.sort_order) : order++
+          ln.sort_order != null ? num(ln.sort_order) : order++,
+          ln.source_url || null
         );
       }
       db.prepare(

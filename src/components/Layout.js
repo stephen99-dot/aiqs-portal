@@ -163,6 +163,7 @@ export default function Layout() {
   const officeInABoxChildren = [
     { path: '/pm', label: 'Project Manager' },
     { path: '/estimator', label: 'Quotes' },
+    { path: '/materials', label: 'Materials Pricing' },
     { path: '/finance', label: 'Finance' },
     { path: '/invoices', label: 'Invoices' },
     { path: '/documents', label: 'Documents' },
