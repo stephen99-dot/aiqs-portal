@@ -319,7 +319,10 @@ function seedIfEmpty() {
         if (!supId) continue;
         const capturedAt = daysAgo(p.d);
         const stale = p.d > STALE_DAYS ? 1 : 0;
-        insPrice.run(uuidv4(), mid, supId, p.price, p.unit, p.url, capturedAt, p.via, p.stock, stale, null, 'seed');
+        // NB: seed rows carry NO source_url on purpose — these are illustrative
+        // sample prices, not real captures, so there is nothing to "Verify".
+        // Real source links arrive via scrape / CSV import / manual entry.
+        insPrice.run(uuidv4(), mid, supId, p.price, p.unit, null, capturedAt, p.via, p.stock, stale, 'Sample seed price — not a verified source', 'seed');
       }
     }
   });
@@ -327,7 +330,24 @@ function seedIfEmpty() {
   console.log('[Materials] Seeded ' + materials.length + ' materials.');
 }
 
+// One-time repair: an earlier seed shipped illustrative (fabricated) product
+// URLs that 404 on the live supplier sites. Strip them from seed rows so the
+// "Verify" link only ever points at a genuinely captured source. Idempotent —
+// after the first run no seed row has an http source_url left to match.
+function repairFabricatedSeedUrls() {
+  try {
+    const info = db.prepare(
+      "UPDATE price_entries SET source_url = NULL, notes = 'Sample seed price — not a verified source' "
+      + "WHERE created_by = 'seed' AND source_url LIKE 'http%'"
+    ).run();
+    if (info.changes) console.log('[Materials] cleared ' + info.changes + ' fabricated seed source URLs');
+  } catch (err) {
+    console.error('[Materials] seed URL repair failed:', err.message);
+  }
+}
+
 seedIfEmpty();
+repairFabricatedSeedUrls();
 refreshStaleFlags();
 // Re-run the stale flag every 6h while the server is up.
 const STALE_JOB_INTERVAL_MS = 6 * 60 * 60 * 1000;
