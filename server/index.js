@@ -28,6 +28,7 @@ const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
 const documentsRoutes = require('./documentsRoutes');
 const projectManagerRoutes = require('./projectManagerRoutes');
+const materialsRoutes = require('./materialsRoutes');
 const { authMiddleware } = require('./auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -71,6 +72,9 @@ app.use('/api/payment-schedules', paymentScheduleRoutes);
 app.use('/api/documents', documentsRoutes);
 // AI Project Manager — deterministic alerts engine (Part A) + LLM-grounded Q&A (Part B).
 app.use('/api/pm', projectManagerRoutes);
+// UK Materials Pricing — searchable catalogue + supplier price comparison that
+// plugs into the quote builder. Gated behind the Office-in-a-Box add-on.
+app.use('/api/materials', materialsRoutes);
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));

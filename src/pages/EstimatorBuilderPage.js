@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
+import MaterialAutocomplete from '../components/MaterialAutocomplete';
 
 // Two-mode page:
 //   /estimator/new          — input flow -> draft -> edit -> save
@@ -653,7 +654,27 @@ function EstimatorBuilderPageInner() {
                           })}
                           placeholder="Item — type to search rate library"
                         />
-                        <input value={ln.description || ''} onChange={e => updateLine(idx, { description: e.target.value })} placeholder="Description" style={inputInline(t)} />
+                        <MaterialAutocomplete
+                          value={ln.description || ''}
+                          unit={ln.unit}
+                          materialId={ln.material_id}
+                          onChange={(v) => updateLine(idx, { description: v })}
+                          onPick={(m) => updateLine(idx, {
+                            description: m.description,
+                            unit: m.unit,
+                            rate: m.rate,
+                            materials: m.materials,
+                            source_url: m.source_url,
+                            material_id: m.material_id,
+                            est_rate: false,
+                          })}
+                          placeholder="Description — type to search materials"
+                        />
+                        {ln.source_url && (
+                          <a href={ln.source_url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 10, color: t.accent, marginLeft: 6 }}
+                            title="Audit source for the materials rate">source ↗</a>
+                        )}
                       </td>
                       <td style={{ ...tdCell, textAlign: 'right' }}>
                         <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />
