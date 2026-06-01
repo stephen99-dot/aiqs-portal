@@ -31,7 +31,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 const { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS } = require('./materialsScrapers');
-const { ensureCatalogue, backfillSearchUrls } = require('./materialsCatalogue');
+const { ensureCatalogue, backfillSearchUrls, importLivePrices } = require('./materialsCatalogue');
 
 const router = express.Router();
 
@@ -353,6 +353,8 @@ repairFabricatedSeedUrls();
 // materials that aren't already present).
 try { ensureCatalogue(db); } catch (e) { console.error('[Materials] ensureCatalogue failed:', e.message); }
 try { backfillSearchUrls(db); } catch (e) { console.error('[Materials] backfillSearchUrls failed:', e.message); }
+// Load any real prices captured by the GitHub Actions scraper (committed JSON).
+try { importLivePrices(db); } catch (e) { console.error('[Materials] importLivePrices failed:', e.message); }
 refreshStaleFlags();
 // Re-run the stale flag every 6h while the server is up.
 const STALE_JOB_INTERVAL_MS = 6 * 60 * 60 * 1000;

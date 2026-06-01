@@ -39,14 +39,32 @@ function hostOf(url) {
   }
 }
 
-async function fetchText(url, { timeout = FETCH_TIMEOUT_MS } = {}) {
+// Optional anti-bot scraping API. Major UK retailers sit behind Cloudflare /
+// Akamai, which 403 plain scrapers. Set SCRAPER_API_KEY (ScraperAPI-compatible)
+// to route requests through a service that solves the challenge. Without a key,
+// requests go direct (and will likely be blocked by those retailers).
+const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY || '';
+const SCRAPER_API_BASE = process.env.SCRAPER_API_BASE || 'http://api.scraperapi.com/';
+const SCRAPER_RENDER = String(process.env.SCRAPER_RENDER || '') === 'true';
+const USING_SCRAPER_API = !!SCRAPER_API_KEY;
+
+function proxied(url) {
+  if (!SCRAPER_API_KEY) return url;
+  const params = new URLSearchParams({ api_key: SCRAPER_API_KEY, url, country_code: 'uk' });
+  if (SCRAPER_RENDER) params.set('render', 'true');
+  return SCRAPER_API_BASE + '?' + params.toString();
+}
+
+async function fetchText(url, { timeout = FETCH_TIMEOUT_MS, raw = false } = {}) {
   if (typeof fetch !== 'function') {
     throw new Error('Global fetch unavailable — Node 18+ required for scraping.');
   }
+  // The scraping API can be slow (it renders/retries) — give it more headroom.
+  const effTimeout = (!raw && USING_SCRAPER_API) ? Math.max(timeout, 70000) : timeout;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
+  const timer = setTimeout(() => ctrl.abort(), effTimeout);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(raw ? url : proxied(url), {
       signal: ctrl.signal,
       redirect: 'follow',
       headers: {
@@ -75,7 +93,7 @@ async function isAllowedByRobots(url) {
     const disallow = [];
     try {
       const origin = new URL(url).origin;
-      const txt = await fetchText(origin + '/robots.txt', { timeout: 6000 });
+      const txt = await fetchText(origin + '/robots.txt', { timeout: 6000, raw: true });
       let appliesToUs = false;
       for (const raw of txt.split(/\r?\n/)) {
         const line = raw.replace(/#.*$/, '').trim();
@@ -194,13 +212,15 @@ async function scrapeUrl(url) {
     err.code = 'UNSUPPORTED_SUPPLIER';
     throw err;
   }
-  const allowed = await isAllowedByRobots(url);
+  // When routing through the scraping API, the API is our access mechanism;
+  // a direct robots.txt fetch would hit the same bot wall, so skip it.
+  const allowed = USING_SCRAPER_API ? true : await isAllowedByRobots(url);
   if (!allowed) {
     const err = new Error('Blocked by ' + adapter.name + " robots.txt — not scraping.");
     err.code = 'ROBOTS_DISALLOWED';
     throw err;
   }
-  await throttle(hostOf(url));
+  if (!USING_SCRAPER_API) await throttle(hostOf(url));
   const html = await fetchText(url);
   const parsed = adapter.parse(html, url);
   if (!parsed || parsed.price == null) {
@@ -220,4 +240,4 @@ async function scrapeUrl(url) {
   };
 }
 
-module.exports = { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS, ADAPTERS };
+module.exports = { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS, ADAPTERS, USING_SCRAPER_API };
