@@ -6,38 +6,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
-const { getBillingCycleStart } = require('./billingCycle');
-
-// Compute spendable BOQ credits across ALL the columns BOQ credits live in.
-// There are three independent sources, all of which look like 'credits' to the user:
-//   1. free_credits   — written by Stripe top-ups & signup
-//   2. bonus_docs     — written by the legacy admin grant UI
-//   3. monthly_boq_quota minus drawing_submissions this billing cycle
-//      — written by the User Management 'Documents / BOQs' allowance field
-function spendableBoqCredits(user) {
-  const free = user.free_credits || 0;
-  const bonus = user.bonus_docs || 0;
-  const monthlyQuota = user.monthly_boq_quota || 0;
-  let monthlyRemaining = 0;
-  if (monthlyQuota > 0) {
-    const cycleStart = getBillingCycleStart(user);
-    const used = db.prepare(
-      'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
-    ).get(user.id, cycleStart).c;
-    monthlyRemaining = Math.max(0, monthlyQuota - used);
-  }
-  return { free, bonus, monthlyRemaining, total: free + bonus + monthlyRemaining };
-}
+const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
 
 // ─── GET /api/credits — Get current user's credit info ──────────────────────
+// `free_credits` here is the SINGLE spendable balance (free_credits + bonus_docs
+// + monthly allowance remaining), kept for backwards-compatibility with the
+// frontend which reads `credits.free_credits` as "BOQ credits remaining".
 router.get('/', (req, res) => {
   try {
-    const user = db.prepare(`
-      SELECT id, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start,
-             total_projects, role
-      FROM users WHERE id = ?
-    `).get(req.user.id);
-
+    const user = db.prepare('SELECT id, total_projects, role FROM users WHERE id = ?').get(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -52,7 +29,7 @@ router.get('/', (req, res) => {
       });
     }
 
-    const { total } = spendableBoqCredits(user);
+    const { total } = getBoqBalance(user.id);
 
     res.json({
       free_credits: total,
@@ -69,7 +46,7 @@ router.get('/', (req, res) => {
 // ─── POST /api/credits/use — Consume 1 credit (called when submitting a project)
 router.post('/use', (req, res) => {
   try {
-    const user = db.prepare('SELECT free_credits, bonus_docs, role FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -80,37 +57,20 @@ router.post('/use', (req, res) => {
       return res.json({ success: true, remaining: 999 });
     }
 
-    const free = user.free_credits || 0;
-    const bonus = user.bonus_docs || 0;
-    if (free + bonus <= 0) {
+    const before = getBoqBalance(user.id);
+    if (before.total <= 0) {
       return res.status(403).json({
-        error: 'No free credits remaining',
+        error: 'No BOQ credits remaining',
         upgrade_required: true,
       });
     }
 
-    // Spend free_credits first, then bonus_docs.
-    if (free > 0) {
-      db.prepare(`
-        UPDATE users
-        SET free_credits = free_credits - 1,
-            total_projects = total_projects + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(req.user.id);
-    } else {
-      db.prepare(`
-        UPDATE users
-        SET bonus_docs = bonus_docs - 1,
-            total_projects = total_projects + 1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(req.user.id);
-    }
+    db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+    const after = consumeBoqCredit(user.id, { eventAlreadyLogged: false });
 
     res.json({
       success: true,
-      remaining: free + bonus - 1,
+      remaining: after.total,
     });
   } catch (err) {
     console.error('Use credit error:', err);

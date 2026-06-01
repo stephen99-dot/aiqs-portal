@@ -11,7 +11,7 @@ const express = require('express');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
-const { getBillingCycleStart } = require('./billingCycle');
+const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
 
 const router = express.Router();
 
@@ -71,19 +71,8 @@ router.post('/', uploadFiles, async (req, res) => {
 
     const isAdmin = user.role === 'admin';
 
-    // Three credit sources: free_credits, bonus_docs, monthly_boq_quota (minus this-cycle submissions)
-    const free = user.free_credits || 0;
-    const bonus = user.bonus_docs || 0;
-    const monthlyQuota = user.monthly_boq_quota || 0;
-    let monthlyRemaining = 0;
-    if (monthlyQuota > 0) {
-      const cycleStart = getBillingCycleStart(user);
-      const used = db.prepare(
-        'SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?'
-      ).get(user.id, cycleStart).c;
-      monthlyRemaining = Math.max(0, monthlyQuota - used);
-    }
-    const totalCredits = free + bonus + monthlyRemaining;
+    // Single spendable balance: free_credits + bonus_docs + monthly allowance left.
+    const totalCredits = isAdmin ? Infinity : getBoqBalance(user.id).total;
     if (!isAdmin && totalCredits <= 0) {
       return res.status(403).json({ error: 'No BOQ credits remaining', upgrade_required: true });
     }
@@ -131,36 +120,13 @@ router.post('/', uploadFiles, async (req, res) => {
       return res.status(502).json({ error: 'Could not forward your submission. Please try again or contact support — no credit has been used.' });
     }
 
-    let creditsRemaining = isAdmin ? 999 : totalCredits - 1;
+    let creditsRemaining = isAdmin ? 999 : Math.max(0, totalCredits - 1);
     if (!isAdmin) {
-      // Spend free_credits first, then bonus_docs, then implicitly the monthly
-      // BOQ quota (which is tracked by counting drawing_submissions this cycle).
-      if (free > 0) {
-        db.prepare(`
-          UPDATE users
-          SET free_credits = free_credits - 1,
-              total_projects = total_projects + 1,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(user.id);
-      } else if (bonus > 0) {
-        db.prepare(`
-          UPDATE users
-          SET bonus_docs = bonus_docs - 1,
-              total_projects = total_projects + 1,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(user.id);
-      } else {
-        // Drawing on monthly_boq_quota — no column to decrement, the
-        // drawing_submissions row inserted below is the deduction.
-        db.prepare(`
-          UPDATE users
-          SET total_projects = total_projects + 1,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(user.id);
-      }
+      // Charge one BOQ credit (monthly allowance → bonus_docs → free_credits).
+      // Called BEFORE the drawing_submissions row is inserted below, so the
+      // helper measures this cycle's usage without counting this job yet.
+      db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+      consumeBoqCredit(user.id, { eventAlreadyLogged: false });
     }
 
     db.prepare(`

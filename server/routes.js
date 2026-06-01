@@ -11,6 +11,7 @@ const { generateToken, authMiddleware, adminMiddleware } = require('./auth');
 const { logActivity } = require('./activityRoutes');
 const { startPipelineRun } = require('./pipelineRoutes');
 const { getBillingCycleStart } = require('./billingCycle');
+const { getBoqBalance } = require('./boqCredits');
 
 const router = express.Router();
 
@@ -733,21 +734,13 @@ router.get('/usage', authMiddleware, (req, res) => {
   const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
   const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
 
-  // BOQ doc usage this billing cycle. Same formula the admin User Management
-  // page uses, plus drawing_submissions (Submit Drawings flow).
-  let boqUsed = 0;
-  try {
-    const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(req.user.id, cycleStart);
-    const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(req.user.id, cycleStart);
-    let dlSubs = 0;
-    try {
-      dlSubs = db.prepare('SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?').get(req.user.id, cycleStart).c || 0;
-    } catch(e) {}
-    boqUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
-  } catch(e) {}
-  const defaultBoqLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
-  const boqLimit = (user.monthly_boq_quota != null && user.monthly_boq_quota >= 0) ? user.monthly_boq_quota : defaultBoqLimit;
-  const boqRemaining = Math.max(0, boqLimit - boqUsed);
+  // BOQ credits — the single spendable balance shared by the chatbot and the
+  // Submit-Drawings page. `boqLimit` is the effective granted total (used +
+  // remaining) so the dashboard bar reads e.g. 1 / 5 after one BOQ.
+  const balance = getBoqBalance(req.user.id);
+  const boqUsed = balance.isAdmin ? 0 : balance.used;
+  const boqRemaining = balance.isAdmin ? 999 : balance.total;
+  const boqLimit = balance.isAdmin ? 999 : (boqUsed + boqRemaining);
 
   // Calculate cycle dates for display
   const cycleStartDate = new Date(cycleStart);
@@ -790,6 +783,10 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
     const plan = u.plan || 'starter';
     const defaultDocLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
     const docsLimit = (u.monthly_boq_quota != null && u.monthly_boq_quota >= 0) ? u.monthly_boq_quota : defaultDocLimit;
+    // The single spendable BOQ balance this user has left right now (granted +
+    // purchased + monthly allowance remaining). This is what the Users area
+    // shows and what ticks down when they submit a job or generate a BOQ.
+    const boqBalance = u.role === 'admin' ? Infinity : getBoqBalance(u.id).total;
     return {
       id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name,
       company: u.company, phone: u.phone, role: u.role,
@@ -800,7 +797,9 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       suspended: u.suspended || 0, suspended_reason: u.suspended_reason,
       bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0,
       monthly_boq_quota: u.monthly_boq_quota || 0,
+      free_credits: u.free_credits || 0,
       docs_used: docsUsed, docs_limit: docsLimit,
+      boq_remaining: boqBalance === Infinity ? null : boqBalance,
       has_estimator: u.has_estimator ? 1 : 0,
       created_at: u.created_at, project_count: 0,
     };
