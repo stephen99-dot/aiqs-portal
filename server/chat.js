@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
 const { getBillingCycleStart } = require('./billingCycle');
+const boqCredits = require('./boqCredits');
 
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
@@ -1996,6 +1997,10 @@ ${summary}`);
     let wantsDocuments = wantsDocumentsRaw;
     let downloadFiles = null;
     let paymentRequired = null;
+    // Whether this BOQ generation is a revision of the last one (revisions are
+    // free — they don't consume a credit). Set in the credit gate below and
+    // read where the document is logged.
+    let boqIsRevision = false;
     let takeoffData = null;
     let pipelineLog = null;
 
@@ -2881,45 +2886,44 @@ CRITICAL RULES:
       } // end shouldExtract
     }
 
-    // ── QUOTA CHECK ───────────────────────────────────────────────────
+    // ── BOQ CREDIT CHECK ──────────────────────────────────────────────
+    // One shared balance (free_credits + bonus_docs + monthly allowance left)
+    // funds both the chatbot and the Submit-Drawings page. Generating a BOQ
+    // here spends one credit, exactly like submitting a job — so the counter
+    // goes 5 → 4 either way. We only fall back to the legacy £99 pay gate /
+    // "limit reached" message once the balance hits zero.
     if (wantsDocuments && req.user.role !== 'admin') {
       const dPlan = req.user.plan || 'starter';
-      const dMonthStr = getBillingCycleStart(req.user);
-      const docsGenThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, dMonthStr).c;
-      const revisionsThisMonth = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, dMonthStr).c;
 
-      if (dPlan === 'starter') {
-        const freeTrialQuota = req.user.monthly_quota || 0;
-        const paidCredits = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_paid'").get(userId).c;
-        const totalAllowed = freeTrialQuota + paidCredits;
-        const totalDocsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated'").get(userId).c;
-        const totalRevisionsEver = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
-        const originalsEver = totalDocsEver - totalRevisionsEver;
-        const looksLikeRevision = totalDocsEver > 0 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-        if (looksLikeRevision && totalRevisionsEver < totalAllowed) {
-          console.log('[Quota] Starter revision allowed');
-        } else if (originalsEver >= totalAllowed) {
+      // Is this a revision of the user's most recent BOQ? Revisions are free
+      // (one included per BOQ) and don't touch the credit balance.
+      const lastDoc = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
+      boqIsRevision = !!lastDoc && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+
+      if (boqIsRevision) {
+        const projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastDoc.detail).c;
+        if (projectRevisions >= 1) {
+          reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).';
+          wantsDocuments = false;
+        } else {
+          console.log('[Credits] Revision allowed — no credit charged');
+        }
+      } else {
+        const balance = boqCredits.getBoqBalance(userId);
+        if (balance.total > 0) {
+          console.log(`[Credits] BOQ generation allowed — ${balance.total} credit(s) before spend`);
+        } else if (dPlan === 'starter') {
           wantsDocuments = false;
           paymentRequired = {
             type: 'boq_payment', plan: 'starter', price: 99, currency: 'GBP',
             url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01?client_reference_id=' + userId,
-            message: 'To generate your BOQ and Findings Report, a one-off payment of £99 is required. This includes a full Excel BOQ with your trained rates, a professional Findings Report, and 1 free revision.',
+            message: "You're out of BOQ credits. A one-off payment of £99 generates this BOQ and Findings Report — includes a full Excel BOQ with your trained rates and 1 free revision.",
           };
-          console.log(`[Quota] Payment required — used ${originalsEver}/${totalAllowed}`);
+          console.log('[Credits] Out of credits — £99 pay gate shown');
         } else {
-          console.log(`[Quota] Free trial — slot ${originalsEver + 1} of ${totalAllowed}`);
-        }
-      } else {
-        const defaultDocLimit = dPlan === 'premium' ? 20 : 10;
-        const docLimit = (req.user.monthly_boq_quota != null && req.user.monthly_boq_quota >= 0) ? req.user.monthly_boq_quota : defaultDocLimit;
-        const originalsThisMonth = docsGenThisMonth - revisionsThisMonth;
-        const lastDoc2 = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-        const isRevision = lastDoc2 && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
-        if (isRevision) {
-          const projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastDoc2.detail).c;
-          if (projectRevisions >= 1) { reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).'; wantsDocuments = false; }
-        } else if (originalsThisMonth >= docLimit) {
-          reply += `\n\nDocument limit reached (${docLimit} BOQs on ${dPlan} plan this month).`; wantsDocuments = false;
+          reply += "\n\nYou're out of BOQ credits this cycle. Top up or upgrade your plan to generate more.";
+          wantsDocuments = false;
+          console.log('[Credits] Out of credits — generation blocked');
         }
       }
     }
@@ -3165,8 +3169,21 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
               }
             } catch(projErr) { console.error('[Project] projects table insert error:', projErr.message); }
 
+            // Originals log as 'doc_generated' and spend a BOQ credit; revisions
+            // log as 'doc_revision' and are free. Logging the revision under its
+            // own action keeps it out of the usage count so it never consumes a
+            // credit (here or on the dashboards).
+            const boqAction = boqIsRevision ? 'doc_revision' : 'doc_generated';
             db.prepare('INSERT INTO usage_log (id,user_id,action,detail,model_used,tokens_in,tokens_out,cost_estimate) VALUES(?,?,?,?,?,?,?,?)')
-              .run('ul_'+uuidv4().slice(0,8), userId, 'doc_generated', projectName, modelUsed||'sonnet', 0, 0, 0);
+              .run('ul_'+uuidv4().slice(0,8), userId, boqAction, projectName, modelUsed||'sonnet', 0, 0, 0);
+
+            // Charge one BOQ credit for an original (monthly allowance → bonus →
+            // free credits). The doc_generated row above is already written, so
+            // the helper is told the event is already counted this cycle.
+            if (!boqIsRevision && req.user.role !== 'admin') {
+              try { boqCredits.consumeBoqCredit(userId, { eventAlreadyLogged: true }); }
+              catch (credErr) { console.error('[Credits] consume error:', credErr.message); }
+            }
 
             // Mirror to activity_log so the admin feed shows BOQ generations
             try {

@@ -242,9 +242,12 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
   const boqUsed = user.boq_used || user.docs_used || 0;
-  const boqTotal = parseInt(docAllowance) || user.monthly_boq_quota || user.boq_quota || 0;
+  // Live spendable balance from the server (granted + purchased + monthly left).
+  const boqRemaining = user.boq_remaining != null ? user.boq_remaining
+    : (user.free_credits || 0) + (user.bonus_docs || 0);
+  const boqTotal = boqRemaining + boqUsed; // effective credits granted
   const boqPct = boqTotal > 0 ? Math.min(100, (boqUsed / boqTotal) * 100) : 0;
-  const boqBarColor = boqPct >= 90 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
+  const boqBarColor = boqRemaining <= 0 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
 
   return (
     <>
@@ -273,7 +276,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           {[
             { label: 'Messages This Month', used: msgsUsed, total: msgsTotal, pct: msgPct, color: msgBarColor },
-            { label: 'Documents This Month', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
+            { label: 'BOQ Credits (' + boqRemaining + ' left)', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
           ].map(({ label, used, total, pct, color }) => (
             <div key={label} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -844,24 +847,30 @@ export default function UserManagementPage({ theme }) {
                             <span style={{fontSize:11,color:muted}}>{msgsUsed} sent</span>
                           )}
                         </td>
-                        {/* BOQ docs usage */}
+                        {/* BOQ credits — single spendable balance left */}
                         <td style={{padding:'12px 16px',minWidth:100}}>
                           {(()=>{
+                            if (user.role === 'admin') return <span style={{fontSize:11,color:muted}}>Unlimited</span>;
                             const docsUsed = user.docs_used || 0;
-                            const docsTotal = (user.monthly_boq_quota != null ? user.monthly_boq_quota : null) ?? user.docs_limit ?? (user.plan==='premium'?20:user.plan==='professional'?10:0);
-                            const docPct = docsTotal > 0 ? Math.min(100, (docsUsed / docsTotal) * 100) : 0;
-                            const docBarColor = docPct >= 90 ? '#EF4444' : docPct >= 70 ? '#F59E0B' : '#3B82F6';
-                            return docsTotal > 0 ? (
+                            // Live balance from the server (granted + purchased + monthly left).
+                            const remaining = user.boq_remaining != null ? user.boq_remaining
+                              : (user.free_credits || 0) + (user.bonus_docs || 0);
+                            const granted = remaining + docsUsed;
+                            const pct = granted > 0 ? Math.min(100, (docsUsed / granted) * 100) : 0;
+                            const barColor = remaining <= 0 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
+                            return (
                               <div>
-                                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                                  <span style={{fontSize:10,color:muted}}>{docsUsed} / {docsTotal}</span>
-                                  {user.bonus_docs > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_docs}</span>}
+                                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                                  <span style={{fontSize:11,fontWeight:700,color:remaining<=0?'#EF4444':(isDark?'#E8EDF5':'#0F172A')}}>{remaining} left</span>
+                                  <span style={{fontSize:10,color:muted}}>{docsUsed} used</span>
                                 </div>
-                                <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
-                                  <div style={{width:docPct+'%',height:'100%',borderRadius:3,background:docBarColor}} />
-                                </div>
+                                {granted > 0 && (
+                                  <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
+                                    <div style={{width:pct+'%',height:'100%',borderRadius:3,background:barColor}} />
+                                  </div>
+                                )}
                               </div>
-                            ) : <span style={{fontSize:11,color:muted}}>{docsUsed} generated</span>;
+                            );
                           })()}
                         </td>
                         <td style={{padding:'12px 16px'}}>
