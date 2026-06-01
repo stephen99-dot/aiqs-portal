@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Send, Phone, FileText, HelpCircle, Clock, ChevronRight, Zap, Upload } from 'lucide-react';
+import { HandIcon } from './Icons';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WHATSAPP WIDGET — src/components/WhatsAppWidget.js
@@ -177,7 +178,7 @@ export default function WhatsAppWidget({ theme, userName }) {
               boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
             }}>
               <p style={{ margin: 0, fontSize: 14, color: isDark ? '#E8EDF5' : '#1A1A2E', lineHeight: 1.5 }}>
-                Hey{userName ? ` ${userName.split(' ')[0]}` : ''}! 👋
+                Hey{userName ? ` ${userName.split(' ')[0]}` : ''}! <HandIcon size={16} style={{ verticalAlign: 'middle' }} />
               </p>
               <p style={{ margin: '8px 0 0', fontSize: 14, color: isDark ? '#94A3B8' : '#64748B', lineHeight: 1.5 }}>
                 How can I help? Pick a quick action below or type your own message.

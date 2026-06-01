@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import { ClientsIcon, FileTextIcon, PoundIcon, ZapIcon, KeyIcon, CheckCircleIcon, XCircleIcon, XIcon, EditIcon, MailIcon, TrashIcon, AlertTriangleIcon, BookIcon, InboxIcon, UploadIcon, SearchIcon, CheckIcon, UserIcon, ClipboardIcon, CreditCardIcon, PaperclipIcon, BarChartIcon, InfoIcon, RefreshIcon } from '../components/Icons';
 
 const PLAN_OPTIONS = [
   { value: 'starter', label: 'Starter (PAYG)', quota: 0 },
@@ -16,11 +17,12 @@ const SYSTEM_SERVICES = [
   { label: 'Rate Library', status: 'operational', uptime: '100%' },
 ];
 
-function StatCard({ label, value, sub, emoji, t }) {
+function StatCard({ label, value, sub, icon, t }) {
+  const Ico = icon;
   return (
     <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '22px 18px', boxShadow: t.shadowSm }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 24 }}>{emoji}</span>
+        <span style={{ fontSize: 24 }}>{Ico && <Ico size={24} />}</span>
         {sub && <span style={{ fontSize: 11, color: t.textMuted }}>{sub}</span>}
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: t.text }}>{value}</div>
@@ -37,10 +39,10 @@ function OverviewTab({ t }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <StatCard emoji="👥" label="Total Clients" value="8" sub="4 Pro" t={t} />
-        <StatCard emoji="📄" label="Drawings Processed" value="116" sub="this month" t={t} />
-        <StatCard emoji="💷" label="Revenue" value="£14,400" sub="all time" t={t} />
-        <StatCard emoji="⚡" label="Avg Processing" value="4.2 min" sub="per drawing" t={t} />
+        <StatCard icon={ClientsIcon} label="Total Clients" value="8" sub="4 Pro" t={t} />
+        <StatCard icon={FileTextIcon} label="Drawings Processed" value="116" sub="this month" t={t} />
+        <StatCard icon={PoundIcon} label="Revenue" value="£14,400" sub="all time" t={t} />
+        <StatCard icon={ZapIcon} label="Avg Processing" value="4.2 min" sub="per drawing" t={t} />
       </div>
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 14px' }}>System Health</h3>
@@ -184,7 +186,7 @@ function ClientsTab({ t }) {
       {showResetModal && resetTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 28, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: t.text, margin: '0 0 6px' }}>🔑 Reset Password</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: t.text, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}><KeyIcon size={16} /> Reset Password</h3>
             <p style={{ fontSize: 13, color: t.textMuted, margin: '0 0 18px', lineHeight: 1.5 }}>
               Setting a new password for <strong style={{ color: t.text }}>{resetTarget.fullName || resetTarget.email}</strong>. They will be prompted to change it on next login.
             </p>
@@ -217,14 +219,14 @@ function ClientsTab({ t }) {
         </div>
       )}
 
-      {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : 'rgba(239,68,68,0.1)', color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}</div>}
+      {actionMsg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: actionMsg.type === 'success' ? (t.successBg || 'rgba(16,185,129,0.1)') : 'rgba(239,68,68,0.1)', color: actionMsg.type === 'success' ? (t.success || '#10B981') : '#EF4444', border: '1px solid ' + (actionMsg.type === 'success' ? (t.success || '#10B981') + '30' : '#EF444430') }}>{actionMsg.type === 'success' ? <CheckCircleIcon size={16} style={{ verticalAlign: 'middle' }} /> : <XCircleIcon size={16} style={{ verticalAlign: 'middle' }} />} {actionMsg.text}</div>}
 
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid ' + t.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: t.text, margin: 0 }}>Client Plans & Usage</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 12, color: t.textMuted }}>{users.length} clients</span>
-            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAddForm ? t.textSecondary : '#fff', border: showAddForm ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAddForm ? '✕ Cancel' : '+ Add Client'}</button>
+            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: showAddForm ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAddForm ? t.textSecondary : '#fff', border: showAddForm ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAddForm ? <><XIcon size={12} style={{ verticalAlign: 'middle' }} /> Cancel</> : '+ Add Client'}</button>
           </div>
         </div>
 
@@ -251,7 +253,7 @@ function ClientsTab({ t }) {
             <div key={user.id} style={{ padding: '16px 20px', borderBottom: i < users.length - 1 ? '1px solid ' + t.border : 'none', background: isEditing ? (t.surfaceHover || t.surface) : isDeleting ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
               {isDeleting && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', marginBottom: 10, borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  <span style={{ fontSize: 13, color: '#EF4444' }}>⚠️ Delete <strong>{user.fullName || user.email}</strong>?</span>
+                  <span style={{ fontSize: 13, color: '#EF4444' }}><AlertTriangleIcon size={14} style={{ verticalAlign: 'middle' }} /> Delete <strong>{user.fullName || user.email}</strong>?</span>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => handleDelete(user.id)} disabled={deleting} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: '#EF4444', color: '#fff', border: 'none', cursor: 'pointer' }}>{deleting ? '...' : 'Yes, Delete'}</button>
                     <button onClick={() => setConfirmDelete(null)} style={{ padding: '5px 14px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button>
@@ -281,7 +283,7 @@ function ClientsTab({ t }) {
                   {isEditing ? (
                     <><button onClick={() => savePlan(user.id)} disabled={saving} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: t.success, color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button><button onClick={cancelEdit} style={{ padding: '6px 14px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Cancel</button></>
                   ) : (
-                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️ Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔑 Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}>✉️ Link</button><button onClick={() => handleSyncStripe(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(124,58,237,0.08)', color: '#A78BFA', border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer' }} title="Sync plan & billing cycle from Stripe">Sync</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></>
+                    <><button onClick={() => startEdit(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}><EditIcon size={12} style={{ verticalAlign: 'middle' }} /> Plan</button><button onClick={() => handleResetPassword(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}><KeyIcon size={12} style={{ verticalAlign: 'middle' }} /> Reset</button><button onClick={() => handleSendMagicLink(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(37,99,235,0.08)', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer' }}><MailIcon size={12} style={{ verticalAlign: 'middle' }} /> Link</button><button onClick={() => handleSyncStripe(user)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(124,58,237,0.08)', color: '#A78BFA', border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer' }} title="Sync plan & billing cycle from Stripe">Sync</button><button onClick={() => setConfirmDelete(user.id)} style={{ padding: '6px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}><TrashIcon size={12} /></button></>
                   )}
                 </div>
               </div>
@@ -363,18 +365,18 @@ function RatesTab({ t }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.type === 'success' ? '#10B981' : '#EF4444' }}>{msg.type === 'success' ? '✅' : '❌'} {msg.text}</div>}
+      {msg && <div style={{ padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500, background: msg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: msg.type === 'success' ? '#10B981' : '#EF4444' }}>{msg.type === 'success' ? <CheckCircleIcon size={16} style={{ verticalAlign: 'middle' }} /> : <XCircleIcon size={16} style={{ verticalAlign: 'middle' }} />} {msg.text}</div>}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '16px 20px', boxShadow: t.shadowSm }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>📚</span>
+            <span style={{ fontSize: 18 }}><BookIcon size={18} /></span>
             <select value={selectedLib} onChange={e => { setSelectedLib(e.target.value); }} style={{ ...iS, fontSize: 13, fontWeight: 600, minWidth: 200 }}>{libraries.map(lib => <option key={lib.id} value={lib.id}>{lib.name} ({lib.item_count} items)</option>)}</select>
             {selLib && <span style={{ fontSize: 11, color: t.textMuted }}>{selLib.version} • {selLib.region}</span>}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={handleExport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>📥 Export</button>
-            <button onClick={handleImport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>📤 Import</button>
-            <button onClick={() => setShowAdd(!showAdd)} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: showAdd ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAdd ? t.textSecondary : '#fff', border: showAdd ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAdd ? '✕ Cancel' : '+ Add Rate'}</button>
+            <button onClick={handleExport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}><InboxIcon size={12} style={{ verticalAlign: 'middle' }} /> Export</button>
+            <button onClick={handleImport} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}><UploadIcon size={12} style={{ verticalAlign: 'middle' }} /> Import</button>
+            <button onClick={() => setShowAdd(!showAdd)} style={{ padding: '7px 14px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: showAdd ? t.surfaceHover : (t.accent || '#F59E0B'), color: showAdd ? t.textSecondary : '#fff', border: showAdd ? '1px solid ' + t.border : 'none', cursor: 'pointer' }}>{showAdd ? <><XIcon size={12} style={{ verticalAlign: 'middle' }} /> Cancel</> : '+ Add Rate'}</button>
           </div>
         </div>
       </div>
@@ -389,12 +391,12 @@ function RatesTab({ t }) {
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Labour £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.labour_rate} onChange={e => setAddData(p => ({ ...p, labour_rate: e.target.value }))} /></div>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Material £</label><input style={{ ...iS, width: '100%' }} type="number" step="0.01" placeholder="0.00" value={addData.material_rate} onChange={e => setAddData(p => ({ ...p, material_rate: e.target.value }))} /></div>
           </div>
-          {addError && <div style={{ fontSize: 12, color: '#EF4444', marginTop: 6 }}>⚠️ {addError}</div>}
+          {addError && <div style={{ fontSize: 12, color: '#EF4444', marginTop: 6 }}><AlertTriangleIcon size={14} style={{ verticalAlign: 'middle' }} /> {addError}</div>}
           <button onClick={handleAddRate} style={{ marginTop: 10, padding: '8px 20px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.accent || '#F59E0B', color: '#fff', border: 'none', cursor: 'pointer' }}>Add Rate</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="🔍  Search rates..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input style={{ ...iS, flex: 1, minWidth: 200, fontSize: 13, padding: '9px 14px' }} placeholder="Search rates..." value={search} onChange={e => setSearch(e.target.value)} />
         <span style={{ fontSize: 12, color: t.textMuted }}>{rates.length} rates across {tradeKeys.length} trades</span>
         <button onClick={expandAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Expand All</button>
         <button onClick={collapseAll} style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>Collapse All</button>
@@ -428,7 +430,7 @@ function RatesTab({ t }) {
                         <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.labour_rate} onChange={e => setEditData(p => ({ ...p, labour_rate: e.target.value }))} />
                         <input style={{ ...iS, width: 70 }} type="number" step="0.01" value={editData.material_rate} onChange={e => setEditData(p => ({ ...p, material_rate: e.target.value }))} />
                         <span style={{ fontSize: 12, fontWeight: 700, color: t.accent || '#F59E0B', fontFamily: 'monospace' }}>£{((parseFloat(editData.labour_rate) || 0) + (parseFloat(editData.material_rate) || 0)).toFixed(2)}</span>
-                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => saveEdit(rate.id)} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, background: t.success || '#10B981', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '..' : '✓'}</button><button onClick={() => setEditingId(null)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}>✕</button></div>
+                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => saveEdit(rate.id)} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 600, background: t.success || '#10B981', color: '#fff', border: 'none', cursor: 'pointer' }}>{saving ? '..' : <CheckIcon size={12} />}</button><button onClick={() => setEditingId(null)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}><XIcon size={12} /></button></div>
                       </>) : (<>
                         <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.accent || '#F59E0B', fontWeight: 600 }}>{rate.code}</span>
                         <div><span style={{ fontSize: 12, color: t.text }}>{rate.description}</span>{rate.notes && <span style={{ fontSize: 10, color: t.textDim, marginLeft: 6 }}>({rate.notes})</span>}</div>
@@ -436,7 +438,7 @@ function RatesTab({ t }) {
                         <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.labour_rate || 0).toFixed(2)}</span>
                         <span style={{ fontSize: 11, fontFamily: 'monospace', color: t.textSecondary }}>£{(rate.material_rate || 0).toFixed(2)}</span>
                         <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: t.text }}>£{(rate.total_rate || 0).toFixed(2)}</span>
-                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => startEdit(rate)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>✏️</button><button onClick={() => deleteRate(rate.id)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}>🗑️</button></div>
+                        <div style={{ display: 'flex', gap: 3 }}><button onClick={() => startEdit(rate)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}><EditIcon size={14} /></button><button onClick={() => deleteRate(rate.id)} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, background: 'rgba(239,68,68,0.06)', color: '#F87171', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer' }}><TrashIcon size={14} /></button></div>
                       </>)}
                     </div>
                   );
@@ -473,16 +475,16 @@ function LogsTab({ t }) {
   }
 
   const eventStyles = {
-    signup: { icon: '👤', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-    login: { icon: '🔑', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-    project_created: { icon: '📋', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-    project_completed: { icon: '✅', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-    plan_changed: { icon: '💳', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
-    file_uploaded: { icon: '📎', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-    boq_generated: { icon: '📊', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-    error: { icon: '❌', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+    signup: { icon: UserIcon, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    login: { icon: KeyIcon, color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+    project_created: { icon: ClipboardIcon, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+    project_completed: { icon: CheckCircleIcon, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    plan_changed: { icon: CreditCardIcon, color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
+    file_uploaded: { icon: PaperclipIcon, color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+    boq_generated: { icon: BarChartIcon, color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+    error: { icon: XCircleIcon, color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
   };
-  const defaultStyle = { icon: 'ℹ️', color: '#94A3B8', bg: 'rgba(148,163,184,0.1)' };
+  const defaultStyle = { icon: InfoIcon, color: '#94A3B8', bg: 'rgba(148,163,184,0.1)' };
 
   function timeAgo(dateStr) {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -508,7 +510,7 @@ function LogsTab({ t }) {
           <option value="plan_changed">Plan Changes</option>
           <option value="error">Errors</option>
         </select>
-        <button onClick={loadActivity} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer' }}>🔄 Refresh</button>
+        <button onClick={loadActivity} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><RefreshIcon size={14} /> Refresh</button>
         <span style={{ fontSize: 12, color: t.textMuted }}>{activities.length} events</span>
       </div>
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
@@ -520,15 +522,16 @@ function LogsTab({ t }) {
           <div style={{ padding: 40, textAlign: 'center', color: t.textMuted }}>Loading activity...</div>
         ) : activities.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+            <div style={{ marginBottom: 8 }}><InboxIcon size={32} /></div>
             <div style={{ fontSize: 14, color: t.textMuted }}>No activity yet</div>
             <div style={{ fontSize: 12, color: t.textDim, marginTop: 4 }}>Events will appear here when users sign up or submit projects</div>
           </div>
         ) : activities.map((item, i) => {
           const style = eventStyles[item.event_type] || defaultStyle;
+          const Ico = style.icon;
           return (
             <div key={item.id} style={{ display: 'flex', gap: 14, padding: '14px 20px', borderBottom: i < activities.length - 1 ? '1px solid ' + t.border : 'none', alignItems: 'flex-start' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: style.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>{style.icon}</div>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: style.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>{Ico && <Ico size={16} color={style.color} />}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: t.text }}>{item.title}</span>
@@ -659,7 +662,7 @@ function SettingsTab({ t }) {
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: '📊 Overview' }, { key: 'clients', label: '👥 Clients' }, { key: 'submissions', label: '📥 Submissions' }, { key: 'rates', label: '📚 Rate Libraries' }, { key: 'logs', label: '📋 Activity Log' }, { key: 'settings', label: '⚙️ Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>

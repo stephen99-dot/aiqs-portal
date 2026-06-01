@@ -2,21 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import {
+  RulerIcon, CoinsIcon, ShopIcon, ClipboardIcon, MapPinIcon, WrenchIcon,
+  ChatIcon, SettingsIcon, BanIcon, ClientsIcon, BuildingIcon, BarChartIcon,
+  EditIcon, BrainIcon, PoundIcon, CheckIcon, XIcon,
+} from '../components/Icons';
 
 const CATEGORY_LABELS = {
-  spec_preference: { label: 'Spec Preferences', emoji: '📐', desc: 'Material and specification choices' },
-  markup: { label: 'Markups & Margins', emoji: '💰', desc: 'Pricing and margin preferences' },
-  supplier: { label: 'Suppliers', emoji: '🏪', desc: 'Preferred suppliers and merchants' },
-  scope: { label: 'Scope Patterns', emoji: '📋', desc: 'Items you always include or exclude' },
-  geography: { label: 'Location', emoji: '📍', desc: 'Where you operate' },
-  trade: { label: 'Trades & Subcontractors', emoji: '🔧', desc: 'How you manage trades' },
-  standard: { label: 'Standards', emoji: '📏', desc: 'Measurement and compliance standards' },
-  feedback: { label: 'Preferences', emoji: '💬', desc: 'How you like your BOQs and reports' },
-  workflow: { label: 'Workflow', emoji: '⚙️', desc: 'How you work and order projects' },
-  exclusion: { label: 'Standard Exclusions', emoji: '🚫', desc: 'Items always excluded from estimates' },
-  team: { label: 'Team & Roles', emoji: '👥', desc: 'Your team structure and day rates' },
-  project_type: { label: 'Project Types', emoji: '🏗️', desc: 'Types of work you typically do' },
-  commercial: { label: 'Commercial Terms', emoji: '📊', desc: 'Payment, contract, and commercial info' },
+  spec_preference: { label: 'Spec Preferences', emoji: RulerIcon, desc: 'Material and specification choices' },
+  markup: { label: 'Markups & Margins', emoji: CoinsIcon, desc: 'Pricing and margin preferences' },
+  supplier: { label: 'Suppliers', emoji: ShopIcon, desc: 'Preferred suppliers and merchants' },
+  scope: { label: 'Scope Patterns', emoji: ClipboardIcon, desc: 'Items you always include or exclude' },
+  geography: { label: 'Location', emoji: MapPinIcon, desc: 'Where you operate' },
+  trade: { label: 'Trades & Subcontractors', emoji: WrenchIcon, desc: 'How you manage trades' },
+  standard: { label: 'Standards', emoji: RulerIcon, desc: 'Measurement and compliance standards' },
+  feedback: { label: 'Preferences', emoji: ChatIcon, desc: 'How you like your BOQs and reports' },
+  workflow: { label: 'Workflow', emoji: SettingsIcon, desc: 'How you work and order projects' },
+  exclusion: { label: 'Standard Exclusions', emoji: BanIcon, desc: 'Items always excluded from estimates' },
+  team: { label: 'Team & Roles', emoji: ClientsIcon, desc: 'Your team structure and day rates' },
+  project_type: { label: 'Project Types', emoji: BuildingIcon, desc: 'Types of work you typically do' },
+  commercial: { label: 'Commercial Terms', emoji: BarChartIcon, desc: 'Payment, contract, and commercial info' },
 };
 
 export default function AIMemoryPage() {
@@ -234,7 +239,7 @@ export default function AIMemoryPage() {
         background: colors.card, border: '1px solid ' + colors.cardBorder,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <span style={{ fontSize: 18 }}>🧠</span>
+          <BrainIcon size={18} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Memories</div>
             <div style={{ fontSize: 12, color: colors.textMuted }}>
@@ -339,8 +344,8 @@ export default function AIMemoryPage() {
                         <button
                           onClick={() => handleSaveEdit(m.id)}
                           title="Save"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, fontSize: 14, padding: '2px 6px', fontWeight: 700 }}
-                        >✓</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, padding: '2px 6px', fontWeight: 700 }}
+                        ><CheckIcon size={14} /></button>
                         <button
                           onClick={() => { setEditingMemoryId(null); setEditingText(''); }}
                           title="Cancel"
@@ -355,7 +360,7 @@ export default function AIMemoryPage() {
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 13, padding: '2px 6px', opacity: 0.6 }}
                           onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = colors.accent; }}
                           onMouseLeave={e => { e.target.style.opacity = '0.6'; e.target.style.color = colors.textMuted; }}
-                        >✎</button>
+                        ><EditIcon size={13} /></button>
                         <button
                           onClick={() => handleDeleteMemory(m.id)}
                           title="Forget"
@@ -379,7 +384,7 @@ export default function AIMemoryPage() {
           padding: '48px 24px', borderRadius: 12, textAlign: 'center',
           background: colors.card, border: '1px solid ' + colors.cardBorder,
         }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🧠</div>
+          <div style={{ marginBottom: 12 }}><BrainIcon size={36} /></div>
           <div style={{ fontSize: 16, fontWeight: 600, color: colors.text, marginBottom: 8 }}>
             No memories yet
           </div>
@@ -396,7 +401,7 @@ export default function AIMemoryPage() {
               background: colors.card, border: '1px solid ' + colors.cardBorder,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: 18 }}>💷</span>
+                <PoundIcon size={18} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Trained Rates</div>
                   <div style={{ fontSize: 12, color: colors.textMuted }}>
@@ -412,14 +417,15 @@ export default function AIMemoryPage() {
 
           {/* Insight categories */}
           {Object.entries(grouped).map(([category, items]) => {
-            const catInfo = CATEGORY_LABELS[category] || { label: category, emoji: '📝', desc: '' };
+            const catInfo = CATEGORY_LABELS[category] || { label: category, emoji: EditIcon, desc: '' };
+            const CatIcon = catInfo.emoji;
             return (
               <div key={category} style={{
                 padding: '18px 20px', borderRadius: 10,
                 background: colors.card, border: '1px solid ' + colors.cardBorder,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <span style={{ fontSize: 18 }}>{catInfo.emoji}</span>
+                  {CatIcon && <CatIcon size={18} />}
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{catInfo.label}</div>
                     {catInfo.desc && <div style={{ fontSize: 12, color: colors.textMuted }}>{catInfo.desc}</div>}

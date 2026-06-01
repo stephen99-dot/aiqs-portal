@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
+import { CheckIcon, AlertTriangleIcon } from '../components/Icons';
 
 /**
  * Admin-only inbox of all customer drawing submissions. Replaces the
@@ -339,7 +340,7 @@ export default function SubmissionsInboxPage() {
                       cursor: savingId === selected.id ? 'wait' : 'pointer',
                     }}
                   >
-                    {selected.actioned_at ? '✓ Done' : 'Mark as actioned'}
+                    {selected.actioned_at ? <><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Done</> : 'Mark as actioned'}
                   </button>
                 </div>
               </div>
@@ -353,7 +354,7 @@ export default function SubmissionsInboxPage() {
                   color: statusMsg.kind === 'ok' ? '#10B981' : '#EF4444',
                   fontSize: 12.5, fontWeight: 600,
                 }}>
-                  {statusMsg.kind === 'ok' ? '✓ ' : '⚠ '}{statusMsg.text}
+                  {statusMsg.kind === 'ok' ? <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> : <AlertTriangleIcon size={14} style={{ verticalAlign: 'middle' }} />} {statusMsg.text}
                 </div>
               )}
 
@@ -369,7 +370,7 @@ export default function SubmissionsInboxPage() {
                 <span><span style={{ color: 'var(--text-muted)' }}>Files</span>{' '}<strong>{selected.file_count}</strong></span>
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', opacity: 0.6 }}>{selected.submission_id}</span>
                 {selected.actioned_at && (
-                  <span style={{ color: '#10B981' }}>✓ {selected.actioned_by} · {new Date(selected.actioned_at).toLocaleDateString('en-GB')}</span>
+                  <span style={{ color: '#10B981' }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {selected.actioned_by} · {new Date(selected.actioned_at).toLocaleDateString('en-GB')}</span>
                 )}
               </div>
 

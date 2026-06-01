@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getEstimatorKey, setEstimatorKey, clearEstimatorKey } from '../utils/api';
+import { LockIcon } from './Icons';
 
 // Wraps the estimator pages with a password prompt. Verifies the stored key
 // against /api/estimator/stats on mount; if missing or wrong, shows a prompt.
@@ -67,7 +68,7 @@ export default function EstimatorGate({ children }) {
   if (phase === 'server_unset') {
     return (
       <Wrap t={t}>
-        <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+        <div style={{ marginBottom: 8 }}><LockIcon size={32} /></div>
         <h2 style={{ margin: 0, color: t.text }}>Estimator is locked</h2>
         <p style={{ color: t.textSecondary, fontSize: 14, marginTop: 12 }}>
           The server doesn't have <code style={code(t)}>ESTIMATOR_PASSWORD</code> configured yet.
@@ -80,7 +81,7 @@ export default function EstimatorGate({ children }) {
   // 'prompt'
   return (
     <Wrap t={t}>
-      <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+      <div style={{ marginBottom: 8 }}><LockIcon size={32} /></div>
       <h2 style={{ margin: 0, color: t.text }}>Password required</h2>
       <p style={{ color: t.textSecondary, fontSize: 14, marginTop: 12, marginBottom: 20 }}>
         The estimator is temporarily restricted. Enter the access password to continue.

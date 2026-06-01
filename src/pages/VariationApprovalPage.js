@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import { LinkIcon, CheckIcon, XCircleIcon } from '../components/Icons';
 
 // Public-facing approval page. No auth, no estimator gate. Anyone with the
 // shareable /v/<token> URL can view + approve/decline. The server captures
@@ -104,7 +105,7 @@ export default function VariationApprovalPage() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
         <div style={{ maxWidth: 460, padding: 32, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, textAlign: 'center', color: '#111827' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>🔗</div>
+          <div style={{ marginBottom: 8 }}><LinkIcon size={32} /></div>
           <h2 style={{ margin: 0, fontSize: 20 }}>Link not found</h2>
           <p style={{ color: '#64748B', fontSize: 14, marginTop: 12 }}>{error || 'This approval link is invalid or has been revoked.'}</p>
         </div>
@@ -138,12 +139,12 @@ export default function VariationApprovalPage() {
         {/* Status banner */}
         {data.status === 'approved' && (
           <div style={{ background: c.success, color: '#fff', padding: '10px 28px', fontSize: 13, fontWeight: 600 }}>
-            ✓ Approved by {data.approval_name} on {data.approval_at}
+            <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approved by {data.approval_name} on {data.approval_at}
           </div>
         )}
         {data.status === 'declined' && (
           <div style={{ background: c.danger, color: '#fff', padding: '10px 28px', fontSize: 13, fontWeight: 600 }}>
-            ✗ Declined on {data.decline_at}
+            <XCircleIcon size={14} style={{ verticalAlign: 'middle' }} /> Declined on {data.decline_at}
           </div>
         )}
 

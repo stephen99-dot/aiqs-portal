@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import { FileTextIcon, ScaleIcon, ClipboardIcon, PoundIcon, AlertTriangleIcon } from '../components/Icons';
 
 const TEMPLATE_ICONS = {
-  'contract': '📜',
-  'terms-conditions': '⚖️',
-  'scope-of-work': '📋',
-  'payment-terms': '💷',
-  'health-safety-rams': '⚠️',
+  'contract': FileTextIcon,
+  'terms-conditions': ScaleIcon,
+  'scope-of-work': ClipboardIcon,
+  'payment-terms': PoundIcon,
+  'health-safety-rams': AlertTriangleIcon,
 };
 
 export default function DocumentsPage() {
@@ -102,16 +103,19 @@ function Inner() {
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            {templates.map(tpl => (
+            {templates.map(tpl => {
+              const Ico = TEMPLATE_ICONS[tpl.id] || FileTextIcon;
+              return (
               <button key={tpl.id} onClick={() => create(tpl.id)} style={{
                 background: t.surface, border: '1px solid ' + t.border, borderRadius: 12,
                 padding: 16, textAlign: 'left', cursor: 'pointer', color: t.text,
               }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>{TEMPLATE_ICONS[tpl.id] || '📄'}</div>
+                <div style={{ marginBottom: 8 }}>{Ico && <Ico size={28} />}</div>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{tpl.label}</div>
                 <div style={{ color: t.textSecondary, fontSize: 12, marginTop: 4 }}>{tpl.description}</div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import MaterialThumb from '../components/MaterialThumb';
+import { CheckIcon, XIcon, EditIcon } from '../components/Icons';
 
 // ─── UK Materials Pricing — standalone search / compare page ────────────────────
 // Fuzzy search across canonical_name + aliases; pick a material to see every
@@ -349,8 +350,8 @@ function PriceRowActions({ t, entry, materialUnit, onChanged }) {
     return (
       <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
         <input type="number" step="any" value={price} onChange={e => setPrice(e.target.value)} style={{ width: 70, background: t.inputBg, border: '1px solid ' + t.border, color: t.text, borderRadius: 4, padding: '3px 5px', fontSize: 12 }} />
-        <button onClick={save} disabled={busy} style={miniBtn(t, t.accent)}>✓</button>
-        <button onClick={() => setEditing(false)} style={miniBtn(t, t.textMuted)}>✕</button>
+        <button onClick={save} disabled={busy} style={miniBtn(t, t.accent)}><CheckIcon size={12} /></button>
+        <button onClick={() => setEditing(false)} style={miniBtn(t, t.textMuted)}><XIcon size={12} /></button>
       </span>
     );
   }
@@ -448,8 +449,8 @@ function FeasibilityPanel({ t, f }) {
   return (
     <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginTop: 14 }}>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        <Col title="✓ Automatable (public prices)" items={f.automatable} colour={t.success} />
-        <Col title="✎ Manual / CSV only" items={f.manual_only} colour={t.warning} />
+        <Col title={<><CheckIcon size={12} style={{ verticalAlign: 'middle' }} /> Automatable (public prices)</>} items={f.automatable} colour={t.success} />
+        <Col title={<><EditIcon size={12} style={{ verticalAlign: 'middle' }} /> Manual / CSV only</>} items={f.manual_only} colour={t.warning} />
       </div>
       <div style={{ fontSize: 12, color: t.textSecondary, marginTop: 12, borderTop: '1px solid ' + t.border, paddingTop: 10 }}>{f.caveats}</div>
     </div>

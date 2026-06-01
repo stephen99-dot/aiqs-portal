@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
+import { CheckIcon } from '../components/Icons';
 
 // Variation editor — used for both /change-orders/new?job=<id> (create) and
 // /change-orders/:id (edit / view). Once status === 'approved' the row is
@@ -237,7 +238,7 @@ function Inner() {
       {/* Approved audit block */}
       {approval && (
         <div style={{ background: t.successBg, border: '1px solid ' + t.success + '55', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: t.success, fontWeight: 600, marginBottom: 6 }}>✓ Approved by client</div>
+          <div style={{ color: t.success, fontWeight: 600, marginBottom: 6 }}><CheckIcon size={16} style={{ verticalAlign: 'middle' }} /> Approved by client</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8, fontSize: 13, color: t.text }}>
             <div><span style={{ color: t.textSecondary }}>Name:</span> <strong>{approval.name}</strong></div>
             <div><span style={{ color: t.textSecondary }}>Signed:</span> {approval.signature}</div>

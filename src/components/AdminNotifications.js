@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { UserIcon, KeyIcon, ClipboardIcon, CheckCircleIcon, CreditCardIcon, XCircleIcon, InfoIcon } from './Icons';
 
 // ═══════════════════════════════════════════════════════════════════
 // ADMIN NOTIFICATIONS — polls for new activity, shows toast popups
@@ -15,15 +16,15 @@ import { apiFetch } from '../utils/api';
 const POLL_INTERVAL = 30000; // 30 seconds
 
 const EVENT_CONFIG = {
-  signup:            { icon: '👤', color: '#10B981', label: 'New Signup' },
-  login:             { icon: '🔑', color: '#3B82F6', label: 'Login' },
-  project_created:   { icon: '📋', color: '#F59E0B', label: 'New Project' },
-  project_completed: { icon: '✅', color: '#10B981', label: 'Completed' },
-  plan_changed:      { icon: '💳', color: '#8B5CF6', label: 'Plan Changed' },
-  error:             { icon: '❌', color: '#EF4444', label: 'Error' },
+  signup:            { icon: UserIcon, color: '#10B981', label: 'New Signup' },
+  login:             { icon: KeyIcon, color: '#3B82F6', label: 'Login' },
+  project_created:   { icon: ClipboardIcon, color: '#F59E0B', label: 'New Project' },
+  project_completed: { icon: CheckCircleIcon, color: '#10B981', label: 'Completed' },
+  plan_changed:      { icon: CreditCardIcon, color: '#8B5CF6', label: 'Plan Changed' },
+  error:             { icon: XCircleIcon, color: '#EF4444', label: 'Error' },
 };
 
-const DEFAULT_EVENT = { icon: 'ℹ️', color: '#94A3B8', label: 'Activity' };
+const DEFAULT_EVENT = { icon: InfoIcon, color: '#94A3B8', label: 'Activity' };
 
 // Only show toasts for these event types (skip logins — too noisy)
 const NOTIFY_TYPES = ['signup', 'project_created', 'project_completed', 'plan_changed', 'error'];
@@ -140,7 +141,7 @@ export default function AdminNotifications() {
               flexShrink: 0,
               fontSize: 16,
             }}>
-              {config.icon}
+              {(() => { const Ico = config.icon; return Ico ? <Ico size={16} color={config.color} /> : null; })()}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>

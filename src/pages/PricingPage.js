@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { StarIcon, ChatIcon, MailIcon } from '../components/Icons';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PRICING PAGE — src/pages/PricingPage.js
@@ -169,7 +170,7 @@ export default function PricingPage() {
                 fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
                 whiteSpace: 'nowrap',
               }}>
-                ★ Most Popular
+                <StarIcon size={14} style={{ verticalAlign: 'middle' }} /> Most Popular
               </div>
             )}
 
@@ -233,7 +234,7 @@ export default function PricingPage() {
               background: '#25D366', color: '#FFF', fontSize: 14, fontWeight: 600, cursor: 'pointer',
             }}
           >
-            💬 WhatsApp Us
+            <ChatIcon size={16} /> WhatsApp Us
           </button>
           <a href="mailto:hello@crmwizardai.com" style={{
             display: 'flex', alignItems: 'center', gap: 8,
@@ -241,7 +242,7 @@ export default function PricingPage() {
             border: `1px solid ${t.border}`,
             color: t.text, fontSize: 14, fontWeight: 600,
           }}>
-            ✉️ Email Us
+            <MailIcon size={16} /> Email Us
           </a>
         </div>
       </div>

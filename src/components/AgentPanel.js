@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
+import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, ChatIcon, BrainIcon, BarChartIcon, DotIcon } from './Icons';
 
 // Live BOQ agent panel. Subscribes to /api/agent/:id/stream, renders:
 //   • Header: status + elapsed time + ETA based on typical runs
@@ -14,13 +15,13 @@ import { useTheme } from '../context/ThemeContext';
 // Resumes cleanly after tab close/reload via SSE snapshot.
 
 const TOOL_LABELS = {
-  view_pdf_page:       { emoji: '🔍', label: 'Viewing drawing' },
-  set_project_metadata:{ emoji: '📋', label: 'Recording project metadata' },
-  record_takeoff_item: { emoji: '📐', label: 'Recording BOQ item' },
-  update_takeoff_item: { emoji: '✏️', label: 'Updating item' },
-  remove_takeoff_item: { emoji: '🗑️', label: 'Removing item' },
-  run_pricer:          { emoji: '🧮', label: 'Running pricer' },
-  finalize_boq:        { emoji: '✅', label: 'Finalising BOQ' },
+  view_pdf_page:       { emoji: SearchIcon, label: 'Viewing drawing' },
+  set_project_metadata:{ emoji: ClipboardIcon, label: 'Recording project metadata' },
+  record_takeoff_item: { emoji: RulerIcon, label: 'Recording BOQ item' },
+  update_takeoff_item: { emoji: EditIcon, label: 'Updating item' },
+  remove_takeoff_item: { emoji: TrashIcon, label: 'Removing item' },
+  run_pricer:          { emoji: CalculatorIcon, label: 'Running pricer' },
+  finalize_boq:        { emoji: CheckCircleIcon, label: 'Finalising BOQ' },
 };
 
 // Typical elapsed seconds by iteration count — very rough, used for ETA.
@@ -391,7 +392,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       {/* Header — sticky at top of panel */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 22 }}>{isComplete ? '✅' : isFailed ? '❌' : isAwaitingReview ? '📋' : isGenerating ? '📄' : isInitialising ? '🔌' : '🛠️'}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center' }}>{isComplete ? <CheckCircleIcon size={22} /> : isFailed ? <XCircleIcon size={22} /> : isAwaitingReview ? <ClipboardIcon size={22} /> : isGenerating ? <FileTextIcon size={22} /> : isInitialising ? <PlugIcon size={22} /> : <WrenchIcon size={22} />}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
               Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isAwaitingReview ? 'Ready for review' : isGenerating ? 'Generating documents' : isInitialising ? 'Initialising' : 'Running'}
@@ -461,7 +462,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {varianceNote && !isComplete && (
             <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: /^HIGH/.test(varianceNote) ? (isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)') : (isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.08)'), borderLeft: '3px solid ' + (/^HIGH/.test(varianceNote) ? c.err : c.accent) }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: /^HIGH/.test(varianceNote) ? c.err : c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                ⚠️ Cost variance vs your past projects
+<AlertTriangleIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Cost variance vs your past projects
               </div>
               <div style={{ fontSize: 12.5, color: c.text, lineHeight: 1.5 }}>
                 {varianceNote}
@@ -481,7 +482,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 240 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>📋 Ready for your review</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}><ClipboardIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Ready for your review</div>
                   <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.55, marginBottom: 8 }}>{reviewSummary || 'Atlas has completed the takeoff. Review items below, tweak any quantities that look off, then click Generate to produce the Excel and Word deliverables.'}</div>
                   {priced?.summary && (
                     <div style={{ fontSize: 12, color: c.muted }}>
@@ -491,10 +492,10 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={reprice} style={{ padding: '9px 14px', borderRadius: 8, background: 'transparent', border: '1px solid ' + c.border, color: c.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    🧮 Re-price
+                    <CalculatorIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Re-price
                   </button>
                   <button onClick={generate} disabled={generating} style={{ padding: '9px 18px', borderRadius: 8, background: c.done, border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1 }}>
-                    {generating ? 'Generating…' : '✓ Generate Excel + Word'}
+                    {generating ? 'Generating…' : <><CheckIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Generate Excel + Word</>}
                   </button>
                 </div>
               </div>
@@ -521,7 +522,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {(narrationLog.length > 0 || narration || isRunning) && (
             <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(96,165,250,0.04)' : 'rgba(96,165,250,0.035)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>💬</span><span>Agent working notes</span>
+                <ChatIcon size={14} /><span>Agent working notes</span>
               </div>
               {/* Prior iterations */}
               {narrationLog.map((entry, i) => entry.text ? (
@@ -586,7 +587,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             {sanityWarnings.length > 0 && !isComplete && (
               <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                  ⚠️ {sanityWarnings.length} quantity warning{sanityWarnings.length !== 1 ? 's' : ''} vs your history
+                  <AlertTriangleIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />{sanityWarnings.length} quantity warning{sanityWarnings.length !== 1 ? 's' : ''} vs your history
                 </div>
                 <div style={{ fontSize: 11.5, color: c.text, lineHeight: 1.55 }}>
                   {sanityWarnings.slice(0, 4).map((w, i) => (
@@ -599,7 +600,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Takeoff</span>
               <span style={{ fontSize: 12, color: c.muted }}>{items.length} item{items.length !== 1 ? 's' : ''}{run?.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}</span>
-              {isAwaitingReview && <span style={{ fontSize: 11, color: c.accent, fontWeight: 600, marginLeft: 'auto' }}>✏️ click qty to edit</span>}
+              {isAwaitingReview && <span style={{ fontSize: 11, color: c.accent, fontWeight: 600, marginLeft: 'auto' }}><EditIcon size={12} style={{ verticalAlign:'middle', marginRight:4 }} />click qty to edit</span>}
               {!isAwaitingReview && items.length > 15 && (
                 <button onClick={() => setShowAllItems(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: c.accent, fontSize: 11, fontWeight: 600, padding: 0, fontFamily: 'inherit' }}>
                   {showAllItems ? `Show first 15` : `Show all ${items.length}`}
@@ -644,12 +645,13 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {toolCalls.map((tc, i) => {
-                  const label = TOOL_LABELS[tc.tool] || { emoji: '·', label: tc.tool };
+                  const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
+                  const LabelIcon = label.emoji;
                   const dotColor = tc.status === 'done' ? c.done : tc.status === 'error' ? c.err : c.accent;
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-                      <span>{label.emoji}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}><LabelIcon size={14} /></span>
                       <span style={{ color: c.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {label.label}{tc.input && tc.tool === 'view_pdf_page' ? ` — ${tc.input.filename} p${tc.input.page}` : tc.input && tc.tool === 'record_takeoff_item' ? ` — ${tc.input.key}` : ''}
                       </span>
@@ -668,7 +670,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 11.5, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}
             >
               <span style={{ transform: showReasoning ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', display: 'inline-block', fontSize: 10 }}>▶</span>
-              🧠 {showReasoning ? 'Hide' : 'Show'} reasoning ({reasoning.length} chars)
+              <BrainIcon size={14} style={{ verticalAlign:'middle', marginRight:4 }} />{showReasoning ? 'Hide' : 'Show'} reasoning ({reasoning.length} chars)
             </button>
             {showReasoning && reasoning && (
               <pre style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', fontSize: 11.5, color: c.muted, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
@@ -711,7 +713,7 @@ function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onC
       <div style={{ padding: '5px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }}>
         <span style={{ color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.description}>{it.description || it.key}</span>
         <span style={{ color: warning ? warnBorder : c.muted, whiteSpace: 'nowrap', fontWeight: warning ? 700 : 400 }}>{it.qty} {it.unit}</span>
-        {warning ? <span title={warning.message} style={{ fontSize: 11, whiteSpace: 'nowrap' }}>⚠️</span> : <span />}
+        {warning ? <span title={warning.message} style={{ fontSize: 11, whiteSpace: 'nowrap' }}><AlertTriangleIcon size={14} /></span> : <span />}
         <span style={{ color: c.sub, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>{it.section}</span>
       </div>
     );
@@ -740,7 +742,7 @@ function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onC
   return (
     <div style={{ padding: '7px 8px', borderRadius: 5, background: zebra ? c.row : 'transparent', display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 10, alignItems: 'center', cursor: 'pointer', borderLeft: warning ? `3px solid ${warnBorder}` : '3px solid transparent', paddingLeft: 8 }} onClick={onEdit} title={warning ? warning.message : 'Click to edit'}>
       <span style={{ color: c.text, lineHeight: 1.5, minWidth: 0, overflow: 'hidden' }}>
-        {warning && <span title={warning.message} style={{ marginRight: 6 }}>⚠️</span>}
+        {warning && <span title={warning.message} style={{ marginRight: 6 }}><AlertTriangleIcon size={14} /></span>}
         {it.description || it.key}
         {it.edited_by_user && <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(59,130,246,0.15)', color: '#3B82F6', fontWeight: 600 }}>edited</span>}
         {warning && (
@@ -783,7 +785,7 @@ function DownloadButton({ f, c, isDark }) {
         fontSize: 13, fontWeight: 600, fontFamily: 'inherit', opacity: busy ? 0.6 : 1,
       }}
     >
-      {f.type === 'xlsx' ? '📊' : '📝'} {busy ? 'Downloading...' : 'Download ' + f.name}
+      {f.type === 'xlsx' ? <BarChartIcon size={16} /> : <EditIcon size={16} />} {busy ? 'Downloading...' : 'Download ' + f.name}
     </button>
   );
 }

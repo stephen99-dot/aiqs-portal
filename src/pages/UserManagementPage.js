@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check } from 'lucide-react';
+import { KeyIcon } from '../components/Icons';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -73,7 +74,7 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
     <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
       <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+border}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:text}}>🔑 Reset Password</h3>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:text}}><KeyIcon size={16} style={{ verticalAlign: 'middle' }} /> Reset Password</h3>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
         </div>
         <p style={{fontSize:13,color:muted,margin:'0 0 16px',lineHeight:1.5}}>

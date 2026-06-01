@@ -8,6 +8,7 @@ import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
   NewProjectIcon, UploadIcon, DownloadIcon, ChatIcon,
+  BrainIcon,
 } from '../components/Icons';
 
 const STRIPE = {
@@ -446,7 +447,7 @@ export default function DashboardPage() {
                 background: 'rgba(245,158,11,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 20,
-              }}>🧠</div>
+              }}><BrainIcon size={20} /></div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 3 }}>
                   Teach the AI how you work — 2 minutes

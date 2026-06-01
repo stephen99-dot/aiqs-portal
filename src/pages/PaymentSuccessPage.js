@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import { CheckCircleIcon, AlertTriangleIcon, ClockIcon } from '../components/Icons';
 
 export default function PaymentSuccessPage() {
   const { t } = useTheme();
@@ -51,7 +52,7 @@ export default function PaymentSuccessPage() {
       }}>
         {status === 'processing' && (
           <>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+            <div style={{ marginBottom: 16 }}><ClockIcon size={48} /></div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
               Processing Payment...
             </h2>
@@ -64,7 +65,7 @@ export default function PaymentSuccessPage() {
 
         {status === 'success' && (
           <>
-            <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+            <div style={{ marginBottom: 16 }}><CheckCircleIcon size={56} /></div>
             <h2 style={{ fontSize: 24, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
               Payment Successful!
             </h2>
@@ -109,7 +110,7 @@ export default function PaymentSuccessPage() {
 
         {status === 'error' && (
           <>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+            <div style={{ marginBottom: 16 }}><AlertTriangleIcon size={48} /></div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
               Something Went Wrong
             </h2>

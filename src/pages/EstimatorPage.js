@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import { ClipboardIcon, FileTextIcon } from '../components/Icons';
 
 // Quotes dashboard — list + stats strip. The "build a new quote" flow lives in
 // EstimatorBuilderPage. Both are gated on user.hasEstimator.
@@ -101,7 +102,7 @@ function EstimatorPageInner() {
           maxWidth: 560, margin: '60px auto', padding: 32, borderRadius: 12,
           background: t.card, border: '1px solid ' + t.border, textAlign: 'center',
         }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
+          <div style={{ marginBottom: 8 }}><ClipboardIcon size={36} /></div>
           <h2 style={{ margin: 0, fontSize: 22, color: t.text }}>Office in a Box</h2>
           <p style={{ color: t.textSecondary, marginTop: 12 }}>
             The complete builder office add-on — quotes, finance tracking, invoices,
@@ -151,7 +152,7 @@ function EstimatorPageInner() {
           background: t.card, border: '1px dashed ' + t.border, borderRadius: 12,
           padding: 40, textAlign: 'center', color: t.textSecondary,
         }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
+          <div style={{ marginBottom: 8 }}><FileTextIcon size={28} /></div>
           <div style={{ color: t.text, fontWeight: 600, marginBottom: 6 }}>No quotes yet</div>
           <div style={{ marginBottom: 16 }}>Describe a job and we'll draft an itemised quote in seconds.</div>
           <button

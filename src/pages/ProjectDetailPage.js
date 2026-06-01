@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
+import { ClipboardIcon } from '../components/Icons';
 
 // SVG icons for document types
 const ExcelIcon = ({ size = 28 }) => (
@@ -118,7 +119,7 @@ export default function ProjectDetailPage() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
-            📋 Variations
+            <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
           </Link>
           <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
             {status.label}

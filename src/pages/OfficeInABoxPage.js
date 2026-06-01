@@ -6,6 +6,7 @@ import { apiFetch } from '../utils/api';
 import {
   ZapIcon, RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon,
   FileTextIcon, LayersIcon, CheckCircleIcon, ArrowRightIcon, ClockIcon,
+  PartyIcon,
 } from '../components/Icons';
 import OfficeBoxArt from '../components/OfficeBoxArt';
 
@@ -268,7 +269,7 @@ export default function OfficeInABoxPage() {
               padding: '16px', textAlign: 'center',
             }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 4 }}>
-                You're on the list 🎉
+                You're on the list <PartyIcon size={16} style={{ verticalAlign: 'middle' }} />
               </div>
               <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.45 }}>
                 We've noted your interest and we'll email you the moment Office in a Box goes live.
