@@ -30,8 +30,9 @@ const SUPPLIERS = [
 ];
 
 // name, category, unit, base (£ representative), aliases. The first 11 names
-// match the original seed so they de-duplicate cleanly.
-const CATALOGUE = [
+// match the original seed so they de-duplicate cleanly. This hand-written core
+// is combined with generated dimensional variants (see buildVariants) below.
+const HAND_CATALOGUE = [
   // ── Timber & carcassing ───────────────────────────────────────────────────
   ['Sawn Timber 47x100mm (4x2) C16 Treated', 'Timber', 'm', 6.20, '4x2,4 by 2,47x100,two by four,2x4,carcassing,stud,joist'],
   ['Sawn Timber 47x75mm (3x2) C16 Treated', 'Timber', 'm', 4.80, '3x2,47x75,three by two,carcassing'],
@@ -547,6 +548,171 @@ const CATALOGUE = [
   ['Site First Aid Kit', 'Site & PPE', 'each', 16.00, 'first aid kit'],
 ];
 
+// ── Generated dimensional variants ──────────────────────────────────────────
+// A merchant's SKU count is dominated by size / grade / length / colour
+// variants of the same product. Rather than hand-list thousands, expand product
+// families across their natural axes — compact to maintain, large in output.
+function buildVariants() {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const out = [];
+  const add = (name, category, unit, base, aliases) => out.push([name, category, unit, r2(base), aliases]);
+
+  // Sawn carcassing timber: section × grade × treatment × length
+  const tSec = [['47x50', 2.6], ['47x75', 3.6], ['47x100', 4.8], ['47x125', 6.1], ['47x150', 7.3], ['47x175', 8.9], ['47x200', 10.5], ['47x225', 12.3]];
+  for (const [sec, perm] of tSec)
+    for (const [g, gf] of [['C16', 1.0], ['C24', 1.18]])
+      for (const [tr, tf] of [['Treated', 1.08], ['Untreated', 1.0]])
+        for (const L of [2.4, 3.0, 3.6, 4.2, 4.8, 6.0])
+          add(`Sawn Timber ${sec}mm ${g} ${tr} ${L}m`, 'Timber', 'each', perm * gf * tf * L, `${sec},carcassing,timber,${g.toLowerCase()},${tr.toLowerCase()},${L}m`);
+
+  // CLS studwork
+  for (const [sec, perm] of [['38x63', 1.9], ['38x89', 2.6], ['38x140', 4.0]])
+    for (const L of [2.4, 3.0, 3.6, 4.2])
+      add(`CLS Studwork ${sec}mm ${L}m`, 'Timber', 'each', perm * L, `cls,studwork,${sec},${L}m`);
+
+  // Planed redwood (PAR)
+  for (const [sec, perm] of [['25x50', 1.0], ['25x75', 1.5], ['25x100', 2.0], ['25x150', 3.0], ['25x175', 3.5]])
+    for (const L of [2.4, 3.0, 3.6])
+      add(`Redwood PAR ${sec}mm ${L}m`, 'Timber', 'each', perm * L, `par,planed,redwood,${sec},${L}m`);
+
+  // Treated battens
+  for (const [sec, perm] of [['25x38', 0.7], ['25x50', 0.9], ['50x50', 1.6]])
+    for (const L of [3.0, 3.6, 4.2, 4.8])
+      add(`Treated Batten ${sec}mm ${L}m`, 'Timber', 'each', perm * L, `batten,roof batten,${sec},${L}m`);
+
+  // Sheet materials: type × thickness
+  const sheets = [
+    ['OSB3', { 9: 13.5, 11: 16, 15: 19, 18: 22, 22: 27 }, 'osb,osb3,sterling board'],
+    ['MDF', { 6: 12, 9: 15, 12: 18, 18: 26, 25: 36 }, 'mdf'],
+    ['Moisture Resistant MDF', { 6: 15, 12: 22, 18: 33 }, 'mdf mr,green mdf'],
+    ['Hardwood Plywood', { 6: 18, 9: 24, 12: 30, 18: 42, 25: 60 }, 'plywood,ply,hardwood'],
+    ['WBP Plywood', { 9: 22, 12: 30, 18: 40 }, 'plywood,wbp'],
+    ['Marine Plywood', { 12: 42, 18: 60 }, 'marine ply,plywood'],
+    ['Birch Plywood', { 12: 34, 18: 48, 25: 66 }, 'birch ply,plywood'],
+    ['Chipboard Flooring T&G', { 18: 11, 22: 14 }, 'chipboard,flooring,p5'],
+  ];
+  for (const [type, th, al] of sheets)
+    for (const t of Object.keys(th))
+      add(`${type} ${t}mm 2440x1220mm`, 'Sheet Materials', 'sheet', th[t], `${al},${t}mm,sheet`);
+
+  // Plasterboard: type × thickness × size
+  for (const [tp, tf, tal] of [['Standard', 1.0, 'plasterboard,wallboard'], ['Moisture Resistant', 1.45, 'mr board,green board'], ['Fireline', 1.35, 'fireline,fire board'], ['Soundbloc', 1.7, 'soundbloc,acoustic board']])
+    for (const [th, hf] of [['9.5mm', 0.85], ['12.5mm', 1.0], ['15mm', 1.2]])
+      for (const [sz, sf] of [['2400x1200mm', 1.0], ['1800x900mm', 0.6]])
+        add(`${tp} Plasterboard ${th} ${sz}`, 'Plasterboard', 'sheet', 9.5 * tf * hf * sf, `${tal},plasterboard,${th}`);
+
+  // PIR insulation thicknesses
+  for (const t of [25, 30, 40, 50, 60, 70, 75, 80, 90, 100, 120, 150])
+    add(`PIR Insulation Board ${t}mm 2400x1200mm`, 'Insulation', 'sheet', 6 + t * 0.32, `pir,celotex,kingspan,insulation,${t}mm`);
+  for (const t of [100, 150, 170, 200])
+    add(`Loft Insulation Roll ${t}mm`, 'Insulation', 'roll', 16 + t * 0.04, `loft roll,mineral wool,${t}mm`);
+  for (const t of [85, 100, 125, 150])
+    add(`Cavity Wall Batt ${t}mm`, 'Insulation', 'pack', 18 + t * 0.08, `cavity batt,dritherm,rockwool,${t}mm`);
+  for (const d of ['15mm', '22mm', '28mm'])
+    for (const L of ['1m', '2m'])
+      add(`Pipe Insulation Lagging ${d} x ${L}`, 'Insulation', 'each', 1.0 + parseInt(d) * 0.03, `pipe lagging,insulation,${d}`);
+
+  // Copper & push-fit pipe: diameter × length
+  for (const [d, perm] of [['8mm', 2.0], ['10mm', 2.2], ['15mm', 3.0], ['22mm', 4.6], ['28mm', 6.7], ['35mm', 9.5]])
+    for (const L of [2, 3])
+      add(`Copper Pipe ${d} ${L}m`, 'Plumbing', 'each', perm * L, `copper pipe,${d},${L}m`);
+  for (const d of ['10mm', '15mm', '22mm', '28mm'])
+    for (const L of [2, 3])
+      add(`Push-Fit Barrier Pipe ${d} ${L}m`, 'Plumbing', 'each', (2 + parseInt(d) * 0.18) * L / 2, `push fit,speedfit,${d},${L}m`);
+
+  // Plumbing fittings: system × type × diameter
+  for (const [sys, sal] of [['Compression', 'compression'], ['Push-Fit', 'push fit,speedfit']])
+    for (const [tp, tb] of [['Elbow', 1.5], ['Equal Tee', 2.0], ['Straight Coupler', 1.3], ['Stop End', 1.1], ['Reducer', 1.6]])
+      for (const [d, df] of [['15mm', 1.0], ['22mm', 1.5], ['28mm', 2.1]])
+        add(`${sys} ${tp} ${d}`, 'Plumbing', 'each', tb * df, `${sys.toLowerCase()},${tp.toLowerCase()},${d},${sal}`);
+
+  // Cable: T&E size × length, plus SWA
+  for (const [s, perm] of [['1.0mm²', 0.32], ['1.5mm²', 0.42], ['2.5mm²', 0.6], ['4mm²', 0.95], ['6mm²', 1.3], ['10mm²', 2.1]])
+    for (const L of [50, 100])
+      add(`Twin & Earth Cable ${s} ${L}m`, 'Electrical', 'roll', perm * L, `twin and earth,t&e,${s},cable`);
+  for (const [s, perm] of [['1.5mm²', 0.7], ['2.5mm²', 0.95], ['4mm²', 1.4], ['6mm²', 1.9]])
+    add(`SWA Armoured Cable ${s} 3-Core (per m)`, 'Electrical', 'm', perm, `swa,armoured,${s}`);
+
+  // Paint: finish × colour × tin size
+  for (const [fin, ff, fal] of [['Matt Emulsion', 1.0, 'emulsion,matt'], ['Silk Emulsion', 1.06, 'emulsion,silk'], ['Gloss', 1.6, 'gloss'], ['Satinwood', 1.7, 'satinwood'], ['Eggshell', 1.65, 'eggshell'], ['Masonry Paint', 1.4, 'masonry,exterior']])
+    for (const col of ['Brilliant White', 'Magnolia', 'Light Grey', 'Cream', 'Black', 'Sage Green', 'Navy', 'Anthracite'])
+      for (const [sz, szf] of [['2.5L', 1.0], ['5L', 1.8], ['10L', 3.2]])
+        add(`${col} ${fin} ${sz}`, 'Paint & Decorating', 'tin', 8 * ff * szf, `paint,${fal},${col.toLowerCase()},${sz}`);
+
+  // Tiles
+  for (const s of ['200x250mm', '250x400mm', '300x600mm', '100x100mm'])
+    add(`Ceramic Wall Tile ${s} (m2)`, 'Tiling & Flooring', 'm2', 12, `wall tile,ceramic,${s}`);
+  for (const s of ['300x300mm', '450x450mm', '600x600mm', '600x300mm', '800x800mm'])
+    add(`Porcelain Floor Tile ${s} (m2)`, 'Tiling & Flooring', 'm2', 22, `floor tile,porcelain,${s}`);
+
+  // Radiators: type × height × width
+  for (const [tp, tf] of [['Single Panel', 1.0], ['Double Panel', 1.5], ['Double Panel Plus', 1.8]])
+    for (const h of [300, 450, 600])
+      for (const w of [400, 600, 800, 1000, 1200, 1400])
+        add(`${tp} Radiator ${h}x${w}mm`, 'Plumbing', 'each', tf * (15 + h * 0.02 + w * 0.02), `radiator,${tp.toLowerCase()},central heating`);
+
+  // Doors: type × width
+  for (const [w, al] of [['610mm', '24 inch'], ['686mm', '27 inch'], ['762mm', '30 inch'], ['838mm', '33 inch']])
+    for (const [tp, b] of [['Primed Internal', 35], ['White Moulded Internal', 30], ['Oak Veneer Internal', 70], ['FD30 Fire', 75], ['Pine Panel Internal', 55]])
+      add(`${tp} Door ${w}`, 'Doors & Joinery', 'each', b * (0.85 + parseInt(w) / 900), `door,${tp.toLowerCase()},${al}`);
+
+  // Skirting & architrave: profile × height × material
+  const profiles = ['Torus', 'Ogee', 'Bullnose', 'Chamfered', 'Square Edge', 'Ovolo'];
+  for (const pf of profiles)
+    for (const [h, hf] of [['95mm', 1.0], ['119mm', 1.25], ['144mm', 1.5], ['169mm', 1.75]])
+      for (const [mat, mf] of [['MDF', 1.0], ['Pine', 1.15]])
+        add(`${mat} ${pf} Skirting ${h} 4.4m`, 'Doors & Joinery', 'length', 8 * hf * mf, `skirting,${pf.toLowerCase()},${mat.toLowerCase()},${h}`);
+  for (const pf of profiles)
+    for (const [mat, mf] of [['MDF', 1.0], ['Pine', 1.15]])
+      add(`${mat} ${pf} Architrave 2.1m`, 'Doors & Joinery', 'length', 4 * mf, `architrave,${pf.toLowerCase()},${mat.toLowerCase()}`);
+
+  // Screws: type × length
+  for (const [nm, al, k] of [['Wood Screws', 'wood screws', 0.04], ['Decking Screws', 'decking screws', 0.06], ['Multipurpose Screws', 'multipurpose screws', 0.05]])
+    for (const L of [16, 20, 25, 30, 40, 50, 60, 70, 80, 100])
+      add(`${nm} 4.0x${L}mm (200 pack)`, 'Fixings', 'box', 4 + L * k, `${al},screws,4x${L}`);
+  for (const [nm, L] of [['Round Wire Nails', '65mm'], ['Round Wire Nails', '100mm'], ['Oval Nails', '50mm'], ['Galvanised Clout Nails', '30mm'], ['Lost Head Nails', '50mm'], ['Masonry Nails', '50mm']])
+    add(`${nm} ${L} 1kg`, 'Fixings', 'box', 4.5, `nails,${nm.toLowerCase()},${L}`);
+
+  // Blocks
+  for (const [tp, b, al] of [['Dense Concrete 7.3N', 1.6, 'concrete block,dense block'], ['Aircrete', 1.9, 'aircrete,aerated,thermalite,celcon']])
+    for (const th of ['100mm', '140mm', '215mm'])
+      add(`${tp} Block ${th}`, 'Bricks & Blocks', 'each', b * (parseInt(th) / 100), `${al},block,${th}`);
+
+  return out;
+}
+
+function dedupeRows(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows) {
+    const k = row[0].toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(row);
+  }
+  return out;
+}
+
+const CATALOGUE = dedupeRows(HAND_CATALOGUE.concat(buildVariants()));
+
+// Supplier "find this product" search URLs — used as the Verify link for sample
+// prices. Search endpoints resolve to a real results page (they don't 404 like a
+// fabricated product path), so every item gets a working, honest link.
+const SUPPLIER_SEARCH = {
+  'Screwfix': 'https://www.screwfix.com/search?search=',
+  'Toolstation': 'https://www.toolstation.com/search?q=',
+  'Wickes': 'https://www.wickes.co.uk/search?text=',
+  'B&Q': 'https://www.diy.com/search?term=',
+  'Selco': 'https://www.selcobw.com/search?q=',
+  'Jewson': 'https://www.jewson.co.uk/search?text=',
+  'Travis Perkins': 'https://www.travisperkins.co.uk/search?q=',
+  'MKM': 'https://www.mkmbs.co.uk/search?q=',
+};
+function searchUrl(supplierName, materialName) {
+  const base = SUPPLIER_SEARCH[supplierName];
+  return base ? base + encodeURIComponent(materialName) : null;
+}
+
 // Deterministic 0..1 from a string (FNV-1a) so generated prices/suppliers are
 // stable run-to-run.
 function rng(str) {
@@ -577,7 +743,7 @@ function ensureCatalogue(db) {
   );
   const insPrice = db.prepare(
     'INSERT INTO price_entries (id, material_id, supplier_id, price, unit, source_url, captured_at, captured_via, in_stock, stale, notes, created_by) '
-    + 'VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)'
+    + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
   let added = 0, priced = 0;
@@ -601,8 +767,8 @@ function ensureCatalogue(db) {
         const capturedAt = new Date(Date.now() - days * 86400000).toISOString();
         const stale = days > 30 ? 1 : 0;
         const inStock = rng(name + s.name + 'stk') < 0.92 ? 1 : 0;
-        insPrice.run(uuidv4(), mid, supId[s.name], price, unit, capturedAt, 'estimate', inStock, stale,
-          'Representative sample price — verify against a live source', 'catalogue');
+        insPrice.run(uuidv4(), mid, supId[s.name], price, unit, searchUrl(s.name, name), capturedAt, 'estimate', inStock, stale,
+          'Representative sample price — Verify opens a supplier search for this item', 'catalogue');
         priced++;
       }
     }
@@ -612,4 +778,32 @@ function ensureCatalogue(db) {
   return { added, priced };
 }
 
-module.exports = { CATALOGUE, SUPPLIERS, ensureCatalogue };
+// Backfill a working Verify link on sample rows that have none (the original 11
+// seed rows + any catalogue rows predating links). Scoped to sample data only
+// (created_by IN seed/catalogue) so real user/scrape entries are untouched.
+// Idempotent: after the first run those rows already have a source_url.
+function backfillSearchUrls(db) {
+  try {
+    const rows = db.prepare(
+      "SELECT pe.id, s.name AS supplier, m.canonical_name AS material "
+      + "FROM price_entries pe JOIN suppliers s ON s.id = pe.supplier_id JOIN materials m ON m.id = pe.material_id "
+      + "WHERE (pe.source_url IS NULL OR pe.source_url = '') AND pe.created_by IN ('seed', 'catalogue')"
+    ).all();
+    if (rows.length === 0) return 0;
+    const upd = db.prepare('UPDATE price_entries SET source_url = ? WHERE id = ?');
+    const txn = db.transaction(() => {
+      for (const r of rows) {
+        const url = searchUrl(r.supplier, r.material);
+        if (url) upd.run(url, r.id);
+      }
+    });
+    txn();
+    console.log('[Materials] backfilled ' + rows.length + ' Verify links on sample prices');
+    return rows.length;
+  } catch (err) {
+    console.error('[Materials] backfillSearchUrls failed:', err.message);
+    return 0;
+  }
+}
+
+module.exports = { CATALOGUE, SUPPLIERS, ensureCatalogue, backfillSearchUrls };
