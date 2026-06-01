@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
-import { CheckCircleIcon, AlertTriangleIcon } from '../components/Icons';
+import { CheckCircleIcon, AlertTriangleIcon, ClockIcon } from '../components/Icons';
 
 export default function PaymentSuccessPage() {
   const { t } = useTheme();
@@ -52,7 +52,7 @@ export default function PaymentSuccessPage() {
       }}>
         {status === 'processing' && (
           <>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+            <div style={{ marginBottom: 16 }}><ClockIcon size={48} /></div>
             <h2 style={{ fontSize: 22, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
               Processing Payment...
             </h2>
