@@ -1,0 +1,44 @@
+[
+  {
+    "material": "No Nonsense C44 Concrete 20kg",
+    "category": "Cement & Aggregates",
+    "unit": "bag",
+    "aliases": "concrete,c44,ready mix concrete,20kg concrete",
+    "urls": ["https://www.screwfix.com/p/no-nonsense-c44-concrete-grey-20kg/748hn"]
+  },
+  {
+    "material": "No Nonsense Concrete Repair Grey 300ml",
+    "category": "Cement & Aggregates",
+    "unit": "tube",
+    "aliases": "concrete repair,patch repair",
+    "urls": ["https://www.screwfix.com/p/no-nonsense-concrete-repair-grey-300ml/727GC"]
+  },
+  {
+    "material": "Essentials Primed MDF Ogee Skirting 2400x119x18mm (4 Pack)",
+    "category": "Doors & Joinery",
+    "unit": "pack",
+    "aliases": "skirting,mdf skirting,ogee skirting",
+    "urls": ["https://www.screwfix.com/p/essentials-primed-mdf-ogee-skirting-board-2400mm-x-119mm-x-18mm-4-pack/561re"]
+  },
+  {
+    "material": "Thistle Finishing Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle finishing,finish plaster,skim plaster",
+    "urls": ["https://www.toolstation.com/thistle-finishing-plaster/p12407"]
+  },
+  {
+    "material": "Thistle One Coat Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle one coat,one coat plaster",
+    "urls": ["https://www.toolstation.com/thistle-one-coat-plaster/p65753"]
+  },
+  {
+    "material": "Dryzone Fast Set Renovation Plaster 20kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "dryzone,renovation plaster,fast set plaster",
+    "urls": ["https://www.toolstation.com/dryzone-fast-set-renovation-plaster/p90547"]
+  }
+]

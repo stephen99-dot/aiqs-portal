@@ -14,6 +14,8 @@
 // will not duplicate or overwrite the existing rows.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
 // Per-supplier price multiplier + account type. Trade merchants tend to be a
@@ -806,4 +808,56 @@ function backfillSearchUrls(db) {
   }
 }
 
-module.exports = { CATALOGUE, SUPPLIERS, ensureCatalogue, backfillSearchUrls };
+// Import live scraped prices committed by the GitHub Actions job
+// (server/materials-live.json). These are REAL captures: live price, the
+// product image, and the exact product URL as the Verify link. Upserts on
+// source_url so re-runs refresh rather than duplicate. Idempotent across boots.
+function importLivePrices(db) {
+  const file = path.join(__dirname, 'materials-live.json');
+  if (!fs.existsSync(file)) return 0;
+  let rows;
+  try { rows = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return 0; }
+  if (!Array.isArray(rows) || rows.length === 0) return 0;
+
+  const findMat = db.prepare('SELECT * FROM materials WHERE LOWER(canonical_name) = LOWER(?)');
+  const insMat = db.prepare('INSERT INTO materials (id, canonical_name, category, default_unit, search_aliases, image_url, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const setMatImg = db.prepare('UPDATE materials SET image_url = ? WHERE id = ?');
+  const findSup = db.prepare('SELECT id FROM suppliers WHERE LOWER(name) = LOWER(?)');
+  const insSup = db.prepare('INSERT INTO suppliers (id, name, region, account_type) VALUES (?, ?, ?, ?)');
+  const findPe = db.prepare("SELECT id FROM price_entries WHERE source_url = ? AND captured_via = 'scrape'");
+  const updPe = db.prepare('UPDATE price_entries SET material_id = ?, supplier_id = ?, price = ?, unit = ?, in_stock = ?, image_url = ?, captured_at = ?, stale = 0 WHERE id = ?');
+  const insPe = db.prepare(
+    "INSERT INTO price_entries (id, material_id, supplier_id, price, unit, source_url, captured_at, captured_via, in_stock, stale, notes, image_url, created_by) "
+    + "VALUES (?, ?, ?, ?, ?, ?, ?, 'scrape', ?, 0, 'Live scraped price', ?, 'live')"
+  );
+
+  let n = 0;
+  const txn = db.transaction(() => {
+    for (const r of rows) {
+      if (!r || !r.material || r.price == null || !r.source_url) continue;
+      let mat = findMat.get(r.material);
+      if (!mat) {
+        const id = uuidv4();
+        insMat.run(id, r.material, r.category || null, r.unit || null, r.aliases || null, r.image_url || null, 'live');
+        mat = findMat.get(r.material);
+      } else if (r.image_url && !mat.image_url) {
+        setMatImg.run(r.image_url, mat.id);
+      }
+      let sup = findSup.get(r.supplier);
+      if (!sup) { const id = uuidv4(); insSup.run(id, r.supplier, 'UK', 'retail'); sup = findSup.get(r.supplier); }
+      const capturedAt = r.captured_at || new Date().toISOString();
+      const existing = findPe.get(r.source_url);
+      if (existing) {
+        updPe.run(mat.id, sup.id, r.price, r.unit || mat.default_unit || null, r.in_stock ? 1 : 0, r.image_url || null, capturedAt, existing.id);
+      } else {
+        insPe.run(uuidv4(), mat.id, sup.id, r.price, r.unit || mat.default_unit || null, r.source_url, capturedAt, r.in_stock ? 1 : 0, r.image_url || null);
+      }
+      n++;
+    }
+  });
+  txn();
+  if (n) console.log('[Materials] imported ' + n + ' live scraped prices');
+  return n;
+}
+
+module.exports = { CATALOGUE, SUPPLIERS, ensureCatalogue, backfillSearchUrls, importLivePrices };
