@@ -440,7 +440,7 @@ router.post('/auth/register', async (req, res) => {
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
-    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 100, 2, 5)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 10, 0, 0)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
     seedDefaultRates(id);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -583,7 +583,7 @@ router.get('/auth/google/callback', async (req, res) => {
       // New user — create account
       const id = uuidv4();
       const role = email === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
-      db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 100, 2, 5)")
+      db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 10, 0, 0)")
         .run(id, email, fullName, googleId, avatar, role);
       seedDefaultRates(id);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -816,7 +816,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     // Generate a random temporary password — user will set their own via magic link
     const tempPassword = crypto.randomBytes(24).toString('hex');
     const passwordHash = await bcrypt.hash(tempPassword, 12);
-    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 100, 2, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 10, 0, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     seedDefaultRates(id);
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     logActivity({ event_type: 'signup', title: fullName + ' added by admin', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });

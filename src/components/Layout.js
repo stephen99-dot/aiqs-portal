@@ -498,7 +498,7 @@ export default function Layout() {
       </main>
 
       {/* Office in a Box upsell — only for non-subscribers, and not on the page itself */}
-      {!hasEstimator && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
+      {(isAdmin || !user?.hasEstimator) && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
     </div>
   );
 }
