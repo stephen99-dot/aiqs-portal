@@ -101,7 +101,6 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [plan, setPlan] = useState(user.plan || 'starter');
   const [msgAllowance, setMsgAllowance] = useState(user.monthly_quota || user.quota || 0);
   const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
-  const [grantAmount, setGrantAmount] = useState(1);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
@@ -125,7 +124,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const bg2 = isDark ? '#131B2E' : '#FFF';
 
   const PLANS = [
-    { value: 'starter', label: 'Starter', msgs: 1, docs: 0 },
+    { value: 'starter', label: 'Starter', msgs: 10, docs: 0 },
     { value: 'professional', label: 'Professional', msgs: 100, docs: 10 },
     { value: 'premium', label: 'Premium', msgs: 200, docs: 20 },
     { value: 'custom', label: 'Custom', msgs: null, docs: null },
@@ -158,17 +157,6 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     });
     onUpdate({ ...user, monthly_quota: msgs, quota: msgs, monthly_boq_quota: docs, boq_quota: docs });
     showSuccess('Allowances updated — ' + msgs + ' messages, ' + docs + ' documents');
-  });
-
-  const grantBoqCredits = () => doAction('grant', async () => {
-    const amount = Math.max(1, parseInt(grantAmount) || 1);
-    const res = await apiFetch('/admin/users/' + user.id + '/grant-doc', {
-      method: 'POST',
-      body: JSON.stringify({ amount }),
-    });
-    const newBonus = res.bonus_docs != null ? res.bonus_docs : (user.bonus_docs || 0) + amount;
-    onUpdate({ ...user, bonus_docs: newBonus });
-    showSuccess('Granted ' + amount + ' BOQ credit' + (amount === 1 ? '' : 's') + ' (bonus_docs now ' + newBonus + ')');
   });
 
   const toggleSuspend = () => doAction('suspend', async () => {
@@ -243,12 +231,11 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
   const boqUsed = user.boq_used || user.docs_used || 0;
-  // Live spendable balance from the server (granted + purchased + monthly left).
-  const boqRemaining = user.boq_remaining != null ? user.boq_remaining
-    : (user.free_credits || 0) + (user.bonus_docs || 0);
-  const boqTotal = boqRemaining + boqUsed; // effective credits granted
+  // Show usage against the monthly Documents/BOQs allowance, mirroring the Messages bar above.
+  const boqTotal = parseInt(docAllowance) || user.monthly_boq_quota || user.boq_quota || 0;
+  const boqRemaining = Math.max(0, boqTotal - boqUsed);
   const boqPct = boqTotal > 0 ? Math.min(100, (boqUsed / boqTotal) * 100) : 0;
-  const boqBarColor = boqRemaining <= 0 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
+  const boqBarColor = boqPct >= 90 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
 
   return (
     <>
@@ -333,26 +320,6 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               <button onClick={saveAllowances} disabled={!!loading} style={{ ...btn('#2563EB'), marginTop: 2 }}>
                 <Save size={12} /> Save Allowances
               </button>
-            </div>
-
-            {/* One-off BOQ credit grant — for retroactively crediting a payment
-                the webhook missed, or as a goodwill gesture. Adds to bonus_docs,
-                which counts toward the user's spendable BOQ pool. */}
-            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed ' + border }}>
-              <div style={{ ...lbl, marginBottom: 6 }}>One-off BOQ Credit Grant</div>
-              <div style={{ fontSize: 11, color: muted, marginBottom: 8, lineHeight: 1.5 }}>
-                Adds credits on top of the monthly allowance. Use for a missed Stripe webhook
-                or a goodwill credit. Current bonus: <strong style={{ color: muted }}>{user.bonus_docs || 0}</strong>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="number" min={1} max={999} value={grantAmount}
-                  onChange={e => setGrantAmount(e.target.value)}
-                  style={{ ...sInp, width: 70, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
-                <button onClick={grantBoqCredits} disabled={!!loading}
-                  style={{ ...btn('#10B981'), flex: 1 }}>
-                  + Grant {parseInt(grantAmount) || 1} BOQ credit{(parseInt(grantAmount) || 1) === 1 ? '' : 's'}
-                </button>
-              </div>
             </div>
           </div>
 
@@ -853,12 +820,11 @@ export default function UserManagementPage({ theme }) {
                           {(()=>{
                             if (user.role === 'admin') return <span style={{fontSize:11,color:muted}}>Unlimited</span>;
                             const docsUsed = user.docs_used || 0;
-                            // Live balance from the server (granted + purchased + monthly left).
-                            const remaining = user.boq_remaining != null ? user.boq_remaining
-                              : (user.free_credits || 0) + (user.bonus_docs || 0);
-                            const granted = remaining + docsUsed;
+                            // Usage against the monthly Documents/BOQs allowance.
+                            const granted = user.monthly_boq_quota || user.boq_quota || 0;
+                            const remaining = Math.max(0, granted - docsUsed);
                             const pct = granted > 0 ? Math.min(100, (docsUsed / granted) * 100) : 0;
-                            const barColor = remaining <= 0 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
+                            const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
                             return (
                               <div>
                                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
