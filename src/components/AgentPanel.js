@@ -63,7 +63,6 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [collapsed, setCollapsed] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
   // narration = the prose Claude writes between tool calls ("Now I'll look at
   // the ground floor plan to measure the extension footprint..."). Shown live
@@ -377,49 +376,44 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
 
   // Outer positioning — fullscreen mode overlays the whole viewport; otherwise
   // sits inline in the chat with a generous height cap so it's readable.
-  const rootStyle = fullscreen
-    ? { position: 'fixed', top: 20, left: 20, right: 20, bottom: 20, zIndex: 1000, background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }
-    : { background: c.card, border: '1px solid ' + c.border, borderRadius: 12, overflow: 'hidden', marginTop: 12, display: 'flex', flexDirection: 'column', maxHeight: '85vh', minHeight: 520 };
+  // Inline, borderless presentation — flows in the conversation like a Claude
+  // message rather than a heavy boxed panel.
+  const rootStyle = { marginTop: 6, display: 'flex', flexDirection: 'column', maxHeight: '72vh' };
 
   return (
     <div style={rootStyle}>
 
-      {/* Header — sticky at top of panel */}
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center' }}>{isComplete ? <CheckCircleIcon size={22} /> : isFailed ? <XCircleIcon size={22} /> : isAwaitingReview ? <ClipboardIcon size={22} /> : isGenerating ? <FileTextIcon size={22} /> : isInitialising ? <PlugIcon size={22} /> : <WrenchIcon size={22} />}</span>
+      {/* Header — clean inline status, no box chrome */}
+      <div style={{ padding: '12px 2px 8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: c.accentBg, color: c.accent }}>
+            {isComplete ? <CheckCircleIcon size={18} /> : isFailed ? <XCircleIcon size={18} /> : isAwaitingReview ? <ClipboardIcon size={18} /> : isGenerating ? <FileTextIcon size={18} /> : isInitialising ? <PlugIcon size={18} /> : <WrenchIcon size={18} />}
+          </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isAwaitingReview ? 'Ready for review' : isGenerating ? 'Generating documents' : isInitialising ? 'Initialising' : 'Running'}
+              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isAwaitingReview ? 'Ready for review' : isGenerating ? 'Generating documents' : isInitialising ? 'Initialising' : 'Working'}
               {run?.project_type && <span style={{ fontWeight: 400, color: c.muted }}> · {run.project_type}</span>}
             </div>
             <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
               {isComplete && run?.grand_total
-                ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · {iter} iterations · {fmtElapsed(elapsedSec)}</>
+                ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · {iter} steps · {fmtElapsed(elapsedSec)}</>
                 : isFailed
                 ? <>{error || run?.error_message || 'Agent failed'}</>
                 : isAwaitingReview
-                ? <>{items.length} items · {priced?.summary ? fmtMoney(priced.summary.grand_total, priced.summary.currency) + ' grand total' : 'priced'} · review and edit below, then click Generate</>
+                ? <>{items.length} items · {priced?.summary ? fmtMoney(priced.summary.grand_total, priced.summary.currency) + ' grand total' : 'priced'} · review and edit below, then Generate</>
                 : isGenerating
-                ? <>Producing Excel + Word deliverables — this takes 10-20 seconds</>
+                ? <>Producing your Excel + Word — about 10-20 seconds</>
                 : isInitialising
-                ? <>Spinning up Atlas, preparing drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
-                : <>Iteration {iter} · elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
+                ? <>Reading your drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
+                : <>elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
             </div>
           </div>
           <button
-            onClick={() => setFullscreen(v => !v)}
-            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 13, padding: '2px 8px', fontWeight: 600 }}
-          >
-            {fullscreen ? '⤢ Exit fullscreen' : '⤢ Fullscreen'}
-          </button>
-          <button
             onClick={() => setCollapsed(v => !v)}
-            title={collapsed ? 'Expand panel' : 'Collapse panel'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 13, padding: '2px 6px', fontWeight: 600 }}
+            title={collapsed ? 'Expand' : 'Collapse'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 12.5, padding: '2px 6px', fontWeight: 600 }}
           >
-            {collapsed ? '▼ Expand' : '▲ Collapse'}
+            {collapsed ? '▼' : '▲'}
           </button>
           {onClose && (
             <button onClick={onClose} title="Close panel (job keeps running on the server)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 20, padding: '0 4px' }}>×</button>
@@ -474,25 +468,22 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               Pinned at the top so the user sees the summary + Generate
               button immediately. Items become editable below. */}
           {isAwaitingReview && (
-            <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(245,158,11,0.08)' : 'rgba(245,158,11,0.06)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 240 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: c.accent, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}><ClipboardIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Ready for your review</div>
-                  <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.55, marginBottom: 8 }}>{reviewSummary || 'Atlas has completed the takeoff. Review items below, tweak any quantities that look off, then click Generate to produce the Excel and Word deliverables.'}</div>
-                  {priced?.summary && (
-                    <div style={{ fontSize: 12, color: c.muted }}>
-                      {items.length} items · Construction {fmtMoney(priced.summary.construction_total, priced.summary.currency)} · Grand total <strong style={{ color: c.text }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</strong> ({priced.summary.currency === 'EUR' ? '€' : '£'}, {priced.summary.vat_rate}% VAT)
-                    </div>
-                  )}
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border }}>
+              <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.65, marginBottom: priced?.summary ? 8 : 14 }}>
+                {reviewSummary || 'I’ve finished the take-off. Have a look at the quantities below — tweak anything that looks off by clicking a figure — then generate your Excel BOQ and Word findings report.'}
+              </div>
+              {priced?.summary && (
+                <div style={{ fontSize: 12.5, color: c.muted, marginBottom: 14 }}>
+                  {items.length} items · Construction {fmtMoney(priced.summary.construction_total, priced.summary.currency)} · Grand total <strong style={{ color: c.text }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</strong> ({priced.summary.currency === 'EUR' ? '€' : '£'}, {priced.summary.vat_rate}% VAT)
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={reprice} style={{ padding: '9px 14px', borderRadius: 8, background: 'transparent', border: '1px solid ' + c.border, color: c.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    <CalculatorIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Re-price
-                  </button>
-                  <button onClick={generate} disabled={generating} style={{ padding: '9px 18px', borderRadius: 8, background: c.done, border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1 }}>
-                    {generating ? 'Generating…' : <><CheckIcon size={14} style={{ verticalAlign:'middle', marginRight:6 }} />Generate Excel + Word</>}
-                  </button>
-                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button onClick={generate} disabled={generating} style={{ padding: '11px 20px', borderRadius: 10, background: c.done, border: 'none', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.28)' }}>
+                  {generating ? 'Generating…' : <><CheckIcon size={15} style={{ verticalAlign:'middle', marginRight:7 }} />Generate documents</>}
+                </button>
+                <button onClick={reprice} style={{ padding: '10px 14px', borderRadius: 9, background: 'transparent', border: '1px solid ' + c.border, color: c.muted, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <CalculatorIcon size={13} style={{ verticalAlign:'middle', marginRight:6 }} />Re-price
+                </button>
               </div>
               {/* Findings notes — editable textarea so user can tweak the
                   Word report narrative before generation. */}
@@ -672,12 +663,6 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             )}
           </div>
 
-          {/* Keep-alive message */}
-          {isRunning && (
-            <div style={{ padding: '8px 18px 14px', fontSize: 11, color: c.sub, fontStyle: 'italic' }}>
-              Atlas runs on the server — safe to close the tab and come back. Live panel re-attaches on reload.
-            </div>
-          )}
         </div>
       )}
 

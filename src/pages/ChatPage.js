@@ -272,6 +272,8 @@ export default function ChatPage() {
   // Artifacts side panel — opened when a large code block is clicked.
   const [artifact, setArtifact]       = useState(null);
   const openArtifact = useCallback((a) => setArtifact(a), []);
+  // Finished BOQ documents — slides out automatically when Atlas completes.
+  const [deliverables, setDeliverables] = useState(null);
 
   // ── Session / takeoff tracking ─────────────────────────────────────
   // These are the two critical IDs that must persist through the conversation
@@ -394,12 +396,17 @@ export default function ChatPage() {
       if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `**Atlas complete.** ${grand} grand total${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Documents below.`,
+        content: `**All done — priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your documents are ready — opening them now.`,
         agentRunCompleted: run.id,
         downloadFiles: downloads.length > 0 ? downloads : null,
         timestamp: new Date().toISOString(),
       }];
     });
+    // Slide the finished documents out automatically, claude.ai-style.
+    if (downloads.length > 0) {
+      setDeliverables({ files: downloads, grand, projectType: run.project_type, floorArea: run.floor_area_m2 });
+      setAgentRunId(null); // the live panel's job is done — dismiss the box
+    }
   }, []);
 
   // ── Copy feedback + smart auto-scroll ──────────────────────────────
@@ -1200,6 +1207,37 @@ export default function ChatPage() {
             <pre style={{ margin: 0, fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, color: c.text, whiteSpace: 'pre', overflowX: 'auto' }}>
               <code dangerouslySetInnerHTML={{ __html: highlightToHtml(artifact.content, artifact.language) }} />
             </pre>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Deliverables drawer — slides out automatically when Atlas finishes */}
+    {deliverables && (
+      <div onClick={() => setDeliverables(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', justifyContent: 'flex-end', background: c.overlay }}>
+        <div onClick={e => e.stopPropagation()}
+          style={{ width: mobile ? '100%' : 'min(440px, 92vw)', height: '100%', background: c.chat, borderLeft: `1px solid ${c.chatBorder}`, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.25)', animation: 'agentslide 0.42s cubic-bezier(0.22,1,0.36,1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', borderBottom: `1px solid ${c.chatBorder}` }}>
+            <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16,185,129,0.14)' }}>
+              <CheckCircleIcon size={19} color="#10B981" />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>Your documents are ready</div>
+              <div style={{ fontSize: 12, color: c.textMuted }}>
+                {deliverables.grand ? `${deliverables.grand} grand total` : ''}{deliverables.floorArea ? ` · ${deliverables.floorArea}m²` : ''}
+              </div>
+            </div>
+            <button onClick={() => setDeliverables(null)} title="Close" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {deliverables.projectType && (
+              <div style={{ fontSize: 12.5, color: c.textMuted, lineHeight: 1.5, marginBottom: 2 }}>{deliverables.projectType}</div>
+            )}
+            {deliverables.files.map((f, i) => <FileCard key={i} f={f} c={c} dark={dark} />)}
+            <div style={{ fontSize: 11.5, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
+              Download to your device, or Open to view in your browser (and from there, Google Sheets / Docs).
+            </div>
           </div>
         </div>
       </div>
