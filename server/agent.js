@@ -818,6 +818,10 @@ async function runGenerationForRun(runId, opts = {}) {
       vat_rate: priced.summary.vat_rate,
       currency: sym,
       branding: _branding,
+      project_type: run.project_type || '',
+      location: run.location || '',
+      spec_level: run.spec_level || '',
+      floor_area_m2: run.floor_area_m2 || null,
     });
     if (excelBuf && excelBuf.length > 100) {
       const fname = `BOQ-${safeName}-${ts}.xlsx`;

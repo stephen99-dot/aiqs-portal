@@ -118,6 +118,37 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   var row = nextRow + 1; // small breathing room
   ws.getRow(nextRow).height = 6;
 
+  // === Project header block (reads like a real tender BOQ) ===
+  // Two-column "label: value" rows summarising the job, basis and preparer —
+  // mirrors the front sheet of a chartered QS bill.
+  var preparedBy = branding.company_name || 'The AI QS';
+  var issueDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  var currencyCode = currency === '€' ? 'EUR' : currency === '$' ? 'USD' : 'GBP';
+  var basisParts = [currencyCode + ', ex VAT unless stated (VAT @ ' + vatRate + '%)'];
+  if (opts.location) basisParts.push(opts.location + ' rates');
+  var metaRows = [
+    ['Project', projectName || '—'],
+    ['Client', clientName || '—'],
+    ['Project type', [opts.project_type, opts.spec_level ? '· ' + opts.spec_level + ' spec' : '', opts.floor_area_m2 ? '· ' + Math.round(opts.floor_area_m2) + ' m² GIA' : ''].filter(Boolean).join(' ') || '—'],
+    ['Prepared by', preparedBy],
+    ['Date', issueDate],
+    ['Basis', basisParts.join(', ')],
+  ];
+  for (var mr = 0; mr < metaRows.length; mr++) {
+    var metaRow = ws.getRow(row);
+    metaRow.getCell(1).value = metaRows[mr][0] + ':';
+    metaRow.getCell(1).font = { name: headingFont, size: 9.5, bold: true, color: { argb: PRIMARY } };
+    metaRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+    ws.mergeCells('B' + row + ':I' + row);
+    metaRow.getCell(2).value = String(metaRows[mr][1]);
+    metaRow.getCell(2).font = { name: bodyFont, size: 9.5, color: { argb: 'FF334155' } };
+    metaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+    metaRow.height = 15;
+    row++;
+  }
+  ws.getRow(row).height = 6; // spacer
+  row++;
+
   // === Column header row ===
   var hdrRow = ws.getRow(row);
   hdrRow.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Labour (' + currency + ')', 'Materials (' + currency + ')', 'Total (' + currency + ')', 'Rate Source'];

@@ -272,7 +272,9 @@ COMPLETENESS CHECKLIST — you MUST have items for ALL of these sections if they
     A two-storey extension needs at most 2× lighting (one per floor) and 2× power (one per floor) = ~£12,800 total.
     If your electrical total exceeds £13,000 for any extension under 80m², STOP and recheck — you are almost certainly pricing per room instead of per circuit.
     NEVER use qty > 2 for lighting_installation or power_sockets_circuit on a residential extension
-15. PRELIMS — scaffolding (elevation m²), skip hire, building control fees
+15. PRELIMS — itemise these SEPARATELY, do not lump into one line: site establishment & welfare; scaffolding (elevation m²); skip hire & waste removal; site management/supervision; temporary protection to retained features; CDM/Building Safety duties; asbestos R&D survey (use a provisional sum); contract insurances; building control & structural inspection fees; final clean & handover
+
+NAME THE SPEC — write descriptions like a chartered QS, not a homeowner. State products, grades, thicknesses and standards: "Marley Acme single-camber clay plain tiles on battens & breathable membrane", "Catnic steel lintels to openings", "150mm Kingspan TP10 PIR under slab", "FENSA-compliant aluminium double-glazed window 1200×1200 to schedule ref W03". Generic descriptions like "new kitchen" or "internal finishes" are NOT acceptable — break them into specified components. Use "P.Sum" / provisional_sum for genuinely unmeasurable items (asbestos works, statutory connections).
 
 WALL AREA MEASUREMENT — CRITICAL (most common source of under-counting):
 - External wall area = FULL perimeter × FULL height (ground floor to eaves)
