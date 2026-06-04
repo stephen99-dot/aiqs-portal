@@ -818,11 +818,15 @@ async function runGenerationForRun(runId, opts = {}) {
       vat_rate: priced.summary.vat_rate,
       currency: sym,
       branding: _branding,
+      project_type: run.project_type || '',
+      location: run.location || '',
+      spec_level: run.spec_level || '',
+      floor_area_m2: run.floor_area_m2 || null,
     });
     if (excelBuf && excelBuf.length > 100) {
       const fname = `BOQ-${safeName}-${ts}.xlsx`;
       fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
-      downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+      downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}`, size: excelBuf.length });
     } else {
       genErrors.push('Excel BOQ buffer was empty.');
     }
@@ -879,7 +883,7 @@ async function runGenerationForRun(runId, opts = {}) {
     if (wordBuf && wordBuf.length > 100) {
       const fname = `Findings-${safeName}-${ts}.docx`;
       fs.writeFileSync(path.join(outputsDir, fname), wordBuf);
-      downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}` });
+      downloads.push({ name: fname, type: 'docx', url: `/api/downloads/${fname}`, size: wordBuf.length });
     } else {
       genErrors.push('Findings Word buffer was empty.');
     }

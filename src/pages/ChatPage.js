@@ -162,6 +162,70 @@ function copyText(text) {
   return Promise.resolve();
 }
 
+// File-type metadata for the Claude-style download cards.
+function fileMeta(f) {
+  const t = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
+  if (t === 'xlsx' || t === 'xls') return { label: 'Excel spreadsheet', ext: 'XLSX', color: '#10B981', bg: 'rgba(16,185,129,0.14)' };
+  if (t === 'docx' || t === 'doc') return { label: 'Word document', ext: 'DOCX', color: '#2563EB', bg: 'rgba(37,99,235,0.14)' };
+  if (t === 'pdf') return { label: 'PDF document', ext: 'PDF', color: '#DC2626', bg: 'rgba(220,38,38,0.14)' };
+  if (t === 'csv') return { label: 'CSV file', ext: 'CSV', color: '#0EA5E9', bg: 'rgba(14,165,233,0.14)' };
+  return { label: 'Document', ext: (t || 'FILE').toUpperCase(), color: '#64748B', bg: 'rgba(100,116,139,0.14)' };
+}
+
+function fmtFileSize(bytes) {
+  if (!bytes || bytes < 1) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function downloadFile(f) {
+  try {
+    const token = localStorage.getItem('aiqs_token');
+    const r = await fetch(f.url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    if (!r.ok) throw new Error();
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = f.name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  } catch { alert('Download failed — please try again.'); }
+}
+
+// claude.ai-style attachment card: file-type tile, name, type, download arrow.
+function FileCard({ f, c, dark }) {
+  const m = fileMeta(f);
+  const [busy, setBusy] = useState(false);
+  const idle = dark ? 'rgba(255,255,255,0.09)' : 'rgba(15,23,42,0.1)';
+  const onClick = async () => { if (busy) return; setBusy(true); await downloadFile(f); setBusy(false); };
+  return (
+    <div
+      onClick={onClick}
+      title={'Download ' + f.name}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 12,
+        cursor: 'pointer', maxWidth: 360,
+        background: dark ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
+        border: '1px solid ' + idle, transition: 'border-color .12s ease, transform .12s ease',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = m.color; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = idle; e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      <div style={{ width: 38, height: 38, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.bg }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={m.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 1 }}>{m.ext} · {f.size ? fmtFileSize(f.size) : m.label}</div>
+      </div>
+      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textMuted }}>
+        {busy
+          ? <span style={{ width: 13, height: 13, border: '2px solid ' + c.textMuted, borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+          : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>}
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const { mode } = useTheme();
   const dark = mode === 'dark';
@@ -1027,24 +1091,14 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Download buttons */}
+            {/* Download files — claude.ai-style attachment cards */}
             {msg.downloadFiles?.length > 0 && (
-              <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:8 }}>
-                <div style={{ fontSize:11, fontWeight:600, color:c.textSub, textTransform:'uppercase', letterSpacing:'0.05em' }}>Documents ready</div>
-                {msg.downloadFiles.map((f,i) => (
-                  <button key={i} onClick={async () => {
-                    try {
-                      const token = localStorage.getItem('aiqs_token');
-                      const r = await fetch(f.url, { headers: { 'Authorization': 'Bearer '+token } });
-                      if (!r.ok) throw new Error();
-                      const blob = await r.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a'); a.href=url; a.download=f.name;
-                      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                    } catch { alert('Download failed — please try again.'); }
-                  }} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', borderRadius:8, cursor:'pointer', background: f.type==='xlsx'?'rgba(16,185,129,0.1)':'rgba(59,130,246,0.1)', border:'1px solid '+(f.type==='xlsx'?'rgba(16,185,129,0.25)':'rgba(59,130,246,0.25)'), color: f.type==='xlsx'?'#10B981':'#3B82F6', fontSize:13, fontWeight:600 }}>
-                    {f.type==='xlsx'?ICONS.excel():ICONS.word()} Download {f.name}
-                  </button>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: c.textSub, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {msg.downloadFiles.length === 1 ? '1 file ready' : `${msg.downloadFiles.length} files ready`}
+                </div>
+                {msg.downloadFiles.map((f, i) => (
+                  <FileCard key={i} f={f} c={c} dark={dark} />
                 ))}
               </div>
             )}
@@ -1138,6 +1192,7 @@ export default function ChatPage() {
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes dot{0%,80%,100%{opacity:0.3;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
         .msgs::-webkit-scrollbar{width:5px}.msgs::-webkit-scrollbar-track{background:transparent}.msgs::-webkit-scrollbar-thumb{background:${c.scroll};border-radius:3px}
         .sidebar::-webkit-scrollbar{width:4px}.sidebar::-webkit-scrollbar-track{background:transparent}.sidebar::-webkit-scrollbar-thumb{background:${c.scroll};border-radius:2px}
         .ta::placeholder{color:${c.textMuted}}
