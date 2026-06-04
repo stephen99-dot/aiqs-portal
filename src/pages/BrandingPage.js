@@ -93,14 +93,15 @@ export default function BrandingPage() {
     setBranding((b) => ({ ...b, [field]: value }));
   }
 
-  async function saveField(field) {
+  async function saveField(field, valueOverride) {
     if (!branding) return;
+    const value = valueOverride !== undefined ? valueOverride : branding[field];
     setSavingField(field);
     setError('');
     try {
       const data = await apiFetch('/branding', {
         method: 'PATCH',
-        body: JSON.stringify({ [field]: branding[field] }),
+        body: JSON.stringify({ [field]: value }),
       });
       if (data && data.branding) {
         setBranding({ ...DEFAULT_BRANDING, ...data.branding });
@@ -338,7 +339,7 @@ export default function BrandingPage() {
                 return (
                   <button
                     key={t.key}
-                    onClick={() => { setField('template', t.key); setTimeout(() => saveField('template'), 50); }}
+                    onClick={() => { setField('template', t.key); saveField('template', t.key); }}
                     style={{
                       padding: '12px 14px', borderRadius: 10, textAlign: 'left',
                       background: active ? 'rgba(245,158,11,0.08)' : 'var(--bg-input)',
