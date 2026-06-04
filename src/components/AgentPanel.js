@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
-import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, ChatIcon, BrainIcon, DotIcon } from './Icons';
+import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, BrainIcon, DotIcon } from './Icons';
 
 // Live BOQ agent panel. Subscribes to /api/agent/:id/stream, renders:
 //   • Header: status + elapsed time + ETA based on typical runs
@@ -433,13 +433,13 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           </div>
         )}
 
-        {/* Current activity line */}
+        {/* Live status — subtle, claude.ai-style "thinking" line (no box) */}
         {(isRunning || isInitialising) && (
-          <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 7, background: c.accentBg, border: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.accent, fontWeight: 500 }}>
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.muted, fontWeight: 500 }}>
             <span style={{ display: 'inline-flex', gap: 3 }}>
               {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.accent, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
             </span>
-            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing drawings for inspection…' : activity}</span>
+            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing your drawings…' : (activity || 'Thinking…')}</span>
           </div>
         )}
       </div>
@@ -498,7 +498,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                   Word report narrative before generation. */}
               <details style={{ marginTop: 12 }}>
                 <summary style={{ fontSize: 11.5, color: c.muted, cursor: 'pointer', fontWeight: 600 }}>
-                  Edit findings notes for the Word report ({findingsNotes.length} chars)
+                  Edit findings notes for the Word report
                 </summary>
                 <textarea
                   value={findingsNotes}
@@ -515,29 +515,21 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               you see continuous progress). Current iteration always shown
               inline with a blinking caret while running. */}
           {(narrationLog.length > 0 || narration || isRunning) && (
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(96,165,250,0.04)' : 'rgba(96,165,250,0.035)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ChatIcon size={14} /><span>Agent working notes</span>
-              </div>
-              {/* Prior iterations */}
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border }}>
+              {/* Prior steps — collapsed, clean labels */}
               {narrationLog.map((entry, i) => entry.text ? (
                 <details key={i} style={{ marginBottom: 8 }} open={i === narrationLog.length - 1 && !narration}>
-                  <summary style={{ fontSize: 11.5, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
-                    Iteration {entry.iteration} · {entry.text.length} chars
+                  <summary style={{ fontSize: 12, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
+                    Step {entry.iteration}
                   </summary>
-                  <div style={{ fontSize: 12.5, color: c.muted, lineHeight: 1.6, whiteSpace: 'pre-wrap', padding: '6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.85 }}>
+                  <div style={{ fontSize: 13, color: c.muted, lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '6px 0 6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.9 }}>
                     {entry.text}
                   </div>
                 </details>
-              ) : (
-                <div key={i} style={{ fontSize: 11.5, color: c.sub, marginBottom: 6, fontStyle: 'italic' }}>
-                  · Iteration {entry.iteration}: tool calls only (no narration)
-                </div>
-              ))}
-              {/* Current iteration — always shown while running so the user
-                  never sees a dead panel. Shows "working..." if no text yet. */}
+              ) : null)}
+              {/* Current step — flowing prose, like a Claude reply */}
               {isRunning && (
-                <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 10 : 0, paddingTop: narrationLog.length > 0 ? 10 : 0, borderTop: narrationLog.length > 0 ? '1px dashed ' + c.border : 'none' }}>
+                <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.75, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 12 : 0 }}>
                   {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
                   {narration && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
                 </div>
@@ -671,7 +663,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 11.5, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}
             >
               <span style={{ transform: showReasoning ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', display: 'inline-block', fontSize: 10 }}>▶</span>
-              <BrainIcon size={14} style={{ verticalAlign:'middle', marginRight:4 }} />{showReasoning ? 'Hide' : 'Show'} reasoning ({reasoning.length} chars)
+              <BrainIcon size={14} style={{ verticalAlign:'middle', marginRight:4 }} />{showReasoning ? 'Hide' : 'Show'} reasoning
             </button>
             {showReasoning && reasoning && (
               <pre style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', fontSize: 11.5, color: c.muted, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
