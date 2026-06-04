@@ -538,18 +538,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                   never sees a dead panel. Shows "working..." if no text yet. */}
               {isRunning && (
                 <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 10 : 0, paddingTop: narrationLog.length > 0 ? 10 : 0, borderTop: narrationLog.length > 0 ? '1px dashed ' + c.border : 'none' }}>
-                  <div style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>⟳ Iteration {iter || 1} — in progress</div>
-                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>Working… {activity || 'thinking'}</span>}
+                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
                   {narration && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
                 </div>
               )}
             </div>
           )}
 
-          {/* Downloads row (if complete) */}
+          {/* Deliverables — slides in when Atlas finishes, claude.ai-style */}
           {isComplete && downloads.length > 0 && (
-            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 7 }}>Documents ready</div>
+            <div style={{ padding: '18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)', animation: 'agentslide 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+                <CheckCircleIcon size={20} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Your documents are ready</div>
+                  <div style={{ fontSize: 12, color: c.muted }}>
+                    {run?.grand_total ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · </> : null}{downloads.length} file{downloads.length !== 1 ? 's' : ''} · download or open below
+                  </div>
+                </div>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {downloads.map((f, i) => <DownloadButton key={i} f={f} c={c} isDark={isDark} />)}
               </div>
@@ -575,9 +582,9 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             </div>
           )}
 
-          {/* Takeoff items. Read-only while running; editable in the
-              awaiting_review state (user can click a qty to edit, or
-              remove the row entirely). */}
+          {/* Takeoff items — only once recorded (or in review). Editable in the
+              awaiting_review state (click a qty to edit, or remove the row). */}
+          {(items.length > 0 || isAwaitingReview) && (
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
             {sanityWarnings.length > 0 && !isComplete && (
               <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
@@ -631,13 +638,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               </div>
             )}
           </div>
+          )}
 
-          {/* Tool call log */}
+          {/* Tool call log — only once there's activity */}
+          {toolCalls.length > 0 && (
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent activity</div>
-            {toolCalls.length === 0 ? (
-              <div style={{ fontSize: 12, color: c.muted }}>No tool calls yet.</div>
-            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {toolCalls.map((tc, i) => {
                   const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
@@ -655,8 +661,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                   );
                 })}
               </div>
-            )}
           </div>
+          )}
 
           {/* Reasoning toggle */}
           <div style={{ padding: '10px 18px' }}>

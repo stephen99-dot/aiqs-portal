@@ -1188,6 +1188,7 @@ export default function ChatPage() {
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes dot{0%,80%,100%{opacity:0.3;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes agentslide{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         .msgs::-webkit-scrollbar{width:5px}.msgs::-webkit-scrollbar-track{background:transparent}.msgs::-webkit-scrollbar-thumb{background:${c.scroll};border-radius:3px}
         .sidebar::-webkit-scrollbar{width:4px}.sidebar::-webkit-scrollbar-track{background:transparent}.sidebar::-webkit-scrollbar-thumb{background:${c.scroll};border-radius:2px}
         .ta::placeholder{color:${c.textMuted}}

@@ -213,9 +213,11 @@ export default function Layout() {
   // Auto-open when navigating to one of the children.
   useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
 
-  const sidebarBg = mode === 'dark'
+  // Sidebar uses the theme's sidebar token (keeps the AI QS dark navy by
+  // default, but re-skins for ChatGPT / Claude / Copilot themes).
+  const sidebarBg = (theme === 'aiqs' && mode === 'dark')
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
-    : '#FFFFFF';
+    : t.sidebar;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
@@ -370,10 +372,10 @@ export default function Layout() {
                         <div style={{
                           position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
                           width: 3, height: 16, borderRadius: '0 3px 3px 0',
-                          background: '#F59E0B',
+                          background: t.accent,
                         }} />
                       )}
-                      <item.Icon size={16} color={isActive ? '#F59E0B' : t.textMuted} />
+                      <item.Icon size={16} color={isActive ? t.accent : t.textMuted} />
                       <span style={{ flex: 1 }}>{item.label}</span>
                       {/* "New" badge */}
                       {item.badge && (
