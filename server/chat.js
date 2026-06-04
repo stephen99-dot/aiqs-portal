@@ -5,6 +5,8 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
+const jwt = require('jsonwebtoken');
+const FILE_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const db = require('./database');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
@@ -1184,6 +1186,52 @@ router.get('/downloads/:filename', authMiddleware, (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`);
   res.setHeader('Content-Length', fileBuffer.length);
   res.send(fileBuffer);
+});
+
+// ── Short-lived signed "view" links ──────────────────────────────────────
+// Lets external viewers (Google / Microsoft Office web viewer) fetch a
+// generated file without a login header. The token is JWT-signed, scoped to a
+// single filename, and expires quickly so the public window is tiny.
+const FILE_MIME = {
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.pdf': 'application/pdf',
+};
+
+// Mint a signed, absolute, publicly-fetchable URL for one of the user's files.
+router.get('/files/sign/:filename', authMiddleware, (req, res) => {
+  try {
+    const filename = req.params.filename;
+    if (path.basename(filename) !== filename) return res.status(400).json({ error: 'Bad filename' });
+    if (!fs.existsSync(path.join(outputsDir, filename))) return res.status(404).json({ error: 'File not found' });
+    const token = jwt.sign({ f: filename, scope: 'file-view' }, FILE_JWT_SECRET, { expiresIn: '15m' });
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
+    const base = process.env.PORTAL_URL ? process.env.PORTAL_URL.replace(/\/$/, '') : `${proto}://${req.get('host')}`;
+    res.json({ url: `${base}/api/files/view/${token}`, expires_in: 900 });
+  } catch (e) {
+    console.error('[Files] sign error:', e.message);
+    res.status(500).json({ error: 'Could not create link' });
+  }
+});
+
+// Serve a file from a signed token — NO auth header required (public for the
+// token's lifetime), inline so the viewer can render it.
+router.get('/files/view/:token', (req, res) => {
+  let payload;
+  try { payload = jwt.verify(req.params.token, FILE_JWT_SECRET); }
+  catch (e) { return res.status(401).send('Link expired or invalid'); }
+  if (!payload || payload.scope !== 'file-view' || !payload.f) return res.status(401).send('Invalid link');
+  const filename = payload.f;
+  if (path.basename(filename) !== filename) return res.status(400).send('Bad filename');
+  const fp = path.join(outputsDir, filename);
+  if (!fs.existsSync(fp)) return res.status(404).send('File not found');
+  const ext = path.extname(filename).toLowerCase();
+  const buf = fs.readFileSync(fp);
+  res.setHeader('Content-Type', FILE_MIME[ext] || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  res.setHeader('Content-Length', buf.length);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(buf);
 });
 
 router.get('/my-rates', authMiddleware, (req, res) => {

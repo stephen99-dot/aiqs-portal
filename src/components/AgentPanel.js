@@ -538,18 +538,25 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                   never sees a dead panel. Shows "working..." if no text yet. */}
               {isRunning && (
                 <div style={{ fontSize: 13, color: c.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 10 : 0, paddingTop: narrationLog.length > 0 ? 10 : 0, borderTop: narrationLog.length > 0 ? '1px dashed ' + c.border : 'none' }}>
-                  <div style={{ fontSize: 11, color: c.accent, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>⟳ Iteration {iter || 1} — in progress</div>
-                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>Working… {activity || 'thinking'}</span>}
+                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
                   {narration && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
                 </div>
               )}
             </div>
           )}
 
-          {/* Downloads row (if complete) */}
+          {/* Deliverables — slides in when Atlas finishes, claude.ai-style */}
           {isComplete && downloads.length > 0 && (
-            <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 7 }}>Documents ready</div>
+            <div style={{ padding: '18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)', animation: 'agentslide 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+                <CheckCircleIcon size={20} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>Your documents are ready</div>
+                  <div style={{ fontSize: 12, color: c.muted }}>
+                    {run?.grand_total ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · </> : null}{downloads.length} file{downloads.length !== 1 ? 's' : ''} · download or open below
+                  </div>
+                </div>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {downloads.map((f, i) => <DownloadButton key={i} f={f} c={c} isDark={isDark} />)}
               </div>
@@ -575,9 +582,9 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             </div>
           )}
 
-          {/* Takeoff items. Read-only while running; editable in the
-              awaiting_review state (user can click a qty to edit, or
-              remove the row entirely). */}
+          {/* Takeoff items — only once recorded (or in review). Editable in the
+              awaiting_review state (click a qty to edit, or remove the row). */}
+          {(items.length > 0 || isAwaitingReview) && (
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
             {sanityWarnings.length > 0 && !isComplete && (
               <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
@@ -631,13 +638,12 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               </div>
             )}
           </div>
+          )}
 
-          {/* Tool call log */}
+          {/* Tool call log — only once there's activity */}
+          {toolCalls.length > 0 && (
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent activity</div>
-            {toolCalls.length === 0 ? (
-              <div style={{ fontSize: 12, color: c.muted }}>No tool calls yet.</div>
-            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {toolCalls.map((tc, i) => {
                   const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
@@ -655,8 +661,8 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                   );
                 })}
               </div>
-            )}
           </div>
+          )}
 
           {/* Reasoning toggle */}
           <div style={{ padding: '10px 18px' }}>
@@ -760,6 +766,18 @@ function fmtFileSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
+async function agentOpenInViewer(f) {
+  try {
+    const token = getToken();
+    const r = await fetch('/api/files/sign/' + encodeURIComponent(f.name), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    if (!r.ok) throw new Error();
+    const { url } = await r.json();
+    const ext = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
+    const viewer = ext === 'pdf' ? url : 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=false';
+    window.open(viewer, '_blank', 'noopener');
+  } catch { alert('Could not open the file — try downloading it instead.'); }
+}
+
 function agentFileMeta(f) {
   const t = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
   if (t === 'xlsx' || t === 'xls') return { label: 'Excel spreadsheet', ext: 'XLSX', color: '#10B981', bg: 'rgba(16,185,129,0.14)' };
@@ -807,7 +825,14 @@ function DownloadButton({ f, c, isDark }) {
         <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
         <div style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{busy ? 'Downloading…' : m.ext + ' · ' + (f.size ? fmtFileSize(f.size) : m.label)}</div>
       </div>
-      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); agentOpenInViewer(f); }}
+        title="Open in browser (Google viewer)"
+        style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted, background: 'none', border: 'none', cursor: 'pointer' }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+      <div title="Download" style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </div>
     </div>
