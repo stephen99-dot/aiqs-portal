@@ -3174,7 +3174,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
           if (buf && buf.length > 100) {
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
             fs.writeFileSync(path.join(outputsDir, fname), buf);
-            downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}` });
+            downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}`, size: buf.length });
             console.log(`[Stage 3] Excel: ${fname}`);
           }
         } catch (excelErr) { console.error('[Stage 3] Excel error:', excelErr.message); }
@@ -3228,7 +3228,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
           if (docBuf && docBuf.length > 100) {
             const docName = `Findings-${safeName}-${ts}.docx`;
             fs.writeFileSync(path.join(outputsDir, docName), docBuf);
-            downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}` });
+            downloadFiles.push({ name: docName, type: 'docx', url: `/api/downloads/${docName}`, size: docBuf.length });
             console.log(`[Stage 3] Word: ${docName}`);
           }
         } catch (wordErr) { console.error('[Stage 3] Word error:', wordErr.message); }

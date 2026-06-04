@@ -172,6 +172,13 @@ function fileMeta(f) {
   return { label: 'Document', ext: (t || 'FILE').toUpperCase(), color: '#64748B', bg: 'rgba(100,116,139,0.14)' };
 }
 
+function fmtFileSize(bytes) {
+  if (!bytes || bytes < 1) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
 async function downloadFile(f) {
   try {
     const token = localStorage.getItem('aiqs_token');
@@ -208,7 +215,7 @@ function FileCard({ f, c, dark }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 1 }}>{m.ext} · {m.label}</div>
+        <div style={{ fontSize: 11, color: c.textMuted, marginTop: 1 }}>{m.ext} · {f.size ? fmtFileSize(f.size) : m.label}</div>
       </div>
       <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textMuted }}>
         {busy

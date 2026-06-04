@@ -758,6 +758,13 @@ function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onC
   );
 }
 
+function fmtFileSize(bytes) {
+  if (!bytes || bytes < 1) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
 function agentFileMeta(f) {
   const t = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
   if (t === 'xlsx' || t === 'xls') return { label: 'Excel spreadsheet', ext: 'XLSX', color: '#10B981', bg: 'rgba(16,185,129,0.14)' };
@@ -803,7 +810,7 @@ function DownloadButton({ f, c, isDark }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
-        <div style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{busy ? 'Downloading…' : m.ext + ' · ' + m.label}</div>
+        <div style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{busy ? 'Downloading…' : m.ext + ' · ' + (f.size ? fmtFileSize(f.size) : m.label)}</div>
       </div>
       <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
