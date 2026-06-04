@@ -18,6 +18,12 @@ try { memoryEngine = require('./memoryEngine'); } catch (e) { console.log('[Chat
 try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat] zipProcessor not found — copy zipProcessor.js to server/'); }
 try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Chat] keyNormalizer not found — copy keyNormalizer.js to server/'); }
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
+let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
+
+// Live web search — gives the chat the same "search the web" ability as the
+// claude.ai front end. Runs as Anthropic's server-side web_search tool, so no
+// extra infrastructure is needed. Disable by setting ENABLE_WEB_SEARCH=0.
+const WEB_SEARCH_ENABLED = process.env.ENABLE_WEB_SEARCH !== '0';
 
 const router = express.Router();
 
@@ -1082,6 +1088,17 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
     } else {
       db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
     }
+
+    // Cross-session memory: keep a rolling summary of this conversation so it
+    // can be recalled from a future, unrelated session (claude.ai-style
+    // continuity). Best-effort and throttled inside autoLearn.
+    if (autoLearn && process.env.ANTHROPIC_API_KEY && messages.length >= 4) {
+      autoLearn.maybeSummariseConversation(db, {
+        userId: req.user.id, sessionId, title: sessionTitle,
+        messages, apiKey: process.env.ANTHROPIC_API_KEY,
+      }).catch(e => console.error('[ConvSummary] error:', e.message));
+    }
+
     res.json({ id: sessionId, title: sessionTitle });
   } catch (e) { console.error('[ChatSessions] Save error:', e.message); res.status(500).json({ error: 'Failed to save session' }); }
 });
@@ -1095,6 +1112,8 @@ router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
     try {
       db.prepare('INSERT OR IGNORE INTO deleted_chat_sessions (id, user_id) VALUES (?, ?)').run(req.params.id, req.user.id);
     } catch (tErr) { console.error('[ChatSessions] Tombstone error:', tErr.message); }
+    // Drop any stored cross-session summary for this conversation too.
+    if (autoLearn) { try { autoLearn.deleteForSession(db, { userId: req.user.id, sessionId: req.params.id }); } catch (e) {} }
     if (result.changes === 0) return res.status(404).json({ error: 'Session not found' });
     res.json({ success: true });
   } catch (e) { console.error('[ChatSessions] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete session' }); }
@@ -1841,6 +1860,25 @@ ${summary}`);
       }
     } catch (intakeErr) { console.error('[Intake] inject error:', intakeErr.message); }
 
+    // ── CROSS-SESSION RECALL: surface summaries of relevant past chats ──
+    // Lets the assistant remember earlier conversations even in a brand-new
+    // session, the way the claude.ai front end carries context across chats.
+    try {
+      if (autoLearn) {
+        const recallQuery = (message || '') + (fileNames.length > 0 ? ' ' + fileNames.join(' ') : '');
+        const sums = await autoLearn.retrieveRelevantSummaries(db, {
+          userId, query: recallQuery,
+          excludeSessionId: req.body.session_id || null, topK: 3,
+        });
+        if (sums && sums.length > 0) systemPrompt += autoLearn.formatSummariesForPrompt(sums);
+      }
+    } catch (recallErr) { console.error('[Recall] error:', recallErr.message); }
+
+    // ── LIVE WEB SEARCH: tell the model the tool exists and when to reach for it ──
+    if (WEB_SEARCH_ENABLED && !hasFiles) {
+      systemPrompt += `\n\n=== LIVE WEB SEARCH ===\nYou have a web_search tool. Use it proactively when the user asks about current material/product prices, product availability, specific suppliers or manufacturers, recent building regulations or standards, or anything time-sensitive or beyond your training knowledge. Prefer UK/Ireland sources for construction queries. When you use it, weave the findings into your answer and cite the source site or URL so the user can verify. Don't search for things you already know confidently.\n===\n`;
+    }
+
     // When files are uploaded, the deterministic pricer will handle pricing via Stage 1.
     // Tell the LLM to focus on scope analysis only — do NOT generate a cost breakdown.
     // This prevents showing inflated LLM-generated prices if extraction fails.
@@ -1912,20 +1950,38 @@ ${summary}`);
 
     const apiHeaders = { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' };
 
+    // Live web search is offered for text chat only. On drawing-upload turns
+    // the deterministic extraction pipeline owns the response, so we keep tools
+    // out of the way there.
+    const webTools = (WEB_SEARCH_ENABLED && !hasFiles)
+      ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]
+      : null;
+    let useTools = !!webTools;
+    const buildBody = (model, budget) => ({
+      model, max_tokens: 16000,
+      thinking: { type: 'enabled', budget_tokens: budget },
+      system: systemPrompt, messages,
+      ...(useTools && webTools ? { tools: webTools } : {}),
+    });
+
     // Stream the primary LLM call — text deltas flow straight to the client
     // via req.sseEmit, so the frontend sees text appear token-by-token (real
     // claude.ai feel) rather than waiting for the full response. The server
     // still aggregates `reply` + `thinking` for the post-processing pipeline.
     let streamResult, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      streamResult = await streamAnthropicMessage(
-        apiHeaders,
-        { model: primaryModel, max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: primaryBudget }, system: systemPrompt, messages },
-        req.sseEmit
-      );
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryBudget), req.sseEmit);
       if (streamResult.ok) break;
-      console.error(`[API] Attempt ${attempt} failed: status=${streamResult.status} type=${streamResult.error?.error?.type || streamResult.error?.type} msg=${streamResult.error?.error?.message || streamResult.error?.message}`);
-      if ((streamResult.status === 529 || streamResult.error?.error?.type === 'overloaded_error' || streamResult.error?.type === 'overloaded_error') && attempt < 3) {
+      const errType = streamResult.error?.error?.type || streamResult.error?.type;
+      const errMsg = streamResult.error?.error?.message || streamResult.error?.message || '';
+      console.error(`[API] Attempt ${attempt} failed: status=${streamResult.status} type=${errType} msg=${errMsg}`);
+      // If web search isn't enabled on this account, drop it and retry rather than failing the chat.
+      if (useTools && streamResult.status !== 529 && /tool|web_search/i.test(errMsg)) {
+        console.log('[API] Web search tool rejected — retrying without it');
+        useTools = false;
+        continue;
+      }
+      if ((streamResult.status === 529 || errType === 'overloaded_error') && attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 3000));
       } else if (streamResult.status !== 529) {
         return sendError(500, { error: 'AI service error -- please try again' });
@@ -1933,11 +1989,7 @@ ${summary}`);
     }
     if (!streamResult.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
       console.log('[API] Sonnet overloaded, falling back to Haiku...');
-      streamResult = await streamAnthropicMessage(
-        apiHeaders,
-        { model: 'claude-haiku-4-5-20251001', max_tokens: 16000, thinking: { type: 'enabled', budget_tokens: 5000 }, system: systemPrompt, messages },
-        req.sseEmit
-      );
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody('claude-haiku-4-5-20251001', 5000), req.sseEmit);
       if (!streamResult.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
     } else if (!streamResult.ok) {
@@ -3480,6 +3532,21 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     // CRITICAL: Always resolve the active takeoff — even on "generate" turns
     // where takeoffData is null (Stage 1 already ran in a previous turn)
     const responseSessionId = (takeoffData && takeoffData.sessionId) || req.body.session_id || sessionId || null;
+
+    // ── ALWAYS-ON LEARNING ──────────────────────────────────────────────
+    // After every turn, extract durable facts/preferences about the user in
+    // the background and store them as memories — so the assistant reliably
+    // remembers, like the claude.ai front end, rather than only when it
+    // happens to emit a [MEMORY|...] tag. Fire-and-forget so it never delays
+    // the response.
+    if (autoLearn && message && ANTHROPIC_API_KEY) {
+      autoLearn.extractAndStore(db, {
+        userId, userMessage: message, assistantReply: reply,
+        sessionId: responseSessionId, apiKey: ANTHROPIC_API_KEY,
+      })
+        .then(created => { if (created && created.length) console.log(`[AutoMemory] learned ${created.length} new memory(ies) for ${userId}`); })
+        .catch(e => console.error('[AutoMemory] extract error:', e.message));
+    }
 
     // Try to get takeoff_id from: 1) current extraction, 2) body (frontend sent it), 3) DB lookup by session
     let responseTakeoffId = (typeof takeoffData === 'object' && takeoffData) ? takeoffData.takeoffId : null;

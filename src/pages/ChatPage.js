@@ -234,6 +234,7 @@ export default function ChatPage() {
 
   const bottomRef   = useRef(null);
   const fileRef     = useRef(null);
+  const inputRef    = useRef(null);
   const timerRef    = useRef(null);
   const saveRef     = useRef(null);
   const hadFiles    = useRef(false);
@@ -441,10 +442,13 @@ export default function ChatPage() {
   // ── SEND ───────────────────────────────────────────────────────────
   // overrideText lets callers (e.g. Regenerate button on the BOQ table) send
   // a specific message without needing to funnel it through the input state.
-  async function handleSend(e, overrideText) {
+  async function handleSend(e, overrideText, opts = {}) {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     const textToSend = overrideText != null ? overrideText : input;
     if (!textToSend.trim() && files.length === 0) return;
+    // baseMessages lets Regenerate re-run from a truncated history without
+    // depending on React state having flushed yet.
+    const baseMessages = Array.isArray(opts.baseMessages) ? opts.baseMessages : messages;
 
     // ── Unified Send — if files are attached (drawings etc.) and there's
     // no active takeoff/agent run yet, route to the BOQ agent. This is the
@@ -460,7 +464,7 @@ export default function ChatPage() {
       files: files.map(f => ({ name: f.name, size: f.size })),
       timestamp: new Date().toISOString(),
     };
-    const nextMessages = [...messages, userMsg];
+    const nextMessages = [...baseMessages, userMsg];
     setMessages(nextMessages);
     const savedInput = textToSend;
     const savedFiles = [...files];
@@ -469,7 +473,7 @@ export default function ChatPage() {
     setFiles([]); setSending(true);
 
     // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits
-    const history = messages.filter(m => m.content).slice(-20).map(m => ({
+    const history = baseMessages.filter(m => m.content).slice(-20).map(m => ({
       role: m.role,
       content: typeof m.content === 'string' && m.content.length > 4000 ? m.content.slice(0, 4000) + '...' : m.content,
     }));
@@ -584,6 +588,34 @@ export default function ChatPage() {
         setSending(false);
       },
     });
+  }
+
+  // ── Edit a previous user message ───────────────────────────────────
+  // claude.ai-style: pull the message back into the composer and drop it
+  // (and everything after it) so the user can revise and resend from there.
+  function editUserMessage(idx) {
+    if (sending) return;
+    const m = messages[idx];
+    if (!m || m.role !== 'user') return;
+    const text = typeof m.content === 'string' ? m.content : '';
+    setMessages(messages.slice(0, idx));
+    setInput(text);
+    setTimeout(() => { try { inputRef.current?.focus(); } catch (e) {} }, 0);
+  }
+
+  // ── Regenerate an assistant reply ──────────────────────────────────
+  // Re-run the user message that produced this reply, replacing it.
+  function regenerateFrom(idx) {
+    if (sending) return;
+    let uIdx = idx - 1;
+    while (uIdx >= 0 && messages[uIdx].role !== 'user') uIdx--;
+    if (uIdx < 0) return;
+    const um = messages[uIdx];
+    const userText = typeof um.content === 'string' ? um.content : '';
+    if (!userText.trim()) return;
+    const base = messages.slice(0, uIdx); // everything before that user turn
+    setMessages(base);
+    handleSend(null, userText, { baseMessages: base });
   }
 
   function onKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }
@@ -749,7 +781,27 @@ export default function ChatPage() {
 
             {/* Message text — markdown for assistant, plain for user (their input is literal) */}
             {isUser ? (
-              <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content || ''}</div>
+              <>
+                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content || ''}</div>
+                {!sending && typeof msg.content === 'string' && msg.content.trim() && (
+                  <div style={{ marginTop: 6, display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => editUserMessage(idx)}
+                      title="Edit & resend"
+                      style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: 500,
+                        padding: '3px 6px', borderRadius: 5, fontFamily: 'inherit',
+                        display: 'inline-flex', alignItems: 'center', gap: 4, opacity: 0.8,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = '0.8'; }}
+                    >
+                      <EditIcon size={12} /> Edit
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <Markdown
                 content={msg.content || ''}
@@ -793,6 +845,22 @@ export default function ChatPage() {
                 >
                   {copiedIdx === idx ? <><CheckIcon size={14} style={{ verticalAlign:'middle' }} /> Copied</> : '⧉ Copy'}
                 </button>
+                {!sending && !msg.error && (
+                  <button
+                    onClick={() => regenerateFrom(idx)}
+                    title="Regenerate this reply"
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: c.textMuted, fontSize: 11, fontWeight: 500,
+                      padding: '3px 6px', borderRadius: 5, fontFamily: 'inherit',
+                      display: 'inline-flex', alignItems: 'center', gap: 4, opacity: 0.7,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '0.7'; }}
+                  >
+                    ↻ Retry
+                  </button>
+                )}
               </div>
             )}
             {!isUser && msg.streaming && (
@@ -1210,7 +1278,7 @@ export default function ChatPage() {
               </button>
               <input ref={fileRef} type="file" multiple style={{ display:'none' }} accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.zip,.xlsx,.xls,.dwg,.dxf"
                 onChange={e => { if (e.target.files?.length) addFiles(e.target.files); }}/>
-              <textarea className="ta" value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKey}
+              <textarea ref={inputRef} className="ta" value={input} onChange={e => setInput(e.target.value)} onKeyDown={onKey}
                 placeholder={
                   currentTakeoffId && takeoffStatus === 'confirmed'
                     ? 'Quantities locked — say "generate documents" or ask to adjust...'
