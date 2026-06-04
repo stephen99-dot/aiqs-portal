@@ -180,10 +180,17 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       var materials = parseFloat(item.materials) || 0;
       var total = parseFloat(item.total) || (labour + materials) || ((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0));
 
-      var srcLabel = 'Generic';
-      if (item.rate_source === 'verified') srcLabel = 'Verified';
-      else if (item.rate_source === 'emerging') srcLabel = 'Emerging';
-      else if (item.rate_source === 'client') srcLabel = 'Client';
+      // Map the pricer's rate_source values to friendly labels. Previously this
+      // only matched legacy values (verified/emerging/client), so every line
+      // fell through to "Generic" — making real work look low-effort.
+      var rs = String(item.rate_source || '');
+      var srcLabel = 'Standard';
+      if (rs === 'override') srcLabel = 'Override';
+      else if (rs === 'client_verified' || rs === 'verified' || rs === 'client') srcLabel = 'Your rate';
+      else if (rs === 'emerging') srcLabel = 'Your rate*';
+      else if (rs === 'base_library') srcLabel = 'Standard';
+      else if (rs === 'ai_estimated') srcLabel = 'AI estimate';
+      else if (rs === 'fallback_estimated' || rs === 'fallback_corrected') srcLabel = 'Estimate';
 
       var dataRow = ws.getRow(row);
       dataRow.getCell(1).value = item.item || '';
@@ -208,8 +215,11 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       }
       dataRow.height = 20;
       
-      // Colour the source cell
-      var srcBg = srcLabel === 'Verified' || srcLabel === 'Client' ? VERIFIED_BG : srcLabel === 'Emerging' ? EMERGING_BG : GENERIC_BG;
+      // Colour the source cell — green for the client's own rates, amber for
+      // AI/estimated, neutral for standard library rates.
+      var srcBg = (srcLabel === 'Your rate' || srcLabel === 'Override') ? VERIFIED_BG
+        : (srcLabel === 'Your rate*' || srcLabel === 'AI estimate' || srcLabel === 'Estimate') ? EMERGING_BG
+        : GENERIC_BG;
       dataRow.getCell(9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: srcBg } };
       
       row++;
@@ -341,13 +351,13 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   ws.getRow(row).getCell(2).value = 'Rate Source Legend:';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, bold: true };
   row++;
-  ws.getRow(row).getCell(2).value = 'Verified = Client-confirmed rate';
+  ws.getRow(row).getCell(2).value = 'Your rate = From your confirmed rate library';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF059669' } };
   row++;
-  ws.getRow(row).getCell(2).value = 'Emerging = Client rate, calibrating';
+  ws.getRow(row).getCell(2).value = 'AI estimate / Estimate = Priced from spec where no library rate exists';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FFD97706' } };
   row++;
-  ws.getRow(row).getCell(2).value = 'Generic = UK database rate';
+  ws.getRow(row).getCell(2).value = 'Standard = Standard UK database rate (SPON\'s-style)';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
 
   // Freeze panes

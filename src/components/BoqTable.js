@@ -169,16 +169,21 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
       }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>Bill of Quantities</span>
         <span style={{ fontSize: 11, color: c.textMuted }}>
-          {sections.reduce((s, sec) => s + (sec.items?.length || 0), 0)} items · click a quantity to edit
+          {sections.reduce((s, sec) => s + (sec.items?.length || 0), 0)} items in {sections.length} sections · click a quantity to edit
         </span>
-        {saving && (
+        {saving ? (
           <span style={{ marginLeft: 'auto', fontSize: 11, color: c.accent, fontWeight: 600 }}>Saving...</span>
+        ) : (
+          <span style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, color: c.text, fontVariantNumeric: 'tabular-nums' }}>
+            {fmtMoney(summary.grand_total, currency)}
+            <span style={{ fontSize: 10, fontWeight: 500, color: c.textMuted, marginLeft: 5 }}>{summary.vat_rate != null ? 'incl VAT' : 'total'}</span>
+          </span>
         )}
       </div>
 
       {/* Sections */}
       <div style={{ maxHeight: compact ? 360 : 600, overflowY: 'auto' }}>
-        {sections.map(sec => {
+        {sections.map((sec, si) => {
           const isOpen = expanded[sec.name];
           return (
             <div key={sec.name}>
@@ -216,14 +221,18 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                     </tr>
                   </thead>
                   <tbody>
-                    {sec.items.map(item => {
+                    {sec.items.map((item, ii) => {
                       const rateSpec = RATE_SOURCE_LABELS[item.rate_source];
                       const qtySpec  = QTY_SOURCE_LABELS[item.qty_source];
                       const isEditing = editingKey === item.key;
+                      const ref = item.item_ref || `${si + 1}.${String(ii + 1).padStart(2, '0')}`;
                       return (
-                        <tr key={item.key + '-' + (item.item_ref || '')} style={{ borderBottom: '1px solid ' + c.border }}>
+                        <tr key={item.key + '-' + (item.item_ref || ii)} style={{ borderBottom: '1px solid ' + c.border }}>
                           <td style={{ padding: '7px 10px', color: c.text, lineHeight: 1.4, verticalAlign: 'top' }}>
-                            <div>{item.description || item.key}</div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <span style={{ color: c.textSub, fontVariantNumeric: 'tabular-nums', fontSize: 11, flexShrink: 0, minWidth: 28 }}>{ref}</span>
+                              <span>{item.description || item.key}</span>
+                            </div>
                           </td>
                           <td
                             style={{

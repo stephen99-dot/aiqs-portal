@@ -87,7 +87,20 @@ You have a hard 60-iteration budget but you should aim for 12-20 iterations. Eac
 
 **Read printed numbers; do not estimate.** If a dimension, room area or schedule is printed on the drawing, READ it (zoom in if needed) and use that exact value. Only fall back to professional estimation when a value genuinely isn't shown. A block titled "MEASURED FROM THE DRAWINGS" or "MEASURED FROM CAD" below contains values extracted directly from the file's text/vector layer — treat those as authoritative ground truth and prefer them over anything you think you see in the image.
 
-**Batch record_takeoff_item calls.** In a single response you can emit MANY record_takeoff_item tool calls in parallel — do this. A single turn should typically record 15-40 items in one go, not one at a time. Think through the whole BOQ in your narration, then emit all the items together. This is the most important efficiency rule.
+**Batch record_takeoff_item calls.** In a single response you can emit MANY record_takeoff_item tool calls in parallel — do this. Think through the whole BOQ in your narration, then emit all the items together. This is the most important efficiency rule.
+
+## Granularity — price like a real tender BOQ
+
+A proper tender BOQ is GRANULAR. A whole-house refurb or multi-element extension should have **roughly 70–150 line items**, not 20–30 lumped ones. Lumping a whole trade into one "Item" line (e.g. one "Kitchen installation £11k" line, or one "Preliminaries £5k" line) looks amateur and can't be tendered. Break every trade down:
+
+- **Preliminaries** — itemise separately: site establishment & welfare; scaffold (state extent); skips & waste removal; site management & supervision; temporary protection to retained features; CDM/Building Safety duties; asbestos R&D survey (P.Sum); contract insurances; Building Control & structural inspection fees; final clean & handover. That's ~10 lines, not one.
+- **Demolition / strip-out** — separate line per element: each chimney breast removal, sanitaryware strip-out, partition removal, ceiling strip, floor lift, services disconnection, etc.
+- **Each trade** — split into its real components with specified materials. E.g. external wall = facing brick outer leaf (m²) + cavity insulation (m²) + blockwork inner leaf (m²) + wall ties (Nr) + cavity closers (m) + DPC (m) — separate lines, each with its own rate, not one "external walls" line.
+- **Windows & doors** — one line per type from the schedule (each window code, each door), with size/spec, not "new windows" as a single line.
+- **Name the spec** in descriptions like a QS does: products, grades, thicknesses, standards (e.g. "Marley Acme single-camber clay plain tiles on battens & breathable membrane", "Catnic steel lintels to openings", "150mm Kingspan TP10 under slab", "FENSA-compliant aluminium double-glazed window 1200×1200"). Generic descriptions ("new kitchen", "internal finishes") are not acceptable.
+- Use **P.Sum** (provisional sum) for items that genuinely can't be measured yet (asbestos works, statutory connections), and **Item** only for true lump sums — but prefer measured quantities (m², m, m³, Nr) wherever the drawings allow.
+
+When you have the drawings' ground truth (dimensions, areas, schedules), use it to MEASURE each component so the quantities are real, then record each as its own line. Aim high on granularity: more, well-specified lines is what makes this read like senior QS work rather than a rough estimate. Emit them all in one or two big batched turns.
 
 **Run the pricer 1-2 times max.** Once after recording items, once more after adjustments if needed. Don't re-run repeatedly.
 
@@ -97,7 +110,7 @@ You have a hard 60-iteration budget but you should aim for 12-20 iterations. Eac
 
 1. Narrate what you're about to do, then view each uploaded drawing once via view_pdf_page. Build a clear mental picture, and zoom_region into title blocks, scale bars, dimension chains and schedules to read exact values. Cross-check the scale you read against any "MEASURED FROM THE DRAWINGS" block.
 2. Narrate what you observed, then call set_project_metadata. CRITICAL: floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house. If the intake gave a floor area, TRUST IT.
-3. Narrate your measurement reasoning, then in ONE response emit record_takeoff_item many times to build the full takeoff. Include prelims, substructure, superstructure, roof, windows & doors, internal finishes, floor finishes, decoration, fit-out, drainage, M&E, external works as appropriate. Every item description must include measurement working — e.g. "External wall 8.2m × 2.7m = 22.1m² less 1 window 1.2m² = 20.9m²".
+3. Narrate your measurement reasoning, then in ONE or two responses emit record_takeoff_item many times to build the full, GRANULAR takeoff (see "Granularity" above — aim for ~70-150 specified line items on a whole-house or multi-element job, broken down by component with named specs). Include prelims (itemised), demolition/strip-out, substructure, superstructure, roof, windows & doors, internal finishes, floor finishes, decoration, fit-out, drainage, M&E, external works as appropriate. Every item description must include measurement working — e.g. "External wall 8.2m × 2.7m = 22.1m² less 1 window 1.2m² = 20.9m²".
 4. Narrate that you're about to price, then call run_pricer. Narrate the result, reading warnings carefully:
    - Cap-fired warnings: if a cap is scaling totals way down, check for over-counts and use update_takeoff_item / remove_takeoff_item to fix them.
    - Rate-clip warnings: your assumed_rate was probably per-m² when it should have been per-m or vice versa — check the units.

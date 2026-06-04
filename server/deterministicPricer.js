@@ -4,6 +4,32 @@
  * Same locked quantities + same rate library = identical output every run.
  */
 
+// For items not in the rate library, derive a sensible labour vs materials
+// split from the trade/section rather than a flat 50/50 (which looks robotic).
+// Labour fraction by trade; materials is the remainder.
+function defaultSplitForSection(section, unit) {
+  const s = (section || '').toLowerCase();
+  const u = (unit || '').toLowerCase();
+  let labour = 0.5;
+  if (/prelim|general|management|supervis|welfare|site\s*set/.test(s)) labour = 0.6;
+  else if (/demolition|strip|alteration|removal/.test(s)) labour = 0.85;
+  else if (/substructure|groundwork|foundation|excavat/.test(s)) labour = 0.4;
+  else if (/steel/.test(s)) labour = 0.4;
+  else if (/superstructure|external\s*wall|masonry|envelope|brick|block/.test(s)) labour = 0.5;
+  else if (/roof/.test(s)) labour = 0.45;
+  else if (/window|door|glaz/.test(s)) labour = 0.3;
+  else if (/internal\s*finish|plaster|partition|ceiling|drylin/.test(s)) labour = 0.6;
+  else if (/floor\s*finish|tiling|screed/.test(s)) labour = 0.45;
+  else if (/decorat|paint/.test(s)) labour = 0.8;
+  else if (/fit|kitchen|bathroom|sanitary|joinery|furniture/.test(s)) labour = 0.4;
+  else if (/mechanic|plumb|heat|hvac|ventilat/.test(s)) labour = 0.5;
+  else if (/electric/.test(s)) labour = 0.55;
+  else if (/external\s*work|drainage|landscap|paving|patio/.test(s)) labour = 0.55;
+  // Supply-and-fix "Nr" product items lean materials-heavy when section is vague.
+  if (labour === 0.5 && (u === 'nr' || u === 'no')) labour = 0.4;
+  return { labour, materials: Math.round((1 - labour) * 100) / 100 };
+}
+
 const BASE_RATES = {
   // Substructure
   'excavation_strip_foundation':        { rate: 75,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations to engineer\'s design depth; remove excavated spoil to skip; trim sides and compact base; including earthwork support where required' },
@@ -1412,7 +1438,8 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       }
     }
 
-    const baseRate = BASE_RATES[item.key] || { labour: 0.5, materials: 0.5, description: item.description };
+    const known = BASE_RATES[item.key];
+    const baseRate = known || { ...defaultSplitForSection(item.section, item.unit), description: item.description };
     const total = Math.round(item.qty * rate * 100) / 100;
     const labour = Math.round(total * baseRate.labour * 100) / 100;
     const materials = Math.round(total * baseRate.materials * 100) / 100;
