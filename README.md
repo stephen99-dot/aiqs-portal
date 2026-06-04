@@ -18,6 +18,14 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
 - `VOYAGE_API_KEY` — optional; enables semantic memory retrieval (falls back to FTS keyword search if unset).
 - `ENABLE_WEB_SEARCH` — optional; the chat uses Anthropic's live `web_search` tool by default. Set to `0` to disable it (e.g. to avoid per-search billing).
 
+### Drawing reading & quote accuracy
+The take-off pipeline reads the numbers printed on the drawings rather than only eyeballing the image:
+- **PDF text-layer extraction** (`server/pdfGeometry.js`) — pulls the drawing scale, sheet size, room areas, dimension strings and door/window schedules straight from vector PDFs and injects them as authoritative ground truth ("read, do not estimate"). Also gives deterministic scale calibration (real mm per pixel) from the scale label + render DPI.
+- **CAD/DXF import** (`server/dxfReader.js`) — when a user exports DXF, exact wall lengths (by layer), closed-polygon areas and door/window block counts are computed from the vector geometry. DWG should be exported to DXF or PDF.
+- **Zoom tool** — the BOQ agent has a `zoom_region` tool to magnify any part of a sheet (scale bar, dimension chains, schedules) at high effective DPI, like a surveyor with a loupe.
+- **Higher-res rendering** — page raster quality raised across the chat/agent paths so dimension text stays legible.
+- **OCR for scanned drawings** (`server/ocr.js`) — optional. Lazy-loads `tesseract.js`; if a PDF has no text layer, printed dimensions/areas/schedules are recovered via OCR. To enable in production: `npm install tesseract.js`.
+
 ### Chat memory & learning
 The chat assistant now mirrors the claude.ai front end's "remembers and learns" behaviour:
 - **Always-on learning** — after every turn, durable facts/preferences about the user are extracted (`server/autoLearn.js`) and saved to `user_memories`, so they're recalled in future chats. They appear on the AI Memory page tagged "Learned automatically".

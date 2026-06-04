@@ -17,6 +17,40 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 const agent = require('./agent');
+let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { pdfGeometry = null; }
+let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { dxfReader = null; }
+let ocr; try { ocr = require('./ocr'); } catch (e) { ocr = null; }
+
+// Read printed dimensions, areas, schedules (PDF text layer) and CAD geometry
+// (DXF) straight off the uploaded files, so the agent starts with authoritative
+// numbers rather than eyeballing rasters. Best-effort; returns '' on any issue.
+async function buildDrawingGroundTruth(tmpDir, extractedNames) {
+  const names = (extractedNames && extractedNames.length)
+    ? extractedNames
+    : (() => { try { return fs.readdirSync(tmpDir); } catch (e) { return []; } })();
+  const blocks = [];
+  for (const name of names) {
+    const lower = name.toLowerCase();
+    const full = path.join(tmpDir, name);
+    try {
+      if (!fs.existsSync(full)) continue;
+      if (lower.endsWith('.pdf') && pdfGeometry && pdfGeometry.isEnabled()) {
+        const res = await pdfGeometry.extractPdf(fs.readFileSync(full));
+        if (res) blocks.push(pdfGeometry.formatForPrompt(res, name));
+        // Scanned PDF with no text layer → try OCR (only if tesseract installed).
+        if (res && !res.isVector && ocr && ocr.isEnabled()) {
+          const text = await ocr.ocrPdf(full);
+          const ocrBlock = pdfGeometry.parsePlainText(text, name);
+          if (ocrBlock) blocks.push(ocrBlock);
+        }
+      } else if (lower.endsWith('.dxf') && dxfReader && dxfReader.isEnabled()) {
+        const res = dxfReader.extractDxf(fs.readFileSync(full, 'utf8'));
+        if (res) blocks.push(dxfReader.formatForPrompt(res, name));
+      }
+    } catch (e) { /* skip this file */ }
+  }
+  return blocks.join('\n');
+}
 const { TOOL_DEFINITIONS, executeTool, updateRun, appendMessage, setActivity, emit } = agent;
 
 const MODEL = 'claude-sonnet-4-20250514';
@@ -49,7 +83,9 @@ This prose is what makes the output feel like real QS work. Don't skip it.
 
 You have a hard 60-iteration budget but you should aim for 12-20 iterations. Each iteration costs money and makes the user wait. Do NOT spread work across many iterations when you can batch.
 
-**View drawings ONCE.** Call view_pdf_page for each relevant drawing at the start. Study it carefully in one look. Don't re-view the same page unless you're verifying one specific dimension you clearly missed.
+**View drawings ONCE, then zoom for detail.** Call view_pdf_page for each relevant drawing at the start to get the whole-page picture. When you need to read a small dimension string, the scale bar, a hatching/spec key, or count openings on a busy elevation, use zoom_region to magnify that part of the page at high resolution rather than squinting at the full page or guessing. Don't re-view a whole page repeatedly — zoom into the specific area instead.
+
+**Read printed numbers; do not estimate.** If a dimension, room area or schedule is printed on the drawing, READ it (zoom in if needed) and use that exact value. Only fall back to professional estimation when a value genuinely isn't shown. A block titled "MEASURED FROM THE DRAWINGS" or "MEASURED FROM CAD" below contains values extracted directly from the file's text/vector layer — treat those as authoritative ground truth and prefer them over anything you think you see in the image.
 
 **Batch record_takeoff_item calls.** In a single response you can emit MANY record_takeoff_item tool calls in parallel — do this. A single turn should typically record 15-40 items in one go, not one at a time. Think through the whole BOQ in your narration, then emit all the items together. This is the most important efficiency rule.
 
@@ -59,7 +95,7 @@ You have a hard 60-iteration budget but you should aim for 12-20 iterations. Eac
 
 ## The workflow
 
-1. Narrate what you're about to do, then view each uploaded drawing once via view_pdf_page. Build a clear mental picture.
+1. Narrate what you're about to do, then view each uploaded drawing once via view_pdf_page. Build a clear mental picture, and zoom_region into title blocks, scale bars, dimension chains and schedules to read exact values. Cross-check the scale you read against any "MEASURED FROM THE DRAWINGS" block.
 2. Narrate what you observed, then call set_project_metadata. CRITICAL: floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house. If the intake gave a floor area, TRUST IT.
 3. Narrate your measurement reasoning, then in ONE response emit record_takeoff_item many times to build the full takeoff. Include prelims, substructure, superstructure, roof, windows & doors, internal finishes, floor finishes, decoration, fit-out, drainage, M&E, external works as appropriate. Every item description must include measurement working — e.g. "External wall 8.2m × 2.7m = 22.1m² less 1 window 1.2m² = 20.9m²".
 4. Narrate that you're about to price, then call run_pricer. Narrate the result, reading warnings carefully:
@@ -206,7 +242,7 @@ function intakeSuggestsIreland(intake) {
 // Build the initial user message content from uploaded files.
 // For ZIPs we've already unpacked via zipProcessor; here we just describe
 // what's in the tmp directory so the agent knows which files to view_pdf_page.
-function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates }) {
+function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth }) {
   const content = [];
   const fileList = extractedNames && extractedNames.length > 0
     ? extractedNames.map((n, i) => `  ${i + 1}. ${n}`).join('\n')
@@ -244,6 +280,9 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   }
 
   if (pdfNotes && pdfNotes.length > 0) introText += `\n\nPDF HANDLING NOTES:\n${pdfNotes.join('\n')}`;
+
+  // Authoritative numbers read straight off the drawings' text/CAD layer.
+  if (drawingGroundTruth && drawingGroundTruth.trim()) introText += `\n${drawingGroundTruth}`;
 
   // Learned rates — inject the user's highest-confidence rates observed on
   // past jobs. Atlas should prefer these over library defaults when the
@@ -369,7 +408,11 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   updateRun(runId, { status: 'running' });
   emit(runId, { type: 'run_started', runId });
 
-  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates });
+  let drawingGroundTruth = '';
+  try { drawingGroundTruth = await buildDrawingGroundTruth(tmpDir, extractedNames); }
+  catch (e) { console.error('[Agent] ground-truth extraction error:', e.message); }
+
+  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth });
   const messages = [{ role: 'user', content: initialContent }];
   appendMessage(runId, 0, 'user', initialContent);
 

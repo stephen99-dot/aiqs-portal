@@ -19,6 +19,8 @@ try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat
 try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Chat] keyNormalizer not found — copy keyNormalizer.js to server/'); }
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
+let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { console.log('[Chat] pdfGeometry not found — drawing text extraction disabled'); }
+let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
 
 // Live web search — gives the chat the same "search the web" ability as the
 // claude.ai front end. Runs as Anthropic's server-side web_search tool, so no
@@ -997,9 +999,9 @@ function renderLargePdfAsImages(pdfPath) {
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
     const maxPages = 10; // construction drawings rarely exceed 10 pages
-    const dpi = 150; // lower than ScaleReader (200) to keep file sizes small
+    const dpi = 170; // legible dimension text while keeping file sizes manageable
     const result = spawnSync('pdftoppm', [
-      '-r', String(dpi), '-jpeg', '-jpegopt', 'quality=80',
+      '-r', String(dpi), '-jpeg', '-jpegopt', 'quality=85',
       '-f', '1', '-l', String(maxPages),
       pdfPath, path.join(tmpDir, 'page')
     ], { timeout: 60000, encoding: 'buffer' });
@@ -1775,11 +1777,20 @@ ${summary}`);
             console.log(`[Upload] Excel parse failed, sending placeholder: ${file.originalname}`);
           }
 
-        } else if (ext === '.dwg' || ext === '.dxf') {
-          // CAD files can't be directly analysed — tell the user to export as PDF
+        } else if (ext === '.dxf') {
+          // DXF is read directly for exact geometry (see the MEASURED FROM CAD
+          // ground-truth block injected into the system prompt above).
           fileNames.push(file.originalname);
-          zipNotes.push(`${file.originalname} is a ${ext.slice(1).toUpperCase()} CAD file — please export as PDF and re-upload for full analysis.`);
-          console.log(`[Upload] CAD file needs PDF export: ${file.originalname}`);
+          if (!(dxfReader && dxfReader.isEnabled())) {
+            zipNotes.push(`${file.originalname} is a DXF CAD file but the CAD reader is unavailable — export as PDF for full analysis.`);
+          }
+          console.log(`[Upload] DXF file accepted for geometry extraction: ${file.originalname}`);
+
+        } else if (ext === '.dwg') {
+          // DWG is a closed binary format — needs conversion. Ask for DXF/PDF.
+          fileNames.push(file.originalname);
+          zipNotes.push(`${file.originalname} is a DWG CAD file — please export as DXF or PDF and re-upload (DXF gives the most accurate quantities).`);
+          console.log(`[Upload] DWG file needs DXF/PDF export: ${file.originalname}`);
 
         } else {
           const b = fileToContentBlock(file.path, ext);
@@ -1899,6 +1910,25 @@ ${summary}`);
     // ── LIVE WEB SEARCH: tell the model the tool exists and when to reach for it ──
     if (WEB_SEARCH_ENABLED && !hasFiles) {
       systemPrompt += `\n\n=== LIVE WEB SEARCH ===\nYou have a web_search tool. Use it proactively when the user asks about current material/product prices, product availability, specific suppliers or manufacturers, recent building regulations or standards, or anything time-sensitive or beyond your training knowledge. Prefer UK/Ireland sources for construction queries. When you use it, weave the findings into your answer and cite the source site or URL so the user can verify. Don't search for things you already know confidently.\n===\n`;
+    }
+
+    // Read printed dimensions/areas/schedules off any uploaded PDFs/DXFs so the
+    // model measures from the numbers on the sheet, not visual estimates.
+    if (hasFiles && req.files && req.files.length) {
+      try {
+        let gt = '';
+        for (const f of req.files) {
+          const lower = (f.originalname || '').toLowerCase();
+          if (lower.endsWith('.pdf') && pdfGeometry && pdfGeometry.isEnabled()) {
+            const res = await pdfGeometry.extractPdf(fs.readFileSync(f.path));
+            if (res) gt += pdfGeometry.formatForPrompt(res, f.originalname);
+          } else if (lower.endsWith('.dxf') && dxfReader && dxfReader.isEnabled()) {
+            const res = dxfReader.extractDxf(fs.readFileSync(f.path, 'utf8'));
+            if (res) gt += dxfReader.formatForPrompt(res, f.originalname);
+          }
+        }
+        if (gt.trim()) systemPrompt += '\n' + gt;
+      } catch (gtErr) { console.error('[GroundTruth] chat extract error:', gtErr.message); }
     }
 
     // When files are uploaded, the deterministic pricer will handle pricing via Stage 1.
