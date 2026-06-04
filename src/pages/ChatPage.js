@@ -43,7 +43,79 @@ function useIsMobile() {
 // Markdown renderer with QS-appropriate typography. Overrides default HTML
 // components so spacing/styling matches the chat bubble look rather than
 // default browser defaults.
-function Markdown({ content, color, mutedColor, borderColor, mono }) {
+// Lightweight, dependency-free syntax highlighter. Escapes HTML first, then
+// wraps comments / strings / numbers / keywords in coloured spans. Good enough
+// for the "claude.ai code block" look without pulling in a heavy library.
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+const HL_KEYWORDS = 'const|let|var|function|return|if|else|elif|for|while|do|switch|case|break|continue|new|class|extends|super|this|self|import|export|from|default|async|await|try|catch|finally|throw|typeof|instanceof|in|of|void|delete|yield|static|get|set|public|private|protected|interface|type|enum|namespace|def|lambda|None|True|False|and|or|not|is|pass|with|as|global|nonlocal|print|then|fi|done|echo|select|insert|update|where|join|group|order|limit|null|true|false|undefined|int|float|double|char|bool|boolean|string|struct|func|package|range|defer|chan';
+function highlightToHtml(code, lang) {
+  const esc = escapeHtml(code);
+  const hashComments = /^(py|python|rb|ruby|sh|bash|shell|zsh|yaml|yml|toml|ini|r|perl|pl|makefile|dockerfile)$/i.test(lang || '');
+  const commentAlt = hashComments
+    ? '\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*|#[^\\n]*'
+    : '\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n]*';
+  const re = new RegExp(
+    '(' + commentAlt + ')' +
+    '|("(?:\\\\.|[^"\\\\])*"|\'(?:\\\\.|[^\'\\\\])*\'|`(?:\\\\.|[^`\\\\])*`)' +
+    '|(\\b\\d[\\d_.]*\\b)' +
+    '|(\\b(?:' + HL_KEYWORDS + ')\\b)', 'g');
+  return esc.replace(re, (m, c, str, num, kw) => {
+    if (c) return '<span style="color:#7a8699;font-style:italic">' + c + '</span>';
+    if (str) return '<span style="color:#34d399">' + str + '</span>';
+    if (num) return '<span style="color:#f59e0b">' + num + '</span>';
+    if (kw) return '<span style="color:#c084fc">' + kw + '</span>';
+    return m;
+  });
+}
+
+const LANG_EXT = {
+  js: 'js', javascript: 'js', ts: 'ts', typescript: 'ts', jsx: 'jsx', tsx: 'tsx',
+  py: 'py', python: 'py', json: 'json', html: 'html', xml: 'xml', css: 'css',
+  scss: 'scss', sql: 'sql', sh: 'sh', bash: 'sh', shell: 'sh', yaml: 'yml', yml: 'yml',
+  md: 'md', markdown: 'md', java: 'java', go: 'go', rs: 'rs', rust: 'rs',
+  c: 'c', cpp: 'cpp', cs: 'cs', rb: 'rb', php: 'php', swift: 'swift', kt: 'kt',
+};
+
+// A single fenced code block. Small blocks render inline with a copy button;
+// large blocks become a clickable "artifact" card that opens the side panel.
+function CodeBlock({ code, lang, mono, color, borderColor, mutedColor, onOpenArtifact }) {
+  const [copied, setCopied] = useState(false);
+  const lineCount = code.split('\n').length;
+  const isArtifact = !!onOpenArtifact && (lineCount >= 12 || code.length >= 500);
+  const label = (lang || 'code').toUpperCase();
+  const doCopy = async (e) => { e.stopPropagation(); await copyText(code); setCopied(true); setTimeout(() => setCopied(false), 1400); };
+
+  if (isArtifact) {
+    return (
+      <div onClick={() => onOpenArtifact({ content: code, language: lang || '', title: label + ' snippet', lineCount })}
+        style={{ cursor: 'pointer', margin: '2px 0 10px', border: `1px solid ${borderColor}`, borderRadius: 10, overflow: 'hidden', background: borderColor }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+          <span style={{ width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245,158,11,0.15)', color: '#F59E0B', flexShrink: 0, fontFamily: mono, fontSize: 12, fontWeight: 700 }}>{'</>'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color }}>{label} snippet</div>
+            <div style={{ fontSize: 11.5, color: mutedColor }}>{lineCount} lines · click to open</div>
+          </div>
+          <span style={{ fontSize: 11.5, color: mutedColor, fontWeight: 600 }}>Open ▸</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ margin: '0 0 10px', borderRadius: 8, overflow: 'hidden', border: `1px solid ${borderColor}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', background: borderColor, fontSize: 11 }}>
+        <span style={{ color: mutedColor, fontWeight: 600, letterSpacing: '0.04em' }}>{label}</span>
+        <button onClick={doCopy} style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, fontSize: 11, fontFamily: 'inherit', padding: '2px 4px' }}>{copied ? 'Copied' : '⧉ Copy'}</button>
+      </div>
+      <pre style={{ margin: 0, padding: '10px 12px', overflowX: 'auto', fontFamily: mono, fontSize: 12.5, lineHeight: 1.5, background: 'transparent' }}>
+        <code style={{ fontFamily: mono, color }} dangerouslySetInnerHTML={{ __html: highlightToHtml(code, lang) }} />
+      </pre>
+    </div>
+  );
+}
+
+function Markdown({ content, color, mutedColor, borderColor, mono, onOpenArtifact }) {
   const base = { color, fontSize: 'inherit', lineHeight: 1.65 };
   const components = useMemo(() => ({
     p:  ({node, ...p}) => <p {...p} style={{ margin: '0 0 10px', ...base }} />,
@@ -58,15 +130,22 @@ function Markdown({ content, color, mutedColor, borderColor, mono }) {
     a:  ({node, ...p}) => <a {...p} style={{ color: '#60A5FA', textDecoration: 'underline', textUnderlineOffset: 2 }} target="_blank" rel="noopener noreferrer" />,
     blockquote: ({node, ...p}) => <blockquote {...p} style={{ margin: '0 0 10px', padding: '6px 12px', borderLeft: '3px solid ' + borderColor, color: mutedColor, fontStyle: 'italic' }} />,
     hr: ({node, ...p}) => <hr {...p} style={{ margin: '14px 0', border: 'none', borderTop: '1px solid ' + borderColor }} />,
-    code: ({node, inline, ...p}) => inline
-      ? <code {...p} style={{ padding: '1px 5px', borderRadius: 4, background: borderColor, fontFamily: mono, fontSize: '0.92em' }} />
-      : <code {...p} style={{ fontFamily: mono, fontSize: '0.9em', color }} />,
-    pre: ({node, ...p}) => <pre {...p} style={{ margin: '0 0 10px', padding: '10px 12px', borderRadius: 8, background: borderColor, overflowX: 'auto', fontFamily: mono, fontSize: 12.5, lineHeight: 1.5 }} />,
+    code: ({node, inline, className, children, ...p}) => {
+      const text = String(Array.isArray(children) ? children.join('') : (children ?? ''));
+      const langMatch = /language-(\w+)/.exec(className || '');
+      const isBlock = !inline && (langMatch || text.includes('\n'));
+      if (!isBlock) {
+        return <code {...p} style={{ padding: '1px 5px', borderRadius: 4, background: borderColor, fontFamily: mono, fontSize: '0.92em' }}>{children}</code>;
+      }
+      return <CodeBlock code={text.replace(/\n$/, '')} lang={langMatch ? langMatch[1] : ''} mono={mono} color={color} borderColor={borderColor} mutedColor={mutedColor} onOpenArtifact={onOpenArtifact} />;
+    },
+    // CodeBlock renders its own container, so pre is just a passthrough.
+    pre: ({node, children, ...p}) => <>{children}</>,
     table: ({node, ...p}) => <div style={{ overflowX: 'auto', margin: '0 0 10px' }}><table {...p} style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%' }} /></div>,
     thead: ({node, ...p}) => <thead {...p} style={{ background: borderColor }} />,
     th: ({node, ...p}) => <th {...p} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid ' + borderColor, fontWeight: 700, color }} />,
     td: ({node, ...p}) => <td {...p} style={{ padding: '6px 10px', borderBottom: '1px solid ' + borderColor, color }} />,
-  }), [color, mutedColor, borderColor, mono]);
+  }), [color, mutedColor, borderColor, mono, onOpenArtifact]);
   return <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{content || ''}</ReactMarkdown>;
 }
 
@@ -97,6 +176,9 @@ export default function ChatPage() {
   const [stageDetail, setStageDetail] = useState('');
   const [streamingText, setStreamingText] = useState('');
   const [expanded, setExpanded]       = useState({});
+  // Artifacts side panel — opened when a large code block is clicked.
+  const [artifact, setArtifact]       = useState(null);
+  const openArtifact = useCallback((a) => setArtifact(a), []);
 
   // ── Session / takeoff tracking ─────────────────────────────────────
   // These are the two critical IDs that must persist through the conversation
@@ -543,6 +625,7 @@ export default function ChatPage() {
           sessionId: data.session_id,
           takeoffId: data.takeoff_id,
           capturedMemories: data.captured_memories || null,
+          sources: data.sources || null,
           timestamp: new Date().toISOString(),
         };
         setMessages(p => [...p, aiMsg]);
@@ -809,6 +892,7 @@ export default function ChatPage() {
                 mutedColor={c.textMuted}
                 borderColor={dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
                 mono="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+                onOpenArtifact={openArtifact}
               />
             )}
 
@@ -865,6 +949,28 @@ export default function ChatPage() {
             )}
             {!isUser && msg.streaming && (
               <span style={{ display: 'inline-block', width: 7, height: 14, background: c.amber, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />
+            )}
+
+            {/* Web search source chips */}
+            {!isUser && msg.sources && msg.sources.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: c.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <SearchIcon size={11} /> Sources
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {msg.sources.map((s, si) => {
+                    let host = s.url;
+                    try { host = new URL(s.url).hostname.replace(/^www\./, ''); } catch (e) {}
+                    return (
+                      <a key={si} href={s.url} target="_blank" rel="noopener noreferrer" title={s.title || s.url}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: 230, padding: '4px 9px', borderRadius: 999, background: dark ? 'rgba(96,165,250,0.1)' : 'rgba(59,130,246,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60A5FA', fontSize: 11.5, textDecoration: 'none', fontWeight: 500 }}>
+                        <span style={{ opacity: 0.7 }}>{si + 1}.</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{host}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {/* Remembered-memory chips */}
@@ -994,6 +1100,40 @@ export default function ChatPage() {
       onSkip={() => { setIntakeOpen(false); setIntakeDone(true); }}
       onSubmit={(data) => { setPendingIntake(data); setIntakeOpen(false); setIntakeDone(true); }}
     />
+
+    {/* Artifacts side panel — claude.ai-style drawer for large code blocks */}
+    {artifact && (
+      <div onClick={() => setArtifact(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', justifyContent: 'flex-end', background: c.overlay }}>
+        <div onClick={e => e.stopPropagation()}
+          style={{ width: mobile ? '100%' : 'min(580px, 94vw)', height: '100%', background: c.chat, borderLeft: `1px solid ${c.chatBorder}`, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.25)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${c.chatBorder}` }}>
+            <span style={{ width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245,158,11,0.15)', color: '#F59E0B', fontFamily: 'monospace', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{'</>'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{artifact.title || 'Snippet'}</div>
+              <div style={{ fontSize: 11.5, color: c.textMuted }}>{(artifact.language || 'text').toUpperCase()}{artifact.lineCount ? ` · ${artifact.lineCount} lines` : ''}</div>
+            </div>
+            <button onClick={() => copyText(artifact.content)} title="Copy" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>⧉ Copy</button>
+            <button onClick={() => {
+              try {
+                const blob = new Blob([artifact.content], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'snippet.' + (LANG_EXT[(artifact.language || '').toLowerCase()] || 'txt');
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+              } catch (e) {}
+            }} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>↓</button>
+            <button onClick={() => setArtifact(null)} title="Close" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>✕</button>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+            <pre style={{ margin: 0, fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, color: c.text, whiteSpace: 'pre', overflowX: 'auto' }}>
+              <code dangerouslySetInnerHTML={{ __html: highlightToHtml(artifact.content, artifact.language) }} />
+            </pre>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div style={{ height:'calc(100vh - 48px)', display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}

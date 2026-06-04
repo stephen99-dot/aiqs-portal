@@ -1500,6 +1500,13 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
   let thinking = '';
   let tokensIn = 0;
   let tokensOut = 0;
+  const sources = [];
+  const seenSourceUrls = new Set();
+  const addSource = (url, title) => {
+    if (!url || seenSourceUrls.has(url)) return;
+    seenSourceUrls.add(url);
+    sources.push({ url, title: title || url });
+  };
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
@@ -1522,6 +1529,18 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
           case 'message_start':
             if (evt.message && evt.message.usage) tokensIn = evt.message.usage.input_tokens || 0;
             break;
+          case 'content_block_start':
+            // Web search results arrive as a web_search_tool_result block — harvest
+            // the source URLs/titles so the UI can show citation chips.
+            if (evt.content_block && evt.content_block.type === 'web_search_tool_result') {
+              const results = evt.content_block.content;
+              if (Array.isArray(results)) {
+                for (const r of results) {
+                  if (r && r.type === 'web_search_result' && r.url) addSource(r.url, r.title);
+                }
+              }
+            }
+            break;
           case 'content_block_delta':
             if (evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
               reply += evt.delta.text;
@@ -1530,6 +1549,9 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
               }
             } else if (evt.delta && evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
               thinking += evt.delta.thinking;
+            } else if (evt.delta && evt.delta.type === 'citations_delta' && evt.delta.citation) {
+              const cit = evt.delta.citation;
+              if (cit.url) addSource(cit.url, cit.title);
             }
             break;
           case 'message_delta':
@@ -1544,11 +1566,11 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
   } catch (streamErr) {
     console.error('[API] stream read error:', streamErr.message);
     // If we got some reply text before the error, still return what we have
-    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, partial: true };
+    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, sources, partial: true };
     return { ok: false, status: 0, error: { message: streamErr.message } };
   }
 
-  return { ok: true, reply, thinking, tokensIn, tokensOut };
+  return { ok: true, reply, thinking, tokensIn, tokensOut, sources };
 }
 
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
@@ -2029,6 +2051,7 @@ ${summary}`);
     // Reply + thinking were aggregated live during streamAnthropicMessage.
     let thinking = streamResult.thinking || '';
     let reply = streamResult.reply || '';
+    const webSources = Array.isArray(streamResult.sources) ? streamResult.sources : [];
     if (usedFallback) reply += '\n\n(Response from lighter model due to high demand.)';
 
     // ═══════════════════════════════════════════════════════════════
@@ -3586,6 +3609,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
       takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
       pipeline_log: pipelineLog || null,
       captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
+      sources: webSources.length > 0 ? webSources : null,
     };
 
     if (req.streaming) {
@@ -3616,6 +3640,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
         takeoff_locked: responseTakeoffId && responseTakeoffStatus === 'confirmed' ? true : false,
         pipeline_log: pipelineLog || null,
         captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
+        sources: webSources.length > 0 ? webSources : null,
       });
     } else {
       res.json(responsePayload);
