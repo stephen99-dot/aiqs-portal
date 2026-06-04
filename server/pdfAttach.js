@@ -32,7 +32,7 @@ function renderPdfToImageBlocks(pdfPath) {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     const result = spawnSync('pdftoppm', [
-      '-r', String(RENDER_DPI), '-jpeg', '-jpegopt', 'quality=75',
+      '-r', String(RENDER_DPI), '-jpeg', '-jpegopt', 'quality=85',
       '-f', '1', '-l', String(MAX_PAGES),
       pdfPath, path.join(tmpDir, 'page'),
     ], { timeout: 120000, encoding: 'buffer' });

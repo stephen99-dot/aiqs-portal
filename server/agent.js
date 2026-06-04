@@ -22,6 +22,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const db = require('./database');
+let sharp; try { sharp = require('sharp'); } catch (e) { sharp = null; }
+let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { pdfGeometry = null; }
 
 // ── Schema ────────────────────────────────────────────────────────────
 
@@ -155,6 +157,22 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'zoom_region',
+    description: 'Magnify a rectangular REGION of a PDF page and view it at high effective resolution — like a surveyor zooming in with a loupe. Use this to read small dimension strings, the scale bar, hatching keys, schedule tables, or to count openings on a busy elevation when view_pdf_page is too coarse. Coordinates are fractions of the page from the TOP-LEFT: x and y are the top-left corner of the region (0=left/top, 1=right/bottom) and w/h are its width/height as fractions. Example: the bottom-right quarter is {x:0.5,y:0.5,w:0.5,h:0.5}. Keep regions reasonably small (w and h around 0.3-0.5) for maximum detail.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string', description: 'Filename of the PDF (exactly as listed in the file summary).' },
+        page: { type: 'integer', description: '1-based page number.' },
+        x: { type: 'number', description: 'Left edge of region, 0-1 fraction of page width.' },
+        y: { type: 'number', description: 'Top edge of region, 0-1 fraction of page height.' },
+        w: { type: 'number', description: 'Region width, 0-1 fraction of page width.' },
+        h: { type: 'number', description: 'Region height, 0-1 fraction of page height.' },
+      },
+      required: ['filename', 'page', 'x', 'y', 'w', 'h'],
+    },
+  },
+  {
     name: 'set_project_metadata',
     description: 'Record the essential project metadata. Call this EARLY once you have identified the project type and floor area from the drawings. CRITICAL: floor_area_m2 should be the TOTAL gross internal floor area (all floors, new + altered), not just the extension footprint — this drives the pricer sizing.',
     input_schema: {
@@ -263,7 +281,7 @@ const TOOL_DEFINITIONS = [
 
 // ── Tool executors ───────────────────────────────────────────────────
 
-function renderPdfPage(tmpDir, filename, page) {
+async function renderPdfPage(tmpDir, filename, page) {
   const srcPath = path.join(tmpDir, filename);
   if (!fs.existsSync(srcPath)) {
     // Try a case-insensitive / basename lookup — AI sometimes paraphrases
@@ -275,7 +293,7 @@ function renderPdfPage(tmpDir, filename, page) {
   try {
     fs.mkdirSync(outDir, { recursive: true });
     const result = spawnSync('pdftoppm', [
-      '-r', '200', '-jpeg', '-jpegopt', 'quality=80',
+      '-r', '200', '-jpeg', '-jpegopt', 'quality=85',
       '-f', String(page), '-l', String(page),
       srcPath, path.join(outDir, 'page'),
     ], { timeout: 60000, encoding: 'buffer' });
@@ -284,13 +302,23 @@ function renderPdfPage(tmpDir, filename, page) {
     }
     const files = fs.readdirSync(outDir).filter(f => f.endsWith('.jpg') || f.endsWith('.jpeg'));
     if (files.length === 0) return { ok: false, reason: `page ${page} not rendered — maybe out of range` };
-    const buf = fs.readFileSync(path.join(outDir, files[0]));
+    let buf = fs.readFileSync(path.join(outDir, files[0]));
     if (buf.length > 4.5 * 1024 * 1024) {
-      // Re-render at lower DPI if it's too big for Anthropic's 5MB image cap
+      // First try recompressing at the same resolution with sharp — keeps detail
+      // far better than dropping DPI.
+      if (sharp) {
+        try {
+          const recompressed = await sharp(buf).jpeg({ quality: 78 }).toBuffer();
+          if (recompressed.length <= 4.5 * 1024 * 1024) {
+            return { ok: true, base64: recompressed.toString('base64'), mediaType: 'image/jpeg' };
+          }
+        } catch (e) {}
+      }
+      // Otherwise re-render at a moderately lower DPI (still legible).
       const outDir2 = path.join(tmpDir, 'rendered2_' + Date.now());
       fs.mkdirSync(outDir2, { recursive: true });
       const r2 = spawnSync('pdftoppm', [
-        '-r', '120', '-jpeg', '-jpegopt', 'quality=70',
+        '-r', '150', '-jpeg', '-jpegopt', 'quality=75',
         '-f', String(page), '-l', String(page),
         srcPath, path.join(outDir2, 'page'),
       ], { timeout: 60000, encoding: 'buffer' });
@@ -311,13 +339,77 @@ function renderPdfPage(tmpDir, filename, page) {
   }
 }
 
+// Render a magnified region of a PDF page. The region (normalised 0-1 from the
+// top-left) is rendered at a DPI chosen so the crop comes out ~1900px wide,
+// giving the model far more effective resolution than a whole-page view.
+async function renderPdfRegion(tmpDir, filename, page, region) {
+  let srcPath = path.join(tmpDir, filename);
+  if (!fs.existsSync(srcPath)) {
+    const alt = fs.readdirSync(tmpDir).find(f => f.toLowerCase() === filename.toLowerCase() || path.basename(f, path.extname(f)).toLowerCase() === filename.toLowerCase());
+    if (!alt) return { ok: false, reason: `file ${filename} not found in upload` };
+    srcPath = path.join(tmpDir, alt);
+  }
+  // Clamp the region to sane bounds.
+  const x = Math.min(Math.max(region.x || 0, 0), 0.98);
+  const y = Math.min(Math.max(region.y || 0, 0), 0.98);
+  const w = Math.min(Math.max(region.w || 0.5, 0.05), 1 - x);
+  const h = Math.min(Math.max(region.h || 0.5, 0.05), 1 - y);
+
+  // Look up the page's point size to compute the pixel crop box.
+  let wPt = 0, hPt = 0;
+  if (pdfGeometry) {
+    try {
+      const sizes = await pdfGeometry.getPageSizes(fs.readFileSync(srcPath), page);
+      const ps = sizes && sizes.sizes.find(s => s.index === page);
+      if (ps) { wPt = ps.wPt; hPt = ps.hPt; }
+    } catch (e) {}
+  }
+  if (!wPt || !hPt) { wPt = 1684; hPt = 2384; } // A1 portrait fallback
+
+  const TARGET_PX = 1900;
+  const cropWInches = (w * wPt) / 72;
+  let dpi = Math.round(TARGET_PX / Math.max(cropWInches, 0.1));
+  dpi = Math.min(Math.max(dpi, 150), 600);
+  const pageWpx = (wPt / 72) * dpi, pageHpx = (hPt / 72) * dpi;
+  const X = Math.round(x * pageWpx), Y = Math.round(y * pageHpx);
+  const W = Math.round(w * pageWpx), H = Math.round(h * pageHpx);
+
+  const outDir = path.join(tmpDir, 'zoom_' + Date.now());
+  try {
+    fs.mkdirSync(outDir, { recursive: true });
+    const result = spawnSync('pdftoppm', [
+      '-r', String(dpi), '-jpeg', '-jpegopt', 'quality=88',
+      '-f', String(page), '-l', String(page),
+      '-x', String(X), '-y', String(Y), '-W', String(W), '-H', String(H),
+      srcPath, path.join(outDir, 'crop'),
+    ], { timeout: 60000, encoding: 'buffer' });
+    if (result.status !== 0 && result.status !== null) {
+      return { ok: false, reason: 'pdftoppm failed: ' + (result.stderr ? result.stderr.toString().substring(0, 200) : '') };
+    }
+    const files = fs.readdirSync(outDir).filter(f => f.endsWith('.jpg') || f.endsWith('.jpeg'));
+    if (files.length === 0) return { ok: false, reason: `region of page ${page} not rendered — page may be out of range` };
+    let buf = fs.readFileSync(path.join(outDir, files[0]));
+    // Keep under Anthropic's 5MB image cap by recompressing/resizing with sharp.
+    if (buf.length > 4.5 * 1024 * 1024 && sharp) {
+      try {
+        buf = await sharp(buf).resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+      } catch (e) {}
+    }
+    return { ok: true, base64: buf.toString('base64'), mediaType: 'image/jpeg', dpi };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  } finally {
+    try { fs.rmSync(outDir, { recursive: true, force: true }); } catch (e) {}
+  }
+}
+
 // Synchronous tool execution — mutates the run state and returns a tool_result
 // content block to send back to Claude in the next turn.
 async function executeTool(runId, toolName, toolInput, runState) {
   switch (toolName) {
     case 'view_pdf_page': {
       setActivity(runId, `Viewing ${toolInput.filename} page ${toolInput.page}`);
-      const rendered = renderPdfPage(runState.tmpDir, toolInput.filename, toolInput.page);
+      const rendered = await renderPdfPage(runState.tmpDir, toolInput.filename, toolInput.page);
       if (!rendered.ok) {
         return { type: 'tool_result', content: `Could not render ${toolInput.filename} page ${toolInput.page}: ${rendered.reason}`, is_error: true };
       }
@@ -326,6 +418,23 @@ async function executeTool(runId, toolName, toolInput, runState) {
         content: [
           { type: 'image', source: { type: 'base64', media_type: rendered.mediaType, data: rendered.base64 } },
           { type: 'text', text: `(${toolInput.filename} page ${toolInput.page} rendered at 200 DPI)` },
+        ],
+      };
+    }
+
+    case 'zoom_region': {
+      setActivity(runId, `Zooming into ${toolInput.filename} page ${toolInput.page}`);
+      const rendered = await renderPdfRegion(runState.tmpDir, toolInput.filename, toolInput.page, {
+        x: toolInput.x, y: toolInput.y, w: toolInput.w, h: toolInput.h,
+      });
+      if (!rendered.ok) {
+        return { type: 'tool_result', content: `Could not zoom ${toolInput.filename} page ${toolInput.page}: ${rendered.reason}`, is_error: true };
+      }
+      return {
+        type: 'tool_result',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: rendered.mediaType, data: rendered.base64 } },
+          { type: 'text', text: `(Zoomed region of ${toolInput.filename} page ${toolInput.page} — rendered at ${rendered.dpi} DPI. Read any dimensions/scale here as ground truth.)` },
         ],
       };
     }
