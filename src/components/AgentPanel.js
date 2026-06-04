@@ -766,6 +766,18 @@ function fmtFileSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
+async function agentOpenInViewer(f) {
+  try {
+    const token = getToken();
+    const r = await fetch('/api/files/sign/' + encodeURIComponent(f.name), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    if (!r.ok) throw new Error();
+    const { url } = await r.json();
+    const ext = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
+    const viewer = ext === 'pdf' ? url : 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=false';
+    window.open(viewer, '_blank', 'noopener');
+  } catch { alert('Could not open the file — try downloading it instead.'); }
+}
+
 function agentFileMeta(f) {
   const t = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
   if (t === 'xlsx' || t === 'xls') return { label: 'Excel spreadsheet', ext: 'XLSX', color: '#10B981', bg: 'rgba(16,185,129,0.14)' };
@@ -813,7 +825,14 @@ function DownloadButton({ f, c, isDark }) {
         <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
         <div style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{busy ? 'Downloading…' : m.ext + ' · ' + (f.size ? fmtFileSize(f.size) : m.label)}</div>
       </div>
-      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); agentOpenInViewer(f); }}
+        title="Open in browser (Google viewer)"
+        style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted, background: 'none', border: 'none', cursor: 'pointer' }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+      <div title="Download" style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       </div>
     </div>
