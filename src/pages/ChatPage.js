@@ -172,6 +172,13 @@ function fileMeta(f) {
   return { label: 'Document', ext: (t || 'FILE').toUpperCase(), color: '#64748B', bg: 'rgba(100,116,139,0.14)' };
 }
 
+// Pick a readable ink colour (black/white) for content sitting on a solid bg.
+function readableOn(hex) {
+  if (!hex || hex[0] !== '#' || hex.length < 7) return '#FFFFFF';
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#111111' : '#FFFFFF';
+}
+
 function fmtFileSize(bytes) {
   if (!bytes || bytes < 1) return '';
   if (bytes < 1024) return bytes + ' B';
@@ -227,7 +234,7 @@ function FileCard({ f, c, dark }) {
 }
 
 export default function ChatPage() {
-  const { mode } = useTheme();
+  const { mode, t } = useTheme();
   const dark = mode === 'dark';
   const mobile = useIsMobile();
 
@@ -439,38 +446,26 @@ export default function ChatPage() {
   }, [messages, currentSessionId]);
 
   // ── Theme colours ──────────────────────────────────────────────────
-  const c = dark ? {
-    page: '#06080F', side: '#0A0D16', sideBorder: '#161E2E', sideHeader: '#080B13',
-    sessHover: '#0F1520', sessActive: '#132040', sessActiveBorder: 'rgba(37,99,235,0.35)',
-    sessActiveText: '#E2EEFF', chat: '#0D1117', chatBorder: '#1A2235',
-    userBubble: '#1B3557', aiBubble: '#111827', text: '#F1F5F9', textSub: '#94A3B8',
-    textMuted: '#3D5068', inputBg: '#111827', inputBorder: '#1E293B', accent: '#2563EB',
-    chipBg: '#1A2235', chipBorder: '#2A3A55', error: '#F87171', avatarBg: '#1A2235',
-    thinkBg: '#111827', thinkBorder: '#1E293B', thinkText: '#94A3B8', amber: '#F59E0B',
-    stageActive: 'rgba(37,99,235,0.08)', stageActiveText: '#60A5FA',
-    stageDone: '#34D399', stageWait: '#1E2D40',
-    topBar: '#080B13', topBorder: '#161E2E', overlay: 'rgba(0,0,0,0.65)',
-    newBg: 'rgba(245,158,11,0.07)', newBorder: 'rgba(245,158,11,0.18)', newText: '#F59E0B',
-    draftBg: 'rgba(245,158,11,0.06)', draftBorder: 'rgba(245,158,11,0.2)', draftText: '#F59E0B',
-    lockedBg: 'rgba(16,185,129,0.06)', lockedBorder: 'rgba(16,185,129,0.2)', lockedText: '#34D399',
-    warnBg: 'rgba(245,158,11,0.06)', warnBorder: 'rgba(245,158,11,0.2)', warnText: '#F59E0B',
-    scroll: '#1E293B', groupLabel: '#2D3E55',
-  } : {
-    page: '#F0F4FA', side: '#FFFFFF', sideBorder: '#E2E8F0', sideHeader: '#F8FAFC',
-    sessHover: '#F1F5F9', sessActive: '#EFF6FF', sessActiveBorder: 'rgba(37,99,235,0.2)',
-    sessActiveText: '#1E3A5F', chat: '#FFFFFF', chatBorder: '#E2E8F0',
-    userBubble: '#2563EB', aiBubble: '#F1F5F9', text: '#1E293B', textSub: '#475569',
-    textMuted: '#94A3B8', inputBg: '#F8FAFC', inputBorder: '#CBD5E1', accent: '#2563EB',
-    chipBg: '#F1F5F9', chipBorder: '#CBD5E1', error: '#DC2626', avatarBg: '#E2E8F0',
-    thinkBg: '#F8FAFC', thinkBorder: '#E2E8F0', thinkText: '#64748B', amber: '#D97706',
-    stageActive: 'rgba(37,99,235,0.05)', stageActiveText: '#2563EB',
-    stageDone: '#059669', stageWait: '#CBD5E1',
-    topBar: '#FFFFFF', topBorder: '#E2E8F0', overlay: 'rgba(0,0,0,0.4)',
-    newBg: 'rgba(245,158,11,0.06)', newBorder: 'rgba(245,158,11,0.2)', newText: '#D97706',
-    draftBg: 'rgba(245,158,11,0.05)', draftBorder: 'rgba(245,158,11,0.2)', draftText: '#D97706',
-    lockedBg: 'rgba(16,185,129,0.05)', lockedBorder: 'rgba(16,185,129,0.2)', lockedText: '#059669',
-    warnBg: 'rgba(245,158,11,0.05)', warnBorder: 'rgba(245,158,11,0.2)', warnText: '#D97706',
-    scroll: '#CBD5E1', groupLabel: '#CBD5E1',
+  // Chat palette derived from the active theme tokens, so the whole chat
+  // re-skins with the selected theme (AI QS / ChatGPT / Claude / Copilot).
+  // Status colours (draft/locked/warn) stay semantic so meaning is preserved.
+  const c = {
+    page: t.bg, side: t.sidebar, sideBorder: t.sidebarBorder, sideHeader: t.sidebar,
+    sessHover: t.surfaceHover, sessActive: t.surfaceHover, sessActiveBorder: t.border, sessActiveText: t.text,
+    chat: t.surface, chatBorder: t.border,
+    userBubble: t.userBubble, aiBubble: t.card, text: t.text, textSub: t.textSecondary, textMuted: t.textMuted,
+    inputBg: t.inputBg, inputBorder: t.border, accent: t.accent,
+    chipBg: t.surfaceHover, chipBorder: t.border, error: t.danger, avatarBg: t.surfaceHover,
+    thinkBg: t.card, thinkBorder: t.border, thinkText: t.textSecondary, amber: t.accent,
+    accentText: t.accentText, accentGradient: t.gradientAccent,
+    stageActive: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', stageActiveText: t.accent,
+    stageDone: t.success, stageWait: t.border,
+    topBar: t.sidebar, topBorder: t.border, overlay: 'rgba(0,0,0,0.55)',
+    newBg: 'transparent', newBorder: t.border, newText: t.accent,
+    draftBg: 'rgba(245,158,11,0.08)', draftBorder: 'rgba(245,158,11,0.25)', draftText: '#F59E0B',
+    lockedBg: 'rgba(16,185,129,0.08)', lockedBorder: 'rgba(16,185,129,0.25)', lockedText: '#10B981',
+    warnBg: 'rgba(245,158,11,0.08)', warnBorder: 'rgba(245,158,11,0.25)', warnText: '#F59E0B',
+    scroll: t.border, groupLabel: t.textMuted,
   };
 
   // ── Session helpers ────────────────────────────────────────────────
@@ -1489,8 +1484,8 @@ export default function ChatPage() {
                 title={files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run Atlas on uploaded files (3-6 min)' : 'Send'}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||agentStarting||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 {agentStarting
-                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2"><circle cx="12" cy="12" r="9" strokeDasharray="42" strokeDashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
-                  : <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
+                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={readableOn(c.accent)} strokeWidth="2.2"><circle cx="12" cy="12" r="9" strokeDasharray="42" strokeDashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
+                  : <svg width="18" height="18" fill="none" stroke={readableOn(c.accent)} strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>}
               </button>
             </form>
             <div style={{ fontSize:11, color:c.textMuted, textAlign:'center', marginTop:7 }}>

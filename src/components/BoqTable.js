@@ -55,7 +55,7 @@ function fmtQty(n) {
 }
 
 export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate, compact = false }) {
-  const { mode } = useTheme();
+  const { mode, t } = useTheme();
   const isDark = mode === 'dark';
   const [loading, setLoading]   = useState(true);
   const [data, setData]         = useState(null);
@@ -127,26 +127,17 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
   );
   if (!data || !data.priced) return null;
 
-  const c = isDark ? {
-    border: 'rgba(255,255,255,0.08)',
-    bg: '#0F1520',
+  // Palette derived from theme tokens so the BOQ table matches the chosen theme.
+  const c = {
+    border: t.border,
+    bg: t.surface,
     rowBg: 'transparent',
-    rowHover: 'rgba(255,255,255,0.03)',
-    text: '#E2E8F0', textMuted: '#94A3B8', textSub: '#64748B',
-    accent: '#F59E0B',
-    sectionBg: 'rgba(245,158,11,0.05)',
-    totalBg: 'rgba(16,185,129,0.06)',
-    editBg: 'rgba(245,158,11,0.08)',
-  } : {
-    border: 'rgba(0,0,0,0.08)',
-    bg: '#FFFFFF',
-    rowBg: 'transparent',
-    rowHover: 'rgba(0,0,0,0.02)',
-    text: '#1E293B', textMuted: '#64748B', textSub: '#94A3B8',
-    accent: '#D97706',
-    sectionBg: 'rgba(245,158,11,0.04)',
-    totalBg: 'rgba(16,185,129,0.04)',
-    editBg: 'rgba(245,158,11,0.06)',
+    rowHover: t.surfaceHover,
+    text: t.text, textMuted: t.textSecondary, textSub: t.textMuted,
+    accent: t.accent,
+    sectionBg: t.surfaceHover,
+    totalBg: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.05)',
+    editBg: t.surfaceHover,
   };
 
   const { sections = [], summary = {} } = data.priced || {};

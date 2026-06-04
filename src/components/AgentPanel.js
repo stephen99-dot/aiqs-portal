@@ -49,7 +49,7 @@ function fmtETA(remainingSec) {
 }
 
 export default function AgentPanel({ runId, onClose, onCompleted }) {
-  const { mode } = useTheme();
+  const { mode, t: tk } = useTheme();
   const isDark = mode === 'dark';
 
   const [run, setRun] = useState(null);
@@ -302,18 +302,13 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
     }
   }
 
-  const c = isDark ? {
-    bg: '#0F1520', card: '#111827', border: 'rgba(255,255,255,0.08)',
-    text: '#E2E8F0', muted: '#94A3B8', sub: '#64748B',
-    accent: '#F59E0B', accentBg: 'rgba(245,158,11,0.08)',
-    done: '#10B981', err: '#EF4444',
-    row: 'rgba(255,255,255,0.025)',
-  } : {
-    bg: '#F8FAFC', card: '#FFFFFF', border: 'rgba(0,0,0,0.08)',
-    text: '#1E293B', muted: '#64748B', sub: '#94A3B8',
-    accent: '#D97706', accentBg: 'rgba(245,158,11,0.06)',
-    done: '#059669', err: '#DC2626',
-    row: 'rgba(0,0,0,0.02)',
+  // Palette derived from theme tokens so the live agent panel matches the theme.
+  const c = {
+    bg: tk.bg, card: tk.card, border: tk.border,
+    text: tk.text, muted: tk.textSecondary, sub: tk.textMuted,
+    accent: tk.accent, accentBg: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+    done: tk.success, err: tk.danger,
+    row: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.02)',
   };
 
   // SQLite's CURRENT_TIMESTAMP is UTC but returned without a 'Z' suffix,
