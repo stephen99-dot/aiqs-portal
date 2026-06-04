@@ -15,6 +15,15 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
 - `JWT_SECRET` — Any random secret string
 - `NODE_ENV` — `production`
 - `PORT` — `5000`
+- `VOYAGE_API_KEY` — optional; enables semantic memory retrieval (falls back to FTS keyword search if unset).
+- `ENABLE_WEB_SEARCH` — optional; the chat uses Anthropic's live `web_search` tool by default. Set to `0` to disable it (e.g. to avoid per-search billing).
+
+### Chat memory & learning
+The chat assistant now mirrors the claude.ai front end's "remembers and learns" behaviour:
+- **Always-on learning** — after every turn, durable facts/preferences about the user are extracted (`server/autoLearn.js`) and saved to `user_memories`, so they're recalled in future chats. They appear on the AI Memory page tagged "Learned automatically".
+- **Cross-session recall** — each conversation is summarised (`conversation_summaries` table) and the most relevant past conversations are injected into the system prompt of new sessions.
+- **Live web search** — Anthropic's `web_search` tool is offered on text chats for current prices, products and regulations.
+- **Edit & regenerate** — edit a previous message and resend, or regenerate the last reply, from the chat UI.
 
 ### Build Command
 npm install && npm run build

@@ -306,7 +306,8 @@ export default function AIMemoryPage() {
               const isEditing = editingMemoryId === m.id;
               const sourceLabel = m.source === 'onboarding' ? 'Onboarding' :
                 m.source === 'user' ? 'Added by you' :
-                m.source === 'chat' ? 'From chat' : m.source;
+                m.source === 'chat' ? 'From chat' :
+                m.source === 'auto' ? 'Learned automatically' : m.source;
               return (
                 <div key={m.id} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
