@@ -11,6 +11,14 @@ import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
 import WhatsNewPopup from './WhatsNewPopup';
 
+// Representative swatch colour for each selectable theme.
+const THEME_SWATCH = {
+  aiqs: '#F59E0B',
+  chatgpt: '#10A37F',
+  claude: '#C96442',
+  copilot: 'linear-gradient(135deg,#2AA5F4,#2AD4A8,#8B5CF6)',
+};
+
 // ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
 function MicIcon({ size = 16, color = 'currentColor' }) {
   return (
@@ -132,7 +140,7 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { t, mode, toggle } = useTheme();
+  const { t, mode, theme, themes, toggle, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -418,6 +426,32 @@ export default function Layout() {
               }}>
                 {user?.email}
               </div>
+            </div>
+          </div>
+
+          {/* Theme picker — pick the overall look (AI QS / ChatGPT / Claude / Copilot) */}
+          <div style={{ padding: '4px 12px 8px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: t.textMuted, marginBottom: 7, letterSpacing: '0.02em' }}>Theme</div>
+            <div style={{ display: 'flex', gap: 9 }}>
+              {themes.map(th => {
+                const active = theme === th.key;
+                return (
+                  <button
+                    key={th.key}
+                    title={th.label}
+                    onClick={() => setTheme(th.key)}
+                    style={{
+                      width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                      background: THEME_SWATCH[th.key] || t.accent,
+                      border: active ? `2px solid ${t.text}` : `1px solid ${t.border}`,
+                      boxShadow: active ? `0 0 0 2px ${t.bg}` : 'none',
+                      transition: 'transform 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.12)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  />
+                );
+              })}
             </div>
           </div>
 
