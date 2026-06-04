@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
-import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, ChatIcon, BrainIcon, BarChartIcon, DotIcon } from './Icons';
+import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, ChatIcon, BrainIcon, DotIcon } from './Icons';
 
 // Live BOQ agent panel. Subscribes to /api/agent/:id/stream, renders:
 //   • Header: status + elapsed time + ETA based on typical runs
@@ -555,7 +555,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           {isComplete && downloads.length > 0 && (
             <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border, background: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.04)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: c.done, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 7 }}>Documents ready</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {downloads.map((f, i) => <DownloadButton key={i} f={f} c={c} isDark={isDark} />)}
               </div>
             </div>
@@ -758,34 +758,56 @@ function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onC
   );
 }
 
+function agentFileMeta(f) {
+  const t = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
+  if (t === 'xlsx' || t === 'xls') return { label: 'Excel spreadsheet', ext: 'XLSX', color: '#10B981', bg: 'rgba(16,185,129,0.14)' };
+  if (t === 'docx' || t === 'doc') return { label: 'Word document', ext: 'DOCX', color: '#2563EB', bg: 'rgba(37,99,235,0.14)' };
+  if (t === 'pdf') return { label: 'PDF document', ext: 'PDF', color: '#DC2626', bg: 'rgba(220,38,38,0.14)' };
+  return { label: 'Document', ext: (t || 'FILE').toUpperCase(), color: '#64748B', bg: 'rgba(100,116,139,0.14)' };
+}
+
+// claude.ai-style attachment card (matches ChatPage's FileCard).
 function DownloadButton({ f, c, isDark }) {
   const [busy, setBusy] = useState(false);
+  const m = agentFileMeta(f);
+  const idle = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(15,23,42,0.1)';
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const token = getToken();
+      const r = await fetch(f.url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+      if (!r.ok) throw new Error();
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = f.name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    } catch (e) { alert('Download failed — try again.'); }
+    finally { setBusy(false); }
+  };
   return (
-    <button
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          const token = getToken();
-          const r = await fetch(f.url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
-          if (!r.ok) throw new Error();
-          const blob = await r.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url; a.download = f.name;
-          document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-        } catch (e) { alert('Download failed — try again.'); }
-        finally { setBusy(false); }
-      }}
+    <div
+      onClick={onClick}
+      title={'Download ' + f.name}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        padding: '9px 14px', borderRadius: 8, cursor: busy ? 'not-allowed' : 'pointer',
-        background: f.type === 'xlsx' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)',
-        border: '1px solid ' + (f.type === 'xlsx' ? 'rgba(16,185,129,0.28)' : 'rgba(59,130,246,0.28)'),
-        color: f.type === 'xlsx' ? c.done : '#3B82F6',
-        fontSize: 13, fontWeight: 600, fontFamily: 'inherit', opacity: busy ? 0.6 : 1,
+        display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 12,
+        cursor: busy ? 'wait' : 'pointer', maxWidth: 360,
+        background: isDark ? 'rgba(255,255,255,0.03)' : '#FFFFFF',
+        border: '1px solid ' + idle, transition: 'border-color .12s ease',
       }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = m.color; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = idle; }}
     >
-      {f.type === 'xlsx' ? <BarChartIcon size={16} /> : <EditIcon size={16} />} {busy ? 'Downloading...' : 'Download ' + f.name}
-    </button>
+      <div style={{ width: 38, height: 38, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: m.bg }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={m.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+        <div style={{ fontSize: 11, color: c.muted, marginTop: 1 }}>{busy ? 'Downloading…' : m.ext + ' · ' + m.label}</div>
+      </div>
+      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.muted }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </div>
+    </div>
   );
 }
