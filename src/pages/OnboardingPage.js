@@ -35,9 +35,8 @@ function Field({ label, desc, children, colors }) {
 }
 
 export default function OnboardingPage() {
-  const { t, mode } = useTheme();
+  const { t } = useTheme();
   const navigate = useNavigate();
-  const isDark = mode === 'dark';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -103,18 +102,13 @@ export default function OnboardingPage() {
     }
   }
 
-  const c = isDark ? {
-    page: '#0A0F1C', card: '#111827', border: 'rgba(255,255,255,0.06)',
-    text: '#E2E8F0', textMuted: '#94A3B8', accent: '#F59E0B',
-    accentBg: 'rgba(245,158,11,0.1)', accentBorder: 'rgba(245,158,11,0.25)',
-    input: '#0F1520', inputBorder: '#1E293B', pill: 'rgba(255,255,255,0.04)',
-    pillActive: 'rgba(245,158,11,0.15)',
-  } : {
-    page: '#F8FAFC', card: '#FFFFFF', border: 'rgba(0,0,0,0.08)',
-    text: '#1E293B', textMuted: '#64748B', accent: '#F59E0B',
-    accentBg: 'rgba(245,158,11,0.08)', accentBorder: 'rgba(245,158,11,0.3)',
-    input: '#F8FAFC', inputBorder: '#CBD5E1', pill: '#F1F5F9',
-    pillActive: 'rgba(245,158,11,0.15)',
+  // Palette derived from theme tokens so onboarding matches the chosen theme.
+  const c = {
+    page: t.bg, card: t.card, border: t.border,
+    text: t.text, textMuted: t.textSecondary, accent: t.accent,
+    accentBg: t.surfaceHover, accentBorder: t.accent,
+    input: t.inputBg, inputBorder: t.border, pill: t.surfaceHover,
+    pillActive: t.surfaceHover,
   };
 
   const textInput = (key, placeholder) => (

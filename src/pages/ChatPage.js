@@ -905,7 +905,7 @@ export default function ChatPage() {
           <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
             {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
-          <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? '#F1F5F9' : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+          <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
 
             {/* User file chips */}
             {isUser && msg.files?.length > 0 && (
@@ -913,7 +913,7 @@ export default function ChatPage() {
                 {msg.files.map((f,i) => {
                   const FIco = fileIcon(f.name);
                   return (
-                  <span key={i} style={{ background:'rgba(255,255,255,0.12)', borderRadius:6, padding:'3px 9px', fontSize:12, display:'flex', alignItems:'center', gap:4 }}>
+                  <span key={i} style={{ background: readableOn(c.userBubble)==='#FFFFFF' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.06)', borderRadius:6, padding:'3px 9px', fontSize:12, display:'flex', alignItems:'center', gap:4 }}>
                     <FIco size={14} /> {f.name}
                   </span>
                   );

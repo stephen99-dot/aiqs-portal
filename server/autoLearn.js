@@ -74,7 +74,7 @@ function parseJsonLoose(text) {
 }
 
 // ── 1. durable fact extraction ──────────────────────────────────────────
-const EXTRACT_SYSTEM = `You extract durable, long-term memories about a user of a quantity-surveying / construction-estimating app, so the assistant can remember them in future conversations (like ChatGPT/Claude memory).
+const EXTRACT_SYSTEM = `You extract durable, long-term memories about a user of a quantity-surveying / construction-estimating app, so the assistant can remember them in future conversations (a personal-assistant style memory).
 
 From the conversation turn provided, extract ONLY facts that are:
 - About the user, their company, their preferences, their standard ways of working, suppliers, rates, regions, project types, team, software/tooling, or recurring constraints.
