@@ -9,6 +9,7 @@ import {
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
+import WhatsNewPopup from './WhatsNewPopup';
 
 // ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
 function MicIcon({ size = 16, color = 'currentColor' }) {
@@ -135,6 +136,9 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // The "What's new" popup takes priority — the Office upsell waits until it's
+  // been dismissed so the two never stack on top of each other.
+  const [whatsNewSeen, setWhatsNewSeen] = useState(false);
   const [testingDismissed, setTestingDismissed] = useState(() => {
     try { return sessionStorage.getItem('aiqs_testing_banner_dismissed') === '1'; }
     catch (e) { return false; }
@@ -497,8 +501,12 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      {/* Office in a Box upsell — only for non-subscribers, and not on the page itself */}
-      {(isAdmin || !user?.hasEstimator) && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
+      {/* What's new — announce chatbot updates to every user, once per release */}
+      <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />
+
+      {/* Office in a Box upsell — only for non-subscribers, and not on the page
+          itself, and only once the What's New popup has been dismissed */}
+      {whatsNewSeen && (isAdmin || !user?.hasEstimator) && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
     </div>
   );
 }
