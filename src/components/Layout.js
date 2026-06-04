@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
-  UploadIcon,
+  UploadIcon, SettingsIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
@@ -197,6 +197,7 @@ export default function Layout() {
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
+    { path: '/branding', label: 'Branding', Icon: SettingsIcon },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
   ];
@@ -429,27 +430,33 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Theme picker — pick the overall look (AI QS / ChatGPT / Claude / Copilot) */}
+          {/* Theme picker — pick the overall look. Each theme is shown with its
+              name (a labelled chip) so it's clear without hovering. */}
           <div style={{ padding: '4px 12px 8px' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: t.textMuted, marginBottom: 7, letterSpacing: '0.02em' }}>Theme</div>
-            <div style={{ display: 'flex', gap: 9 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {themes.map(th => {
                 const active = theme === th.key;
                 return (
                   <button
                     key={th.key}
-                    title={th.label}
                     onClick={() => setTheme(th.key)}
                     style={{
-                      width: 24, height: 24, borderRadius: '50%', cursor: 'pointer', padding: 0,
-                      background: THEME_SWATCH[th.key] || t.accent,
-                      border: active ? `2px solid ${t.text}` : `1px solid ${t.border}`,
-                      boxShadow: active ? `0 0 0 2px ${t.bg}` : 'none',
-                      transition: 'transform 0.12s',
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '6px 9px', borderRadius: 8, cursor: 'pointer', width: '100%',
+                      background: active ? t.surfaceHover : 'transparent',
+                      border: `1px solid ${active ? t.accent : t.border}`,
+                      color: t.text, fontSize: 12, fontWeight: active ? 700 : 500,
+                      fontFamily: 'inherit', textAlign: 'left',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.12)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                  />
+                  >
+                    <span style={{
+                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                      background: THEME_SWATCH[th.key] || t.accent,
+                      border: `1px solid ${t.border}`,
+                    }} />
+                    {th.label}
+                  </button>
                 );
               })}
             </div>

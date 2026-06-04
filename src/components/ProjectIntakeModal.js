@@ -22,8 +22,7 @@ const PROJECT_TYPE_OPTIONS = [
 const SPEC_OPTIONS = ['Budget', 'Mid-range', 'Premium'];
 
 export default function ProjectIntakeModal({ open, fileNames = [], onSubmit, onSkip, onClose }) {
-  const { mode } = useTheme();
-  const isDark = mode === 'dark';
+  const { t } = useTheme();
   const [data, setData] = useState({
     scope: '',
     floor_area_m2: '',
@@ -38,20 +37,13 @@ export default function ProjectIntakeModal({ open, fileNames = [], onSubmit, onS
 
   if (!open) return null;
 
-  const c = isDark ? {
-    overlay: 'rgba(0,0,0,0.65)',
-    card: '#111827', border: 'rgba(255,255,255,0.08)',
-    text: '#E2E8F0', textMuted: '#94A3B8', accent: '#F59E0B',
-    accentBg: 'rgba(245,158,11,0.1)', accentBorder: 'rgba(245,158,11,0.25)',
-    input: '#0F1520', inputBorder: '#1E293B',
-    pill: 'rgba(255,255,255,0.04)', pillActive: 'rgba(245,158,11,0.15)',
-  } : {
-    overlay: 'rgba(0,0,0,0.4)',
-    card: '#FFFFFF', border: 'rgba(0,0,0,0.08)',
-    text: '#1E293B', textMuted: '#64748B', accent: '#F59E0B',
-    accentBg: 'rgba(245,158,11,0.08)', accentBorder: 'rgba(245,158,11,0.3)',
-    input: '#F8FAFC', inputBorder: '#CBD5E1',
-    pill: '#F1F5F9', pillActive: 'rgba(245,158,11,0.15)',
+  const c = {
+    overlay: 'rgba(0,0,0,0.55)',
+    card: t.card, border: t.border,
+    text: t.text, textMuted: t.textSecondary, accent: t.accent,
+    accentBg: t.surfaceHover, accentBorder: t.accent,
+    input: t.inputBg, inputBorder: t.border,
+    pill: t.surfaceHover, pillActive: t.surfaceHover,
   };
 
   const set = (k, v) => setData(d => ({ ...d, [k]: v }));

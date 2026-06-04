@@ -221,7 +221,7 @@ export default function BrandingPage() {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 14,
               padding: 14, borderRadius: 10,
-              background: 'var(--bg)', border: '1px solid var(--border)',
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
             }}>
               <div style={{
                 width: 80, height: 80, borderRadius: 9, flexShrink: 0,
@@ -341,7 +341,7 @@ export default function BrandingPage() {
                     onClick={() => { setField('template', t.key); setTimeout(() => saveField('template'), 50); }}
                     style={{
                       padding: '12px 14px', borderRadius: 10, textAlign: 'left',
-                      background: active ? 'rgba(245,158,11,0.08)' : 'var(--bg)',
+                      background: active ? 'rgba(245,158,11,0.08)' : 'var(--bg-input)',
                       border: '1px solid ' + (active ? '#F59E0B' : 'var(--border)'),
                       cursor: 'pointer',
                     }}
@@ -362,7 +362,7 @@ export default function BrandingPage() {
         <div style={{
           position: 'sticky', top: 12,
           padding: 18, borderRadius: 12,
-          background: 'var(--card-bg)', border: '1px solid var(--border)',
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
           maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
         }}>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
@@ -379,7 +379,7 @@ export default function BrandingPage() {
 
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
-  background: 'var(--bg)', color: 'var(--text-primary)',
+  background: 'var(--bg-input)', color: 'var(--text-primary)',
   border: '1px solid var(--border)', fontSize: 13, outline: 'none',
   boxSizing: 'border-box',
 };
@@ -388,7 +388,7 @@ function Card({ title, children }) {
   return (
     <div style={{
       padding: 18, borderRadius: 12,
-      background: 'var(--card-bg)', border: '1px solid var(--border)',
+      background: 'var(--bg-card)', border: '1px solid var(--border)',
     }}>
       <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{title}</h3>
       {children}
