@@ -538,24 +538,23 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               inline with a blinking caret while running. */}
           {(narrationLog.length > 0 || narration || isRunning) && (
             <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border }}>
-              {/* Prior steps — collapsed, clean labels, rendered as markdown */}
-              {narrationLog.map((entry, i) => entry.text ? (
-                <details key={i} style={{ marginBottom: 8 }} open={i === narrationLog.length - 1 && !narration}>
+              {/* Earlier reasoning — folded into ONE collapsible (claude.ai style),
+                  not a per-step list. */}
+              {narrationLog.some(e => e.text) && (
+                <details style={{ marginBottom: narration || isRunning ? 12 : 0 }}>
                   <summary style={{ fontSize: 12, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
-                    Step {entry.iteration}
+                    Show earlier working
                   </summary>
-                  <div style={{ padding: '6px 0 6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.92 }}>
-                    <AgentMd text={entry.text} c={c} muted />
+                  <div style={{ padding: '8px 0 4px 12px', marginTop: 6, borderLeft: '2px solid ' + c.border, opacity: 0.9 }}>
+                    <AgentMd text={narrationLog.map(e => e.text).filter(Boolean).join('\n\n')} c={c} muted />
                   </div>
                 </details>
-              ) : null)}
-              {/* Current step — flowing markdown prose, like a Claude reply */}
+              )}
+              {/* Current reasoning — flowing markdown prose, like a Claude reply */}
               {isRunning && (
-                <div style={{ marginTop: narrationLog.length > 0 ? 12 : 0 }}>
-                  {narration
-                    ? <AgentMd text={narration} c={c} caret />
-                    : <span style={{ fontSize: 13.5, color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
-                </div>
+                narration
+                  ? <AgentMd text={narration} c={c} caret />
+                  : <span style={{ fontSize: 13.5, color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>
               )}
             </div>
           )}
