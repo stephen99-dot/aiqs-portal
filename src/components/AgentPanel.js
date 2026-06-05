@@ -44,12 +44,14 @@ function AgentMd({ text, c, muted, caret }) {
 // Resumes cleanly after tab close/reload via SSE snapshot.
 
 const TOOL_LABELS = {
-  view_pdf_page:       { emoji: SearchIcon, label: 'Viewing drawing' },
-  set_project_metadata:{ emoji: ClipboardIcon, label: 'Recording project metadata' },
-  record_takeoff_item: { emoji: RulerIcon, label: 'Recording BOQ item' },
-  update_takeoff_item: { emoji: EditIcon, label: 'Updating item' },
+  view_pdf_page:       { emoji: SearchIcon, label: 'Reading drawing' },
+  zoom_region:         { emoji: SearchIcon, label: 'Zooming into detail' },
+  set_project_metadata:{ emoji: ClipboardIcon, label: 'Noting project details' },
+  record_takeoff_item: { emoji: RulerIcon, label: 'Measuring' },
+  update_takeoff_item: { emoji: EditIcon, label: 'Adjusting' },
   remove_takeoff_item: { emoji: TrashIcon, label: 'Removing item' },
-  run_pricer:          { emoji: CalculatorIcon, label: 'Running pricer' },
+  run_pricer:          { emoji: CalculatorIcon, label: 'Pricing' },
+  submit_for_review:   { emoji: ClipboardIcon, label: 'Preparing your review' },
   finalize_boq:        { emoji: CheckCircleIcon, label: 'Finalising BOQ' },
 };
 
@@ -462,7 +464,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
             <span style={{ display: 'inline-flex', gap: 3 }}>
               {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.accent, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
             </span>
-            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing your drawings…' : (activity || 'Thinking…')}</span>
+            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing your drawings…' : (() => { const a = (activity || '').replace(/\s*\(iteration\s*\d+\/\d+\)/i, '').trim(); return (a && !/^thinking$/i.test(a)) ? a : 'Thinking…'; })()}</span>
           </div>
         )}
       </div>
@@ -653,28 +655,24 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           </div>
           )}
 
-          {/* Tool call log — only once there's activity */}
-          {toolCalls.length > 0 && (
-          <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent activity</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {toolCalls.map((tc, i) => {
-                  const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
-                  const LabelIcon = label.emoji;
-                  const dotColor = tc.status === 'done' ? c.done : tc.status === 'error' ? c.err : c.accent;
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
-                      <span style={{ display: 'inline-flex', alignItems: 'center' }}><LabelIcon size={14} /></span>
-                      <span style={{ color: c.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {label.label}{tc.input && tc.tool === 'view_pdf_page' ? ` — ${tc.input.filename} p${tc.input.page}` : tc.input && tc.tool === 'record_takeoff_item' ? ` — ${tc.input.key}` : ''}
-                      </span>
-                      <span style={{ color: c.sub, fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(tc.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                    </div>
-                  );
-                })}
-              </div>
-          </div>
+          {/* Tool use — quiet inline trace woven into the flow (claude.ai style):
+              the few most recent actions, muted, no box / dots / timestamps. */}
+          {toolCalls.length > 0 && (isRunning || isInitialising) && (
+            <div style={{ padding: '0 18px 12px' }}>
+              {toolCalls.slice(-4).map((tc, i) => {
+                const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
+                const LabelIcon = label.emoji;
+                const detail = tc.input && (tc.tool === 'view_pdf_page' || tc.tool === 'zoom_region')
+                  ? ` — ${tc.input.filename}${tc.input.page ? ` · p${tc.input.page}` : ''}`
+                  : tc.input && (tc.tool === 'record_takeoff_item' || tc.tool === 'update_takeoff_item') ? ` — ${tc.input.key}` : '';
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.muted, padding: '2px 0', opacity: 0.82 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', color: c.sub, flexShrink: 0 }}><LabelIcon size={13} /></span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label.label}{detail}</span>
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           {/* Reasoning toggle */}
