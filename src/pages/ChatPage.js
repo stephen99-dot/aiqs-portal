@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
+import BoqSheet from '../components/BoqSheet';
 import AgentPanel from '../components/AgentPanel';
 import {
   RulerIcon, BrainIcon, SettingsIcon, AlertTriangleIcon, EditIcon,
@@ -391,12 +392,26 @@ export default function ChatPage() {
     try { downloads = run.download_files ? (typeof run.download_files === 'string' ? JSON.parse(run.download_files) : run.download_files) : []; } catch (e) {}
     const sym = run.currency === 'EUR' ? '€' : '£';
     const grand = run.grand_total ? `${sym}${Math.round(run.grand_total).toLocaleString('en-GB')}` : '(no total)';
+    // Lead with the agent's own written summary/findings so the left pane reads
+    // like a proper explanation, then the headline.
+    let intro = '';
+    try {
+      const fs = run.findings_structured
+        ? (typeof run.findings_structured === 'string' ? JSON.parse(run.findings_structured) : run.findings_structured)
+        : null;
+      if (run.review_summary) intro += run.review_summary.trim() + '\n\n';
+      if (fs && Array.isArray(fs.key_findings) && fs.key_findings.length) {
+        intro += fs.key_findings.map(f => `**${f.title}**\n${f.detail || ''}${Array.isArray(f.items) && f.items.length ? '\n' + f.items.map(x => `- ${x}`).join('\n') : ''}`).join('\n\n') + '\n\n';
+      } else if (!run.review_summary && run.findings_notes) {
+        intro += String(run.findings_notes).trim() + '\n\n';
+      }
+    } catch (e) { /* fall back to headline only */ }
     setMessages(p => {
       const last = p[p.length - 1];
       if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `**All done — priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your documents are ready — opening them now.`,
+        content: `${intro}**Priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your documents are ready — opening them on the right.`,
         agentRunCompleted: run.id,
         downloadFiles: downloads.length > 0 ? downloads : null,
         timestamp: new Date().toISOString(),
@@ -1212,36 +1227,44 @@ export default function ChatPage() {
       </div>
     )}
 
-    {/* Deliverables drawer — slides out automatically when Atlas finishes */}
-    {deliverables && (
+    {/* Deliverables drawer — slides out automatically when Atlas finishes and
+        renders the BOQ as a live spreadsheet, claude.ai artifact style */}
+    {deliverables && (() => {
+      const xlsx = (deliverables.files || []).find(f => (f.type || '').toLowerCase() === 'xlsx') || (deliverables.files || [])[0];
+      return (
       <div onClick={() => setDeliverables(null)}
         style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', justifyContent: 'flex-end', background: c.overlay }}>
         <div onClick={e => e.stopPropagation()}
-          style={{ width: mobile ? '100%' : 'min(440px, 92vw)', height: '100%', background: c.chat, borderLeft: `1px solid ${c.chatBorder}`, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.25)', animation: 'agentslide 0.42s cubic-bezier(0.22,1,0.36,1)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', borderBottom: `1px solid ${c.chatBorder}` }}>
-            <span style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16,185,129,0.14)' }}>
-              <CheckCircleIcon size={19} color="#10B981" />
+          style={{ width: mobile ? '100%' : 'min(820px, 96vw)', height: '100%', background: c.chat, borderLeft: `1px solid ${c.chatBorder}`, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.25)', animation: 'agentslide 0.42s cubic-bezier(0.22,1,0.36,1)' }}>
+          {/* Artifact header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${c.chatBorder}` }}>
+            <span style={{ width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(31,158,142,0.14)' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F9E8E" strokeWidth="2" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: c.text }}>Your documents are ready</div>
-              <div style={{ fontSize: 12, color: c.textMuted }}>
-                {deliverables.grand ? `${deliverables.grand} grand total` : ''}{deliverables.floorArea ? ` · ${deliverables.floorArea}m²` : ''}
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {xlsx ? xlsx.name.replace(/\.xlsx$/i, '') : 'Bill of Quantities'} <span style={{ color: c.textMuted, fontWeight: 500 }}>· XLSX</span>
               </div>
+              <div style={{ fontSize: 11.5, color: c.textMuted }}>{deliverables.grand ? `${deliverables.grand} grand total` : 'Priced BOQ'}{deliverables.floorArea ? ` · ${deliverables.floorArea}m²` : ''}</div>
             </div>
+            {xlsx && <button onClick={() => openInViewer(xlsx)} title="Open in Google Sheets / Docs" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12, fontFamily: 'inherit', padding: '5px 10px', borderRadius: 6, fontWeight: 600 }}>Open in Google</button>}
+            {xlsx && <button onClick={() => downloadFile(xlsx)} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>↓</button>}
             <button onClick={() => setDeliverables(null)} title="Close" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>✕</button>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {deliverables.projectType && (
-              <div style={{ fontSize: 12.5, color: c.textMuted, lineHeight: 1.5, marginBottom: 2 }}>{deliverables.projectType}</div>
-            )}
-            {deliverables.files.map((f, i) => <FileCard key={i} f={f} c={c} dark={dark} />)}
-            <div style={{ fontSize: 11.5, color: c.textMuted, marginTop: 6, lineHeight: 1.5 }}>
-              Download to your device, or Open to view in your browser (and from there, Google Sheets / Docs).
+          {/* Live spreadsheet render */}
+          <div style={{ flex: 1, overflow: 'auto', padding: mobile ? 0 : 12, background: dark ? '#1A1A1A' : '#E9ECF1' }}>
+            <div style={{ maxWidth: 900, margin: '0 auto', boxShadow: '0 2px 16px rgba(0,0,0,0.12)' }}>
+              <BoqSheet sessionId={currentSessionId} meta={{ projectType: deliverables.projectType }} />
             </div>
+            {/* Word report card, if present */}
+            {(deliverables.files || []).filter(f => (f.type || '').toLowerCase() === 'docx').map((f, i) => (
+              <div key={i} style={{ maxWidth: 900, margin: '12px auto 0' }}><FileCard f={f} c={c} dark={dark} /></div>
+            ))}
           </div>
         </div>
       </div>
-    )}
+      );
+    })()}
 
     <div style={{ height:'calc(100vh - 48px)', display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
       <style>{`
