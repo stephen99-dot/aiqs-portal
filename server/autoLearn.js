@@ -163,6 +163,19 @@ async function maybeSummariseConversation(db, { userId, sessionId, title, messag
   return id;
 }
 
+// ── concise conversation title (like a chat app naming a thread) ─────────
+const TITLE_SYSTEM = `Generate a very short, specific title for this conversation — 3 to 7 words, Title Case, no quotes, no surrounding punctuation. It should capture the actual subject (e.g. "Two-storey extension BOQ, Manchester" or "Hand-dig foundation pricing"). Output ONLY the title, nothing else.`;
+
+async function generateTitle(messages, apiKey) {
+  if (!apiKey || !messages || messages.length === 0) return null;
+  let raw;
+  try { raw = await callModel(apiKey, TITLE_SYSTEM, messagesToText(messages, 8), 30); }
+  catch (e) { return null; }
+  let t = (raw || '').split('\n')[0].trim().replace(/^["'#*\s-]+/, '').replace(/["'.\s]+$/, '');
+  if (t.length < 2 || t.length > 70) return null;
+  return t;
+}
+
 async function retrieveRelevantSummaries(db, { userId, query, excludeSessionId, topK = 3 }) {
   if (!db || !userId) return [];
   ensureSchema(db);
@@ -208,6 +221,7 @@ module.exports = {
   ensureSchema,
   extractAndStore,
   maybeSummariseConversation,
+  generateTitle,
   retrieveRelevantSummaries,
   formatSummariesForPrompt,
   deleteForSession,
