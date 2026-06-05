@@ -62,15 +62,16 @@ const TYPICAL_ITERATIONS = 22;
 
 // Collapsible "Thinking" disclosure — claude.ai style. Shows "Thinking" with a
 // shimmer/dots while active, "Thought for Xs" when done; expands to the trace.
-function ThinkingPill({ c, running, elapsed, text, open, onToggle }) {
+function ThinkingPill({ c, running, elapsed, eta, text, open, onToggle }) {
   const hasText = !!(text && text.trim());
   return (
     <div>
       <button onClick={hasText ? onToggle : undefined}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 999, padding: '4px 12px', cursor: hasText ? 'pointer' : 'default', fontFamily: 'inherit' }}>
         {hasText && <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', fontSize: 9, color: c.sub }}>▶</span>}
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: running ? c.sub : c.muted }}>{running ? 'Thinking' : `Thought for ${elapsed}`}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: running ? c.sub : c.muted }}>{running ? `Thinking · ${elapsed}` : `Thought for ${elapsed}`}</span>
         {running && <span style={{ display: 'inline-flex', gap: 3 }}>{[0, 1, 2].map(i => <span key={i} style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: c.sub, animation: 'dot 1.4s infinite', animationDelay: (i * 0.2) + 's' }} />)}</span>}
+        {running && eta && <span style={{ fontSize: 11.5, fontWeight: 500, color: c.muted, marginLeft: 2 }}>· {eta}</span>}
       </button>
       {open && hasText && (
         <div style={{ marginTop: 8, padding: '8px 0 4px 12px', borderLeft: `2px solid ${c.border}` }}>
@@ -276,11 +277,38 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Generate failed');
+      // Show the "generating…" state immediately rather than waiting for SSE.
+      setRun(rr => rr ? { ...rr, status: 'generating' } : rr);
+
       if (data.already_generated) {
-        setDownloads(data.downloads || []);
-        setRun(r => r ? { ...r, status: 'completed' } : r);
+        try { const snap = await apiFetch('/agent/' + runId); if (snap && snap.run) { setRun(snap.run); setDownloads(snap.run.downloads || []); if (onCompleted) onCompleted(snap.run); } }
+        catch (e) {}
+        return;
       }
-      // else — server is generating in background, SSE will deliver finalized event
+
+      // Poll for completion — resilient even if the live SSE stream has dropped
+      // by the time the user clicks Generate (it can sit idle at the review step).
+      const started = Date.now();
+      const poll = async () => {
+        try {
+          const d = await apiFetch('/agent/' + runId);
+          if (d && d.run) {
+            if (d.run.status === 'completed') {
+              setRun(d.run); setDownloads(d.run.downloads || []);
+              if (onCompleted) onCompleted(d.run);
+              return;
+            }
+            if (d.run.status === 'failed') {
+              setError(d.run.error_message || 'Document generation failed — please try again.');
+              setRun(d.run); setGenerating(false);
+              return;
+            }
+          }
+        } catch (e) { /* keep trying */ }
+        if (Date.now() - started < 120000) setTimeout(poll, 2500);
+        else { setGenerating(false); alert('Generating is taking longer than expected — refresh the page in a moment and your documents should be ready.'); }
+      };
+      setTimeout(poll, 2500);
     } catch (e) { alert('Generate failed: ' + e.message); setGenerating(false); }
   }
 
@@ -494,7 +522,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           <div style={{ padding: '8px 18px 4px', display: 'flex', gap: 12 }}>
             <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: c.accentBg, color: c.accent, marginTop: 1 }}><WrenchIcon size={15} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <ThinkingPill c={c} running={isRunning || isInitialising} elapsed={fmtElapsed(elapsedSec)}
+              <ThinkingPill c={c} running={isRunning || isInitialising} elapsed={fmtElapsed(elapsedSec)} eta={isRunning ? fmtETA(remainingSec) : null}
                 text={[narrationLog.map(e => e.text).filter(Boolean).join('\n\n'), reasoning].filter(Boolean).join('\n\n')}
                 open={showReasoning} onToggle={() => setShowReasoning(v => !v)} />
               {toolCalls.length > 0 && (
