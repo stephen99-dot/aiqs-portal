@@ -1,7 +1,36 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, BrainIcon, DotIcon } from './Icons';
+
+// Renders the agent's reasoning prose as markdown (headers, bullets, bold
+// figures) so it reads like a Claude reply rather than raw text.
+function AgentMd({ text, c, muted, caret }) {
+  const col = muted ? c.muted : c.text;
+  return (
+    <div style={{ fontSize: 13.5, lineHeight: 1.75, color: col }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+        p: ({ node, ...p }) => <p {...p} style={{ margin: '0 0 8px' }} />,
+        ul: ({ node, ...p }) => <ul {...p} style={{ margin: '0 0 8px', paddingLeft: 18 }} />,
+        ol: ({ node, ...p }) => <ol {...p} style={{ margin: '0 0 8px', paddingLeft: 18 }} />,
+        li: ({ node, ...p }) => <li {...p} style={{ margin: '2px 0' }} />,
+        h1: ({ node, ...p }) => <h3 {...p} style={{ fontSize: 15, fontWeight: 700, margin: '12px 0 6px', color: c.text }} />,
+        h2: ({ node, ...p }) => <h3 {...p} style={{ fontSize: 14.5, fontWeight: 700, margin: '12px 0 6px', color: c.text }} />,
+        h3: ({ node, ...p }) => <h4 {...p} style={{ fontSize: 13.5, fontWeight: 700, margin: '10px 0 4px', color: c.text }} />,
+        strong: ({ node, ...p }) => <strong {...p} style={{ fontWeight: 700, color: c.text }} />,
+        em: ({ node, ...p }) => <em {...p} />,
+        code: ({ node, inline, ...p }) => <code {...p} style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.9em' }} />,
+        a: ({ node, ...p }) => <a {...p} style={{ color: c.accent, textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer" />,
+        table: ({ node, ...p }) => <div style={{ overflowX: 'auto' }}><table {...p} style={{ borderCollapse: 'collapse', fontSize: 12.5, margin: '0 0 8px' }} /></div>,
+        td: ({ node, ...p }) => <td {...p} style={{ border: `1px solid ${c.border}`, padding: '4px 8px' }} />,
+        th: ({ node, ...p }) => <th {...p} style={{ border: `1px solid ${c.border}`, padding: '4px 8px', textAlign: 'left', fontWeight: 700 }} />,
+      }}>{text || ''}</ReactMarkdown>
+      {caret && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 1, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
+    </div>
+  );
+}
 
 // Live BOQ agent panel. Subscribes to /api/agent/:id/stream, renders:
 //   • Header: status + elapsed time + ETA based on typical runs
@@ -507,22 +536,23 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               inline with a blinking caret while running. */}
           {(narrationLog.length > 0 || narration || isRunning) && (
             <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border }}>
-              {/* Prior steps — collapsed, clean labels */}
+              {/* Prior steps — collapsed, clean labels, rendered as markdown */}
               {narrationLog.map((entry, i) => entry.text ? (
                 <details key={i} style={{ marginBottom: 8 }} open={i === narrationLog.length - 1 && !narration}>
                   <summary style={{ fontSize: 12, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
                     Step {entry.iteration}
                   </summary>
-                  <div style={{ fontSize: 13, color: c.muted, lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '6px 0 6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.9 }}>
-                    {entry.text}
+                  <div style={{ padding: '6px 0 6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.92 }}>
+                    <AgentMd text={entry.text} c={c} muted />
                   </div>
                 </details>
               ) : null)}
-              {/* Current step — flowing prose, like a Claude reply */}
+              {/* Current step — flowing markdown prose, like a Claude reply */}
               {isRunning && (
-                <div style={{ fontSize: 13.5, color: c.text, lineHeight: 1.75, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: narrationLog.length > 0 ? 12 : 0 }}>
-                  {narration || <span style={{ color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
-                  {narration && <span style={{ display: 'inline-block', width: 7, height: 14, background: c.accent, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />}
+                <div style={{ marginTop: narrationLog.length > 0 ? 12 : 0 }}>
+                  {narration
+                    ? <AgentMd text={narration} c={c} caret />
+                    : <span style={{ fontSize: 13.5, color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
                 </div>
               )}
             </div>
