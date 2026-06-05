@@ -60,6 +60,70 @@ const TOOL_LABELS = {
 const SECONDS_PER_ITERATION = 18;
 const TYPICAL_ITERATIONS = 22;
 
+// Collapsible "Thinking" disclosure — claude.ai style. Shows "Thinking" with a
+// shimmer/dots while active, "Thought for Xs" when done; expands to the trace.
+function ThinkingPill({ c, running, elapsed, text, open, onToggle }) {
+  const hasText = !!(text && text.trim());
+  return (
+    <div>
+      <button onClick={hasText ? onToggle : undefined}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 999, padding: '4px 12px', cursor: hasText ? 'pointer' : 'default', fontFamily: 'inherit' }}>
+        {hasText && <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', fontSize: 9, color: c.sub }}>▶</span>}
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: running ? c.sub : c.muted }}>{running ? 'Thinking' : `Thought for ${elapsed}`}</span>
+        {running && <span style={{ display: 'inline-flex', gap: 3 }}>{[0, 1, 2].map(i => <span key={i} style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: c.sub, animation: 'dot 1.4s infinite', animationDelay: (i * 0.2) + 's' }} />)}</span>}
+      </button>
+      {open && hasText && (
+        <div style={{ marginTop: 8, padding: '8px 0 4px 12px', borderLeft: `2px solid ${c.border}` }}>
+          <AgentMd text={text} c={c} muted />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsible tool-use chip — a single summary ("Read 3 drawings · measured 24
+// items"), expands to the list. Claude shows tool use as one compact card.
+function ToolChip({ c, toolCalls, open, onToggle }) {
+  const drawings = new Set(); let measured = 0, priced = 0;
+  toolCalls.forEach(tc => {
+    if (tc.tool === 'view_pdf_page' || tc.tool === 'zoom_region') { if (tc.input && tc.input.filename) drawings.add(tc.input.filename); }
+    else if (tc.tool === 'record_takeoff_item') measured++;
+    else if (tc.tool === 'run_pricer') priced++;
+  });
+  const parts = [];
+  if (drawings.size) parts.push(`Read ${drawings.size} drawing${drawings.size !== 1 ? 's' : ''}`);
+  if (measured) parts.push(`measured ${measured} item${measured !== 1 ? 's' : ''}`);
+  if (priced) parts.push('priced');
+  const summary = parts.join(' · ') || `${toolCalls.length} step${toolCalls.length !== 1 ? 's' : ''}`;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button onClick={onToggle}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'transparent', border: `1px solid ${c.border}`, borderRadius: 8, padding: '4px 11px', cursor: 'pointer', fontFamily: 'inherit' }}>
+        <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', fontSize: 9, color: c.sub }}>▶</span>
+        <SearchIcon size={13} color={c.sub} />
+        <span style={{ fontSize: 12.5, color: c.sub, fontWeight: 500 }}>{summary}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, padding: '4px 0 4px 12px', borderLeft: `2px solid ${c.border}` }}>
+          {toolCalls.slice(-14).map((tc, i) => {
+            const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
+            const LI = label.emoji;
+            const detail = tc.input && (tc.tool === 'view_pdf_page' || tc.tool === 'zoom_region')
+              ? ` — ${tc.input.filename}${tc.input.page ? ` · p${tc.input.page}` : ''}`
+              : tc.input && (tc.tool === 'record_takeoff_item' || tc.tool === 'update_takeoff_item') ? ` — ${tc.input.key}` : '';
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.muted, padding: '2px 0' }}>
+                <span style={{ color: c.sub, flexShrink: 0, display: 'inline-flex' }}><LI size={13} /></span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label.label}{detail}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function fmtMoney(n, currency) {
   const sym = currency === 'EUR' ? '€' : '£';
   if (n == null || isNaN(n)) return sym + '0';
@@ -90,6 +154,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   const [activity, setActivity] = useState('Connecting...');
   const [toolCalls, setToolCalls] = useState([]);  // [{ ts, tool, input }]
   const [showReasoning, setShowReasoning] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [reasoning, setReasoning] = useState('');
   const [error, setError] = useState(null);
   const [now, setNow] = useState(Date.now());
@@ -414,67 +479,37 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
   return (
     <div style={rootStyle}>
 
-      {/* Header — clean inline status, no box chrome */}
-      <div style={{ padding: '12px 2px 8px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: c.accentBg, color: c.accent }}>
-            {isComplete ? <CheckCircleIcon size={18} /> : isFailed ? <XCircleIcon size={18} /> : isAwaitingReview ? <ClipboardIcon size={18} /> : isGenerating ? <FileTextIcon size={18} /> : isInitialising ? <PlugIcon size={18} /> : <WrenchIcon size={18} />}
-          </span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>
-              Atlas · {isComplete ? 'Complete' : isFailed ? 'Failed' : isAwaitingReview ? 'Ready for review' : isGenerating ? 'Generating documents' : isInitialising ? 'Initialising' : 'Working'}
-              {run?.project_type && <span style={{ fontWeight: 400, color: c.muted }}> · {run.project_type}</span>}
-            </div>
-            <div style={{ fontSize: 12, color: c.muted, marginTop: 3 }}>
-              {isComplete && run?.grand_total
-                ? <>Grand total {fmtMoney(run.grand_total, run.currency)} · {iter} steps · {fmtElapsed(elapsedSec)}</>
-                : isFailed
-                ? <>{error || run?.error_message || 'Agent failed'}</>
-                : isAwaitingReview
-                ? <>{items.length} items · {priced?.summary ? fmtMoney(priced.summary.grand_total, priced.summary.currency) + ' grand total' : 'priced'} · review and edit below, then Generate</>
-                : isGenerating
-                ? <>Producing your Excel + Word — about 10-20 seconds</>
-                : isInitialising
-                ? <>Reading your drawings{elapsedSec > 2 ? ` · ${fmtElapsed(elapsedSec)}` : ''}</>
-                : <>elapsed {fmtElapsed(elapsedSec)} · {fmtETA(remainingSec)}</>}
-            </div>
-          </div>
-          <button
-            onClick={() => setCollapsed(v => !v)}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 12.5, padding: '2px 6px', fontWeight: 600 }}
-          >
-            {collapsed ? '▼' : '▲'}
-          </button>
-          {onClose && (
-            <button onClick={onClose} title="Close panel (job keeps running on the server)" style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 20, padding: '0 4px' }}>×</button>
-          )}
-        </div>
+      {/* No header chrome — Atlas reads like a Claude message */}
+      <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, padding: '6px 0' }}>
 
-        {/* Progress bar */}
-        {!isFailed && (
-          <div style={{ marginTop: 10, height: 3, borderRadius: 3, background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-            <div style={{ width: progressPct + '%', height: '100%', background: isComplete ? c.done : c.accent, transition: 'width 0.6s ease' }} />
+        {/* Failed */}
+        {isFailed && (
+          <div style={{ padding: '12px 18px', color: c.err, fontSize: 13, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <XCircleIcon size={16} /><span>{error || run?.error_message || 'Atlas hit a problem — please try again.'}</span>
           </div>
         )}
 
-        {/* Live status — subtle, claude.ai-style "thinking" line (no box) */}
-        {(isRunning || isInitialising) && (
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: c.muted, fontWeight: 500 }}>
-            <span style={{ display: 'inline-flex', gap: 3 }}>
-              {[0, 1, 2].map(d => <span key={d} style={{ width: 4, height: 4, borderRadius: '50%', background: c.accent, animation: 'dot 1.4s infinite', animationDelay: (d * 0.2) + 's' }} />)}
-            </span>
-            <span style={{ flex: 1 }}>{isInitialising ? 'Atlas is initialising — preparing your drawings…' : (() => { const a = (activity || '').replace(/\s*\(iteration\s*\d+\/\d+\)/i, '').trim(); return (a && !/^thinking$/i.test(a)) ? a : 'Thinking…'; })()}</span>
+        {/* Working — claude-style: mark + Thinking disclosure + tool chip + streaming body */}
+        {(isRunning || isInitialising || isGenerating) && (
+          <div style={{ padding: '8px 18px 4px', display: 'flex', gap: 12 }}>
+            <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: c.accentBg, color: c.accent, marginTop: 1 }}><WrenchIcon size={15} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ThinkingPill c={c} running={isRunning || isInitialising} elapsed={fmtElapsed(elapsedSec)}
+                text={[narrationLog.map(e => e.text).filter(Boolean).join('\n\n'), reasoning].filter(Boolean).join('\n\n')}
+                open={showReasoning} onToggle={() => setShowReasoning(v => !v)} />
+              {toolCalls.length > 0 && (
+                <ToolChip c={c} toolCalls={toolCalls} open={toolsOpen} onToggle={() => setToolsOpen(v => !v)} />
+              )}
+              <div style={{ marginTop: 10 }}>
+                {isGenerating
+                  ? <span style={{ fontSize: 14, color: c.text }}>Generating your Excel BOQ and Word findings report…</span>
+                  : (narration
+                      ? <AgentMd text={narration} c={c} caret />
+                      : <span style={{ fontSize: 13.5, color: c.muted, fontStyle: 'italic' }}>{(() => { const a = (activity || '').replace(/\s*\(iteration\s*\d+\/\d+\)/i, '').trim(); return (a && !/^thinking$/i.test(a)) ? a : 'Reading your drawings…'; })()}</span>)}
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Body — hidden when collapsed. The panel itself caps at 85vh so
-          it never swallows the whole viewport; the body scrolls internally
-          and auto-follows new content (unless you've scrolled up to read
-          older notes). */}
-      {!collapsed && (
-        <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
 
           {/* Variance warning — shown whenever priced cost/m² is ±30% vs
               user's historical jobs for this project type. Surfaces both
@@ -531,34 +566,6 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
               </details>
             </div>
           )}
-          {/* Live narration — the agent's prose as it thinks through the
-              job. Streams in character-by-character. Prior iterations
-              collapse into compact log entries (silent ones flagged so
-              you see continuous progress). Current iteration always shown
-              inline with a blinking caret while running. */}
-          {(narrationLog.length > 0 || narration || isRunning) && (
-            <div style={{ padding: '16px 18px', borderBottom: '1px solid ' + c.border }}>
-              {/* Prior steps — collapsed, clean labels, rendered as markdown */}
-              {narrationLog.map((entry, i) => entry.text ? (
-                <details key={i} style={{ marginBottom: 8 }} open={i === narrationLog.length - 1 && !narration}>
-                  <summary style={{ fontSize: 12, color: c.muted, cursor: 'pointer', fontWeight: 600, padding: '3px 0' }}>
-                    Step {entry.iteration}
-                  </summary>
-                  <div style={{ padding: '6px 0 6px 10px', marginTop: 4, borderLeft: '2px solid ' + c.border, opacity: 0.92 }}>
-                    <AgentMd text={entry.text} c={c} muted />
-                  </div>
-                </details>
-              ) : null)}
-              {/* Current step — flowing markdown prose, like a Claude reply */}
-              {isRunning && (
-                <div style={{ marginTop: narrationLog.length > 0 ? 12 : 0 }}>
-                  {narration
-                    ? <AgentMd text={narration} c={c} caret />
-                    : <span style={{ fontSize: 13.5, color: c.muted, fontStyle: 'italic' }}>{(activity && !/^thinking/i.test(activity)) ? activity : 'Atlas is studying your drawings…'}</span>}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Deliverables — slides in when Atlas finishes, claude.ai-style */}
           {isComplete && downloads.length > 0 && (
@@ -579,7 +586,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           )}
 
           {/* Priced summary */}
-          {priced && priced.summary && (
+          {priced && priced.summary && isAwaitingReview && (
             <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: c.sub, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Current priced estimate</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 3, columnGap: 14, fontSize: 12.5, color: c.text }}>
@@ -599,7 +606,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
 
           {/* Takeoff items — only once recorded (or in review). Editable in the
               awaiting_review state (click a qty to edit, or remove the row). */}
-          {(items.length > 0 || isAwaitingReview) && (
+          {isAwaitingReview && (
           <div style={{ padding: '12px 18px', borderBottom: '1px solid ' + c.border }}>
             {sanityWarnings.length > 0 && !isComplete && (
               <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 7, background: isDark ? 'rgba(245,158,11,0.10)' : 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '3px solid ' + c.accent }}>
@@ -655,44 +662,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
           </div>
           )}
 
-          {/* Tool use — quiet inline trace woven into the flow (claude.ai style):
-              the few most recent actions, muted, no box / dots / timestamps. */}
-          {toolCalls.length > 0 && (isRunning || isInitialising) && (
-            <div style={{ padding: '0 18px 12px' }}>
-              {toolCalls.slice(-4).map((tc, i) => {
-                const label = TOOL_LABELS[tc.tool] || { emoji: DotIcon, label: tc.tool };
-                const LabelIcon = label.emoji;
-                const detail = tc.input && (tc.tool === 'view_pdf_page' || tc.tool === 'zoom_region')
-                  ? ` — ${tc.input.filename}${tc.input.page ? ` · p${tc.input.page}` : ''}`
-                  : tc.input && (tc.tool === 'record_takeoff_item' || tc.tool === 'update_takeoff_item') ? ` — ${tc.input.key}` : '';
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: c.muted, padding: '2px 0', opacity: 0.82 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', color: c.sub, flexShrink: 0 }}><LabelIcon size={13} /></span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label.label}{detail}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Reasoning toggle */}
-          <div style={{ padding: '10px 18px' }}>
-            <button
-              onClick={() => setShowReasoning(v => !v)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.muted, fontSize: 11.5, fontWeight: 600, padding: 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}
-            >
-              <span style={{ transform: showReasoning ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', display: 'inline-block', fontSize: 10 }}>▶</span>
-              <BrainIcon size={14} style={{ verticalAlign:'middle', marginRight:4 }} />{showReasoning ? 'Hide' : 'Show'} reasoning
-            </button>
-            {showReasoning && reasoning && (
-              <pre style={{ marginTop: 8, padding: '10px 12px', borderRadius: 6, background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', fontSize: 11.5, color: c.muted, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>
-                {reasoning}
-              </pre>
-            )}
-          </div>
-
         </div>
-      )}
 
       <style>{`
         @keyframes dot { 0%,80%,100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
