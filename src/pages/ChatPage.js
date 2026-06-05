@@ -273,8 +273,6 @@ export default function ChatPage() {
   // Artifacts side panel — opened when a large code block is clicked.
   const [artifact, setArtifact]       = useState(null);
   const openArtifact = useCallback((a) => setArtifact(a), []);
-  // Finished BOQ documents — slides out automatically when Atlas completes.
-  const [deliverables, setDeliverables] = useState(null);
 
   // ── Session / takeoff tracking ─────────────────────────────────────
   // These are the two critical IDs that must persist through the conversation
@@ -406,21 +404,22 @@ export default function ChatPage() {
         intro += String(run.findings_notes).trim() + '\n\n';
       }
     } catch (e) { /* fall back to headline only */ }
+    const boqSession = downloads.length > 0 ? (run.session_id || sessionIdRef.current || null) : null;
     setMessages(p => {
       const last = p[p.length - 1];
       if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `${intro}**Priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your documents are ready — opening them on the right.`,
+        content: `${intro}**Priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your Bill of Quantities is below.`,
         agentRunCompleted: run.id,
         downloadFiles: downloads.length > 0 ? downloads : null,
+        boqSheetSession: boqSession,
+        boqProjectType: run.project_type || null,
         timestamp: new Date().toISOString(),
       }];
     });
-    // Slide the finished documents out automatically, claude.ai-style.
     if (downloads.length > 0) {
-      setDeliverables({ files: downloads, grand, projectType: run.project_type, floorArea: run.floor_area_m2 });
-      setAgentRunId(null); // the live panel's job is done — dismiss the box
+      setAgentRunId(null); // the live panel's job is done — dismiss it; the BOQ now flows inline
     }
   }, []);
 
@@ -436,6 +435,10 @@ export default function ChatPage() {
   const saveRef     = useRef(null);
   const hadFiles    = useRef(false);
   const abortRef    = useRef(null);
+  // Mirror of currentSessionId so the memoized agent-completion callback can
+  // read the live value without re-creating (avoids a stale closure).
+  const sessionIdRef = useRef(null);
+  useEffect(() => { sessionIdRef.current = currentSessionId; }, [currentSessionId]);
 
   useEffect(() => { if (mobile) setSidebarOpen(false); }, [mobile]);
   useEffect(() => {
@@ -949,7 +952,7 @@ export default function ChatPage() {
           <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
             {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
-          <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+          <div style={{ maxWidth: msg.boqSheetSession ? '96%' : (mobile ? '85%' : '72%'), padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
 
             {/* User file chips */}
             {isUser && msg.files?.length > 0 && (
@@ -1142,6 +1145,31 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Bill of Quantities — rendered inline as a live spreadsheet that
+                flows in the conversation (no pop-over). */}
+            {msg.boqSheetSession && (() => {
+              const xlsx = (msg.downloadFiles || []).find(f => (f.type || '').toLowerCase() === 'xlsx');
+              return (
+                <div style={{ marginTop: 12, border: `1px solid ${c.chatBorder}`, borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderBottom: `1px solid ${c.chatBorder}`, background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
+                    <span style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(31,158,142,0.14)' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1F9E8E" strokeWidth="2" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {xlsx ? xlsx.name.replace(/\.xlsx$/i, '') : 'Bill of Quantities'} <span style={{ color: c.textMuted, fontWeight: 500 }}>· XLSX</span>
+                    </div>
+                    {xlsx && <button onClick={() => openInViewer(xlsx)} title="Open in Google Sheets / Docs" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 11.5, fontFamily: 'inherit', padding: '4px 9px', borderRadius: 6, fontWeight: 600 }}>Open in Google</button>}
+                    {xlsx && <button onClick={() => downloadFile(xlsx)} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12.5, fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}>↓</button>}
+                  </div>
+                  <div style={{ maxHeight: 520, overflow: 'auto', background: dark ? '#15171C' : '#E9ECF1', padding: 10 }}>
+                    <div style={{ boxShadow: '0 1px 10px rgba(0,0,0,0.12)' }}>
+                      <BoqSheet sessionId={msg.boqSheetSession} meta={{ projectType: msg.boqProjectType }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Payment required */}
             {msg.paymentRequired && (
               <div style={{ marginTop:14, padding:16, borderRadius:10, background:c.warnBg, border:`1px solid ${c.warnBorder}` }}>
@@ -1227,44 +1255,6 @@ export default function ChatPage() {
       </div>
     )}
 
-    {/* Deliverables drawer — slides out automatically when Atlas finishes and
-        renders the BOQ as a live spreadsheet, claude.ai artifact style */}
-    {deliverables && (() => {
-      const xlsx = (deliverables.files || []).find(f => (f.type || '').toLowerCase() === 'xlsx') || (deliverables.files || [])[0];
-      return (
-      <div onClick={() => setDeliverables(null)}
-        style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', justifyContent: 'flex-end', background: c.overlay }}>
-        <div onClick={e => e.stopPropagation()}
-          style={{ width: mobile ? '100%' : 'min(820px, 96vw)', height: '100%', background: c.chat, borderLeft: `1px solid ${c.chatBorder}`, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.25)', animation: 'agentslide 0.42s cubic-bezier(0.22,1,0.36,1)' }}>
-          {/* Artifact header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: `1px solid ${c.chatBorder}` }}>
-            <span style={{ width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(31,158,142,0.14)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F9E8E" strokeWidth="2" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {xlsx ? xlsx.name.replace(/\.xlsx$/i, '') : 'Bill of Quantities'} <span style={{ color: c.textMuted, fontWeight: 500 }}>· XLSX</span>
-              </div>
-              <div style={{ fontSize: 11.5, color: c.textMuted }}>{deliverables.grand ? `${deliverables.grand} grand total` : 'Priced BOQ'}{deliverables.floorArea ? ` · ${deliverables.floorArea}m²` : ''}</div>
-            </div>
-            {xlsx && <button onClick={() => openInViewer(xlsx)} title="Open in Google Sheets / Docs" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12, fontFamily: 'inherit', padding: '5px 10px', borderRadius: 6, fontWeight: 600 }}>Open in Google</button>}
-            {xlsx && <button onClick={() => downloadFile(xlsx)} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>↓</button>}
-            <button onClick={() => setDeliverables(null)} title="Close" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>✕</button>
-          </div>
-          {/* Live spreadsheet render */}
-          <div style={{ flex: 1, overflow: 'auto', padding: mobile ? 0 : 12, background: dark ? '#1A1A1A' : '#E9ECF1' }}>
-            <div style={{ maxWidth: 900, margin: '0 auto', boxShadow: '0 2px 16px rgba(0,0,0,0.12)' }}>
-              <BoqSheet sessionId={currentSessionId} meta={{ projectType: deliverables.projectType }} />
-            </div>
-            {/* Word report card, if present */}
-            {(deliverables.files || []).filter(f => (f.type || '').toLowerCase() === 'docx').map((f, i) => (
-              <div key={i} style={{ maxWidth: 900, margin: '12px auto 0' }}><FileCard f={f} c={c} dark={dark} /></div>
-            ))}
-          </div>
-        </div>
-      </div>
-      );
-    })()}
 
     <div style={{ height:'calc(100vh - 48px)', display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
       <style>{`
