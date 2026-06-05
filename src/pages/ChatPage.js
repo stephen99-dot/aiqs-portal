@@ -578,6 +578,8 @@ export default function ChatPage() {
         takeoffStatus: m.takeoffStatus || null,
         agentRunId: m.agentRunId || null,
         agentRunCompleted: m.agentRunCompleted || null,
+        boqSheetSession: m.boqSheetSession || null,
+        boqProjectType: m.boqProjectType || null,
         files: m.files || null,
       }));
       const d = await apiFetch('/chat-sessions', {
@@ -585,8 +587,11 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: sid || undefined, messages: saveable }),
       });
-      if (!sid && d.id) { setCurrentSessionId(d.id); loadSessions(); return d.id; }
-      return sid;
+      if (!sid && d.id) setCurrentSessionId(d.id);
+      // Always refresh the sidebar so the latest chat (and its auto-generated
+      // title) shows immediately — not only for brand-new sessions.
+      loadSessions();
+      return (!sid && d.id) ? d.id : sid;
     } catch (e) { console.error(e); }
   }, []);
 

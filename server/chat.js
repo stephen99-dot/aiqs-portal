@@ -97,6 +97,12 @@ try {
     )
   `);
   db.prepare("DELETE FROM deleted_chat_sessions WHERE deleted_at < datetime('now', '-1 day')").run();
+  // Flag for whether an AI title has been generated for a session (so we only
+  // generate it once, the way a chat app names a thread).
+  try {
+    const cols = db.prepare('PRAGMA table_info(chat_sessions)').all();
+    if (!cols.some(c => c.name === 'title_generated')) db.exec('ALTER TABLE chat_sessions ADD COLUMN title_generated INTEGER DEFAULT 0');
+  } catch (e) { /* column exists */ }
 } catch (e) { console.error('[DB] chat_sessions table error:', e.message); }
 
 const storage = multer.diskStorage({
@@ -1071,7 +1077,7 @@ router.get('/chat-sessions/:id', authMiddleware, (req, res) => {
   } catch (e) { console.error('[ChatSessions] Get error:', e.message); res.status(500).json({ error: 'Failed to load session' }); }
 });
 
-router.post('/chat-sessions', authMiddleware, (req, res) => {
+router.post('/chat-sessions', authMiddleware, async (req, res) => {
   try {
     const { id, title, messages } = req.body;
     if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: 'messages array required' });
@@ -1089,17 +1095,39 @@ router.post('/chat-sessions', authMiddleware, (req, res) => {
     if (tombstoned) {
       return res.json({ id: sessionId, title: sessionTitle, skipped: 'deleted' });
     }
-    // Upsert: UPDATE if the row exists, otherwise INSERT.
-    const existing = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+    // Upsert. Once an AI title has been generated, keep it — don't overwrite it
+    // with the truncated-first-message title on every autosave.
+    const existing = db.prepare('SELECT id, title, title_generated FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
     if (existing) {
-      db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
+      if (existing.title_generated && !title) {
+        db.prepare('UPDATE chat_sessions SET messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(JSON.stringify(messages), sessionId, req.user.id);
+        sessionTitle = existing.title;
+      } else {
+        db.prepare('UPDATE chat_sessions SET title = ?, messages = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(sessionTitle, JSON.stringify(messages), sessionId, req.user.id);
+      }
     } else {
       db.prepare('INSERT INTO chat_sessions (id, user_id, title, messages) VALUES (?, ?, ?, ?)').run(sessionId, req.user.id, sessionTitle, JSON.stringify(messages));
     }
 
-    // Cross-session memory: keep a rolling summary of this conversation so it
-    // can be recalled from a future, unrelated session (claude.ai-style
-    // continuity). Best-effort and throttled inside autoLearn.
+    // Generate a concise, Claude-style title once there's a real exchange —
+    // then lock it so it isn't regenerated on every save.
+    if (autoLearn && autoLearn.generateTitle && process.env.ANTHROPIC_API_KEY && !title && messages.filter(m => m && m.content).length >= 2) {
+      const row = db.prepare('SELECT title_generated FROM chat_sessions WHERE id = ? AND user_id = ?').get(sessionId, req.user.id);
+      if (row && !row.title_generated) {
+        try {
+          const aiTitle = await autoLearn.generateTitle(messages, process.env.ANTHROPIC_API_KEY);
+          if (aiTitle) {
+            db.prepare('UPDATE chat_sessions SET title = ?, title_generated = 1 WHERE id = ? AND user_id = ?').run(aiTitle, sessionId, req.user.id);
+            sessionTitle = aiTitle;
+          } else {
+            db.prepare('UPDATE chat_sessions SET title_generated = 1 WHERE id = ? AND user_id = ?').run(sessionId, req.user.id);
+          }
+        } catch (titleErr) { console.error('[ChatTitle]', titleErr.message); }
+      }
+    }
+
+    // Cross-session memory: keep a rolling summary so this chat can be recalled
+    // from a future session. Best-effort and throttled inside autoLearn.
     if (autoLearn && process.env.ANTHROPIC_API_KEY && messages.length >= 4) {
       autoLearn.maybeSummariseConversation(db, {
         userId: req.user.id, sessionId, title: sessionTitle,
