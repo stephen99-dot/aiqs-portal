@@ -5,7 +5,6 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
-import BoqSheet from '../components/BoqSheet';
 import AgentPanel from '../components/AgentPanel';
 import {
   RulerIcon, BrainIcon, SettingsIcon, AlertTriangleIcon, EditIcon,
@@ -404,17 +403,14 @@ export default function ChatPage() {
         intro += String(run.findings_notes).trim() + '\n\n';
       }
     } catch (e) { /* fall back to headline only */ }
-    const boqSession = downloads.length > 0 ? (run.session_id || sessionIdRef.current || null) : null;
     setMessages(p => {
       const last = p[p.length - 1];
       if (last && last.role === 'assistant' && last.agentRunCompleted === run.id) return p;
       return [...p, {
         role: 'assistant',
-        content: `${intro}**Priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your Bill of Quantities is below.`,
+        content: `${intro}**Priced at ${grand}**${run.floor_area_m2 ? ` · ${run.floor_area_m2}m²` : ''}${run.project_type ? ` · ${run.project_type}` : ''}. Your documents are ready below.`,
         agentRunCompleted: run.id,
         downloadFiles: downloads.length > 0 ? downloads : null,
-        boqSheetSession: boqSession,
-        boqProjectType: run.project_type || null,
         timestamp: new Date().toISOString(),
       }];
     });
@@ -578,8 +574,6 @@ export default function ChatPage() {
         takeoffStatus: m.takeoffStatus || null,
         agentRunId: m.agentRunId || null,
         agentRunCompleted: m.agentRunCompleted || null,
-        boqSheetSession: m.boqSheetSession || null,
-        boqProjectType: m.boqProjectType || null,
         files: m.files || null,
       }));
       const d = await apiFetch('/chat-sessions', {
@@ -957,7 +951,7 @@ export default function ChatPage() {
           <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
             {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
-          <div style={{ maxWidth: msg.boqSheetSession ? '96%' : (mobile ? '85%' : '72%'), padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+          <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
 
             {/* User file chips */}
             {isUser && msg.files?.length > 0 && (
@@ -1149,31 +1143,6 @@ export default function ChatPage() {
                 ))}
               </div>
             )}
-
-            {/* Bill of Quantities — rendered inline as a live spreadsheet that
-                flows in the conversation (no pop-over). */}
-            {msg.boqSheetSession && (() => {
-              const xlsx = (msg.downloadFiles || []).find(f => (f.type || '').toLowerCase() === 'xlsx');
-              return (
-                <div style={{ marginTop: 12, border: `1px solid ${c.chatBorder}`, borderRadius: 12, overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderBottom: `1px solid ${c.chatBorder}`, background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
-                    <span style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(31,158,142,0.14)' }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1F9E8E" strokeWidth="2" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {xlsx ? xlsx.name.replace(/\.xlsx$/i, '') : 'Bill of Quantities'} <span style={{ color: c.textMuted, fontWeight: 500 }}>· XLSX</span>
-                    </div>
-                    {xlsx && <button onClick={() => openInViewer(xlsx)} title="Open in Google Sheets / Docs" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 11.5, fontFamily: 'inherit', padding: '4px 9px', borderRadius: 6, fontWeight: 600 }}>Open in Google</button>}
-                    {xlsx && <button onClick={() => downloadFile(xlsx)} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12.5, fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}>↓</button>}
-                  </div>
-                  <div style={{ maxHeight: 520, overflow: 'auto', background: dark ? '#15171C' : '#E9ECF1', padding: 10 }}>
-                    <div style={{ boxShadow: '0 1px 10px rgba(0,0,0,0.12)' }}>
-                      <BoqSheet sessionId={msg.boqSheetSession} meta={{ projectType: msg.boqProjectType }} />
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* Payment required */}
             {msg.paymentRequired && (
