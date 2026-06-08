@@ -657,6 +657,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_material ON price_entries(material_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
+
+  -- Stripe one-off payments (BOQ credit packs) that could NOT be matched to a
+  -- portal user at webhook time — e.g. the buyer paid via a Payment Link using
+  -- a different email than their account. We record the paid credits here so
+  -- nothing is silently lost; they're auto-claimed when a matching user next
+  -- logs in or registers, and an admin can reconcile them manually.
+  CREATE TABLE IF NOT EXISTS pending_credits (
+    id TEXT PRIMARY KEY,
+    stripe_session_id TEXT UNIQUE,
+    email TEXT,
+    amount_total INTEGER,
+    credits INTEGER NOT NULL DEFAULT 0,
+    reason TEXT,                       -- 'user_not_found' | 'amount_unmatched'
+    claimed_at DATETIME,
+    claimed_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_credits_email ON pending_credits(email);
+  CREATE INDEX IF NOT EXISTS idx_pending_credits_claimed ON pending_credits(claimed_at);
 `);
 
 // Migrations for existing databases

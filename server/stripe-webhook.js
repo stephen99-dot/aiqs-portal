@@ -1,4 +1,5 @@
 const db = require('./database');
+const { recordPendingCredit } = require('./pendingCredits');
 
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
@@ -144,36 +145,78 @@ async function handleCheckoutComplete(session, stripeSecret) {
     }
   }
 
-  // Handle one-time payment (PAYG BOQ purchase)
+  // Handle one-time payment (PAYG BOQ credit-pack purchase)
   if (session.mode === 'payment' && session.payment_status === 'paid') {
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(customerEmail.toLowerCase());
-    if (user) {
-      const { v4: uuidv4 } = require('uuid');
-      db.prepare('INSERT INTO usage_log (id, user_id, action, detail) VALUES (?, ?, ?, ?)').run(
-        'ul_' + uuidv4().slice(0, 8), user.id, 'doc_paid', 'Stripe checkout ' + session.id
-      );
+    grantPackCredits(session, customerEmail);
+  }
+}
 
-      // Map of one-off Stripe payment amounts (pence) → BOQ credits granted.
-      // Overridable via STRIPE_BOQ_PACKS env var as JSON, e.g. '{"9900":1,"30000":5}'.
-      let PACKS = { 9900: 1, 7900: 1, 30000: 5 };
-      if (process.env.STRIPE_BOQ_PACKS) {
-        try {
-          const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
-          PACKS = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [parseInt(k, 10), parseInt(v, 10)]));
-        } catch (e) {
-          console.error('[Stripe] Bad STRIPE_BOQ_PACKS JSON, using defaults:', e.message);
-        }
-      }
-      const credits = PACKS[session.amount_total];
-      if (credits) {
-        db.prepare('UPDATE users SET free_credits = COALESCE(free_credits, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .run(credits, user.id);
-        console.log(`[Stripe] Granted ${credits} BOQ credit(s) to ${customerEmail} (£${(session.amount_total / 100).toFixed(2)} payment)`);
-      } else {
-        console.log(`[Stripe] PAYG one-off payment from ${customerEmail} for ${session.amount_total} — no credit pack matched (known: ${Object.keys(PACKS).join(', ')})`);
-      }
+// Map a one-off Stripe payment to a number of BOQ credits. Tries the exact
+// amount paid, then the pre-tax subtotal (so a pack still maps if VAT was added
+// on top at checkout). Overridable via STRIPE_BOQ_PACKS env var as JSON,
+// e.g. '{"9900":1,"30000":5}'.
+function resolvePackCredits(session) {
+  let PACKS = { 9900: 1, 7900: 1, 30000: 5 };
+  if (process.env.STRIPE_BOQ_PACKS) {
+    try {
+      const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
+      PACKS = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [parseInt(k, 10), parseInt(v, 10)]));
+    } catch (e) {
+      console.error('[Stripe] Bad STRIPE_BOQ_PACKS JSON, using defaults:', e.message);
     }
   }
+  const credits = PACKS[session.amount_total] || (session.amount_subtotal ? PACKS[session.amount_subtotal] : 0) || 0;
+  return { credits, PACKS };
+}
+
+// Grant BOQ credits for a paid one-off checkout. Resolves the portal user by
+// the logged-in account id (client_reference_id, the reliable signal) first,
+// then falls back to the email typed at Stripe. A payment that can't be matched
+// — or whose amount maps to no known pack — is recorded in pending_credits and
+// logged loudly so it is never silently lost.
+function grantPackCredits(session, customerEmail) {
+  const { v4: uuidv4 } = require('uuid');
+  const email = (customerEmail || '').toLowerCase();
+
+  // Idempotency: Stripe can deliver the same webhook more than once. Skip if
+  // we've already granted (usage_log row) or already recorded (pending_credits)
+  // for this checkout session.
+  const alreadyGranted = db.prepare("SELECT 1 FROM usage_log WHERE action = 'doc_paid' AND detail = ?").get('Stripe checkout ' + session.id);
+  const alreadyPending = db.prepare('SELECT 1 FROM pending_credits WHERE stripe_session_id = ?').get(session.id);
+  if (alreadyGranted || alreadyPending) {
+    console.log(`[Stripe] Checkout ${session.id} already processed — skipping duplicate webhook`);
+    return;
+  }
+
+  const { credits, PACKS } = resolvePackCredits(session);
+
+  if (!credits) {
+    console.error(`[Stripe] PAID checkout ${session.id} from ${email || 'unknown email'} — amount ${session.amount_total} (subtotal ${session.amount_subtotal}) matched no BOQ pack (known: ${Object.keys(PACKS).join(', ')}). Recording as unclaimed for review.`);
+    recordPendingCredit(session, email, 0, 'amount_unmatched');
+    return;
+  }
+
+  // Resolve the portal user: account id first, then email.
+  let user = null;
+  if (session.client_reference_id) {
+    user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.client_reference_id);
+  }
+  if (!user && email) {
+    user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  }
+
+  if (!user) {
+    console.error(`[Stripe] PAID checkout ${session.id} worth ${credits} BOQ credit(s) (£${(session.amount_total / 100).toFixed(2)}) from ${email || 'unknown email'} could NOT be matched to a portal user (client_reference_id=${session.client_reference_id || 'none'}). Recording as PENDING — will auto-claim when that email logs in.`);
+    recordPendingCredit(session, email, credits, 'user_not_found');
+    return;
+  }
+
+  db.prepare('INSERT INTO usage_log (id, user_id, action, detail) VALUES (?, ?, ?, ?)').run(
+    'ul_' + uuidv4().slice(0, 8), user.id, 'doc_paid', 'Stripe checkout ' + session.id
+  );
+  db.prepare('UPDATE users SET free_credits = COALESCE(free_credits, 0) + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(credits, user.id);
+  console.log(`[Stripe] Granted ${credits} BOQ credit(s) to ${user.email} (£${(session.amount_total / 100).toFixed(2)}, session ${session.id})`);
 }
 
 async function handleSubscriptionUpdate(subscription, stripeSecret) {

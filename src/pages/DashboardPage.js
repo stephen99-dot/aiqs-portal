@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import { withUserRef } from '../utils/stripeLinks';
 import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
@@ -19,7 +20,7 @@ const STRIPE = {
   upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // upgrade to premium
 };
 
-function UsageBar({ usage, t }) {
+function UsageBar({ usage, t, user }) {
   if (!usage) return null;
   // Pull BOQ-specific fields from /usage. Fall back to legacy quota/used/remaining
   // (which were really project counts) only if the new fields aren't present yet.
@@ -53,7 +54,7 @@ function UsageBar({ usage, t }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {/* £99 per BOQ button */}
-          <a href={STRIPE.starter_payg} target="_blank" rel="noopener noreferrer" style={{
+          <a href={withUserRef(STRIPE.starter_payg, user)} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 12px', borderRadius: 7,
             background: 'linear-gradient(135deg, #F59E0B, #D97706)',
@@ -145,7 +146,7 @@ function UsageBar({ usage, t }) {
               </a>
             )}
             <a
-              href={plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg}
+              href={withUserRef(plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg, user)}
               target="_blank" rel="noopener noreferrer"
               style={{
                 padding: '7px 14px', borderRadius: 7,
@@ -549,7 +550,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <UsageBar usage={usage} t={t} />
+      <UsageBar usage={usage} t={t} user={user} />
       <MessageUsageBar usage={usage} t={t} />
       <GettingStarted projects={projectList} t={t} />
 

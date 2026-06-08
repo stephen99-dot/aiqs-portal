@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { withUserRef } from '../utils/stripeLinks';
 import {
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
   UploadIcon, XIcon, CreditCardIcon, ChatIcon,
@@ -80,7 +82,7 @@ function LimitReachedModal({ usage, t, onClose }) {
 
           {/* Buy Extra Project — always shown */}
           <a
-            href={isSubscriber ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01"}
+            href={withUserRef(isSubscriber ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01", user)}
             target="_blank" rel="noopener noreferrer"
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
@@ -201,6 +203,7 @@ function LimitReachedModal({ usage, t, onClose }) {
 export default function NewProjectPage() {
   const navigate = useNavigate();
   const { t } = useTheme();
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState({ title: '', projectType: '', location: '', description: '' });
   const [files, setFiles] = useState([]);
