@@ -12,6 +12,7 @@ const { logActivity } = require('./activityRoutes');
 const { startPipelineRun } = require('./pipelineRoutes');
 const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
+const { claimPendingCredits } = require('./pendingCredits');
 
 const router = express.Router();
 
@@ -444,6 +445,8 @@ router.post('/auth/register', async (req, res) => {
     seedDefaultRates(id);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    // If they paid for a BOQ pack before creating their account, grant it now.
+    claimPendingCredits(newUser);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
 
@@ -471,6 +474,9 @@ router.post('/auth/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
     if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
+    // Claim any BOQ credits paid for under this email but not matched to an
+    // account at webhook time (e.g. paid via Payment Link with a different email).
+    claimPendingCredits(user);
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
@@ -514,6 +520,7 @@ router.get('/auth/magic', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(link.user_id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
+    claimPendingCredits(user);
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || user.email) + ' logged in via magic link', user_id: user.id, user_name: user.full_name, user_email: user.email });
@@ -603,6 +610,7 @@ router.get('/auth/google/callback', async (req, res) => {
 
     if (user.suspended) return res.redirect(`/login?error=account_suspended`);
 
+    claimPendingCredits(user);
     const authToken = generateToken(user);
     // Redirect to frontend with token in query param — frontend will store it
     res.redirect(`/auth/google/success?token=${authToken}`);

@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
+import { withUserRef } from '../utils/stripeLinks';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
 import AgentPanel from '../components/AgentPanel';
@@ -257,6 +259,7 @@ function FileCard({ f, c, dark }) {
 
 export default function ChatPage() {
   const { mode, t } = useTheme();
+  const { user } = useAuth();
   const dark = mode === 'dark';
   const mobile = useIsMobile();
 
@@ -1149,7 +1152,7 @@ export default function ChatPage() {
               <div style={{ marginTop:14, padding:16, borderRadius:10, background:c.warnBg, border:`1px solid ${c.warnBorder}` }}>
                 <div style={{ fontSize:13, fontWeight:600, color:c.text, marginBottom:4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
-                  <a href="https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01" target="_blank" rel="noopener noreferrer"
+                  <a href={withUserRef("https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01", user)} target="_blank" rel="noopener noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 18px', borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C', textDecoration:'none', fontSize:13, fontWeight:700 }}>
                     Pay £99 — Generate this BOQ
                   </a>

@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { withUserRef } from '../utils/stripeLinks';
+
+const BOQ_5_PACK_LINK = 'https://buy.stripe.com/5kQ8wPaZycfK5sAfCA73G0d';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
@@ -41,6 +45,7 @@ function fmtSize(b) {
 
 export default function SubmitDrawingsPage() {
   const { t } = useTheme();
+  const { user } = useAuth();
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
   const [message, setMessage] = useState('');
@@ -653,7 +658,7 @@ export default function SubmitDrawingsPage() {
             </div>
 
             <a
-              href="https://buy.stripe.com/5kQ8wPaZycfK5sAfCA73G0d"
+              href={withUserRef(BOQ_5_PACK_LINK, user)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
