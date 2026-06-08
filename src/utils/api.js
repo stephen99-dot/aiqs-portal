@@ -22,6 +22,20 @@ function setEstimatorKey(key) {
 function clearEstimatorKey() {
   localStorage.removeItem(ESTIMATOR_KEY_STORAGE);
 }
+// The portal runs as a single instance on Render with its database on a
+// persistent disk, so every deploy/restart briefly stops the old process
+// before the new one is listening. During that gap Render's edge returns a
+// 502/503/504 (or the connection is refused outright). These responses mean
+// the request never reached the app, so it's safe to transparently retry —
+// the user's "refresh and it worked" becomes automatic instead of an error.
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_RETRY_ATTEMPTS = 3;       // up to 3 retries after the first try
+const RETRY_BASE_MS = 600;          // backoff: ~0.6s, 1.2s, 2.4s (+ jitter)
+
+function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
 async function apiFetch(endpoint, options = {}) {
   const token = getToken();
   const headers = { ...options.headers };
@@ -39,10 +53,28 @@ async function apiFetch(endpoint, options = {}) {
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+
+  // Retry loop for transient gateway errors during a deploy/restart window.
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
+    } catch (networkErr) {
+      // fetch rejects (TypeError) when the server is unreachable — e.g. the
+      // connection is refused mid-restart. Retry the same way as a 502.
+      if (attempt < MAX_RETRY_ATTEMPTS) {
+        await sleep(RETRY_BASE_MS * Math.pow(2, attempt) + Math.random() * 200);
+        continue;
+      }
+      throw networkErr;
+    }
+    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRY_ATTEMPTS) {
+      await sleep(RETRY_BASE_MS * Math.pow(2, attempt) + Math.random() * 200);
+      continue;
+    }
+    break;
+  }
+
   if (res.status === 401) {
     // Only redirect to login if this is NOT a login/register request
     const isAuthRequest = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
