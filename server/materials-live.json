@@ -1,0 +1,28 @@
+[
+  {
+    "material": "Thistle Finishing Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle finishing,finish plaster,skim plaster",
+    "supplier": "Toolstation",
+    "price": 12.7,
+    "currency": "GBP",
+    "in_stock": true,
+    "image_url": "https://cdn.aws.toolstation.com/images/141020-UK/250/12407.jpg",
+    "source_url": "https://www.toolstation.com/thistle-finishing-plaster/p12407",
+    "captured_at": "2026-06-08T10:10:28.018Z"
+  },
+  {
+    "material": "Thistle One Coat Plaster 7.5kg",
+    "category": "Plaster",
+    "unit": "bag",
+    "aliases": "thistle one coat,one coat plaster",
+    "supplier": "Toolstation",
+    "price": 17.99,
+    "currency": "GBP",
+    "in_stock": true,
+    "image_url": "https://cdn.aws.toolstation.com/images/141020-UK/250/65753.jpg",
+    "source_url": "https://www.toolstation.com/thistle-one-coat-plaster/p65753",
+    "captured_at": "2026-06-08T10:10:29.940Z"
+  }
+]
