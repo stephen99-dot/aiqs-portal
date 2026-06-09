@@ -9,6 +9,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
@@ -21,10 +23,36 @@ const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
 const MAX_FILES = 20;
 
+// Buffer uploads to disk rather than RAM. With memory storage a single
+// submission could pin MAX_FILES * MAX_FILE_BYTES (≈2 GB) in the heap, and
+// concurrent submissions stacked on top of each other — a real risk of the
+// Render instance OOMing. Disk storage keeps memory flat; files are streamed
+// to Pipedream from disk and cleaned up when the response finishes.
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const uploadsDir = path.join(DATA_DIR, 'submission-uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
+});
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage,
   limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES },
 });
+
+// Delete the temp files multer wrote for this request, whatever the outcome.
+// Wired to res 'finish' so every return path (validation rejects, credit
+// checks, Pipedream errors, success) cleans up without scattering unlink calls.
+function cleanupUploads(req) {
+  if (!req.files || req.files.length === 0) return;
+  for (const f of req.files) {
+    if (f && f.path) {
+      fs.unlink(f.path, () => {});
+    }
+  }
+}
 
 // Run multer and translate its errors into clean JSON. Without this, a multer
 // error (oversized file, too many files) bypasses the route's try/catch and
@@ -49,20 +77,71 @@ function uploadFiles(req, res, next) {
   });
 }
 
+// How many files to forward to Pipedream at once. Files are buffered in memory
+// (up to MAX_FILE_BYTES each), so we cap concurrency to avoid spiking memory and
+// outbound bandwidth while still turning a slow N-file serial upload into a few
+// parallel batches.
+const FORWARD_CONCURRENCY = 4;
+// Hard ceiling per file so a single stalled connection to Pipedream can't hang
+// the whole request indefinitely. Generous enough for a 100 MB file on a slow
+// link; a timeout surfaces as a clean 502 rather than a silent hang.
+const FORWARD_TIMEOUT_MS = 120000;
+
 async function forwardFile(file, submissionId) {
   const fd = new FormData();
-  const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
+  // openAsBlob backs the Blob with the file on disk, so fetch streams it out
+  // without loading the whole file into memory. Fall back to a buffered read on
+  // older Node where openAsBlob isn't available.
+  const type = file.mimetype || 'application/octet-stream';
+  const blob = fs.openAsBlob
+    ? await fs.openAsBlob(file.path, { type })
+    : new Blob([fs.readFileSync(file.path)], { type });
   fd.append('file', blob, file.originalname);
 
-  const resp = await fetch(FILE_UPLOAD_URL, {
-    method: 'POST',
-    headers: { 'X-Submission-Id': submissionId },
-    body: fd,
-  });
-  if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MS);
+  try {
+    const resp = await fetch(FILE_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'X-Submission-Id': submissionId },
+      body: fd,
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Pipedream file upload timed out after ' + (FORWARD_TIMEOUT_MS / 1000) + 's: ' + file.originalname);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Forward files to Pipedream in parallel, capped at FORWARD_CONCURRENCY in
+// flight. Workers pull from a shared cursor so a mix of large and small files
+// stays balanced. The first failure rejects (so the route still reports a clean
+// error and charges no credit) without leaving later uploads to drag on.
+async function forwardFiles(files, submissionId) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < files.length) {
+      const file = files[cursor++];
+      await forwardFile(file, submissionId);
+    }
+  };
+  const workers = Array.from(
+    { length: Math.min(FORWARD_CONCURRENCY, files.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
 }
 
 router.post('/', uploadFiles, async (req, res) => {
+  // Clean up the temp upload files once the response is sent, regardless of
+  // which branch below returns (validation, credit check, error, or success).
+  res.on('finish', () => cleanupUploads(req));
+  res.on('close', () => cleanupUploads(req));
   try {
     const user = db.prepare(
       'SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
@@ -89,9 +168,7 @@ router.post('/', uploadFiles, async (req, res) => {
 
     let pipedreamStatus = 'ok';
     try {
-      for (const file of files) {
-        await forwardFile(file, submissionId);
-      }
+      await forwardFiles(files, submissionId);
 
       const payload = {
         name: user.full_name,
