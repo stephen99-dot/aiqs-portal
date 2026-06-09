@@ -9,6 +9,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
@@ -21,10 +23,36 @@ const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
 const MAX_FILES = 20;
 
+// Buffer uploads to disk rather than RAM. With memory storage a single
+// submission could pin MAX_FILES * MAX_FILE_BYTES (≈2 GB) in the heap, and
+// concurrent submissions stacked on top of each other — a real risk of the
+// Render instance OOMing. Disk storage keeps memory flat; files are streamed
+// to Pipedream from disk and cleaned up when the response finishes.
+const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+const uploadsDir = path.join(DATA_DIR, 'submission-uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
+});
+
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage,
   limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES },
 });
+
+// Delete the temp files multer wrote for this request, whatever the outcome.
+// Wired to res 'finish' so every return path (validation rejects, credit
+// checks, Pipedream errors, success) cleans up without scattering unlink calls.
+function cleanupUploads(req) {
+  if (!req.files || req.files.length === 0) return;
+  for (const f of req.files) {
+    if (f && f.path) {
+      fs.unlink(f.path, () => {});
+    }
+  }
+}
 
 // Run multer and translate its errors into clean JSON. Without this, a multer
 // error (oversized file, too many files) bypasses the route's try/catch and
@@ -61,7 +89,13 @@ const FORWARD_TIMEOUT_MS = 120000;
 
 async function forwardFile(file, submissionId) {
   const fd = new FormData();
-  const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
+  // openAsBlob backs the Blob with the file on disk, so fetch streams it out
+  // without loading the whole file into memory. Fall back to a buffered read on
+  // older Node where openAsBlob isn't available.
+  const type = file.mimetype || 'application/octet-stream';
+  const blob = fs.openAsBlob
+    ? await fs.openAsBlob(file.path, { type })
+    : new Blob([fs.readFileSync(file.path)], { type });
   fd.append('file', blob, file.originalname);
 
   const controller = new AbortController();
@@ -104,6 +138,10 @@ async function forwardFiles(files, submissionId) {
 }
 
 router.post('/', uploadFiles, async (req, res) => {
+  // Clean up the temp upload files once the response is sent, regardless of
+  // which branch below returns (validation, credit check, error, or success).
+  res.on('finish', () => cleanupUploads(req));
+  res.on('close', () => cleanupUploads(req));
   try {
     const user = db.prepare(
       'SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
