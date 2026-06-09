@@ -49,17 +49,58 @@ function uploadFiles(req, res, next) {
   });
 }
 
+// How many files to forward to Pipedream at once. Files are buffered in memory
+// (up to MAX_FILE_BYTES each), so we cap concurrency to avoid spiking memory and
+// outbound bandwidth while still turning a slow N-file serial upload into a few
+// parallel batches.
+const FORWARD_CONCURRENCY = 4;
+// Hard ceiling per file so a single stalled connection to Pipedream can't hang
+// the whole request indefinitely. Generous enough for a 100 MB file on a slow
+// link; a timeout surfaces as a clean 502 rather than a silent hang.
+const FORWARD_TIMEOUT_MS = 120000;
+
 async function forwardFile(file, submissionId) {
   const fd = new FormData();
   const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
   fd.append('file', blob, file.originalname);
 
-  const resp = await fetch(FILE_UPLOAD_URL, {
-    method: 'POST',
-    headers: { 'X-Submission-Id': submissionId },
-    body: fd,
-  });
-  if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FORWARD_TIMEOUT_MS);
+  try {
+    const resp = await fetch(FILE_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'X-Submission-Id': submissionId },
+      body: fd,
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error('Pipedream file upload failed: ' + resp.status);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('Pipedream file upload timed out after ' + (FORWARD_TIMEOUT_MS / 1000) + 's: ' + file.originalname);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Forward files to Pipedream in parallel, capped at FORWARD_CONCURRENCY in
+// flight. Workers pull from a shared cursor so a mix of large and small files
+// stays balanced. The first failure rejects (so the route still reports a clean
+// error and charges no credit) without leaving later uploads to drag on.
+async function forwardFiles(files, submissionId) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < files.length) {
+      const file = files[cursor++];
+      await forwardFile(file, submissionId);
+    }
+  };
+  const workers = Array.from(
+    { length: Math.min(FORWARD_CONCURRENCY, files.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
 }
 
 router.post('/', uploadFiles, async (req, res) => {
@@ -89,9 +130,7 @@ router.post('/', uploadFiles, async (req, res) => {
 
     let pipedreamStatus = 'ok';
     try {
-      for (const file of files) {
-        await forwardFile(file, submissionId);
-      }
+      await forwardFiles(files, submissionId);
 
       const payload = {
         name: user.full_name,
