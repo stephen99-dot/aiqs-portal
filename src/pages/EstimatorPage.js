@@ -4,16 +4,20 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import ShareLinkModal from '../components/ShareLinkModal';
 import { ClipboardIcon, FileTextIcon } from '../components/Icons';
 
 // Quotes dashboard — list + stats strip. The "build a new quote" flow lives in
 // EstimatorBuilderPage. Both are gated on user.hasEstimator.
 
+// 'accepted' is set by the client from the public /q/<token> link — it can't
+// be picked manually, but it shows in the dropdown when set.
 const STATUS_OPTIONS = ['draft', 'sent', 'won', 'lost'];
 
 function statusColour(s, t) {
   switch (s) {
-    case 'won':   return { bg: t.successBg, fg: t.success };
+    case 'won':
+    case 'accepted': return { bg: t.successBg, fg: t.success };
     case 'lost':  return { bg: t.dangerBg,  fg: t.danger };
     case 'sent':  return { bg: t.warningBg, fg: t.warning };
     default:      return { bg: 'rgba(148,163,184,0.15)', fg: t.textSecondary };
@@ -39,6 +43,7 @@ function EstimatorPageInner() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [share, setShare] = useState(null); // { url } — share sheet after "Send"
 
   const refresh = useCallback(async () => {
     setError('');
@@ -77,6 +82,14 @@ function EstimatorPageInner() {
     try {
       const r = await apiFetch('/estimator/quotes/' + id + '/duplicate', { method: 'POST' });
       nav('/estimator/quote/' + r.id);
+    } catch (e) { alert(e.message); }
+  };
+
+  const handleSend = async (id) => {
+    try {
+      const r = await apiFetch('/estimator/quotes/' + id + '/send', { method: 'POST' });
+      setShare({ url: window.location.origin + r.path });
+      refresh();
     } catch (e) { alert(e.message); }
   };
 
@@ -191,24 +204,39 @@ function EstimatorPageInner() {
                     <td style={td}>{q.project_name || <span style={{ color: t.textMuted }}>—</span>}</td>
                     <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(q.grand_total, q.currency)}</td>
                     <td style={td}>
-                      <select
-                        value={q.status || 'draft'}
-                        onChange={e => handleStatus(q.id, e.target.value)}
-                        style={{
+                      {q.status === 'accepted' ? (
+                        <span style={{
                           background: sc.bg, color: sc.fg, border: '1px solid ' + sc.fg + '33',
                           borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600,
-                          textTransform: 'capitalize', cursor: 'pointer',
-                        }}
-                      >
-                        {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                          textTransform: 'capitalize', display: 'inline-block',
+                        }}>accepted</span>
+                      ) : (
+                        <select
+                          value={q.status || 'draft'}
+                          onChange={e => handleStatus(q.id, e.target.value)}
+                          style={{
+                            background: sc.bg, color: sc.fg, border: '1px solid ' + sc.fg + '33',
+                            borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600,
+                            textTransform: 'capitalize', cursor: 'pointer',
+                          }}
+                        >
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      )}
                     </td>
                     <td style={{ ...td, color: t.textSecondary, fontSize: 13 }}>{new Date(q.created_at).toLocaleDateString('en-GB')}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <button onClick={() => nav('/estimator/quote/' + q.id)} style={btnGhost(t)}>Open</button>
+                      {q.status !== 'accepted' && (
+                        <button onClick={() => handleSend(q.id)} style={{ ...btnGhost(t), color: t.accent, borderColor: t.accent + '66' }}>
+                          {q.public_token ? 'Share link' : 'Send the quote'}
+                        </button>
+                      )}
                       <button onClick={() => downloadPdf(q.id)} style={btnGhost(t)}>PDF</button>
                       <button onClick={() => handleDuplicate(q.id)} style={btnGhost(t)}>Duplicate</button>
-                      <button onClick={() => handleDelete(q.id, q.project_name)} style={{ ...btnGhost(t), color: t.danger }}>Delete</button>
+                      {q.status !== 'accepted' && (
+                        <button onClick={() => handleDelete(q.id, q.project_name)} style={{ ...btnGhost(t), color: t.danger }}>Delete</button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -217,6 +245,16 @@ function EstimatorPageInner() {
           </table>
           </div>
         </div>
+      )}
+
+      {share && (
+        <ShareLinkModal
+          t={t}
+          url={share.url}
+          title="Send the quote to your client"
+          message="Here’s your quote — you can view and accept it here:"
+          onClose={() => setShare(null)}
+        />
       )}
     </div>
   );

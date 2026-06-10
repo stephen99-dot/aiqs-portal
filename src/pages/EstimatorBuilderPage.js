@@ -6,6 +6,7 @@ import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
 import MaterialAutocomplete from '../components/MaterialAutocomplete';
+import ShareLinkModal from '../components/ShareLinkModal';
 
 // Two-mode page:
 //   /estimator/new          — input flow -> draft -> edit -> save
@@ -173,6 +174,13 @@ function EstimatorBuilderPageInner() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
 
+  // A1 — public acceptance link state
+  const [locked, setLocked] = useState(false);              // accepted -> read-only
+  const [acceptedInfo, setAcceptedInfo] = useState(null);   // { name, at }
+  const [share, setShare] = useState(null);                 // { url } share sheet
+  const [sendingQuote, setSendingQuote] = useState(false);
+  const [clientQuestions, setClientQuestions] = useState([]);
+
   // Wave 2 — overheads + jobs awareness
   const [overheads, setOverheads] = useState(null);    // { break_even_day, break_even_hour, total } or null
   const [jobs, setJobs] = useState([]);                // list of available jobs to link this quote to
@@ -199,7 +207,14 @@ function EstimatorBuilderPageInner() {
         setNotes(q.notes || '');
         setLines((r.lines || []).map(l => ({ ...l, est_rate: !!l.est_rate })));
         setJobId(q.job_id || null);
+        setLocked(!!q.locked);
+        if (q.accepted_at) setAcceptedInfo({ name: q.acceptance_name, at: q.accepted_at });
         setPhase('ready');
+        // Best-effort: questions the client asked from the public page.
+        try {
+          const m = await apiFetch('/estimator/quotes/' + q.id + '/messages');
+          setClientQuestions(m.messages || []);
+        } catch (e2) { /* non-fatal */ }
       } catch (e) {
         setError(e.message);
         setPhase('error');
@@ -384,6 +399,24 @@ function EstimatorBuilderPageInner() {
     }
   };
 
+  // Save the latest edits, then mint/reuse the public /q/<token> link and show
+  // the share sheet (copy / WhatsApp / native share).
+  const sendQuote = async () => {
+    if (!quoteId) { alert('Save the quote first.'); return; }
+    setSendingQuote(true);
+    setError('');
+    try {
+      await save();
+      const r = await apiFetch('/estimator/quotes/' + quoteId + '/send', { method: 'POST' });
+      setStatus(r.status || 'sent');
+      setShare({ url: window.location.origin + r.path });
+    } catch (e) {
+      setError(e.message || 'Failed to send the quote');
+    } finally {
+      setSendingQuote(false);
+    }
+  };
+
   const download = (kind) => {
     if (!quoteId) { alert('Save the quote first.'); return; }
     const url = '/api/estimator/quotes/' + quoteId + '/' + kind;
@@ -551,11 +584,49 @@ function EstimatorBuilderPageInner() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={save} disabled={saving} style={btnPrimary(t, saving)}>{saving ? 'Saving…' : (quoteId ? 'Save changes' : 'Save quote')}</button>
+          {!locked && (
+            <button onClick={save} disabled={saving} style={btnPrimary(t, saving)}>{saving ? 'Saving…' : (quoteId ? 'Save changes' : 'Save quote')}</button>
+          )}
+          {!locked && quoteId && (
+            <button onClick={sendQuote} disabled={sendingQuote} style={{
+              background: t.success, color: '#fff', border: 'none', borderRadius: 8,
+              padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: sendingQuote ? 'wait' : 'pointer',
+              opacity: sendingQuote ? 0.7 : 1,
+            }}>{sendingQuote ? 'Getting link…' : 'Send the quote'}</button>
+          )}
           <button onClick={() => download('pdf')} disabled={!quoteId} style={btnSecondary(t, !quoteId)}>Download PDF</button>
           <button onClick={() => download('xlsx')} disabled={!quoteId} style={btnSecondary(t, !quoteId)}>Download Excel</button>
         </div>
       </div>
+
+      {/* Accepted — the quote is the signed record now */}
+      {acceptedInfo && (
+        <div style={{ background: t.successBg, border: '1px solid ' + t.success, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ color: t.success, fontWeight: 700 }}>
+            Accepted by {acceptedInfo.name || 'the client'} on {new Date(acceptedInfo.at).toLocaleDateString('en-GB')}
+          </div>
+          <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
+            This quote is locked — it's your signed record. {jobId
+              ? <>The job is in Finance: <a href={'/finance/jobs/' + jobId} onClick={(e) => { e.preventDefault(); nav('/finance/jobs/' + jobId); }} style={{ color: t.accent }}>open the job</a>.</>
+              : 'Duplicate it if you need a revised version.'}
+          </div>
+        </div>
+      )}
+
+      {/* Questions the client asked from the public quote page */}
+      {clientQuestions.length > 0 && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Questions from your client</div>
+          {clientQuestions.map(m => (
+            <div key={m.id} style={{ borderTop: '1px solid ' + t.border, padding: '10px 0', fontSize: 14 }}>
+              <div style={{ color: t.textSecondary, fontSize: 12, marginBottom: 2 }}>
+                {m.sender_name || 'Client'} · {new Date(m.created_at).toLocaleString('en-GB')}
+              </div>
+              <div>{m.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && <div style={errBox(t)}>{error}</div>}
 
@@ -578,9 +649,10 @@ function EstimatorBuilderPageInner() {
           </div>
           <div>
             <label style={lbl(t)}>Status</label>
-            <select value={status} onChange={e => setStatus(e.target.value)} style={input(t)}>
+            <select value={status} onChange={e => setStatus(e.target.value)} style={input(t)} disabled={locked}>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
+              {status === 'accepted' && <option value="accepted">Accepted by client</option>}
               <option value="won">Won</option>
               <option value="lost">Lost</option>
             </select>
@@ -754,6 +826,16 @@ function EstimatorBuilderPageInner() {
           )}
         </div>
       </div>
+
+      {share && (
+        <ShareLinkModal
+          t={t}
+          url={share.url}
+          title="Send the quote to your client"
+          message="Here’s your quote — you can view and accept it here:"
+          onClose={() => setShare(null)}
+        />
+      )}
     </div>
   );
 }

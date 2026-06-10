@@ -658,6 +658,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 
+  -- A1 (Office in a Box): questions a client asks from the public quote page.
+  -- Read by the owner from the quote editor; read_at flips when viewed.
+  CREATE TABLE IF NOT EXISTS quote_messages (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    sender_name TEXT,
+    sender_email TEXT,
+    message TEXT NOT NULL,
+    read_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (quote_id) REFERENCES quotes(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_quote_messages_quote ON quote_messages(quote_id);
+  CREATE INDEX IF NOT EXISTS idx_quote_messages_user ON quote_messages(user_id, read_at);
+
   -- Stripe one-off payments (BOQ credit packs) that could NOT be matched to a
   -- portal user at webhook time — e.g. the buyer paid via a Payment Link using
   -- a different email than their account. We record the paid credits here so
@@ -724,6 +741,18 @@ const migrations = [
   // Phase 5: per-user model-tier override ('standard' | 'frontier') — admin-set,
   // forces the agentic/Fable takeoff loop for that user's complex jobs.
   { column: 'model_tier', table: 'users', sql: "ALTER TABLE users ADD COLUMN model_tier TEXT DEFAULT 'standard'" },
+  // A1: public quote acceptance — share token + signed acceptance audit trail
+  // (mirrors estimator_variations). locked=1 once accepted; the row becomes
+  // the audit record and line edits are rejected.
+  { column: 'public_token', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN public_token TEXT" },
+  { column: 'sent_at', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN sent_at DATETIME" },
+  { column: 'locked', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN locked INTEGER DEFAULT 0" },
+  { column: 'accepted_at', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN accepted_at DATETIME" },
+  { column: 'acceptance_name', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_name TEXT" },
+  { column: 'acceptance_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_email TEXT" },
+  { column: 'acceptance_signature', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_signature TEXT" },
+  { column: 'acceptance_ip', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_ip TEXT" },
+  { column: 'acceptance_user_agent', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_user_agent TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {
@@ -736,6 +765,14 @@ for (const { column, table, sql } of migrations) {
   } catch (err) {
     console.log(`Migration ${column}:`, err.message);
   }
+}
+
+// Indexes on migration-added columns must run after the loop — on an older
+// database the column doesn't exist until the ALTER TABLE above has run.
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_public_token ON quotes(public_token)');
+} catch (err) {
+  console.log('Index idx_quotes_public_token:', err.message);
 }
 
 module.exports = db;

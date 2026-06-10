@@ -23,6 +23,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
@@ -31,6 +32,7 @@ const ExcelJS = require('exceljs');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const { streamQuotePdf } = require('./quotePdf');
 
 const router = express.Router();
 
@@ -51,6 +53,25 @@ function genQuoteNumber() {
     + String(d.getDate()).padStart(2, '0');
   const suffix = Math.floor(1000 + Math.random() * 9000);
   return 'Q-' + stamp + '-' + suffix;
+}
+
+// 32 url-safe chars, cryptographically random — same scheme as variation
+// approval tokens. Powers the public /q/<token> acceptance link.
+function newShareToken() {
+  return crypto.randomBytes(24).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Accepted quotes are the signed audit record — no silent edits.
+function rejectIfQuoteLocked(q, res) {
+  if (q.locked) {
+    res.status(423).json({
+      error: 'This quote has been accepted by the client and is locked. Duplicate it to make a revised version.',
+      code: 'QUOTE_LOCKED',
+    });
+    return true;
+  }
+  return false;
 }
 
 function getBranding(userId) {
@@ -403,7 +424,8 @@ router.post('/draft', async (req, res) => {
 router.get('/quotes', (req, res) => {
   try {
     const rows = db.prepare(
-      'SELECT id, client_name, project_name, project_type, currency, grand_total, status, quote_number, created_at, updated_at '
+      'SELECT id, client_name, project_name, project_type, currency, grand_total, status, quote_number, '
+      + 'public_token, sent_at, accepted_at, acceptance_name, locked, created_at, updated_at '
       + 'FROM quotes WHERE user_id = ? ORDER BY created_at DESC LIMIT 500'
     ).all(req.user.id);
     res.json({ quotes: rows });
@@ -420,7 +442,8 @@ router.get('/stats', (req, res) => {
     since.setDate(1); since.setHours(0, 0, 0, 0);
     const sinceIso = since.toISOString();
     const month = db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(grand_total),0) as v FROM quotes WHERE user_id=? AND created_at >= ?").get(req.user.id, sinceIso);
-    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='won'").get(req.user.id).c;
+    // Client-accepted quotes count as wins alongside manually-marked ones.
+    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status IN ('won','accepted')").get(req.user.id).c;
     const lost = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='lost'").get(req.user.id).c;
     const decided = won + lost;
     const winRate = decided > 0 ? Math.round((won / decided) * 100) : null;
@@ -574,8 +597,9 @@ router.get('/quotes/:id', (req, res) => {
 // PATCH /api/estimator/quotes/:id  — update header + percentages + status
 router.patch('/quotes/:id', (req, res) => {
   try {
-    const q = db.prepare('SELECT id FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const q = db.prepare('SELECT id, locked FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    if (rejectIfQuoteLocked(q, res)) return;
     const b = req.body || {};
     const allowed = ['client_name', 'project_name', 'project_type', 'currency', 'notes', 'status', 'ohp_pct', 'contingency_pct', 'vat_pct', 'target_margin_pct'];
     const sets = [];
@@ -600,6 +624,7 @@ router.put('/quotes/:id/lines', (req, res) => {
   try {
     const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    if (rejectIfQuoteLocked(q, res)) return;
     const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
     if (lines.length === 0) return res.status(400).json({ error: 'A quote needs at least one line.' });
 
@@ -691,11 +716,12 @@ router.post('/quotes/:id/duplicate', (req, res) => {
   }
 });
 
-// DELETE /api/estimator/quotes/:id
+// DELETE /api/estimator/quotes/:id — accepted quotes are locked (audit record).
 router.delete('/quotes/:id', (req, res) => {
   try {
-    const q = db.prepare('SELECT id FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const q = db.prepare('SELECT id, locked FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    if (rejectIfQuoteLocked(q, res)) return;
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM quote_lines WHERE quote_id = ?').run(q.id);
       db.prepare('DELETE FROM quotes WHERE id = ?').run(q.id);
@@ -705,6 +731,58 @@ router.delete('/quotes/:id', (req, res) => {
   } catch (err) {
     console.error('[Estimator] delete error:', err);
     res.status(500).json({ error: 'Failed to delete quote.' });
+  }
+});
+
+// ─── A1: send the quote — public acceptance link ─────────────────────────────
+
+// POST /api/estimator/quotes/:id/send — mint the share token (idempotent),
+// draft -> sent. Email delivery arrives with A2 (mailer.js); until then the
+// UI offers the copyable link for WhatsApp/text, which it keeps regardless.
+router.post('/quotes/:id/send', (req, res) => {
+  try {
+    const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    if (q.status === 'accepted') return res.status(400).json({ error: 'This quote has already been accepted.' });
+    const token = q.public_token || newShareToken();
+    db.prepare(
+      "UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, "
+      + 'public_token = ?, sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(token, q.id);
+    res.json({ id: q.id, status: q.status === 'draft' ? 'sent' : q.status, token, path: '/q/' + token, delivery: 'manual' });
+  } catch (err) {
+    console.error('[Estimator] send error:', err);
+    res.status(500).json({ error: 'Failed to send the quote.' });
+  }
+});
+
+// GET /api/estimator/quotes/:id/share-url — fetch the link again later.
+router.get('/quotes/:id/share-url', (req, res) => {
+  try {
+    const q = db.prepare('SELECT id, public_token FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    if (!q.public_token) return res.status(400).json({ error: 'Not sent yet — send it first to get a link.' });
+    res.json({ token: q.public_token, path: '/q/' + q.public_token });
+  } catch (err) {
+    console.error('[Estimator] share-url error:', err);
+    res.status(500).json({ error: 'Failed.' });
+  }
+});
+
+// GET /api/estimator/quotes/:id/messages — questions the client asked from the
+// public page. Reading marks them read (clears the notification state).
+router.get('/quotes/:id/messages', (req, res) => {
+  try {
+    const q = db.prepare('SELECT id FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!q) return res.status(404).json({ error: 'Quote not found.' });
+    const rows = db.prepare(
+      'SELECT id, sender_name, sender_email, message, read_at, created_at FROM quote_messages WHERE quote_id = ? ORDER BY created_at DESC'
+    ).all(q.id);
+    db.prepare('UPDATE quote_messages SET read_at = CURRENT_TIMESTAMP WHERE quote_id = ? AND read_at IS NULL').run(q.id);
+    res.json({ messages: rows });
+  } catch (err) {
+    console.error('[Estimator] messages error:', err);
+    res.status(500).json({ error: 'Failed to load messages.' });
   }
 });
 
@@ -727,191 +805,9 @@ router.get('/quotes/:id/pdf', (req, res) => {
     const lines = db.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY sort_order ASC, rowid ASC').all(q.id);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
-    const cc = q.currency || 'GBP';
-
-    const filename = (q.quote_number || 'quote') + '.pdf';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    doc.pipe(res);
-
-    const primary = branding.primary_colour || '#1B2A4A';
-    const accent = branding.accent_colour || '#F59E0B';
-
-    // Header band
-    doc.rect(0, 0, doc.page.width, 90).fill(primary);
-
-    // Logo (if present)
-    let titleX = 40;
-    if (branding.logo_filename) {
-      const logoPath = path.join(brandingDir, branding.logo_filename);
-      if (fs.existsSync(logoPath) && /\.(png|jpe?g)$/i.test(branding.logo_filename)) {
-        try {
-          doc.image(logoPath, 40, 22, { fit: [120, 46] });
-          titleX = 175;
-        } catch (e) { /* bad image, skip */ }
-      }
-    }
-
-    doc.fillColor('#ffffff')
-      .font('Helvetica-Bold').fontSize(20)
-      .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Quotation', titleX, 28);
-    doc.font('Helvetica').fontSize(9)
-      .text('Quote ' + (q.quote_number || ''), titleX, 56)
-      .text(new Date(q.created_at || Date.now()).toLocaleDateString('en-GB'), titleX, 70);
-
-    // Quote meta block
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14)
-      .text(q.project_name || 'Quotation', 40, 110);
-    doc.font('Helvetica').fontSize(10).fillColor('#444444');
-    let metaY = 130;
-    if (q.client_name) { doc.text('Client: ' + q.client_name, 40, metaY); metaY += 14; }
-    if (q.project_type) { doc.text('Project type: ' + q.project_type, 40, metaY); metaY += 14; }
-    doc.text('Valid for 30 days from issue.', 40, metaY); metaY += 18;
-
-    // Company contact block (right)
-    let rightY = 110;
-    doc.fontSize(9).fillColor('#333333');
-    if (branding.company_name) { doc.text(branding.company_name, 360, rightY, { width: 200, align: 'right' }); rightY += 13; }
-    if (branding.company_address) {
-      const addrLines = String(branding.company_address).split(/\r?\n/);
-      for (const ln of addrLines) { doc.text(ln, 360, rightY, { width: 200, align: 'right' }); rightY += 12; }
-    }
-    if (userInfo?.email) { doc.text(userInfo.email, 360, rightY, { width: 200, align: 'right' }); rightY += 12; }
-
-    let y = Math.max(metaY, rightY) + 10;
-
-    // Group lines by section
-    const sections = {};
-    const sectionOrder = [];
-    for (const ln of lines) {
-      const s = ln.section || 'General';
-      if (!sections[s]) { sections[s] = []; sectionOrder.push(s); }
-      sections[s].push(ln);
-    }
-
-    // Column layout
-    const COLS = {
-      desc: { x: 40, w: 270 },
-      qty:  { x: 315, w: 35, align: 'right' },
-      unit: { x: 355, w: 35, align: 'left' },
-      rate: { x: 395, w: 70, align: 'right' },
-      total:{ x: 470, w: 85, align: 'right' },
-    };
-
-    function ensureRoom(h) {
-      if (y + h > doc.page.height - 80) {
-        doc.addPage();
-        y = 50;
-      }
-    }
-
-    function drawHeaderRow() {
-      ensureRoom(22);
-      doc.rect(40, y, 515, 18).fill(primary);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
-      doc.text('Description', COLS.desc.x + 4, y + 5, { width: COLS.desc.w - 4 });
-      doc.text('Qty',  COLS.qty.x,  y + 5, { width: COLS.qty.w,  align: 'right' });
-      doc.text('Unit', COLS.unit.x, y + 5, { width: COLS.unit.w });
-      doc.text('Rate', COLS.rate.x, y + 5, { width: COLS.rate.w, align: 'right' });
-      doc.text('Total',COLS.total.x,y + 5, { width: COLS.total.w,align: 'right' });
-      y += 18;
-      doc.fillColor('#111111').font('Helvetica').fontSize(9);
-    }
-
-    drawHeaderRow();
-
-    let runningNet = 0;
-    for (const sec of sectionOrder) {
-      ensureRoom(20);
-      doc.rect(40, y, 515, 16).fill(accent);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text(sec, 44, y + 3);
-      y += 16;
-      doc.fillColor('#111111').font('Helvetica').fontSize(9);
-
-      let sectionSubtotal = 0;
-      for (const ln of sections[sec]) {
-        const descText = (ln.item ? ln.item + ' — ' : '') + (ln.description || '');
-        const descHeight = doc.heightOfString(descText, { width: COLS.desc.w - 4 });
-        const rowH = Math.max(14, descHeight + 4);
-        ensureRoom(rowH);
-
-        const isEst = ln.est_rate ? true : false;
-        doc.font('Helvetica').fontSize(9).fillColor('#111111');
-        doc.text(descText, COLS.desc.x + 4, y + 2, { width: COLS.desc.w - 4 });
-        doc.text(String(num(ln.qty)), COLS.qty.x, y + 2, { width: COLS.qty.w, align: 'right' });
-        doc.text(String(ln.unit || ''), COLS.unit.x, y + 2, { width: COLS.unit.w });
-        const rateText = fmtMoney(ln.rate, cc) + (isEst ? ' *' : '');
-        if (isEst) doc.fillColor('#B45309');
-        doc.text(rateText, COLS.rate.x, y + 2, { width: COLS.rate.w, align: 'right' });
-        doc.fillColor('#111111');
-        doc.text(fmtMoney(ln.line_total, cc), COLS.total.x, y + 2, { width: COLS.total.w, align: 'right' });
-
-        // light divider
-        doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(40, y + rowH).lineTo(555, y + rowH).stroke();
-        sectionSubtotal += num(ln.line_total);
-        y += rowH;
-      }
-
-      // section subtotal
-      ensureRoom(16);
-      doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111');
-      doc.text(sec + ' subtotal', COLS.desc.x + 4, y + 3, { width: COLS.desc.w - 4 });
-      doc.text(fmtMoney(sectionSubtotal, cc), COLS.total.x, y + 3, { width: COLS.total.w, align: 'right' });
-      doc.font('Helvetica').fontSize(9);
-      y += 18;
-      runningNet += sectionSubtotal;
-    }
-
-    // Summary block
-    ensureRoom(140);
-    y += 10;
-    doc.rect(310, y, 245, 130).strokeColor(primary).lineWidth(1).stroke();
-    let sy = y + 8;
-    function summaryRow(label, value, bold) {
-      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor('#111111');
-      doc.text(label, 318, sy, { width: 140 });
-      doc.text(value, 460, sy, { width: 90, align: 'right' });
-      sy += 16;
-    }
-    summaryRow('Net', fmtMoney(q.net_total, cc));
-    summaryRow('OH&P (' + num(q.ohp_pct).toFixed(1) + '%)', fmtMoney(q.ohp_amount, cc));
-    summaryRow('Contingency (' + num(q.contingency_pct).toFixed(1) + '%)', fmtMoney(q.contingency_amount, cc));
-    summaryRow('VAT (' + num(q.vat_pct).toFixed(1) + '%)', fmtMoney(q.vat_amount, cc));
-    sy += 4;
-    doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();
-    sy += 6;
-    summaryRow('Grand Total', fmtMoney(q.grand_total, cc), true);
-    y += 140;
-
-    // est_rate marker explanation
-    const anyEst = lines.some(l => l.est_rate);
-    if (anyEst) {
-      ensureRoom(24);
-      doc.font('Helvetica-Oblique').fontSize(8).fillColor('#B45309');
-      doc.text('* Rate estimated by AI — no match in priced rate library. Confirm before issuing.', 40, y);
-      doc.fillColor('#111111');
-      y += 14;
-    }
-
-    // Notes + terms
-    if (q.notes) {
-      ensureRoom(60);
-      y += 10;
-      doc.font('Helvetica-Bold').fontSize(10).text('Notes', 40, y); y += 14;
-      doc.font('Helvetica').fontSize(9).fillColor('#333333').text(q.notes, 40, y, { width: 515 });
-      const h = doc.heightOfString(q.notes, { width: 515 });
-      y += h + 6;
-      doc.fillColor('#111111');
-    }
-
-    // Footer
-    const footY = doc.page.height - 50;
-    doc.font('Helvetica').fontSize(8).fillColor('#666666')
-      .text(branding.footer_text || 'This quotation is valid for 30 days from the date above. Prices exclude VAT unless stated.', 40, footY, { width: 515, align: 'center' });
-
-    doc.end();
+    // Rendering lives in quotePdf.js so the public acceptance page streams the
+    // identical document.
+    streamQuotePdf(res, q, lines, branding, userInfo);
   } catch (err) {
     console.error('[Estimator] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });

@@ -416,7 +416,7 @@ router.get('/dashboard', (req, res) => {
     const quotesMonth = db.prepare(
       'SELECT COUNT(*) as c, COALESCE(SUM(grand_total),0) as v FROM quotes WHERE user_id=? AND created_at >= ?'
     ).get(userId, sinceIso);
-    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='won'").get(userId).c;
+    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status IN ('won','accepted')").get(userId).c;
     const lost = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='lost'").get(userId).c;
     const decided = won + lost;
     const winRate = decided > 0 ? Math.round((won / decided) * 100) : null;

@@ -24,6 +24,7 @@ const agentRoutes = require('./agentRoutes');
 const estimatorRoutes = require('./estimatorRoutes');
 const financeRoutes = require('./financeRoutes');
 const estimatorVariationRoutes = require('./estimatorVariationRoutes');
+const quotePublicRoutes = require('./quotePublicRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
 const documentsRoutes = require('./documentsRoutes');
@@ -65,6 +66,9 @@ app.use('/api/finance', financeRoutes);
 // client opens via the shareable approval link.
 app.use('/api/change-orders', estimatorVariationRoutes.ownerRouter);
 app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
+// A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
+// links), rate-limited inside the router.
+app.use('/api/public/quotes', quotePublicRoutes);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
