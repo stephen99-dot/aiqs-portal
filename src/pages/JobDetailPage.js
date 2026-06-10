@@ -5,6 +5,7 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import { jobStage, stageColours } from '../utils/jobStages';
 import { PhoneIcon } from '../components/Icons';
+import JobPhotos from '../components/JobPhotos';
 
 // THE JOB PAGE — one screen with everything about one job, sectioned
 // vertically: money strip, quotes, invoices & payments, changes, documents,
@@ -65,7 +66,8 @@ function Inner() {
   // Section anchors for the sticky nav.
   const sections = {
     money: useRef(null), quotes: useRef(null), invoices: useRef(null),
-    changes: useRef(null), documents: useRef(null), notes: useRef(null), plan: useRef(null),
+    changes: useRef(null), photos: useRef(null), documents: useRef(null),
+    notes: useRef(null), plan: useRef(null),
   };
   const jumpTo = (key) => sections[key]?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -295,6 +297,7 @@ function Inner() {
         <button style={chipBtn()} onClick={() => jumpTo('quotes')}>Quotes</button>
         <button style={chipBtn()} onClick={() => jumpTo('invoices')}>Invoices & payments</button>
         <button style={chipBtn()} onClick={() => jumpTo('changes')}>Changes</button>
+        <button style={chipBtn()} onClick={() => jumpTo('photos')}>Photos</button>
         <button style={chipBtn()} onClick={() => jumpTo('documents')}>Documents</button>
         <button style={chipBtn()} onClick={() => jumpTo('notes')}>Notes</button>
         <button style={chipBtn()} onClick={() => jumpTo('plan')}>Plan & costs</button>
@@ -498,6 +501,15 @@ function Inner() {
             </div>
           );
         })}
+      </div>
+
+      {/* Photos */}
+      <div ref={sections.photos} style={card}>
+        <div style={sectionTitle}>Photos</div>
+        <div style={{ color: t.textMuted, fontSize: 13, marginBottom: 10 }}>
+          Snap it before it's covered up — photos can go on a change so the client sees exactly what you found.
+        </div>
+        <JobPhotos t={t} jobId={id} />
       </div>
 
       {/* Documents */}

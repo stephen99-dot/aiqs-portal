@@ -6,6 +6,7 @@ import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
 import { CheckIcon } from '../components/Icons';
 import useIsMobile from '../utils/useIsMobile';
+import JobPhotos from '../components/JobPhotos';
 
 // Variation editor — used for both /change-orders/new?job=<id> (create) and
 // /change-orders/:id (edit / view). Once status === 'approved' the row is
@@ -243,6 +244,14 @@ function Inner() {
             </code>
             <button onClick={copyLink} style={btnSecondary(t)}>{copied ? 'Copied!' : 'Copy link'}</button>
           </div>
+        </div>
+      )}
+
+      {/* B4 — attach site photos to this change */}
+      {variationId && jobId && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Photos with this change</div>
+          <JobPhotos t={t} jobId={jobId} attachTo={{ kind: 'variation', id: variationId }} />
         </div>
       )}
 

@@ -658,6 +658,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 
+  -- B4: photos on jobs — taken on site, shown as a strip on the job page,
+  -- attachable to a variation ("here's the rot behind the plaster") or a
+  -- quote so they print in the PDF. Files live in DATA_DIR/job-photos.
+  CREATE TABLE IF NOT EXISTS job_photos (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    variation_id TEXT,
+    quote_id TEXT,
+    filename TEXT NOT NULL,
+    mime TEXT,
+    file_size INTEGER,
+    caption TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_job_photos_job ON job_photos(job_id);
+  CREATE INDEX IF NOT EXISTS idx_job_photos_variation ON job_photos(variation_id);
+  CREATE INDEX IF NOT EXISTS idx_job_photos_quote ON job_photos(quote_id);
+
   -- A3/A4: per-user Office-in-a-Box settings — card fees, Tax & CIS, the
   -- accountant's email for exports. One row per user, INSERT OR IGNORE on
   -- first read seeds defaults (same pattern as pm_alert_thresholds).

@@ -836,8 +836,9 @@ router.get('/quotes/:id/pdf', (req, res) => {
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
     // Rendering lives in quotePdf.js so the public acceptance page streams the
-    // identical document.
-    streamQuotePdf(res, q, lines, branding, userInfo);
+    // identical document. B4: attached site photos print at the end.
+    const photos = require('./jobPhotoRoutes').photoPathsFor('quote', q.id);
+    streamQuotePdf(res, q, lines, branding, userInfo, photos);
   } catch (err) {
     console.error('[Estimator] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });
