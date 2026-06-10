@@ -207,6 +207,7 @@ async function callClaude(userText, projectType) {
   const userMsg = 'Project type: ' + (projectType || '(not specified)')
     + '\n\nDescription:\n"""\n' + userText + '\n"""\n\nReturn the JSON quote now.';
 
+  // Forced JSON via tool use — guaranteed-valid JSON, no fence-stripping.
   // Usage is logged by logEstimatorUsage() at the route, so we don't pass
   // userId here (the wrapper would otherwise double-count it).
   const result = await callModel({
@@ -215,6 +216,21 @@ async function callClaude(userText, projectType) {
     temperature: 0.3,
     system: DRAFT_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMsg }],
+    tools: [{
+      name: 'submit_quote',
+      description: 'Submit the drafted itemised quote.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          client_name: { type: ['string', 'null'] },
+          project_name: { type: ['string', 'null'] },
+          currency: { type: ['string', 'null'] },
+          sections: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        },
+        required: ['sections'],
+      },
+    }],
+    toolChoice: { type: 'tool', name: 'submit_quote' },
   });
 
   if (!result.ok) {
@@ -224,7 +240,7 @@ async function callClaude(userText, projectType) {
 
   // Return the Anthropic-shaped usage logEstimatorUsage() expects.
   const usage = { input_tokens: result.usage.tokensIn, output_tokens: result.usage.tokensOut };
-  return { text: result.text, usage, model: result.model };
+  return { json: result.json, usage, model: result.model };
 }
 
 // Strip optional code fences and parse JSON defensively.
@@ -348,7 +364,7 @@ router.post('/draft', async (req, res) => {
       return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
     }
 
-    const draft = parseDraftJson(claudeResult.text);
+    const draft = claudeResult.json;
     if (!draft || !Array.isArray(draft.sections)) {
       return res.status(502).json({ error: 'The AI returned an unexpected response. Please try again or simplify the description.' });
     }

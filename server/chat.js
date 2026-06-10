@@ -2349,38 +2349,49 @@ ${summary}`);
 
         const extractMessages = [...messages, { role: 'user', content: extractContent }];
 
-        const extractResult = await callModel({
+        // Forced JSON via tool use — the takeoff is returned as the tool's input,
+        // which is guaranteed-valid JSON. The schema is permissive (item fields are
+        // free-form) so the deterministic pricer consumes `parsed` exactly as before.
+        const extractTool = {
+          name: 'record_takeoff',
+          description: 'Record the measured quantity takeoff as structured data.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              items: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              project_type: { type: ['string', 'null'] },
+              location: { type: ['string', 'null'] },
+              floor_area_m2: { type: ['number', 'string', 'null'] },
+            },
+            required: ['items'],
+            additionalProperties: true,
+          },
+        };
+        const extractCall = (msgs) => callModel({
           model: MODELS.STANDARD,
           maxTokens: MAX_TOKENS.EXTRACTION,
           temperature: 0,
           system: extractPrompt,
-          messages: extractMessages,
+          messages: msgs,
+          tools: [extractTool],
+          toolChoice: { type: 'tool', name: 'record_takeoff' },
           userId, action: 'extraction_pass',
         });
 
+        const extractResult = await extractCall(extractMessages);
+
         if (extractResult.ok) {
-          const rawText = extractResult.text;
-          const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          // Try direct parse first; if it fails, extract the JSON object from mixed prose
-          let parsed;
-          try {
-            parsed = JSON.parse(cleaned);
-          } catch (directParseErr) {
-            // Claude sometimes wraps JSON in explanatory text like "Looking at the drawings..."
-            // Find the first '{' and last '}' to extract the JSON object
-            const firstBrace = cleaned.indexOf('{');
-            const lastBrace = cleaned.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace > firstBrace) {
-              const jsonSubstring = cleaned.substring(firstBrace, lastBrace + 1);
-              try {
-                parsed = JSON.parse(jsonSubstring);
-                console.log(`[Stage 1] Recovered JSON from mixed text (prose before position ${firstBrace})`);
-              } catch (subParseErr) {
-                throw directParseErr; // rethrow original error if recovery also fails
-              }
-            } else {
-              throw directParseErr;
-            }
+          // Thin validation + a single hinted retry if the tool output lacks items.
+          let parsed = extractResult.json;
+          if (!parsed || !Array.isArray(parsed.items)) {
+            const retry = await extractCall([
+              ...extractMessages,
+              { role: 'user', content: 'Your previous record_takeoff call was missing the required "items" array. Call record_takeoff again with the complete items array.' },
+            ]);
+            if (retry.ok && retry.json && Array.isArray(retry.json.items)) parsed = retry.json;
+          }
+          if (!parsed || !Array.isArray(parsed.items)) {
+            throw new Error('Stage 1 extraction returned no items');
           }
 
           // ═══════════════════════════════════════════════════════════
@@ -2633,12 +2644,29 @@ CRITICAL RULES:
                 temperature: 0,
                 system: validationPrompt,
                 messages: [{ role: 'user', content: validationContent }],
+                tools: [{
+                  name: 'report_corrections',
+                  description: 'Report the takeoff review as structured corrections.',
+                  input_schema: {
+                    type: 'object',
+                    properties: {
+                      corrections: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                      validation_notes: { type: 'string' },
+                      items_checked: { type: ['number', 'string'] },
+                      errors_found: { type: ['number', 'string'] },
+                      confidence: { type: 'string' },
+                    },
+                    required: ['corrections'],
+                    additionalProperties: true,
+                  },
+                }],
+                toolChoice: { type: 'tool', name: 'report_corrections' },
               });
 
               if (validationResult.ok) {
-                const valRaw = validationResult.text;
-                const valCleaned = valRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-                const validation = JSON.parse(valCleaned);
+                // Forced tool output is guaranteed-valid JSON; missing corrections
+                // is treated as "no changes" (downstream guards on the array).
+                const validation = validationResult.json || {};
 
                 // Log validation cost (cost from the wrapper's PRICING map).
                 const valTokensIn = validationResult.usage.tokensIn;

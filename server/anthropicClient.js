@@ -440,6 +440,10 @@ async function callModel(opts) {
     thinking: thinkingOut,
     blocks,
     toolUse,
+    // Convenience for forced-JSON-via-tool callers: the first tool_use input,
+    // which (with tool_choice forcing the tool) is guaranteed-valid JSON — no
+    // fence-stripping or brace-matching recovery needed.
+    json: (toolUse && toolUse[0]) ? toolUse[0].input : null,
     sources,
     usage,
     cost,
