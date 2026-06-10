@@ -144,7 +144,7 @@ function fmtETA(remainingSec) {
   return `~${Math.ceil(remainingSec / 60)} min remaining`;
 }
 
-export default function AgentPanel({ runId, onClose, onCompleted }) {
+export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) {
   const { mode, t: tk } = useTheme();
   const isDark = mode === 'dark';
 
@@ -572,7 +572,7 @@ export default function AgentPanel({ runId, onClose, onCompleted }) {
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button onClick={generate} disabled={generating} style={{ padding: '11px 20px', borderRadius: 10, background: c.done, border: 'none', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.28)' }}>
+                <button onClick={() => { if (onGenerate) { setGenerating(true); onGenerate(); } else { generate(); } }} disabled={generating} style={{ padding: '11px 20px', borderRadius: 10, background: c.done, border: 'none', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: generating ? 'wait' : 'pointer', fontFamily: 'inherit', opacity: generating ? 0.6 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.28)' }}>
                   {generating ? 'Generating…' : <><CheckIcon size={15} style={{ verticalAlign:'middle', marginRight:7 }} />Generate documents</>}
                 </button>
                 <button onClick={reprice} style={{ padding: '10px 14px', borderRadius: 9, background: 'transparent', border: '1px solid ' + c.border, color: c.muted, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
