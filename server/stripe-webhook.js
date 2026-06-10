@@ -120,6 +120,13 @@ async function findUserForSubscription(subscription, stripeSecret) {
 }
 
 async function handleCheckoutComplete(session, stripeSecret) {
+  // A3: invoice "Pay now" — the checkout session carries invoice_id metadata.
+  // Handle and stop: this payment is the builder's money, not a platform plan.
+  if (session.metadata && session.metadata.invoice_id) {
+    handleInvoicePaymentComplete(session);
+    return;
+  }
+
   const customerEmail = session.customer_email || session.customer_details?.email;
 
   if (!customerEmail) {
@@ -148,6 +155,57 @@ async function handleCheckoutComplete(session, stripeSecret) {
   // Handle one-time payment (PAYG BOQ credit-pack purchase)
   if (session.mode === 'payment' && session.payment_status === 'paid') {
     grantPackCredits(session, customerEmail);
+  }
+}
+
+// A3: a client paid a builder's invoice through the "Pay now" link. Mark it
+// paid, settle any linked payment-schedule stage, and tell the builder
+// (notification bell + email).
+function handleInvoicePaymentComplete(session) {
+  try {
+    if (session.payment_status && session.payment_status !== 'paid') {
+      console.log('[Stripe] Invoice checkout not paid yet:', session.id);
+      return;
+    }
+    const invoiceId = session.metadata.invoice_id;
+    const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+    if (!inv) {
+      console.error('[Stripe] Paid invoice not found:', invoiceId);
+      return;
+    }
+    if (inv.status === 'paid') return; // idempotent — webhooks can repeat
+
+    const paidAmount = session.amount_total ? session.amount_total / 100 : inv.grand_total;
+    const { v4: uuidv4 } = require('uuid');
+    db.prepare(
+      "UPDATE invoices SET status='paid', paid_amount=?, paid_at=CURRENT_TIMESTAMP, "
+      + 'stripe_payment_intent_id=COALESCE(?, stripe_payment_intent_id), updated_at=CURRENT_TIMESTAMP WHERE id=?'
+    ).run(paidAmount, session.payment_intent || null, inv.id);
+    db.prepare(
+      "UPDATE payment_schedules SET status='paid', paid_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE invoice_id=? AND status='unpaid'"
+    ).run(inv.id);
+
+    const sym = inv.currency === 'EUR' ? '€' : '£';
+    const amountText = sym + Number(paidAmount).toLocaleString('en-GB', { minimumFractionDigits: 2 });
+    const summary = (inv.client_name || 'Your client') + ' paid invoice ' + (inv.invoice_number || '') + ' — ' + amountText + ' received by card.';
+    db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(uuidv4(), inv.user_id, summary);
+
+    const mailer = require('./mailer');
+    const owner = db.prepare('SELECT email FROM users WHERE id = ?').get(inv.user_id);
+    mailer.sendMail({
+      userId: inv.user_id,
+      type: 'invoice_paid',
+      to: owner?.email,
+      subject: 'Paid: invoice ' + (inv.invoice_number || '') + ' — ' + amountText,
+      heading: 'You\'ve been paid',
+      paragraphs: [summary, 'The invoice has been marked as paid automatically.'],
+      ctaText: 'Open the invoice',
+      ctaUrl: mailer.BASE_URL + '/invoices/' + inv.id,
+    }).catch(() => {});
+
+    console.log('[Stripe] Invoice ' + (inv.invoice_number || inv.id) + ' marked paid (' + amountText + ')');
+  } catch (err) {
+    console.error('[Stripe] Invoice payment handling failed:', err.message);
   }
 }
 

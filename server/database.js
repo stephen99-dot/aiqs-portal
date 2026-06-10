@@ -658,6 +658,24 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 
+  -- A3/A4: per-user Office-in-a-Box settings — card fees, Tax & CIS, the
+  -- accountant's email for exports. One row per user, INSERT OR IGNORE on
+  -- first read seeds defaults (same pattern as pm_alert_thresholds).
+  CREATE TABLE IF NOT EXISTS oib_settings (
+    user_id TEXT PRIMARY KEY,
+    card_fee_mode TEXT DEFAULT 'absorb',     -- 'absorb' | 'add' (to the payment)
+    card_fee_pct REAL DEFAULT 1.5,
+    card_fee_fixed REAL DEFAULT 0.20,
+    vat_registered INTEGER DEFAULT 0,
+    vat_number TEXT,
+    cis_contractor INTEGER DEFAULT 0,        -- pays subcontractors under CIS
+    cis_subcontractor INTEGER DEFAULT 0,     -- gets paid under CIS
+    cis_default_rate REAL DEFAULT 20,        -- 20 = verified, 30 = unverified
+    accountant_email TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   -- A2: every Office-in-a-Box email send (or attempt) is logged here.
   -- status: 'sent' | 'failed' | 'manual' (manual = SMTP not configured or no
   -- recipient — the builder shares the link by WhatsApp/text instead).
@@ -772,6 +790,12 @@ const migrations = [
   // /i/<token> view page (the shareable link, and where A3's Pay now lives).
   { column: 'client_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN client_email TEXT" },
   { column: 'public_token', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN public_token TEXT" },
+  // A3: automated payment reminders — on by default for new invoices, the
+  // toggle is per invoice. reminder_stage: 0 none sent, 1 due-date, 2 = +7d,
+  // 3 = +14d (paymentReminders.js sends the highest stage not yet sent).
+  { column: 'reminders_enabled', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminders_enabled INTEGER DEFAULT 1" },
+  { column: 'reminder_stage', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_stage INTEGER DEFAULT 0" },
+  { column: 'reminder_last_at', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_last_at DATETIME" },
 ];
 
 for (const { column, table, sql } of migrations) {

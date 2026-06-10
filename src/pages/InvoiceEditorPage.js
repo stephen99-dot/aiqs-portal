@@ -36,6 +36,11 @@ function Inner() {
   const [stripeLink, setStripeLink] = useState('');
   const [share, setShare] = useState(null);   // { url, emailedTo } after sending
   const [sending, setSending] = useState(false);
+  const [reminders, setReminders] = useState(true);
+  // A3 chase modal: null | { loading } | { subject, body, canEmail, clientEmail }
+  const [chase, setChase] = useState(null);
+  const [chaseSending, setChaseSending] = useState(false);
+  const [chaseDone, setChaseDone] = useState('');
 
   const load = useCallback(async () => {
     setError('');
@@ -50,6 +55,7 @@ function Inner() {
       setDiscount(num(r.invoice.discount_amount));
       setNotes(r.invoice.notes || '');
       setStripeLink(r.invoice.stripe_payment_link || '');
+      setReminders(r.invoice.reminders_enabled !== 0);
       setLines(r.lines || []);
       setDirty(false);
     } catch (e) { setError(e.message); }
@@ -157,6 +163,39 @@ function Inner() {
       }).catch(e => alert(e.message));
   };
 
+  const toggleReminders = async (on) => {
+    setReminders(on);
+    try {
+      await apiFetch('/invoices/' + id, { method: 'PATCH', body: JSON.stringify({ reminders_enabled: on ? 1 : 0 }) });
+    } catch (e) { setError(e.message); setReminders(!on); }
+  };
+
+  // A3: AI drafts the chaser, the builder reads/edits it, nothing sends itself.
+  const openChase = async () => {
+    setChase({ loading: true });
+    setChaseDone('');
+    try {
+      const r = await apiFetch('/invoices/' + id + '/chase-draft', { method: 'POST' });
+      setChase({ subject: r.subject, body: r.body, canEmail: r.can_email, clientEmail: r.client_email });
+    } catch (e) {
+      setChase(null);
+      setError(e.message);
+    }
+  };
+
+  const sendChase = async () => {
+    setChaseSending(true); setError('');
+    try {
+      const r = await apiFetch('/invoices/' + id + '/chase-send', {
+        method: 'POST',
+        body: JSON.stringify({ subject: chase.subject, body: chase.body }),
+      });
+      setChaseDone('Sent to ' + r.sent_to);
+      setChase(null);
+    } catch (e) { setError(e.message); }
+    finally { setChaseSending(false); }
+  };
+
   const genStripeLink = async () => {
     try {
       const r = await apiFetch('/invoices/' + id + '/stripe-link', { method: 'POST' });
@@ -190,6 +229,9 @@ function Inner() {
           {!readOnly && <button onClick={save} disabled={saving || !dirty} style={btnPrimary(t, saving || !dirty)}>{saving ? 'Saving…' : (dirty ? 'Save changes' : 'Saved')}</button>}
           {invoice.status === 'draft' && !readOnly && <button onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send the invoice'}</button>}
           {invoice.status === 'sent' && !readOnly && <button onClick={shareLink} style={btnSecondary(t)}>Share link</button>}
+          {invoice.status === 'sent' && !readOnly && (
+            <button onClick={openChase} style={{ ...btnPrimary(t), background: invoice.overdue ? t.danger : t.accent }}>Chase this payment</button>
+          )}
           {(invoice.status === 'sent' || invoice.status === 'draft') && !readOnly && <button onClick={markPaid} style={{ ...btnPrimary(t), background: t.success }}>Mark as paid</button>}
           <button onClick={downloadPdf} style={btnSecondary(t)}>PDF</button>
           <button onClick={duplicate} style={btnSecondary(t)}>Duplicate</button>
@@ -199,15 +241,31 @@ function Inner() {
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
+      {chaseDone && <div style={{ background: t.successBg, color: t.success, padding: 10, borderRadius: 8, marginBottom: 12 }}>{chaseDone}</div>}
+
+      {/* Reminders toggle — visible while there's something to chase */}
+      {(invoice.status === 'sent' || invoice.status === 'draft') && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={reminders} onChange={e => toggleReminders(e.target.checked)} style={{ width: 20, height: 20 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Chase this invoice automatically</div>
+              <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
+                We'll email a polite reminder on the due date, then 7 and 14 days after — until it's marked as paid.
+              </div>
+            </div>
+          </label>
+        </div>
+      )}
 
       {/* Stripe link panel */}
       {invoice.status !== 'paid' && invoice.status !== 'void' && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Online payment link</div>
+              <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Let them pay by card</div>
               <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
-                Optional. Generates a Stripe Checkout link your client can pay through.
+                Adds a "Pay now" button to the invoice your client sees. When they pay, the invoice marks itself as paid.
               </div>
             </div>
             {stripeLink ? (
@@ -216,7 +274,7 @@ function Inner() {
                 <button onClick={() => navigator.clipboard.writeText(stripeLink)} style={btnSecondary(t)}>Copy</button>
               </div>
             ) : (
-              <button onClick={genStripeLink} style={btnSecondary(t)}>Generate Stripe link</button>
+              <button onClick={genStripeLink} style={btnSecondary(t)}>Set up card payment</button>
             )}
           </div>
         </div>
@@ -326,6 +384,50 @@ function Inner() {
           message="Here’s your invoice — you can view and download it here:"
           onClose={() => setShare(null)}
         />
+      )}
+
+      {/* A3: chase modal — the builder always sees the message before it goes */}
+      {chase && (
+        <div onClick={() => !chaseSending && setChase(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: t.card, color: t.text, width: '100%', maxWidth: 560, borderRadius: 14,
+            border: '1px solid ' + t.border, padding: 20, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box',
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Chase this payment</div>
+            {chase.loading ? (
+              <div style={{ color: t.textSecondary, padding: '24px 0' }}>Writing a polite chaser for you…</div>
+            ) : (
+              <>
+                <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 14 }}>
+                  Read it, change anything you like, then send it. Nothing goes without your say-so.
+                </div>
+                <label style={lbl(t)}>Subject</label>
+                <input value={chase.subject} onChange={e => setChase({ ...chase, subject: e.target.value })} style={fld(t)} />
+                <label style={lbl(t, 12)}>Message</label>
+                <textarea value={chase.body} onChange={e => setChase({ ...chase, body: e.target.value })} rows={9} style={ta(t)} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+                  {chase.canEmail ? (
+                    <button onClick={sendChase} disabled={chaseSending} style={{ ...btnPrimary(t, chaseSending), minHeight: 44 }}>
+                      {chaseSending ? 'Sending…' : 'Send it to ' + chase.clientEmail + ' (invoice attached)'}
+                    </button>
+                  ) : (
+                    <div style={{ background: t.warningBg, color: t.warning, padding: 10, borderRadius: 8, fontSize: 13 }}>
+                      {chase.clientEmail ? 'Email isn’t set up on the server — copy the message and send it by WhatsApp or text.' : 'No client email on this invoice — copy the message and send it by WhatsApp or text.'}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => navigator.clipboard.writeText(chase.body).then(() => setChaseDone('Message copied — paste it into WhatsApp or a text.')).then(() => setChase(null)).catch(() => {})}
+                    style={{ ...btnSecondary(t), minHeight: 44 }}
+                  >Copy the message</button>
+                  <button onClick={() => setChase(null)} disabled={chaseSending} style={{ background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 13, cursor: 'pointer', minHeight: 36 }}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Summary + notes */}

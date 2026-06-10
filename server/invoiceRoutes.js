@@ -246,7 +246,8 @@ router.patch('/:id', (req, res) => {
     if (rejectIfPaid(inv, res)) return;
     const b = req.body || {};
     const allowed = ['client_name', 'client_email', 'client_address', 'currency', 'issue_date',
-      'due_date', 'payment_terms_days', 'notes', 'vat_pct', 'discount_amount', 'job_id', 'status'];
+      'due_date', 'payment_terms_days', 'notes', 'vat_pct', 'discount_amount', 'job_id', 'status',
+      'reminders_enabled'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {
@@ -485,13 +486,19 @@ router.post('/:id/void', (req, res) => {
   }
 });
 
-// ─── Stripe link (opt-in) ───────────────────────────────────────────────────
+// ─── Stripe "Pay now" link (opt-in) ─────────────────────────────────────────
+
+function getOibSettings(userId) {
+  db.prepare('INSERT OR IGNORE INTO oib_settings (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM oib_settings WHERE user_id = ?').get(userId);
+}
 
 // POST /api/invoices/:id/stripe-link
-// Mints a one-off Stripe Checkout payment link for this invoice's grand total.
+// Mints a one-off Stripe Checkout payment link for this invoice. The webhook
+// (stripe-webhook.js) marks the invoice paid on checkout completion via the
+// invoice_id metadata. Card fees follow the builder's setting: 'absorb'
+// charges the invoice total; 'add' puts the processing fee on top.
 // Optional — returns 503 with STRIPE_NOT_CONFIGURED if no STRIPE_SECRET_KEY.
-// TODO: wire to billing — production rollout needs a webhook handler to flip
-// invoices.status to 'paid' on payment_intent.succeeded.
 router.post('/:id/stripe-link', async (req, res) => {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -504,7 +511,15 @@ router.post('/:id/stripe-link', async (req, res) => {
 
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     const currency = (inv.currency || 'GBP').toLowerCase();
-    const amount = Math.round(num(inv.grand_total) * 100);
+
+    const settings = getOibSettings(req.user.id);
+    let chargeTotal = num(inv.grand_total);
+    let feeAdded = 0;
+    if (settings.card_fee_mode === 'add') {
+      feeAdded = round2(chargeTotal * (num(settings.card_fee_pct, 1.5) / 100) + num(settings.card_fee_fixed, 0.20));
+      chargeTotal = round2(chargeTotal + feeAdded);
+    }
+    const amount = Math.round(chargeTotal * 100);
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -515,7 +530,10 @@ router.post('/:id/stripe-link', async (req, res) => {
           unit_amount: amount,
           product_data: {
             name: 'Invoice ' + (inv.invoice_number || inv.id.slice(0, 8)),
-            description: inv.client_name ? 'For ' + inv.client_name : undefined,
+            description: [
+              inv.client_name ? 'For ' + inv.client_name : null,
+              feeAdded > 0 ? 'Includes ' + fmtMoney(feeAdded, inv.currency) + ' card processing fee' : null,
+            ].filter(Boolean).join(' · ') || undefined,
           },
         },
       }],
@@ -526,10 +544,127 @@ router.post('/:id/stripe-link', async (req, res) => {
       'UPDATE invoices SET stripe_payment_link=?, stripe_payment_intent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
     ).run(session.url, session.payment_intent || null, inv.id);
 
-    res.json({ url: session.url });
+    res.json({ url: session.url, fee_added: feeAdded });
   } catch (err) {
     console.error('[Invoices] stripe-link error:', err);
     res.status(500).json({ error: 'Failed to create Stripe link.' });
+  }
+});
+
+// ─── A3: "Chase this payment" — drafted by AI, approved by the builder ──────
+
+const CHASER_SYSTEM = `You draft payment-chasing emails for a UK builder. Firm but always polite and professional — the client relationship matters more than this one invoice. Plain English, no legalese, no threats. 3 short paragraphs maximum. Sign off with the company name only (no placeholder names). Use ONLY the facts provided — never invent amounts, dates or names.`;
+
+// POST /api/invoices/:id/chase-draft — returns { subject, body } for approval.
+// NEVER sends anything itself.
+router.post('/:id/chase-draft', async (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (inv.status === 'paid') return res.status(400).json({ error: 'This invoice is already paid.' });
+    if (inv.status === 'void') return res.status(400).json({ error: 'This invoice is void.' });
+
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'the builder';
+    const job = inv.job_id ? db.prepare('SELECT name FROM estimator_jobs WHERE id = ?').get(inv.job_id) : null;
+    const today = todayIso();
+    const daysOverdue = inv.due_date && inv.due_date < today
+      ? Math.round((new Date(today) - new Date(inv.due_date)) / 86400000)
+      : 0;
+
+    const facts = [
+      'Company: ' + companyName,
+      'Client: ' + (inv.client_name || 'the client'),
+      'Invoice number: ' + (inv.invoice_number || ''),
+      'Amount due: ' + fmtMoney(inv.grand_total, inv.currency),
+      'Issue date: ' + (inv.issue_date || 'unknown'),
+      'Due date: ' + (inv.due_date || 'unknown'),
+      daysOverdue > 0 ? 'Days overdue: ' + daysOverdue : 'Not yet overdue (chasing ahead of the due date)',
+      job?.name ? 'Job: ' + job.name : null,
+    ].filter(Boolean).join('\n');
+
+    const { callModel, MODELS } = require('./anthropicClient');
+    const result = await callModel({
+      model: MODELS.FAST,
+      maxTokens: 700,
+      temperature: 0.4,
+      system: CHASER_SYSTEM,
+      messages: [{ role: 'user', content: 'Draft the chaser email now.\n\nFACTS:\n' + facts }],
+      tools: [{
+        name: 'submit_email',
+        description: 'Submit the drafted chaser email.',
+        input_schema: {
+          type: 'object',
+          properties: { subject: { type: 'string' }, body: { type: 'string' } },
+          required: ['subject', 'body'],
+        },
+      }],
+      toolChoice: { type: 'tool', name: 'submit_email' },
+      userId: req.user.id,
+      action: 'invoice_chase_draft',
+    });
+    if (!result.ok || !result.json) {
+      return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
+    }
+
+    res.json({
+      subject: String(result.json.subject || '').slice(0, 200),
+      body: String(result.json.body || '').slice(0, 4000),
+      can_email: !!(inv.client_email && mailer.isConfigured()),
+      client_email: inv.client_email || null,
+      days_overdue: daysOverdue,
+    });
+  } catch (err) {
+    console.error('[Invoices] chase-draft error:', err);
+    res.status(500).json({ error: 'Failed to draft the chaser.' });
+  }
+});
+
+// POST /api/invoices/:id/chase-send { subject, body } — sends the (possibly
+// edited) chaser with the invoice PDF attached. Only ever called after the
+// builder has seen and approved the draft.
+router.post('/:id/chase-send', async (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (inv.status === 'paid') return res.status(400).json({ error: 'This invoice is already paid.' });
+    if (!inv.client_email) return res.status(400).json({ error: "Add the client's email to the invoice first." });
+    if (!mailer.isConfigured()) return res.status(503).json({ error: 'Email is not set up on the server — copy the message and send it by WhatsApp or text instead.', code: 'MAIL_NOT_CONFIGURED' });
+
+    const b = req.body || {};
+    const subject = String(b.subject || '').trim().slice(0, 200);
+    const bodyText = String(b.body || '').trim().slice(0, 4000);
+    if (!subject || !bodyText) return res.status(400).json({ error: 'Subject and message are both needed.' });
+
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    let attachments = [];
+    try {
+      const pdf = await invoicePdfBuffer(inv, getInvoiceLines(inv.id), branding, userInfo);
+      attachments = [{ filename: (inv.invoice_number || 'invoice') + '.pdf', content: pdf }];
+    } catch (e) {
+      console.error('[Invoices] chase PDF attach failed:', e.message);
+    }
+
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'payment_chase',
+      to: inv.client_email,
+      subject,
+      heading: subject,
+      paragraphs: bodyText.split(/\n{2,}/).map(p => p.trim()).filter(Boolean),
+      ctaText: inv.public_token ? 'View the invoice' : null,
+      ctaUrl: inv.public_token ? mailer.BASE_URL + '/i/' + inv.public_token : null,
+      attachments,
+    });
+    if (!mail.ok) {
+      return res.status(502).json({ error: 'The email could not be sent' + (mail.error ? ' (' + mail.error + ')' : '') + '. Copy the message and send it by WhatsApp instead.' });
+    }
+    res.json({ ok: true, sent_to: inv.client_email });
+  } catch (err) {
+    console.error('[Invoices] chase-send error:', err);
+    res.status(500).json({ error: 'Failed to send the chaser.' });
   }
 });
 

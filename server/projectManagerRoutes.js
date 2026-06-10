@@ -95,7 +95,7 @@ function rulePaymentsDue(userId, thresholds) {
       AND date(p.due_date) <= date('now', '+' || ? || ' days')
     ORDER BY p.due_date ASC
   `).all(userId, H);
-  return rows.map(r => {
+  const stageCards = rows.map(r => {
     const days = daysUntil(r.due_date);
     const isOverdue = days < 0;
     return {
@@ -110,6 +110,45 @@ function rulePaymentsDue(userId, thresholds) {
       meta: { days_to_due: days, value: r.amount, overdue: isOverdue, horizon: H },
     };
   });
+
+  // A3: unpaid invoices due soon or overdue, with the automated-reminder state
+  // on the card so the builder knows whether the system is already chasing.
+  const invoices = db.prepare(`
+    SELECT id, invoice_number, client_name, grand_total, due_date,
+           reminders_enabled, reminder_stage, reminder_last_at
+    FROM invoices
+    WHERE user_id = ?
+      AND status = 'sent'
+      AND due_date IS NOT NULL
+      AND date(due_date) <= date('now', '+' || ? || ' days')
+    ORDER BY due_date ASC
+  `).all(userId, H);
+  const invoiceCards = invoices.map(r => {
+    const days = daysUntil(r.due_date);
+    const isOverdue = days < 0;
+    let reminderNote;
+    if (!r.reminders_enabled) reminderNote = 'automatic reminders are off';
+    else if (r.reminder_stage > 0) {
+      const since = daysSince(r.reminder_last_at);
+      reminderNote = 'reminder sent' + (since != null ? ' ' + since + ' day(s) ago' : '');
+    } else reminderNote = 'reminders on — first one goes on the due date';
+    return {
+      id: 'invoice-due-' + r.id,
+      rule: 'payment_due',
+      severity: isOverdue ? 'high' : 'medium',
+      title: 'Invoice ' + (r.invoice_number || '')
+        + ' — ' + (isOverdue ? Math.abs(days) + ' day(s) overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' day(s)')),
+      body: (r.client_name ? r.client_name + ' · ' : '')
+        + fmtMoney(r.grand_total) + ' · due ' + r.due_date + ' · ' + reminderNote,
+      link: '/invoices/' + r.id,
+      meta: {
+        days_to_due: days, value: r.grand_total, overdue: isOverdue, horizon: H,
+        reminders_enabled: !!r.reminders_enabled, reminder_stage: r.reminder_stage,
+      },
+    };
+  });
+
+  return [...stageCards, ...invoiceCards];
 }
 
 // ─── Rule 3: Cost actuals over planned budget by > X% ───────────────────────
