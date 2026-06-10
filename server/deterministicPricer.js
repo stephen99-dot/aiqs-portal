@@ -1283,6 +1283,18 @@ function detectProjectType(items) {
  * @returns {Object} - Complete priced BOQ structure
  */
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
+  // Input guard: drop ghost/malformed items before pricing so a stray entry
+  // (e.g. one with no key and description "undefined", or a non-numeric qty)
+  // can never poison the summed total to NaN / €0. This is a defensive filter,
+  // not a change to how legitimate items are priced.
+  lockedItems = (Array.isArray(lockedItems) ? lockedItems : []).filter((it) => {
+    if (!it || typeof it !== 'object') return false;
+    const key = it.key != null && String(it.key).trim();
+    const desc = it.description != null && String(it.description).trim();
+    if (!key && (!desc || String(it.description).trim().toLowerCase() === 'undefined')) return false;
+    return Number.isFinite(parseFloat(it.qty));
+  });
+
   const locationInfo = detectLocationFactor(location);
 
   // Auto-detect Ireland from location and set correct defaults

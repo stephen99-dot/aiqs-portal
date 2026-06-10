@@ -1247,7 +1247,11 @@ router.get('/files/sign/:filename', authMiddleware, (req, res) => {
     const token = jwt.sign({ f: filename, scope: 'file-view' }, FILE_JWT_SECRET, { expiresIn: '15m' });
     const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
     const base = process.env.PORTAL_URL ? process.env.PORTAL_URL.replace(/\/$/, '') : `${proto}://${req.get('host')}`;
-    res.json({ url: `${base}/api/files/view/${token}`, expires_in: 900 });
+    // Append the real filename as the final URL segment so external viewers
+    // (Google Sheets / Office web viewer) title the document with the actual
+    // name instead of the JWT token. The token still carries the authoritative
+    // filename in its payload; the path segment is cosmetic.
+    res.json({ url: `${base}/api/files/view/${token}/${encodeURIComponent(filename)}`, expires_in: 900 });
   } catch (e) {
     console.error('[Files] sign error:', e.message);
     res.status(500).json({ error: 'Could not create link' });
@@ -1255,8 +1259,10 @@ router.get('/files/sign/:filename', authMiddleware, (req, res) => {
 });
 
 // Serve a file from a signed token — NO auth header required (public for the
-// token's lifetime), inline so the viewer can render it.
-router.get('/files/view/:token', (req, res) => {
+// token's lifetime), inline so the viewer can render it. The optional trailing
+// filename segment is cosmetic (so viewers title the doc correctly) — the
+// authoritative filename always comes from the verified token payload.
+function serveSignedFile(req, res) {
   let payload;
   try { payload = jwt.verify(req.params.token, FILE_JWT_SECRET); }
   catch (e) { return res.status(401).send('Link expired or invalid'); }
@@ -1272,7 +1278,9 @@ router.get('/files/view/:token', (req, res) => {
   res.setHeader('Content-Length', buf.length);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.send(buf);
-});
+}
+router.get('/files/view/:token', serveSignedFile);
+router.get('/files/view/:token/:name', serveSignedFile);
 
 router.get('/my-rates', authMiddleware, (req, res) => {
   try {

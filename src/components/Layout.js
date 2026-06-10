@@ -200,6 +200,7 @@ export default function Layout() {
     { path: '/branding', label: 'Branding', Icon: SettingsIcon },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
+    { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
   ];
 
   const visibleNavItems = navItems.filter(item => {
