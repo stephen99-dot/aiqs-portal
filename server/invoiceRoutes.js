@@ -10,12 +10,15 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const { streamInvoicePdf, invoicePdfBuffer } = require('./invoicePdf');
+const mailer = require('./mailer');
 
 const router = express.Router();
 router.use(authMiddleware, requireEstimator, requireEstimatorPassword);
@@ -50,6 +53,12 @@ function nextInvoiceNumber(userId) {
 
 function getInvoice(id, userId) {
   return db.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').get(id, userId);
+}
+
+// Same token scheme as quote/variation share links — powers /i/<token>.
+function newShareToken() {
+  return crypto.randomBytes(24).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 function getInvoiceLines(invoiceId) {
   return db.prepare(
@@ -374,21 +383,74 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// POST /api/invoices/:id/send
-router.post('/:id/send', (req, res) => {
+// POST /api/invoices/:id/send — really send it (A2): mint the public
+// /i/<token> link, email the client the PDF when SMTP + a client email exist,
+// and always hand back the shareable link for WhatsApp/text.
+router.post('/:id/send', async (req, res) => {
   try {
     const inv = getInvoice(req.params.id, req.user.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     if (rejectIfPaid(inv, res)) return;
     const issueDate = inv.issue_date || todayIso();
     const dueDate = inv.due_date || dueDateFromTerms(issueDate, inv.payment_terms_days || 30);
+    const token = inv.public_token || newShareToken();
     db.prepare(
-      "UPDATE invoices SET status = 'sent', issue_date = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(issueDate, dueDate, inv.id);
-    res.json({ id: inv.id, status: 'sent', issue_date: issueDate, due_date: dueDate });
+      "UPDATE invoices SET status = 'sent', issue_date = ?, due_date = ?, public_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(issueDate, dueDate, token, inv.id);
+
+    const fresh = getInvoice(inv.id, req.user.id);
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'your builder';
+    const link = mailer.BASE_URL + '/i/' + token;
+
+    let attachments = [];
+    if (fresh.client_email && mailer.isConfigured()) {
+      try {
+        const pdf = await invoicePdfBuffer(fresh, getInvoiceLines(fresh.id), branding, userInfo);
+        attachments = [{ filename: (fresh.invoice_number || 'invoice') + '.pdf', content: pdf }];
+      } catch (e) {
+        console.error('[Invoices] PDF attach failed:', e.message);
+      }
+    }
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'invoice_send',
+      to: fresh.client_email || null,
+      subject: 'Invoice ' + (fresh.invoice_number || '') + ' from ' + companyName,
+      heading: 'Invoice ' + (fresh.invoice_number || ''),
+      paragraphs: [
+        'Please find your invoice from ' + companyName + (fresh.client_name ? ' for ' + fresh.client_name : '') + '.',
+        'Amount due: ' + fmtMoney(fresh.grand_total, fresh.currency) + (dueDate ? ', due by ' + dueDate + '.' : '.'),
+        'The invoice is attached as a PDF, or you can view it online below.',
+      ],
+      ctaText: 'View the invoice',
+      ctaUrl: link,
+      attachments,
+    });
+
+    res.json({
+      id: inv.id, status: 'sent', issue_date: issueDate, due_date: dueDate,
+      token, path: '/i/' + token,
+      delivery: mail.delivery,
+      emailed_to: mail.delivery === 'email' ? fresh.client_email : null,
+    });
   } catch (err) {
     console.error('[Invoices] send error:', err);
     res.status(500).json({ error: 'Failed to send invoice.' });
+  }
+});
+
+// GET /api/invoices/:id/share-url — fetch the public link again later.
+router.get('/:id/share-url', (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (!inv.public_token) return res.status(400).json({ error: 'Not sent yet — send it first to get a link.' });
+    res.json({ token: inv.public_token, path: '/i/' + inv.public_token });
+  } catch (err) {
+    console.error('[Invoices] share-url error:', err);
+    res.status(500).json({ error: 'Failed.' });
   }
 });
 
@@ -486,140 +548,9 @@ router.get('/:id/pdf', (req, res) => {
     const lines = getInvoiceLines(inv.id);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
-    const cc = inv.currency || 'GBP';
-
-    const filename = (inv.invoice_number || 'invoice') + '.pdf';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    doc.pipe(res);
-
-    const primary = branding.primary_colour || '#1B2A4A';
-
-    // Header band
-    doc.rect(0, 0, doc.page.width, 90).fill(primary);
-    let titleX = 40;
-    if (branding.logo_filename) {
-      const logoPath = path.join(brandingDir, branding.logo_filename);
-      if (fs.existsSync(logoPath) && /\.(png|jpe?g)$/i.test(branding.logo_filename)) {
-        try { doc.image(logoPath, 40, 22, { fit: [120, 46] }); titleX = 175; } catch (e) {}
-      }
-    }
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20)
-      .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Invoice', titleX, 28);
-    doc.font('Helvetica').fontSize(9)
-      .text('Invoice ' + (inv.invoice_number || ''), titleX, 56)
-      .text('Issued ' + (inv.issue_date || ''), titleX, 70);
-
-    // Status banner
-    let topY = 92;
-    if (inv.status === 'paid') {
-      doc.rect(0, topY, doc.page.width, 18).fill('#10B981');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('PAID', 40, topY + 4);
-      topY += 18;
-    } else if (inv.status === 'void') {
-      doc.rect(0, topY, doc.page.width, 18).fill('#94A3B8');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('VOID', 40, topY + 4);
-      topY += 18;
-    } else if (overdueState(inv)) {
-      doc.rect(0, topY, doc.page.width, 18).fill('#EF4444');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('OVERDUE', 40, topY + 4);
-      topY += 18;
-    }
-
-    // Two-column block: bill to + company details + dates
-    let y = topY + 20;
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(11).text('Bill to', 40, y);
-    doc.font('Helvetica').fontSize(10).fillColor('#333333');
-    let by = y + 14;
-    if (inv.client_name) { doc.text(inv.client_name, 40, by); by += 13; }
-    if (inv.client_address) {
-      const lns = String(inv.client_address).split(/\r?\n/);
-      for (const ln of lns) { doc.text(ln, 40, by); by += 12; }
-    }
-    if (inv.client_email) { doc.text(inv.client_email, 40, by); by += 12; }
-
-    // Right column
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(11).text('Invoice details', 320, y, { width: 235 });
-    doc.font('Helvetica').fontSize(10).fillColor('#333333');
-    doc.text('Invoice no.: ' + (inv.invoice_number || ''), 320, y + 14, { width: 235 });
-    doc.text('Issued: ' + (inv.issue_date || ''), 320, y + 28, { width: 235 });
-    doc.text('Due: ' + (inv.due_date || ''), 320, y + 42, { width: 235 });
-    if (branding.company_address) {
-      const lns = String(branding.company_address).split(/\r?\n/).slice(0, 3);
-      let ry = y + 60;
-      for (const ln of lns) { doc.text(ln, 320, ry, { width: 235 }); ry += 12; }
-    }
-
-    y = Math.max(by, y + 80) + 10;
-
-    // Lines header
-    doc.rect(40, y, 515, 18).fill(primary);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
-    doc.text('Description', 44, y + 5);
-    doc.text('Qty',  330, y + 5, { width: 40, align: 'right' });
-    doc.text('Unit', 375, y + 5);
-    doc.text('Rate', 410, y + 5, { width: 65, align: 'right' });
-    doc.text('Total',480, y + 5, { width: 75, align: 'right' });
-    y += 18;
-    doc.fillColor('#111111').font('Helvetica').fontSize(9);
-
-    function ensureRoom(h) {
-      if (y + h > doc.page.height - 80) { doc.addPage(); y = 50; }
-    }
-
-    for (const ln of lines) {
-      const descText = (ln.item ? ln.item + ' — ' : '') + (ln.description || '');
-      const descH = doc.heightOfString(descText, { width: 280 });
-      const rowH = Math.max(14, descH + 4);
-      ensureRoom(rowH);
-      doc.text(descText, 44, y + 2, { width: 280 });
-      doc.text(String(num(ln.qty)), 330, y + 2, { width: 40, align: 'right' });
-      doc.text(String(ln.unit || ''), 375, y + 2);
-      doc.text(fmtMoney(ln.rate, cc), 410, y + 2, { width: 65, align: 'right' });
-      doc.text(fmtMoney(ln.line_total, cc), 480, y + 2, { width: 75, align: 'right' });
-      doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(40, y + rowH).lineTo(555, y + rowH).stroke();
-      y += rowH;
-    }
-
-    // Summary
-    ensureRoom(110);
-    y += 10;
-    doc.rect(310, y, 245, 100).strokeColor(primary).lineWidth(1).stroke();
-    let sy = y + 8;
-    function row(label, value, bold) {
-      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor('#111111');
-      doc.text(label, 318, sy, { width: 140 });
-      doc.text(value, 460, sy, { width: 90, align: 'right' });
-      sy += 16;
-    }
-    row('Net', fmtMoney(inv.net_total, cc));
-    if (num(inv.discount_amount) > 0) row('Discount', '−' + fmtMoney(inv.discount_amount, cc));
-    row('VAT (' + num(inv.vat_pct).toFixed(1) + '%)', fmtMoney(inv.vat_amount, cc));
-    sy += 2;
-    doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();
-    sy += 4;
-    row('Amount due', fmtMoney(inv.grand_total, cc), true);
-    if (inv.status === 'paid' && num(inv.paid_amount) > 0) {
-      row('Paid', fmtMoney(inv.paid_amount, cc));
-    }
-    y += 110;
-
-    // Notes / terms
-    if (inv.notes) {
-      ensureRoom(60);
-      y += 8;
-      doc.font('Helvetica-Bold').fontSize(10).text('Payment terms / notes', 40, y); y += 14;
-      doc.font('Helvetica').fontSize(9).fillColor('#333333').text(inv.notes, 40, y, { width: 515 });
-      doc.fillColor('#111111');
-    }
-
-    const footY = doc.page.height - 50;
-    doc.font('Helvetica').fontSize(8).fillColor('#666666')
-      .text(branding.footer_text || ('Payment due by ' + (inv.due_date || 'the due date') + '. Please reference the invoice number when paying.'), 40, footY, { width: 515, align: 'center' });
-
-    doc.end();
+    // Rendering lives in invoicePdf.js so the public /i/<token> page and the
+    // email attachment use the identical document.
+    streamInvoicePdf(res, inv, lines, branding, userInfo);
   } catch (err) {
     console.error('[Invoices] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });

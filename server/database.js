@@ -658,6 +658,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 
+  -- A2: every Office-in-a-Box email send (or attempt) is logged here.
+  -- status: 'sent' | 'failed' | 'manual' (manual = SMTP not configured or no
+  -- recipient — the builder shares the link by WhatsApp/text instead).
+  CREATE TABLE IF NOT EXISTS mail_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    type TEXT,
+    recipient TEXT,
+    subject TEXT,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_mail_log_user ON mail_log(user_id, created_at);
+
   -- A1 (Office in a Box): questions a client asks from the public quote page.
   -- Read by the owner from the quote editor; read_at flips when viewed.
   CREATE TABLE IF NOT EXISTS quote_messages (
@@ -753,6 +768,10 @@ const migrations = [
   { column: 'acceptance_signature', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_signature TEXT" },
   { column: 'acceptance_ip', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_ip TEXT" },
   { column: 'acceptance_user_agent', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_user_agent TEXT" },
+  // A2: email delivery — quotes need a recipient; invoices get a public
+  // /i/<token> view page (the shareable link, and where A3's Pay now lives).
+  { column: 'client_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN client_email TEXT" },
+  { column: 'public_token', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN public_token TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {
@@ -771,8 +790,9 @@ for (const { column, table, sql } of migrations) {
 // database the column doesn't exist until the ALTER TABLE above has run.
 try {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_public_token ON quotes(public_token)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_public_token ON invoices(public_token)');
 } catch (err) {
-  console.log('Index idx_quotes_public_token:', err.message);
+  console.log('Public token indexes:', err.message);
 }
 
 module.exports = db;

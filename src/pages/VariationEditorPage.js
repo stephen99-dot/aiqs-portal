@@ -45,6 +45,7 @@ function Inner() {
   const [approval, setApproval] = useState(null);   // {name, email, signature, ip, at}
   const [decline, setDecline] = useState(null);     // {reason, at}
   const [approvalToken, setApprovalToken] = useState('');
+  const [emailedTo, setEmailedTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -137,11 +138,18 @@ function Inner() {
 
   const send = async () => {
     if (!variationId) { setError('Save first.'); return; }
+    // A2: optional email delivery — blank just mints the shareable link.
+    const email = window.prompt("Client's email to send it to (leave blank to share the link by WhatsApp/text instead):", '');
+    if (email === null) return; // cancelled
     setSending(true); setError('');
     try {
-      const r = await apiFetch('/change-orders/' + variationId + '/send', { method: 'POST' });
+      const r = await apiFetch('/change-orders/' + variationId + '/send', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim() || null }),
+      });
       setStatus('sent');
       setApprovalToken(r.approval_token);
+      if (r.emailed_to) setEmailedTo(r.emailed_to);
     } catch (e) { setError(e.message); }
     finally { setSending(false); }
   };
@@ -224,7 +232,8 @@ function Inner() {
         <div style={{ background: t.warningBg, border: '1px solid ' + t.warning + '55', borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <div style={{ color: t.warning, fontWeight: 600, marginBottom: 6 }}>Awaiting client approval</div>
           <div style={{ fontSize: 13, color: t.text, marginBottom: 10 }}>
-            Share this link with your client. When they approve, this row locks and forms part of the contract.
+            {emailedTo ? 'Emailed to ' + emailedTo + '. You can also share' : 'Share'} this link with your client — WhatsApp or text works.
+            When they approve, this row locks and forms part of the contract.
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <code style={{ flex: 1, minWidth: 200, background: t.bg, padding: '8px 10px', borderRadius: 6, fontSize: 12, color: t.text, border: '1px solid ' + t.border, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

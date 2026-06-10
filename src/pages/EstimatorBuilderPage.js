@@ -168,6 +168,7 @@ function EstimatorBuilderPageInner() {
   const [quoteNumber, setQuoteNumber] = useState('');
   const [status, setStatus] = useState('draft');
   const [clientName, setClientName] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
   const [projectName, setProjectName] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState([]);
@@ -196,6 +197,7 @@ function EstimatorBuilderPageInner() {
         setQuoteId(q.id);
         setQuoteNumber(q.quote_number || '');
         setClientName(q.client_name || '');
+        setClientEmail(q.client_email || '');
         setProjectName(q.project_name || '');
         setProjectType(q.project_type || '');
         setCurrency(q.currency || 'GBP');
@@ -343,6 +345,7 @@ function EstimatorBuilderPageInner() {
           method: 'POST',
           body: JSON.stringify({
             client_name: clientName,
+            client_email: clientEmail,
             project_name: projectName || 'Untitled quote',
             project_type: projectType,
             currency,
@@ -371,6 +374,7 @@ function EstimatorBuilderPageInner() {
           method: 'PATCH',
           body: JSON.stringify({
             client_name: clientName,
+            client_email: clientEmail,
             project_name: projectName,
             project_type: projectType,
             currency,
@@ -407,9 +411,12 @@ function EstimatorBuilderPageInner() {
     setError('');
     try {
       await save();
-      const r = await apiFetch('/estimator/quotes/' + quoteId + '/send', { method: 'POST' });
+      const r = await apiFetch('/estimator/quotes/' + quoteId + '/send', {
+        method: 'POST',
+        body: JSON.stringify({ client_email: clientEmail || null }),
+      });
       setStatus(r.status || 'sent');
-      setShare({ url: window.location.origin + r.path });
+      setShare({ url: window.location.origin + r.path, emailedTo: r.emailed_to });
     } catch (e) {
       setError(e.message || 'Failed to send the quote');
     } finally {
@@ -638,6 +645,10 @@ function EstimatorBuilderPageInner() {
             <input value={clientName} onChange={e => setClientName(e.target.value)} style={input(t)} placeholder="e.g. Mr & Mrs Smith" />
           </div>
           <div>
+            <label style={lbl(t)}>Client email <span style={{ fontWeight: 400, color: t.textMuted }}>(so we can email the quote)</span></label>
+            <input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} style={input(t)} placeholder="e.g. dave@example.com" />
+          </div>
+          <div>
             <label style={lbl(t)}>Project name</label>
             <input value={projectName} onChange={e => setProjectName(e.target.value)} style={input(t)} placeholder="e.g. Kitchen extension" />
           </div>
@@ -831,7 +842,7 @@ function EstimatorBuilderPageInner() {
         <ShareLinkModal
           t={t}
           url={share.url}
-          title="Send the quote to your client"
+          title={share.emailedTo ? ('Emailed to ' + share.emailedTo) : 'Send the quote to your client'}
           message="Here’s your quote — you can view and accept it here:"
           onClose={() => setShare(null)}
         />

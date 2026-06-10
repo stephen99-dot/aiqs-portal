@@ -28,6 +28,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { streamQuotePdf } = require('./quotePdf');
 const { rateLimit, clientIp } = require('./publicRateLimit');
+const mailer = require('./mailer');
 
 const router = express.Router();
 
@@ -245,6 +246,23 @@ router.post('/:token/accept', postLimit, (req, res) => {
     });
     txn();
 
+    // A2: email the builder. After the response — the client shouldn't wait on SMTP.
+    const owner = getUserDisplay(q.user_id);
+    mailer.sendMail({
+      userId: q.user_id,
+      type: 'quote_accepted',
+      to: owner?.email,
+      subject: name + ' accepted your quote for ' + fmtMoney(q.grand_total, q.currency),
+      heading: 'Good news — your quote was accepted',
+      paragraphs: [
+        name + ' accepted quote ' + (q.quote_number || '') + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
+        'Total: ' + fmtMoney(q.grand_total, q.currency) + '. Signed: ' + signature + '.',
+        'The job has been created in Finance with the budget filled in from the quote.',
+      ],
+      ctaText: 'Open the job',
+      ctaUrl: mailer.BASE_URL + '/finance/jobs/' + jobId,
+    }).catch(() => {});
+
     res.json({ ok: true, accepted_at: new Date().toISOString() });
   } catch (err) {
     console.error('[QuotePublic] accept error:', err);
@@ -278,6 +296,24 @@ router.post('/:token/question', postLimit, (req, res) => {
       );
     });
     txn();
+
+    // A2: email the builder, reply-to the client so they can answer directly.
+    const owner = getUserDisplay(q.user_id);
+    mailer.sendMail({
+      userId: q.user_id,
+      type: 'quote_question',
+      to: owner?.email,
+      replyTo: email || undefined,
+      subject: name + ' has a question about quote ' + (q.quote_number || ''),
+      heading: 'Question about your quote',
+      paragraphs: [
+        name + (email ? ' (' + email + ')' : '') + ' asked about quote ' + (q.quote_number || '') + ':',
+        '"' + message + '"',
+        'Reply to this email to answer them directly.',
+      ],
+      ctaText: 'Open the quote',
+      ctaUrl: mailer.BASE_URL + '/estimator/quote/' + q.id,
+    }).catch(() => {});
 
     res.json({ ok: true });
   } catch (err) {

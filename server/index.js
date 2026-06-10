@@ -25,6 +25,7 @@ const estimatorRoutes = require('./estimatorRoutes');
 const financeRoutes = require('./financeRoutes');
 const estimatorVariationRoutes = require('./estimatorVariationRoutes');
 const quotePublicRoutes = require('./quotePublicRoutes');
+const invoicePublicRoutes = require('./invoicePublicRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
 const documentsRoutes = require('./documentsRoutes');
@@ -69,6 +70,8 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 // A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
 // links), rate-limited inside the router.
 app.use('/api/public/quotes', quotePublicRoutes);
+// A2: public invoice view (/i/<token>) — same posture.
+app.use('/api/public/invoices', invoicePublicRoutes);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);

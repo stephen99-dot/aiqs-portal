@@ -34,6 +34,7 @@ const PDFDocument = require('pdfkit');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const mailer = require('./mailer');
 
 const ownerRouter = express.Router();
 const publicRouter = express.Router();
@@ -418,8 +419,10 @@ ownerRouter.delete('/:id', (req, res) => {
   }
 });
 
-// POST /api/variations/:id/send — issue an approval token, status -> sent
-ownerRouter.post('/:id/send', (req, res) => {
+// POST /api/variations/:id/send — issue an approval token, status -> sent.
+// A2: body may carry { email } — the client gets the approval link by email
+// when SMTP is configured; the link is always returned for WhatsApp/text.
+ownerRouter.post('/:id/send', async (req, res) => {
   try {
     const v = getVariation(req.params.id, req.user.id);
     if (!v) return res.status(404).json({ error: 'Variation not found.' });
@@ -429,7 +432,32 @@ ownerRouter.post('/:id/send', (req, res) => {
     db.prepare(
       'UPDATE estimator_variations SET status=?, approval_token=?, sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?'
     ).run('sent', token, v.id);
-    res.json({ id: v.id, status: 'sent', approval_token: token });
+
+    const clientEmail = (req.body && req.body.email) ? String(req.body.email).trim().slice(0, 200) : null;
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'your builder';
+    const job = db.prepare('SELECT name FROM estimator_jobs WHERE id = ?').get(v.job_id);
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'variation_send',
+      to: clientEmail,
+      subject: 'Change to the job' + (job?.name ? ' at ' + job.name : '') + ' — approval needed',
+      heading: 'A change to your job needs your approval',
+      paragraphs: [
+        companyName + ' has priced a change to the job' + (job?.name ? ' "' + job.name + '"' : '') + (v.title ? ': ' + v.title : '') + '.',
+        'Cost of the change: ' + fmtMoney(v.grand_total, v.currency) + '.',
+        'Tap the button to see the details and approve or decline it.',
+      ],
+      ctaText: 'Review the change',
+      ctaUrl: mailer.BASE_URL + '/v/' + token,
+    });
+
+    res.json({
+      id: v.id, status: 'sent', approval_token: token,
+      delivery: mail.delivery,
+      emailed_to: mail.delivery === 'email' ? clientEmail : null,
+    });
   } catch (err) {
     console.error('[Variations] send error:', err);
     res.status(500).json({ error: 'Failed to send variation.' });
@@ -623,6 +651,36 @@ function findByToken(token) {
   return row;
 }
 
+// A2: bell notification + email to the builder when the client decides.
+function notifyOwnerOfDecision(v, decision, clientName, reason) {
+  try {
+    const job = db.prepare('SELECT name FROM estimator_jobs WHERE id = ?').get(v.job_id);
+    const jobLabel = job?.name ? ' on ' + job.name : '';
+    const summary = decision === 'approved'
+      ? (clientName || 'The client') + ' approved the change' + jobLabel + ' for ' + fmtMoney(v.grand_total, v.currency) + ' (' + (v.vo_number || '') + ').'
+      : 'The client declined the change' + jobLabel + ' (' + (v.vo_number || '') + ')' + (reason ? ': "' + reason.slice(0, 140) + '"' : '.');
+    db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(uuidv4(), v.user_id, summary);
+
+    const owner = getUserDisplay(v.user_id);
+    mailer.sendMail({
+      userId: v.user_id,
+      type: 'variation_' + decision,
+      to: owner?.email,
+      subject: decision === 'approved'
+        ? 'Change approved' + jobLabel + ' — ' + fmtMoney(v.grand_total, v.currency)
+        : 'Change declined' + jobLabel,
+      heading: decision === 'approved' ? 'Your change was approved' : 'Your change was declined',
+      paragraphs: [summary, decision === 'approved'
+        ? 'The signed approval is saved on the variation — it forms part of the contract.'
+        : 'You can duplicate it, adjust the price, and send a revised version.'],
+      ctaText: 'Open the variation',
+      ctaUrl: mailer.BASE_URL + '/change-orders/' + v.id,
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('[Variations] owner notification failed:', err.message);
+  }
+}
+
 // Stream the builder's logo, but only when invoked from a valid approval link.
 // Lets the public approval page render a branded header without exposing the
 // auth-gated /api/branding/logo/:userId route.
@@ -683,6 +741,9 @@ publicRouter.post('/:token/approve', (req, res) => {
       + 'updated_at=CURRENT_TIMESTAMP WHERE id=? AND approval_token=?'
     ).run('approved', name, email, signature, ip, ua, v.id, req.params.token);
 
+    // A2: tell the builder — notification bell + email.
+    notifyOwnerOfDecision(v, 'approved', name);
+
     res.json({ ok: true, approved_at: new Date().toISOString() });
   } catch (err) {
     console.error('[Variations] approve error:', err);
@@ -701,6 +762,9 @@ publicRouter.post('/:token/decline', (req, res) => {
       'UPDATE estimator_variations SET status=?, decline_reason=?, decline_at=CURRENT_TIMESTAMP, '
       + 'updated_at=CURRENT_TIMESTAMP WHERE id=? AND approval_token=?'
     ).run('declined', reason || null, v.id, req.params.token);
+
+    // A2: tell the builder — notification bell + email.
+    notifyOwnerOfDecision(v, 'declined', null, reason);
 
     res.json({ ok: true });
   } catch (err) {

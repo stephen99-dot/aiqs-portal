@@ -33,6 +33,7 @@ const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 const { streamQuotePdf } = require('./quotePdf');
+const mailer = require('./mailer');
 
 const router = express.Router();
 
@@ -534,13 +535,13 @@ router.post('/quotes', (req, res) => {
     const quoteNumber = b.quote_number || genQuoteNumber();
     const txn = db.transaction(() => {
       db.prepare(
-        'INSERT INTO quotes (id, user_id, client_name, project_name, project_type, currency, input_text, '
+        'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
         + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
         + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         id, req.user.id,
-        b.client_name || null, b.project_name || 'Untitled quote', b.project_type || null,
+        b.client_name || null, b.client_email || null, b.project_name || 'Untitled quote', b.project_type || null,
         b.currency || 'GBP', b.input_text || null,
         totals.net_total, totals.ohp_pct, totals.ohp_amount,
         totals.contingency_pct, totals.contingency_amount,
@@ -601,7 +602,7 @@ router.patch('/quotes/:id', (req, res) => {
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
     if (rejectIfQuoteLocked(q, res)) return;
     const b = req.body || {};
-    const allowed = ['client_name', 'project_name', 'project_type', 'currency', 'notes', 'status', 'ohp_pct', 'contingency_pct', 'vat_pct', 'target_margin_pct'];
+    const allowed = ['client_name', 'client_email', 'project_name', 'project_type', 'currency', 'notes', 'status', 'ohp_pct', 'contingency_pct', 'vat_pct', 'target_margin_pct'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {
@@ -737,19 +738,48 @@ router.delete('/quotes/:id', (req, res) => {
 // ─── A1: send the quote — public acceptance link ─────────────────────────────
 
 // POST /api/estimator/quotes/:id/send — mint the share token (idempotent),
-// draft -> sent. Email delivery arrives with A2 (mailer.js); until then the
-// UI offers the copyable link for WhatsApp/text, which it keeps regardless.
-router.post('/quotes/:id/send', (req, res) => {
+// draft -> sent, and (A2) email the client the acceptance link when SMTP and
+// a client email exist. The UI always offers the copyable link for
+// WhatsApp/text regardless of delivery.
+router.post('/quotes/:id/send', async (req, res) => {
   try {
     const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
     if (q.status === 'accepted') return res.status(400).json({ error: 'This quote has already been accepted.' });
     const token = q.public_token || newShareToken();
+    const clientEmail = (req.body && req.body.client_email != null)
+      ? String(req.body.client_email).trim().slice(0, 200) || null
+      : q.client_email;
     db.prepare(
       "UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, "
-      + 'public_token = ?, sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(token, q.id);
-    res.json({ id: q.id, status: q.status === 'draft' ? 'sent' : q.status, token, path: '/q/' + token, delivery: 'manual' });
+      + 'public_token = ?, client_email = ?, sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(token, clientEmail, q.id);
+
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'your builder';
+    const link = mailer.BASE_URL + '/q/' + token;
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'quote_send',
+      to: clientEmail,
+      subject: 'Quote ' + (q.quote_number || '') + ' from ' + companyName,
+      heading: 'Your quote' + (q.project_name ? ' — ' + q.project_name : ''),
+      paragraphs: [
+        companyName + ' has sent you a quote' + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
+        'Total: ' + fmtMoney(q.grand_total, q.currency) + '.',
+        'Tap the button to see the full price breakdown, download the PDF, ask a question, or accept it online.',
+      ],
+      ctaText: 'View and accept your quote',
+      ctaUrl: link,
+    });
+
+    res.json({
+      id: q.id, status: q.status === 'draft' ? 'sent' : q.status,
+      token, path: '/q/' + token,
+      delivery: mail.delivery,
+      emailed_to: mail.delivery === 'email' ? clientEmail : null,
+    });
   } catch (err) {
     console.error('[Estimator] send error:', err);
     res.status(500).json({ error: 'Failed to send the quote.' });

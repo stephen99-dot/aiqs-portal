@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import ShareLinkModal from '../components/ShareLinkModal';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function fmt(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -33,6 +34,8 @@ function Inner() {
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState('');
   const [stripeLink, setStripeLink] = useState('');
+  const [share, setShare] = useState(null);   // { url, emailedTo } after sending
+  const [sending, setSending] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -89,10 +92,24 @@ function Inner() {
     finally { setSaving(false); }
   };
 
+  // Save any edits first, then send: emails the client when the server has
+  // SMTP + a client email, and always opens the share sheet with the /i/ link.
   const send = async () => {
+    setSending(true); setError('');
     try {
-      await apiFetch('/invoices/' + id + '/send', { method: 'POST' });
+      if (dirty) await save();
+      const r = await apiFetch('/invoices/' + id + '/send', { method: 'POST' });
+      setShare({ url: window.location.origin + r.path, emailedTo: r.emailed_to });
       await load();
+    } catch (e) { setError(e.message); }
+    finally { setSending(false); }
+  };
+
+  // Re-open the share sheet for an already-sent invoice.
+  const shareLink = async () => {
+    try {
+      const r = await apiFetch('/invoices/' + id + '/share-url');
+      setShare({ url: window.location.origin + r.path, emailedTo: null });
     } catch (e) { setError(e.message); }
   };
 
@@ -171,8 +188,9 @@ function Inner() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {!readOnly && <button onClick={save} disabled={saving || !dirty} style={btnPrimary(t, saving || !dirty)}>{saving ? 'Saving…' : (dirty ? 'Save changes' : 'Saved')}</button>}
-          {invoice.status === 'draft' && !readOnly && <button onClick={send} style={btnPrimary(t)}>Mark sent</button>}
-          {(invoice.status === 'sent' || invoice.status === 'draft') && !readOnly && <button onClick={markPaid} style={{ ...btnPrimary(t), background: t.success }}>Mark paid</button>}
+          {invoice.status === 'draft' && !readOnly && <button onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send the invoice'}</button>}
+          {invoice.status === 'sent' && !readOnly && <button onClick={shareLink} style={btnSecondary(t)}>Share link</button>}
+          {(invoice.status === 'sent' || invoice.status === 'draft') && !readOnly && <button onClick={markPaid} style={{ ...btnPrimary(t), background: t.success }}>Mark as paid</button>}
           <button onClick={downloadPdf} style={btnSecondary(t)}>PDF</button>
           <button onClick={duplicate} style={btnSecondary(t)}>Duplicate</button>
           {invoice.status !== 'void' && invoice.status !== 'paid' && <button onClick={voidIt} style={btnSecondary(t)}>Void</button>}
@@ -299,6 +317,16 @@ function Inner() {
           </table>
         </div>
       </div>
+
+      {share && (
+        <ShareLinkModal
+          t={t}
+          url={share.url}
+          title={share.emailedTo ? ('Emailed to ' + share.emailedTo) : 'Send the invoice to your client'}
+          message="Here’s your invoice — you can view and download it here:"
+          onClose={() => setShare(null)}
+        />
+      )}
 
       {/* Summary + notes */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
