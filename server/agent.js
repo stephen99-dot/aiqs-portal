@@ -795,6 +795,26 @@ async function runGenerationForRun(runId, opts = {}) {
     ...(intakeIsIreland ? { currency: 'EUR' } : {}),
   });
 
+  // Phase 9 verifier (ported to the Atlas path): a final deterministic gate over
+  // the takeoff. We don't block generation here (the agent already self-corrected
+  // and the user reviewed), but error-level failures are surfaced into the
+  // findings report and emitted so the QS sees them rather than shipping silently.
+  let verification = null;
+  try {
+    const { verifyTakeoff } = require('./verifyTakeoff');
+    verification = verifyTakeoff({
+      items,
+      floorAreaM2: run.floor_area_m2 || null,
+      projectType: run.project_type || '',
+      pricedResult: priced,
+    });
+    const errs = verification.failures.filter((f) => f.severity === 'error');
+    if (errs.length) {
+      console.warn(`[Agent ${runId}] verifier flagged ${errs.length} issue(s): ${errs.map((e) => e.code).join(', ')}`);
+      emit(runId, { type: 'activity', activity: `Verification flagged ${errs.length} issue(s) for review` });
+    }
+  } catch (e) { console.error(`[Agent ${runId}] verify error:`, e.message); }
+
   const projectName = run.project_type || 'Project';
   const safeName = projectName.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 50);
   const ts = Date.now();
@@ -824,6 +844,22 @@ async function runGenerationForRun(runId, opts = {}) {
       floor_area_m2: run.floor_area_m2 || null,
     });
     if (excelBuf && excelBuf.length > 100) {
+      // Phase 9 recalc gate (ported to the Atlas path): the workbook's summed
+      // line totals must reconcile to the pricer's construction total to the
+      // penny. Warns by default; STRICT_RECALC=1 hard-fails generation.
+      try {
+        const { assertBOQMatches } = require('./recalcGate');
+        const rc = await assertBOQMatches(excelBuf, priced.summary.construction_total);
+        if (!rc.ok) {
+          console.error(`[Agent ${runId}] RECALC MISMATCH: sheet ${rc.lineSum} vs pricer ${rc.expected} (diff ${rc.diff})`);
+          if (process.env.STRICT_RECALC === '1') throw new Error(`BOQ recalc mismatch (diff ${rc.diff})`);
+        } else {
+          console.log(`[Agent ${runId}] Recalc OK — ${rc.rows} lines reconcile to ${rc.expected}`);
+        }
+      } catch (recErr) {
+        if (process.env.STRICT_RECALC === '1') throw recErr;
+        console.error(`[Agent ${runId}] recalc gate:`, recErr.message);
+      }
       const fname = `BOQ-${safeName}-${ts}.xlsx`;
       fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
       downloads.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}`, size: excelBuf.length });
@@ -877,6 +913,18 @@ async function runGenerationForRun(runId, opts = {}) {
       currency: sym,
     },
   };
+
+  // Surface verifier error flags into the findings so the QS sees them before
+  // issuing — never ship silently with deterministic failures.
+  if (verification && !verification.ok) {
+    const errs = verification.failures.filter((f) => f.severity === 'error');
+    if (errs.length) {
+      findingsObj.key_findings = [
+        ...(findingsObj.key_findings || []),
+        { title: 'Automated verification flags — review before issue', detail: 'The deterministic verifier flagged the following; confirm or correct each:', items: errs.map((e) => e.message) },
+      ];
+    }
+  }
 
   try {
     const wordBuf = await findingsGen.generateFindingsReport(findingsObj, '', projectName, _branding);
