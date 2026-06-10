@@ -1867,6 +1867,12 @@ ${summary}`);
     messages.push({ role: 'user', content: currentContent });
 
     let systemPrompt = buildSystemPrompt(userId, false);
+    // Capture the stable base (identity + rules + rate library + client insights)
+    // before any per-turn injections are appended below. All the `systemPrompt +=`
+    // sites only APPEND, so systemPrompt always starts with this exact string —
+    // letting us cache the (large, ~unchanging-per-user) base and keep the volatile
+    // per-turn tail after the cache breakpoint (Phase 2 prompt caching).
+    const stableSystemBase = systemPrompt;
     const hasFiles = fileNames.length > 0;
 
     // ── USER MEMORIES: semantic/FTS retrieval of user-confirmed memories ──
@@ -2028,10 +2034,21 @@ ${summary}`);
       ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]
       : null;
     let useTools = !!webTools;
+    // Split the system prompt into [cached stable base, uncached per-turn tail] so
+    // the large rate-library/insights base is read from cache on this user's
+    // subsequent turns. The base is byte-identical across turns; the tail (memory,
+    // intake, drawing ground-truth, takeoff figures) sits after the breakpoint.
+    const perTurnTail = systemPrompt.slice(stableSystemBase.length);
+    const cachedSystem = perTurnTail
+      ? [
+          { type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: perTurnTail },
+        ]
+      : [{ type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } }];
     const buildBody = (model, budget) => ({
       model, max_tokens: 16000,
       thinking: { type: 'enabled', budget_tokens: budget },
-      system: systemPrompt, messages,
+      system: cachedSystem, messages,
       ...(useTools && webTools ? { tools: webTools } : {}),
     });
 

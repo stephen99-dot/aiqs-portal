@@ -145,6 +145,13 @@ async function callClaudeStreaming({ apiKey, system, messages, tools, runId, ite
     maxTokens: MAX_TOKENS,
     thinking: { type: 'enabled', budget_tokens: THINKING_BUDGET },
     stream: true,
+    // Phase 2 caching: the system prompt is a constant and the message history
+    // (drawings + rendered page images in tool_results) grows every iteration but
+    // its prefix is byte-identical to the previous turn. Cache the system block and
+    // place an incremental breakpoint on the last message so each iteration reads
+    // the prior prefix from cache instead of re-billing it at full input price.
+    cacheSystem: true,
+    cacheLastMessage: true,
     onEvent: (evt) => { try { emit(runId, evt); } catch (e) {} },
   });
 

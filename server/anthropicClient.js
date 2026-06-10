@@ -114,6 +114,25 @@ function withCachedMessages(messages) {
   return out;
 }
 
+// Incremental breakpoint: cache_control on the last content block of the LAST
+// message, regardless of type. Used by the agent loop so each iteration's growing
+// history (system + drawings + prior tool results) is read from cache on the next
+// iteration. The breakpoint "moves forward" as messages append.
+function withCachedLastMessage(messages) {
+  if (!Array.isArray(messages) || !messages.length) return messages;
+  const out = messages.map((m) => ({ ...m }));
+  const last = out[out.length - 1];
+  if (typeof last.content === 'string') {
+    last.content = [{ type: 'text', text: last.content, cache_control: EPHEMERAL }];
+  } else if (Array.isArray(last.content) && last.content.length) {
+    const content = last.content.map((b) => ({ ...b }));
+    content[content.length - 1] = { ...content[content.length - 1], cache_control: EPHEMERAL };
+    last.content = content;
+  }
+  out[out.length - 1] = last;
+  return out;
+}
+
 function readUsage(raw) {
   const u = (raw && raw.usage) || {};
   return {
@@ -140,9 +159,12 @@ function logUsage({ userId, action, detail, model, usage, cost }) {
 }
 
 // ── Request body assembly ───────────────────────────────────────────────────
-function buildBody({ model, system, messages, maxTokens, thinking, tools, toolChoice, effort, temperature, cacheSystem, cacheMessages }) {
+function buildBody({ model, system, messages, maxTokens, thinking, tools, toolChoice, effort, temperature, cacheSystem, cacheMessages, cacheLastMessage }) {
   const isFrontier = model === MODELS.FRONTIER || model.includes('fable');
-  const body = { model, max_tokens: maxTokens, messages: cacheMessages ? withCachedMessages(messages) : messages };
+  let msgs = messages;
+  if (cacheMessages) msgs = withCachedMessages(msgs);
+  if (cacheLastMessage) msgs = withCachedLastMessage(msgs);
+  const body = { model, max_tokens: maxTokens, messages: msgs };
   if (system) body.system = cacheSystem ? withCachedSystem(system) : system;
   if (tools && tools.length) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
@@ -329,7 +351,7 @@ async function callModel(opts) {
     model = MODELS.STANDARD,
     system, messages, maxTokens = 4096,
     thinking, tools, toolChoice, effort, temperature,
-    cacheSystem = false, cacheMessages = false,
+    cacheSystem = false, cacheMessages = false, cacheLastMessage = false,
     stream = false, onDelta, onEvent,
     apiKey, betaHeaders, maxAttempts = 3,
     userId, action, detail,
@@ -343,7 +365,7 @@ async function callModel(opts) {
     const body = buildBody({
       model, system, messages, maxTokens, thinking,
       tools: useTools ? tools : undefined, toolChoice: useTools ? toolChoice : undefined,
-      effort, temperature, cacheSystem, cacheMessages,
+      effort, temperature, cacheSystem, cacheMessages, cacheLastMessage,
     });
 
     result = stream
