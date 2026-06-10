@@ -330,10 +330,14 @@ router.post('/agent/:id/generate', authMiddleware, express.json(), async (req, r
     if (!run) return res.status(404).json({ error: 'Run not found' });
     if (run.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
     if (run.status === 'completed') {
-      // Already done — just return existing downloads
+      // Already done — return existing downloads. But if the run completed
+      // WITHOUT producing any files (the "click does nothing" case), fall
+      // through and regenerate rather than returning an empty list.
       let downloads = [];
       try { downloads = run.download_files ? JSON.parse(run.download_files) : []; } catch (e) {}
-      return res.json({ success: true, already_generated: true, downloads });
+      if (Array.isArray(downloads) && downloads.length > 0) {
+        return res.json({ success: true, already_generated: true, downloads });
+      }
     }
 
     agent.updateRun(req.params.id, { status: 'generating' });
