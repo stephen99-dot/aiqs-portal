@@ -1437,4 +1437,75 @@ router.put('/my-messages/:id/dismiss', authMiddleware, (req, res) => {
   }
 });
 
+// ── Admin cost dashboard (Phase 7) ─────────────────────────────────────────
+// Spend by model / action / user, cache hit-rate, and per-drawing-job cost,
+// all derived from usage_log. No new infrastructure.
+router.get('/admin/costs', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const num = (v) => Number(v || 0);
+    const day = "created_at >= date('now')";
+    const month = "created_at >= date('now','start of month')";
+
+    const period = (where) => db.prepare(
+      `SELECT COALESCE(SUM(cost_estimate),0) AS cost, COUNT(*) AS calls FROM usage_log WHERE ${where}`
+    ).get();
+
+    const byModel = db.prepare(
+      `SELECT COALESCE(model_used,'(unknown)') AS model, COALESCE(model_tier,'') AS tier,
+              COUNT(*) AS calls, COALESCE(SUM(cost_estimate),0) AS cost,
+              COALESCE(SUM(tokens_in),0) AS tokens_in, COALESCE(SUM(tokens_out),0) AS tokens_out
+       FROM usage_log WHERE ${month} GROUP BY model_used, model_tier ORDER BY cost DESC`
+    ).all();
+
+    const byAction = db.prepare(
+      `SELECT COALESCE(action,'(none)') AS action, COUNT(*) AS calls, COALESCE(SUM(cost_estimate),0) AS cost
+       FROM usage_log WHERE ${month} GROUP BY action ORDER BY cost DESC`
+    ).all();
+
+    const byUser = db.prepare(
+      `SELECT u.id AS user_id, COALESCE(u.email,'(unknown)') AS email, COALESCE(u.full_name,'') AS name,
+              COUNT(*) AS calls, COALESCE(SUM(ul.cost_estimate),0) AS cost
+       FROM usage_log ul LEFT JOIN users u ON u.id = ul.user_id
+       WHERE ul.${month} GROUP BY ul.user_id ORDER BY cost DESC LIMIT 20`
+    ).all();
+
+    // Cache hit-rate = cached reads / total input tokens billed (read + write + uncached).
+    const c = db.prepare(
+      `SELECT COALESCE(SUM(cache_read_input_tokens),0) AS read,
+              COALESCE(SUM(cache_creation_input_tokens),0) AS write,
+              COALESCE(SUM(tokens_in),0) AS uncached
+       FROM usage_log WHERE ${month}`
+    ).get();
+    const totalIn = num(c.read) + num(c.write) + num(c.uncached);
+    const cache = {
+      read_tokens: num(c.read), write_tokens: num(c.write), uncached_tokens: num(c.uncached),
+      hit_rate: totalIn ? num(c.read) / totalIn : 0,
+    };
+
+    // Per-drawing-job: the deterministic pipeline cost (extraction + validation +
+    // findings) divided by the number of jobs (one extraction_pass per job).
+    const jobActions = "('extraction_pass','validation_pass','findings_pass')";
+    const jobAgg = db.prepare(
+      `SELECT COALESCE(SUM(cost_estimate),0) AS cost FROM usage_log WHERE ${month} AND action IN ${jobActions}`
+    ).get();
+    const jobCount = db.prepare(
+      `SELECT COUNT(*) AS n FROM usage_log WHERE ${month} AND action='extraction_pass'`
+    ).get().n;
+    const perDrawingJob = {
+      jobs: num(jobCount),
+      estimate: jobCount ? num(jobAgg.cost) / num(jobCount) : 0,
+    };
+
+    res.json({
+      today: period(day),
+      month: period(month),
+      byModel, byAction, byUser, cache, perDrawingJob,
+      currency: 'USD',
+    });
+  } catch (err) {
+    console.error('[admin/costs] error:', err.message);
+    res.status(500).json({ error: 'Failed to load cost data' });
+  }
+});
+
 module.exports = router;

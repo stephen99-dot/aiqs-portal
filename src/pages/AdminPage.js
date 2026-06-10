@@ -659,10 +659,91 @@ function SettingsTab({ t }) {
 // MAIN ADMIN PAGE
 // ═══════════════════════════════════════════════════
 
+// ── Costs tab (Phase 7) — API spend visibility from usage_log ──────────────
+function CostsTab({ t }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    apiFetch('/admin/costs')
+      .then(d => { setData(d); setError(''); })
+      .catch(err => { console.error('Failed to load costs:', err); setError('Failed to load cost data'); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const usd = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pct = (n) => (Number(n || 0) * 100).toFixed(1) + '%';
+  const num = (n) => Number(n || 0).toLocaleString('en-US');
+
+  if (loading) return <div style={{ color: t.textMuted, fontSize: 13, padding: 20 }}>Loading cost data…</div>;
+  if (error) return <div style={{ color: '#dc2626', fontSize: 13, padding: 20 }}>{error}</div>;
+  if (!data) return null;
+
+  const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11, fontWeight: 600, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.4, borderBottom: '1px solid ' + t.border };
+  const td = { padding: '8px 10px', fontSize: 13, color: t.text, borderBottom: '1px solid ' + t.border };
+  const tdR = { ...td, textAlign: 'right' };
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 18, boxShadow: t.shadowSm };
+
+  const Table = ({ title, rows, cols }) => (
+    <div style={{ ...card, marginTop: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 10 }}>{title}</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>{cols.map((c, i) => <th key={i} style={{ ...th, textAlign: c.right ? 'right' : 'left' }}>{c.label}</th>)}</tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td style={td} colSpan={cols.length}><span style={{ color: t.textMuted }}>No data yet this month.</span></td></tr>}
+            {rows.map((r, i) => <tr key={i}>{cols.map((c, j) => <td key={j} style={c.right ? tdR : td}>{c.render(r)}</td>)}</tr>)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+        <StatCard t={t} icon={PoundIcon} label="Spend today" value={usd(data.today.cost)} sub={num(data.today.calls) + ' calls'} />
+        <StatCard t={t} icon={BarChartIcon} label="Spend this month" value={usd(data.month.cost)} sub={num(data.month.calls) + ' calls'} />
+        <StatCard t={t} icon={ZapIcon} label="Cache hit-rate" value={pct(data.cache.hit_rate)} sub={num(data.cache.read_tokens) + ' tok cached'} />
+        <StatCard t={t} icon={FileTextIcon} label="Per drawing job" value={usd(data.perDrawingJob.estimate)} sub={num(data.perDrawingJob.jobs) + ' jobs (pipeline)'} />
+      </div>
+
+      <Table title="By model (this month)" rows={data.byModel} cols={[
+        { label: 'Model', render: r => r.model },
+        { label: 'Tier', render: r => r.tier || '—' },
+        { label: 'Calls', right: true, render: r => num(r.calls) },
+        { label: 'Tokens in', right: true, render: r => num(r.tokens_in) },
+        { label: 'Tokens out', right: true, render: r => num(r.tokens_out) },
+        { label: 'Cost', right: true, render: r => usd(r.cost) },
+      ]} />
+
+      <Table title="By action (this month)" rows={data.byAction} cols={[
+        { label: 'Action', render: r => r.action },
+        { label: 'Calls', right: true, render: r => num(r.calls) },
+        { label: 'Cost', right: true, render: r => usd(r.cost) },
+      ]} />
+
+      <Table title="Top users (this month)" rows={data.byUser} cols={[
+        { label: 'User', render: r => r.email + (r.name ? ' (' + r.name + ')' : '') },
+        { label: 'Calls', right: true, render: r => num(r.calls) },
+        { label: 'Cost', right: true, render: r => usd(r.cost) },
+      ]} />
+
+      <p style={{ fontSize: 11, color: t.textMuted, marginTop: 14 }}>
+        Cache hit-rate = cached read tokens ÷ all input tokens billed this month. Per-drawing-job is the deterministic
+        pipeline cost (extraction + validation + findings) ÷ number of jobs. Costs in {data.currency} from the
+        anthropicClient PRICING map.
+      </p>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -676,6 +757,7 @@ export default function AdminPage() {
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'submissions' && <SubmissionsTab t={t} />}
+      {tab === 'costs' && <CostsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'settings' && <SettingsTab t={t} />}
