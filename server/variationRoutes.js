@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const db = require('./database');
+const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
 const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
 const { getBrandingForUser } = require('./brandingRoutes');
@@ -319,31 +320,41 @@ Respond ONLY with this JSON structure:
     }
     content.push({ type: 'text', text: userPrompt });
 
-    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content }]
-      })
+    // Forced JSON via tool use — the model must emit the analysis as the tool's
+    // input, which is guaranteed-valid JSON (no fence-stripping / brace-matching).
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content }],
+      tools: [{
+        name: 'report_variation',
+        description: 'Report the priced variation analysis.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            additions: { type: 'number' },
+            omissions: { type: 'number' },
+            net_change: { type: 'number' },
+            scope_changes: { type: 'array', items: { type: 'string' } },
+            assumptions: { type: 'array', items: { type: 'string' } },
+            confidence: { type: 'string' },
+            notes: { type: 'string' },
+          },
+          required: ['additions', 'omissions', 'net_change'],
+        },
+      }],
+      toolChoice: { type: 'tool', name: 'report_variation' },
+      betaHeaders: 'pdfs-2024-09-25',
+      userId: req.user.id,
+      action: 'variation_analysis',
     });
 
-    const aiData = await apiResponse.json();
-    if (!apiResponse.ok) throw new Error(aiData.error?.message || 'Anthropic API error');
+    if (!result.ok) throw new Error(result.error?.error?.message || result.error?.message || 'Anthropic API error');
 
-    let analysis = {};
-    try {
-      const raw = aiData.content[0].text.replace(/```json|```/g, '').trim();
-      analysis = JSON.parse(raw);
-    } catch (e) {
-      console.error('[Variations] parse error:', e.message);
+    let analysis = result.json;
+    if (!analysis || typeof analysis !== 'object') {
+      console.error('[Variations] no tool output');
       analysis = { additions: 0, omissions: 0, net_change: 0, scope_changes: [], assumptions: [], notes: 'Analysis could not be parsed.' };
     }
 

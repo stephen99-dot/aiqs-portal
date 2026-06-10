@@ -716,6 +716,14 @@ const migrations = [
   // Materials Pricing: product thumbnails (catalogue default + per-supplier listing image).
   { column: 'image_url', table: 'materials', sql: "ALTER TABLE materials ADD COLUMN image_url TEXT" },
   { column: 'image_url', table: 'price_entries', sql: "ALTER TABLE price_entries ADD COLUMN image_url TEXT" },
+  // Phase 1: prompt-cache accounting + per-job model tier, all costing flows
+  // through anthropicClient.js's PRICING map.
+  { column: 'cache_creation_input_tokens', table: 'usage_log', sql: "ALTER TABLE usage_log ADD COLUMN cache_creation_input_tokens INTEGER DEFAULT 0" },
+  { column: 'cache_read_input_tokens', table: 'usage_log', sql: "ALTER TABLE usage_log ADD COLUMN cache_read_input_tokens INTEGER DEFAULT 0" },
+  { column: 'model_tier', table: 'usage_log', sql: "ALTER TABLE usage_log ADD COLUMN model_tier TEXT" },
+  // Phase 5: per-user model-tier override ('standard' | 'frontier') — admin-set,
+  // forces the agentic/Fable takeoff loop for that user's complex jobs.
+  { column: 'model_tier', table: 'users', sql: "ALTER TABLE users ADD COLUMN model_tier TEXT DEFAULT 'standard'" },
 ];
 
 for (const { column, table, sql } of migrations) {

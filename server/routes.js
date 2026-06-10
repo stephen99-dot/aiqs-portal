@@ -1437,4 +1437,143 @@ router.put('/my-messages/:id/dismiss', authMiddleware, (req, res) => {
   }
 });
 
+// ── Admin cost dashboard (Phase 7) ─────────────────────────────────────────
+// Spend by model / action / user, cache hit-rate, and per-drawing-job cost,
+// all derived from usage_log. No new infrastructure.
+router.get('/admin/costs', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const num = (v) => Number(v || 0);
+    const day = "created_at >= date('now')";
+    const month = "created_at >= date('now','start of month')";
+
+    const period = (where) => db.prepare(
+      `SELECT COALESCE(SUM(cost_estimate),0) AS cost, COUNT(*) AS calls FROM usage_log WHERE ${where}`
+    ).get();
+
+    const byModel = db.prepare(
+      `SELECT COALESCE(model_used,'(unknown)') AS model, COALESCE(model_tier,'') AS tier,
+              COUNT(*) AS calls, COALESCE(SUM(cost_estimate),0) AS cost,
+              COALESCE(SUM(tokens_in),0) AS tokens_in, COALESCE(SUM(tokens_out),0) AS tokens_out
+       FROM usage_log WHERE ${month} GROUP BY model_used, model_tier ORDER BY cost DESC`
+    ).all();
+
+    const byAction = db.prepare(
+      `SELECT COALESCE(action,'(none)') AS action, COUNT(*) AS calls, COALESCE(SUM(cost_estimate),0) AS cost
+       FROM usage_log WHERE ${month} GROUP BY action ORDER BY cost DESC`
+    ).all();
+
+    const byUser = db.prepare(
+      `SELECT u.id AS user_id, COALESCE(u.email,'(unknown)') AS email, COALESCE(u.full_name,'') AS name,
+              COUNT(*) AS calls, COALESCE(SUM(ul.cost_estimate),0) AS cost
+       FROM usage_log ul LEFT JOIN users u ON u.id = ul.user_id
+       WHERE ul.${month} GROUP BY ul.user_id ORDER BY cost DESC LIMIT 20`
+    ).all();
+
+    // Cache hit-rate = cached reads / total input tokens billed (read + write + uncached).
+    const c = db.prepare(
+      `SELECT COALESCE(SUM(cache_read_input_tokens),0) AS read,
+              COALESCE(SUM(cache_creation_input_tokens),0) AS write,
+              COALESCE(SUM(tokens_in),0) AS uncached
+       FROM usage_log WHERE ${month}`
+    ).get();
+    const totalIn = num(c.read) + num(c.write) + num(c.uncached);
+    const cache = {
+      read_tokens: num(c.read), write_tokens: num(c.write), uncached_tokens: num(c.uncached),
+      hit_rate: totalIn ? num(c.read) / totalIn : 0,
+    };
+
+    // Per-drawing-job: the deterministic pipeline cost (extraction + validation +
+    // findings) divided by the number of jobs (one extraction_pass per job).
+    const jobActions = "('extraction_pass','validation_pass','findings_pass')";
+    const jobAgg = db.prepare(
+      `SELECT COALESCE(SUM(cost_estimate),0) AS cost FROM usage_log WHERE ${month} AND action IN ${jobActions}`
+    ).get();
+    const jobCount = db.prepare(
+      `SELECT COUNT(*) AS n FROM usage_log WHERE ${month} AND action='extraction_pass'`
+    ).get().n;
+    const perDrawingJob = {
+      jobs: num(jobCount),
+      estimate: jobCount ? num(jobAgg.cost) / num(jobCount) : 0,
+    };
+
+    res.json({
+      today: period(day),
+      month: period(month),
+      byModel, byAction, byUser, cache, perDrawingJob,
+      currency: 'USD',
+    });
+  } catch (err) {
+    console.error('[admin/costs] error:', err.message);
+    res.status(500).json({ error: 'Failed to load cost data' });
+  }
+});
+
+// ── Client playbooks (Phase 10) ────────────────────────────────────────────
+const playbooks = require('./playbooks');
+
+// Get a user's playbook (migrating from legacy insights/rates on first access).
+router.get('/admin/playbooks/:userId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    let pb = playbooks.getPlaybook(db, req.params.userId);
+    if (!pb) { playbooks.migrateFromLegacy(db, req.params.userId); pb = playbooks.getPlaybook(db, req.params.userId); }
+    const row = db.prepare('SELECT version, updated_at FROM client_playbooks WHERE user_id=? ORDER BY version DESC LIMIT 1').get(req.params.userId);
+    res.json({ playbook: pb || playbooks.defaultPlaybook(), version: row ? row.version : 0, updated_at: row ? row.updated_at : null });
+  } catch (err) {
+    console.error('[admin/playbooks] get error:', err.message);
+    res.status(500).json({ error: 'Failed to load playbook' });
+  }
+});
+
+// Save a corrected playbook as a new version.
+router.put('/admin/playbooks/:userId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const pb = req.body && req.body.playbook;
+    if (!pb || typeof pb !== 'object') return res.status(400).json({ error: 'playbook object required' });
+    const saved = playbooks.savePlaybook(db, req.params.userId, pb);
+    res.json({ ok: true, version: saved.version });
+  } catch (err) {
+    console.error('[admin/playbooks] save error:', err.message);
+    res.status(500).json({ error: 'Failed to save playbook' });
+  }
+});
+
+// ── Quality flywheel (Phase 11) ────────────────────────────────────────────
+const flywheel = require('./flywheel');
+const benchmarkStore = require('./benchmarkStore');
+
+// Promote a delivered takeoff to a golden eval fixture (one click).
+router.post('/admin/promote-fixture/:takeoffId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const tk = benchmarkStore.getTakeoffById(db, req.params.takeoffId);
+    if (!tk) return res.status(404).json({ error: 'Takeoff not found' });
+    const out = flywheel.promoteToFixture({
+      jobId: tk.id, projectType: tk.project_type, location: tk.location,
+      options: {}, items: tk.items || [],
+    });
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    console.error('[admin/promote-fixture] error:', err.message);
+    res.status(500).json({ error: 'Failed to promote fixture' });
+  }
+});
+
+// Approval queue for nightly suggestions.
+router.get('/admin/flywheel/suggestions', authMiddleware, adminMiddleware, (req, res) => {
+  try { res.json({ suggestions: flywheel.listSuggestions(db, req.query.status || 'pending') }); }
+  catch (err) { res.status(500).json({ error: 'Failed to load suggestions' }); }
+});
+router.post('/admin/flywheel/suggestions/:id/:action', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const action = req.params.action === 'approve' ? 'approved' : 'rejected';
+    flywheel.setSuggestionStatus(db, req.params.id, action);
+    res.json({ ok: true, status: action });
+  } catch (err) { res.status(500).json({ error: 'Failed to update suggestion' }); }
+});
+
+// Manually trigger the nightly suggestion run (also call from a scheduler).
+router.post('/admin/flywheel/run', authMiddleware, adminMiddleware, async (req, res) => {
+  try { res.json(await flywheel.generateSuggestions(db, {})); }
+  catch (err) { res.status(500).json({ error: 'Failed to run flywheel' }); }
+});
+
 module.exports = router;

@@ -52,11 +52,12 @@ async function buildDrawingGroundTruth(tmpDir, extractedNames) {
   return blocks.join('\n');
 }
 const { TOOL_DEFINITIONS, executeTool, updateRun, appendMessage, setActivity, emit } = agent;
+const { callModel, MODELS, MAX_TOKENS: WRAP_TOKENS } = require('./anthropicClient');
 
-const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = MODELS.STANDARD;
 const MAX_ITERATIONS = 60;
 const THINKING_BUDGET = 8000;
-const MAX_TOKENS = 20000;
+const MAX_TOKENS = WRAP_TOKENS.AGENT;
 
 // At these iterations we inject a budget-pressure note alongside the tool
 // results, telling the model to wrap up. At MAX-1 we force-finalise.
@@ -131,119 +132,39 @@ State assumptions and exclusions explicitly in findings_notes — this is what t
 
 **Remember: narrate before every tool batch. Work in 2-3 big turns of narration + batched tools, not 20 silent single-tool turns.**`;
 
-// Claude's streaming SSE parser (tool-use aware)
+// Claude's streaming tool-use loop — delegates HTTP + SSE parsing to the shared
+// anthropicClient wrapper, which assembles content blocks (text/thinking/tool_use)
+// and replays granular events so we can stream them to subscribers via emit().
 async function callClaudeStreaming({ apiKey, system, messages, tools, runId, iteration }) {
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      thinking: { type: 'enabled', budget_tokens: THINKING_BUDGET },
-      system,
-      messages,
-      tools,
-      stream: true,
-    }),
+  const result = await callModel({
+    model: MODEL,
+    apiKey,
+    system,
+    messages,
+    tools,
+    maxTokens: MAX_TOKENS,
+    thinking: { type: 'enabled', budget_tokens: THINKING_BUDGET },
+    stream: true,
+    // Phase 2 caching: the system prompt is a constant and the message history
+    // (drawings + rendered page images in tool_results) grows every iteration but
+    // its prefix is byte-identical to the previous turn. Cache the system block and
+    // place an incremental breakpoint on the last message so each iteration reads
+    // the prior prefix from cache instead of re-billing it at full input price.
+    cacheSystem: true,
+    cacheLastMessage: true,
+    onEvent: (evt) => { try { emit(runId, evt); } catch (e) {} },
   });
 
-  if (!resp.ok) {
-    let err = {};
-    try { err = await resp.json(); } catch (e) {}
-    throw new Error('Atlas engine error ' + resp.status + ': ' + (err?.error?.message || resp.statusText));
+  if (!result.ok) {
+    const errMsg = result.error?.error?.message || result.error?.message || result.status;
+    throw new Error('Atlas engine error ' + (result.status || '') + ': ' + errMsg);
   }
 
-  // Accumulators: per-block state during streaming
-  const blocks = [];     // final assembled content blocks
-  const blockStates = {}; // index -> { type, partialJson, accumulatedText, toolName, toolId }
-  let usage = { input_tokens: 0, output_tokens: 0 };
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const payload = line.slice(6).trim();
-      if (!payload) continue;
-      let evt; try { evt = JSON.parse(payload); } catch (e) { continue; }
-
-      switch (evt.type) {
-        case 'message_start':
-          if (evt.message?.usage) usage.input_tokens = evt.message.usage.input_tokens || 0;
-          break;
-
-        case 'content_block_start': {
-          const idx = evt.index;
-          const block = evt.content_block;
-          if (block.type === 'text') {
-            blockStates[idx] = { type: 'text', accumulatedText: '' };
-            blocks[idx] = { type: 'text', text: '' };
-          } else if (block.type === 'thinking') {
-            blockStates[idx] = { type: 'thinking', accumulatedText: '' };
-            blocks[idx] = { type: 'thinking', thinking: '', signature: '' };
-          } else if (block.type === 'tool_use') {
-            blockStates[idx] = { type: 'tool_use', toolId: block.id, toolName: block.name, partialJson: '' };
-            blocks[idx] = { type: 'tool_use', id: block.id, name: block.name, input: {} };
-            emit(runId, { type: 'tool_call_start', tool: block.name, id: block.id });
-          }
-          break;
-        }
-
-        case 'content_block_delta': {
-          const idx = evt.index;
-          const state = blockStates[idx];
-          if (!state) break;
-          if (evt.delta.type === 'text_delta') {
-            state.accumulatedText += evt.delta.text;
-            blocks[idx].text = state.accumulatedText;
-            emit(runId, { type: 'text_delta', delta: evt.delta.text });
-          } else if (evt.delta.type === 'thinking_delta') {
-            state.accumulatedText += evt.delta.thinking;
-            blocks[idx].thinking = state.accumulatedText;
-            emit(runId, { type: 'thinking_delta', delta: evt.delta.thinking });
-          } else if (evt.delta.type === 'input_json_delta') {
-            state.partialJson = (state.partialJson || '') + (evt.delta.partial_json || '');
-          } else if (evt.delta.type === 'signature_delta') {
-            blocks[idx].signature = (blocks[idx].signature || '') + (evt.delta.signature || '');
-          }
-          break;
-        }
-
-        case 'content_block_stop': {
-          const idx = evt.index;
-          const state = blockStates[idx];
-          if (state && state.type === 'tool_use') {
-            try { blocks[idx].input = JSON.parse(state.partialJson || '{}'); }
-            catch (e) { blocks[idx].input = {}; }
-            emit(runId, { type: 'tool_call', tool: state.toolName, input: blocks[idx].input });
-          }
-          break;
-        }
-
-        case 'message_delta':
-          if (evt.usage?.output_tokens != null) usage.output_tokens = evt.usage.output_tokens;
-          break;
-
-        case 'error':
-          throw new Error(evt.error?.message || 'Stream error');
-      }
-    }
-  }
-
-  // Filter out undefined holes (shouldn't happen but defensive)
-  const finalBlocks = blocks.filter(b => b);
-  return { blocks: finalBlocks, usage };
+  // Keep the { blocks, usage } shape the loop expects (Anthropic usage shape).
+  return {
+    blocks: result.blocks,
+    usage: { input_tokens: result.usage.tokensIn, output_tokens: result.usage.tokensOut },
+  };
 }
 
 // Heuristic: detect Ireland from any intake field so currency/defaults are

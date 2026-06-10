@@ -8,6 +8,8 @@ const { authMiddleware } = require('./auth');
 const jwt = require('jsonwebtoken');
 const FILE_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const db = require('./database');
+const { callModel, MODELS, MAX_TOKENS, computeCost } = require('./anthropicClient');
+const { runAgenticTakeoff, shouldUseAgenticTakeoff } = require('./agenticTakeoff');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
 
@@ -172,6 +174,8 @@ function extractInsightsFromMessage(userId, message) {
       }
       if (!isDuplicate) {
         db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText);
+        // Phase 10: also fold the learned rule into the versioned client playbook.
+        try { require('./playbooks').recordInsight(db, userId, pattern.category, insightText); } catch (e) {}
       }
     } catch (err) { console.error('[Insight] Save error:', err.message); }
   }
@@ -208,6 +212,14 @@ function buildSystemPrompt(userId, forDocGen, benchmarkSection) {
       clientInsightsSection = `\n=== CLIENT PROFILE (learned from past projects) ===\nApply these preferences automatically — the client has told us this before.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat.toUpperCase()}]\n${items.join('\n')}`).join('\n\n')}\n===\n`;
     }
   } catch (err) { console.error('[Chat] Insight load error:', err.message); }
+  // Phase 10: render the structured client playbook into the (cached) prefix.
+  // Stable, sorted serialisation so it holds in cache between jobs. Empty for
+  // users without a playbook yet, so existing behaviour is unchanged.
+  try {
+    const playbooks = require('./playbooks');
+    const pb = playbooks.getPlaybook(db, userId);
+    clientInsightsSection += playbooks.renderPlaybook(pb);
+  } catch (err) { /* playbook is best-effort context */ }
 
   if (forDocGen === 'extract_quantities' || forDocGen === 'extract_quantities_text') {
     // STAGE 1: Extract locked quantities from drawings OR text description
@@ -1475,6 +1487,9 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
     });
 
     benchmarkStore.updateTakeoff(db, req.params.id, { items: merged });
+    // Phase 11: log the human corrections (model value -> corrected value) for the
+    // quality flywheel. Best-effort.
+    try { require('./flywheel').logCorrections(db, { jobId: req.params.id, userId: req.user.id, prevItems: takeoff.items || [], newItems: merged }); } catch (e) {}
     const clientRates = {};
     try {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
@@ -1561,98 +1576,38 @@ function sseEvent(res, evt) {
 //
 // Returns { ok, status, error, reply, thinking, tokensIn, tokensOut }.
 async function streamAnthropicMessage(headers, body, sseEmit) {
-  let resp;
-  try {
-    resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...body, stream: true }),
-    });
-  } catch (fetchErr) {
-    return { ok: false, status: 0, error: { message: fetchErr.message } };
-  }
+  // Thin adapter over the shared anthropicClient wrapper. We run a SINGLE
+  // attempt here (maxAttempts: 1) and let the caller's existing retry/tool-drop/
+  // Sonnet→Haiku fallback loop drive recovery, so behaviour is unchanged.
+  // Usage is logged by the caller (chat_message row), so no userId is passed.
+  const result = await callModel({
+    model: body.model,
+    system: body.system,
+    messages: body.messages,
+    maxTokens: body.max_tokens,
+    thinking: body.thinking,
+    tools: body.tools,
+    cacheSystem: body.cacheSystem,
+    cacheMessages: body.cacheMessages,
+    stream: true,
+    maxAttempts: 1,
+    onDelta: (text) => { if (sseEmit) { try { sseEmit({ type: 'text', content: text }); } catch (e) {} } },
+  });
 
-  if (!resp.ok) {
-    let err = {};
-    try { err = await resp.json(); } catch (e) {}
-    return { ok: false, status: resp.status, error: err };
+  if (!result.ok) {
+    return { ok: false, status: result.status, error: result.error };
   }
-
-  let reply = '';
-  let thinking = '';
-  let tokensIn = 0;
-  let tokensOut = 0;
-  const sources = [];
-  const seenSourceUrls = new Set();
-  const addSource = (url, title) => {
-    if (!url || seenSourceUrls.has(url)) return;
-    seenSourceUrls.add(url);
-    sources.push({ url, title: title || url });
+  return {
+    ok: true,
+    reply: result.text,
+    thinking: result.thinking,
+    tokensIn: result.usage.tokensIn,
+    tokensOut: result.usage.tokensOut,
+    cacheWrite: result.usage.cacheWrite,
+    cacheRead: result.usage.cacheRead,
+    sources: result.sources,
+    partial: result.partial,
   };
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (!payload) continue;
-        let evt;
-        try { evt = JSON.parse(payload); } catch (e) { continue; }
-        switch (evt.type) {
-          case 'message_start':
-            if (evt.message && evt.message.usage) tokensIn = evt.message.usage.input_tokens || 0;
-            break;
-          case 'content_block_start':
-            // Web search results arrive as a web_search_tool_result block — harvest
-            // the source URLs/titles so the UI can show citation chips.
-            if (evt.content_block && evt.content_block.type === 'web_search_tool_result') {
-              const results = evt.content_block.content;
-              if (Array.isArray(results)) {
-                for (const r of results) {
-                  if (r && r.type === 'web_search_result' && r.url) addSource(r.url, r.title);
-                }
-              }
-            }
-            break;
-          case 'content_block_delta':
-            if (evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
-              reply += evt.delta.text;
-              if (sseEmit) {
-                try { sseEmit({ type: 'text', content: evt.delta.text }); } catch (e) {}
-              }
-            } else if (evt.delta && evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
-              thinking += evt.delta.thinking;
-            } else if (evt.delta && evt.delta.type === 'citations_delta' && evt.delta.citation) {
-              const cit = evt.delta.citation;
-              if (cit.url) addSource(cit.url, cit.title);
-            }
-            break;
-          case 'message_delta':
-            if (evt.usage && evt.usage.output_tokens != null) tokensOut = evt.usage.output_tokens;
-            break;
-          case 'error':
-            return { ok: false, status: 500, error: evt.error || evt, reply, thinking, tokensIn, tokensOut };
-          // message_stop / content_block_start / content_block_stop / ping — ignore
-        }
-      }
-    }
-  } catch (streamErr) {
-    console.error('[API] stream read error:', streamErr.message);
-    // If we got some reply text before the error, still return what we have
-    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, sources, partial: true };
-    return { ok: false, status: 0, error: { message: streamErr.message } };
-  }
-
-  return { ok: true, reply, thinking, tokensIn, tokensOut, sources };
 }
 
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
@@ -1928,6 +1883,12 @@ ${summary}`);
     messages.push({ role: 'user', content: currentContent });
 
     let systemPrompt = buildSystemPrompt(userId, false);
+    // Capture the stable base (identity + rules + rate library + client insights)
+    // before any per-turn injections are appended below. All the `systemPrompt +=`
+    // sites only APPEND, so systemPrompt always starts with this exact string —
+    // letting us cache the (large, ~unchanging-per-user) base and keep the volatile
+    // per-turn tail after the cache breakpoint (Phase 2 prompt caching).
+    const stableSystemBase = systemPrompt;
     const hasFiles = fileNames.length > 0;
 
     // ── USER MEMORIES: semantic/FTS retrieval of user-confirmed memories ──
@@ -2075,8 +2036,12 @@ ${summary}`);
       } catch(e) { console.error('[Takeoff inject] Error:', e.message); }
     }
 
-    const primaryModel = hasFiles ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
-    const primaryBudget = hasFiles ? 8000 : 5000;
+    const primaryModel = hasFiles ? MODELS.STANDARD : MODELS.FAST;
+    // Drawing turns keep thinking (Sonnet) but at a reduced budget — the
+    // deterministic pricer does the maths, so the model doesn't need a deep
+    // think to narrate. Text-only chat on Haiku drops thinking entirely
+    // (thinking tokens bill as output).
+    const primaryThinking = hasFiles ? { type: 'enabled', budget_tokens: 4000 } : null;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
     if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'analyse', detail: hasFiles ? 'Analysing drawings...' : 'Thinking...' });
 
@@ -2089,10 +2054,21 @@ ${summary}`);
       ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }]
       : null;
     let useTools = !!webTools;
-    const buildBody = (model, budget) => ({
-      model, max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: budget },
-      system: systemPrompt, messages,
+    // Split the system prompt into [cached stable base, uncached per-turn tail] so
+    // the large rate-library/insights base is read from cache on this user's
+    // subsequent turns. The base is byte-identical across turns; the tail (memory,
+    // intake, drawing ground-truth, takeoff figures) sits after the breakpoint.
+    const perTurnTail = systemPrompt.slice(stableSystemBase.length);
+    const cachedSystem = perTurnTail
+      ? [
+          { type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: perTurnTail },
+        ]
+      : [{ type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } }];
+    const buildBody = (model, thinking) => ({
+      model, max_tokens: MAX_TOKENS.CHAT,
+      ...(thinking ? { thinking } : {}),
+      system: cachedSystem, messages,
       ...(useTools && webTools ? { tools: webTools } : {}),
     });
 
@@ -2102,7 +2078,7 @@ ${summary}`);
     // still aggregates `reply` + `thinking` for the post-processing pipeline.
     let streamResult, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryBudget), req.sseEmit);
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryThinking), req.sseEmit);
       if (streamResult.ok) break;
       const errType = streamResult.error?.error?.type || streamResult.error?.type;
       const errMsg = streamResult.error?.error?.message || streamResult.error?.message || '';
@@ -2119,9 +2095,9 @@ ${summary}`);
         return sendError(500, { error: 'AI service error -- please try again' });
       }
     }
-    if (!streamResult.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
+    if (!streamResult.ok && primaryModel !== MODELS.FAST) {
       console.log('[API] Sonnet overloaded, falling back to Haiku...');
-      streamResult = await streamAnthropicMessage(apiHeaders, buildBody('claude-haiku-4-5-20251001', 5000), req.sseEmit);
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(MODELS.FAST, null), req.sseEmit);
       if (!streamResult.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
     } else if (!streamResult.ok) {
@@ -2132,13 +2108,15 @@ ${summary}`);
     const streamedToClient = Boolean(req.streaming);
     const tokensIn = streamResult.tokensIn || 0;
     const tokensOut = streamResult.tokensOut || 0;
-    const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
-    const costPerIn = modelUsed.includes('haiku') ? 0.0000008 : 0.000003;
-    const costPerOut = modelUsed.includes('haiku') ? 0.000004 : 0.000015;
-    const costEstimate = (tokensIn * costPerIn) + (tokensOut * costPerOut);
+    const cacheWrite = streamResult.cacheWrite || 0;
+    const cacheRead = streamResult.cacheRead || 0;
+    const modelUsed = usedFallback ? MODELS.FAST : primaryModel;
+    // Cost flows through the wrapper's PRICING map (no hardcoded per-token rates).
+    const costEstimate = computeCost(modelUsed, { tokensIn, tokensOut, cacheWrite, cacheRead });
+    const modelTier = modelUsed.includes('haiku') ? 'fast' : 'standard';
     try {
-      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-        'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, costEstimate
+      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cache_creation_input_tokens, cache_read_input_tokens, model_tier, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, cacheWrite, cacheRead, modelTier, costEstimate
       );
     } catch(ue) { console.error('[Usage] Log error:', ue.message); }
 
@@ -2385,41 +2363,74 @@ ${summary}`);
 
         const extractMessages = [...messages, { role: 'user', content: extractContent }];
 
-        const extractResp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', headers: apiHeaders,
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 16000,
-            temperature: 0,
-            system: extractPrompt,
-            messages: extractMessages
-          })
+        // Forced JSON via tool use — the takeoff is returned as the tool's input,
+        // which is guaranteed-valid JSON. The schema is permissive (item fields are
+        // free-form) so the deterministic pricer consumes `parsed` exactly as before.
+        const extractTool = {
+          name: 'record_takeoff',
+          description: 'Record the measured quantity takeoff as structured data.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              items: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              project_type: { type: ['string', 'null'] },
+              location: { type: ['string', 'null'] },
+              floor_area_m2: { type: ['number', 'string', 'null'] },
+            },
+            required: ['items'],
+            additionalProperties: true,
+          },
+        };
+        const extractCall = (msgs) => callModel({
+          model: MODELS.STANDARD,
+          maxTokens: MAX_TOKENS.EXTRACTION,
+          temperature: 0,
+          system: extractPrompt,
+          messages: msgs,
+          tools: [extractTool],
+          toolChoice: { type: 'tool', name: 'record_takeoff' },
+          userId, action: 'extraction_pass',
         });
 
-        if (extractResp.ok) {
-          const extractData = await extractResp.json();
-          const rawText = extractData.content.filter(c => c.type === 'text').map(c => c.text).join('');
-          const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-          // Try direct parse first; if it fails, extract the JSON object from mixed prose
-          let parsed;
-          try {
-            parsed = JSON.parse(cleaned);
-          } catch (directParseErr) {
-            // Claude sometimes wraps JSON in explanatory text like "Looking at the drawings..."
-            // Find the first '{' and last '}' to extract the JSON object
-            const firstBrace = cleaned.indexOf('{');
-            const lastBrace = cleaned.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace > firstBrace) {
-              const jsonSubstring = cleaned.substring(firstBrace, lastBrace + 1);
-              try {
-                parsed = JSON.parse(jsonSubstring);
-                console.log(`[Stage 1] Recovered JSON from mixed text (prose before position ${firstBrace})`);
-              } catch (subParseErr) {
-                throw directParseErr; // rethrow original error if recovery also fails
-              }
-            } else {
-              throw directParseErr;
-            }
+        // Phase 8 router: for complex jobs (and only when AGENTIC_TAKEOFF=1) run
+        // the plan->measure->reconcile->verify loop in place of single-pass Stage
+        // 1/1b. Falls back to single-pass on any error. Flag-gated so production
+        // is byte-for-byte unchanged until enabled.
+        let agenticParsed = null;
+        try {
+          const userTier = (db.prepare('SELECT model_tier FROM users WHERE id=?').get(userId) || {}).model_tier;
+          if (shouldUseAgenticTakeoff({ zipData: req.zipData, projectType: projectTypeGuess, pageCount: req.zipData?.summary?.pdf_count, modelTierOverride: userTier })) {
+            agenticParsed = await runAgenticTakeoff({
+              drawingsContent: extractContent,
+              extractPrompt,
+              priorMessages: messages,
+              zipData: req.zipData,
+              floorAreaM2: req.zipData?.summary?.total_floor_area_m2 || null,
+              projectType: projectTypeGuess,
+              model: MODELS.FRONTIER,
+              userId,
+              onProgress: (p) => { if (req.sseEmit) req.sseEmit({ type: 'progress', stage: p.stage, detail: p.detail }); },
+            });
+          }
+        } catch (agErr) {
+          console.error('[Agentic] takeoff failed, falling back to single-pass:', agErr.message);
+          agenticParsed = null;
+        }
+
+        const extractResult = agenticParsed ? { ok: true } : await extractCall(extractMessages);
+
+        if (extractResult.ok) {
+          // Thin validation + a single hinted retry if the tool output lacks items.
+          let parsed = agenticParsed || extractResult.json;
+          if (!agenticParsed && (!parsed || !Array.isArray(parsed.items))) {
+            const retry = await extractCall([
+              ...extractMessages,
+              { role: 'user', content: 'Your previous record_takeoff call was missing the required "items" array. Call record_takeoff again with the complete items array.' },
+            ]);
+            if (retry.ok && retry.json && Array.isArray(retry.json.items)) parsed = retry.json;
+          }
+          if (!parsed || !Array.isArray(parsed.items)) {
+            throw new Error('Stage 1 extraction returned no items');
           }
 
           // ═══════════════════════════════════════════════════════════
@@ -2666,30 +2677,43 @@ CRITICAL RULES:
                 { type: 'text', text: `\n\nJUNIOR QS TAKEOFF TO REVIEW:\n\`\`\`json\n${JSON.stringify(parsed.items, null, 2)}\n\`\`\`\n\nProject type: ${parsed.project_type || 'Unknown'}\nLocation: ${parsed.location || 'Unknown'}\nFloor area: ${parsed.floor_area_m2 || 'Not stated'}m²\n\nReview every item critically. Check quantities, find missing items, flag double-counts.` }
               ];
 
-              const validationResp = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST', headers: apiHeaders,
-                body: JSON.stringify({
-                  model: 'claude-sonnet-4-20250514',
-                  max_tokens: 12000,
-                  temperature: 0,
-                  system: validationPrompt,
-                  messages: [{ role: 'user', content: validationContent }]
-                })
+              const validationResult = await callModel({
+                model: MODELS.STANDARD,
+                maxTokens: MAX_TOKENS.VALIDATION,
+                temperature: 0,
+                system: validationPrompt,
+                messages: [{ role: 'user', content: validationContent }],
+                tools: [{
+                  name: 'report_corrections',
+                  description: 'Report the takeoff review as structured corrections.',
+                  input_schema: {
+                    type: 'object',
+                    properties: {
+                      corrections: { type: 'array', items: { type: 'object', additionalProperties: true } },
+                      validation_notes: { type: 'string' },
+                      items_checked: { type: ['number', 'string'] },
+                      errors_found: { type: ['number', 'string'] },
+                      confidence: { type: 'string' },
+                    },
+                    required: ['corrections'],
+                    additionalProperties: true,
+                  },
+                }],
+                toolChoice: { type: 'tool', name: 'report_corrections' },
               });
 
-              if (validationResp.ok) {
-                const valData = await validationResp.json();
-                const valRaw = valData.content.filter(c => c.type === 'text').map(c => c.text).join('');
-                const valCleaned = valRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-                const validation = JSON.parse(valCleaned);
+              if (validationResult.ok) {
+                // Forced tool output is guaranteed-valid JSON; missing corrections
+                // is treated as "no changes" (downstream guards on the array).
+                const validation = validationResult.json || {};
 
-                // Log validation cost
-                const valTokensIn = valData.usage ? valData.usage.input_tokens : 0;
-                const valTokensOut = valData.usage ? valData.usage.output_tokens : 0;
-                const valCost = (valTokensIn * 0.000003) + (valTokensOut * 0.000015);
+                // Log validation cost (cost from the wrapper's PRICING map).
+                const valTokensIn = validationResult.usage.tokensIn;
+                const valTokensOut = validationResult.usage.tokensOut;
+                const valCost = validationResult.cost;
                 try {
-                  db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    'ul_' + uuidv4().slice(0, 8), userId, 'validation_pass', `Stage 1b: ${validation.errors_found || 0} corrections`, 'claude-sonnet-4-20250514', valTokensIn, valTokensOut, valCost
+                  db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cache_creation_input_tokens, cache_read_input_tokens, model_tier, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    'ul_' + uuidv4().slice(0, 8), userId, 'validation_pass', `Stage 1b: ${validation.errors_found || 0} corrections`, validationResult.model, valTokensIn, valTokensOut, validationResult.usage.cacheWrite, validationResult.usage.cacheRead, 'standard', valCost
                   );
                 } catch(ue) {}
 
@@ -3250,6 +3274,18 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             branding: _branding,
           });
           if (buf && buf.length > 100) {
+            // Phase 9 recalc gate: the workbook's summed line totals must equal
+            // the deterministic pricer's construction total to the penny. Warns by
+            // default; set STRICT_RECALC=1 to hard-fail generation on a mismatch.
+            try {
+              const { assertBOQMatches } = require('./recalcGate');
+              const recalc = await assertBOQMatches(buf, pricedResult.summary.construction_total);
+              if (!recalc.ok) console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`);
+              else console.log(`[Stage 3] Recalc OK — ${recalc.rows} lines reconcile to £${recalc.expected}`);
+            } catch (recalcErr) {
+              console.error('[Stage 3] Recalc gate:', recalcErr.message);
+              if (process.env.STRICT_RECALC === '1') throw recalcErr; // hard gate
+            }
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
             fs.writeFileSync(path.join(outputsDir, fname), buf);
             downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}`, size: buf.length });
@@ -3269,21 +3305,18 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             item_count: pricedResult.item_count,
             warnings: pricedResult.warnings,
           };
-          const findingsResp = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST', headers: apiHeaders,
-            body: JSON.stringify({
-              model: 'claude-haiku-4-5-20251001',
-              max_tokens: 4000,
-              temperature: 0,
-              system: findingsPrompt,
-              messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }]
-            })
+          const findingsResult = await callModel({
+            model: MODELS.FAST,
+            maxTokens: MAX_TOKENS.FINDINGS,
+            temperature: 0,
+            system: findingsPrompt,
+            messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }],
+            userId, action: 'findings_pass',
           });
 
           let findings = {};
-          if (findingsResp.ok) {
-            const fData = await findingsResp.json();
-            const fText = fData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+          if (findingsResult.ok) {
+            const fText = findingsResult.text;
             const fCleaned = fText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
             try { findings = JSON.parse(fCleaned); } catch (jsonErr) { console.error('[Stage 3] Findings JSON parse error:', jsonErr.message); }
             // Inject the deterministic cost summary

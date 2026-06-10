@@ -29,6 +29,7 @@ const { v4: uuidv4 } = require('uuid');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 const db = require('./database');
+const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 
 const router = express.Router();
@@ -199,46 +200,47 @@ RULES:
 8. Return ONLY the JSON object. No markdown fences. No commentary.`;
 
 async function callClaude(userText, projectType) {
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
   const userMsg = 'Project type: ' + (projectType || '(not specified)')
     + '\n\nDescription:\n"""\n' + userText + '\n"""\n\nReturn the JSON quote now.';
 
-  const body = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4000,
+  // Forced JSON via tool use — guaranteed-valid JSON, no fence-stripping.
+  // Usage is logged by logEstimatorUsage() at the route, so we don't pass
+  // userId here (the wrapper would otherwise double-count it).
+  const result = await callModel({
+    model: MODELS.FAST,
+    maxTokens: 4000,
     temperature: 0.3,
     system: DRAFT_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMsg }],
-  };
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
+    tools: [{
+      name: 'submit_quote',
+      description: 'Submit the drafted itemised quote.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          client_name: { type: ['string', 'null'] },
+          project_name: { type: ['string', 'null'] },
+          currency: { type: ['string', 'null'] },
+          sections: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        },
+        required: ['sections'],
+      },
+    }],
+    toolChoice: { type: 'tool', name: 'submit_quote' },
   });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error('Claude API ' + resp.status + ': ' + errText.slice(0, 200));
+  if (!result.ok) {
+    const errMsg = result.error?.error?.message || result.error?.message || '';
+    throw new Error('Claude API ' + result.status + ': ' + String(errMsg).slice(0, 200));
   }
 
-  const data = await resp.json();
-  const text = (data.content || [])
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('\n')
-    .trim();
-
-  const usage = data.usage || {};
-  return { text, usage, model: data.model };
+  // Return the Anthropic-shaped usage logEstimatorUsage() expects.
+  const usage = { input_tokens: result.usage.tokensIn, output_tokens: result.usage.tokensOut };
+  return { json: result.json, usage, model: result.model };
 }
 
 // Strip optional code fences and parse JSON defensively.
@@ -362,7 +364,7 @@ router.post('/draft', async (req, res) => {
       return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
     }
 
-    const draft = parseDraftJson(claudeResult.text);
+    const draft = claudeResult.json;
     if (!draft || !Array.isArray(draft.sections)) {
       return res.status(502).json({ error: 'The AI returned an unexpected response. Please try again or simplify the description.' });
     }
