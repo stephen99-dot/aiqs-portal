@@ -31,14 +31,17 @@ function Inner() {
   const [cards, setCards] = useState(null);     // PM alert cards
   const [error, setError] = useState('');
   const [nudge, setNudge] = useState(null);     // { url } share sheet for a quote follow-up
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [agg, quotes, alerts] = await Promise.all([
+      const [agg, quotes, alerts, settings] = await Promise.all([
         apiFetch('/invoices/_aggregates/dashboard'),
         apiFetch('/estimator/quotes'),
         apiFetch('/pm/alerts'),
+        apiFetch('/finance/settings').catch(() => null),
       ]);
+      setNeedsSetup(!!settings && !settings.settings?.setup_completed_at);
       const quoted = (quotes.quotes || [])
         .filter(q => q.status === 'sent')
         .reduce((s, q) => s + num(q.grand_total), 0);
@@ -88,6 +91,20 @@ function Inner() {
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 16 }}>{error}</div>}
+
+      {/* B2 — first run: two minutes of set-up, never forced */}
+      {needsSetup && (
+        <button onClick={() => nav('/office/setup')} style={{
+          display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+          background: 'rgba(245,158,11,0.08)', border: '1px solid ' + t.accent + '66',
+          borderRadius: 12, padding: '14px 16px', marginBottom: 16, color: t.text,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Two minutes of set-up</div>
+          <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 4 }}>
+            Your name, your logo, your colour — then every quote and invoice goes out looking like yours. Tap to start.
+          </div>
+        </button>
+      )}
 
       {/* The three numbers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 22 }}>

@@ -813,6 +813,11 @@ const migrations = [
   { column: 'retention_release_date', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_release_date DATE" },
   // Restructure 2 — one-tap call/WhatsApp from the job page.
   { column: 'client_phone', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN client_phone TEXT" },
+  // B2 — first-run wizard: what they do, their day rates (JSON, feeds the
+  // C1 quote drafting), and whether set-up has been done/skipped.
+  { column: 'trade_type', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN trade_type TEXT" },
+  { column: 'day_rates', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN day_rates TEXT" },
+  { column: 'setup_completed_at', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN setup_completed_at DATETIME" },
 ];
 
 for (const { column, table, sql } of migrations) {

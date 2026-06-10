@@ -54,6 +54,19 @@ export default function TaxCisSettings() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={card}>
+        <h3 style={h3}>Set-up</h3>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 }}>
+          The two-minute set-up walks through your name, logo, trade, tax and day rates again.
+        </div>
+        <a href="/office/setup" style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: 44, padding: '0 18px', borderRadius: 10, textDecoration: 'none',
+          background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border)',
+          fontSize: 13.5, fontWeight: 600,
+        }}>Run the set-up again</a>
+      </div>
+
+      <div style={card}>
         <h3 style={h3}>Tax & CIS {saved && <span style={{ color: '#10B981', textTransform: 'none' }}>· saved</span>}</h3>
         {error && <div style={{ color: '#EF4444', fontSize: 12.5, marginBottom: 10 }}>{error}</div>}
 

@@ -42,6 +42,7 @@ import CalculatorsPage from './pages/CalculatorsPage';
 import MaterialsPage from './pages/MaterialsPage';
 import TodayPage from './pages/TodayPage';
 import ToolsPage from './pages/ToolsPage';
+import SetupWizardPage from './pages/SetupWizardPage';
 import OfficeInABoxPage from './pages/OfficeInABoxPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -114,6 +115,7 @@ function AppInner() {
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           {/* Office in a Box — three destinations: Today / Jobs / Money (+ Tools). */}
           <Route path="/office" element={<TodayPage />} />
+          <Route path="/office/setup" element={<SetupWizardPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/money" element={<MoneyPage />} />
