@@ -34,7 +34,7 @@ import VariationEditorPage from './pages/VariationEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
 import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
 import InvoicePublicPage from './pages/InvoicePublicPage';
-import InvoicesPage from './pages/InvoicesPage';
+import MoneyPage from './pages/MoneyPage';
 import InvoiceEditorPage from './pages/InvoiceEditorPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
@@ -116,9 +116,7 @@ function AppInner() {
           <Route path="/office" element={<TodayPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<JobDetailPage />} />
-          {/* /money becomes the merged Money page in section 3; until then it
-              hosts the invoices list so navigation and redirects are stable. */}
-          <Route path="/money" element={<InvoicesPage />} />
+          <Route path="/money" element={<MoneyPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/estimator" element={<EstimatorPage />} />
           <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
