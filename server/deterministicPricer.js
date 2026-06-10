@@ -1297,14 +1297,24 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   const locationInfo = detectLocationFactor(location);
 
-  // Auto-detect Ireland from location and set correct defaults
-  const isIreland = locationInfo.isIreland || (options.currency === 'EUR');
+  // Region is driven by the property address (Phase: detect-from-drawings).
+  // A UK postcode forces GBP + UK VAT even if the account default is EUR; an
+  // Irish address forces EUR. Only fall back to options.currency when the
+  // address gives no country signal.
+  const ukPostcode = /\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b/i.test(location || '');
+  const isUKAddress = ukPostcode && !locationInfo.isIreland;
+  const isIreland = locationInfo.isIreland || (!isUKAddress && options.currency === 'EUR');
   const {
     contingency_pct = 7.5,
     ohp_pct = 12,
-    vat_rate = isIreland ? 13.5 : 20,
-    currency = isIreland ? 'EUR' : 'GBP',
   } = options;
+  // VAT + currency follow the detected region. A decisive address (UK postcode
+  // or Irish location) overrides any account-default passed in options.
+  const vat_rate = options.vat_rate != null ? options.vat_rate : (isIreland ? 13.5 : 20);
+  let currency;
+  if (isUKAddress) currency = 'GBP';
+  else if (locationInfo.isIreland) currency = 'EUR';
+  else currency = options.currency || (isIreland ? 'EUR' : 'GBP');
 
   // Location factor + currency conversion for Ireland (GBP base rates → EUR)
   let locFactor = locationInfo.factor;

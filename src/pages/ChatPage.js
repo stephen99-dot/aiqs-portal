@@ -1485,6 +1485,7 @@ export default function ChatPage() {
                 runId={agentRunId}
                 onClose={() => setAgentRunId(null)}
                 onCompleted={onAgentCompleted}
+                onGenerate={() => handleSend(null, 'generate documents')}
               />
             )}
 
