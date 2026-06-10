@@ -32,6 +32,10 @@ function Inner() {
   const [filter, setFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const [newInv, setNewInv] = useState({ source: 'blank', from_quote_id: '', job_id: '', client_name: '' });
+  // A4 — accountant export modal
+  const [exporting, setExporting] = useState(false);
+  const [exp, setExp] = useState({ what: 'invoices', format: 'xero' });
+  const [expMsg, setExpMsg] = useState('');
 
   const refresh = useCallback(async () => {
     setError('');
@@ -80,6 +84,29 @@ function Inner() {
       }).catch(e => alert(e.message));
   };
 
+  // A4 — accountant export: download needs the auth headers, so fetch a blob.
+  const downloadExport = () => {
+    fetch('/api/invoices/_export/csv?what=' + exp.what + '&format=' + exp.format, {
+      headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() },
+    }).then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = exp.what + '-' + exp.format + '.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setExpMsg('Downloaded — attach it to an email or import it straight into ' + (exp.format === 'xero' ? 'Xero' : 'QuickBooks') + '.');
+      }).catch(e => setExpMsg(e.message));
+  };
+
+  const emailExport = async () => {
+    setExpMsg('');
+    try {
+      const r = await apiFetch('/invoices/_export/email', { method: 'POST', body: JSON.stringify(exp) });
+      setExpMsg('Sent to ' + r.sent_to + '.');
+    } catch (e) { setExpMsg(e.message); }
+  };
+
   const filtered = filter ? invoices.filter(i => filter === 'overdue' ? i.overdue : i.status === filter) : invoices;
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
@@ -93,10 +120,43 @@ function Inner() {
             Issue branded invoices from quotes, jobs, or standalone.
           </div>
         </div>
-        <button onClick={() => setCreating(v => !v)} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, cursor: 'pointer' }}>
-          {creating ? 'Cancel' : '+ New invoice'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => { setExporting(v => !v); setExpMsg(''); }} style={{ background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 8, padding: '10px 14px', fontWeight: 600, cursor: 'pointer' }}>
+            Send to your accountant
+          </button>
+          <button onClick={() => setCreating(v => !v)} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, cursor: 'pointer' }}>
+            {creating ? 'Cancel' : '+ New invoice'}
+          </button>
+        </div>
       </div>
+
+      {/* A4 — accountant export */}
+      {exporting && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
+            A spreadsheet your accountant can pull straight into their software. Download it, or email it to them in one tap.
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+            <div>
+              <label style={lbl(t)}>What</label>
+              <select value={exp.what} onChange={e => setExp({ ...exp, what: e.target.value })} style={fld(t)}>
+                <option value="invoices">Invoices you've sent</option>
+                <option value="payments">Payments you've received</option>
+              </select>
+            </div>
+            <div>
+              <label style={lbl(t)}>Their software</label>
+              <select value={exp.format} onChange={e => setExp({ ...exp, format: e.target.value })} style={fld(t)}>
+                <option value="xero">Xero</option>
+                <option value="quickbooks">QuickBooks</option>
+              </select>
+            </div>
+            <button onClick={downloadExport} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontWeight: 600, cursor: 'pointer' }}>Download the file</button>
+            <button onClick={emailExport} style={{ background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 8, padding: '9px 14px', fontWeight: 600, cursor: 'pointer' }}>Email it to your accountant</button>
+          </div>
+          {expMsg && <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 10 }}>{expMsg}</div>}
+        </div>
+      )}
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 

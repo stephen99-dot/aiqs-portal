@@ -95,7 +95,7 @@ function rulePaymentsDue(userId, thresholds) {
       AND date(p.due_date) <= date('now', '+' || ? || ' days')
     ORDER BY p.due_date ASC
   `).all(userId, H);
-  return rows.map(r => {
+  const stageCards = rows.map(r => {
     const days = daysUntil(r.due_date);
     const isOverdue = days < 0;
     return {
@@ -110,6 +110,45 @@ function rulePaymentsDue(userId, thresholds) {
       meta: { days_to_due: days, value: r.amount, overdue: isOverdue, horizon: H },
     };
   });
+
+  // A3: unpaid invoices due soon or overdue, with the automated-reminder state
+  // on the card so the builder knows whether the system is already chasing.
+  const invoices = db.prepare(`
+    SELECT id, invoice_number, client_name, grand_total, due_date,
+           reminders_enabled, reminder_stage, reminder_last_at
+    FROM invoices
+    WHERE user_id = ?
+      AND status = 'sent'
+      AND due_date IS NOT NULL
+      AND date(due_date) <= date('now', '+' || ? || ' days')
+    ORDER BY due_date ASC
+  `).all(userId, H);
+  const invoiceCards = invoices.map(r => {
+    const days = daysUntil(r.due_date);
+    const isOverdue = days < 0;
+    let reminderNote;
+    if (!r.reminders_enabled) reminderNote = 'automatic reminders are off';
+    else if (r.reminder_stage > 0) {
+      const since = daysSince(r.reminder_last_at);
+      reminderNote = 'reminder sent' + (since != null ? ' ' + since + ' day(s) ago' : '');
+    } else reminderNote = 'reminders on — first one goes on the due date';
+    return {
+      id: 'invoice-due-' + r.id,
+      rule: 'payment_due',
+      severity: isOverdue ? 'high' : 'medium',
+      title: 'Invoice ' + (r.invoice_number || '')
+        + ' — ' + (isOverdue ? Math.abs(days) + ' day(s) overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' day(s)')),
+      body: (r.client_name ? r.client_name + ' · ' : '')
+        + fmtMoney(r.grand_total) + ' · due ' + r.due_date + ' · ' + reminderNote,
+      link: '/invoices/' + r.id,
+      meta: {
+        days_to_due: days, value: r.grand_total, overdue: isOverdue, horizon: H,
+        reminders_enabled: !!r.reminders_enabled, reminder_stage: r.reminder_stage,
+      },
+    };
+  });
+
+  return [...stageCards, ...invoiceCards];
 }
 
 // ─── Rule 3: Cost actuals over planned budget by > X% ───────────────────────
@@ -243,6 +282,43 @@ function ruleDayRateBelowBreakeven(userId) {
   return out.sort((a, b) => b.meta.shortfall - a.meta.shortfall);
 }
 
+// ─── Rule 6 (A4): retention falling due ─────────────────────────────────────
+// Builders forget retention money constantly. Alert from 14 days before the
+// release date, loudest once it's passed. Amount = retention_pct of the job's
+// planned revenue (best available figure).
+
+function ruleRetentionDue(userId) {
+  const rows = db.prepare(`
+    SELECT j.id, j.name, j.client_name, j.retention_pct, j.retention_release_date,
+           b.planned_revenue
+    FROM estimator_jobs j
+    LEFT JOIN job_budgets b ON b.job_id = j.id
+    WHERE j.user_id = ?
+      AND j.retention_pct > 0
+      AND j.retention_release_date IS NOT NULL
+      AND date(j.retention_release_date) <= date('now', '+14 days')
+      AND j.status != 'cancelled'
+    ORDER BY j.retention_release_date ASC
+  `).all(userId);
+  return rows.map(r => {
+    const days = daysUntil(r.retention_release_date);
+    const isDue = days <= 0;
+    const amount = (Number(r.planned_revenue) || 0) * (Number(r.retention_pct) || 0) / 100;
+    return {
+      id: 'retention-due-' + r.id,
+      rule: 'retention_due',
+      severity: isDue ? 'high' : 'medium',
+      title: 'Retention on ' + (r.name || 'a job') + ' — '
+        + (isDue ? 'due back now' : 'due back in ' + days + ' day(s)'),
+      body: (r.client_name ? r.client_name + ' · ' : '')
+        + (amount > 0 ? fmtMoney(amount) + ' held back (' + r.retention_pct + '%) · ' : r.retention_pct + '% held back · ')
+        + 'release date ' + r.retention_release_date + ' — invoice it before it gets forgotten',
+      link: '/finance/jobs/' + r.id,
+      meta: { days_to_due: days, value: amount, retention_pct: r.retention_pct },
+    };
+  });
+}
+
 // ─── Aggregator ─────────────────────────────────────────────────────────────
 
 function gatherAlerts(userId) {
@@ -253,6 +329,7 @@ function gatherAlerts(userId) {
     ...ruleBudgetOverrun(userId, thresholds),
     ...ruleStaleQuotes(userId, thresholds),
     ...ruleDayRateBelowBreakeven(userId),
+    ...ruleRetentionDue(userId),
   ];
   const severityOrder = { high: 0, medium: 1, low: 2 };
   cards.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));

@@ -33,6 +33,8 @@ import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
 import VariationEditorPage from './pages/VariationEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
+import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
+import InvoicePublicPage from './pages/InvoicePublicPage';
 import InvoicesPage from './pages/InvoicesPage';
 import InvoiceEditorPage from './pages/InvoiceEditorPage';
 import DocumentsPage from './pages/DocumentsPage';
@@ -72,6 +74,10 @@ function AppInner() {
         <Route path="/magic" element={<MagicLinkPage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
+        {/* Public quote acceptance — same pattern, the builder's client opens this. */}
+        <Route path="/q/:token" element={<QuoteAcceptancePage />} />
+        {/* Public invoice view — emailed/WhatsApped to the builder's client. */}
+        <Route path="/i/:token" element={<InvoicePublicPage />} />
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />

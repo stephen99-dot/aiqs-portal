@@ -10,12 +10,15 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const { streamInvoicePdf, invoicePdfBuffer } = require('./invoicePdf');
+const mailer = require('./mailer');
 
 const router = express.Router();
 router.use(authMiddleware, requireEstimator, requireEstimatorPassword);
@@ -51,6 +54,12 @@ function nextInvoiceNumber(userId) {
 function getInvoice(id, userId) {
   return db.prepare('SELECT * FROM invoices WHERE id = ? AND user_id = ?').get(id, userId);
 }
+
+// Same token scheme as quote/variation share links — powers /i/<token>.
+function newShareToken() {
+  return crypto.randomBytes(24).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
 function getInvoiceLines(invoiceId) {
   return db.prepare(
     'SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY sort_order ASC, rowid ASC'
@@ -60,22 +69,33 @@ function getInvoiceLines(invoiceId) {
 function computeTotals(lines, opts) {
   const vatPct = num(opts.vat_pct);
   const discount = num(opts.discount_amount);
+  const reverseCharge = opts.reverse_charge ? 1 : 0;
+  const cisApplies = opts.cis_applies ? 1 : 0;
+  const cisRate = num(opts.cis_rate, 20);
   let net = 0;
+  let labour = 0;
   for (const ln of lines) {
     const qty = num(ln.qty);
     const rate = num(ln.rate);
     ln.line_total = round2(qty * rate);
     net += ln.line_total;
+    if (ln.is_labour) labour += ln.line_total;
   }
   const beforeVat = Math.max(0, net - discount);
-  const vat = beforeVat * (vatPct / 100);
+  // A4 — domestic reverse charge: no VAT is charged here; the customer
+  // accounts for it to HMRC (the PDF prints the required wording + amount).
+  const vat = reverseCharge ? 0 : beforeVat * (vatPct / 100);
   const grand = beforeVat + vat;
+  // A4 — CIS: the deduction applies to the labour element only, ex VAT.
+  // grand_total stays the gross; deduction and net payable show on the PDF.
   return {
     net_total: round2(net),
     discount_amount: round2(discount),
     vat_pct: vatPct,
     vat_amount: round2(vat),
     grand_total: round2(grand),
+    cis_labour_total: cisApplies ? round2(labour) : 0,
+    cis_deduction: cisApplies ? round2(labour * (cisRate / 100)) : 0,
   };
 }
 
@@ -237,7 +257,13 @@ router.patch('/:id', (req, res) => {
     if (rejectIfPaid(inv, res)) return;
     const b = req.body || {};
     const allowed = ['client_name', 'client_email', 'client_address', 'currency', 'issue_date',
-      'due_date', 'payment_terms_days', 'notes', 'vat_pct', 'discount_amount', 'job_id', 'status'];
+      'due_date', 'payment_terms_days', 'notes', 'vat_pct', 'discount_amount', 'job_id', 'status',
+      'reminders_enabled', 'cis_applies', 'cis_rate', 'reverse_charge', 'client_vat_number'];
+    // Turning CIS on without a rate: default from the builder's Tax & CIS
+    // settings (20 verified / 30 unverified).
+    if (b.cis_applies && !('cis_rate' in b) && inv.cis_rate == null) {
+      b.cis_rate = num(getOibSettings(req.user.id).cis_default_rate, 20);
+    }
     const sets = [];
     const vals = [];
     for (const k of allowed) {
@@ -251,17 +277,15 @@ router.patch('/:id', (req, res) => {
       sets.push('updated_at = CURRENT_TIMESTAMP');
       vals.push(inv.id);
       db.prepare('UPDATE invoices SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
-      // If vat_pct or discount_amount changed, recompute totals.
-      if ('vat_pct' in b || 'discount_amount' in b) {
+      // Recompute totals if anything that feeds them changed.
+      const totalsKeys = ['vat_pct', 'discount_amount', 'cis_applies', 'cis_rate', 'reverse_charge'];
+      if (totalsKeys.some(k => k in b)) {
         const lines = getInvoiceLines(inv.id);
-        const newPcts = {
-          vat_pct: 'vat_pct' in b ? b.vat_pct : inv.vat_pct,
-          discount_amount: 'discount_amount' in b ? b.discount_amount : inv.discount_amount,
-        };
-        const t = computeTotals(lines, newPcts);
+        const fresh = getInvoice(inv.id, req.user.id);
+        const t = computeTotals(lines, fresh);
         db.prepare(
-          'UPDATE invoices SET net_total=?, discount_amount=?, vat_amount=?, grand_total=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
-        ).run(t.net_total, t.discount_amount, t.vat_amount, t.grand_total, inv.id);
+          'UPDATE invoices SET net_total=?, discount_amount=?, vat_amount=?, grand_total=?, cis_labour_total=?, cis_deduction=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+        ).run(t.net_total, t.discount_amount, t.vat_amount, t.grand_total, t.cis_labour_total, t.cis_deduction, inv.id);
       }
     }
     res.json({ id: inv.id });
@@ -278,13 +302,13 @@ router.put('/:id/lines', (req, res) => {
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     if (rejectIfPaid(inv, res)) return;
     const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
-    const totals = computeTotals(lines, { vat_pct: inv.vat_pct, discount_amount: inv.discount_amount });
+    const totals = computeTotals(lines, inv);
 
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
       const ins = db.prepare(
-        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, is_labour, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let order = 0;
       for (const ln of lines) {
@@ -296,12 +320,13 @@ router.put('/:id/lines', (req, res) => {
           (ln.unit || 'item').toString().slice(0, 20),
           num(ln.qty), num(ln.rate),
           num(ln.line_total) || round2(num(ln.qty) * num(ln.rate)),
+          ln.is_labour ? 1 : 0,
           ln.sort_order != null ? num(ln.sort_order) : order++
         );
       }
       db.prepare(
-        'UPDATE invoices SET net_total=?, vat_amount=?, grand_total=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
-      ).run(totals.net_total, totals.vat_amount, totals.grand_total, inv.id);
+        'UPDATE invoices SET net_total=?, vat_amount=?, grand_total=?, cis_labour_total=?, cis_deduction=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+      ).run(totals.net_total, totals.vat_amount, totals.grand_total, totals.cis_labour_total, totals.cis_deduction, inv.id);
     });
     txn();
     res.json({ id: inv.id, ...totals });
@@ -326,22 +351,25 @@ router.post('/:id/duplicate', (req, res) => {
       db.prepare(
         'INSERT INTO invoices (id, user_id, job_id, quote_id, invoice_number, client_name, client_email, '
         + 'client_address, currency, issue_date, due_date, payment_terms_days, notes, net_total, '
-        + 'discount_amount, vat_pct, vat_amount, grand_total, status) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'discount_amount, vat_pct, vat_amount, grand_total, status, '
+        + 'cis_applies, cis_rate, cis_labour_total, cis_deduction, reverse_charge, client_vat_number) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         newId, req.user.id, inv.job_id, inv.quote_id, newNumber,
         inv.client_name, inv.client_email, inv.client_address,
         inv.currency, issueDate, dueDate, inv.payment_terms_days,
         inv.notes,
         inv.net_total, inv.discount_amount, inv.vat_pct, inv.vat_amount, inv.grand_total,
-        'draft'
+        'draft',
+        inv.cis_applies || 0, inv.cis_rate, inv.cis_labour_total || 0, inv.cis_deduction || 0,
+        inv.reverse_charge || 0, inv.client_vat_number
       );
       const ins = db.prepare(
-        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, is_labour, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const ln of lines) {
-        ins.run(uuidv4(), newId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.line_total, ln.sort_order);
+        ins.run(uuidv4(), newId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.line_total, ln.is_labour || 0, ln.sort_order);
       }
     });
     txn();
@@ -374,21 +402,74 @@ router.delete('/:id', (req, res) => {
   }
 });
 
-// POST /api/invoices/:id/send
-router.post('/:id/send', (req, res) => {
+// POST /api/invoices/:id/send — really send it (A2): mint the public
+// /i/<token> link, email the client the PDF when SMTP + a client email exist,
+// and always hand back the shareable link for WhatsApp/text.
+router.post('/:id/send', async (req, res) => {
   try {
     const inv = getInvoice(req.params.id, req.user.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     if (rejectIfPaid(inv, res)) return;
     const issueDate = inv.issue_date || todayIso();
     const dueDate = inv.due_date || dueDateFromTerms(issueDate, inv.payment_terms_days || 30);
+    const token = inv.public_token || newShareToken();
     db.prepare(
-      "UPDATE invoices SET status = 'sent', issue_date = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).run(issueDate, dueDate, inv.id);
-    res.json({ id: inv.id, status: 'sent', issue_date: issueDate, due_date: dueDate });
+      "UPDATE invoices SET status = 'sent', issue_date = ?, due_date = ?, public_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(issueDate, dueDate, token, inv.id);
+
+    const fresh = getInvoice(inv.id, req.user.id);
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'your builder';
+    const link = mailer.BASE_URL + '/i/' + token;
+
+    let attachments = [];
+    if (fresh.client_email && mailer.isConfigured()) {
+      try {
+        const pdf = await invoicePdfBuffer(fresh, getInvoiceLines(fresh.id), branding, userInfo);
+        attachments = [{ filename: (fresh.invoice_number || 'invoice') + '.pdf', content: pdf }];
+      } catch (e) {
+        console.error('[Invoices] PDF attach failed:', e.message);
+      }
+    }
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'invoice_send',
+      to: fresh.client_email || null,
+      subject: 'Invoice ' + (fresh.invoice_number || '') + ' from ' + companyName,
+      heading: 'Invoice ' + (fresh.invoice_number || ''),
+      paragraphs: [
+        'Please find your invoice from ' + companyName + (fresh.client_name ? ' for ' + fresh.client_name : '') + '.',
+        'Amount due: ' + fmtMoney(fresh.grand_total, fresh.currency) + (dueDate ? ', due by ' + dueDate + '.' : '.'),
+        'The invoice is attached as a PDF, or you can view it online below.',
+      ],
+      ctaText: 'View the invoice',
+      ctaUrl: link,
+      attachments,
+    });
+
+    res.json({
+      id: inv.id, status: 'sent', issue_date: issueDate, due_date: dueDate,
+      token, path: '/i/' + token,
+      delivery: mail.delivery,
+      emailed_to: mail.delivery === 'email' ? fresh.client_email : null,
+    });
   } catch (err) {
     console.error('[Invoices] send error:', err);
     res.status(500).json({ error: 'Failed to send invoice.' });
+  }
+});
+
+// GET /api/invoices/:id/share-url — fetch the public link again later.
+router.get('/:id/share-url', (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (!inv.public_token) return res.status(400).json({ error: 'Not sent yet — send it first to get a link.' });
+    res.json({ token: inv.public_token, path: '/i/' + inv.public_token });
+  } catch (err) {
+    console.error('[Invoices] share-url error:', err);
+    res.status(500).json({ error: 'Failed.' });
   }
 });
 
@@ -423,13 +504,19 @@ router.post('/:id/void', (req, res) => {
   }
 });
 
-// ─── Stripe link (opt-in) ───────────────────────────────────────────────────
+// ─── Stripe "Pay now" link (opt-in) ─────────────────────────────────────────
+
+function getOibSettings(userId) {
+  db.prepare('INSERT OR IGNORE INTO oib_settings (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM oib_settings WHERE user_id = ?').get(userId);
+}
 
 // POST /api/invoices/:id/stripe-link
-// Mints a one-off Stripe Checkout payment link for this invoice's grand total.
+// Mints a one-off Stripe Checkout payment link for this invoice. The webhook
+// (stripe-webhook.js) marks the invoice paid on checkout completion via the
+// invoice_id metadata. Card fees follow the builder's setting: 'absorb'
+// charges the invoice total; 'add' puts the processing fee on top.
 // Optional — returns 503 with STRIPE_NOT_CONFIGURED if no STRIPE_SECRET_KEY.
-// TODO: wire to billing — production rollout needs a webhook handler to flip
-// invoices.status to 'paid' on payment_intent.succeeded.
 router.post('/:id/stripe-link', async (req, res) => {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -442,7 +529,15 @@ router.post('/:id/stripe-link', async (req, res) => {
 
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     const currency = (inv.currency || 'GBP').toLowerCase();
-    const amount = Math.round(num(inv.grand_total) * 100);
+
+    const settings = getOibSettings(req.user.id);
+    let chargeTotal = num(inv.grand_total);
+    let feeAdded = 0;
+    if (settings.card_fee_mode === 'add') {
+      feeAdded = round2(chargeTotal * (num(settings.card_fee_pct, 1.5) / 100) + num(settings.card_fee_fixed, 0.20));
+      chargeTotal = round2(chargeTotal + feeAdded);
+    }
+    const amount = Math.round(chargeTotal * 100);
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -453,7 +548,10 @@ router.post('/:id/stripe-link', async (req, res) => {
           unit_amount: amount,
           product_data: {
             name: 'Invoice ' + (inv.invoice_number || inv.id.slice(0, 8)),
-            description: inv.client_name ? 'For ' + inv.client_name : undefined,
+            description: [
+              inv.client_name ? 'For ' + inv.client_name : null,
+              feeAdded > 0 ? 'Includes ' + fmtMoney(feeAdded, inv.currency) + ' card processing fee' : null,
+            ].filter(Boolean).join(' · ') || undefined,
           },
         },
       }],
@@ -464,10 +562,127 @@ router.post('/:id/stripe-link', async (req, res) => {
       'UPDATE invoices SET stripe_payment_link=?, stripe_payment_intent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
     ).run(session.url, session.payment_intent || null, inv.id);
 
-    res.json({ url: session.url });
+    res.json({ url: session.url, fee_added: feeAdded });
   } catch (err) {
     console.error('[Invoices] stripe-link error:', err);
     res.status(500).json({ error: 'Failed to create Stripe link.' });
+  }
+});
+
+// ─── A3: "Chase this payment" — drafted by AI, approved by the builder ──────
+
+const CHASER_SYSTEM = `You draft payment-chasing emails for a UK builder. Firm but always polite and professional — the client relationship matters more than this one invoice. Plain English, no legalese, no threats. 3 short paragraphs maximum. Sign off with the company name only (no placeholder names). Use ONLY the facts provided — never invent amounts, dates or names.`;
+
+// POST /api/invoices/:id/chase-draft — returns { subject, body } for approval.
+// NEVER sends anything itself.
+router.post('/:id/chase-draft', async (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (inv.status === 'paid') return res.status(400).json({ error: 'This invoice is already paid.' });
+    if (inv.status === 'void') return res.status(400).json({ error: 'This invoice is void.' });
+
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'the builder';
+    const job = inv.job_id ? db.prepare('SELECT name FROM estimator_jobs WHERE id = ?').get(inv.job_id) : null;
+    const today = todayIso();
+    const daysOverdue = inv.due_date && inv.due_date < today
+      ? Math.round((new Date(today) - new Date(inv.due_date)) / 86400000)
+      : 0;
+
+    const facts = [
+      'Company: ' + companyName,
+      'Client: ' + (inv.client_name || 'the client'),
+      'Invoice number: ' + (inv.invoice_number || ''),
+      'Amount due: ' + fmtMoney(inv.grand_total, inv.currency),
+      'Issue date: ' + (inv.issue_date || 'unknown'),
+      'Due date: ' + (inv.due_date || 'unknown'),
+      daysOverdue > 0 ? 'Days overdue: ' + daysOverdue : 'Not yet overdue (chasing ahead of the due date)',
+      job?.name ? 'Job: ' + job.name : null,
+    ].filter(Boolean).join('\n');
+
+    const { callModel, MODELS } = require('./anthropicClient');
+    const result = await callModel({
+      model: MODELS.FAST,
+      maxTokens: 700,
+      temperature: 0.4,
+      system: CHASER_SYSTEM,
+      messages: [{ role: 'user', content: 'Draft the chaser email now.\n\nFACTS:\n' + facts }],
+      tools: [{
+        name: 'submit_email',
+        description: 'Submit the drafted chaser email.',
+        input_schema: {
+          type: 'object',
+          properties: { subject: { type: 'string' }, body: { type: 'string' } },
+          required: ['subject', 'body'],
+        },
+      }],
+      toolChoice: { type: 'tool', name: 'submit_email' },
+      userId: req.user.id,
+      action: 'invoice_chase_draft',
+    });
+    if (!result.ok || !result.json) {
+      return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
+    }
+
+    res.json({
+      subject: String(result.json.subject || '').slice(0, 200),
+      body: String(result.json.body || '').slice(0, 4000),
+      can_email: !!(inv.client_email && mailer.isConfigured()),
+      client_email: inv.client_email || null,
+      days_overdue: daysOverdue,
+    });
+  } catch (err) {
+    console.error('[Invoices] chase-draft error:', err);
+    res.status(500).json({ error: 'Failed to draft the chaser.' });
+  }
+});
+
+// POST /api/invoices/:id/chase-send { subject, body } — sends the (possibly
+// edited) chaser with the invoice PDF attached. Only ever called after the
+// builder has seen and approved the draft.
+router.post('/:id/chase-send', async (req, res) => {
+  try {
+    const inv = getInvoice(req.params.id, req.user.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (inv.status === 'paid') return res.status(400).json({ error: 'This invoice is already paid.' });
+    if (!inv.client_email) return res.status(400).json({ error: "Add the client's email to the invoice first." });
+    if (!mailer.isConfigured()) return res.status(503).json({ error: 'Email is not set up on the server — copy the message and send it by WhatsApp or text instead.', code: 'MAIL_NOT_CONFIGURED' });
+
+    const b = req.body || {};
+    const subject = String(b.subject || '').trim().slice(0, 200);
+    const bodyText = String(b.body || '').trim().slice(0, 4000);
+    if (!subject || !bodyText) return res.status(400).json({ error: 'Subject and message are both needed.' });
+
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    let attachments = [];
+    try {
+      const pdf = await invoicePdfBuffer(inv, getInvoiceLines(inv.id), branding, userInfo);
+      attachments = [{ filename: (inv.invoice_number || 'invoice') + '.pdf', content: pdf }];
+    } catch (e) {
+      console.error('[Invoices] chase PDF attach failed:', e.message);
+    }
+
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'payment_chase',
+      to: inv.client_email,
+      subject,
+      heading: subject,
+      paragraphs: bodyText.split(/\n{2,}/).map(p => p.trim()).filter(Boolean),
+      ctaText: inv.public_token ? 'View the invoice' : null,
+      ctaUrl: inv.public_token ? mailer.BASE_URL + '/i/' + inv.public_token : null,
+      attachments,
+    });
+    if (!mail.ok) {
+      return res.status(502).json({ error: 'The email could not be sent' + (mail.error ? ' (' + mail.error + ')' : '') + '. Copy the message and send it by WhatsApp instead.' });
+    }
+    res.json({ ok: true, sent_to: inv.client_email });
+  } catch (err) {
+    console.error('[Invoices] chase-send error:', err);
+    res.status(500).json({ error: 'Failed to send the chaser.' });
   }
 });
 
@@ -486,143 +701,75 @@ router.get('/:id/pdf', (req, res) => {
     const lines = getInvoiceLines(inv.id);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
-    const cc = inv.currency || 'GBP';
-
-    const filename = (inv.invoice_number || 'invoice') + '.pdf';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    doc.pipe(res);
-
-    const primary = branding.primary_colour || '#1B2A4A';
-
-    // Header band
-    doc.rect(0, 0, doc.page.width, 90).fill(primary);
-    let titleX = 40;
-    if (branding.logo_filename) {
-      const logoPath = path.join(brandingDir, branding.logo_filename);
-      if (fs.existsSync(logoPath) && /\.(png|jpe?g)$/i.test(branding.logo_filename)) {
-        try { doc.image(logoPath, 40, 22, { fit: [120, 46] }); titleX = 175; } catch (e) {}
-      }
-    }
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20)
-      .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Invoice', titleX, 28);
-    doc.font('Helvetica').fontSize(9)
-      .text('Invoice ' + (inv.invoice_number || ''), titleX, 56)
-      .text('Issued ' + (inv.issue_date || ''), titleX, 70);
-
-    // Status banner
-    let topY = 92;
-    if (inv.status === 'paid') {
-      doc.rect(0, topY, doc.page.width, 18).fill('#10B981');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('PAID', 40, topY + 4);
-      topY += 18;
-    } else if (inv.status === 'void') {
-      doc.rect(0, topY, doc.page.width, 18).fill('#94A3B8');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('VOID', 40, topY + 4);
-      topY += 18;
-    } else if (overdueState(inv)) {
-      doc.rect(0, topY, doc.page.width, 18).fill('#EF4444');
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text('OVERDUE', 40, topY + 4);
-      topY += 18;
-    }
-
-    // Two-column block: bill to + company details + dates
-    let y = topY + 20;
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(11).text('Bill to', 40, y);
-    doc.font('Helvetica').fontSize(10).fillColor('#333333');
-    let by = y + 14;
-    if (inv.client_name) { doc.text(inv.client_name, 40, by); by += 13; }
-    if (inv.client_address) {
-      const lns = String(inv.client_address).split(/\r?\n/);
-      for (const ln of lns) { doc.text(ln, 40, by); by += 12; }
-    }
-    if (inv.client_email) { doc.text(inv.client_email, 40, by); by += 12; }
-
-    // Right column
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(11).text('Invoice details', 320, y, { width: 235 });
-    doc.font('Helvetica').fontSize(10).fillColor('#333333');
-    doc.text('Invoice no.: ' + (inv.invoice_number || ''), 320, y + 14, { width: 235 });
-    doc.text('Issued: ' + (inv.issue_date || ''), 320, y + 28, { width: 235 });
-    doc.text('Due: ' + (inv.due_date || ''), 320, y + 42, { width: 235 });
-    if (branding.company_address) {
-      const lns = String(branding.company_address).split(/\r?\n/).slice(0, 3);
-      let ry = y + 60;
-      for (const ln of lns) { doc.text(ln, 320, ry, { width: 235 }); ry += 12; }
-    }
-
-    y = Math.max(by, y + 80) + 10;
-
-    // Lines header
-    doc.rect(40, y, 515, 18).fill(primary);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
-    doc.text('Description', 44, y + 5);
-    doc.text('Qty',  330, y + 5, { width: 40, align: 'right' });
-    doc.text('Unit', 375, y + 5);
-    doc.text('Rate', 410, y + 5, { width: 65, align: 'right' });
-    doc.text('Total',480, y + 5, { width: 75, align: 'right' });
-    y += 18;
-    doc.fillColor('#111111').font('Helvetica').fontSize(9);
-
-    function ensureRoom(h) {
-      if (y + h > doc.page.height - 80) { doc.addPage(); y = 50; }
-    }
-
-    for (const ln of lines) {
-      const descText = (ln.item ? ln.item + ' — ' : '') + (ln.description || '');
-      const descH = doc.heightOfString(descText, { width: 280 });
-      const rowH = Math.max(14, descH + 4);
-      ensureRoom(rowH);
-      doc.text(descText, 44, y + 2, { width: 280 });
-      doc.text(String(num(ln.qty)), 330, y + 2, { width: 40, align: 'right' });
-      doc.text(String(ln.unit || ''), 375, y + 2);
-      doc.text(fmtMoney(ln.rate, cc), 410, y + 2, { width: 65, align: 'right' });
-      doc.text(fmtMoney(ln.line_total, cc), 480, y + 2, { width: 75, align: 'right' });
-      doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(40, y + rowH).lineTo(555, y + rowH).stroke();
-      y += rowH;
-    }
-
-    // Summary
-    ensureRoom(110);
-    y += 10;
-    doc.rect(310, y, 245, 100).strokeColor(primary).lineWidth(1).stroke();
-    let sy = y + 8;
-    function row(label, value, bold) {
-      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor('#111111');
-      doc.text(label, 318, sy, { width: 140 });
-      doc.text(value, 460, sy, { width: 90, align: 'right' });
-      sy += 16;
-    }
-    row('Net', fmtMoney(inv.net_total, cc));
-    if (num(inv.discount_amount) > 0) row('Discount', '−' + fmtMoney(inv.discount_amount, cc));
-    row('VAT (' + num(inv.vat_pct).toFixed(1) + '%)', fmtMoney(inv.vat_amount, cc));
-    sy += 2;
-    doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();
-    sy += 4;
-    row('Amount due', fmtMoney(inv.grand_total, cc), true);
-    if (inv.status === 'paid' && num(inv.paid_amount) > 0) {
-      row('Paid', fmtMoney(inv.paid_amount, cc));
-    }
-    y += 110;
-
-    // Notes / terms
-    if (inv.notes) {
-      ensureRoom(60);
-      y += 8;
-      doc.font('Helvetica-Bold').fontSize(10).text('Payment terms / notes', 40, y); y += 14;
-      doc.font('Helvetica').fontSize(9).fillColor('#333333').text(inv.notes, 40, y, { width: 515 });
-      doc.fillColor('#111111');
-    }
-
-    const footY = doc.page.height - 50;
-    doc.font('Helvetica').fontSize(8).fillColor('#666666')
-      .text(branding.footer_text || ('Payment due by ' + (inv.due_date || 'the due date') + '. Please reference the invoice number when paying.'), 40, footY, { width: 515, align: 'center' });
-
-    doc.end();
+    // Rendering lives in invoicePdf.js so the public /i/<token> page and the
+    // email attachment use the identical document.
+    streamInvoicePdf(res, inv, lines, branding, userInfo);
   } catch (err) {
     console.error('[Invoices] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+// ─── A4: "Send to your accountant" — Xero / QuickBooks CSV exports ──────────
+
+const { buildInvoicesCsv, buildPaymentsCsv } = require('./accountingExport');
+
+function buildExport(userId, what, format) {
+  const fmt = format === 'quickbooks' ? 'quickbooks' : 'xero';
+  return what === 'payments' ? buildPaymentsCsv(userId, fmt) : buildInvoicesCsv(userId, fmt);
+}
+
+// GET /api/invoices/_export/csv?what=invoices|payments&format=xero|quickbooks
+router.get('/_export/csv', (req, res) => {
+  try {
+    const { filename, csv } = buildExport(req.user.id, String(req.query.what || 'invoices'), String(req.query.format || 'xero'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(csv);
+  } catch (err) {
+    console.error('[Invoices] export error:', err);
+    res.status(500).json({ error: 'Failed to build the export.' });
+  }
+});
+
+// POST /api/invoices/_export/email { what, format } — emails the CSV to the
+// accountant's saved address (Settings -> Tax & CIS).
+router.post('/_export/email', async (req, res) => {
+  try {
+    const settings = getOibSettings(req.user.id);
+    if (!settings.accountant_email) {
+      return res.status(400).json({ error: "No accountant email saved yet — add it in Settings under 'Tax & CIS'." });
+    }
+    if (!mailer.isConfigured()) {
+      return res.status(503).json({ error: 'Email is not set up on the server — download the file and send it yourself instead.', code: 'MAIL_NOT_CONFIGURED' });
+    }
+    const b = req.body || {};
+    const what = String(b.what || 'invoices');
+    const format = String(b.format || 'xero');
+    const { filename, csv } = buildExport(req.user.id, what, format);
+    const userInfo = getUserDisplay(req.user.id);
+    const branding = getBranding(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || '';
+
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'accountant_export',
+      to: settings.accountant_email,
+      subject: (what === 'payments' ? 'Payments' : 'Invoices') + ' export from ' + companyName,
+      heading: 'Books from ' + companyName,
+      paragraphs: [
+        'Attached: ' + (what === 'payments' ? 'payments received' : 'sales invoices') + ' in '
+        + (format === 'quickbooks' ? 'QuickBooks' : 'Xero') + ' import format.',
+        'Sent from the AI QS portal on behalf of ' + companyName + '.',
+      ],
+      attachments: [{ filename, content: Buffer.from(csv, 'utf-8') }],
+      replyTo: userInfo?.email,
+    });
+    if (!mail.ok) return res.status(502).json({ error: 'The email could not be sent. Download the file instead.' });
+    res.json({ ok: true, sent_to: settings.accountant_email });
+  } catch (err) {
+    console.error('[Invoices] export email error:', err);
+    res.status(500).json({ error: 'Failed to email the export.' });
   }
 });
 

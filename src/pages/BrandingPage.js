@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
+import TaxCisSettings from '../components/TaxCisSettings';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -357,6 +358,9 @@ export default function BrandingPage() {
               })}
             </div>
           </Card>
+
+          {/* A4 — Tax & CIS + card fees (Office in a Box users only) */}
+          <TaxCisSettings />
         </div>
 
         {/* Live document preview */}

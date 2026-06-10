@@ -66,6 +66,52 @@ function ensureJob(req, jobId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  SETTINGS (A3/A4 — card fees, Tax & CIS, accountant email)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function getSettings(userId) {
+  db.prepare('INSERT OR IGNORE INTO oib_settings (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM oib_settings WHERE user_id = ?').get(userId);
+}
+
+router.get('/settings', (req, res) => {
+  try {
+    res.json({ settings: getSettings(req.user.id) });
+  } catch (err) {
+    console.error('[Finance] settings GET error:', err);
+    res.status(500).json({ error: 'Failed to load settings.' });
+  }
+});
+
+router.put('/settings', (req, res) => {
+  try {
+    getSettings(req.user.id); // ensure the row exists
+    const b = req.body || {};
+    const sets = [];
+    const vals = [];
+    const put = (col, val) => { sets.push(col + ' = ?'); vals.push(val); };
+    if ('card_fee_mode' in b && ['absorb', 'add'].includes(b.card_fee_mode)) put('card_fee_mode', b.card_fee_mode);
+    if ('card_fee_pct' in b) put('card_fee_pct', Math.min(Math.max(num(b.card_fee_pct), 0), 10));
+    if ('card_fee_fixed' in b) put('card_fee_fixed', Math.min(Math.max(num(b.card_fee_fixed), 0), 5));
+    if ('vat_registered' in b) put('vat_registered', b.vat_registered ? 1 : 0);
+    if ('vat_number' in b) put('vat_number', String(b.vat_number || '').trim().slice(0, 20) || null);
+    if ('cis_contractor' in b) put('cis_contractor', b.cis_contractor ? 1 : 0);
+    if ('cis_subcontractor' in b) put('cis_subcontractor', b.cis_subcontractor ? 1 : 0);
+    if ('cis_default_rate' in b) put('cis_default_rate', [20, 30].includes(num(b.cis_default_rate)) ? num(b.cis_default_rate) : 20);
+    if ('accountant_email' in b) put('accountant_email', String(b.accountant_email || '').trim().slice(0, 200) || null);
+    if (sets.length > 0) {
+      sets.push('updated_at = CURRENT_TIMESTAMP');
+      vals.push(req.user.id);
+      db.prepare('UPDATE oib_settings SET ' + sets.join(', ') + ' WHERE user_id = ?').run(...vals);
+    }
+    res.json({ settings: getSettings(req.user.id) });
+  } catch (err) {
+    console.error('[Finance] settings PUT error:', err);
+    res.status(500).json({ error: 'Failed to save settings.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  OVERHEADS
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -240,12 +286,19 @@ router.patch('/jobs/:id', (req, res) => {
     const job = ensureJob(req, req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found.' });
     const b = req.body || {};
-    const allowed = ['name', 'client_name', 'project_type', 'location', 'status', 'notes'];
+    // A4: retention_pct + retention_release_date — money held back by the
+    // client, released on a date (the PM alerts when it falls due).
+    const allowed = ['name', 'client_name', 'project_type', 'location', 'status', 'notes', 'retention_pct', 'retention_release_date'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {
       if (k in b) {
         if (k === 'status' && !['planned', 'active', 'completed', 'cancelled'].includes(b[k])) continue;
+        if (k === 'retention_pct') {
+          sets.push('retention_pct = ?');
+          vals.push(Math.min(Math.max(num(b[k]), 0), 50));
+          continue;
+        }
         sets.push(k + ' = ?');
         vals.push(b[k] == null ? null : String(b[k]).slice(0, 4000));
       }
@@ -416,7 +469,7 @@ router.get('/dashboard', (req, res) => {
     const quotesMonth = db.prepare(
       'SELECT COUNT(*) as c, COALESCE(SUM(grand_total),0) as v FROM quotes WHERE user_id=? AND created_at >= ?'
     ).get(userId, sinceIso);
-    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='won'").get(userId).c;
+    const won = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status IN ('won','accepted')").get(userId).c;
     const lost = db.prepare("SELECT COUNT(*) as c FROM quotes WHERE user_id=? AND status='lost'").get(userId).c;
     const decided = won + lost;
     const winRate = decided > 0 ? Math.round((won / decided) * 100) : null;

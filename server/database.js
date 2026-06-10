@@ -658,6 +658,56 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_price_entries_supplier ON price_entries(supplier_id);
   CREATE INDEX IF NOT EXISTS idx_price_entries_stale ON price_entries(stale);
 
+  -- A3/A4: per-user Office-in-a-Box settings — card fees, Tax & CIS, the
+  -- accountant's email for exports. One row per user, INSERT OR IGNORE on
+  -- first read seeds defaults (same pattern as pm_alert_thresholds).
+  CREATE TABLE IF NOT EXISTS oib_settings (
+    user_id TEXT PRIMARY KEY,
+    card_fee_mode TEXT DEFAULT 'absorb',     -- 'absorb' | 'add' (to the payment)
+    card_fee_pct REAL DEFAULT 1.5,
+    card_fee_fixed REAL DEFAULT 0.20,
+    vat_registered INTEGER DEFAULT 0,
+    vat_number TEXT,
+    cis_contractor INTEGER DEFAULT 0,        -- pays subcontractors under CIS
+    cis_subcontractor INTEGER DEFAULT 0,     -- gets paid under CIS
+    cis_default_rate REAL DEFAULT 20,        -- 20 = verified, 30 = unverified
+    accountant_email TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
+  -- A2: every Office-in-a-Box email send (or attempt) is logged here.
+  -- status: 'sent' | 'failed' | 'manual' (manual = SMTP not configured or no
+  -- recipient — the builder shares the link by WhatsApp/text instead).
+  CREATE TABLE IF NOT EXISTS mail_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    type TEXT,
+    recipient TEXT,
+    subject TEXT,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_mail_log_user ON mail_log(user_id, created_at);
+
+  -- A1 (Office in a Box): questions a client asks from the public quote page.
+  -- Read by the owner from the quote editor; read_at flips when viewed.
+  CREATE TABLE IF NOT EXISTS quote_messages (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    sender_name TEXT,
+    sender_email TEXT,
+    message TEXT NOT NULL,
+    read_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (quote_id) REFERENCES quotes(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_quote_messages_quote ON quote_messages(quote_id);
+  CREATE INDEX IF NOT EXISTS idx_quote_messages_user ON quote_messages(user_id, read_at);
+
   -- Stripe one-off payments (BOQ credit packs) that could NOT be matched to a
   -- portal user at webhook time — e.g. the buyer paid via a Payment Link using
   -- a different email than their account. We record the paid credits here so
@@ -724,6 +774,43 @@ const migrations = [
   // Phase 5: per-user model-tier override ('standard' | 'frontier') — admin-set,
   // forces the agentic/Fable takeoff loop for that user's complex jobs.
   { column: 'model_tier', table: 'users', sql: "ALTER TABLE users ADD COLUMN model_tier TEXT DEFAULT 'standard'" },
+  // A1: public quote acceptance — share token + signed acceptance audit trail
+  // (mirrors estimator_variations). locked=1 once accepted; the row becomes
+  // the audit record and line edits are rejected.
+  { column: 'public_token', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN public_token TEXT" },
+  { column: 'sent_at', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN sent_at DATETIME" },
+  { column: 'locked', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN locked INTEGER DEFAULT 0" },
+  { column: 'accepted_at', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN accepted_at DATETIME" },
+  { column: 'acceptance_name', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_name TEXT" },
+  { column: 'acceptance_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_email TEXT" },
+  { column: 'acceptance_signature', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_signature TEXT" },
+  { column: 'acceptance_ip', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_ip TEXT" },
+  { column: 'acceptance_user_agent', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_user_agent TEXT" },
+  // A2: email delivery — quotes need a recipient; invoices get a public
+  // /i/<token> view page (the shareable link, and where A3's Pay now lives).
+  { column: 'client_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN client_email TEXT" },
+  { column: 'public_token', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN public_token TEXT" },
+  // A3: automated payment reminders — on by default for new invoices, the
+  // toggle is per invoice. reminder_stage: 0 none sent, 1 due-date, 2 = +7d,
+  // 3 = +14d (paymentReminders.js sends the highest stage not yet sent).
+  { column: 'reminders_enabled', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminders_enabled INTEGER DEFAULT 1" },
+  { column: 'reminder_stage', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_stage INTEGER DEFAULT 0" },
+  { column: 'reminder_last_at', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_last_at DATETIME" },
+  // A4 — UK compliance. CIS: deduction on the labour element only
+  // (line-level is_labour flag); gross stays in grand_total, the deduction
+  // and net payable are derived and shown on the PDF. Reverse charge: VAT
+  // excluded from the total, customer accounts for it (wording per VAT
+  // Notice 735 printed on the PDF, with the customer's VAT number).
+  { column: 'cis_applies', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_applies INTEGER DEFAULT 0" },
+  { column: 'cis_rate', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_rate REAL" },
+  { column: 'cis_labour_total', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_labour_total REAL DEFAULT 0" },
+  { column: 'cis_deduction', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_deduction REAL DEFAULT 0" },
+  { column: 'reverse_charge', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reverse_charge INTEGER DEFAULT 0" },
+  { column: 'client_vat_number', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN client_vat_number TEXT" },
+  { column: 'is_labour', table: 'invoice_lines', sql: "ALTER TABLE invoice_lines ADD COLUMN is_labour INTEGER DEFAULT 0" },
+  // A4 — retention held on a job, released on a date (PM alert when due).
+  { column: 'retention_pct', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_pct REAL DEFAULT 0" },
+  { column: 'retention_release_date', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_release_date DATE" },
 ];
 
 for (const { column, table, sql } of migrations) {
@@ -736,6 +823,15 @@ for (const { column, table, sql } of migrations) {
   } catch (err) {
     console.log(`Migration ${column}:`, err.message);
   }
+}
+
+// Indexes on migration-added columns must run after the loop — on an older
+// database the column doesn't exist until the ALTER TABLE above has run.
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_public_token ON quotes(public_token)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_public_token ON invoices(public_token)');
+} catch (err) {
+  console.log('Public token indexes:', err.message);
 }
 
 module.exports = db;

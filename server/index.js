@@ -24,6 +24,8 @@ const agentRoutes = require('./agentRoutes');
 const estimatorRoutes = require('./estimatorRoutes');
 const financeRoutes = require('./financeRoutes');
 const estimatorVariationRoutes = require('./estimatorVariationRoutes');
+const quotePublicRoutes = require('./quotePublicRoutes');
+const invoicePublicRoutes = require('./invoicePublicRoutes');
 const invoiceRoutes = require('./invoiceRoutes');
 const paymentScheduleRoutes = require('./paymentScheduleRoutes');
 const documentsRoutes = require('./documentsRoutes');
@@ -65,6 +67,11 @@ app.use('/api/finance', financeRoutes);
 // client opens via the shareable approval link.
 app.use('/api/change-orders', estimatorVariationRoutes.ownerRouter);
 app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
+// A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
+// links), rate-limited inside the router.
+app.use('/api/public/quotes', quotePublicRoutes);
+// A2: public invoice view (/i/<token>) — same posture.
+app.use('/api/public/invoices', invoicePublicRoutes);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
@@ -80,4 +87,6 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(buildPath));
   app.get('*', function(req, res) { res.sendFile(path.join(buildPath, 'index.html')); });
 }
+// A3: automated payment reminders — twice-daily sweep, no-op without SMTP.
+require('./paymentReminders').start();
 app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
