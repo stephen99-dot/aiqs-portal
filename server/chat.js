@@ -3261,6 +3261,18 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             branding: _branding,
           });
           if (buf && buf.length > 100) {
+            // Phase 9 recalc gate: the workbook's summed line totals must equal
+            // the deterministic pricer's construction total to the penny. Warns by
+            // default; set STRICT_RECALC=1 to hard-fail generation on a mismatch.
+            try {
+              const { assertBOQMatches } = require('./recalcGate');
+              const recalc = await assertBOQMatches(buf, pricedResult.summary.construction_total);
+              if (!recalc.ok) console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`);
+              else console.log(`[Stage 3] Recalc OK — ${recalc.rows} lines reconcile to £${recalc.expected}`);
+            } catch (recalcErr) {
+              console.error('[Stage 3] Recalc gate:', recalcErr.message);
+              if (process.env.STRICT_RECALC === '1') throw recalcErr; // hard gate
+            }
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
             fs.writeFileSync(path.join(outputsDir, fname), buf);
             downloadFiles.push({ name: fname, type: 'xlsx', url: `/api/downloads/${fname}`, size: buf.length });
