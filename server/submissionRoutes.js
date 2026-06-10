@@ -32,6 +32,19 @@ const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', '
 const uploadsDir = path.join(DATA_DIR, 'submission-uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+// Durable local copy of each submission's files, so a submission is never lost
+// when the external (Pipedream/Drive) forward fails. The submission row is
+// recorded regardless, so it always appears in the admin inbox.
+const submissionStoreDir = path.join(DATA_DIR, 'submission-store');
+function saveFilesLocally(files, submissionId) {
+  const dir = path.join(submissionStoreDir, submissionId);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of files) {
+    const safe = (f.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
+    fs.copyFileSync(f.path, path.join(dir, safe));
+  }
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
@@ -166,7 +179,14 @@ router.post('/', uploadFiles, async (req, res) => {
 
     const submissionId = 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
+    // Keep a durable local copy first so the submission is never lost, even if
+    // the external forward below fails. Best-effort.
+    let localSaved = false;
+    try { saveFilesLocally(files, submissionId); localSaved = true; }
+    catch (e) { console.error('[Submissions] local save failed:', e.message); }
+
     let pipedreamStatus = 'ok';
+    let forwarded = true;
     try {
       await forwardFiles(files, submissionId);
 
@@ -192,9 +212,15 @@ router.post('/', uploadFiles, async (req, res) => {
       });
       if (!resp.ok) throw new Error('Pipedream main webhook failed: ' + resp.status);
     } catch (err) {
+      // Don't lose the submission when the external forward fails — record it
+      // anyway (files are kept locally) so it appears in the inbox for the admin
+      // to action. Only hard-fail if we couldn't keep the files anywhere.
       console.error('[Submissions] Pipedream forward error:', err.message);
       pipedreamStatus = 'failed: ' + err.message;
-      return res.status(502).json({ error: 'Could not forward your submission. Please try again or contact support — no credit has been used.' });
+      forwarded = false;
+      if (!localSaved) {
+        return res.status(502).json({ error: 'Could not save your submission. Please try again — no credit has been used.' });
+      }
     }
 
     let creditsRemaining = isAdmin ? 999 : Math.max(0, totalCredits - 1);
@@ -226,6 +252,7 @@ router.post('/', uploadFiles, async (req, res) => {
       success: true,
       submission_id: submissionId,
       credits_remaining: creditsRemaining,
+      forwarded,
     });
   } catch (err) {
     console.error('[Submissions] Error:', err);
