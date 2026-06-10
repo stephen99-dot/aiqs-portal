@@ -9,6 +9,7 @@ const jwt = require('jsonwebtoken');
 const FILE_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const db = require('./database');
 const { callModel, MODELS, MAX_TOKENS, computeCost } = require('./anthropicClient');
+const { runAgenticTakeoff, shouldUseAgenticTakeoff } = require('./agenticTakeoff');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
 
@@ -2378,12 +2379,37 @@ ${summary}`);
           userId, action: 'extraction_pass',
         });
 
-        const extractResult = await extractCall(extractMessages);
+        // Phase 8 router: for complex jobs (and only when AGENTIC_TAKEOFF=1) run
+        // the plan->measure->reconcile->verify loop in place of single-pass Stage
+        // 1/1b. Falls back to single-pass on any error. Flag-gated so production
+        // is byte-for-byte unchanged until enabled.
+        let agenticParsed = null;
+        try {
+          const userTier = (db.prepare('SELECT model_tier FROM users WHERE id=?').get(userId) || {}).model_tier;
+          if (shouldUseAgenticTakeoff({ zipData: req.zipData, projectType: projectTypeGuess, pageCount: req.zipData?.summary?.pdf_count, modelTierOverride: userTier })) {
+            agenticParsed = await runAgenticTakeoff({
+              drawingsContent: extractContent,
+              extractPrompt,
+              priorMessages: messages,
+              zipData: req.zipData,
+              floorAreaM2: req.zipData?.summary?.total_floor_area_m2 || null,
+              projectType: projectTypeGuess,
+              model: MODELS.FRONTIER,
+              userId,
+              onProgress: (p) => { if (req.sseEmit) req.sseEmit({ type: 'progress', stage: p.stage, detail: p.detail }); },
+            });
+          }
+        } catch (agErr) {
+          console.error('[Agentic] takeoff failed, falling back to single-pass:', agErr.message);
+          agenticParsed = null;
+        }
+
+        const extractResult = agenticParsed ? { ok: true } : await extractCall(extractMessages);
 
         if (extractResult.ok) {
           // Thin validation + a single hinted retry if the tool output lacks items.
-          let parsed = extractResult.json;
-          if (!parsed || !Array.isArray(parsed.items)) {
+          let parsed = agenticParsed || extractResult.json;
+          if (!agenticParsed && (!parsed || !Array.isArray(parsed.items))) {
             const retry = await extractCall([
               ...extractMessages,
               { role: 'user', content: 'Your previous record_takeoff call was missing the required "items" array. Call record_takeoff again with the complete items array.' },
