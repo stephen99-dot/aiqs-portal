@@ -796,6 +796,21 @@ const migrations = [
   { column: 'reminders_enabled', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminders_enabled INTEGER DEFAULT 1" },
   { column: 'reminder_stage', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_stage INTEGER DEFAULT 0" },
   { column: 'reminder_last_at', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reminder_last_at DATETIME" },
+  // A4 — UK compliance. CIS: deduction on the labour element only
+  // (line-level is_labour flag); gross stays in grand_total, the deduction
+  // and net payable are derived and shown on the PDF. Reverse charge: VAT
+  // excluded from the total, customer accounts for it (wording per VAT
+  // Notice 735 printed on the PDF, with the customer's VAT number).
+  { column: 'cis_applies', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_applies INTEGER DEFAULT 0" },
+  { column: 'cis_rate', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_rate REAL" },
+  { column: 'cis_labour_total', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_labour_total REAL DEFAULT 0" },
+  { column: 'cis_deduction', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN cis_deduction REAL DEFAULT 0" },
+  { column: 'reverse_charge', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN reverse_charge INTEGER DEFAULT 0" },
+  { column: 'client_vat_number', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN client_vat_number TEXT" },
+  { column: 'is_labour', table: 'invoice_lines', sql: "ALTER TABLE invoice_lines ADD COLUMN is_labour INTEGER DEFAULT 0" },
+  // A4 — retention held on a job, released on a date (PM alert when due).
+  { column: 'retention_pct', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_pct REAL DEFAULT 0" },
+  { column: 'retention_release_date', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_release_date DATE" },
 ];
 
 for (const { column, table, sql } of migrations) {

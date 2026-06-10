@@ -106,8 +106,11 @@ function renderInvoicePdf(doc, inv, lines, branding, userInfo) {
     if (y + h > doc.page.height - 80) { doc.addPage(); y = 50; }
   }
 
+  const cisOn = !!inv.cis_applies;
   for (const ln of lines) {
-    const descText = (ln.item ? ln.item + ' — ' : '') + (ln.description || '');
+    // Under CIS the labour/materials split must be visible line by line.
+    const descText = (ln.item ? ln.item + ' — ' : '') + (ln.description || '')
+      + (cisOn ? '  [' + (ln.is_labour ? 'Labour' : 'Materials') + ']' : '');
     const descH = doc.heightOfString(descText, { width: 280 });
     const rowH = Math.max(14, descH + 4);
     ensureRoom(rowH);
@@ -120,10 +123,12 @@ function renderInvoicePdf(doc, inv, lines, branding, userInfo) {
     y += rowH;
   }
 
-  // Summary
-  ensureRoom(110);
+  // Summary — grows when CIS rows are present.
+  const cisRows = cisOn ? 3 : 0;
+  const boxH = 100 + cisRows * 16;
+  ensureRoom(boxH + 10);
   y += 10;
-  doc.rect(310, y, 245, 100).strokeColor(primary).lineWidth(1).stroke();
+  doc.rect(310, y, 245, boxH).strokeColor(primary).lineWidth(1).stroke();
   let sy = y + 8;
   function row(label, value, bold) {
     doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor('#111111');
@@ -133,15 +138,52 @@ function renderInvoicePdf(doc, inv, lines, branding, userInfo) {
   }
   row('Net', fmtMoney(inv.net_total, cc));
   if (num(inv.discount_amount) > 0) row('Discount', '−' + fmtMoney(inv.discount_amount, cc));
-  row('VAT (' + num(inv.vat_pct).toFixed(1) + '%)', fmtMoney(inv.vat_amount, cc));
+  if (inv.reverse_charge) {
+    row('VAT', 'Reverse charge');
+  } else {
+    row('VAT (' + num(inv.vat_pct).toFixed(1) + '%)', fmtMoney(inv.vat_amount, cc));
+  }
   sy += 2;
   doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();
   sy += 4;
-  row('Amount due', fmtMoney(inv.grand_total, cc), true);
+  row(cisOn ? 'Total (gross)' : 'Amount due', fmtMoney(inv.grand_total, cc), !cisOn);
+  if (cisOn) {
+    const rate = num(inv.cis_rate, 20);
+    row('CIS deduction (' + rate.toFixed(0) + '% of labour ' + fmtMoney(inv.cis_labour_total, cc) + ')',
+      '−' + fmtMoney(inv.cis_deduction, cc));
+    row('Net payable', fmtMoney(num(inv.grand_total) - num(inv.cis_deduction), cc), true);
+  }
   if (inv.status === 'paid' && num(inv.paid_amount) > 0) {
     row('Paid', fmtMoney(inv.paid_amount, cc));
   }
-  y += 110;
+  y += boxH + 10;
+
+  // A4 — domestic reverse charge wording (VAT Notice 735). The invoice must
+  // say the reverse charge applies and show the VAT the customer accounts for.
+  if (inv.reverse_charge) {
+    const rcVat = Math.max(0, num(inv.net_total) - num(inv.discount_amount)) * (num(inv.vat_pct, 20) / 100);
+    ensureRoom(60);
+    doc.rect(40, y, 515, 50).fill('#FFFBEB').strokeColor('#F59E0B').lineWidth(1).stroke();
+    doc.fillColor('#92400E').font('Helvetica-Bold').fontSize(10)
+      .text('Reverse charge: customer to pay the VAT to HMRC (VAT Act 1994 Section 55A applies).', 50, y + 8, { width: 495 });
+    doc.font('Helvetica').fontSize(9)
+      .text('VAT to be accounted for by the customer at ' + num(inv.vat_pct, 20).toFixed(0) + '%: ' + fmtMoney(rcVat, cc)
+        + (inv.client_vat_number ? '   ·   Customer VAT number: ' + inv.client_vat_number : ''), 50, y + 26, { width: 495 });
+    doc.fillColor('#111111');
+    y += 60;
+  }
+
+  // A4 — CIS audit line: gross / deduction / net in one sentence.
+  if (cisOn) {
+    ensureRoom(20);
+    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#475569')
+      .text('CIS: gross ' + fmtMoney(inv.grand_total, cc)
+        + ' · deduction ' + fmtMoney(inv.cis_deduction, cc)
+        + ' (' + num(inv.cis_rate, 20).toFixed(0) + '% of labour ' + fmtMoney(inv.cis_labour_total, cc) + ', materials excluded)'
+        + ' · net payable ' + fmtMoney(num(inv.grand_total) - num(inv.cis_deduction), cc), 40, y, { width: 515 });
+    doc.fillColor('#111111');
+    y += 16;
+  }
 
   // Notes / terms
   if (inv.notes) {

@@ -69,22 +69,33 @@ function getInvoiceLines(invoiceId) {
 function computeTotals(lines, opts) {
   const vatPct = num(opts.vat_pct);
   const discount = num(opts.discount_amount);
+  const reverseCharge = opts.reverse_charge ? 1 : 0;
+  const cisApplies = opts.cis_applies ? 1 : 0;
+  const cisRate = num(opts.cis_rate, 20);
   let net = 0;
+  let labour = 0;
   for (const ln of lines) {
     const qty = num(ln.qty);
     const rate = num(ln.rate);
     ln.line_total = round2(qty * rate);
     net += ln.line_total;
+    if (ln.is_labour) labour += ln.line_total;
   }
   const beforeVat = Math.max(0, net - discount);
-  const vat = beforeVat * (vatPct / 100);
+  // A4 — domestic reverse charge: no VAT is charged here; the customer
+  // accounts for it to HMRC (the PDF prints the required wording + amount).
+  const vat = reverseCharge ? 0 : beforeVat * (vatPct / 100);
   const grand = beforeVat + vat;
+  // A4 — CIS: the deduction applies to the labour element only, ex VAT.
+  // grand_total stays the gross; deduction and net payable show on the PDF.
   return {
     net_total: round2(net),
     discount_amount: round2(discount),
     vat_pct: vatPct,
     vat_amount: round2(vat),
     grand_total: round2(grand),
+    cis_labour_total: cisApplies ? round2(labour) : 0,
+    cis_deduction: cisApplies ? round2(labour * (cisRate / 100)) : 0,
   };
 }
 
@@ -247,7 +258,12 @@ router.patch('/:id', (req, res) => {
     const b = req.body || {};
     const allowed = ['client_name', 'client_email', 'client_address', 'currency', 'issue_date',
       'due_date', 'payment_terms_days', 'notes', 'vat_pct', 'discount_amount', 'job_id', 'status',
-      'reminders_enabled'];
+      'reminders_enabled', 'cis_applies', 'cis_rate', 'reverse_charge', 'client_vat_number'];
+    // Turning CIS on without a rate: default from the builder's Tax & CIS
+    // settings (20 verified / 30 unverified).
+    if (b.cis_applies && !('cis_rate' in b) && inv.cis_rate == null) {
+      b.cis_rate = num(getOibSettings(req.user.id).cis_default_rate, 20);
+    }
     const sets = [];
     const vals = [];
     for (const k of allowed) {
@@ -261,17 +277,15 @@ router.patch('/:id', (req, res) => {
       sets.push('updated_at = CURRENT_TIMESTAMP');
       vals.push(inv.id);
       db.prepare('UPDATE invoices SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
-      // If vat_pct or discount_amount changed, recompute totals.
-      if ('vat_pct' in b || 'discount_amount' in b) {
+      // Recompute totals if anything that feeds them changed.
+      const totalsKeys = ['vat_pct', 'discount_amount', 'cis_applies', 'cis_rate', 'reverse_charge'];
+      if (totalsKeys.some(k => k in b)) {
         const lines = getInvoiceLines(inv.id);
-        const newPcts = {
-          vat_pct: 'vat_pct' in b ? b.vat_pct : inv.vat_pct,
-          discount_amount: 'discount_amount' in b ? b.discount_amount : inv.discount_amount,
-        };
-        const t = computeTotals(lines, newPcts);
+        const fresh = getInvoice(inv.id, req.user.id);
+        const t = computeTotals(lines, fresh);
         db.prepare(
-          'UPDATE invoices SET net_total=?, discount_amount=?, vat_amount=?, grand_total=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
-        ).run(t.net_total, t.discount_amount, t.vat_amount, t.grand_total, inv.id);
+          'UPDATE invoices SET net_total=?, discount_amount=?, vat_amount=?, grand_total=?, cis_labour_total=?, cis_deduction=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+        ).run(t.net_total, t.discount_amount, t.vat_amount, t.grand_total, t.cis_labour_total, t.cis_deduction, inv.id);
       }
     }
     res.json({ id: inv.id });
@@ -288,13 +302,13 @@ router.put('/:id/lines', (req, res) => {
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     if (rejectIfPaid(inv, res)) return;
     const lines = Array.isArray(req.body?.lines) ? req.body.lines : [];
-    const totals = computeTotals(lines, { vat_pct: inv.vat_pct, discount_amount: inv.discount_amount });
+    const totals = computeTotals(lines, inv);
 
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
       const ins = db.prepare(
-        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, is_labour, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let order = 0;
       for (const ln of lines) {
@@ -306,12 +320,13 @@ router.put('/:id/lines', (req, res) => {
           (ln.unit || 'item').toString().slice(0, 20),
           num(ln.qty), num(ln.rate),
           num(ln.line_total) || round2(num(ln.qty) * num(ln.rate)),
+          ln.is_labour ? 1 : 0,
           ln.sort_order != null ? num(ln.sort_order) : order++
         );
       }
       db.prepare(
-        'UPDATE invoices SET net_total=?, vat_amount=?, grand_total=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
-      ).run(totals.net_total, totals.vat_amount, totals.grand_total, inv.id);
+        'UPDATE invoices SET net_total=?, vat_amount=?, grand_total=?, cis_labour_total=?, cis_deduction=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+      ).run(totals.net_total, totals.vat_amount, totals.grand_total, totals.cis_labour_total, totals.cis_deduction, inv.id);
     });
     txn();
     res.json({ id: inv.id, ...totals });
@@ -336,22 +351,25 @@ router.post('/:id/duplicate', (req, res) => {
       db.prepare(
         'INSERT INTO invoices (id, user_id, job_id, quote_id, invoice_number, client_name, client_email, '
         + 'client_address, currency, issue_date, due_date, payment_terms_days, notes, net_total, '
-        + 'discount_amount, vat_pct, vat_amount, grand_total, status) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'discount_amount, vat_pct, vat_amount, grand_total, status, '
+        + 'cis_applies, cis_rate, cis_labour_total, cis_deduction, reverse_charge, client_vat_number) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         newId, req.user.id, inv.job_id, inv.quote_id, newNumber,
         inv.client_name, inv.client_email, inv.client_address,
         inv.currency, issueDate, dueDate, inv.payment_terms_days,
         inv.notes,
         inv.net_total, inv.discount_amount, inv.vat_pct, inv.vat_amount, inv.grand_total,
-        'draft'
+        'draft',
+        inv.cis_applies || 0, inv.cis_rate, inv.cis_labour_total || 0, inv.cis_deduction || 0,
+        inv.reverse_charge || 0, inv.client_vat_number
       );
       const ins = db.prepare(
-        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, is_labour, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const ln of lines) {
-        ins.run(uuidv4(), newId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.line_total, ln.sort_order);
+        ins.run(uuidv4(), newId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.line_total, ln.is_labour || 0, ln.sort_order);
       }
     });
     txn();
@@ -689,6 +707,69 @@ router.get('/:id/pdf', (req, res) => {
   } catch (err) {
     console.error('[Invoices] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+// ─── A4: "Send to your accountant" — Xero / QuickBooks CSV exports ──────────
+
+const { buildInvoicesCsv, buildPaymentsCsv } = require('./accountingExport');
+
+function buildExport(userId, what, format) {
+  const fmt = format === 'quickbooks' ? 'quickbooks' : 'xero';
+  return what === 'payments' ? buildPaymentsCsv(userId, fmt) : buildInvoicesCsv(userId, fmt);
+}
+
+// GET /api/invoices/_export/csv?what=invoices|payments&format=xero|quickbooks
+router.get('/_export/csv', (req, res) => {
+  try {
+    const { filename, csv } = buildExport(req.user.id, String(req.query.what || 'invoices'), String(req.query.format || 'xero'));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    res.send(csv);
+  } catch (err) {
+    console.error('[Invoices] export error:', err);
+    res.status(500).json({ error: 'Failed to build the export.' });
+  }
+});
+
+// POST /api/invoices/_export/email { what, format } — emails the CSV to the
+// accountant's saved address (Settings -> Tax & CIS).
+router.post('/_export/email', async (req, res) => {
+  try {
+    const settings = getOibSettings(req.user.id);
+    if (!settings.accountant_email) {
+      return res.status(400).json({ error: "No accountant email saved yet — add it in Settings under 'Tax & CIS'." });
+    }
+    if (!mailer.isConfigured()) {
+      return res.status(503).json({ error: 'Email is not set up on the server — download the file and send it yourself instead.', code: 'MAIL_NOT_CONFIGURED' });
+    }
+    const b = req.body || {};
+    const what = String(b.what || 'invoices');
+    const format = String(b.format || 'xero');
+    const { filename, csv } = buildExport(req.user.id, what, format);
+    const userInfo = getUserDisplay(req.user.id);
+    const branding = getBranding(req.user.id);
+    const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || '';
+
+    const mail = await mailer.sendMail({
+      userId: req.user.id,
+      type: 'accountant_export',
+      to: settings.accountant_email,
+      subject: (what === 'payments' ? 'Payments' : 'Invoices') + ' export from ' + companyName,
+      heading: 'Books from ' + companyName,
+      paragraphs: [
+        'Attached: ' + (what === 'payments' ? 'payments received' : 'sales invoices') + ' in '
+        + (format === 'quickbooks' ? 'QuickBooks' : 'Xero') + ' import format.',
+        'Sent from the AI QS portal on behalf of ' + companyName + '.',
+      ],
+      attachments: [{ filename, content: Buffer.from(csv, 'utf-8') }],
+      replyTo: userInfo?.email,
+    });
+    if (!mail.ok) return res.status(502).json({ error: 'The email could not be sent. Download the file instead.' });
+    res.json({ ok: true, sent_to: settings.accountant_email });
+  } catch (err) {
+    console.error('[Invoices] export email error:', err);
+    res.status(500).json({ error: 'Failed to email the export.' });
   }
 });
 

@@ -282,6 +282,43 @@ function ruleDayRateBelowBreakeven(userId) {
   return out.sort((a, b) => b.meta.shortfall - a.meta.shortfall);
 }
 
+// ─── Rule 6 (A4): retention falling due ─────────────────────────────────────
+// Builders forget retention money constantly. Alert from 14 days before the
+// release date, loudest once it's passed. Amount = retention_pct of the job's
+// planned revenue (best available figure).
+
+function ruleRetentionDue(userId) {
+  const rows = db.prepare(`
+    SELECT j.id, j.name, j.client_name, j.retention_pct, j.retention_release_date,
+           b.planned_revenue
+    FROM estimator_jobs j
+    LEFT JOIN job_budgets b ON b.job_id = j.id
+    WHERE j.user_id = ?
+      AND j.retention_pct > 0
+      AND j.retention_release_date IS NOT NULL
+      AND date(j.retention_release_date) <= date('now', '+14 days')
+      AND j.status != 'cancelled'
+    ORDER BY j.retention_release_date ASC
+  `).all(userId);
+  return rows.map(r => {
+    const days = daysUntil(r.retention_release_date);
+    const isDue = days <= 0;
+    const amount = (Number(r.planned_revenue) || 0) * (Number(r.retention_pct) || 0) / 100;
+    return {
+      id: 'retention-due-' + r.id,
+      rule: 'retention_due',
+      severity: isDue ? 'high' : 'medium',
+      title: 'Retention on ' + (r.name || 'a job') + ' — '
+        + (isDue ? 'due back now' : 'due back in ' + days + ' day(s)'),
+      body: (r.client_name ? r.client_name + ' · ' : '')
+        + (amount > 0 ? fmtMoney(amount) + ' held back (' + r.retention_pct + '%) · ' : r.retention_pct + '% held back · ')
+        + 'release date ' + r.retention_release_date + ' — invoice it before it gets forgotten',
+      link: '/finance/jobs/' + r.id,
+      meta: { days_to_due: days, value: amount, retention_pct: r.retention_pct },
+    };
+  });
+}
+
 // ─── Aggregator ─────────────────────────────────────────────────────────────
 
 function gatherAlerts(userId) {
@@ -292,6 +329,7 @@ function gatherAlerts(userId) {
     ...ruleBudgetOverrun(userId, thresholds),
     ...ruleStaleQuotes(userId, thresholds),
     ...ruleDayRateBelowBreakeven(userId),
+    ...ruleRetentionDue(userId),
   ];
   const severityOrder = { high: 0, medium: 1, low: 2 };
   cards.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));

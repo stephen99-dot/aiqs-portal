@@ -7,6 +7,10 @@ import ShareLinkModal from '../components/ShareLinkModal';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function fmt(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// A4 — first guess at whether a line is labour (CIS deducts from labour only).
+// Always editable line by line; this only sets the starting point.
+const LABOUR_RX = /labour|labor|day ?rate|hourly|hours?\b|man[- ]?day|install|fitting|fix(ing)?\b|supervis|attendance|demolit|excavat|groundwork|brickwork|plaster|render|paint|decorat|tiling|joinery|carpentr|making good/i;
 function fmt0(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
 
 export default function InvoiceEditorPage() {
@@ -37,6 +41,11 @@ function Inner() {
   const [share, setShare] = useState(null);   // { url, emailedTo } after sending
   const [sending, setSending] = useState(false);
   const [reminders, setReminders] = useState(true);
+  // A4 — UK compliance
+  const [cisApplies, setCisApplies] = useState(false);
+  const [cisRate, setCisRate] = useState(20);
+  const [reverseCharge, setReverseCharge] = useState(false);
+  const [clientVatNumber, setClientVatNumber] = useState('');
   // A3 chase modal: null | { loading } | { subject, body, canEmail, clientEmail }
   const [chase, setChase] = useState(null);
   const [chaseSending, setChaseSending] = useState(false);
@@ -56,6 +65,10 @@ function Inner() {
       setNotes(r.invoice.notes || '');
       setStripeLink(r.invoice.stripe_payment_link || '');
       setReminders(r.invoice.reminders_enabled !== 0);
+      setCisApplies(!!r.invoice.cis_applies);
+      setCisRate(num(r.invoice.cis_rate, 20));
+      setReverseCharge(!!r.invoice.reverse_charge);
+      setClientVatNumber(r.invoice.client_vat_number || '');
       setLines(r.lines || []);
       setDirty(false);
     } catch (e) { setError(e.message); }
@@ -65,15 +78,34 @@ function Inner() {
 
   const totals = useMemo(() => {
     let net = 0;
-    for (const ln of lines) net += num(ln.qty) * num(ln.rate);
+    let labour = 0;
+    for (const ln of lines) {
+      const lt = num(ln.qty) * num(ln.rate);
+      net += lt;
+      if (ln.is_labour) labour += lt;
+    }
     const beforeVat = Math.max(0, net - num(discount));
-    const vat = beforeVat * (num(vatPct) / 100);
-    return { net, vat, grand: beforeVat + vat };
-  }, [lines, vatPct, discount]);
+    const vat = reverseCharge ? 0 : beforeVat * (num(vatPct) / 100);
+    const grand = beforeVat + vat;
+    const deduction = cisApplies ? labour * (num(cisRate, 20) / 100) : 0;
+    return { net, vat, grand, labour, deduction, netPayable: grand - deduction };
+  }, [lines, vatPct, discount, reverseCharge, cisApplies, cisRate]);
 
   const readOnly = invoice?.status === 'paid' || invoice?.status === 'void';
 
   const updateLine = (idx, patch) => { setLines(prev => prev.map((ln, i) => i === idx ? { ...ln, ...patch } : ln)); setDirty(true); };
+
+  // Turning CIS on guesses labour vs materials from each line's wording —
+  // the builder can change any line with the picker that appears.
+  const toggleCis = (on) => {
+    setCisApplies(on);
+    if (on) {
+      setLines(prev => prev.map(ln => ln.is_labour
+        ? ln
+        : { ...ln, is_labour: LABOUR_RX.test((ln.item || '') + ' ' + (ln.description || '')) ? 1 : 0 }));
+    }
+    setDirty(true);
+  };
   const deleteLine = (idx) => { setLines(prev => prev.filter((_, i) => i !== idx)); setDirty(true); };
   const addLine = () => { setLines(prev => [...prev, { description: '', unit: 'item', qty: 1, rate: 0, sort_order: prev.length }]); setDirty(true); };
   const onHeaderChange = () => setDirty(true);
@@ -87,6 +119,8 @@ function Inner() {
           client_name: client.name, client_email: client.email, client_address: client.address,
           issue_date: issueDate, due_date: dueDate, payment_terms_days: num(paymentTerms),
           vat_pct: num(vatPct), discount_amount: num(discount), notes,
+          cis_applies: cisApplies ? 1 : 0, cis_rate: num(cisRate, 20),
+          reverse_charge: reverseCharge ? 1 : 0, client_vat_number: clientVatNumber || null,
         }),
       });
       await apiFetch('/invoices/' + id + '/lines', {
@@ -318,13 +352,54 @@ function Inner() {
         </div>
       </div>
 
+      {/* A4 — Tax & CIS for this invoice */}
+      {!readOnly && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Tax & CIS on this invoice</div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+            <input type="checkbox" checked={cisApplies} onChange={e => toggleCis(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>CIS applies</div>
+              <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
+                The contractor paying you takes a deduction off the labour (never the materials). We'll split your lines and show the deduction on the invoice.
+              </div>
+            </div>
+          </label>
+          {cisApplies && (
+            <div style={{ marginLeft: 30, marginBottom: 12 }}>
+              <label style={lbl(t)}>Deduction rate</label>
+              <select value={num(cisRate, 20)} onChange={e => { setCisRate(num(e.target.value)); onHeaderChange(); }} style={{ ...fld(t), maxWidth: 320 }}>
+                <option value={20}>20% — you're verified with HMRC</option>
+                <option value={30}>30% — not verified yet</option>
+              </select>
+            </div>
+          )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={reverseCharge} onChange={e => { setReverseCharge(e.target.checked); onHeaderChange(); }} style={{ width: 20, height: 20, marginTop: 2 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>VAT reverse charge</div>
+              <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
+                For CIS work for another VAT-registered builder: you don't charge the VAT — they pay it to HMRC. The invoice carries the official wording automatically.
+              </div>
+            </div>
+          </label>
+          {reverseCharge && (
+            <div style={{ marginLeft: 30, marginTop: 10 }}>
+              <label style={lbl(t)}>Customer's VAT number</label>
+              <input value={clientVatNumber} onChange={e => { setClientVatNumber(e.target.value); onHeaderChange(); }} placeholder="e.g. GB123456789" style={{ ...fld(t), maxWidth: 320 }} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lines */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
             <thead>
               <tr style={{ background: t.surface, fontSize: 12, color: t.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                <th style={{ ...th, width: '50%' }}>Description</th>
+                <th style={{ ...th, width: cisApplies ? '40%' : '50%' }}>Description</th>
+                {cisApplies && <th style={{ ...th, width: 110 }}>Labour or materials?</th>}
                 <th style={{ ...th, width: 70, textAlign: 'right' }}>Qty</th>
                 <th style={{ ...th, width: 70 }}>Unit</th>
                 <th style={{ ...th, width: 110, textAlign: 'right' }}>Rate</th>
@@ -350,6 +425,16 @@ function Inner() {
                         </>
                       )}
                     </td>
+                    {cisApplies && (
+                      <td style={tdCell}>
+                        {readOnly ? (ln.is_labour ? 'Labour' : 'Materials') : (
+                          <select value={ln.is_labour ? 1 : 0} onChange={e => updateLine(idx, { is_labour: num(e.target.value) })} style={{ ...inputInline(t), border: '1px solid ' + t.border }}>
+                            <option value={1}>Labour</option>
+                            <option value={0}>Materials</option>
+                          </select>
+                        )}
+                      </td>
+                    )}
                     <td style={{ ...tdCell, textAlign: 'right' }}>
                       {readOnly ? num(ln.qty) : <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />}
                     </td>
@@ -366,7 +451,7 @@ function Inner() {
               })}
               {!readOnly && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 12, borderTop: '1px solid ' + t.border }}>
+                  <td colSpan={cisApplies ? 7 : 6} style={{ padding: 12, borderTop: '1px solid ' + t.border }}>
                     <button onClick={addLine} style={btnGhost(t)}>+ Add line</button>
                   </td>
                 </tr>
@@ -439,9 +524,24 @@ function Inner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmt(totals.net)} />
           {num(discount) > 0 && <SummaryRow t={t} label="Discount" value={'−' + fmt(num(discount))} />}
-          <SummaryRow t={t} label={'VAT (' + num(vatPct).toFixed(1) + '%)'} value={fmt(totals.vat)} />
+          {reverseCharge ? (
+            <SummaryRow t={t} label="VAT" value="Reverse charge" />
+          ) : (
+            <SummaryRow t={t} label={'VAT (' + num(vatPct).toFixed(1) + '%)'} value={fmt(totals.vat)} />
+          )}
           <div style={{ borderTop: '1px solid ' + t.border, margin: '8px 0' }} />
-          <SummaryRow t={t} label="Amount due" value={fmt(totals.grand)} bold />
+          <SummaryRow t={t} label={cisApplies ? 'Total (gross)' : 'Amount due'} value={fmt(totals.grand)} bold={!cisApplies} />
+          {cisApplies && (
+            <>
+              <SummaryRow t={t} label={'CIS deduction (' + num(cisRate, 20).toFixed(0) + '% of labour ' + fmt(totals.labour) + ')'} value={'−' + fmt(totals.deduction)} />
+              <SummaryRow t={t} label="Net payable to you" value={fmt(totals.netPayable)} bold />
+            </>
+          )}
+          {reverseCharge && (
+            <div style={{ marginTop: 8, padding: 8, borderRadius: 8, background: t.warningBg, color: t.warning, fontSize: 12 }}>
+              No VAT charged — your customer pays {fmt(Math.max(0, totals.net - num(discount)) * num(vatPct, 20) / 100)} VAT to HMRC. The invoice says so in the official words.
+            </div>
+          )}
           {invoice.status === 'paid' && num(invoice.paid_amount) > 0 && (
             <SummaryRow t={t} label="Paid" value={fmt(invoice.paid_amount)} />
           )}

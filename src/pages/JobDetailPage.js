@@ -182,6 +182,35 @@ function Inner() {
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 
+      {/* A4 — retention held on this job. The PM alerts when release day comes. */}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
+          <div>
+            <label style={{ display: 'block', color: t.textSecondary, fontSize: 12, marginBottom: 4 }}>Retention held back (%)</label>
+            <input
+              type="number" step="0.5" min="0" max="50"
+              defaultValue={Number(job.retention_pct) || 0}
+              onBlur={e => updateJob({ retention_pct: e.target.value })}
+              style={{ ...fld(t), width: 110 }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', color: t.textSecondary, fontSize: 12, marginBottom: 4 }}>When it's due back to you</label>
+            <input
+              type="date"
+              defaultValue={job.retention_release_date || ''}
+              onBlur={e => updateJob({ retention_release_date: e.target.value || null })}
+              style={fld(t)}
+            />
+          </div>
+          <div style={{ color: t.textMuted, fontSize: 12, paddingBottom: 8, flex: 1, minWidth: 220 }}>
+            {Number(job.retention_pct) > 0
+              ? 'The Project Manager will remind you to invoice it when the date comes — retention money gets forgotten all the time.'
+              : 'If the client holds money back until the snags are done, put the percentage and release date here so it never gets forgotten.'}
+          </div>
+        </div>
+      </div>
+
       {/* Variance strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
         <Stat t={t} label="Planned revenue" value={fmt0(totals.plannedRevenue)} />

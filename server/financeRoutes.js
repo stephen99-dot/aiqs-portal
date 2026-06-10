@@ -286,12 +286,19 @@ router.patch('/jobs/:id', (req, res) => {
     const job = ensureJob(req, req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found.' });
     const b = req.body || {};
-    const allowed = ['name', 'client_name', 'project_type', 'location', 'status', 'notes'];
+    // A4: retention_pct + retention_release_date — money held back by the
+    // client, released on a date (the PM alerts when it falls due).
+    const allowed = ['name', 'client_name', 'project_type', 'location', 'status', 'notes', 'retention_pct', 'retention_release_date'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {
       if (k in b) {
         if (k === 'status' && !['planned', 'active', 'completed', 'cancelled'].includes(b[k])) continue;
+        if (k === 'retention_pct') {
+          sets.push('retention_pct = ?');
+          vals.push(Math.min(Math.max(num(b[k]), 0), 50));
+          continue;
+        }
         sets.push(k + ' = ?');
         vals.push(b[k] == null ? null : String(b[k]).slice(0, 4000));
       }
