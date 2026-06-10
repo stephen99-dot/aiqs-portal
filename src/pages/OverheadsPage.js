@@ -103,10 +103,10 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 1000, margin: '0 auto' }}>
-      <button onClick={() => nav('/finance')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Finance dashboard</button>
+      <button onClick={() => nav('/money')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Money</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 26 }}>Monthly overheads</h1>
+          <h1 style={{ margin: 0, fontSize: 26 }}>Monthly running costs</h1>
           <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 4 }}>
             Snapshot for <strong>{month}</strong>. We use this to compute your true break-even rate and to flag under-priced quotes.
           </div>
@@ -118,7 +118,7 @@ function Inner() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Fixed monthly costs</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>What the business costs each month</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {lines.map(l => (
               <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 40px', gap: 8, alignItems: 'center' }}>
@@ -146,7 +146,7 @@ function Inner() {
         </div>
 
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Capacity</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Days you can work</div>
           <label style={lbl(t)}>Working days / month</label>
           <input type="number" step="any" value={workingDays} onChange={e => setWorkingDays(e.target.value)} style={fld(t)} />
           <label style={lbl(t, 12)}>Hours / day</label>
@@ -164,7 +164,7 @@ function Inner() {
 
       {history.length > 0 && (
         <div style={{ marginTop: 24, background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>History</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Past months</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ color: t.textSecondary }}>

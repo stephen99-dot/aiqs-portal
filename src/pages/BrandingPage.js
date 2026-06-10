@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
 import TaxCisSettings from '../components/TaxCisSettings';
+import AlertSettings from '../components/AlertSettings';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -361,6 +362,9 @@ export default function BrandingPage() {
 
           {/* A4 — Tax & CIS + card fees (Office in a Box users only) */}
           <TaxCisSettings />
+
+          {/* When the Today screen should start nagging (OiB users only) */}
+          <AlertSettings />
         </div>
 
         {/* Live document preview */}

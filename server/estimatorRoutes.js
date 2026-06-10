@@ -897,7 +897,7 @@ router.get('/quotes/:id/xlsx', async (req, res) => {
       r.getCell(7).numFmt = '#,##0.00';
     }
     sumRow('Net', num(q.net_total));
-    sumRow('OH&P (' + num(q.ohp_pct) + '%)', num(q.ohp_amount));
+    sumRow('Overheads & profit (' + num(q.ohp_pct) + '%)', num(q.ohp_amount));
     sumRow('Contingency (' + num(q.contingency_pct) + '%)', num(q.contingency_amount));
     sumRow('VAT (' + num(q.vat_pct) + '%)', num(q.vat_amount));
     sumRow('Grand Total', num(q.grand_total), true);

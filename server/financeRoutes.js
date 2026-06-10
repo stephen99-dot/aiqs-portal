@@ -220,12 +220,21 @@ router.get('/overheads/history', (req, res) => {
 
 router.get('/jobs', (req, res) => {
   try {
-    // Join in budget summary and actual totals so the list shows variance at a glance.
+    // Join in budget summary, actual totals, and the money-pipeline numbers
+    // the Jobs cards need (quoted / accepted / invoiced / paid / overdue) so
+    // the list can show the figure that matters for each job's stage.
     const rows = db.prepare(`
       SELECT j.*,
         b.planned_revenue, b.planned_labour, b.planned_materials, b.planned_overheads, b.planned_other,
         (SELECT COALESCE(SUM(c.total),0) FROM job_costs c WHERE c.job_id = j.id) AS actual_total,
-        (SELECT COUNT(*) FROM quotes q WHERE q.job_id = j.id) AS quote_count
+        (SELECT COUNT(*) FROM quotes q WHERE q.job_id = j.id) AS quote_count,
+        (SELECT COALESCE(SUM(q.grand_total),0) FROM quotes q WHERE q.job_id = j.id AND q.status != 'lost') AS quoted_total,
+        (SELECT COALESCE(SUM(q.grand_total),0) FROM quotes q WHERE q.job_id = j.id AND q.status IN ('accepted','won')) AS accepted_total,
+        (SELECT COALESCE(SUM(i.grand_total),0) FROM invoices i WHERE i.job_id = j.id AND i.status IN ('sent','paid')) AS invoiced_total,
+        (SELECT COALESCE(SUM(CASE WHEN i.paid_amount > 0 THEN i.paid_amount ELSE i.grand_total END),0)
+           FROM invoices i WHERE i.job_id = j.id AND i.status = 'paid') AS paid_total,
+        (SELECT COUNT(*) FROM invoices i WHERE i.job_id = j.id AND i.status = 'sent'
+           AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')) AS overdue_count
       FROM estimator_jobs j
       LEFT JOIN job_budgets b ON b.job_id = j.id
       WHERE j.user_id = ?
@@ -246,11 +255,12 @@ router.post('/jobs', (req, res) => {
     if (!name) return res.status(400).json({ error: 'Job name is required.' });
     const id = uuidv4();
     db.prepare(
-      'INSERT INTO estimator_jobs (id, user_id, name, client_name, project_type, location, status, notes) '
-      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       id, req.user.id, name.slice(0, 200),
       (b.client_name || '').toString().slice(0, 200) || null,
+      (b.client_phone || '').toString().slice(0, 40) || null,
       (b.project_type || '').toString().slice(0, 80) || null,
       (b.location || '').toString().slice(0, 200) || null,
       ['planned', 'active', 'completed', 'cancelled'].includes(b.status) ? b.status : 'planned',
@@ -288,7 +298,7 @@ router.patch('/jobs/:id', (req, res) => {
     const b = req.body || {};
     // A4: retention_pct + retention_release_date — money held back by the
     // client, released on a date (the PM alerts when it falls due).
-    const allowed = ['name', 'client_name', 'project_type', 'location', 'status', 'notes', 'retention_pct', 'retention_release_date'];
+    const allowed = ['name', 'client_name', 'client_phone', 'project_type', 'location', 'status', 'notes', 'retention_pct', 'retention_release_date'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {

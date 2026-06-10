@@ -583,7 +583,7 @@ ownerRouter.get('/:id/pdf', (req, res) => {
       sy += 16;
     }
     row('Net', fmtMoney(v.net_total, cc));
-    row('OH&P (' + num(v.ohp_pct).toFixed(1) + '%)', fmtMoney(v.ohp_amount, cc));
+    row('Overheads & profit (' + num(v.ohp_pct).toFixed(1) + '%)', fmtMoney(v.ohp_amount, cc));
     row('VAT (' + num(v.vat_pct).toFixed(1) + '%)', fmtMoney(v.vat_amount, cc));
     sy += 2;
     doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();

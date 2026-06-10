@@ -21,6 +21,26 @@ function ensureJob(userId, jobId) {
   return db.prepare('SELECT * FROM estimator_jobs WHERE id = ? AND user_id = ?').get(jobId, userId);
 }
 
+// GET /api/payment-schedules — every stage across all jobs, unpaid first by
+// due date. Powers the Money page's "Due in" view.
+router.get('/', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT p.*, j.name AS job_name, j.client_name AS job_client
+      FROM payment_schedules p
+      LEFT JOIN estimator_jobs j ON j.id = p.job_id
+      WHERE p.user_id = ?
+      ORDER BY CASE WHEN p.status = 'unpaid' THEN 0 ELSE 1 END,
+               p.due_date IS NULL, p.due_date ASC
+      LIMIT 500
+    `).all(req.user.id);
+    res.json({ stages: rows });
+  } catch (err) {
+    console.error('[PaymentSchedule] list-all error:', err);
+    res.status(500).json({ error: 'Failed to load payment stages.' });
+  }
+});
+
 // GET /api/payment-schedules/job/:jobId
 router.get('/job/:jobId', (req, res) => {
   try {

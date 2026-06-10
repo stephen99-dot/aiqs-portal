@@ -50,12 +50,20 @@ function daysUntil(iso) {
   return Math.round((target.getTime() - todayUTC.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Builders think in customers and jobs, not reference numbers — every card
+// carries a headline ("Patel — 5m x 4m Extension"), a plain-English situation
+// line, and ONE obvious action. title/body stay for back-compat.
+function headlineFor(client, job) {
+  return [client, job].filter(Boolean).join(' — ') || job || client || 'One of your jobs';
+}
+
 // ─── Rule 1: Variations sent but unapproved for > N days ────────────────────
 
 function ruleStaleVariations(userId, thresholds) {
   const N = thresholds.variation_stale_days;
   const rows = db.prepare(`
-    SELECT v.id, v.vo_number, v.title, v.grand_total, v.sent_at, v.job_id, j.name AS job_name
+    SELECT v.id, v.vo_number, v.title, v.grand_total, v.sent_at, v.job_id,
+           j.name AS job_name, j.client_name AS job_client
     FROM estimator_variations v
     LEFT JOIN estimator_jobs j ON j.id = v.job_id
     WHERE v.user_id = ?
@@ -70,6 +78,9 @@ function ruleStaleVariations(userId, thresholds) {
       id: 'variation-stale-' + r.id,
       rule: 'variation_stale',
       severity: days > N * 2 ? 'high' : 'medium',
+      headline: headlineFor(r.job_client, r.job_name),
+      situation: 'Change' + (r.title ? ' "' + r.title + '"' : '') + ' sent ' + days + ' days ago, no answer — ' + fmtMoney(r.grand_total),
+      action: { label: 'Open the change', kind: 'link', link: '/change-orders/' + r.id },
       title: (r.vo_number || 'Variation') + ' — awaiting client approval for ' + days + ' days',
       body: (r.title ? '"' + r.title + '" · ' : '')
         + (r.job_name ? r.job_name + ' · ' : '')
@@ -86,7 +97,8 @@ function ruleStaleVariations(userId, thresholds) {
 function rulePaymentsDue(userId, thresholds) {
   const H = thresholds.payment_due_horizon_days;
   const rows = db.prepare(`
-    SELECT p.id, p.stage_label, p.amount, p.due_date, p.job_id, j.name AS job_name
+    SELECT p.id, p.stage_label, p.amount, p.due_date, p.job_id, p.invoice_id,
+           j.name AS job_name, j.client_name AS job_client
     FROM payment_schedules p
     LEFT JOIN estimator_jobs j ON j.id = p.job_id
     WHERE p.user_id = ?
@@ -98,15 +110,21 @@ function rulePaymentsDue(userId, thresholds) {
   const stageCards = rows.map(r => {
     const days = daysUntil(r.due_date);
     const isOverdue = days < 0;
+    const when = isOverdue ? Math.abs(days) + ' days overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' days');
     return {
       id: 'payment-due-' + r.id,
       rule: 'payment_due',
       severity: isOverdue ? 'high' : 'medium',
+      headline: headlineFor(r.job_client, r.job_name),
+      situation: (r.stage_label || 'Payment stage') + ' ' + fmtMoney(r.amount) + ' — ' + when,
+      action: (isOverdue && r.invoice_id)
+        ? { label: 'Chase it', kind: 'link', link: '/invoices/' + r.invoice_id + '?chase=1' }
+        : { label: 'See the job', kind: 'link', link: r.job_id ? '/jobs/' + r.job_id : '/money' },
       title: (r.stage_label || 'Payment stage')
         + ' — ' + (isOverdue ? Math.abs(days) + ' day(s) overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' day(s)')),
       body: (r.job_name ? r.job_name + ' · ' : '')
         + 'due ' + r.due_date + ' · ' + fmtMoney(r.amount),
-      link: r.job_id ? '/finance/jobs/' + r.job_id : '/finance',
+      link: r.job_id ? '/jobs/' + r.job_id : '/money',
       meta: { days_to_due: days, value: r.amount, overdue: isOverdue, horizon: H },
     };
   });
@@ -114,28 +132,36 @@ function rulePaymentsDue(userId, thresholds) {
   // A3: unpaid invoices due soon or overdue, with the automated-reminder state
   // on the card so the builder knows whether the system is already chasing.
   const invoices = db.prepare(`
-    SELECT id, invoice_number, client_name, grand_total, due_date,
-           reminders_enabled, reminder_stage, reminder_last_at
-    FROM invoices
-    WHERE user_id = ?
-      AND status = 'sent'
-      AND due_date IS NOT NULL
-      AND date(due_date) <= date('now', '+' || ? || ' days')
-    ORDER BY due_date ASC
+    SELECT i.id, i.invoice_number, i.client_name, i.grand_total, i.due_date,
+           i.reminders_enabled, i.reminder_stage, i.reminder_last_at,
+           j.name AS job_name
+    FROM invoices i
+    LEFT JOIN estimator_jobs j ON j.id = i.job_id
+    WHERE i.user_id = ?
+      AND i.status = 'sent'
+      AND i.due_date IS NOT NULL
+      AND date(i.due_date) <= date('now', '+' || ? || ' days')
+    ORDER BY i.due_date ASC
   `).all(userId, H);
   const invoiceCards = invoices.map(r => {
     const days = daysUntil(r.due_date);
     const isOverdue = days < 0;
+    const when = isOverdue ? Math.abs(days) + ' days overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' days');
     let reminderNote;
     if (!r.reminders_enabled) reminderNote = 'automatic reminders are off';
     else if (r.reminder_stage > 0) {
       const since = daysSince(r.reminder_last_at);
-      reminderNote = 'reminder sent' + (since != null ? ' ' + since + ' day(s) ago' : '');
+      reminderNote = 'reminder sent' + (since != null ? ' ' + since + ' days ago' : '');
     } else reminderNote = 'reminders on — first one goes on the due date';
     return {
       id: 'invoice-due-' + r.id,
       rule: 'payment_due',
       severity: isOverdue ? 'high' : 'medium',
+      headline: headlineFor(r.client_name, r.job_name),
+      situation: 'Invoice for ' + fmtMoney(r.grand_total) + ' — ' + when + ' (' + reminderNote + ')',
+      action: isOverdue
+        ? { label: 'Chase it', kind: 'link', link: '/invoices/' + r.id + '?chase=1' }
+        : { label: 'See the invoice', kind: 'link', link: '/invoices/' + r.id },
       title: 'Invoice ' + (r.invoice_number || '')
         + ' — ' + (isOverdue ? Math.abs(days) + ' day(s) overdue' : (days === 0 ? 'due today' : 'due in ' + days + ' day(s)')),
       body: (r.client_name ? r.client_name + ' · ' : '')
@@ -188,11 +214,14 @@ function ruleBudgetOverrun(userId, thresholds) {
       id: 'budget-overrun-' + r.job_id,
       rule: 'budget_overrun',
       severity: overrun > overrunPct * 2 ? 'high' : 'medium',
+      headline: headlineFor(r.client_name, r.job_name),
+      situation: 'Spent ' + fmtMoney(actual) + ' against a plan of ' + fmtMoney(planned) + ' — ' + fmtMoney(actual - planned) + ' over',
+      action: { label: 'See the job', kind: 'link', link: '/jobs/' + r.job_id },
       title: (r.job_name || 'Job') + ' — costs ' + overrun.toFixed(0) + '% over planned',
       body: (r.client_name ? r.client_name + ' · ' : '')
         + 'Planned ' + fmtMoney(planned) + ' · Actual ' + fmtMoney(actual)
         + ' · Over by ' + fmtMoney(actual - planned),
-      link: '/finance/jobs/' + r.job_id,
+      link: '/jobs/' + r.job_id,
       meta: { planned, actual, overrun_pct: overrun, threshold_pct: overrunPct },
     });
   }
@@ -217,10 +246,15 @@ function ruleStaleQuotes(userId, thresholds) {
       id: 'quote-stale-' + r.id,
       rule: 'quote_stale',
       severity: days > N * 2 ? 'high' : 'low',
+      headline: headlineFor(r.client_name, r.project_name),
+      situation: 'Quote sent ' + days + ' days ago, no answer — ' + fmtMoney(r.grand_total),
+      // "Nudge them" — the frontend fetches the share link and opens the
+      // follow-up share sheet (WhatsApp-first), so it needs the quote id.
+      action: { label: 'Nudge them', kind: 'nudge_quote', quote_id: r.id },
       title: (r.quote_number || 'Quote') + ' — sent ' + days + ' days ago, no response',
       body: (r.client_name ? r.client_name + ' · ' : '')
         + (r.project_name || '') + ' · ' + fmtMoney(r.grand_total),
-      link: '/estimator/' + r.id,
+      link: '/estimator/quote/' + r.id,
       meta: { days_outstanding: days, value: r.grand_total, threshold: N },
     };
   });
@@ -270,12 +304,15 @@ function ruleDayRateBelowBreakeven(userId) {
       id: 'day-rate-' + r.job_id,
       rule: 'day_rate_below_breakeven',
       severity: shortfall > floor * 0.2 ? 'high' : 'medium',
+      headline: headlineFor(r.client_name, r.job_name),
+      situation: 'This job pays about ' + fmtMoney(effectiveRate) + ' a day — you need ' + fmtMoney(floor) + ' a day to break even',
+      action: { label: 'See the job', kind: 'link', link: '/jobs/' + r.job_id },
       title: (r.job_name || 'Job') + ' — effective day-rate ' + fmtMoney(effectiveRate) + ' is below break-even',
       body: (r.client_name ? r.client_name + ' · ' : '')
         + 'Break-even ' + fmtMoney(floor) + '/day · '
         + 'Revenue ' + fmtMoney(revenue) + ' over ~' + impliedDays.toFixed(1) + ' days · '
         + 'Short by ' + fmtMoney(shortfall) + '/day',
-      link: '/finance/jobs/' + r.job_id,
+      link: '/jobs/' + r.job_id,
       meta: { break_even_day: floor, effective_rate: effectiveRate, shortfall, implied_days: impliedDays },
     });
   }
@@ -308,12 +345,16 @@ function ruleRetentionDue(userId) {
       id: 'retention-due-' + r.id,
       rule: 'retention_due',
       severity: isDue ? 'high' : 'medium',
+      headline: headlineFor(r.client_name, r.name),
+      situation: (amount > 0 ? fmtMoney(amount) + ' retention' : 'Retention (' + r.retention_pct + '%)')
+        + (isDue ? ' is due back to you now — invoice it before it gets forgotten' : ' is due back in ' + days + ' days'),
+      action: { label: 'See the job', kind: 'link', link: '/jobs/' + r.id },
       title: 'Retention on ' + (r.name || 'a job') + ' — '
         + (isDue ? 'due back now' : 'due back in ' + days + ' day(s)'),
       body: (r.client_name ? r.client_name + ' · ' : '')
         + (amount > 0 ? fmtMoney(amount) + ' held back (' + r.retention_pct + '%) · ' : r.retention_pct + '% held back · ')
         + 'release date ' + r.retention_release_date + ' — invoice it before it gets forgotten',
-      link: '/finance/jobs/' + r.id,
+      link: '/jobs/' + r.id,
       meta: { days_to_due: days, value: amount, retention_pct: r.retention_pct },
     };
   });

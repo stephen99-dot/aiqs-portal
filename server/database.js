@@ -811,6 +811,8 @@ const migrations = [
   // A4 — retention held on a job, released on a date (PM alert when due).
   { column: 'retention_pct', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_pct REAL DEFAULT 0" },
   { column: 'retention_release_date', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN retention_release_date DATE" },
+  // Restructure 2 — one-tap call/WhatsApp from the job page.
+  { column: 'client_phone', table: 'estimator_jobs', sql: "ALTER TABLE estimator_jobs ADD COLUMN client_phone TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

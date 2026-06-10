@@ -5,6 +5,7 @@ import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
 import { CheckIcon } from '../components/Icons';
+import useIsMobile from '../utils/useIsMobile';
 
 // Variation editor — used for both /change-orders/new?job=<id> (create) and
 // /change-orders/:id (edit / view). Once status === 'approved' the row is
@@ -22,6 +23,7 @@ function Inner() {
   const { id } = useParams();
   const [qs] = useSearchParams();
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const isNew = !id;
   const jobIdFromQs = qs.get('job') || '';
 
@@ -159,7 +161,7 @@ function Inner() {
     if (!window.confirm('Delete this variation?')) return;
     try {
       await apiFetch('/change-orders/' + variationId, { method: 'DELETE' });
-      nav(jobId ? '/finance/jobs/' + jobId : '/finance');
+      nav(jobId ? '/jobs/' + jobId : '/jobs');
     } catch (e) { setError(e.message); }
   };
 
@@ -201,8 +203,8 @@ function Inner() {
   const readOnly = locked;
 
   return (
-    <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav(jobId ? '/finance/jobs/' + jobId : '/finance')} style={btnLink(t)}>← Job</button>
+    <div style={{ padding: isMobile ? '16px 12px 110px' : 24, color: t.text }}>
+      <button onClick={() => nav(jobId ? '/jobs/' + jobId : '/jobs')} style={btnLink(t)}>← Job</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>
@@ -282,7 +284,7 @@ function Inner() {
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Add bifold doors" disabled={readOnly} style={fld(t)} />
           </div>
           <div>
-            <label style={lbl(t)}>OH&P %</label>
+            <label style={lbl(t)}>Your markup %</label>
             <input type="number" step="any" value={ohpPct} onChange={e => setOhpPct(e.target.value)} disabled={readOnly} style={fld(t)} />
           </div>
           <div>
@@ -296,6 +298,69 @@ function Inner() {
 
       {/* Lines */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        {isMobile ? (
+        <div style={{ padding: 4 }}>
+          {lines.map((ln, idx) => {
+            const lineTotal = num(ln.qty) * num(ln.rate);
+            return (
+              <div key={idx} style={{ border: '1px solid ' + t.border, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                {readOnly ? (
+                  <>
+                    {ln.item && <div style={{ fontWeight: 700 }}>{ln.item}</div>}
+                    <div style={{ color: t.textSecondary, fontSize: 13 }}>{ln.description}</div>
+                  </>
+                ) : (
+                  <>
+                    <RateAutocomplete
+                      value={ln.item || ''}
+                      unit={ln.unit}
+                      onChange={(v) => updateLine(idx, { item: v })}
+                      onPick={(r) => updateLine(idx, {
+                        item: r.description.split(',')[0].slice(0, 80),
+                        description: r.description,
+                        unit: r.unit || ln.unit || 'item',
+                        rate: r.rate,
+                        labour: r.labour,
+                        materials: r.materials,
+                        est_rate: false,
+                      })}
+                      placeholder="Item — type to search your rates"
+                    />
+                    <input value={ln.description || ''} onChange={e => updateLine(idx, { description: e.target.value })} placeholder="What's the change?"
+                      style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, marginTop: 6, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 15, outline: 'none' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
+                        <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
+                          style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Unit</div>
+                        <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })}
+                          style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £</div>
+                        <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
+                          style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                  {!readOnly ? (
+                    <button onClick={() => deleteLine(idx)} style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 44, padding: 0 }}>Remove line</button>
+                  ) : <span />}
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(lineTotal)}</div>
+                </div>
+              </div>
+            );
+          })}
+          {!readOnly && (
+            <button onClick={addLine} style={{ background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 10, minHeight: 44, width: '100%', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add line</button>
+          )}
+        </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
             <thead>
@@ -372,6 +437,7 @@ function Inner() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {/* Summary */}
@@ -382,12 +448,34 @@ function Inner() {
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmt(totals.net)} />
-          <SummaryRow t={t} label={'OH&P (' + num(ohpPct).toFixed(1) + '%)'} value={fmt(totals.ohp)} />
+          <SummaryRow t={t} label={'Your markup (' + num(ohpPct).toFixed(1) + '%)'} value={fmt(totals.ohp)} />
           <SummaryRow t={t} label={'VAT (' + num(vatPct).toFixed(1) + '%)'} value={fmt(totals.vat)} />
           <div style={{ borderTop: '1px solid ' + t.border, margin: '8px 0' }} />
           <SummaryRow t={t} label="Grand Total" value={fmt(totals.grand)} bold />
         </div>
       </div>
+      {/* Phone: primary actions pinned to the bottom. */}
+      {isMobile && !readOnly && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 100,
+          display: 'flex', gap: 8, padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+          background: t.card, borderTop: '1px solid ' + t.border,
+        }}>
+          <button onClick={save} disabled={saving} style={{
+            flex: 1, minHeight: 52, borderRadius: 12, border: '1px solid ' + t.border,
+            background: 'transparent', color: t.text, fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', opacity: saving ? 0.6 : 1,
+          }}>{saving ? 'Saving…' : 'Save'}</button>
+          {variationId && status === 'draft' && (
+            <button onClick={send} disabled={sending} style={{
+              flex: 2, minHeight: 52, borderRadius: 12, border: 'none',
+              background: t.success, color: '#fff', fontSize: 15, fontWeight: 700,
+              cursor: 'pointer', opacity: sending ? 0.6 : 1,
+            }}>{sending ? 'Sending…' : 'Send to the client'}</button>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }

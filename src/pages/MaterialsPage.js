@@ -112,7 +112,7 @@ function MaterialsPageInner() {
     <div style={{ padding: 24, color: t.text, maxWidth: 1180, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 24, color: t.text }}>UK Materials Pricing</h1>
+          <h1 style={{ margin: 0, fontSize: 24, color: t.text }}>Materials prices</h1>
           <p style={{ color: t.textSecondary, fontSize: 14, marginTop: 6, maxWidth: 640 }}>
             Search the catalogue, compare supplier prices, and drop a chosen variant
             straight into a quote. Every price links back to its source and shows

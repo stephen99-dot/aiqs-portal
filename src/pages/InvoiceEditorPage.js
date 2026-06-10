@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
+import useIsMobile from '../utils/useIsMobile';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function fmt(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -21,6 +22,11 @@ function Inner() {
   const { t } = useTheme();
   const { id } = useParams();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+  // /invoices/:id?chase=1 — the Today screen's "Chase it" lands here and the
+  // chase modal opens by itself.
+  const chaseRequested = useRef(searchParams.get('chase') === '1');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -173,7 +179,7 @@ function Inner() {
     if (!window.confirm('Delete this invoice?')) return;
     try {
       await apiFetch('/invoices/' + id, { method: 'DELETE' });
-      nav('/invoices');
+      nav('/money');
     } catch (e) { setError(e.message); }
   };
 
@@ -203,6 +209,14 @@ function Inner() {
       await apiFetch('/invoices/' + id, { method: 'PATCH', body: JSON.stringify({ reminders_enabled: on ? 1 : 0 }) });
     } catch (e) { setError(e.message); setReminders(!on); }
   };
+
+  useEffect(() => {
+    if (chaseRequested.current && invoice && invoice.status === 'sent') {
+      chaseRequested.current = false;
+      openChase();
+    }
+    // openChase is stable enough — this only ever fires once, on first load.
+  }, [invoice]); // eslint-disable-line
 
   // A3: AI drafts the chaser, the builder reads/edits it, nothing sends itself.
   const openChase = async () => {
@@ -247,8 +261,8 @@ function Inner() {
   if (!invoice) return <div style={{ padding: 40, color: t.danger }}>{error || 'Invoice not found.'}</div>;
 
   return (
-    <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav('/invoices')} style={btnLink(t)}>← Invoices</button>
+    <div style={{ padding: isMobile ? '16px 12px 110px' : 24, color: t.text }}>
+      <button onClick={() => nav('/money')} style={btnLink(t)}>← Money</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>
@@ -297,7 +311,7 @@ function Inner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Let them pay by card</div>
+              <div style={{ color: t.text, fontSize: 14, fontWeight: 700 }}>Let them pay by card</div>
               <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
                 Adds a "Pay now" button to the invoice your client sees. When they pay, the invoice marks itself as paid.
               </div>
@@ -317,7 +331,7 @@ function Inner() {
       {/* Header form */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Bill to</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Bill to</div>
           <label style={lbl(t)}>Client name</label>
           <input value={client.name} disabled={readOnly} onChange={e => { setClient({ ...client, name: e.target.value }); onHeaderChange(); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Email</label>
@@ -326,7 +340,7 @@ function Inner() {
           <textarea value={client.address} disabled={readOnly} onChange={e => { setClient({ ...client, address: e.target.value }); onHeaderChange(); }} rows={3} style={ta(t)} />
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Invoice details</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Invoice details</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label style={lbl(t)}>Issue date</label>
@@ -355,7 +369,7 @@ function Inner() {
       {/* A4 — Tax & CIS for this invoice */}
       {!readOnly && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Tax & CIS on this invoice</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Tax & CIS on this invoice</div>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
             <input type="checkbox" checked={cisApplies} onChange={e => toggleCis(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
             <div>
@@ -394,6 +408,65 @@ function Inner() {
 
       {/* Lines */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        {isMobile ? (
+        <div style={{ padding: 12 }}>
+          {lines.map((ln, idx) => {
+            const lineTotal = num(ln.qty) * num(ln.rate);
+            return (
+              <div key={idx} style={{ border: '1px solid ' + t.border, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                {readOnly ? (
+                  <>
+                    {ln.item && <div style={{ fontWeight: 700 }}>{ln.item}</div>}
+                    <div style={{ color: t.textSecondary, fontSize: 13 }}>{ln.description}</div>
+                  </>
+                ) : (
+                  <>
+                    <input value={ln.item || ''} onChange={e => updateLine(idx, { item: e.target.value })} placeholder="Item (optional)"
+                      style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 15, outline: 'none', fontWeight: 600, marginBottom: 6 }} />
+                    <input value={ln.description || ''} onChange={e => updateLine(idx, { description: e.target.value })} placeholder="What's the line for?"
+                      style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 15, outline: 'none' }} />
+                  </>
+                )}
+                {cisApplies && !readOnly && (
+                  <select value={ln.is_labour ? 1 : 0} onChange={e => updateLine(idx, { is_labour: num(e.target.value) })}
+                    style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, marginTop: 8, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 15 }}>
+                    <option value={1}>Labour (CIS deducts from this)</option>
+                    <option value={0}>Materials (no deduction)</option>
+                  </select>
+                )}
+                {!readOnly && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
+                      <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Unit</div>
+                      <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £</div>
+                      <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                  {!readOnly ? (
+                    <button onClick={() => deleteLine(idx)} style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 44, padding: 0 }}>Remove line</button>
+                  ) : <span />}
+                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(lineTotal)}</div>
+                </div>
+              </div>
+            );
+          })}
+          {!readOnly && (
+            <button onClick={addLine} style={{ ...btnGhost(t), minHeight: 44, width: '100%' }}>+ Add line</button>
+          )}
+        </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
             <thead>
@@ -459,6 +532,7 @@ function Inner() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
       {share && (
@@ -512,6 +586,34 @@ function Inner() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Phone: primary actions pinned to the bottom. */}
+      {isMobile && !readOnly && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 100,
+          display: 'flex', gap: 8, padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+          background: t.card, borderTop: '1px solid ' + t.border,
+        }}>
+          <button onClick={save} disabled={saving || !dirty} style={{
+            flex: 1, minHeight: 52, borderRadius: 12, border: '1px solid ' + t.border,
+            background: 'transparent', color: t.text, fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', opacity: (saving || !dirty) ? 0.6 : 1,
+          }}>{saving ? 'Saving…' : (dirty ? 'Save' : 'Saved')}</button>
+          {invoice.status === 'draft' ? (
+            <button onClick={send} disabled={sending} style={{
+              flex: 2, minHeight: 52, borderRadius: 12, border: 'none',
+              background: t.success, color: '#fff', fontSize: 15, fontWeight: 700,
+              cursor: 'pointer', opacity: sending ? 0.6 : 1,
+            }}>{sending ? 'Sending…' : 'Send the invoice'}</button>
+          ) : (
+            <button onClick={openChase} style={{
+              flex: 2, minHeight: 52, borderRadius: 12, border: 'none',
+              background: invoice.overdue ? t.danger : t.accent, color: '#fff',
+              fontSize: 15, fontWeight: 700, cursor: 'pointer',
+            }}>Chase this payment</button>
+          )}
         </div>
       )}
 
