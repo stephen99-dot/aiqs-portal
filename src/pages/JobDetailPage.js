@@ -59,6 +59,8 @@ function Inner() {
   const [invoices, setInvoices] = useState([]);
   const [schedule, setSchedule] = useState({ stages: [], total: 0, paid: 0, unpaid: 0 });
   const [newStage, setNewStage] = useState({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
+  const [invoiceSheet, setInvoiceSheet] = useState(null); // quote being turned into an invoice
+  const [pctChoice, setPctChoice] = useState(25);
   const [documents, setDocuments] = useState([]);
   const [docTemplates, setDocTemplates] = useState([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
@@ -202,12 +204,29 @@ function Inner() {
     } catch (e) { setError(e.message); }
   };
 
-  // B5 (one-tap): accepted quote -> invoice, everything pre-filled.
-  const turnIntoInvoice = async (quote) => {
+  // B5: accepted quote -> invoice. The sheet offers the full amount, a
+  // percentage ("Invoice the deposit (25%)"), or a stage from the payment
+  // plan — everything pre-filled either way.
+  const createFromQuote = async (quote, percent, stageLabel) => {
     try {
       const r = await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({
         from_quote_id: quote.id, job_id: id, client_name: job.client_name || quote.client_name,
+        percent: percent || 100, stage_label: stageLabel || undefined,
       }) });
+      setInvoiceSheet(null);
+      nav('/invoices/' + r.id);
+    } catch (e) { setError(e.message); }
+  };
+
+  const createFromStage = async (stage) => {
+    try {
+      const r = await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({
+        job_id: id, client_name: job.client_name,
+        lines: [{ description: stage.stage_label || 'Staged payment', unit: 'item', qty: 1, rate: num(stage.amount) }],
+        vat_pct: 20,
+      }) });
+      try { await apiFetch('/payment-schedules/' + stage.id + '/link-invoice', { method: 'POST', body: JSON.stringify({ invoice_id: r.id }) }); } catch (e) {}
+      setInvoiceSheet(null);
       nav('/invoices/' + r.id);
     } catch (e) { setError(e.message); }
   };
@@ -344,7 +363,7 @@ function Inner() {
                 </div>
               </div>
               {accepted && (
-                <button onClick={() => turnIntoInvoice(q)} style={{ ...primaryBtn, background: t.success, marginTop: 10 }}>
+                <button onClick={() => { setInvoiceSheet(q); setPctChoice(25); }} style={{ ...primaryBtn, background: t.success, marginTop: 10 }}>
                   Turn into invoice
                 </button>
               )}
@@ -620,6 +639,63 @@ function Inner() {
           </div>
         ))}
       </div>
+      {/* B5 — how much of the quote to invoice */}
+      {invoiceSheet && (() => {
+        const exVat = num(invoiceSheet.grand_total) - num(invoiceSheet.vat_amount || 0);
+        const unpaidStages = (schedule.stages || []).filter(st => st.status === 'unpaid' && !st.invoice_id);
+        return (
+          <div onClick={() => setInvoiceSheet(null)} style={{
+            position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: t.card, color: t.text, width: '100%', maxWidth: 520,
+              borderRadius: '16px 16px 0 0', padding: '20px 20px calc(24px + env(safe-area-inset-bottom))',
+              border: '1px solid ' + t.border, borderBottom: 'none', boxSizing: 'border-box',
+              maxHeight: '85vh', overflowY: 'auto',
+            }}>
+              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>How much do you want to invoice?</div>
+              <div style={{ color: t.textSecondary, fontSize: 13.5, marginBottom: 16 }}>
+                The quote came to {fmt0(invoiceSheet.grand_total)} ({fmt0(exVat)} before VAT).
+              </div>
+
+              <button onClick={() => createFromQuote(invoiceSheet, 100)} style={{ ...primaryBtn, width: '100%', minHeight: 52, marginBottom: 10 }}>
+                The full amount — {fmt0(invoiceSheet.grand_total)}
+              </button>
+
+              {unpaidStages.map(st => (
+                <button key={st.id} onClick={() => createFromStage(st)} style={{ ...ghostBtn, width: '100%', minHeight: 52, marginBottom: 10, textAlign: 'left', paddingLeft: 16 }}>
+                  {(st.stage_label || 'Stage')} from your payment plan — {fmt0(st.amount)}
+                </button>
+              ))}
+
+              <div style={{ border: '1px solid ' + t.border, borderRadius: 12, padding: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Or a part of it</div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  {[25, 50, 75].map(p => (
+                    <button key={p} onClick={() => setPctChoice(p)} style={{
+                      flex: 1, minHeight: 44, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15,
+                      background: pctChoice === p ? t.accent : 'transparent',
+                      color: pctChoice === p ? '#fff' : t.text,
+                      border: '1px solid ' + (pctChoice === p ? t.accent : t.border),
+                    }}>{p}%</button>
+                  ))}
+                  <input type="number" min="1" max="99" value={pctChoice}
+                    onChange={e => setPctChoice(Math.min(99, Math.max(1, num(e.target.value, 25))))}
+                    style={{ width: 70, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.bg, color: t.text, textAlign: 'center', fontSize: 16, outline: 'none' }} />
+                </div>
+                <button onClick={() => createFromQuote(invoiceSheet, pctChoice, pctChoice === 25 ? 'Deposit' : null)}
+                  style={{ ...primaryBtn, width: '100%', minHeight: 48 }}>
+                  Invoice {pctChoice}% — {fmt0(exVat * pctChoice / 100)} + VAT
+                </button>
+              </div>
+
+              <button onClick={() => setInvoiceSheet(null)} style={{ width: '100%', minHeight: 44, marginTop: 10, background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 }
