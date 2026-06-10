@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 
-const BOQ_5_PACK_LINK = 'https://buy.stripe.com/5kQ8wPaZycfK5sAfCA73G0d';
+const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
@@ -646,11 +646,11 @@ export default function SubmitDrawingsPage() {
                   5 BOQ pack
                 </div>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#F59E0B', fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                  £300
+                  £349
                 </div>
               </div>
               <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
-                That's just <strong style={{ color: t.text }}>£60 per BOQ</strong> — saves you £195 vs. PAYG.
+                That's just <strong style={{ color: t.text }}>£69.80 per BOQ</strong> — saves you £146 vs. PAYG.
               </div>
               <div style={{ fontSize: 12, color: t.textMuted }}>
                 Credits never expire. Use them whenever you like.
@@ -672,7 +672,7 @@ export default function SubmitDrawingsPage() {
               }}
             >
               <ZapIcon size={15} color="#0A0F1C" />
-              Buy 5 BOQs — £300
+              Buy 5 BOQs — £349
               <ArrowRightIcon size={15} color="#0A0F1C" />
             </a>
 
@@ -709,7 +709,7 @@ export default function SubmitDrawingsPage() {
           }}
         >
           <ZapIcon size={14} color="#0A0F1C" />
-          Buy 5 BOQs — £300
+          Buy 5 BOQs — £349
         </button>
       )}
 

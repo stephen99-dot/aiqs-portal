@@ -156,7 +156,7 @@ async function handleCheckoutComplete(session, stripeSecret) {
 // on top at checkout). Overridable via STRIPE_BOQ_PACKS env var as JSON,
 // e.g. '{"9900":1,"30000":5}'.
 function resolvePackCredits(session) {
-  let PACKS = { 9900: 1, 7900: 1, 30000: 5 };
+  let PACKS = { 9900: 1, 7900: 1, 34900: 5, 30000: 5 };
   if (process.env.STRIPE_BOQ_PACKS) {
     try {
       const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
