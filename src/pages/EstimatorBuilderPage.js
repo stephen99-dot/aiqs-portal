@@ -7,6 +7,7 @@ import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
 import MaterialAutocomplete from '../components/MaterialAutocomplete';
 import ShareLinkModal from '../components/ShareLinkModal';
+import useIsMobile from '../utils/useIsMobile';
 
 // Two-mode page:
 //   /estimator/new          — input flow -> draft -> edit -> save
@@ -144,6 +145,7 @@ function EstimatorBuilderPageInner() {
   const { user } = useAuth();
   const nav = useNavigate();
   const [qs] = useSearchParams();
+  const isMobile = useIsMobile();
 
   // Input phase
   const [inputMode, setInputMode] = useState('describe'); // 'describe' | 'form' | 'measure'
@@ -582,7 +584,7 @@ function EstimatorBuilderPageInner() {
 
   // ─── Editor (ready phase) ────────────────────────────────────────────────
   return (
-    <div style={{ padding: 24, color: t.text }}>
+    <div style={{ padding: isMobile ? '16px 12px 110px' : 24, color: t.text }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <button onClick={() => nav('/estimator')} style={btnLink(t)}>← Quotes</button>
@@ -701,6 +703,75 @@ function EstimatorBuilderPageInner() {
 
       {/* Lines */}
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+        {isMobile ? (
+        <div style={{ padding: 12 }}>
+          {sections.order.map(sec => (
+            <div key={sec}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: t.textSecondary, padding: '8px 2px 6px' }}>{sec}</div>
+              {sections.grouped[sec].map(ln => {
+                const idx = ln._idx;
+                const lineTotal = num(ln.qty) * num(ln.rate);
+                return (
+                  <div key={idx} style={{ border: '1px solid ' + t.border, borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                    <RateAutocomplete
+                      value={ln.item || ''}
+                      unit={ln.unit}
+                      onChange={(v) => updateLine(idx, { item: v })}
+                      onPick={(r) => updateLine(idx, {
+                        item: r.description.split(',')[0].slice(0, 80),
+                        description: r.description,
+                        unit: r.unit || ln.unit || 'item',
+                        rate: r.rate,
+                        labour: r.labour,
+                        materials: r.materials,
+                        est_rate: false,
+                      })}
+                      placeholder="Item — type to search your rates"
+                    />
+                    <MaterialAutocomplete
+                      value={ln.description || ''}
+                      unit={ln.unit}
+                      materialId={ln.material_id}
+                      onChange={(v) => updateLine(idx, { description: v })}
+                      onPick={(m) => updateLine(idx, {
+                        description: m.description,
+                        unit: m.unit,
+                        rate: m.rate,
+                        materials: m.materials,
+                        source_url: m.source_url,
+                        material_id: m.material_id,
+                        est_rate: false,
+                      })}
+                      placeholder="Description — type to search materials"
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
+                        <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Unit</div>
+                        <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16, textAlign: 'left' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £{ln.est_rate ? ' (AI guess)' : ''}</div>
+                        <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
+                          style={{ ...inputNum(t), minHeight: 44, fontSize: 16, color: ln.est_rate ? t.warning : t.text, borderColor: ln.est_rate ? t.warning + '55' : t.border }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                      <button onClick={() => deleteLine(idx)} style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 13, fontWeight: 600, minHeight: 44, padding: 0 }}>Remove line</button>
+                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(lineTotal, currency)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={() => addLine(sec)} style={{ ...btnGhost(t), minHeight: 44, width: '100%', marginBottom: 8 }}>+ Add line to {sec}</button>
+            </div>
+          ))}
+          <button onClick={() => addLine('General')} style={{ ...btnGhost(t), minHeight: 44, width: '100%' }}>+ Add new section line</button>
+        </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 880 }}>
           <thead>
@@ -800,6 +871,7 @@ function EstimatorBuilderPageInner() {
           </tbody>
         </table>
         </div>
+        )}
       </div>
 
       {/* Summary */}
@@ -849,6 +921,26 @@ function EstimatorBuilderPageInner() {
           message="Here’s your quote — you can view and accept it here:"
           onClose={() => setShare(null)}
         />
+      )}
+
+      {/* Phone: the two actions that matter, always under the thumb. */}
+      {isMobile && !locked && (
+        <div style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 100,
+          display: 'flex', gap: 8, padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+          background: t.card, borderTop: '1px solid ' + t.border,
+        }}>
+          <button onClick={save} disabled={saving} style={{
+            flex: 1, minHeight: 52, borderRadius: 12, border: '1px solid ' + t.border,
+            background: 'transparent', color: t.text, fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', opacity: saving ? 0.6 : 1,
+          }}>{saving ? 'Saving…' : 'Save'}</button>
+          <button onClick={sendQuote} disabled={sendingQuote || !quoteId} style={{
+            flex: 2, minHeight: 52, borderRadius: 12, border: 'none',
+            background: t.success, color: '#fff', fontSize: 15, fontWeight: 700,
+            cursor: 'pointer', opacity: (sendingQuote || !quoteId) ? 0.6 : 1,
+          }}>{sendingQuote ? 'Getting link…' : 'Send the quote'}</button>
+        </div>
       )}
     </div>
   );

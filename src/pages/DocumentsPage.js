@@ -125,37 +125,24 @@ function Inner() {
           No documents yet. Click "+ New document" to start.
         </div>
       ) : (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: t.surface, color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  <th style={th}>Title</th>
-                  <th style={th}>Template</th>
-                  <th style={th}>Job</th>
-                  <th style={th}>Updated</th>
-                  <th style={{ ...th, textAlign: 'right' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {documents.map(d => (
-                  <tr key={d.id} style={{ borderTop: '1px solid ' + t.border }}>
-                    <td style={td}>
-                      <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}>{d.title}</a>
-                    </td>
-                    <td style={td}>{d.template_label || d.template_id}</td>
-                    <td style={td}>{d.job_name || <span style={{ color: t.textMuted }}>—</span>}</td>
-                    <td style={{ ...td, color: t.textSecondary, fontSize: 13 }}>{(d.updated_at || d.created_at || '').slice(0, 10)}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <button onClick={() => nav('/documents/' + d.id)} style={btnGhost(t)}>Open</button>
-                      <button onClick={() => downloadPdf(d.id)} style={btnGhost(t)}>PDF</button>
-                      <button onClick={() => remove(d.id, d.title)} style={{ ...btnGhost(t), color: t.danger }}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {documents.map(d => (
+            <div key={d.id} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                <div style={{ minWidth: 0 }}>
+                  <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ color: t.text, textDecoration: 'none', fontWeight: 700, fontSize: 15 }}>{d.title}</a>
+                  <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+                    {(d.template_label || d.template_id)}{d.job_name ? ' · ' + d.job_name : ''} · {(d.updated_at || d.created_at || '').slice(0, 10)}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <button onClick={() => nav('/documents/' + d.id)} style={{ ...btnGhost(t), minHeight: 40 }}>Open</button>
+                <button onClick={() => downloadPdf(d.id)} style={{ ...btnGhost(t), minHeight: 40 }}>PDF</button>
+                <button onClick={() => remove(d.id, d.title)} style={{ ...btnGhost(t), minHeight: 40, color: t.danger }}>Delete</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
