@@ -282,7 +282,7 @@ function Inner() {
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Add bifold doors" disabled={readOnly} style={fld(t)} />
           </div>
           <div>
-            <label style={lbl(t)}>OH&P %</label>
+            <label style={lbl(t)}>Your markup %</label>
             <input type="number" step="any" value={ohpPct} onChange={e => setOhpPct(e.target.value)} disabled={readOnly} style={fld(t)} />
           </div>
           <div>
@@ -382,7 +382,7 @@ function Inner() {
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmt(totals.net)} />
-          <SummaryRow t={t} label={'OH&P (' + num(ohpPct).toFixed(1) + '%)'} value={fmt(totals.ohp)} />
+          <SummaryRow t={t} label={'Your markup (' + num(ohpPct).toFixed(1) + '%)'} value={fmt(totals.ohp)} />
           <SummaryRow t={t} label={'VAT (' + num(vatPct).toFixed(1) + '%)'} value={fmt(totals.vat)} />
           <div style={{ borderTop: '1px solid ' + t.border, margin: '8px 0' }} />
           <SummaryRow t={t} label="Grand Total" value={fmt(totals.grand)} bold />

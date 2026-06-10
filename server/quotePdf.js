@@ -186,7 +186,7 @@ function streamQuotePdf(res, q, lines, branding, userInfo) {
     sy += 16;
   }
   summaryRow('Net', fmtMoney(q.net_total, cc));
-  summaryRow('OH&P (' + num(q.ohp_pct).toFixed(1) + '%)', fmtMoney(q.ohp_amount, cc));
+  summaryRow('Overheads & profit (' + num(q.ohp_pct).toFixed(1) + '%)', fmtMoney(q.ohp_amount, cc));
   summaryRow('Contingency (' + num(q.contingency_pct).toFixed(1) + '%)', fmtMoney(q.contingency_amount, cc));
   summaryRow('VAT (' + num(q.vat_pct).toFixed(1) + '%)', fmtMoney(q.vat_amount, cc));
   sy += 4;

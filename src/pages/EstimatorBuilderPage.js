@@ -554,7 +554,7 @@ function EstimatorBuilderPageInner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 12 }}>Quote build-up</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-            <PctField t={t} label="OH&P %" value={ohpPct} onChange={setOhpPct} />
+            <PctField t={t} label="Your markup %" value={ohpPct} onChange={setOhpPct} />
             <PctField t={t} label="Contingency %" value={contPct} onChange={setContPct} />
             <PctField t={t} label="VAT %" value={vatPct} onChange={setVatPct} />
             <PctField t={t} label="Target margin %" value={targetMarginPct} onChange={setTargetMarginPct} />
@@ -692,7 +692,7 @@ function EstimatorBuilderPageInner() {
       <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 12 }}>Build-up</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-          <PctField t={t} label="OH&P %" value={ohpPct} onChange={setOhpPct} />
+          <PctField t={t} label="Your markup %" value={ohpPct} onChange={setOhpPct} />
           <PctField t={t} label="Contingency %" value={contPct} onChange={setContPct} />
           <PctField t={t} label="VAT %" value={vatPct} onChange={setVatPct} />
           <PctField t={t} label="Target margin %" value={targetMarginPct} onChange={setTargetMarginPct} />
@@ -810,7 +810,7 @@ function EstimatorBuilderPageInner() {
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmtMoney(totals.net, currency)} />
-          <SummaryRow t={t} label={'OH&P (' + num(ohpPct).toFixed(1) + '%)'} value={fmtMoney(totals.ohp, currency)} />
+          <SummaryRow t={t} label={'Your markup (' + num(ohpPct).toFixed(1) + '%)'} value={fmtMoney(totals.ohp, currency)} />
           <SummaryRow t={t} label={'Contingency (' + num(contPct).toFixed(1) + '%)'} value={fmtMoney(totals.cont, currency)} />
           <SummaryRow t={t} label={'VAT (' + num(vatPct).toFixed(1) + '%)'} value={fmtMoney(totals.vat, currency)} />
           <div style={{ borderTop: '1px solid ' + t.border, margin: '8px 0' }} />
@@ -827,8 +827,8 @@ function EstimatorBuilderPageInner() {
             return (
               <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: clears ? t.successBg : t.warningBg, color: clears ? t.success : t.warning, fontSize: 12 }}>
                 {clears
-                  ? <>This quote's OH&P covers {days.toFixed(1)} day{days >= 1.05 ? 's' : ''} of your {fmtMoney(breakDay, 'GBP')}/day overhead.</>
-                  : <>OH&P doesn't cover one full day of overhead ({fmtMoney(breakDay, 'GBP')}/day). Consider lifting the markup.</>
+                  ? <>This quote's markup covers {days.toFixed(1)} day{days >= 1.05 ? 's' : ''} of your {fmtMoney(breakDay, 'GBP')}/day overhead.</>
+                  : <>The markup doesn't cover one full day of overhead ({fmtMoney(breakDay, 'GBP')}/day). Consider lifting the markup.</>
                 }
               </div>
             );

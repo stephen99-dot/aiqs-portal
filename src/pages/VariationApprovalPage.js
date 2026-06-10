@@ -192,7 +192,7 @@ export default function VariationApprovalPage() {
           <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
             <div style={{ minWidth: 260, border: '1px solid ' + c.border, borderRadius: 8, padding: 16 }}>
               <Row c={c} label="Net" value={fmt(data.net_total, cc)} />
-              <Row c={c} label={'OH&P (' + num(data.ohp_pct).toFixed(1) + '%)'} value={fmt(data.ohp_amount, cc)} />
+              <Row c={c} label={'Overheads & profit (' + num(data.ohp_pct).toFixed(1) + '%)'} value={fmt(data.ohp_amount, cc)} />
               <Row c={c} label={'VAT (' + num(data.vat_pct).toFixed(1) + '%)'} value={fmt(data.vat_amount, cc)} />
               <div style={{ borderTop: '1px solid ' + c.border, margin: '8px 0' }} />
               <Row c={c} label="Grand Total" value={fmt(data.grand_total, cc)} bold />

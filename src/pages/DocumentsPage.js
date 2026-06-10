@@ -94,7 +94,7 @@ function Inner() {
 
       {picking && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 10 }}>Pick a template</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Pick a template</div>
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', color: t.textSecondary, fontSize: 12, marginBottom: 4 }}>Attach to job (optional)</label>
             <select value={pickJobId} onChange={e => setPickJobId(e.target.value)} style={{ width: 360, maxWidth: '100%', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: '8px 10px', fontSize: 14, outline: 'none' }}>

@@ -1,18 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
-import { ClipboardIcon, FileTextIcon } from '../components/Icons';
+import { FileTextIcon } from '../components/Icons';
 
-// Quotes dashboard — list + stats strip. The "build a new quote" flow lives in
-// EstimatorBuilderPage. Both are gated on user.hasEstimator.
+// All quotes — reached from Jobs ("All quotes"). Cards, not a table: the
+// customer is the headline, "Quote · 20 May" the subtitle, the reference in
+// small print for paperwork. Most quote work happens on the job page; this
+// is the full list for anything not tied to a job yet.
 
-// 'accepted' is set by the client from the public /q/<token> link — it can't
-// be picked manually, but it shows in the dropdown when set.
-const STATUS_OPTIONS = ['draft', 'sent', 'won', 'lost'];
+function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
+function fmt0(n) { return '£' + Math.round(num(n)).toLocaleString('en-GB'); }
+function shortDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); } catch (e) { return iso; }
+}
+
+const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', won: 'Won', lost: 'Lost' };
 
 function statusColour(s, t) {
   switch (s) {
@@ -24,66 +30,31 @@ function statusColour(s, t) {
   }
 }
 
-function fmtMoney(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
-  const v = Number(n) || 0;
-  return sym + v.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
 export default function EstimatorPage() {
   return <EstimatorGate><EstimatorPageInner /></EstimatorGate>;
 }
 
 function EstimatorPageInner() {
   const { t } = useTheme();
-  const { user } = useAuth();
   const nav = useNavigate();
 
   const [quotes, setQuotes] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [share, setShare] = useState(null); // { url } — share sheet after "Send"
+  const [share, setShare] = useState(null);
 
   const refresh = useCallback(async () => {
     setError('');
     try {
-      const [q, s] = await Promise.all([
-        apiFetch('/estimator/quotes'),
-        apiFetch('/estimator/stats'),
-      ]);
+      const q = await apiFetch('/estimator/quotes');
       setQuotes(q.quotes || []);
-      setStats(s || null);
     } catch (e) {
       setError(e.message || 'Failed to load quotes');
     } finally {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => { refresh(); }, [refresh]);
-
-  const handleStatus = async (id, status) => {
-    try {
-      await apiFetch('/estimator/quotes/' + id, { method: 'PATCH', body: JSON.stringify({ status }) });
-      refresh();
-    } catch (e) { alert(e.message); }
-  };
-
-  const handleDelete = async (id, name) => {
-    if (!window.confirm('Delete "' + (name || 'this quote') + '"? This cannot be undone.')) return;
-    try {
-      await apiFetch('/estimator/quotes/' + id, { method: 'DELETE' });
-      refresh();
-    } catch (e) { alert(e.message); }
-  };
-
-  const handleDuplicate = async (id) => {
-    try {
-      const r = await apiFetch('/estimator/quotes/' + id + '/duplicate', { method: 'POST' });
-      nav('/estimator/quote/' + r.id);
-    } catch (e) { alert(e.message); }
-  };
 
   const handleSend = async (id) => {
     try {
@@ -93,10 +64,16 @@ function EstimatorPageInner() {
     } catch (e) { alert(e.message); }
   };
 
+  const handleDelete = async (id, name) => {
+    if (!window.confirm('Delete the quote for "' + (name || 'this job') + '"? This cannot be undone.')) return;
+    try {
+      await apiFetch('/estimator/quotes/' + id, { method: 'DELETE' });
+      refresh();
+    } catch (e) { alert(e.message); }
+  };
+
   const downloadPdf = (id) => {
-    const tok = getToken();
-    const eKey = getEstimatorKey();
-    fetch('/api/estimator/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok, 'x-estimator-key': eKey } })
+    fetch('/api/estimator/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() } })
       .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
       .then(blob => {
         const a = document.createElement('a');
@@ -108,142 +85,83 @@ function EstimatorPageInner() {
       .catch(e => alert(e.message));
   };
 
-  if (!user?.hasEstimator && user?.role !== 'admin') {
-    return (
-      <div style={{ padding: 32, color: t.text }}>
-        <div style={{
-          maxWidth: 560, margin: '60px auto', padding: 32, borderRadius: 12,
-          background: t.card, border: '1px solid ' + t.border, textAlign: 'center',
-        }}>
-          <div style={{ marginBottom: 8 }}><ClipboardIcon size={36} /></div>
-          <h2 style={{ margin: 0, fontSize: 22, color: t.text }}>Office in a Box</h2>
-          <p style={{ color: t.textSecondary, marginTop: 12 }}>
-            The complete builder office add-on — quotes, finance tracking, invoices,
-            documents, calculators, and variations — for £50/month.
-          </p>
-          <p style={{ color: t.textMuted, fontSize: 13 }}>
-            Contact support to enable it on your account.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const ghostBtn = {
+    minHeight: 40, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
+    background: 'transparent', color: t.text, border: '1px solid ' + t.border,
+    fontSize: 13, fontWeight: 600,
+  };
 
   return (
-    <div style={{ padding: 24, color: t.text }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+      <button onClick={() => nav('/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: '0 0 8px', fontSize: 13, cursor: 'pointer' }}>← Jobs</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Office in a Box</div>
-          <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>Quotes</h1>
-          <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 4 }}>
-            Fast itemised quotes — describe a job, get a branded PDF.
-          </div>
+          <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>All quotes</h1>
         </div>
         <button
           onClick={() => nav('/estimator/new')}
           style={{
-            background: t.accent, color: '#fff', border: 'none', borderRadius: 8,
-            padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            background: t.accent, color: '#fff', border: 'none', borderRadius: 10,
+            minHeight: 48, padding: '0 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
           }}
-        >+ New Quote</button>
+        >+ New quote</button>
       </div>
 
-      {/* Stats strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <StatCard t={t} label="Quotes this month" value={stats ? stats.this_month_count : '—'} />
-        <StatCard t={t} label="Total quoted" value={stats ? fmtMoney(stats.this_month_value, 'GBP') : '—'} />
-        <StatCard t={t} label="Win rate" value={stats && stats.win_rate != null ? stats.win_rate + '%' : '—'} />
-        <StatCard t={t} label="Won / Lost" value={stats ? (stats.won + ' / ' + stats.lost) : '—'} />
-      </div>
-
-      {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 16 }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: t.textSecondary, padding: 40, textAlign: 'center' }}>Loading…</div>
       ) : quotes.length === 0 ? (
         <div style={{
           background: t.card, border: '1px dashed ' + t.border, borderRadius: 12,
-          padding: 40, textAlign: 'center', color: t.textSecondary,
+          padding: 36, textAlign: 'center', color: t.textSecondary,
         }}>
           <div style={{ marginBottom: 8 }}><FileTextIcon size={28} /></div>
-          <div style={{ color: t.text, fontWeight: 600, marginBottom: 6 }}>No quotes yet</div>
-          <div style={{ marginBottom: 16 }}>Describe a job and we'll draft an itemised quote in seconds.</div>
+          <div style={{ color: t.text, fontWeight: 700, marginBottom: 6 }}>No quotes yet</div>
+          <div style={{ marginBottom: 16 }}>Describe the job and we'll draft a priced quote in seconds.</div>
           <button
             onClick={() => nav('/estimator/new')}
-            style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, cursor: 'pointer' }}
-          >Create your first quote</button>
+            style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 10, minHeight: 48, padding: '0 22px', fontWeight: 700, cursor: 'pointer' }}
+          >Make your first quote</button>
         </div>
       ) : (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: t.surface, color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                <th style={th}>Quote</th>
-                <th style={th}>Client</th>
-                <th style={th}>Project</th>
-                <th style={{ ...th, textAlign: 'right' }}>Total</th>
-                <th style={th}>Status</th>
-                <th style={th}>Date</th>
-                <th style={{ ...th, textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotes.map(q => {
-                const sc = statusColour(q.status, t);
-                return (
-                  <tr key={q.id} style={{ borderTop: '1px solid ' + t.border }}>
-                    <td style={td}>
-                      <a
-                        onClick={(e) => { e.preventDefault(); nav('/estimator/quote/' + q.id); }}
-                        href="#"
-                        style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}
-                      >{q.quote_number || q.id.slice(0, 8)}</a>
-                    </td>
-                    <td style={td}>{q.client_name || <span style={{ color: t.textMuted }}>—</span>}</td>
-                    <td style={td}>{q.project_name || <span style={{ color: t.textMuted }}>—</span>}</td>
-                    <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(q.grand_total, q.currency)}</td>
-                    <td style={td}>
-                      {q.status === 'accepted' ? (
-                        <span style={{
-                          background: sc.bg, color: sc.fg, border: '1px solid ' + sc.fg + '33',
-                          borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600,
-                          textTransform: 'capitalize', display: 'inline-block',
-                        }}>accepted</span>
-                      ) : (
-                        <select
-                          value={q.status || 'draft'}
-                          onChange={e => handleStatus(q.id, e.target.value)}
-                          style={{
-                            background: sc.bg, color: sc.fg, border: '1px solid ' + sc.fg + '33',
-                            borderRadius: 6, padding: '4px 8px', fontSize: 12, fontWeight: 600,
-                            textTransform: 'capitalize', cursor: 'pointer',
-                          }}
-                        >
-                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      )}
-                    </td>
-                    <td style={{ ...td, color: t.textSecondary, fontSize: 13 }}>{new Date(q.created_at).toLocaleDateString('en-GB')}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <button onClick={() => nav('/estimator/quote/' + q.id)} style={btnGhost(t)}>Open</button>
-                      {q.status !== 'accepted' && (
-                        <button onClick={() => handleSend(q.id)} style={{ ...btnGhost(t), color: t.accent, borderColor: t.accent + '66' }}>
-                          {q.public_token ? 'Share link' : 'Send the quote'}
-                        </button>
-                      )}
-                      <button onClick={() => downloadPdf(q.id)} style={btnGhost(t)}>PDF</button>
-                      <button onClick={() => handleDuplicate(q.id)} style={btnGhost(t)}>Duplicate</button>
-                      {q.status !== 'accepted' && (
-                        <button onClick={() => handleDelete(q.id, q.project_name)} style={{ ...btnGhost(t), color: t.danger }}>Delete</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {quotes.map(q => {
+            const sc = statusColour(q.status, t);
+            return (
+              <div key={q.id} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <button onClick={() => nav('/estimator/quote/' + q.id)} style={{ background: 'none', border: 'none', padding: 0, color: t.text, fontWeight: 700, fontSize: 16, cursor: 'pointer', textAlign: 'left' }}>
+                      {q.client_name || q.project_name || 'Quote'}
+                    </button>
+                    <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+                      Quote · {shortDate(q.created_at)}{q.client_name && q.project_name ? ' · ' + q.project_name : ''}{q.quote_number ? ' · ' + q.quote_number : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{fmt0(q.grand_total)}</div>
+                    <span style={{ background: sc.bg, color: sc.fg, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+                      {STATUS_LABELS[q.status] || 'Draft'}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => nav('/estimator/quote/' + q.id)} style={ghostBtn}>Open</button>
+                  {q.status !== 'accepted' && (
+                    <button onClick={() => handleSend(q.id)} style={{ ...ghostBtn, color: t.accent, borderColor: t.accent + '66' }}>
+                      {q.public_token ? 'Share the link' : 'Send the quote'}
+                    </button>
+                  )}
+                  <button onClick={() => downloadPdf(q.id)} style={ghostBtn}>PDF</button>
+                  {q.status !== 'accepted' && (
+                    <button onClick={() => handleDelete(q.id, q.project_name)} style={{ ...ghostBtn, color: t.danger }}>Delete</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -256,27 +174,6 @@ function EstimatorPageInner() {
           onClose={() => setShare(null)}
         />
       )}
-    </div>
-  );
-}
-
-const th = { padding: '10px 14px', textAlign: 'left', fontSize: 12 };
-const td = { padding: '12px 14px', fontSize: 14 };
-function btnGhost(t) {
-  return {
-    background: 'transparent', color: t.text, border: '1px solid ' + t.border,
-    borderRadius: 6, padding: '4px 10px', fontSize: 12, marginLeft: 6, cursor: 'pointer',
-  };
-}
-
-function StatCard({ t, label, value }) {
-  return (
-    <div style={{
-      background: t.card, border: '1px solid ' + t.border, borderRadius: 12,
-      padding: '14px 16px',
-    }}>
-      <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
-      <div style={{ color: t.text, fontSize: 22, fontWeight: 700, marginTop: 4 }}>{value}</div>
     </div>
   );
 }

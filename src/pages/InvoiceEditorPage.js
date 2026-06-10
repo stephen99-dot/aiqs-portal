@@ -309,7 +309,7 @@ function Inner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
-              <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>Let them pay by card</div>
+              <div style={{ color: t.text, fontSize: 14, fontWeight: 700 }}>Let them pay by card</div>
               <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
                 Adds a "Pay now" button to the invoice your client sees. When they pay, the invoice marks itself as paid.
               </div>
@@ -329,7 +329,7 @@ function Inner() {
       {/* Header form */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Bill to</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Bill to</div>
           <label style={lbl(t)}>Client name</label>
           <input value={client.name} disabled={readOnly} onChange={e => { setClient({ ...client, name: e.target.value }); onHeaderChange(); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Email</label>
@@ -338,7 +338,7 @@ function Inner() {
           <textarea value={client.address} disabled={readOnly} onChange={e => { setClient({ ...client, address: e.target.value }); onHeaderChange(); }} rows={3} style={ta(t)} />
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Invoice details</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Invoice details</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label style={lbl(t)}>Issue date</label>
@@ -367,7 +367,7 @@ function Inner() {
       {/* A4 — Tax & CIS for this invoice */}
       {!readOnly && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <div style={{ color: t.textSecondary, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 12 }}>Tax & CIS on this invoice</div>
+          <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Tax & CIS on this invoice</div>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
             <input type="checkbox" checked={cisApplies} onChange={e => toggleCis(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
             <div>
