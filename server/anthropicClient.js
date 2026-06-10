@@ -68,6 +68,18 @@ function priceFor(model) {
   return PRICING[model] || PRICING['claude-sonnet-4-6'];
 }
 
+// ── max_tokens, right-sized per call site (Phase 3) ─────────────────────────
+// These are output ceilings, not targets — sized to the largest realistic output
+// for each call so we never truncate, without leaving 16-20k headroom everywhere.
+const MAX_TOKENS = {
+  CHAT: 4000,        // conversational reply (deterministic pricer does the maths)
+  EXTRACTION: 12000, // Stage 1 — big item arrays
+  VALIDATION: 6000,  // Stage 1b — corrections array
+  FINDINGS: 4000,    // narrative report JSON
+  SCALE_READER: 2000,// per-drawing measurement JSON
+  AGENT: 12000,      // one agent turn (narration + tool calls)
+};
+
 function computeCost(model, u) {
   const p = priceFor(model);
   return (u.tokensIn || 0) * p.input
@@ -438,4 +450,4 @@ async function callModel(opts) {
   };
 }
 
-module.exports = { callModel, MODELS, PRICING, computeCost, tierFor };
+module.exports = { callModel, MODELS, PRICING, MAX_TOKENS, computeCost, tierFor };

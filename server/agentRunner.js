@@ -52,12 +52,12 @@ async function buildDrawingGroundTruth(tmpDir, extractedNames) {
   return blocks.join('\n');
 }
 const { TOOL_DEFINITIONS, executeTool, updateRun, appendMessage, setActivity, emit } = agent;
-const { callModel, MODELS } = require('./anthropicClient');
+const { callModel, MODELS, MAX_TOKENS: WRAP_TOKENS } = require('./anthropicClient');
 
 const MODEL = MODELS.STANDARD;
 const MAX_ITERATIONS = 60;
 const THINKING_BUDGET = 8000;
-const MAX_TOKENS = 20000;
+const MAX_TOKENS = WRAP_TOKENS.AGENT;
 
 // At these iterations we inject a budget-pressure note alongside the tool
 // results, telling the model to wrap up. At MAX-1 we force-finalise.

@@ -8,7 +8,7 @@ const { authMiddleware } = require('./auth');
 const jwt = require('jsonwebtoken');
 const FILE_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const db = require('./database');
-const { callModel, MODELS } = require('./anthropicClient');
+const { callModel, MODELS, MAX_TOKENS, computeCost } = require('./anthropicClient');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
 
@@ -1589,6 +1589,8 @@ async function streamAnthropicMessage(headers, body, sseEmit) {
     thinking: result.thinking,
     tokensIn: result.usage.tokensIn,
     tokensOut: result.usage.tokensOut,
+    cacheWrite: result.usage.cacheWrite,
+    cacheRead: result.usage.cacheRead,
     sources: result.sources,
     partial: result.partial,
   };
@@ -2020,8 +2022,12 @@ ${summary}`);
       } catch(e) { console.error('[Takeoff inject] Error:', e.message); }
     }
 
-    const primaryModel = hasFiles ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
-    const primaryBudget = hasFiles ? 8000 : 5000;
+    const primaryModel = hasFiles ? MODELS.STANDARD : MODELS.FAST;
+    // Drawing turns keep thinking (Sonnet) but at a reduced budget — the
+    // deterministic pricer does the maths, so the model doesn't need a deep
+    // think to narrate. Text-only chat on Haiku drops thinking entirely
+    // (thinking tokens bill as output).
+    const primaryThinking = hasFiles ? { type: 'enabled', budget_tokens: 4000 } : null;
     console.log(`[API] Using ${hasFiles ? 'Sonnet (files)' : 'Haiku (text chat)'}`);
     if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'analyse', detail: hasFiles ? 'Analysing drawings...' : 'Thinking...' });
 
@@ -2045,9 +2051,9 @@ ${summary}`);
           { type: 'text', text: perTurnTail },
         ]
       : [{ type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } }];
-    const buildBody = (model, budget) => ({
-      model, max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: budget },
+    const buildBody = (model, thinking) => ({
+      model, max_tokens: MAX_TOKENS.CHAT,
+      ...(thinking ? { thinking } : {}),
       system: cachedSystem, messages,
       ...(useTools && webTools ? { tools: webTools } : {}),
     });
@@ -2058,7 +2064,7 @@ ${summary}`);
     // still aggregates `reply` + `thinking` for the post-processing pipeline.
     let streamResult, usedFallback = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryBudget), req.sseEmit);
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryThinking), req.sseEmit);
       if (streamResult.ok) break;
       const errType = streamResult.error?.error?.type || streamResult.error?.type;
       const errMsg = streamResult.error?.error?.message || streamResult.error?.message || '';
@@ -2075,9 +2081,9 @@ ${summary}`);
         return sendError(500, { error: 'AI service error -- please try again' });
       }
     }
-    if (!streamResult.ok && primaryModel !== 'claude-haiku-4-5-20251001') {
+    if (!streamResult.ok && primaryModel !== MODELS.FAST) {
       console.log('[API] Sonnet overloaded, falling back to Haiku...');
-      streamResult = await streamAnthropicMessage(apiHeaders, buildBody('claude-haiku-4-5-20251001', 5000), req.sseEmit);
+      streamResult = await streamAnthropicMessage(apiHeaders, buildBody(MODELS.FAST, null), req.sseEmit);
       if (!streamResult.ok) return sendError(500, { error: 'AI service busy -- try again shortly' });
       usedFallback = true;
     } else if (!streamResult.ok) {
@@ -2088,13 +2094,15 @@ ${summary}`);
     const streamedToClient = Boolean(req.streaming);
     const tokensIn = streamResult.tokensIn || 0;
     const tokensOut = streamResult.tokensOut || 0;
-    const modelUsed = usedFallback ? 'claude-haiku-4-5-20251001' : primaryModel;
-    const costPerIn = modelUsed.includes('haiku') ? 0.0000008 : 0.000003;
-    const costPerOut = modelUsed.includes('haiku') ? 0.000004 : 0.000015;
-    const costEstimate = (tokensIn * costPerIn) + (tokensOut * costPerOut);
+    const cacheWrite = streamResult.cacheWrite || 0;
+    const cacheRead = streamResult.cacheRead || 0;
+    const modelUsed = usedFallback ? MODELS.FAST : primaryModel;
+    // Cost flows through the wrapper's PRICING map (no hardcoded per-token rates).
+    const costEstimate = computeCost(modelUsed, { tokensIn, tokensOut, cacheWrite, cacheRead });
+    const modelTier = modelUsed.includes('haiku') ? 'fast' : 'standard';
     try {
-      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-        'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, costEstimate
+      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cache_creation_input_tokens, cache_read_input_tokens, model_tier, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, cacheWrite, cacheRead, modelTier, costEstimate
       );
     } catch(ue) { console.error('[Usage] Log error:', ue.message); }
 
@@ -2342,8 +2350,8 @@ ${summary}`);
         const extractMessages = [...messages, { role: 'user', content: extractContent }];
 
         const extractResult = await callModel({
-          model: 'claude-sonnet-4-20250514',
-          maxTokens: 16000,
+          model: MODELS.STANDARD,
+          maxTokens: MAX_TOKENS.EXTRACTION,
           temperature: 0,
           system: extractPrompt,
           messages: extractMessages,
@@ -2620,8 +2628,8 @@ CRITICAL RULES:
               ];
 
               const validationResult = await callModel({
-                model: 'claude-sonnet-4-20250514',
-                maxTokens: 12000,
+                model: MODELS.STANDARD,
+                maxTokens: MAX_TOKENS.VALIDATION,
                 temperature: 0,
                 system: validationPrompt,
                 messages: [{ role: 'user', content: validationContent }],
@@ -3220,7 +3228,7 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
           };
           const findingsResult = await callModel({
             model: MODELS.FAST,
-            maxTokens: 4000,
+            maxTokens: MAX_TOKENS.FINDINGS,
             temperature: 0,
             system: findingsPrompt,
             messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }],

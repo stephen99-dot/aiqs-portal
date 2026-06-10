@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { callModel, MODELS } = require('./anthropicClient');
+const { callModel, MODELS, MAX_TOKENS } = require('./anthropicClient');
 
 const DPI = 200;
 const MAX_PAGES = 2; // process first 2 pages per PDF
@@ -313,7 +313,7 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
     // Call Claude Vision
     const result = await callModel({
       model: MODELS.STANDARD,
-      maxTokens: 4000,
+      maxTokens: MAX_TOKENS.SCALE_READER,
       temperature: 0,
       messages: [{
         role: 'user',
