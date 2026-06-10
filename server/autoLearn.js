@@ -20,7 +20,7 @@ const embeddings = require('./embeddings');
 let memoryStore;
 try { memoryStore = require('./memoryStore'); } catch (e) { memoryStore = null; }
 
-const { callModel: callAnthropic, MODELS } = require('./anthropicClient');
+const { callModel: callAnthropic, batchOne, MODELS } = require('./anthropicClient');
 const MODEL = MODELS.FAST;
 
 // ── schema (lazy, runs once) ────────────────────────────────────────────
@@ -48,11 +48,14 @@ function ensureSchema(db) {
 
 // ── shared LLM helper ───────────────────────────────────────────────────
 async function callModel(apiKey, system, userText, maxTokens = 600) {
-  const result = await callAnthropic({
+  const req = {
     model: MODEL, apiKey, system, maxTokens,
     messages: [{ role: 'user', content: userText }],
     action: 'memory_learn',
-  });
+  };
+  // Background learning is not latency-sensitive — route through the 50%-cheaper
+  // Batch API when USE_BATCH_API=1 (it polls, so off the interactive path only).
+  const result = process.env.USE_BATCH_API === '1' ? await batchOne(req) : await callAnthropic(req);
   if (!result.ok) {
     const msg = result.error?.error?.message || result.error?.message || result.status;
     throw new Error(`LLM ${msg}`);

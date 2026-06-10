@@ -454,4 +454,84 @@ async function callModel(opts) {
   };
 }
 
-module.exports = { callModel, MODELS, PRICING, MAX_TOKENS, computeCost, tierFor };
+// ── Batch API (Phase 6) — 50% cheaper for non-latency-sensitive work ────────
+// Submits a Message Batch, polls to completion, returns results keyed by
+// custom_id. Falls back to synchronous callModel on any batch-level error so a
+// failed batch never silently drops the work.
+const BATCH_URL = 'https://api.anthropic.com/v1/messages/batches';
+
+async function batchCall(requests, { apiKey, pollMs = 5000, timeoutMs = 23 * 60 * 60 * 1000, userId, action } = {}) {
+  const headers = buildHeaders(apiKey);
+  const body = {
+    requests: requests.map((r) => ({
+      custom_id: r.custom_id,
+      params: buildBody({
+        model: r.model || MODELS.FAST, system: r.system, messages: r.messages,
+        maxTokens: r.maxTokens || 1024, thinking: r.thinking, tools: r.tools,
+        toolChoice: r.toolChoice, effort: r.effort, temperature: r.temperature,
+      }),
+    })),
+  };
+
+  try {
+    const submit = await fetch(BATCH_URL, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!submit.ok) throw new Error('batch submit ' + submit.status);
+    const batch = await submit.json();
+    const id = batch.id;
+
+    const start = Date.now();
+    let status = batch;
+    while (status.processing_status !== 'ended') {
+      if (Date.now() - start > timeoutMs) throw new Error('batch timeout');
+      await new Promise((r) => setTimeout(r, pollMs));
+      const poll = await fetch(`${BATCH_URL}/${id}`, { headers });
+      if (!poll.ok) throw new Error('batch poll ' + poll.status);
+      status = await poll.json();
+    }
+
+    const resultsResp = await fetch(status.results_url, { headers });
+    const text = await resultsResp.text();
+    const out = {};
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      let row; try { row = JSON.parse(line); } catch (e) { continue; }
+      const res = row.result;
+      if (res && res.type === 'succeeded' && res.message) {
+        const norm = normaliseRaw(res.message, res.message.model);
+        // Batch is billed at 50% — reflect that in logged cost.
+        logUsage({ userId, action, model: norm.model, usage: norm.usage, cost: norm.cost * 0.5 });
+        out[row.custom_id] = { ok: true, ...norm };
+      } else {
+        out[row.custom_id] = { ok: false, error: (res && res.error) || { message: res && res.type } };
+      }
+    }
+    return out;
+  } catch (err) {
+    console.error('[anthropicClient] batch failed, falling back to sync:', err.message);
+    const out = {};
+    for (const r of requests) {
+      out[r.custom_id] = await callModel({ ...r, apiKey, userId, action });
+    }
+    return out;
+  }
+}
+
+// Normalise a non-streaming raw message into our result shape (shared by batch).
+function normaliseRaw(raw, model) {
+  const blocks = raw.content || [];
+  const text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  const toolUse = blocks.filter((b) => b.type === 'tool_use');
+  const usage = readUsage(raw);
+  const modelUsed = model || raw.model;
+  const cost = computeCost(modelUsed, usage);
+  return { text, blocks, toolUse, json: toolUse[0] ? toolUse[0].input : null, usage, cost, model: modelUsed, stopReason: raw.stop_reason || null };
+}
+
+// Single background request through the batch lane (convenience for callers like
+// autoLearn). Polls to completion — only use off the interactive path.
+async function batchOne(opts) {
+  const res = await batchCall([{ custom_id: 'one', ...opts }], opts);
+  return res.one;
+}
+
+module.exports = { callModel, batchCall, batchOne, MODELS, PRICING, MAX_TOKENS, computeCost, tierFor };
