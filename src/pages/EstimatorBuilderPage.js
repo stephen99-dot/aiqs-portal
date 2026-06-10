@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
@@ -143,6 +143,7 @@ function EstimatorBuilderPageInner() {
   const { t } = useTheme();
   const { user } = useAuth();
   const nav = useNavigate();
+  const [qs] = useSearchParams();
 
   // Input phase
   const [inputMode, setInputMode] = useState('describe'); // 'describe' | 'form' | 'measure'
@@ -182,10 +183,12 @@ function EstimatorBuilderPageInner() {
   const [sendingQuote, setSendingQuote] = useState(false);
   const [clientQuestions, setClientQuestions] = useState([]);
 
-  // Wave 2 — overheads + jobs awareness
+  // Wave 2 — overheads + jobs awareness. /estimator/new?job=<id> (the job
+  // page's "+ New quote") arrives pre-linked so the builder never associates
+  // things by hand.
   const [overheads, setOverheads] = useState(null);    // { break_even_day, break_even_hour, total } or null
   const [jobs, setJobs] = useState([]);                // list of available jobs to link this quote to
-  const [jobId, setJobId] = useState(null);
+  const [jobId, setJobId] = useState(qs.get('job') || null);
 
   // Load existing quote
   useEffect(() => {
