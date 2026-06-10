@@ -147,17 +147,8 @@ export default function Layout() {
   // The "What's new" popup takes priority — the Office upsell waits until it's
   // been dismissed so the two never stack on top of each other.
   const [whatsNewSeen, setWhatsNewSeen] = useState(false);
-  const [testingDismissed, setTestingDismissed] = useState(() => {
-    try { return sessionStorage.getItem('aiqs_testing_banner_dismissed') === '1'; }
-    catch (e) { return false; }
-  });
 
   const isAdmin = user?.role === 'admin';
-
-  function dismissTestingBanner() {
-    setTestingDismissed(true);
-    try { sessionStorage.setItem('aiqs_testing_banner_dismissed', '1'); } catch (e) {}
-  }
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -508,40 +499,6 @@ export default function Layout() {
         background: t.bg,
         transition: 'background 0.2s',
       }} className="main-content">
-        {/* Global TESTING / BETA strip — visible on every page until dismissed for the session */}
-        {!testingDismissed && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '8px 16px',
-            background: 'repeating-linear-gradient(45deg, rgba(239,68,68,0.08) 0 12px, rgba(239,68,68,0.16) 12px 24px)',
-            borderBottom: '1px solid rgba(239,68,68,0.35)',
-            color: mode === 'dark' ? '#FCA5A5' : '#B91C1C',
-            fontSize: 12.5, lineHeight: 1.4, fontWeight: 500,
-          }}>
-            <span style={{
-              fontSize: 9.5, fontWeight: 800, letterSpacing: '0.08em',
-              padding: '2px 7px', borderRadius: 4,
-              background: 'rgba(239,68,68,0.2)',
-              border: '1px solid rgba(239,68,68,0.5)',
-              textTransform: 'uppercase', flexShrink: 0,
-            }}>Testing · Beta</span>
-            <span style={{ flex: 1 }}>
-              You're using the AI QS portal in test mode. Outputs may be incomplete or unverified —
-              don't issue them to clients or subcontractors without a QS sign-off.
-            </span>
-            <button
-              type="button"
-              onClick={dismissTestingBanner}
-              aria-label="Dismiss testing banner"
-              style={{
-                background: 'transparent', border: '1px solid rgba(239,68,68,0.35)',
-                color: 'inherit', cursor: 'pointer',
-                fontSize: 11, fontWeight: 600,
-                padding: '3px 9px', borderRadius: 6, flexShrink: 0,
-              }}
-            >Got it</button>
-          </div>
-        )}
         <Outlet />
       </main>
 
