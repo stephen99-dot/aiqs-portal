@@ -174,6 +174,8 @@ function extractInsightsFromMessage(userId, message) {
       }
       if (!isDuplicate) {
         db.prepare('INSERT INTO client_insights (id, user_id, category, insight) VALUES (?, ?, ?, ?)').run('ins_' + uuidv4().slice(0, 8), userId, pattern.category, insightText);
+        // Phase 10: also fold the learned rule into the versioned client playbook.
+        try { require('./playbooks').recordInsight(db, userId, pattern.category, insightText); } catch (e) {}
       }
     } catch (err) { console.error('[Insight] Save error:', err.message); }
   }
@@ -210,6 +212,14 @@ function buildSystemPrompt(userId, forDocGen, benchmarkSection) {
       clientInsightsSection = `\n=== CLIENT PROFILE (learned from past projects) ===\nApply these preferences automatically — the client has told us this before.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat.toUpperCase()}]\n${items.join('\n')}`).join('\n\n')}\n===\n`;
     }
   } catch (err) { console.error('[Chat] Insight load error:', err.message); }
+  // Phase 10: render the structured client playbook into the (cached) prefix.
+  // Stable, sorted serialisation so it holds in cache between jobs. Empty for
+  // users without a playbook yet, so existing behaviour is unchanged.
+  try {
+    const playbooks = require('./playbooks');
+    const pb = playbooks.getPlaybook(db, userId);
+    clientInsightsSection += playbooks.renderPlaybook(pb);
+  } catch (err) { /* playbook is best-effort context */ }
 
   if (forDocGen === 'extract_quantities' || forDocGen === 'extract_quantities_text') {
     // STAGE 1: Extract locked quantities from drawings OR text description

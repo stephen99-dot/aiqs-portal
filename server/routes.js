@@ -1508,4 +1508,33 @@ router.get('/admin/costs', authMiddleware, adminMiddleware, (req, res) => {
   }
 });
 
+// ── Client playbooks (Phase 10) ────────────────────────────────────────────
+const playbooks = require('./playbooks');
+
+// Get a user's playbook (migrating from legacy insights/rates on first access).
+router.get('/admin/playbooks/:userId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    let pb = playbooks.getPlaybook(db, req.params.userId);
+    if (!pb) { playbooks.migrateFromLegacy(db, req.params.userId); pb = playbooks.getPlaybook(db, req.params.userId); }
+    const row = db.prepare('SELECT version, updated_at FROM client_playbooks WHERE user_id=? ORDER BY version DESC LIMIT 1').get(req.params.userId);
+    res.json({ playbook: pb || playbooks.defaultPlaybook(), version: row ? row.version : 0, updated_at: row ? row.updated_at : null });
+  } catch (err) {
+    console.error('[admin/playbooks] get error:', err.message);
+    res.status(500).json({ error: 'Failed to load playbook' });
+  }
+});
+
+// Save a corrected playbook as a new version.
+router.put('/admin/playbooks/:userId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const pb = req.body && req.body.playbook;
+    if (!pb || typeof pb !== 'object') return res.status(400).json({ error: 'playbook object required' });
+    const saved = playbooks.savePlaybook(db, req.params.userId, pb);
+    res.json({ ok: true, version: saved.version });
+  } catch (err) {
+    console.error('[admin/playbooks] save error:', err.message);
+    res.status(500).json({ error: 'Failed to save playbook' });
+  }
+});
+
 module.exports = router;

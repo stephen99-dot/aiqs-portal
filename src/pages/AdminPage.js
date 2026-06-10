@@ -659,6 +659,61 @@ function SettingsTab({ t }) {
 // MAIN ADMIN PAGE
 // ═══════════════════════════════════════════════════
 
+// ── Playbooks tab (Phase 10) — edit a client's learned house rules ─────────
+function PlaybooksTab({ t }) {
+  const [users, setUsers] = useState([]);
+  const [userId, setUserId] = useState('');
+  const [text, setText] = useState('');
+  const [version, setVersion] = useState(0);
+  const [status, setStatus] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    apiFetch('/admin/users').then(d => setUsers(d.users || d || [])).catch(() => setUsers([]));
+  }, []);
+
+  function load(id) {
+    setUserId(id); setStatus(''); setErr('');
+    if (!id) { setText(''); return; }
+    apiFetch('/admin/playbooks/' + id)
+      .then(d => { setText(JSON.stringify(d.playbook, null, 2)); setVersion(d.version || 0); })
+      .catch(() => setErr('Failed to load playbook'));
+  }
+
+  function save() {
+    setStatus(''); setErr('');
+    let playbook;
+    try { playbook = JSON.parse(text); } catch (e) { setErr('Invalid JSON: ' + e.message); return; }
+    apiFetch('/admin/playbooks/' + userId, { method: 'PUT', body: JSON.stringify({ playbook }) })
+      .then(d => { setVersion(d.version); setStatus('Saved as version ' + d.version); })
+      .catch(() => setErr('Failed to save'));
+  }
+
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 18, boxShadow: t.shadowSm };
+  return (
+    <div style={card}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: t.text, marginBottom: 4 }}>Client playbook editor</div>
+      <p style={{ fontSize: 12, color: t.textMuted, marginTop: 0 }}>Correct a learned house rule directly. Saving creates a new version that renders into the cached system prefix for that client's jobs.</p>
+      <select value={userId} onChange={e => load(e.target.value)} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 13, marginBottom: 12, minWidth: 260 }}>
+        <option value="">Select a client…</option>
+        {users.map(u => <option key={u.id} value={u.id}>{u.email}{u.full_name ? ' (' + u.full_name + ')' : ''}</option>)}
+      </select>
+      {userId && (
+        <div>
+          <textarea value={text} onChange={e => setText(e.target.value)} spellCheck={false}
+            style={{ width: '100%', minHeight: 360, fontFamily: 'monospace', fontSize: 12.5, padding: 12, borderRadius: 10, border: '1px solid ' + t.border, background: t.surface, color: t.text, resize: 'vertical' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+            <button onClick={save} style={{ padding: '9px 18px', borderRadius: 9, background: t.accent || '#2563eb', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Save new version</button>
+            <span style={{ fontSize: 12, color: t.textMuted }}>Current version: {version}</span>
+            {status && <span style={{ fontSize: 12, color: '#16a34a' }}>{status}</span>}
+            {err && <span style={{ fontSize: 12, color: '#dc2626' }}>{err}</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Costs tab (Phase 7) — API spend visibility from usage_log ──────────────
 function CostsTab({ t }) {
   const [data, setData] = useState(null);
@@ -743,7 +798,7 @@ function CostsTab({ t }) {
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -759,6 +814,7 @@ export default function AdminPage() {
       {tab === 'submissions' && <SubmissionsTab t={t} />}
       {tab === 'costs' && <CostsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
+      {tab === 'playbooks' && <PlaybooksTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'settings' && <SettingsTab t={t} />}
     </div>
