@@ -8,6 +8,7 @@ const { authMiddleware } = require('./auth');
 const jwt = require('jsonwebtoken');
 const FILE_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
 const db = require('./database');
+const { callModel, MODELS } = require('./anthropicClient');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
 
@@ -1561,98 +1562,36 @@ function sseEvent(res, evt) {
 //
 // Returns { ok, status, error, reply, thinking, tokensIn, tokensOut }.
 async function streamAnthropicMessage(headers, body, sseEmit) {
-  let resp;
-  try {
-    resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ ...body, stream: true }),
-    });
-  } catch (fetchErr) {
-    return { ok: false, status: 0, error: { message: fetchErr.message } };
-  }
+  // Thin adapter over the shared anthropicClient wrapper. We run a SINGLE
+  // attempt here (maxAttempts: 1) and let the caller's existing retry/tool-drop/
+  // Sonnet→Haiku fallback loop drive recovery, so behaviour is unchanged.
+  // Usage is logged by the caller (chat_message row), so no userId is passed.
+  const result = await callModel({
+    model: body.model,
+    system: body.system,
+    messages: body.messages,
+    maxTokens: body.max_tokens,
+    thinking: body.thinking,
+    tools: body.tools,
+    cacheSystem: body.cacheSystem,
+    cacheMessages: body.cacheMessages,
+    stream: true,
+    maxAttempts: 1,
+    onDelta: (text) => { if (sseEmit) { try { sseEmit({ type: 'text', content: text }); } catch (e) {} } },
+  });
 
-  if (!resp.ok) {
-    let err = {};
-    try { err = await resp.json(); } catch (e) {}
-    return { ok: false, status: resp.status, error: err };
+  if (!result.ok) {
+    return { ok: false, status: result.status, error: result.error };
   }
-
-  let reply = '';
-  let thinking = '';
-  let tokensIn = 0;
-  let tokensOut = 0;
-  const sources = [];
-  const seenSourceUrls = new Set();
-  const addSource = (url, title) => {
-    if (!url || seenSourceUrls.has(url)) return;
-    seenSourceUrls.add(url);
-    sources.push({ url, title: title || url });
+  return {
+    ok: true,
+    reply: result.text,
+    thinking: result.thinking,
+    tokensIn: result.usage.tokensIn,
+    tokensOut: result.usage.tokensOut,
+    sources: result.sources,
+    partial: result.partial,
   };
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const payload = line.slice(6).trim();
-        if (!payload) continue;
-        let evt;
-        try { evt = JSON.parse(payload); } catch (e) { continue; }
-        switch (evt.type) {
-          case 'message_start':
-            if (evt.message && evt.message.usage) tokensIn = evt.message.usage.input_tokens || 0;
-            break;
-          case 'content_block_start':
-            // Web search results arrive as a web_search_tool_result block — harvest
-            // the source URLs/titles so the UI can show citation chips.
-            if (evt.content_block && evt.content_block.type === 'web_search_tool_result') {
-              const results = evt.content_block.content;
-              if (Array.isArray(results)) {
-                for (const r of results) {
-                  if (r && r.type === 'web_search_result' && r.url) addSource(r.url, r.title);
-                }
-              }
-            }
-            break;
-          case 'content_block_delta':
-            if (evt.delta && evt.delta.type === 'text_delta' && evt.delta.text) {
-              reply += evt.delta.text;
-              if (sseEmit) {
-                try { sseEmit({ type: 'text', content: evt.delta.text }); } catch (e) {}
-              }
-            } else if (evt.delta && evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
-              thinking += evt.delta.thinking;
-            } else if (evt.delta && evt.delta.type === 'citations_delta' && evt.delta.citation) {
-              const cit = evt.delta.citation;
-              if (cit.url) addSource(cit.url, cit.title);
-            }
-            break;
-          case 'message_delta':
-            if (evt.usage && evt.usage.output_tokens != null) tokensOut = evt.usage.output_tokens;
-            break;
-          case 'error':
-            return { ok: false, status: 500, error: evt.error || evt, reply, thinking, tokensIn, tokensOut };
-          // message_stop / content_block_start / content_block_stop / ping — ignore
-        }
-      }
-    }
-  } catch (streamErr) {
-    console.error('[API] stream read error:', streamErr.message);
-    // If we got some reply text before the error, still return what we have
-    if (reply) return { ok: true, reply, thinking, tokensIn, tokensOut, sources, partial: true };
-    return { ok: false, status: 0, error: { message: streamErr.message } };
-  }
-
-  return { ok: true, reply, thinking, tokensIn, tokensOut, sources };
 }
 
 router.post('/chat/stream', authMiddleware, (req, res, next) => {
@@ -2385,20 +2324,17 @@ ${summary}`);
 
         const extractMessages = [...messages, { role: 'user', content: extractContent }];
 
-        const extractResp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST', headers: apiHeaders,
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 16000,
-            temperature: 0,
-            system: extractPrompt,
-            messages: extractMessages
-          })
+        const extractResult = await callModel({
+          model: 'claude-sonnet-4-20250514',
+          maxTokens: 16000,
+          temperature: 0,
+          system: extractPrompt,
+          messages: extractMessages,
+          userId, action: 'extraction_pass',
         });
 
-        if (extractResp.ok) {
-          const extractData = await extractResp.json();
-          const rawText = extractData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+        if (extractResult.ok) {
+          const rawText = extractResult.text;
           const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
           // Try direct parse first; if it fails, extract the JSON object from mixed prose
           let parsed;
@@ -2666,30 +2602,26 @@ CRITICAL RULES:
                 { type: 'text', text: `\n\nJUNIOR QS TAKEOFF TO REVIEW:\n\`\`\`json\n${JSON.stringify(parsed.items, null, 2)}\n\`\`\`\n\nProject type: ${parsed.project_type || 'Unknown'}\nLocation: ${parsed.location || 'Unknown'}\nFloor area: ${parsed.floor_area_m2 || 'Not stated'}m²\n\nReview every item critically. Check quantities, find missing items, flag double-counts.` }
               ];
 
-              const validationResp = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST', headers: apiHeaders,
-                body: JSON.stringify({
-                  model: 'claude-sonnet-4-20250514',
-                  max_tokens: 12000,
-                  temperature: 0,
-                  system: validationPrompt,
-                  messages: [{ role: 'user', content: validationContent }]
-                })
+              const validationResult = await callModel({
+                model: 'claude-sonnet-4-20250514',
+                maxTokens: 12000,
+                temperature: 0,
+                system: validationPrompt,
+                messages: [{ role: 'user', content: validationContent }],
               });
 
-              if (validationResp.ok) {
-                const valData = await validationResp.json();
-                const valRaw = valData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+              if (validationResult.ok) {
+                const valRaw = validationResult.text;
                 const valCleaned = valRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
                 const validation = JSON.parse(valCleaned);
 
-                // Log validation cost
-                const valTokensIn = valData.usage ? valData.usage.input_tokens : 0;
-                const valTokensOut = valData.usage ? valData.usage.output_tokens : 0;
-                const valCost = (valTokensIn * 0.000003) + (valTokensOut * 0.000015);
+                // Log validation cost (cost from the wrapper's PRICING map).
+                const valTokensIn = validationResult.usage.tokensIn;
+                const valTokensOut = validationResult.usage.tokensOut;
+                const valCost = validationResult.cost;
                 try {
-                  db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-                    'ul_' + uuidv4().slice(0, 8), userId, 'validation_pass', `Stage 1b: ${validation.errors_found || 0} corrections`, 'claude-sonnet-4-20250514', valTokensIn, valTokensOut, valCost
+                  db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cache_creation_input_tokens, cache_read_input_tokens, model_tier, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+                    'ul_' + uuidv4().slice(0, 8), userId, 'validation_pass', `Stage 1b: ${validation.errors_found || 0} corrections`, validationResult.model, valTokensIn, valTokensOut, validationResult.usage.cacheWrite, validationResult.usage.cacheRead, 'standard', valCost
                   );
                 } catch(ue) {}
 
@@ -3269,21 +3201,18 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
             item_count: pricedResult.item_count,
             warnings: pricedResult.warnings,
           };
-          const findingsResp = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST', headers: apiHeaders,
-            body: JSON.stringify({
-              model: 'claude-haiku-4-5-20251001',
-              max_tokens: 4000,
-              temperature: 0,
-              system: findingsPrompt,
-              messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }]
-            })
+          const findingsResult = await callModel({
+            model: MODELS.FAST,
+            maxTokens: 4000,
+            temperature: 0,
+            system: findingsPrompt,
+            messages: [{ role: 'user', content: `Write the Findings Report for this project: ${JSON.stringify(findingsInput)}` }],
+            userId, action: 'findings_pass',
           });
 
           let findings = {};
-          if (findingsResp.ok) {
-            const fData = await findingsResp.json();
-            const fText = fData.content.filter(c => c.type === 'text').map(c => c.text).join('');
+          if (findingsResult.ok) {
+            const fText = findingsResult.text;
             const fCleaned = fText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
             try { findings = JSON.parse(fCleaned); } catch (jsonErr) { console.error('[Stage 3] Findings JSON parse error:', jsonErr.message); }
             // Inject the deterministic cost summary

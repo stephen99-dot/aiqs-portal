@@ -29,6 +29,7 @@ const { v4: uuidv4 } = require('uuid');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 const db = require('./database');
+const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 
 const router = express.Router();
@@ -199,46 +200,31 @@ RULES:
 8. Return ONLY the JSON object. No markdown fences. No commentary.`;
 
 async function callClaude(userText, projectType) {
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_API_KEY) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
   const userMsg = 'Project type: ' + (projectType || '(not specified)')
     + '\n\nDescription:\n"""\n' + userText + '\n"""\n\nReturn the JSON quote now.';
 
-  const body = {
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 4000,
+  // Usage is logged by logEstimatorUsage() at the route, so we don't pass
+  // userId here (the wrapper would otherwise double-count it).
+  const result = await callModel({
+    model: MODELS.FAST,
+    maxTokens: 4000,
     temperature: 0.3,
     system: DRAFT_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMsg }],
-  };
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
   });
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error('Claude API ' + resp.status + ': ' + errText.slice(0, 200));
+  if (!result.ok) {
+    const errMsg = result.error?.error?.message || result.error?.message || '';
+    throw new Error('Claude API ' + result.status + ': ' + String(errMsg).slice(0, 200));
   }
 
-  const data = await resp.json();
-  const text = (data.content || [])
-    .filter(b => b.type === 'text')
-    .map(b => b.text)
-    .join('\n')
-    .trim();
-
-  const usage = data.usage || {};
-  return { text, usage, model: data.model };
+  // Return the Anthropic-shaped usage logEstimatorUsage() expects.
+  const usage = { input_tokens: result.usage.tokensIn, output_tokens: result.usage.tokensOut };
+  return { text: result.text, usage, model: result.model };
 }
 
 // Strip optional code fences and parse JSON defensively.

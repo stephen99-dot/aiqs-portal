@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { callModel, MODELS } = require('./anthropicClient');
 
 // ─── Rate limiting (preserved from original) ────────────────────────────────
 const limiter = {};
@@ -127,39 +128,22 @@ router.post('/enhance-brief', async (req, res) => {
     userContent.push({ type: 'text', text: userText });
 
     // ─── Call Claude ────────────────────────────────────────────────────────
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: isPolish ? 600 : 1200,
-        temperature: 0.2,              // LOW — suppresses creative invention
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: userContent
-          }
-        ]
-      })
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: isPolish ? 600 : 1200,
+      temperature: 0.2,              // LOW — suppresses creative invention
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      action: 'enhance_brief',
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('[Enhance Brief] API error:', response.status, errText);
-      throw new Error('API error ' + response.status);
+    if (!result.ok) {
+      const errMsg = result.error?.error?.message || result.error?.message || result.status;
+      console.error('[Enhance Brief] API error:', errMsg);
+      throw new Error('API error ' + result.status);
     }
 
-    const data = await response.json();
-    const enhanced = data.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('\n')
-      .trim();
+    const enhanced = (result.text || '').trim();
 
     if (!enhanced) {
       return res.status(502).json({ error: 'AI returned an empty response. Please try again.' });

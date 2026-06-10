@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { callModel, MODELS } = require('./anthropicClient');
 
 const DPI = 200;
 const MAX_PAGES = 2; // process first 2 pages per PDF
@@ -310,41 +311,27 @@ async function processPdfWithScale(pdfPath, filename, outputDir, { projectContex
     const prompt = buildScaleMeasurementPrompt(textScale, dt, projectContext);
 
     // Call Claude Vision
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: anthropicHeaders || {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        temperature: 0,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: imageMediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }]
-      })
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: 4000,
+      temperature: 0,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } },
+          { type: 'text', text: prompt },
+        ],
+      }],
+      action: 'scale_measure',
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error(`[ScaleReader] Claude Vision error: ${err}`);
+    if (!result.ok) {
+      const errMsg = result.error?.error?.message || result.error?.message || result.status;
+      console.error(`[ScaleReader] Claude Vision error: ${errMsg}`);
       return null;
     }
 
-    const data = await response.json();
-    const rawText = data.content.filter(c => c.type === 'text').map(c => c.text).join('');
+    const rawText = result.text;
     
     // Parse JSON response
     const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();

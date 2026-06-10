@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const db = require('./database');
+const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
 const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
 const { getBrandingForUser } = require('./brandingRoutes');
@@ -319,28 +320,21 @@ Respond ONLY with this JSON structure:
     }
     content.push({ type: 'text', text: userPrompt });
 
-    const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content }]
-      })
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content }],
+      betaHeaders: 'pdfs-2024-09-25',
+      userId: req.user.id,
+      action: 'variation_analysis',
     });
 
-    const aiData = await apiResponse.json();
-    if (!apiResponse.ok) throw new Error(aiData.error?.message || 'Anthropic API error');
+    if (!result.ok) throw new Error(result.error?.error?.message || result.error?.message || 'Anthropic API error');
 
     let analysis = {};
     try {
-      const raw = aiData.content[0].text.replace(/```json|```/g, '').trim();
+      const raw = (result.text || '').replace(/```json|```/g, '').trim();
       analysis = JSON.parse(raw);
     } catch (e) {
       console.error('[Variations] parse error:', e.message);

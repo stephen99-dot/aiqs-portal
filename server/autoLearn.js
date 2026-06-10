@@ -20,8 +20,8 @@ const embeddings = require('./embeddings');
 let memoryStore;
 try { memoryStore = require('./memoryStore'); } catch (e) { memoryStore = null; }
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001';
+const { callModel: callAnthropic, MODELS } = require('./anthropicClient');
+const MODEL = MODELS.FAST;
 
 // ── schema (lazy, runs once) ────────────────────────────────────────────
 let schemaReady = false;
@@ -48,17 +48,16 @@ function ensureSchema(db) {
 
 // ── shared LLM helper ───────────────────────────────────────────────────
 async function callModel(apiKey, system, userText, maxTokens = 600) {
-  const resp = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: userText }] }),
+  const result = await callAnthropic({
+    model: MODEL, apiKey, system, maxTokens,
+    messages: [{ role: 'user', content: userText }],
+    action: 'memory_learn',
   });
-  if (!resp.ok) {
-    const t = await resp.text().catch(() => '');
-    throw new Error(`LLM ${resp.status} ${t.slice(0, 160)}`);
+  if (!result.ok) {
+    const msg = result.error?.error?.message || result.error?.message || result.status;
+    throw new Error(`LLM ${msg}`);
   }
-  const data = await resp.json();
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  return (result.text || '').trim();
 }
 
 function parseJsonLoose(text) {
