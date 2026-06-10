@@ -788,10 +788,15 @@ async function runGenerationForRun(runId, opts = {}) {
   if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
     location = location ? `${location}, Ireland` : 'Ireland';
   }
+  // OH&P / contingency come from the client's playbook (Phase 10), falling back
+  // to the global defaults. Currency follows the property address in the pricer.
+  let pricingPrefs = { ohp_pct: 12, contingency_pct: 7.5 };
+  try { pricingPrefs = require('./playbooks').getPricingPrefs(db, run.user_id); } catch (e) {}
   const priced = pricer.priceLockedQuantities(items, location, clientRates, {
     project_type: run.project_type || '',
     floor_area: run.floor_area_m2 || null,
-    contingency_pct: 7.5, ohp_pct: 12,
+    contingency_pct: pricingPrefs.contingency_pct,
+    ohp_pct: pricingPrefs.ohp_pct,
     ...(intakeIsIreland ? { currency: 'EUR' } : {}),
   });
 

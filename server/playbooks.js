@@ -29,7 +29,9 @@ function defaultPlaybook() {
     rates: { day: null, hourly: null },
     materials_markup: null,
     ohp_treatment: 'visible',      // buried | visible | stripped
+    ohp_pct: null,                 // overrides the global OH&P % when set
     contingency: null,
+    contingency_pct: null,         // overrides the global contingency % when set
     vat_treatment: 'standard',
     currency: 'GBP',
     prelims_style: null,
@@ -107,6 +109,18 @@ function recordInsight(db, userId, category, insight) {
   } catch (e) { /* best-effort */ }
 }
 
+// OH&P / contingency percentages for pricing, from the client's playbook (with
+// the global defaults when unset). Used by the doc-generation pricer calls.
+function getPricingPrefs(db, userId) {
+  let pb = null;
+  try { pb = getPlaybook(db, userId); } catch (e) {}
+  const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  return {
+    ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 12,
+    contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 7.5,
+  };
+}
+
 // Render the playbook into the cached system prefix (stable, sorted serialisation).
 function renderPlaybook(playbook) {
   if (!playbook) return '';
@@ -116,4 +130,4 @@ function renderPlaybook(playbook) {
   return `\n=== CLIENT PLAYBOOK (apply these as house rules) ===\n${JSON.stringify(pb, null, 2)}\n===\n`;
 }
 
-module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook };
+module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs };
