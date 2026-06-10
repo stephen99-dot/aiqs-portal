@@ -45,7 +45,7 @@ function Inner() {
       const r = await apiFetch('/finance/jobs', { method: 'POST', body: JSON.stringify(newJob) });
       setCreating(false);
       setNewJob({ name: '', client_name: '', project_type: '' });
-      nav('/finance/jobs/' + r.id);
+      nav('/jobs/' + r.id);
     } catch (e) { setError(e.message); }
   };
 
@@ -60,7 +60,7 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav('/finance')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Finance dashboard</button>
+      <button onClick={() => nav('/office')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Today</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26 }}>Jobs</h1>
@@ -122,7 +122,7 @@ function Inner() {
                   return (
                     <tr key={j.id} style={{ borderTop: '1px solid ' + t.border }}>
                       <td style={td}>
-                        <a href="#" onClick={(e) => { e.preventDefault(); nav('/finance/jobs/' + j.id); }} style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}>{j.name}</a>
+                        <a href="#" onClick={(e) => { e.preventDefault(); nav('/jobs/' + j.id); }} style={{ color: t.accent, textDecoration: 'none', fontWeight: 600 }}>{j.name}</a>
                       </td>
                       <td style={td}>{j.client_name || <span style={{ color: t.textMuted }}>—</span>}</td>
                       <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{planned ? fmt(planned) : <span style={{ color: t.textMuted }}>—</span>}</td>
@@ -137,7 +137,7 @@ function Inner() {
                       </td>
                       <td style={{ ...td, textAlign: 'right' }}>{j.quote_count || 0}</td>
                       <td style={td}>
-                        <button onClick={() => nav('/finance/jobs/' + j.id)} style={btn(t)}>Open</button>
+                        <button onClick={() => nav('/jobs/' + j.id)} style={btn(t)}>Open</button>
                       </td>
                     </tr>
                   );

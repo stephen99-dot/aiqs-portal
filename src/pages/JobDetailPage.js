@@ -155,7 +155,7 @@ function Inner() {
     if (!window.confirm('Delete this job, its budget, and all recorded costs? This cannot be undone.')) return;
     try {
       await apiFetch('/finance/jobs/' + id, { method: 'DELETE' });
-      nav('/finance/jobs');
+      nav('/jobs');
     } catch (e) { setError(e.message); }
   };
 
@@ -164,7 +164,7 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav('/finance/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Jobs</button>
+      <button onClick={() => nav('/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Jobs</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26 }}>{job.name}</h1>

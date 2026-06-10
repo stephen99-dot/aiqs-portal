@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
@@ -21,6 +21,10 @@ function Inner() {
   const { t } = useTheme();
   const { id } = useParams();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  // /invoices/:id?chase=1 — the Today screen's "Chase it" lands here and the
+  // chase modal opens by itself.
+  const chaseRequested = useRef(searchParams.get('chase') === '1');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -173,7 +177,7 @@ function Inner() {
     if (!window.confirm('Delete this invoice?')) return;
     try {
       await apiFetch('/invoices/' + id, { method: 'DELETE' });
-      nav('/invoices');
+      nav('/money');
     } catch (e) { setError(e.message); }
   };
 
@@ -203,6 +207,14 @@ function Inner() {
       await apiFetch('/invoices/' + id, { method: 'PATCH', body: JSON.stringify({ reminders_enabled: on ? 1 : 0 }) });
     } catch (e) { setError(e.message); setReminders(!on); }
   };
+
+  useEffect(() => {
+    if (chaseRequested.current && invoice && invoice.status === 'sent') {
+      chaseRequested.current = false;
+      openChase();
+    }
+    // openChase is stable enough — this only ever fires once, on first load.
+  }, [invoice]); // eslint-disable-line
 
   // A3: AI drafts the chaser, the builder reads/edits it, nothing sends itself.
   const openChase = async () => {
@@ -248,7 +260,7 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav('/invoices')} style={btnLink(t)}>← Invoices</button>
+      <button onClick={() => nav('/money')} style={btnLink(t)}>← Money</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>

@@ -103,7 +103,7 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 1000, margin: '0 auto' }}>
-      <button onClick={() => nav('/finance')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Finance dashboard</button>
+      <button onClick={() => nav('/money')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Money</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26 }}>Monthly overheads</h1>

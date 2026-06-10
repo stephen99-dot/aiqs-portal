@@ -614,7 +614,7 @@ function EstimatorBuilderPageInner() {
           </div>
           <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
             This quote is locked — it's your signed record. {jobId
-              ? <>The job is in Finance: <a href={'/finance/jobs/' + jobId} onClick={(e) => { e.preventDefault(); nav('/finance/jobs/' + jobId); }} style={{ color: t.accent }}>open the job</a>.</>
+              ? <>The job is in Finance: <a href={'/jobs/' + jobId} onClick={(e) => { e.preventDefault(); nav('/jobs/' + jobId); }} style={{ color: t.accent }}>open the job</a>.</>
               : 'Duplicate it if you need a revised version.'}
           </div>
         </div>

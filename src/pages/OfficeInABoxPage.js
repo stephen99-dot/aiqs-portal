@@ -108,7 +108,7 @@ export default function OfficeInABoxPage() {
           <span style={{ fontSize: 13.5, color: t.text, fontWeight: 500 }}>
             You already have Office in a Box on your account.
           </span>
-          <button onClick={() => navigate('/pm')} style={{
+          <button onClick={() => navigate('/office')} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             background: t.success, color: '#fff', border: 'none', borderRadius: 8,
             padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',

@@ -160,19 +160,23 @@ export default function Layout() {
 
   const hasEstimator = !!user?.hasEstimator || isAdmin;
 
-  // The "Office in a Box" add-on is a parent group containing the whole
-  // builder workflow — quotes, finance, invoices, documents, calculators.
-  // Routes are unchanged; only the sidebar presentation is nested.
+  // The "Office in a Box" add-on navigates the way a builder thinks: Today
+  // (what needs doing), Jobs (everything about one job), Money (in and out).
+  // Calculators + materials prices live behind Tools — reference, not workflow.
   const officeInABoxChildren = [
-    { path: '/pm', label: 'Project Manager' },
-    { path: '/estimator', label: 'Quotes' },
-    { path: '/materials', label: 'Materials Pricing' },
-    { path: '/finance', label: 'Finance' },
-    { path: '/invoices', label: 'Invoices' },
-    { path: '/documents', label: 'Documents' },
-    { path: '/calculators', label: 'Calculators' },
+    { path: '/office', label: 'Today' },
+    { path: '/jobs', label: 'Jobs' },
+    { path: '/money', label: 'Money' },
+    { path: '/tools', label: 'Tools' },
   ];
-  const isOfficeRouteActive = officeInABoxChildren.some(c => location.pathname.startsWith(c.path));
+  // Pages reached from inside the group (quote editor, invoice editor, job
+  // page, documents, tools) keep the group highlighted and open.
+  const officeRoutePrefixes = [
+    '/office', '/jobs', '/money', '/tools',
+    '/estimator', '/invoices', '/finance', '/change-orders',
+    '/documents', '/calculators', '/materials', '/pm',
+  ];
+  const isOfficeRouteActive = officeRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
   // Subscribers (and admins) get the working tool group. Everyone else sees a
   // single "Office in a Box" entry that opens the Coming Soon / upsell page.
@@ -184,7 +188,8 @@ export default function Layout() {
     { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     officeNavItem,
-    { path: '/variations', label: 'Variations', Icon: RatesIcon },
+    // OiB users reach variations through the job page — no standalone entry.
+    ...(hasEstimator ? [] : [{ path: '/variations', label: 'Variations', Icon: RatesIcon }]),
     { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
     { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
     { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },

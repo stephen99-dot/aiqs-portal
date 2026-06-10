@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, BrowserRouter } from 'react-router-dom';
+import { Navigate, Route, Routes, BrowserRouter, useParams } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import Layout from './components/Layout';
@@ -27,7 +27,6 @@ import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
 import EstimatorPage from './pages/EstimatorPage';
 import EstimatorBuilderPage from './pages/EstimatorBuilderPage';
-import FinanceDashboardPage from './pages/FinanceDashboardPage';
 import OverheadsPage from './pages/OverheadsPage';
 import JobsPage from './pages/JobsPage';
 import JobDetailPage from './pages/JobDetailPage';
@@ -41,7 +40,8 @@ import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import CalculatorsPage from './pages/CalculatorsPage';
 import MaterialsPage from './pages/MaterialsPage';
-import ProjectManagerPage from './pages/ProjectManagerPage';
+import TodayPage from './pages/TodayPage';
+import ToolsPage from './pages/ToolsPage';
 import OfficeInABoxPage from './pages/OfficeInABoxPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -57,8 +57,23 @@ function ProtectedRoute({ children }) {
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
   return children;
+}
+
+// Office in a Box subscribers land on Today (/office); everyone else on the
+// BOQ-pipeline dashboard. Used for the catch-all and post-login redirect.
+function HomeRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
+}
+
+// Old bookmark redirects that need to carry the :id through.
+function JobIdRedirect() {
+  const { id } = useParams();
+  return <Navigate to={'/jobs/' + id} replace />;
 }
 
 function AppInner() {
@@ -97,28 +112,37 @@ function AppInner() {
           <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
+          {/* Office in a Box — three destinations: Today / Jobs / Money (+ Tools). */}
+          <Route path="/office" element={<TodayPage />} />
+          <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/jobs/:id" element={<JobDetailPage />} />
+          {/* /money becomes the merged Money page in section 3; until then it
+              hosts the invoices list so navigation and redirects are stable. */}
+          <Route path="/money" element={<InvoicesPage />} />
+          <Route path="/tools" element={<ToolsPage />} />
           <Route path="/estimator" element={<EstimatorPage />} />
           <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
           <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
-          <Route path="/finance" element={<FinanceDashboardPage />} />
           <Route path="/finance/overheads" element={<OverheadsPage />} />
-          <Route path="/finance/jobs" element={<JobsPage />} />
-          <Route path="/finance/jobs/:id" element={<JobDetailPage />} />
           <Route path="/change-orders/new" element={<VariationEditorPage />} />
           <Route path="/change-orders/:id" element={<VariationEditorPage />} />
-          <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/invoices/:id" element={<InvoiceEditorPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/documents/:id" element={<DocumentEditorPage />} />
           <Route path="/calculators" element={<CalculatorsPage />} />
           <Route path="/materials" element={<MaterialsPage />} />
-          <Route path="/pm" element={<ProjectManagerPage />} />
+          {/* Old OiB homes — keep bookmarks and in-app links working. */}
+          <Route path="/pm" element={<Navigate to="/office" replace />} />
+          <Route path="/finance" element={<Navigate to="/money" replace />} />
+          <Route path="/finance/jobs" element={<Navigate to="/jobs" replace />} />
+          <Route path="/finance/jobs/:id" element={<JobIdRedirect />} />
+          <Route path="/invoices" element={<Navigate to="/money" replace />} />
           <Route path="/office-in-a-box" element={<OfficeInABoxPage />} />
           <Route path="/branding" element={<BrandingPage />} />
           <Route path="/settings" element={<BrandingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<HomeRedirect />} />
       </Routes>
       {user && <WhatsAppWidget theme={t} userName={user?.fullName} />}
       <AdminNotifications />

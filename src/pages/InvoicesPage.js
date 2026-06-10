@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
@@ -24,13 +24,15 @@ export default function InvoicesPage() {
 function Inner() {
   const { t } = useTheme();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const [invoices, setInvoices] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
-  const [creating, setCreating] = useState(false);
+  // /money?new=1 — the Today screen's "New invoice" opens the create panel.
+  const [creating, setCreating] = useState(searchParams.get('new') === '1');
   const [newInv, setNewInv] = useState({ source: 'blank', from_quote_id: '', job_id: '', client_name: '' });
   // A4 — accountant export modal
   const [exporting, setExporting] = useState(false);

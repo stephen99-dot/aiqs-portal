@@ -159,7 +159,7 @@ function Inner() {
     if (!window.confirm('Delete this variation?')) return;
     try {
       await apiFetch('/change-orders/' + variationId, { method: 'DELETE' });
-      nav(jobId ? '/finance/jobs/' + jobId : '/finance');
+      nav(jobId ? '/jobs/' + jobId : '/jobs');
     } catch (e) { setError(e.message); }
   };
 
@@ -202,7 +202,7 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text }}>
-      <button onClick={() => nav(jobId ? '/finance/jobs/' + jobId : '/finance')} style={btnLink(t)}>← Job</button>
+      <button onClick={() => nav(jobId ? '/jobs/' + jobId : '/jobs')} style={btnLink(t)}>← Job</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>
