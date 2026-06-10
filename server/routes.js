@@ -1537,4 +1537,43 @@ router.put('/admin/playbooks/:userId', authMiddleware, adminMiddleware, (req, re
   }
 });
 
+// ── Quality flywheel (Phase 11) ────────────────────────────────────────────
+const flywheel = require('./flywheel');
+const benchmarkStore = require('./benchmarkStore');
+
+// Promote a delivered takeoff to a golden eval fixture (one click).
+router.post('/admin/promote-fixture/:takeoffId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const tk = benchmarkStore.getTakeoffById(db, req.params.takeoffId);
+    if (!tk) return res.status(404).json({ error: 'Takeoff not found' });
+    const out = flywheel.promoteToFixture({
+      jobId: tk.id, projectType: tk.project_type, location: tk.location,
+      options: {}, items: tk.items || [],
+    });
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    console.error('[admin/promote-fixture] error:', err.message);
+    res.status(500).json({ error: 'Failed to promote fixture' });
+  }
+});
+
+// Approval queue for nightly suggestions.
+router.get('/admin/flywheel/suggestions', authMiddleware, adminMiddleware, (req, res) => {
+  try { res.json({ suggestions: flywheel.listSuggestions(db, req.query.status || 'pending') }); }
+  catch (err) { res.status(500).json({ error: 'Failed to load suggestions' }); }
+});
+router.post('/admin/flywheel/suggestions/:id/:action', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const action = req.params.action === 'approve' ? 'approved' : 'rejected';
+    flywheel.setSuggestionStatus(db, req.params.id, action);
+    res.json({ ok: true, status: action });
+  } catch (err) { res.status(500).json({ error: 'Failed to update suggestion' }); }
+});
+
+// Manually trigger the nightly suggestion run (also call from a scheduler).
+router.post('/admin/flywheel/run', authMiddleware, adminMiddleware, async (req, res) => {
+  try { res.json(await flywheel.generateSuggestions(db, {})); }
+  catch (err) { res.status(500).json({ error: 'Failed to run flywheel' }); }
+});
+
 module.exports = router;

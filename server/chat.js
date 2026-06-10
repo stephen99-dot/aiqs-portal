@@ -1487,6 +1487,9 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
     });
 
     benchmarkStore.updateTakeoff(db, req.params.id, { items: merged });
+    // Phase 11: log the human corrections (model value -> corrected value) for the
+    // quality flywheel. Best-effort.
+    try { require('./flywheel').logCorrections(db, { jobId: req.params.id, userId: req.user.id, prevItems: takeoff.items || [], newItems: merged }); } catch (e) {}
     const clientRates = {};
     try {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);

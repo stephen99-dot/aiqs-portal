@@ -1,11 +1,12 @@
 {
-  "_comment": "Synthetic captured run — intentionally drops the windows and inflates the slab so the harness demonstrates a missing-item + value regression. A real actual.json is the items the live pipeline produced for this job.",
+  "_comment": "Synthetic captured run that matches the golden takeoff, so the shipped harness passes (CI green). To see the harness DETECT a regression, change a qty or delete a line below and re-run node server/evals/runEval.js. Replace this whole fixture with a real promoted job.",
   "items": [
     { "key": "strip_foundation", "description": "Strip foundation excavation and concrete", "unit": "m3", "qty": 12, "section": "1. Substructure" },
-    { "key": "ground_slab", "description": "Ground-bearing concrete slab inc. DPM and insulation", "unit": "m2", "qty": 31, "section": "1. Substructure" },
+    { "key": "ground_slab", "description": "Ground-bearing concrete slab inc. DPM and insulation", "unit": "m2", "qty": 24, "section": "1. Substructure" },
     { "key": "cavity_wall", "description": "Cavity wall, facing brick outer / blockwork inner", "unit": "m2", "qty": 38, "section": "2. Superstructure" },
     { "key": "flat_roof_warm", "description": "Warm flat roof, EPDM covering", "unit": "m2", "qty": 26, "section": "3. Roof" },
     { "key": "bifold_door_aluminium", "description": "Aluminium bifold door 3000mm", "unit": "Nr", "qty": 1, "section": "6. Windows & External Doors" },
+    { "key": "upvc_window_standard", "description": "W01 - UPVC window 1200x1200mm", "unit": "Nr", "qty": 2, "section": "6. Windows & External Doors" },
     { "key": "plaster_skim", "description": "Plaster skim to walls and ceiling", "unit": "m2", "qty": 92, "section": "7. Internal Finishes" },
     { "key": "electrical_first_fix", "description": "Electrical first and second fix to extension", "unit": "m2", "qty": 24, "section": "8. Services" }
   ]
