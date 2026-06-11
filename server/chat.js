@@ -631,7 +631,8 @@ Marker tape + tracer wire: 8.80/m | Internal duct run: 38/m | Builders work inte
 ESB mini pillar vault: 4950/Nr | ESB metering pillar: 2350/Nr | ESB connection provisional: 2500/Item
 
 LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | South West +5% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
-IRELAND: If the project is in Ireland, use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
+IRELAND: If the project is in Ireland (the Republic — Northern Ireland is UK, £/20%), use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
+ONE CURRENCY ONLY: a job is either £ or € — decide from the project location and use ONLY that symbol in every figure you write. Never mix £ and € in one answer or quote dual-currency amounts.
 YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
@@ -774,6 +775,7 @@ PRELIMS: Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 32
 
 LOCATION FACTORS:
 London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)
+ONE CURRENCY ONLY: each job is either £ (UK, incl. Northern Ireland) or € (Republic of Ireland). Decide once from the location and use only that symbol throughout — never mix currencies in one answer.
 
 COST SANITY CHECKS — you MUST verify your total before responding:
 - Typical single storey extension (25-40m2): construction cost £45,000-£100,000

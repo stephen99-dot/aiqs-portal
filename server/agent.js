@@ -295,6 +295,15 @@ async function capImageDims(buf, maxEdge = 1950) {
   }
 }
 
+// A UK postcode or explicit UK country name in the location string means the
+// job is UK — used to stop intake/memory Ireland hints overriding what the
+// agent read off the drawings. "Northern Ireland" is deliberately UK here.
+function looksLikeUkLocation(loc) {
+  const v = String(loc || '');
+  return /\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b/i.test(v)
+    || /\b(england|scotland|wales|northern ireland|united kingdom|uk)\b/i.test(v);
+}
+
 async function renderPdfPage(tmpDir, filename, page) {
   const srcPath = path.join(tmpDir, filename);
   if (!fs.existsSync(srcPath)) {
@@ -546,7 +555,11 @@ async function executeTool(runId, toolName, toolInput, runState) {
       // set a UK-only location (e.g. just "Dublin") so the pricer's Ireland
       // detection fires. Also pass explicit currency as a last-resort override.
       let effectiveLocation = meta.location || '';
-      if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+      // The drawings' address is authoritative: a UK postcode or explicit UK
+      // country name beats any intake/memory Ireland hint. Northern Ireland is
+      // UK (£/20%), so it must not match the Ireland branch either.
+      const looksUk = looksLikeUkLocation(effectiveLocation);
+      if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
         effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
       }
       let priced;
@@ -556,7 +569,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           floor_area: meta.floor_area_m2 || null,
           contingency_pct: 7.5,
           ohp_pct: 12,
-          ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
+          ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
         });
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
@@ -689,14 +702,15 @@ async function executeTool(runId, toolName, toolInput, runState) {
             for (const r of rates) clientRates[r.item_key] = r.value;
           } catch (e) {}
           let effectiveLocation = meta.location || '';
-          if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+          const looksUk = looksLikeUkLocation(effectiveLocation);
+          if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
             effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
           }
           runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
             project_type: meta.project_type || '',
             floor_area: meta.floor_area_m2 || null,
             contingency_pct: 7.5, ohp_pct: 12,
-            ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
+            ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
           });
         } catch (e) { console.error(`[Agent ${runId}] review pre-price error:`, e.message); }
       }

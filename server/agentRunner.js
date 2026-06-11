@@ -112,7 +112,7 @@ When you have the drawings' ground truth (dimensions, areas, schedules), use it 
 ## The workflow
 
 1. Narrate what you're about to do, then view each uploaded drawing once via view_pdf_page. Build a clear mental picture, and zoom_region into title blocks, scale bars, dimension chains and schedules to read exact values. Cross-check the scale you read against any "MEASURED FROM THE DRAWINGS" block.
-2. Narrate what you observed, then call set_project_metadata. CRITICAL — PROPERTY ADDRESS & JURISDICTION: read the full property address from the drawing TITLE BLOCK, including the postcode/Eircode, and put it in the location field. The address on the drawings is AUTHORITATIVE and determines currency + VAT — a UK postcode (e.g. "RH7 6HL", "M1 4WP") means UK pricing in GBP at 20% VAT; an Irish address or Eircode means Ireland in EUR at 13.5%. Use the address you READ on the drawings even if the intake or your prior context assumed a different country. Only fall back to the intake's jurisdiction if the drawings show no address. floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house. If the intake gave a floor area, TRUST IT.
+2. Narrate what you observed, then call set_project_metadata. CRITICAL — PROPERTY ADDRESS & JURISDICTION: read the full property address from the drawing TITLE BLOCK, including the postcode/Eircode, and put it in the location field. The address on the drawings is AUTHORITATIVE and determines currency + VAT — a UK postcode (e.g. "RH7 6HL", "M1 4WP") means UK pricing in GBP at 20% VAT; an Irish address or Eircode means Ireland in EUR at 13.5%. Use the address you READ on the drawings even if the intake or your prior context assumed a different country. Only fall back to the intake's jurisdiction if the drawings show no address. ONE CURRENCY ONLY: once you've set the jurisdiction, every figure you write — narration, notes, findings, totals — uses that one currency symbol. Never mention the other currency or give dual-currency figures. floor_area_m2 is the TOTAL gross internal floor area (all floors, all affected spaces) — not just an extension footprint. For a barn conversion include the whole barn area; for a full-house refurb include the whole house. If the intake gave a floor area, TRUST IT.
 3. Narrate your measurement reasoning, then in ONE or two responses emit record_takeoff_item many times to build the full, GRANULAR takeoff (see "Granularity" above — aim for ~70-150 specified line items on a whole-house or multi-element job, broken down by component with named specs). Include prelims (itemised), demolition/strip-out, substructure, superstructure, roof, windows & doors, internal finishes, floor finishes, decoration, fit-out, drainage, M&E, external works as appropriate. Every item description must include measurement working — e.g. "External wall 8.2m × 2.7m = 22.1m² less 1 window 1.2m² = 20.9m²".
 4. Narrate that you're about to price, then call run_pricer. Narrate the result, reading warnings carefully:
    - Cap-fired warnings: if a cap is scaling totals way down, check for over-counts and use update_takeoff_item / remove_takeoff_item to fix them.
@@ -191,9 +191,12 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   // Promote country/location into a prominent block the model cannot miss —
   // otherwise it defaults to UK/GBP even when the user's intake or saved
   // memories clearly indicate Ireland.
-  const isIreland = intakeSuggestsIreland(intake) || memoriesSuggestIreland;
-  if (isIreland) {
-    introText += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIKELY JURISDICTION: IRELAND (€ / 13.5% VAT) — from the intake/your saved context.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUse this ONLY as a fallback. The property address on the drawing title block is authoritative: if the drawings show a UK postcode/address, price the job as UK (£, 20% VAT) and set a UK location — do NOT force Ireland. If the drawings confirm Ireland (or show no address), set location to the Irish county/city (e.g. "Dublin, Ireland") and price in € at 13.5% VAT.`;
+  if (intakeSuggestsIreland(intake)) {
+    introText += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nLIKELY JURISDICTION: IRELAND (€ / 13.5% VAT) — from this job's intake.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUse this ONLY as a fallback. The property address on the drawing title block is authoritative: if the drawings show a UK postcode/address, price the job as UK (£, 20% VAT) and set a UK location — do NOT force Ireland. If the drawings confirm Ireland (or show no address), set location to the Irish county/city (e.g. "Dublin, Ireland") and price in € at 13.5% VAT.`;
+  } else if (memoriesSuggestIreland) {
+    // The user has MENTIONED Ireland in saved memories — that says nothing
+    // about THIS job. A soft note only; jurisdiction comes from the drawings.
+    introText += `\n\nNOTE: this user has worked in Ireland before, but that does not apply to this job unless the drawings say so. Read the jurisdiction off the title block as normal: UK address -> £ at 20% VAT; Irish address/Eircode -> € at 13.5% VAT.`;
   }
 
   if (intake) {
@@ -224,9 +227,11 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   // past jobs. Atlas should prefer these over library defaults when the
   // matching item comes up.
   if (topLearnedRates && topLearnedRates.length > 0) {
-    const sym = memoriesSuggestIreland || intakeSuggestsIreland(intake) ? '€' : '£';
+    // Each rate was learned in its own jurisdiction — label it with ITS
+    // currency, not a global guess, or UK jobs get € rates in the prompt.
+    const symFor = (r) => /\b(ireland|irish|dublin|cork|galway|limerick)\b/i.test(r.region || '') ? '€' : '£';
     const rateLines = topLearnedRates.slice(0, 20).map(r =>
-      `  ${r.item_key} = ${sym}${Math.round(r.rate)} (${r.project_type === 'any' ? 'all projects' : r.project_type}, ${r.region}, n=${r.sample_count})`
+      `  ${r.item_key} = ${symFor(r)}${Math.round(r.rate)} (${r.project_type === 'any' ? 'all projects' : r.project_type}, ${r.region}, n=${r.sample_count})`
     ).join('\n');
     introText += `\n\nLEARNED RATES FROM THIS USER'S PAST PROJECTS (prefer these when applicable — they reflect their actual observed costs, not library defaults):\n${rateLines}`;
   }
@@ -328,7 +333,9 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   // Pre-seed the runState with intake-derived hints (Ireland jurisdiction,
   // suggested currency). The pricer falls back to these when the agent
   // set_project_metadata with a weak or UK-looking location string.
-  const intakeCurrency = (intakeSuggestsIreland(intake) || memoriesSuggestIreland) ? 'EUR' : null;
+  // Job-level signal ONLY. Memories mentioning Ireland must never force a
+  // currency override on an unrelated UK job.
+  const intakeCurrency = intakeSuggestsIreland(intake) ? 'EUR' : null;
 
   const runState = {
     userId,
