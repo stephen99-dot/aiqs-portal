@@ -30,7 +30,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
-const { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS } = require('./materialsScrapers');
+const { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS, discoverProduct } = require('./materialsScrapers');
 const { ensureCatalogue, backfillSearchUrls, importLivePrices } = require('./materialsCatalogue');
 
 const router = express.Router();
@@ -115,7 +115,9 @@ function pricesForMaterial(materialId, sort = 'asc') {
 function priceSummary(materialId) {
   const row = db.prepare(
     `SELECT COUNT(*) AS count, MIN(price) AS min_price, MAX(price) AS max_price,
-            SUM(${STALE_SQL}) AS stale_count
+            SUM(${STALE_SQL}) AS stale_count,
+            SUM(CASE WHEN captured_via = 'scrape' THEN 1 ELSE 0 END) AS live_count,
+            MAX(CASE WHEN captured_via = 'scrape' THEN captured_at END) AS live_checked_at
        FROM price_entries WHERE material_id = ?`
   ).get(materialId);
   return {
@@ -123,6 +125,8 @@ function priceSummary(materialId) {
     min_price: row.min_price,
     max_price: row.max_price,
     stale_count: row.stale_count || 0,
+    live_count: row.live_count || 0,
+    live_checked_at: row.live_checked_at || null,
   };
 }
 
@@ -419,26 +423,58 @@ router.get('/search', (req, res) => {
     }
     scored.sort((a, b) => b.score - a.score || a.m.canonical_name.localeCompare(b.m.canonical_name));
 
-    const results = scored.slice(0, limit).map(({ m }) => {
-      const summary = priceSummary(m.id);
-      return {
-        id: m.id,
-        canonical_name: m.canonical_name,
-        category: m.category,
-        default_unit: m.default_unit,
-        search_aliases: m.search_aliases,
-        spec_notes: m.spec_notes,
-        image_url: m.image_url,
-        price_count: summary.count,
-        min_price: summary.min_price,
-        max_price: summary.max_price,
-        stale_count: summary.stale_count,
-      };
-    });
+    // Live-priced (scrape-verified) items outrank guide-only ones at equal
+    // relevance — builders should see real prices first.
+    const withSummary = scored.slice(0, limit * 3).map(({ m, score }) => ({ m, score, summary: priceSummary(m.id) }));
+    withSummary.sort((a, b) =>
+      (b.summary.live_count > 0 ? 1 : 0) - (a.summary.live_count > 0 ? 1 : 0)
+      || b.score - a.score
+      || a.m.canonical_name.localeCompare(b.m.canonical_name));
+
+    const results = withSummary.slice(0, limit).map(({ m, summary }) => ({
+      id: m.id,
+      canonical_name: m.canonical_name,
+      category: m.category,
+      default_unit: m.default_unit,
+      search_aliases: m.search_aliases,
+      spec_notes: m.spec_notes,
+      image_url: m.image_url,
+      price_count: summary.count,
+      min_price: summary.min_price,
+      max_price: summary.max_price,
+      stale_count: summary.stale_count,
+      live_count: summary.live_count,
+      live_checked_at: summary.live_checked_at,
+    }));
     res.json({ results });
   } catch (err) {
     console.error('[Materials] search error:', err);
     res.status(500).json({ error: 'Search failed.' });
+  }
+});
+
+// ─── Browse: categories with counts + the live-priced shelf ───────────────────
+router.get('/browse', (req, res) => {
+  try {
+    const categories = db.prepare(
+      'SELECT category, COUNT(*) AS count FROM materials WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC'
+    ).all();
+    // Materials with at least one scrape-verified price — image first so the
+    // landing page leads with real products, freshest first.
+    const live = db.prepare(`
+      SELECT m.id, m.canonical_name, m.category, m.default_unit, m.image_url,
+             MIN(pe.price) AS min_price, MAX(pe.price) AS max_price,
+             COUNT(pe.id) AS live_count, MAX(pe.captured_at) AS live_checked_at
+        FROM materials m
+        JOIN price_entries pe ON pe.material_id = m.id AND pe.captured_via = 'scrape'
+       GROUP BY m.id
+       ORDER BY (m.image_url IS NULL), MAX(pe.captured_at) DESC
+       LIMIT 24
+    `).all();
+    res.json({ categories, live, total: db.prepare('SELECT COUNT(*) c FROM materials').get().c });
+  } catch (err) {
+    console.error('[Materials] browse error:', err);
+    res.status(500).json({ error: 'Failed to load the catalogue.' });
   }
 });
 
@@ -666,6 +702,92 @@ router.post('/import-csv', (req, res) => {
 // ─── Scrape a public product URL ───────────────────────────────────────────────
 // Body: { url, material_id }. Resolves the supplier from the URL's adapter,
 // scrapes price + stock, writes an auditable price_entry (captured_via=scrape).
+// ─── One-tap "Check today's price" for a material ────────────────────────────
+// Re-scrapes any real product URLs we already hold for this material, then
+// tries to DISCOVER the product on up to two more public-price suppliers via
+// their search pages. Upserts by source_url so repeats refresh, not duplicate.
+// Needs outbound access (ideally SCRAPER_API_KEY in the server env) — without
+// it the big retailers will block and the caller gets a friendly message.
+router.post('/:id/check-price', async (req, res) => {
+  try {
+    const material = db.prepare('SELECT * FROM materials WHERE id = ?').get(req.params.id);
+    if (!material) return res.status(404).json({ error: 'Material not found.' });
+
+    const upsert = (scraped) => {
+      const sup = resolveSupplier(scraped.supplier, { account_type: 'retail' }, req.user.id);
+      const existing = db.prepare('SELECT id FROM price_entries WHERE source_url = ? AND material_id = ?')
+        .get(scraped.source_url, material.id);
+      if (existing) {
+        db.prepare(
+          "UPDATE price_entries SET price = ?, in_stock = ?, image_url = COALESCE(?, image_url), "
+          + "captured_at = ?, captured_via = 'scrape', stale = 0, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        ).run(scraped.price, scraped.inStock === false ? 0 : 1, scraped.image || null,
+          scraped.captured_at, 'Live price checked from ' + scraped.supplier, existing.id);
+      } else {
+        db.prepare(
+          'INSERT INTO price_entries (id, material_id, supplier_id, price, unit, source_url, captured_at, captured_via, in_stock, stale, notes, image_url, created_by) '
+          + "VALUES (?, ?, ?, ?, ?, ?, ?, 'scrape', ?, 0, ?, ?, ?)"
+        ).run(uuidv4(), material.id, sup.id, scraped.price, material.default_unit || null,
+          scraped.source_url, scraped.captured_at, scraped.inStock === false ? 0 : 1,
+          'Live price checked from ' + scraped.supplier, scraped.image || null, req.user.id);
+      }
+      if (scraped.image && !material.image_url) {
+        db.prepare('UPDATE materials SET image_url = ? WHERE id = ?').run(scraped.image, material.id);
+        material.image_url = scraped.image;
+      }
+    };
+
+    let checked = 0;
+    const problems = [];
+
+    // 1. Refresh the real product URLs we already know about.
+    const known = db.prepare(
+      "SELECT DISTINCT pe.source_url FROM price_entries pe WHERE pe.material_id = ? AND pe.captured_via = 'scrape' AND pe.source_url LIKE 'http%' LIMIT 4"
+    ).all(material.id).map(r => r.source_url).filter(u => adapterFor(u));
+    for (const url of known) {
+      try { upsert(await scrapeUrl(url)); checked++; }
+      catch (e) { problems.push(e.code || e.message); }
+    }
+
+    // 2. Discover on suppliers we don't have yet (max 2 fresh lookups a tap —
+    //    each one costs a search fetch + a product fetch).
+    if (known.length < 2) {
+      const haveSuppliers = new Set(db.prepare(
+        "SELECT LOWER(s.name) n FROM price_entries pe JOIN suppliers s ON s.id = pe.supplier_id WHERE pe.material_id = ? AND pe.captured_via = 'scrape'"
+      ).all(material.id).map(r => r.n));
+      let fresh = 0;
+      for (const sup of SUPPORTED_SUPPLIERS) {
+        if (fresh >= 2) break;
+        if (haveSuppliers.has(sup.name.toLowerCase())) continue;
+        try {
+          const found = await discoverProduct(sup.id, material.canonical_name);
+          if (!found) continue;
+          upsert(await scrapeUrl(found.url));
+          checked++;
+          fresh++;
+        } catch (e) {
+          problems.push(sup.name + ': ' + (e.code || e.message));
+        }
+      }
+    }
+
+    if (checked === 0) {
+      const blocked = problems.some(p => /403|ROBOTS|blocked/i.test(String(p)));
+      return res.status(502).json({
+        error: blocked
+          ? "The suppliers' websites blocked the check. Ask the admin to set SCRAPER_API_KEY on the server, or add the price by hand with the product link."
+          : "Couldn't find this one on the suppliers' sites just now. You can add the price by hand with the product link.",
+        code: 'CHECK_FAILED',
+      });
+    }
+
+    res.json({ checked, prices: pricesForMaterial(material.id), material, stale_days: STALE_DAYS });
+  } catch (err) {
+    console.error('[Materials] check-price error:', err);
+    res.status(500).json({ error: 'Price check failed.' });
+  }
+});
+
 router.post('/scrape', async (req, res) => {
   try {
     const b = req.body || {};

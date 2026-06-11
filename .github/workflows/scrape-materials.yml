@@ -13,7 +13,7 @@ name: Scrape live material prices
 on:
   workflow_dispatch:        # run on demand from the Actions tab
   schedule:
-    - cron: '0 6 * * 1'     # weekly, Monday 06:00 UTC
+    - cron: '0 6 * * 1,4'   # Monday + Thursday 06:00 UTC — fills the catalogue ~240 items/week
 
 permissions:
   contents: write
@@ -31,17 +31,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Scrape live prices
+      - name: Scrape live prices (re-checks + discovery)
         env:
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
           SCRAPER_RENDER: 'false'
+          # Discovery budget per run — each discovery is ~2 proxied fetches
+          # (search page + product page). Raise via repo variables once you
+          # can see the ScraperAPI credit burn.
+          DISCOVER_LIMIT: ${{ vars.MATERIALS_DISCOVER_LIMIT || '120' }}
+          SUPPLIERS_PER_MATERIAL: ${{ vars.MATERIALS_SUPPLIERS_PER_MATERIAL || '2' }}
         run: node server/scrapeToJson.js
 
       - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add server/materials-live.json
+          git add server/materials-live.json server/materials-resolved.json
           if git diff --staged --quiet; then
             echo "No price changes to commit."
           else
