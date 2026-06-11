@@ -18,11 +18,11 @@ const AMBER = '#F59E0B';
 const AMBER_DIM = '#D97706';
 
 const CHIPS = [
-  { Icon: RulerIcon,      label: 'Quotes' },
-  { Icon: BuildingIcon,   label: 'Projects' },
-  { Icon: TrendingUpIcon, label: 'Finance' },
-  { Icon: CreditCardIcon, label: 'Invoices' },
-  { Icon: FileTextIcon,   label: 'Documents' },
+  { Icon: RulerIcon,      label: 'Speak a quote' },
+  { Icon: CreditCardIcon, label: 'Get paid' },
+  { Icon: TrendingUpIcon, label: 'CIS & VAT' },
+  { Icon: BuildingIcon,   label: 'Jobs & photos' },
+  { Icon: FileTextIcon,   label: 'Paperwork' },
 ];
 
 export default function OfficeInABoxPopup() {
@@ -211,8 +211,8 @@ export default function OfficeInABoxPopup() {
                 }}>in one tab.</span>
               </h2>
               <p style={{ margin: '0 auto 16px', fontSize: 14.5, lineHeight: 1.5, color: t.textSecondary, maxWidth: 360 }}>
-                Quoting, project management, invoicing, cashflow and documents —
-                all powered by your AI QS pricing. Stop juggling spreadsheets.
+                Say a job out loud, get a priced quote. Send it by WhatsApp, get it
+                accepted, invoiced and paid — CIS and VAT handled. Built for the van.
               </p>
 
               {/* Feature chips */}

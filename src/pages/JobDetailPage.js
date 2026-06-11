@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import HelpTip from '../components/HelpTip';
 import { jobStage, stageColours } from '../utils/jobStages';
 import { PhoneIcon } from '../components/Icons';
 import JobPhotos from '../components/JobPhotos';
@@ -262,7 +263,10 @@ function Inner() {
 
   return (
     <div style={{ padding: '16px 16px 40px', color: t.text, maxWidth: 760, margin: '0 auto' }}>
-      <button onClick={() => nav('/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: '8px 0', fontSize: 13, cursor: 'pointer' }}>← Jobs</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => nav('/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: '8px 0', fontSize: 13, cursor: 'pointer' }}>← Jobs</button>
+        <HelpTip t={t} title="The job page" text={"Everything about this one job on one screen. The chips under the name jump to each section.\n\nThe four figures are the job's money at a glance: what you quoted, what you've invoiced, what's been paid, and what's still to bill.\n\nAccepted quote? The green button turns it into an invoice — full amount, a deposit, or a stage."} />
+      </div>
 
       {/* Header: customer, address, stage, one-tap contact */}
       <div style={{ marginBottom: 12 }}>

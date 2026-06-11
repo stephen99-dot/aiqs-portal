@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import HelpTip from '../components/HelpTip';
 import { jobStage, stageColours, stageFigure } from '../utils/jobStages';
 import { FolderIcon } from '../components/Icons';
 
@@ -74,7 +75,7 @@ function Inner() {
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
-        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Jobs</h1>
+        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Jobs <HelpTip t={t} title="Jobs" text={"One card per job: the customer, where it's up to, and the number that matters right now.\n\nJobs with overdue money jump to the top with a red edge.\n\nOpen a job and everything about it is on one screen — quote, invoices, changes, photos, paperwork, notes."} /></h1>
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 14 }}>{error}</div>}

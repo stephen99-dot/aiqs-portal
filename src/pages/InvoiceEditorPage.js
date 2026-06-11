@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
+import HelpTip from '../components/HelpTip';
 import useIsMobile from '../utils/useIsMobile';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
@@ -267,6 +268,7 @@ function Inner() {
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>
             {invoice.invoice_number} — {client.name || 'No client'}
+            {' '}<HelpTip t={t} title="The invoice" text={"Fill in who it's for and what for, then 'Send the invoice' — it goes by email with a link your client can open (and pay, if you've set up card payments).\n\nCIS and reverse-charge VAT have their own switches and do the maths for you.\n\nLeave reminders on and it chases itself: due date, a week late, two weeks late."} />
           </h1>
           <div style={{ color: t.textSecondary, fontSize: 13 }}>
             <StatusPill t={t} status={invoice.status} overdue={invoice.overdue} />

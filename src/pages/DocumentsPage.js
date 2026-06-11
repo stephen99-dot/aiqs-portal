@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import { FileTextIcon, ScaleIcon, ClipboardIcon, PoundIcon, AlertTriangleIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 const TEMPLATE_ICONS = {
   'contract': FileTextIcon,
@@ -98,7 +99,7 @@ function Inner() {
     <div style={{ padding: 24, color: t.text }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 26 }}>Documents</h1>
+          <h1 style={{ margin: 0, fontSize: 26 }}>Documents <HelpTip t={t} title="Documents" text={"Branded paperwork from fill-in templates — contract, terms, scope of work, payment terms, RAMS, letters.\n\nOr just say what letter you need ('polite letter about the two-week delay') and read the draft before you do anything with it."} /></h1>
           <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 4 }}>
             Fillable, branded templates — contracts, T&Cs, scope of work, payment terms, RAMS.
           </div>

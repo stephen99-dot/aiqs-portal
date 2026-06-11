@@ -44,6 +44,7 @@ import TodayPage from './pages/TodayPage';
 import ToolsPage from './pages/ToolsPage';
 import SetupWizardPage from './pages/SetupWizardPage';
 import OfficeInABoxPage from './pages/OfficeInABoxPage';
+import OfficeDemoPage from './pages/OfficeDemoPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
@@ -138,6 +139,8 @@ function AppInner() {
           <Route path="/finance/jobs/:id" element={<JobIdRedirect />} />
           <Route path="/invoices" element={<Navigate to="/money" replace />} />
           <Route path="/office-in-a-box" element={<OfficeInABoxPage />} />
+          {/* D — example-data sandbox, open to non-subscribers on purpose. */}
+          <Route path="/office-demo" element={<OfficeDemoPage />} />
           <Route path="/branding" element={<BrandingPage />} />
           <Route path="/settings" element={<BrandingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />

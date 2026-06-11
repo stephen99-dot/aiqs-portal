@@ -6,6 +6,7 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
 import { CheckCircleIcon, FileTextIcon, PoundIcon, ImageIcon, WrenchIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 // TODAY — the Office in a Box home screen (/office).
 // Glanceable in 5 seconds on a phone: three plain money numbers, the things
@@ -109,7 +110,7 @@ function Inner() {
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
-        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today</h1>
+        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today <HelpTip t={t} title="Today" text={"Your home screen.\n\nThe three numbers at the top are your money position right now. Below that, anything that needs chasing — each card has one button that does the obvious thing.\n\nIt updates itself every time you come back to it. You never need to refresh."} /></h1>
         <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 2 }}>{today}{firstName ? ' · ' + firstName : ''}</div>
       </div>
 

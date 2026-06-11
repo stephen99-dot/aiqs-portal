@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import EstimatorGate from '../components/EstimatorGate';
 import { BrickIcon, CubeIcon, PaletteIcon, HomeIcon, BucketIcon, AlertTriangleIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 // Five client-side, stateless calculators for common material quantities.
 // All maths is local — no API calls, no DB writes.
@@ -29,7 +30,7 @@ function Inner() {
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.4 }}>Calculators</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.4 }}>Calculators <HelpTip t={t} title="Calculators" text={"Quick quantity maths for on site — pick a calculator, put in the sizes, get the answer. Nothing is saved; it's a calculator."} /></h1>
         <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 6 }}>
           Quick material-quantity tools. Coverage defaults are typical UK values — override for your supplier's product.
         </div>

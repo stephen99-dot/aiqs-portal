@@ -5,6 +5,7 @@ import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
 import { CheckIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 import useIsMobile from '../utils/useIsMobile';
 import JobPhotos from '../components/JobPhotos';
 
@@ -209,7 +210,8 @@ function Inner() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: '6px 0 4px 0', fontSize: 24 }}>
-            {voNumber || 'New variation'}{title ? ' — ' + title : ''}
+            {voNumber || 'New change'}{title ? ' — ' + title : ''}
+            {' '}<HelpTip t={t} title="Changes to the job" text={"Client wants something extra, or you've found a surprise? Price the change here and send the link — they approve it on their phone with a typed signature.\n\nOnce approved it locks, photos and all. That's your paper trail if there's ever an argument about money."} />
           </h1>
           <div style={{ color: t.textSecondary, fontSize: 13 }}>
             {jobName || 'No job linked'} · <StatusPill t={t} status={status} />
