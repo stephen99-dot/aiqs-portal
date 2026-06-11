@@ -109,15 +109,17 @@ function recordInsight(db, userId, category, insight) {
   } catch (e) { /* best-effort */ }
 }
 
-// OH&P / contingency percentages for pricing, from the client's playbook (with
-// the global defaults when unset). Used by the doc-generation pricer calls.
+// OH&P / contingency percentages for pricing, from the client's playbook.
+// Default is ZERO: BOQ rates are all-in competitive prices and nothing is
+// added on top automatically (front-end parity). Setting ohp_pct /
+// contingency_pct in a playbook is the explicit opt-in for a margin stack.
 function getPricingPrefs(db, userId) {
   let pb = null;
   try { pb = getPlaybook(db, userId); } catch (e) {}
   const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
   return {
-    ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 12,
-    contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 7.5,
+    ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 0,
+    contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 0,
   };
 }
 

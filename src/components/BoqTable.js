@@ -295,13 +295,15 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
           <span style={{ color: c.textMuted }}>Construction total</span>
           <span style={{ color: c.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(summary.construction_total, currency)}</span>
 
-          {summary.contingency_pct != null && (
+          {/* Margin rows only appear when a playbook actually adds them —
+              default is 0 (rates are all-in), so most users never see these. */}
+          {summary.contingency > 0 && (
             <>
               <span style={{ color: c.textMuted }}>Contingency ({summary.contingency_pct}%)</span>
               <span style={{ color: c.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(summary.contingency, currency)}</span>
             </>
           )}
-          {summary.ohp_pct != null && (
+          {summary.ohp > 0 && (
             <>
               <span style={{ color: c.textMuted }}>Overheads &amp; profit ({summary.ohp_pct}%)</span>
               <span style={{ color: c.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{fmtMoney(summary.ohp, currency)}</span>
@@ -350,7 +352,11 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
             <span>Items</span>
             <span style={{ color: c.text }}>{(data.items_raw || []).length} raw · {sections.reduce((s, sec) => s + (sec.items?.length || 0), 0)} priced</span>
             <span>Margins</span>
-            <span style={{ color: c.text }}>Contingency {summary.contingency_pct}% · OH&P {summary.ohp_pct}%</span>
+            <span style={{ color: c.text }}>
+              {(summary.contingency > 0 || summary.ohp > 0)
+                ? <>Contingency {summary.contingency_pct}% · OH&P {summary.ohp_pct}%</>
+                : 'None added — rates are all-in'}
+            </span>
           </div>
           {data.priced?.warnings && data.priced.warnings.length > 0 && (
             <div style={{ marginTop: 10 }}>

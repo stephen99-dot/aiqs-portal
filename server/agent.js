@@ -564,11 +564,15 @@ async function executeTool(runId, toolName, toolInput, runState) {
       }
       let priced;
       try {
+        // No automatic markup — rates are all-in (front-end parity). A user's
+        // playbook Pricing Preferences can opt margin back in.
+        let prefs = { ohp_pct: 0, contingency_pct: 0 };
+        try { prefs = require('./playbooks').getPricingPrefs(db, runState.userId); } catch (e) {}
         priced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
           project_type: meta.project_type || '',
           floor_area: meta.floor_area_m2 || null,
-          contingency_pct: 7.5,
-          ohp_pct: 12,
+          contingency_pct: prefs.contingency_pct,
+          ohp_pct: prefs.ohp_pct,
           ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
         });
       } catch (err) {
@@ -706,10 +710,12 @@ async function executeTool(runId, toolName, toolInput, runState) {
           if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
             effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
           }
+          let prefs = { ohp_pct: 0, contingency_pct: 0 };
+          try { prefs = require('./playbooks').getPricingPrefs(db, runState.userId); } catch (e) {}
           runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
             project_type: meta.project_type || '',
             floor_area: meta.floor_area_m2 || null,
-            contingency_pct: 7.5, ohp_pct: 12,
+            contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
             ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
           });
         } catch (e) { console.error(`[Agent ${runId}] review pre-price error:`, e.message); }
@@ -834,9 +840,10 @@ async function runGenerationForRun(runId, opts = {}) {
   if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
     location = location ? `${location}, Ireland` : 'Ireland';
   }
-  // OH&P / contingency come from the client's playbook (Phase 10), falling back
-  // to the global defaults. Currency follows the property address in the pricer.
-  let pricingPrefs = { ohp_pct: 12, contingency_pct: 7.5 };
+  // OH&P / contingency come from the client's playbook (Phase 10). The default
+  // is ZERO — rates are all-in competitive prices, so the summary only adds
+  // margin when the user has explicitly set it. Currency follows the address.
+  let pricingPrefs = { ohp_pct: 0, contingency_pct: 0 };
   try { pricingPrefs = require('./playbooks').getPricingPrefs(db, run.user_id); } catch (e) {}
   const priced = pricer.priceLockedQuantities(items, location, clientRates, {
     project_type: run.project_type || '',

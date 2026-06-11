@@ -122,13 +122,13 @@ When you have the drawings' ground truth (dimensions, areas, schedules), use it 
 
 ## Rates — READ THIS CAREFULLY (most common cause of an over-priced BOQ)
 
-Each assumed_rate is the NET, keen, current market rate a COMPETITIVE contractor would charge to win this work — the rate per single unit, before any location uplift. CRITICAL: do NOT pre-load overhead, profit, preliminaries percentages, or risk/contingency into the rate. The system adds Overheads & Profit (12%) and Contingency (7.5%) automatically in the summary, so if you bake them into each rate too, the total is inflated ~20-40% and double-counted. Price like a builder quoting to win the job, not a cautious tender allowance.
+Each assumed_rate is the ALL-IN, keen, current market rate a COMPETITIVE contractor would actually quote to win this work — the rate per single unit, with the contractor's own overhead and profit already inside it, before any location uplift. The system adds NOTHING on top (no automatic contingency, no OH&P stack) — your rates ARE the price the client sees, exactly like a real builder's quote. So price each line at what the job genuinely gets done for locally: not a stripped-back labour-and-materials cost, and not a cautious defensive tender allowance either.
 
-NEVER record a contingency, "overheads & profit", OH&P, margin, markup, or percentage-prelims line item — those are added by the system, not by you. (Do itemise REAL prelims with real costs: scaffold, welfare, skips, supervision, Building Control, structural engineer fees. Just never a "% contingency" or "% OH&P" line.)
+NEVER record a contingency, "overheads & profit", OH&P, margin, markup, or percentage-prelims line item — there is no margin stack to feed, and the pricer strips such lines anyway. (Do itemise REAL prelims with real costs: scaffold, welfare, skips, supervision, Building Control, structural engineer fees. Genuine provisional sums for genuinely unknowable scope are fine. Just never a "% contingency" or "% OH&P" line.)
 
-Sense-check before you submit: would a competent local contractor actually charge this for the job shown? Small remedial/repair jobs are priced keenly — a few hundred to low thousands per item — not at new-build defensive tender rates. If your section subtotals look high for the scope, your rates are probably loaded; bring them back to keen market level.
+Sense-check before you submit: would a competent local contractor actually charge this for the job shown? The grand total ex-VAT should read like the winning quote among three local builders. Small remedial/repair jobs are priced keenly — a few hundred to low thousands per item — not at new-build defensive tender rates. If your section subtotals look high for the scope, your rates are probably loaded; bring them back to keen market level.
 
-Use standard item keys from the rate library where possible (concrete_slab_150mm, brick_outer_leaf, plasterboard_skim_walls, kitchen_fitout_high, etc.). For bespoke items, set a realistic NET assumed_rate in GBP (pre-location uplift, pre-OH&P).
+Use standard item keys from the rate library where possible (concrete_slab_150mm, brick_outer_leaf, plasterboard_skim_walls, kitchen_fitout_high, etc.). For bespoke items, set a realistic all-in assumed_rate in GBP (pre-location uplift only — the location factor is applied automatically).
 
 ## Currency and format
 

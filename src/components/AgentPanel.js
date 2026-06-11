@@ -620,10 +620,18 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 3, columnGap: 14, fontSize: 12.5, color: c.text }}>
                 <span style={{ color: c.muted }}>Construction</span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.construction_total, priced.summary.currency)}</span>
-                <span style={{ color: c.muted }}>Contingency ({priced.summary.contingency_pct}%)</span>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.contingency, priced.summary.currency)}</span>
-                <span style={{ color: c.muted }}>OH&P ({priced.summary.ohp_pct}%)</span>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.ohp, priced.summary.currency)}</span>
+                {priced.summary.contingency > 0 && (
+                  <>
+                    <span style={{ color: c.muted }}>Contingency ({priced.summary.contingency_pct}%)</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.contingency, priced.summary.currency)}</span>
+                  </>
+                )}
+                {priced.summary.ohp > 0 && (
+                  <>
+                    <span style={{ color: c.muted }}>OH&P ({priced.summary.ohp_pct}%)</span>
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.ohp, priced.summary.currency)}</span>
+                  </>
+                )}
                 <span style={{ color: c.muted }}>VAT ({priced.summary.vat_rate}%)</span>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.vat, priced.summary.currency)}</span>
                 <span style={{ color: c.text, fontWeight: 700, paddingTop: 4, borderTop: '1px solid ' + c.border, marginTop: 2 }}>Grand total</span>

@@ -1324,9 +1324,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const ukPostcode = /\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b/i.test(location || '');
   const isUKAddress = ukPostcode && !locationInfo.isIreland;
   const isIreland = locationInfo.isIreland || (!isUKAddress && options.currency === 'EUR');
+  // Front-end parity: rates are all-in competitive prices, so the summary
+  // adds NO automatic markup. A builder can still opt back in via their
+  // playbook (Pricing Preferences), which arrives here through options.
   const {
-    contingency_pct = 7.5,
-    ohp_pct = 12,
+    contingency_pct = 0,
+    ohp_pct = 0,
   } = options;
   // VAT + currency follow the detected region. A decisive address (UK postcode
   // or Irish location) overrides any account-default passed in options.
