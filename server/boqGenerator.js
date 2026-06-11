@@ -11,8 +11,10 @@ const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex } = requ
 
 async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const currency = opts.currency || '\u00a3';
-  const contingencyPct = opts.contingency_pct || 7.5;
-  const ohpPct = opts.ohp_pct || 12;
+  // Default ZERO markup: rates are all-in competitive prices, so the summary
+  // only shows Contingency/OH&P rows when the caller (playbook prefs) asks.
+  const contingencyPct = Number.isFinite(Number(opts.contingency_pct)) ? Number(opts.contingency_pct) : 0;
+  const ohpPct = Number.isFinite(Number(opts.ohp_pct)) ? Number(opts.ohp_pct) : 0;
   const vatRate = opts.vat_rate || 20;
 
   const branding = opts.branding || {};
@@ -317,33 +319,39 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   var netRowNum = row;
   row++;
 
-  // Contingency
-  var contRow = ws.getRow(row);
-  contRow.getCell(2).value = 'Contingency (' + contingencyPct + '%)';
-  contRow.getCell(2).font = { name: bodyFont, size: 10 };
-  contRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (contingencyPct / 100) };
-  contRow.getCell(8).numFmt = currFmt;
-  contRow.getCell(8).font = { name: bodyFont, size: 10 };
-  contRow.getCell(8).border = allBorders;
-  var contRowNum = row;
-  row++;
+  // Contingency / OH&P — only rendered when a percentage is actually set
+  // (default is 0: rates are all-in, nothing stacked on top). The grand-total
+  // formula is built from whichever rows were written.
+  var gtParts = ['H' + netRowNum];
+  if (contingencyPct > 0) {
+    var contRow = ws.getRow(row);
+    contRow.getCell(2).value = 'Contingency (' + contingencyPct + '%)';
+    contRow.getCell(2).font = { name: bodyFont, size: 10 };
+    contRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (contingencyPct / 100) };
+    contRow.getCell(8).numFmt = currFmt;
+    contRow.getCell(8).font = { name: bodyFont, size: 10 };
+    contRow.getCell(8).border = allBorders;
+    gtParts.push('H' + row);
+    row++;
+  }
 
-  // OH&P
-  var ohpRow = ws.getRow(row);
-  ohpRow.getCell(2).value = 'Overheads & Profit (' + ohpPct + '%)';
-  ohpRow.getCell(2).font = { name: bodyFont, size: 10 };
-  ohpRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (ohpPct / 100) };
-  ohpRow.getCell(8).numFmt = currFmt;
-  ohpRow.getCell(8).font = { name: bodyFont, size: 10 };
-  ohpRow.getCell(8).border = allBorders;
-  var ohpRowNum = row;
-  row++;
+  if (ohpPct > 0) {
+    var ohpRow = ws.getRow(row);
+    ohpRow.getCell(2).value = 'Overheads & Profit (' + ohpPct + '%)';
+    ohpRow.getCell(2).font = { name: bodyFont, size: 10 };
+    ohpRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (ohpPct / 100) };
+    ohpRow.getCell(8).numFmt = currFmt;
+    ohpRow.getCell(8).font = { name: bodyFont, size: 10 };
+    ohpRow.getCell(8).border = allBorders;
+    gtParts.push('H' + row);
+    row++;
+  }
 
   // Grand total excl VAT
   var gtRow = ws.getRow(row);
   gtRow.getCell(2).value = 'TOTAL CONSTRUCTION COST (EXCL. VAT)';
   gtRow.getCell(2).font = { name: headingFont, size: 11, bold: true, color: { argb: PRIMARY } };
-  gtRow.getCell(8).value = { formula: 'H' + netRowNum + '+H' + contRowNum + '+H' + ohpRowNum };
+  gtRow.getCell(8).value = { formula: gtParts.join('+') };
   gtRow.getCell(8).numFmt = currFmt;
   gtRow.getCell(8).font = { name: headingFont, size: 11, bold: true };
   for (var gc = 1; gc <= 9; gc++) {

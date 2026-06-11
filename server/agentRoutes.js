@@ -303,10 +303,12 @@ router.post('/agent/:id/reprice', authMiddleware, (req, res) => {
     if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
       location = location ? `${location}, Ireland` : 'Ireland';
     }
+    let prefs = { ohp_pct: 0, contingency_pct: 0 };
+    try { prefs = require('./playbooks').getPricingPrefs(db, run.user_id); } catch (e) {}
     const priced = pricer.priceLockedQuantities(items, location, clientRates, {
       project_type: run.project_type || '',
       floor_area: run.floor_area_m2 || null,
-      contingency_pct: 7.5, ohp_pct: 12,
+      contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
       ...(intakeIsIreland ? { currency: 'EUR' } : {}),
     });
     agent.updateRun(req.params.id, {

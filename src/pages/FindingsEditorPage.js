@@ -281,9 +281,9 @@ export default function FindingsEditorPage() {
       {/* Cost summary — read-only callout (driven by the priced BOQ) */}
       {findings.cost_summary && findings.cost_summary.grand_total > 0 && (
         <Card title="Cost summary (read-only)" subtitle="Pulled from the priced BOQ — edit the BOQ on the Builder Pack page if these need to change.">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: findings.cost_summary.ohp > 0 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 10 }}>
             <Stat label="Net total"        value={findings.cost_summary.net_total} />
-            <Stat label="OH&P"             value={findings.cost_summary.ohp} />
+            {findings.cost_summary.ohp > 0 && <Stat label="OH&P" value={findings.cost_summary.ohp} />}
             <Stat label="Grand total"      value={findings.cost_summary.grand_total} accent />
           </div>
         </Card>

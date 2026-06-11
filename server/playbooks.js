@@ -109,16 +109,31 @@ function recordInsight(db, userId, category, insight) {
   } catch (e) { /* best-effort */ }
 }
 
-// OH&P / contingency percentages for pricing, from the client's playbook (with
-// the global defaults when unset). Used by the doc-generation pricer calls.
+// OH&P / contingency percentages for pricing, from the client's playbook.
+// Default is ZERO: BOQ rates are all-in competitive prices and nothing is
+// added on top automatically (front-end parity). Setting ohp_pct /
+// contingency_pct in a playbook is the explicit opt-in for a margin stack.
 function getPricingPrefs(db, userId) {
   let pb = null;
   try { pb = getPlaybook(db, userId); } catch (e) {}
   const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
   return {
-    ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 12,
-    contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 7.5,
+    ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 0,
+    contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 0,
   };
+}
+
+// Set the user's BOQ margin stack — the per-user setting behind getPricingPrefs.
+// null/'' clears a value back to the 0 default; numbers are clamped 0-100.
+// Writes a new playbook version so the change is audit-trailed like any other
+// playbook edit.
+function setPricingPrefs(db, userId, { ohp_pct, contingency_pct } = {}) {
+  const pb = getPlaybook(db, userId) || defaultPlaybook();
+  const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : null);
+  if (ohp_pct !== undefined) pb.ohp_pct = num(ohp_pct);
+  if (contingency_pct !== undefined) pb.contingency_pct = num(contingency_pct);
+  savePlaybook(db, userId, pb);
+  return getPricingPrefs(db, userId);
 }
 
 // Render the playbook into the cached system prefix (stable, sorted serialisation).
@@ -130,4 +145,4 @@ function renderPlaybook(playbook) {
   return `\n=== CLIENT PLAYBOOK (apply these as house rules) ===\n${JSON.stringify(pb, null, 2)}\n===\n`;
 }
 
-module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs };
+module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs, setPricingPrefs };

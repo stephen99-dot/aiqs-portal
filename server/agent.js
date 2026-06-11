@@ -281,6 +281,29 @@ const TOOL_DEFINITIONS = [
 
 // ── Tool executors ───────────────────────────────────────────────────
 
+// Hard-cap an image's dimensions under Anthropic's 2000px many-image limit.
+// -scale-to should already guarantee this; this catches exotic poppler builds
+// and multi-column pages. No-op when sharp is unavailable or on error.
+async function capImageDims(buf, maxEdge = 1950) {
+  if (!sharp) return buf;
+  try {
+    const meta = await sharp(buf).metadata();
+    if ((meta.width || 0) <= maxEdge && (meta.height || 0) <= maxEdge) return buf;
+    return await sharp(buf).resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+  } catch (e) {
+    return buf;
+  }
+}
+
+// A UK postcode or explicit UK country name in the location string means the
+// job is UK — used to stop intake/memory Ireland hints overriding what the
+// agent read off the drawings. "Northern Ireland" is deliberately UK here.
+function looksLikeUkLocation(loc) {
+  const v = String(loc || '');
+  return /\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b/i.test(v)
+    || /\b(england|scotland|wales|northern ireland|united kingdom|uk)\b/i.test(v);
+}
+
 async function renderPdfPage(tmpDir, filename, page) {
   const srcPath = path.join(tmpDir, filename);
   if (!fs.existsSync(srcPath)) {
@@ -292,8 +315,13 @@ async function renderPdfPage(tmpDir, filename, page) {
   const outDir = path.join(tmpDir, 'rendered_' + Date.now());
   try {
     fs.mkdirSync(outDir, { recursive: true });
+    // Anthropic rejects requests carrying >20 images unless EVERY image is
+    // <=2000px on both sides — and a long takeoff run accumulates dozens of
+    // page renders in the conversation. So full pages are scaled to a 1950px
+    // long edge (-scale-to handles any sheet size); fine detail comes from
+    // zoom_to_region, which renders crops at high effective DPI.
     const result = spawnSync('pdftoppm', [
-      '-r', '200', '-jpeg', '-jpegopt', 'quality=85',
+      '-scale-to', '1950', '-jpeg', '-jpegopt', 'quality=85',
       '-f', String(page), '-l', String(page),
       srcPath, path.join(outDir, 'page'),
     ], { timeout: 60000, encoding: 'buffer' });
@@ -308,7 +336,7 @@ async function renderPdfPage(tmpDir, filename, page) {
       // far better than dropping DPI.
       if (sharp) {
         try {
-          const recompressed = await sharp(buf).jpeg({ quality: 78 }).toBuffer();
+          const recompressed = await capImageDims(await sharp(buf).jpeg({ quality: 78 }).toBuffer());
           if (recompressed.length <= 4.5 * 1024 * 1024) {
             return { ok: true, base64: recompressed.toString('base64'), mediaType: 'image/jpeg' };
           }
@@ -318,7 +346,7 @@ async function renderPdfPage(tmpDir, filename, page) {
       const outDir2 = path.join(tmpDir, 'rendered2_' + Date.now());
       fs.mkdirSync(outDir2, { recursive: true });
       const r2 = spawnSync('pdftoppm', [
-        '-r', '150', '-jpeg', '-jpegopt', 'quality=75',
+        '-scale-to', '1500', '-jpeg', '-jpegopt', 'quality=75',
         '-f', String(page), '-l', String(page),
         srcPath, path.join(outDir2, 'page'),
       ], { timeout: 60000, encoding: 'buffer' });
@@ -327,10 +355,11 @@ async function renderPdfPage(tmpDir, filename, page) {
         return { ok: false, reason: 'retry render failed' };
       }
       const files2 = fs.readdirSync(outDir2).filter(f => f.endsWith('.jpg'));
-      const buf2 = fs.readFileSync(path.join(outDir2, files2[0]));
+      const buf2 = await capImageDims(fs.readFileSync(path.join(outDir2, files2[0])));
       try { fs.rmSync(outDir2, { recursive: true, force: true }); } catch (e) {}
       return { ok: true, base64: buf2.toString('base64'), mediaType: 'image/jpeg' };
     }
+    buf = await capImageDims(buf);
     return { ok: true, base64: buf.toString('base64'), mediaType: 'image/jpeg' };
   } catch (err) {
     return { ok: false, reason: err.message };
@@ -366,10 +395,17 @@ async function renderPdfRegion(tmpDir, filename, page, region) {
   }
   if (!wPt || !hPt) { wPt = 1684; hPt = 2384; } // A1 portrait fallback
 
+  // Pick a DPI so the LONGER crop side lands ~1900px — both sides must stay
+  // under Anthropic's 2000px many-image ceiling (a tall narrow crop used to
+  // blow the height; a wide crop with the old 150-DPI floor blew the width).
   const TARGET_PX = 1900;
   const cropWInches = (w * wPt) / 72;
-  let dpi = Math.round(TARGET_PX / Math.max(cropWInches, 0.1));
-  dpi = Math.min(Math.max(dpi, 150), 600);
+  const cropHInches = (h * hPt) / 72;
+  let dpi = Math.floor(Math.min(
+    TARGET_PX / Math.max(cropWInches, 0.1),
+    TARGET_PX / Math.max(cropHInches, 0.1)
+  ));
+  dpi = Math.min(Math.max(dpi, 60), 600);
   const pageWpx = (wPt / 72) * dpi, pageHpx = (hPt / 72) * dpi;
   const X = Math.round(x * pageWpx), Y = Math.round(y * pageHpx);
   const W = Math.round(w * pageWpx), H = Math.round(h * pageHpx);
@@ -389,10 +425,15 @@ async function renderPdfRegion(tmpDir, filename, page, region) {
     const files = fs.readdirSync(outDir).filter(f => f.endsWith('.jpg') || f.endsWith('.jpeg'));
     if (files.length === 0) return { ok: false, reason: `region of page ${page} not rendered — page may be out of range` };
     let buf = fs.readFileSync(path.join(outDir, files[0]));
-    // Keep under Anthropic's 5MB image cap by recompressing/resizing with sharp.
-    if (buf.length > 4.5 * 1024 * 1024 && sharp) {
+    // Safety net: hard-cap both dimensions under the 2000px many-image limit
+    // (also keeps us under the 5MB cap). The DPI maths above should already
+    // guarantee this; this catches rounding and odd page geometry.
+    if (sharp) {
       try {
-        buf = await sharp(buf).resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        const meta = await sharp(buf).metadata();
+        if ((meta.width || 0) > 1950 || (meta.height || 0) > 1950 || buf.length > 4.5 * 1024 * 1024) {
+          buf = await sharp(buf).resize({ width: 1950, height: 1950, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+        }
       } catch (e) {}
     }
     return { ok: true, base64: buf.toString('base64'), mediaType: 'image/jpeg', dpi };
@@ -417,7 +458,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
         type: 'tool_result',
         content: [
           { type: 'image', source: { type: 'base64', media_type: rendered.mediaType, data: rendered.base64 } },
-          { type: 'text', text: `(${toolInput.filename} page ${toolInput.page} rendered at 200 DPI)` },
+          { type: 'text', text: `(${toolInput.filename} page ${toolInput.page} rendered full-page at reduced resolution — use zoom_to_region for any dimension or annotation you cannot read clearly)` },
         ],
       };
     }
@@ -514,17 +555,25 @@ async function executeTool(runId, toolName, toolInput, runState) {
       // set a UK-only location (e.g. just "Dublin") so the pricer's Ireland
       // detection fires. Also pass explicit currency as a last-resort override.
       let effectiveLocation = meta.location || '';
-      if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+      // The drawings' address is authoritative: a UK postcode or explicit UK
+      // country name beats any intake/memory Ireland hint. Northern Ireland is
+      // UK (£/20%), so it must not match the Ireland branch either.
+      const looksUk = looksLikeUkLocation(effectiveLocation);
+      if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
         effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
       }
       let priced;
       try {
+        // No automatic markup — rates are all-in (front-end parity). A user's
+        // playbook Pricing Preferences can opt margin back in.
+        let prefs = { ohp_pct: 0, contingency_pct: 0 };
+        try { prefs = require('./playbooks').getPricingPrefs(db, runState.userId); } catch (e) {}
         priced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
           project_type: meta.project_type || '',
           floor_area: meta.floor_area_m2 || null,
-          contingency_pct: 7.5,
-          ohp_pct: 12,
-          ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
+          contingency_pct: prefs.contingency_pct,
+          ohp_pct: prefs.ohp_pct,
+          ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
         });
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
@@ -657,14 +706,17 @@ async function executeTool(runId, toolName, toolInput, runState) {
             for (const r of rates) clientRates[r.item_key] = r.value;
           } catch (e) {}
           let effectiveLocation = meta.location || '';
-          if (runState.intakeCurrency === 'EUR' && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
+          const looksUk = looksLikeUkLocation(effectiveLocation);
+          if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
             effectiveLocation = effectiveLocation ? `${effectiveLocation}, Ireland` : 'Ireland';
           }
+          let prefs = { ohp_pct: 0, contingency_pct: 0 };
+          try { prefs = require('./playbooks').getPricingPrefs(db, runState.userId); } catch (e) {}
           runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
             project_type: meta.project_type || '',
             floor_area: meta.floor_area_m2 || null,
-            contingency_pct: 7.5, ohp_pct: 12,
-            ...(runState.intakeCurrency ? { currency: runState.intakeCurrency } : {}),
+            contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
+            ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
           });
         } catch (e) { console.error(`[Agent ${runId}] review pre-price error:`, e.message); }
       }
@@ -788,9 +840,10 @@ async function runGenerationForRun(runId, opts = {}) {
   if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
     location = location ? `${location}, Ireland` : 'Ireland';
   }
-  // OH&P / contingency come from the client's playbook (Phase 10), falling back
-  // to the global defaults. Currency follows the property address in the pricer.
-  let pricingPrefs = { ohp_pct: 12, contingency_pct: 7.5 };
+  // OH&P / contingency come from the client's playbook (Phase 10). The default
+  // is ZERO — rates are all-in competitive prices, so the summary only adds
+  // margin when the user has explicitly set it. Currency follows the address.
+  let pricingPrefs = { ohp_pct: 0, contingency_pct: 0 };
   try { pricingPrefs = require('./playbooks').getPricingPrefs(db, run.user_id); } catch (e) {}
   const priced = pricer.priceLockedQuantities(items, location, clientRates, {
     project_type: run.project_type || '',

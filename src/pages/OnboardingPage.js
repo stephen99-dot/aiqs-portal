@@ -214,12 +214,12 @@ export default function OnboardingPage() {
           {textInput('regions', 'e.g. London, South East, Home Counties')}
         </Field>
 
-        <Field colors={c} label="5. Default contingency %" desc="The buffer added to every estimate for unknowns. 7.5% is standard for most projects.">
-          {numberInput('contingency_pct', '7.5')}
+        <Field colors={c} label="5. Default contingency %" desc="Optional buffer shown on top of every BOQ. Leave blank for 0 — rates are already all-in competitive prices, like a real builder's quote. You can change this any time from the AI Memory page.">
+          {numberInput('contingency_pct', '0')}
         </Field>
 
-        <Field colors={c} label="6. Default markup / overhead %" desc="The margin added on top of costs (sometimes called OH&P — overheads & profit). 12% is typical.">
-          {numberInput('ohp_pct', '12')}
+        <Field colors={c} label="6. Default markup / overhead %" desc="Optional margin line (OH&P — overheads & profit) shown on top of every BOQ. Leave blank for 0 — the builder's overhead and profit is already inside each rate.">
+          {numberInput('ohp_pct', '0')}
         </Field>
 
         <Field colors={c} label="7. Standard exclusions" desc="Things you always leave out of estimates (VAT, planning fees, surveys, etc).">

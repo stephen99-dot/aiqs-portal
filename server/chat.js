@@ -33,6 +33,14 @@ const WEB_SEARCH_ENABLED = process.env.ENABLE_WEB_SEARCH !== '0';
 
 const router = express.Router();
 
+// Playbook OH&P/contingency for pricer calls. Defaults are ZERO — BOQ rates
+// are all-in competitive prices and nothing is stacked on top (front-end
+// parity). A user's playbook Pricing Preferences are the explicit opt-in.
+function getPricingPrefsSafe(userId) {
+  try { return require('./playbooks').getPricingPrefs(db, userId); }
+  catch (e) { return { ohp_pct: 0, contingency_pct: 0 }; }
+}
+
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
 const outputsDir = path.join(DATA_DIR, 'outputs');
@@ -460,7 +468,7 @@ IRELAND-SPECIFIC:
 - Use "ESB Networks" not "UK Power Networks" for Irish projects
 
 If an element has no matching key, use "key": "custom_[description]" and set "needs_pricing": true.
-IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the BASE UK/Irish market rate (NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP (will be converted to EUR automatically for Ireland).
+IMPORTANT: You MUST also include "assumed_rate": <number> with your best estimate of the ALL-IN competitive UK/Irish market rate — the rate a keen local builder would actually quote to win the job, with their own overhead and profit already inside it. Nothing is added on top later, so do NOT quote a stripped-back "net" rate (but apply NO location uplift — location factors are applied automatically). NEVER leave assumed_rate as 0 — always provide a realistic per-unit rate in GBP (will be converted to EUR automatically for Ireland).
 CRITICAL: The assumed_rate must be a PER-UNIT rate matching the "unit" field. If unit is "m²", the rate is price per square metre (e.g. 42 not 4200). If unit is "Nr", it is price per number. Do NOT put the total cost in assumed_rate — put the rate per single unit only.
 
 ═══════════════════════════════════════════════════════════
@@ -631,7 +639,8 @@ Marker tape + tracer wire: 8.80/m | Internal duct run: 38/m | Builders work inte
 ESB mini pillar vault: 4950/Nr | ESB metering pillar: 2350/Nr | ESB connection provisional: 2500/Item
 
 LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | South West +5% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
-IRELAND: If the project is in Ireland, use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
+IRELAND: If the project is in Ireland (the Republic — Northern Ireland is UK, £/20%), use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
+ONE CURRENCY ONLY: a job is either £ or € — decide from the project location and use ONLY that symbol in every figure you write. Never mix £ and € in one answer or quote dual-currency amounts.
 YOU MUST USE THESE EXACT RATES. Do not interpolate, estimate, or vary from these figures. If a client rate is marked VERIFIED use that instead.
 ${clientRateSection}
 ${clientInsightsSection}
@@ -653,7 +662,7 @@ COST SANITY CHECKS — verify your total before responding:
 - Typical heritage/listed refurbishment: add 15-30% over standard refurbishment
 - Typical water damage / insurance reinstatement (2-3 bed, multiple rooms): £30,000-£80,000
 - Typical water damage / insurance reinstatement (4+ bed or extensive): £50,000-£120,000
-- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
+- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before VAT)
 - Cost per m2 for UK refurbishment: typically £800-£1,800/m2 depending on scope
 - If your total is BELOW these ranges, you are almost certainly MISSING items or entire rooms — re-check
 - If your total is near the TOP of these ranges, re-check quantities for errors: wrong units, doubled areas, overlapping items, or building-level quantities instead of element-level
@@ -685,14 +694,15 @@ Respond with this JSON structure:
     "cost_summary": {
       "sections": [{ "name": "Section Name", "total": 12345.00 }],
       "net_total": 50000.00,
-      "contingency_pct": 7.5, "contingency": 3750.00,
-      "ohp_pct": 12, "ohp": 6000.00,
-      "grand_total": 59750.00
+      "contingency_pct": 0, "contingency": 0,
+      "ohp_pct": 0, "ohp": 0,
+      "grand_total": 50000.00
     },
     "recommendations": ["Specific actionable recommendation 1"]
   }
 }
-Include ALL measurable items. Be thorough. Every item needs rate_source. Minimum 40 line items for any project.`;
+Include ALL measurable items. Be thorough. Every item needs rate_source. Minimum 40 line items for any project.
+Rates are ALL-IN competitive prices (overhead and profit inside each rate). Do NOT add contingency or OH&P — keep contingency_pct/ohp_pct at 0 and grand_total = net_total.`;
   }
 
   return `You are an expert UK Quantity Surveyor AI assistant working for The AI QS (theaiqs.co.uk), a professional AI-powered quantity surveying service covering the UK and Ireland.
@@ -717,7 +727,7 @@ WHEN ANALYSING DRAWINGS — BE THOROUGH:
 6. STATE ALL ASSUMPTIONS clearly (slab thickness, insulation spec, foundation depth, etc.)
 7. FLAG anything unclear, missing information, or needing site verification
 8. Include PRELIMS (site setup, welfare, skip hire, scaffolding) but NOT professional fees (architect, planning, CDM, PM) unless client specifically asks
-9. Include CONTINGENCY (7.5%) and OH&P (12%) — use these exact percentages, not ranges
+9. Do NOT add contingency, OH&P or any percentage markup lines — rates must be all-in competitive prices (the builder's overhead and profit lives inside each rate, like a real quote). Genuine provisional sums for genuinely unknowable scope are fine
 10. Note whether VAT applies
 11. NEVER double-count: if you include a fit-out lump sum (kitchen_fitout_mid, bathroom_fitout_mid) do NOT also price individual items within that fit-out. If you include first_fix_plumbing do NOT also price individual pipe runs
 
@@ -774,6 +784,7 @@ PRELIMS: Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 32
 
 LOCATION FACTORS:
 London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)
+ONE CURRENCY ONLY: each job is either £ (UK, incl. Northern Ireland) or € (Republic of Ireland). Decide once from the location and use only that symbol throughout — never mix currencies in one answer.
 
 COST SANITY CHECKS — you MUST verify your total before responding:
 - Typical single storey extension (25-40m2): construction cost £45,000-£100,000
@@ -781,7 +792,7 @@ COST SANITY CHECKS — you MUST verify your total before responding:
 - Typical loft conversion: construction cost £35,000-£75,000
 - Typical water damage / insurance reinstatement (2-3 bed, multiple rooms): £30,000-£80,000
 - Typical water damage / insurance reinstatement (4+ bed or extensive): £50,000-£120,000
-- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before contingency/OH&P/VAT)
+- Cost per m2 for UK residential extensions: typically £1,800-£3,000/m2 (construction only, before VAT)
 - If your total is BELOW these ranges, you are almost certainly MISSING items or entire rooms — go back and add them
 - If your total is near the TOP of these ranges, re-check for: wrong units, doubled areas, overlapping items, building-level quantities applied at element-level rates
 - No single line item for a residential project should exceed £20,000 unless genuinely high-value (e.g. bi-fold doors, kitchen PC sum, ASHP)
@@ -1456,9 +1467,10 @@ router.get('/takeoff/:sessionId/priced', authMiddleware, (req, res) => {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
       for (const r of dbRates) clientRates[r.item_key] = r.value;
     } catch (e) {}
+    const prefs = getPricingPrefsSafe(req.user.id);
     const priced = deterministicPricer.priceLockedQuantities(
       takeoff.items || [], takeoff.location || '', clientRates,
-      { contingency_pct: 7.5, ohp_pct: 12, project_type: takeoff.project_type }
+      { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type }
     );
     res.json({
       takeoff: { id: takeoff.id, status: takeoff.status, location: takeoff.location, project_type: takeoff.project_type },
@@ -1503,7 +1515,8 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
       const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
       for (const r of dbRates) clientRates[r.item_key] = r.value;
     } catch(e) {}
-    const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates, { contingency_pct: 7.5, ohp_pct: 12, project_type: takeoff.project_type });
+    const prefs = getPricingPrefsSafe(req.user.id);
+    const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates, { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type });
     res.json({ success: true, priced, items_raw: merged });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
 });
@@ -2013,9 +2026,10 @@ ${summary}`);
           }
           const locText = (existingTk.location || '').toLowerCase();
           const tkIsIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|donegal/.test(locText);
+          const tkPrefs = getPricingPrefsSafe(userId);
           const tkPriced = deterministicPricer.priceLockedQuantities(
             existingTk.items, existingTk.location || '', tkClientRates,
-            { contingency_pct: 7.5, ohp_pct: 12, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP' }
+            { contingency_pct: tkPrefs.contingency_pct, ohp_pct: tkPrefs.ohp_pct, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP' }
           );
           const tkSym = tkPriced.summary.currency === 'EUR' ? '€' : '£';
           const sectionLines = tkPriced.sections.map(s => `${s.name}: ${tkSym}${s.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}`).join('\n');
@@ -2024,7 +2038,7 @@ ${summary}`);
           systemPrompt += `\n\n${tkStatusLabel} TAKEOFF PRICING (ref: ${existingTk.id}) — THESE ARE THE CORRECT FIGURES:\n` +
             sectionLines + '\n' +
             `Construction Total: ${tkSym}${tkPriced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
-            `Grand Total (incl contingency, OH&P, VAT): ${tkSym}${tkPriced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
+            `Grand Total (incl VAT${(tkPriced.summary.contingency > 0 || tkPriced.summary.ohp > 0) ? ', contingency, OH&P' : ''}): ${tkSym}${tkPriced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}\n` +
             `CRITICAL: A deterministic pricer has already calculated costs for this project. Do NOT generate your own cost breakdown or section totals. ` +
             `If the user asks about costs, ONLY reference these figures. Do NOT re-price items using the fixed rates above — those are for initial estimation only. ` +
             `The pricer's figures are authoritative and must not be contradicted.\n` +
@@ -2939,9 +2953,10 @@ CRITICAL RULES:
               (() => {
                 const locText = (parsed.location || message || '').toLowerCase();
                 const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
+                const prefs = getPricingPrefsSafe(userId);
                 return {
-                  contingency_pct: 7.5,
-                  ohp_pct: 12,
+                  contingency_pct: prefs.contingency_pct,
+                  ohp_pct: prefs.ohp_pct,
                   vat_rate: isIreland ? 13.5 : 20,
                   currency: isIreland ? 'EUR' : 'GBP',
                   project_type: mergedProjectType,
@@ -2986,10 +3001,16 @@ CRITICAL RULES:
               }
             }
             quantitySummary += `\nConstruction Total: ${currSym}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): ${currSym}${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nNet Total: ${currSym}${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nOH&P (${priced.summary.ohp_pct}%): ${currSym}${priced.summary.ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
-            quantitySummary += `\nNet + OH&P: ${currSym}${priced.summary.net_with_ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            // Contingency/OH&P only print when a playbook actually adds them —
+            // the default is 0 (rates are all-in), so most users never see these rows.
+            if (priced.summary.contingency > 0) {
+              quantitySummary += `\nContingency (${priced.summary.contingency_pct}%): ${currSym}${priced.summary.contingency.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+              quantitySummary += `\nNet Total: ${currSym}${priced.summary.net_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            }
+            if (priced.summary.ohp > 0) {
+              quantitySummary += `\nOH&P (${priced.summary.ohp_pct}%): ${currSym}${priced.summary.ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+              quantitySummary += `\nNet + OH&P: ${currSym}${priced.summary.net_with_ohp.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
+            }
             quantitySummary += `\nVAT (${priced.summary.vat_rate}%): ${currSym}${priced.summary.vat.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
             quantitySummary += `\nGrand Total: ${currSym}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`;
 
@@ -3218,9 +3239,10 @@ CRITICAL RULES:
           (() => {
             const locText = (lockedTakeoff.location || message || '').toLowerCase();
             const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
+            const prefs = getPricingPrefsSafe(userId);
             return {
-              contingency_pct: 7.5,
-              ohp_pct: 12,
+              contingency_pct: prefs.contingency_pct,
+              ohp_pct: prefs.ohp_pct,
               vat_rate: isIreland ? 13.5 : 20,
               currency: isIreland ? 'EUR' : 'GBP',
             };
