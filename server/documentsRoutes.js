@@ -129,6 +129,20 @@ const TEMPLATES = [
     ],
     render: renderRAMS,
   },
+  {
+    id: 'letter',
+    label: 'Letter',
+    description: 'A branded letter — quote cover letter, follow-up, dispute, work-complete notice. Write it yourself or let the AI draft it from one sentence.',
+    fields: [
+      { key: 'letter_date', label: 'Date', type: 'date', required: true },
+      { key: 'recipient_name', label: 'To (name)', type: 'text', required: true },
+      { key: 'recipient_address', label: 'Their address', type: 'textarea' },
+      { key: 'subject', label: 'Subject', type: 'text', required: true },
+      { key: 'body', label: 'The letter', type: 'textarea', required: true },
+      { key: 'sign_off', label: 'Sign-off', type: 'text', default: 'Yours sincerely' },
+    ],
+    render: renderLetter,
+  },
 ];
 
 const TEMPLATE_INDEX = Object.fromEntries(TEMPLATES.map(t => [t.id, t]));
@@ -174,6 +188,95 @@ function defaultsFor(tpl) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  ROUTES
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ─── C3: "Describe what you need" — AI drafts the letter ─────────────────────
+// MODELS.FAST, grounded in the linked job's facts and the builder's branding.
+// The draft lands in the normal editor for review — nothing is sent anywhere.
+
+const LETTER_SYSTEM = `You draft letters for a UK builder to send to their customers (quote cover letters, polite follow-ups, extension-of-time letters, polite dispute letters, work-complete notices). Rules:
+1. British English, professional but warm — the way a good tradesperson writes, not a lawyer.
+2. Short: 2-4 paragraphs. No waffle, no legalese, no bullet points unless asked.
+3. Use ONLY the facts provided. Never invent amounts, dates or names. If a needed detail is missing, leave a clearly marked gap like [DATE].
+4. Sign-off plain (e.g. "Yours sincerely" / "Kind regards"). Do not include the sender name in the body — it is added under the sign-off automatically.`;
+
+router.post('/draft', async (req, res) => {
+  try {
+    const { callModel, MODELS } = require('./anthropicClient');
+    const description = String((req.body && req.body.description) || '').trim().slice(0, 1000);
+    if (description.length < 5) return res.status(400).json({ error: 'Say what you need the letter for first.' });
+
+    const userId = req.user.id;
+    const jobId = (req.body.job_id || '').toString() || null;
+    const branding = getBranding(userId);
+    const user = getUserDisplay(userId);
+    const companyName = branding.company_name || user?.company || user?.full_name || '';
+
+    const facts = ['Builder/company: ' + companyName, 'Today: ' + new Date().toISOString().slice(0, 10)];
+    let job = null;
+    if (jobId) {
+      job = db.prepare('SELECT * FROM estimator_jobs WHERE id = ? AND user_id = ?').get(jobId, userId);
+      if (job) {
+        facts.push('Job: ' + job.name + (job.client_name ? ' for ' + job.client_name : '') + (job.location ? ' at ' + job.location : '') + ' (status: ' + job.status + ')');
+        const q = db.prepare("SELECT project_name, status, grand_total FROM quotes WHERE job_id = ? ORDER BY created_at DESC LIMIT 3").all(job.id);
+        for (const x of q) facts.push('Quote: ' + (x.project_name || '') + ' — £' + (x.grand_total || 0) + ' (' + x.status + ')');
+        const inv = db.prepare("SELECT invoice_number, status, grand_total, due_date FROM invoices WHERE job_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 5").all(job.id, userId);
+        for (const x of inv) facts.push('Invoice ' + (x.invoice_number || '') + ': £' + (x.grand_total || 0) + ' (' + x.status + (x.due_date ? ', due ' + x.due_date : '') + ')');
+        const vo = db.prepare("SELECT title, status, grand_total FROM estimator_variations WHERE job_id = ? AND user_id = ? LIMIT 5").all(job.id, userId);
+        for (const x of vo) facts.push('Change: ' + (x.title || '') + ' — £' + (x.grand_total || 0) + ' (' + x.status + ')');
+      }
+    }
+
+    const result = await callModel({
+      model: MODELS.FAST,
+      maxTokens: 900,
+      temperature: 0.4,
+      system: LETTER_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: 'What the builder needs: ' + description + '\n\nFACTS:\n' + facts.join('\n') + '\n\nDraft the letter now.',
+      }],
+      tools: [{
+        name: 'submit_letter',
+        description: 'Submit the drafted letter.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Short document title, e.g. "Follow-up letter — Patel extension"' },
+            recipient_name: { type: 'string' },
+            subject: { type: 'string' },
+            body: { type: 'string', description: 'The letter body, paragraphs separated by blank lines. No address block, no sign-off.' },
+            sign_off: { type: 'string' },
+          },
+          required: ['title', 'recipient_name', 'subject', 'body'],
+        },
+      }],
+      toolChoice: { type: 'tool', name: 'submit_letter' },
+      userId,
+      action: 'document_draft',
+    });
+    if (!result.ok || !result.json) {
+      return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
+    }
+
+    const d = result.json;
+    const fields = {
+      letter_date: new Date().toISOString().slice(0, 10),
+      recipient_name: String(d.recipient_name || (job?.client_name || '')).slice(0, 200),
+      recipient_address: '',
+      subject: String(d.subject || '').slice(0, 200),
+      body: String(d.body || '').slice(0, 8000),
+      sign_off: String(d.sign_off || 'Yours sincerely').slice(0, 80),
+    };
+    const id = uuidv4();
+    db.prepare(
+      'INSERT INTO documents (id, user_id, job_id, template_id, title, fields) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, userId, job ? job.id : null, 'letter', String(d.title || 'Letter').slice(0, 200), JSON.stringify(fields));
+    res.status(201).json({ id });
+  } catch (err) {
+    console.error('[Documents] draft error:', err);
+    res.status(500).json({ error: 'Failed to draft the letter.' });
+  }
+});
 
 router.get('/templates', (req, res) => {
   res.json({ templates: TEMPLATES.map(publicTemplate) });
@@ -467,6 +570,32 @@ function signatureLine(doc, role, name) {
   doc.moveTo(310, y).lineTo(440, y).stroke();
   doc.fontSize(8).fillColor('#666666').text('Signed', 50, y + 2).text('Date', 310, y + 2);
   doc.fillColor('#111111').fontSize(10);
+}
+
+function renderLetter(doc, ctx) {
+  const f = ctx.fields;
+  const company = ctx.branding.company_name || ctx.user?.company || ctx.user?.full_name || '';
+  startBody(doc);
+  doc.font('Helvetica').fontSize(10).fillColor('#666666')
+    .text(f.letter_date || '', { align: 'right' });
+  doc.moveDown(0.8);
+  doc.fillColor('#111111').fontSize(10);
+  if (f.recipient_name) doc.text(f.recipient_name);
+  if (f.recipient_address) doc.text(String(f.recipient_address));
+  doc.moveDown(1);
+  if (f.subject) {
+    doc.font('Helvetica-Bold').fontSize(11).text(f.subject);
+    doc.moveDown(0.6);
+  }
+  doc.font('Helvetica').fontSize(10.5);
+  const paras = String(f.body || '').split(/\n{2,}/);
+  for (const p of paras) {
+    para(doc, p.replace(/\n/g, ' ').trim());
+  }
+  doc.moveDown(1.2);
+  doc.text(f.sign_off || 'Yours sincerely');
+  doc.moveDown(2);
+  doc.font('Helvetica-Bold').text(company);
 }
 
 function renderTerms(doc, ctx) {

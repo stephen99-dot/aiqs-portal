@@ -11,6 +11,7 @@ const TEMPLATE_ICONS = {
   'scope-of-work': ClipboardIcon,
   'payment-terms': PoundIcon,
   'health-safety-rams': AlertTriangleIcon,
+  'letter': FileTextIcon,
 };
 
 export default function DocumentsPage() {
@@ -27,6 +28,10 @@ function Inner() {
   const [error, setError] = useState('');
   const [picking, setPicking] = useState(false);
   const [pickJobId, setPickJobId] = useState('');
+  // C3 — "Describe what you need" -> AI drafts a letter into the editor.
+  const [draftText, setDraftText] = useState('');
+  const [draftJobId, setDraftJobId] = useState('');
+  const [drafting, setDrafting] = useState(false);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -51,6 +56,19 @@ function Inner() {
       const r = await apiFetch('/documents', { method: 'POST', body: JSON.stringify(body) });
       nav('/documents/' + r.id);
     } catch (e) { setError(e.message); }
+  };
+
+  const draftLetter = async () => {
+    if (!draftText.trim() || drafting) return;
+    setDrafting(true); setError('');
+    try {
+      const r = await apiFetch('/documents/draft', {
+        method: 'POST',
+        body: JSON.stringify({ description: draftText.trim(), job_id: draftJobId || null }),
+      });
+      nav('/documents/' + r.id);
+    } catch (e) { setError(e.message); }
+    finally { setDrafting(false); }
   };
 
   const downloadPdf = (id) => {
@@ -91,6 +109,32 @@ function Inner() {
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
+
+      {/* C3 — describe what you need, get a letter to review */}
+      <div style={{ background: t.card, border: '1px solid ' + t.accent + '55', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Need a letter? Just say what for</div>
+        <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
+          e.g. "A polite letter to Mrs Patel explaining the job will finish two weeks late because of the steel delay." You'll see the draft before anything goes anywhere.
+        </div>
+        <textarea
+          value={draftText}
+          onChange={e => setDraftText(e.target.value)}
+          rows={2}
+          placeholder="What do you need to say, and to whom?"
+          style={{ width: '100%', boxSizing: 'border-box', minHeight: 64, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 14.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <select value={draftJobId} onChange={e => setDraftJobId(e.target.value)} style={{ flex: 1, minWidth: 180, minHeight: 44, padding: '8px 10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 13.5 }}>
+            <option value="">Not about a particular job</option>
+            {jobs.map(j => <option key={j.id} value={j.id}>{[j.client_name, j.name].filter(Boolean).join(' — ')}</option>)}
+          </select>
+          <button onClick={draftLetter} disabled={drafting || !draftText.trim()} style={{
+            minHeight: 44, padding: '0 18px', borderRadius: 10, border: 'none',
+            background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', opacity: (drafting || !draftText.trim()) ? 0.5 : 1,
+          }}>{drafting ? 'Writing it…' : 'Draft the letter'}</button>
+        </div>
+      </div>
 
       {picking && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
