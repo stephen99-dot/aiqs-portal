@@ -31,6 +31,10 @@ function Inner() {
   const [cards, setCards] = useState(null);     // PM alert cards
   const [error, setError] = useState('');
   const [nudge, setNudge] = useState(null);     // { url } share sheet for a quote follow-up
+  // C2 — grounded Q&A over the builder's own data.
+  const [thread, setThread] = useState([]);     // [{ role, content }]
+  const [question, setQuestion] = useState('');
+  const [asking, setAsking] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -76,6 +80,25 @@ function Inner() {
       return;
     }
     if (a.link) nav(a.link);
+  };
+
+  const ask = async (q) => {
+    const text = (q || question).trim();
+    if (!text || asking) return;
+    setQuestion('');
+    setThread(prev => [...prev, { role: 'user', content: text }]);
+    setAsking(true);
+    try {
+      const r = await apiFetch('/pm/ask', {
+        method: 'POST',
+        body: JSON.stringify({ question: text, history: thread.slice(-6) }),
+      });
+      setThread(prev => [...prev, { role: 'assistant', content: r.answer }]);
+    } catch (e) {
+      setThread(prev => [...prev, { role: 'assistant', content: e.message || 'That didn\'t work — try again.' }]);
+    } finally {
+      setAsking(false);
+    }
   };
 
   const firstName = (user?.fullName || '').split(' ')[0];
@@ -155,11 +178,59 @@ function Inner() {
       )}
 
       {/* Quick actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 24 }}>
         <QuickAction t={t} Icon={FileTextIcon} label="New quote" onClick={() => nav('/estimator/new')} primary />
         <QuickAction t={t} Icon={PoundIcon} label="New invoice" onClick={() => nav('/money?new=1')} />
         <QuickAction t={t} Icon={ImageIcon} label="Add a photo" onClick={() => nav('/jobs')} />
         <QuickAction t={t} Icon={WrenchIcon} label="Tools" onClick={() => nav('/tools')} />
+      </div>
+
+      {/* C2 — ask about your jobs (answers come only from your own data) */}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Ask about your jobs</div>
+        <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2, marginBottom: 10 }}>
+          Answers come straight from your own quotes, jobs and invoices — nothing made up.
+        </div>
+
+        {thread.length === 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {['Who owes me the most?', 'Am I making money on my jobs?', "What's still to invoice?"].map(sugg => (
+              <button key={sugg} onClick={() => ask(sugg)} style={{
+                minHeight: 38, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
+                background: t.surface, color: t.textSecondary, border: '1px solid ' + t.border,
+                fontSize: 12.5, fontWeight: 600,
+              }}>{sugg}</button>
+            ))}
+          </div>
+        )}
+
+        {thread.map((m, i) => (
+          <div key={i} style={{
+            marginBottom: 8, padding: '10px 12px', borderRadius: 10, fontSize: 14, lineHeight: 1.5,
+            background: m.role === 'user' ? t.surface : 'rgba(245,158,11,0.07)',
+            border: '1px solid ' + (m.role === 'user' ? t.border : t.accent + '33'),
+            color: t.text, whiteSpace: 'pre-wrap',
+          }}>{m.content}</div>
+        ))}
+        {asking && <div style={{ color: t.textMuted, fontSize: 13, marginBottom: 8 }}>Checking your numbers…</div>}
+
+        <form onSubmit={e => { e.preventDefault(); ask(); }} style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            placeholder="e.g. What did I quote for the Patel job?"
+            style={{
+              flex: 1, minHeight: 48, padding: '10px 14px', boxSizing: 'border-box',
+              background: t.bg, border: '1px solid ' + t.border, color: t.text,
+              borderRadius: 10, fontSize: 15, outline: 'none',
+            }}
+          />
+          <button type="submit" disabled={asking || !question.trim()} style={{
+            minHeight: 48, padding: '0 18px', borderRadius: 10, border: 'none',
+            background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', opacity: (asking || !question.trim()) ? 0.5 : 1,
+          }}>Ask</button>
+        </form>
       </div>
 
       {nudge && (
