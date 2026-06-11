@@ -281,6 +281,20 @@ const TOOL_DEFINITIONS = [
 
 // ── Tool executors ───────────────────────────────────────────────────
 
+// Hard-cap an image's dimensions under Anthropic's 2000px many-image limit.
+// -scale-to should already guarantee this; this catches exotic poppler builds
+// and multi-column pages. No-op when sharp is unavailable or on error.
+async function capImageDims(buf, maxEdge = 1950) {
+  if (!sharp) return buf;
+  try {
+    const meta = await sharp(buf).metadata();
+    if ((meta.width || 0) <= maxEdge && (meta.height || 0) <= maxEdge) return buf;
+    return await sharp(buf).resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+  } catch (e) {
+    return buf;
+  }
+}
+
 async function renderPdfPage(tmpDir, filename, page) {
   const srcPath = path.join(tmpDir, filename);
   if (!fs.existsSync(srcPath)) {
@@ -292,8 +306,13 @@ async function renderPdfPage(tmpDir, filename, page) {
   const outDir = path.join(tmpDir, 'rendered_' + Date.now());
   try {
     fs.mkdirSync(outDir, { recursive: true });
+    // Anthropic rejects requests carrying >20 images unless EVERY image is
+    // <=2000px on both sides — and a long takeoff run accumulates dozens of
+    // page renders in the conversation. So full pages are scaled to a 1950px
+    // long edge (-scale-to handles any sheet size); fine detail comes from
+    // zoom_to_region, which renders crops at high effective DPI.
     const result = spawnSync('pdftoppm', [
-      '-r', '200', '-jpeg', '-jpegopt', 'quality=85',
+      '-scale-to', '1950', '-jpeg', '-jpegopt', 'quality=85',
       '-f', String(page), '-l', String(page),
       srcPath, path.join(outDir, 'page'),
     ], { timeout: 60000, encoding: 'buffer' });
@@ -308,7 +327,7 @@ async function renderPdfPage(tmpDir, filename, page) {
       // far better than dropping DPI.
       if (sharp) {
         try {
-          const recompressed = await sharp(buf).jpeg({ quality: 78 }).toBuffer();
+          const recompressed = await capImageDims(await sharp(buf).jpeg({ quality: 78 }).toBuffer());
           if (recompressed.length <= 4.5 * 1024 * 1024) {
             return { ok: true, base64: recompressed.toString('base64'), mediaType: 'image/jpeg' };
           }
@@ -318,7 +337,7 @@ async function renderPdfPage(tmpDir, filename, page) {
       const outDir2 = path.join(tmpDir, 'rendered2_' + Date.now());
       fs.mkdirSync(outDir2, { recursive: true });
       const r2 = spawnSync('pdftoppm', [
-        '-r', '150', '-jpeg', '-jpegopt', 'quality=75',
+        '-scale-to', '1500', '-jpeg', '-jpegopt', 'quality=75',
         '-f', String(page), '-l', String(page),
         srcPath, path.join(outDir2, 'page'),
       ], { timeout: 60000, encoding: 'buffer' });
@@ -327,10 +346,11 @@ async function renderPdfPage(tmpDir, filename, page) {
         return { ok: false, reason: 'retry render failed' };
       }
       const files2 = fs.readdirSync(outDir2).filter(f => f.endsWith('.jpg'));
-      const buf2 = fs.readFileSync(path.join(outDir2, files2[0]));
+      const buf2 = await capImageDims(fs.readFileSync(path.join(outDir2, files2[0])));
       try { fs.rmSync(outDir2, { recursive: true, force: true }); } catch (e) {}
       return { ok: true, base64: buf2.toString('base64'), mediaType: 'image/jpeg' };
     }
+    buf = await capImageDims(buf);
     return { ok: true, base64: buf.toString('base64'), mediaType: 'image/jpeg' };
   } catch (err) {
     return { ok: false, reason: err.message };
@@ -366,10 +386,17 @@ async function renderPdfRegion(tmpDir, filename, page, region) {
   }
   if (!wPt || !hPt) { wPt = 1684; hPt = 2384; } // A1 portrait fallback
 
+  // Pick a DPI so the LONGER crop side lands ~1900px — both sides must stay
+  // under Anthropic's 2000px many-image ceiling (a tall narrow crop used to
+  // blow the height; a wide crop with the old 150-DPI floor blew the width).
   const TARGET_PX = 1900;
   const cropWInches = (w * wPt) / 72;
-  let dpi = Math.round(TARGET_PX / Math.max(cropWInches, 0.1));
-  dpi = Math.min(Math.max(dpi, 150), 600);
+  const cropHInches = (h * hPt) / 72;
+  let dpi = Math.floor(Math.min(
+    TARGET_PX / Math.max(cropWInches, 0.1),
+    TARGET_PX / Math.max(cropHInches, 0.1)
+  ));
+  dpi = Math.min(Math.max(dpi, 60), 600);
   const pageWpx = (wPt / 72) * dpi, pageHpx = (hPt / 72) * dpi;
   const X = Math.round(x * pageWpx), Y = Math.round(y * pageHpx);
   const W = Math.round(w * pageWpx), H = Math.round(h * pageHpx);
@@ -389,10 +416,15 @@ async function renderPdfRegion(tmpDir, filename, page, region) {
     const files = fs.readdirSync(outDir).filter(f => f.endsWith('.jpg') || f.endsWith('.jpeg'));
     if (files.length === 0) return { ok: false, reason: `region of page ${page} not rendered — page may be out of range` };
     let buf = fs.readFileSync(path.join(outDir, files[0]));
-    // Keep under Anthropic's 5MB image cap by recompressing/resizing with sharp.
-    if (buf.length > 4.5 * 1024 * 1024 && sharp) {
+    // Safety net: hard-cap both dimensions under the 2000px many-image limit
+    // (also keeps us under the 5MB cap). The DPI maths above should already
+    // guarantee this; this catches rounding and odd page geometry.
+    if (sharp) {
       try {
-        buf = await sharp(buf).resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
+        const meta = await sharp(buf).metadata();
+        if ((meta.width || 0) > 1950 || (meta.height || 0) > 1950 || buf.length > 4.5 * 1024 * 1024) {
+          buf = await sharp(buf).resize({ width: 1950, height: 1950, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+        }
       } catch (e) {}
     }
     return { ok: true, base64: buf.toString('base64'), mediaType: 'image/jpeg', dpi };
@@ -417,7 +449,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
         type: 'tool_result',
         content: [
           { type: 'image', source: { type: 'base64', media_type: rendered.mediaType, data: rendered.base64 } },
-          { type: 'text', text: `(${toolInput.filename} page ${toolInput.page} rendered at 200 DPI)` },
+          { type: 'text', text: `(${toolInput.filename} page ${toolInput.page} rendered full-page at reduced resolution — use zoom_to_region for any dimension or annotation you cannot read clearly)` },
         ],
       };
     }
