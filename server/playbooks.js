@@ -123,6 +123,19 @@ function getPricingPrefs(db, userId) {
   };
 }
 
+// Set the user's BOQ margin stack — the per-user setting behind getPricingPrefs.
+// null/'' clears a value back to the 0 default; numbers are clamped 0-100.
+// Writes a new playbook version so the change is audit-trailed like any other
+// playbook edit.
+function setPricingPrefs(db, userId, { ohp_pct, contingency_pct } = {}) {
+  const pb = getPlaybook(db, userId) || defaultPlaybook();
+  const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : null);
+  if (ohp_pct !== undefined) pb.ohp_pct = num(ohp_pct);
+  if (contingency_pct !== undefined) pb.contingency_pct = num(contingency_pct);
+  savePlaybook(db, userId, pb);
+  return getPricingPrefs(db, userId);
+}
+
 // Render the playbook into the cached system prefix (stable, sorted serialisation).
 function renderPlaybook(playbook) {
   if (!playbook) return '';
@@ -132,4 +145,4 @@ function renderPlaybook(playbook) {
   return `\n=== CLIENT PLAYBOOK (apply these as house rules) ===\n${JSON.stringify(pb, null, 2)}\n===\n`;
 }
 
-module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs };
+module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs, setPricingPrefs };

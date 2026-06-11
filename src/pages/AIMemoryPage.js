@@ -37,22 +37,27 @@ export default function AIMemoryPage() {
   const [newMemoryText, setNewMemoryText] = useState('');
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [editingText, setEditingText] = useState('');
+  const [prefs, setPrefs] = useState(null);          // { ohp_pct, contingency_pct }
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsSaved, setPrefsSaved] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     try {
-      const [insightData, rateData, memData, onbData] = await Promise.all([
+      const [insightData, rateData, memData, onbData, prefData] = await Promise.all([
         apiFetch('/my-insights').catch(() => ({ insights: [], stats: null })),
         apiFetch('/my-rates').catch(() => ({ stats: null })),
         apiFetch('/memories').catch(() => ({ memories: [] })),
         apiFetch('/onboarding').catch(() => null),
+        apiFetch('/pricing-prefs').catch(() => null),
       ]);
       setInsights(insightData.insights || []);
       setStats(insightData.stats || { total: 0, categories: 0 });
       setRateStats(rateData.stats || { total: 0, avg_confidence: 0 });
       setMemories(memData.memories || []);
       setOnboardingStatus(onbData);
+      if (prefData) setPrefs({ ohp_pct: prefData.ohp_pct ?? 0, contingency_pct: prefData.contingency_pct ?? 0 });
     } catch (err) {
       console.error('Load error:', err);
     }
@@ -88,6 +93,20 @@ export default function AIMemoryPage() {
         setAddingMemory(false);
       }
     } catch (err) { alert(err.message || 'Failed to save memory'); }
+  }
+
+  async function handleSavePrefs() {
+    setPrefsSaving(true); setPrefsSaved(false);
+    try {
+      const res = await apiFetch('/pricing-prefs', {
+        method: 'PUT',
+        body: JSON.stringify({ ohp_pct: prefs.ohp_pct, contingency_pct: prefs.contingency_pct }),
+      });
+      setPrefs({ ohp_pct: res.ohp_pct ?? 0, contingency_pct: res.contingency_pct ?? 0 });
+      setPrefsSaved(true);
+      setTimeout(() => setPrefsSaved(false), 2500);
+    } catch (err) { alert(err.message || 'Failed to save'); }
+    setPrefsSaving(false);
   }
 
   async function handleSaveEdit(id) {
@@ -232,6 +251,69 @@ export default function AIMemoryPage() {
           You can remove anything here that you don't want the AI to remember.
         </div>
       </div>
+
+      {/* Pricing margins — the per-user BOQ markup setting */}
+      {prefs && (
+        <div style={{
+          padding: '18px 20px', borderRadius: 10, marginBottom: 20,
+          background: colors.card, border: '1px solid ' + colors.cardBorder,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <PoundIcon size={18} />
+            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Pricing margins</div>
+          </div>
+          <div style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
+            Leave both at 0 and your BOQ totals are the all-in price — every rate already
+            includes the builder's overhead and profit, like a real quote. Set a percentage
+            here to add a visible Contingency and/or Overheads &amp; Profit line on top of
+            every BOQ instead.
+          </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
+              Contingency %
+              <input
+                type="number" min="0" max="100" step="0.5"
+                value={prefs.contingency_pct}
+                onChange={e => setPrefs(p => ({ ...p, contingency_pct: e.target.value }))}
+                style={{
+                  display: 'block', marginTop: 5, width: 110, padding: '9px 10px', borderRadius: 8,
+                  border: '1px solid ' + colors.cardBorder, background: colors.bg, color: colors.text, fontSize: 14,
+                }}
+              />
+            </label>
+            <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
+              Overheads &amp; profit %
+              <input
+                type="number" min="0" max="100" step="0.5"
+                value={prefs.ohp_pct}
+                onChange={e => setPrefs(p => ({ ...p, ohp_pct: e.target.value }))}
+                style={{
+                  display: 'block', marginTop: 5, width: 110, padding: '9px 10px', borderRadius: 8,
+                  border: '1px solid ' + colors.cardBorder, background: colors.bg, color: colors.text, fontSize: 14,
+                }}
+              />
+            </label>
+            <button
+              onClick={handleSavePrefs}
+              disabled={prefsSaving}
+              style={{
+                padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C',
+                fontSize: 13, fontWeight: 700, minHeight: 40,
+              }}
+            >
+              {prefsSaving ? 'Saving…' : prefsSaved ? 'Saved ✓' : 'Save margins'}
+            </button>
+          </div>
+          {(Number(prefs.contingency_pct) > 0 || Number(prefs.ohp_pct) > 0) && (
+            <div style={{ fontSize: 12, color: colors.accent, marginTop: 10 }}>
+              Every new BOQ will show {Number(prefs.contingency_pct) > 0 ? `Contingency (${prefs.contingency_pct}%)` : ''}
+              {Number(prefs.contingency_pct) > 0 && Number(prefs.ohp_pct) > 0 ? ' and ' : ''}
+              {Number(prefs.ohp_pct) > 0 ? `Overheads & Profit (${prefs.ohp_pct}%)` : ''} on top of the priced items.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* User memories section */}
       <div style={{

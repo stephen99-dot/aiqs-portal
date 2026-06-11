@@ -142,11 +142,50 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       }
     }
 
+    // Contingency/OH&P answers also land in the playbook — that's what the
+    // pricer actually reads (getPricingPrefs), not the memory text above.
+    const pctAnswers = {};
+    if (answers.contingency_pct != null && answers.contingency_pct !== '') pctAnswers.contingency_pct = answers.contingency_pct;
+    if (answers.ohp_pct != null && answers.ohp_pct !== '') pctAnswers.ohp_pct = answers.ohp_pct;
+    if (Object.keys(pctAnswers).length > 0) {
+      try { require('./playbooks').setPricingPrefs(db, userId, pctAnswers); }
+      catch (err) { console.error('[Onboarding] pricing prefs save error:', err.message); }
+    }
+
     db.prepare('UPDATE users SET onboarding_completed_at = CURRENT_TIMESTAMP, onboarding_skipped = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
     res.json({ success: true, saved_count: saved.length });
   } catch (e) {
     console.error('[Onboarding] save error:', e.message);
     res.status(500).json({ error: 'Failed to save onboarding' });
+  }
+});
+
+// ── Pricing margins (per-user BOQ setting) ───────────────────────────
+// Default 0/0: BOQ rates are all-in competitive prices with nothing stacked
+// on top. Setting these percentages adds a visible Contingency / OH&P block
+// to every BOQ summary for this user.
+
+router.get('/pricing-prefs', authMiddleware, (req, res) => {
+  try {
+    res.json(require('./playbooks').getPricingPrefs(db, req.user.id));
+  } catch (e) {
+    console.error('[PricingPrefs] load error:', e.message);
+    res.status(500).json({ error: 'Failed to load pricing preferences' });
+  }
+});
+
+router.put('/pricing-prefs', authMiddleware, (req, res) => {
+  try {
+    const { ohp_pct, contingency_pct } = req.body || {};
+    const bad = (v) => v !== undefined && v !== null && v !== '' && (!Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > 100);
+    if (bad(ohp_pct) || bad(contingency_pct)) {
+      return res.status(400).json({ error: 'Percentages must be numbers between 0 and 100' });
+    }
+    const prefs = require('./playbooks').setPricingPrefs(db, req.user.id, { ohp_pct, contingency_pct });
+    res.json(prefs);
+  } catch (e) {
+    console.error('[PricingPrefs] save error:', e.message);
+    res.status(500).json({ error: 'Failed to save pricing preferences' });
   }
 });
 
