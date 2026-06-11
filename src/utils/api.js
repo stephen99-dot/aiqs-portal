@@ -44,7 +44,7 @@ async function apiFetch(endpoint, options = {}) {
   }
   // Estimator add-on endpoints share an extra password header. All Wave 1-5
   // endpoints sit under one of these prefixes.
-  const ESTIMATOR_PREFIXES = ['/estimator', '/finance', '/change-orders', '/invoices', '/payment-schedules', '/documents', '/pm', '/materials'];
+  const ESTIMATOR_PREFIXES = ['/estimator', '/finance', '/change-orders', '/invoices', '/payment-schedules', '/documents', '/pm', '/materials', '/job-photos'];
   if (ESTIMATOR_PREFIXES.some(p => endpoint.startsWith(p))) {
     const eKey = getEstimatorKey();
     if (eKey) headers['x-estimator-key'] = eKey;

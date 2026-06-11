@@ -48,18 +48,21 @@ export default function JobPhotos({ t, jobId, attachTo }) {
     // eslint-disable-next-line
   }, [photos]);
 
-  const addPhoto = async (file) => {
-    if (!file) return;
+  const addPhotos = async (fileList) => {
+    const files = Array.from(fileList || []).filter(f => f && /^image\//.test(f.type || ''));
+    if (files.length === 0) return;
     setUploading(true); setError('');
     try {
-      const compressed = await compressImage(file);
-      const fd = new FormData();
-      fd.append('photo', compressed, compressed.name || 'photo.jpg');
-      fd.append('job_id', jobId);
-      if (attachTo?.kind === 'variation') fd.append('variation_id', attachTo.id);
-      if (attachTo?.kind === 'quote') fd.append('quote_id', attachTo.id);
-      const resp = await fetch('/api/job-photos', { method: 'POST', headers: authHeaders(), body: fd });
-      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Upload failed');
+      for (const file of files) {
+        const compressed = await compressImage(file);
+        const fd = new FormData();
+        fd.append('photo', compressed, compressed.name || 'photo.jpg');
+        fd.append('job_id', jobId);
+        if (attachTo?.kind === 'variation') fd.append('variation_id', attachTo.id);
+        if (attachTo?.kind === 'quote') fd.append('quote_id', attachTo.id);
+        const resp = await fetch('/api/job-photos', { method: 'POST', headers: authHeaders(), body: fd });
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Upload failed');
+      }
       await load();
     } catch (e) { setError(e.message); }
     finally { setUploading(false); }
@@ -94,7 +97,9 @@ export default function JobPhotos({ t, jobId, attachTo }) {
       {error && <div style={{ color: t.danger, fontSize: 13, marginBottom: 8 }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
-        {/* Camera button first — that's the whole point on site */}
+        {/* Two ways in: the camera (one shot), or the photo library (as many
+            as you like). `capture` jumps straight to the camera on phones, so
+            it gets its own tile rather than blocking gallery picks. */}
         <label style={{
           flexShrink: 0, width: 96, height: 96, borderRadius: 12, cursor: 'pointer',
           border: '2px dashed ' + t.border, color: t.textSecondary,
@@ -102,10 +107,23 @@ export default function JobPhotos({ t, jobId, attachTo }) {
           fontSize: 12, fontWeight: 600, textAlign: 'center', gap: 4,
         }}>
           <span style={{ fontSize: 22 }}>📷</span>
-          {uploading ? 'Saving…' : '+ Add a photo'}
+          {uploading ? 'Saving…' : 'Take a photo'}
           <input
             type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files && e.target.files[0]; if (f) addPhoto(f); e.target.value = ''; }}
+            onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}
+          />
+        </label>
+        <label style={{
+          flexShrink: 0, width: 96, height: 96, borderRadius: 12, cursor: 'pointer',
+          border: '2px dashed ' + t.border, color: t.textSecondary,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 600, textAlign: 'center', gap: 4,
+        }}>
+          <span style={{ fontSize: 22 }}>🖼️</span>
+          {uploading ? 'Saving…' : 'Add photos'}
+          <input
+            type="file" accept="image/*" multiple style={{ display: 'none' }}
+            onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}
           />
         </label>
 
