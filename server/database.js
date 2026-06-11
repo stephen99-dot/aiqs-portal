@@ -839,6 +839,12 @@ const migrations = [
   { column: 'trade_type', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN trade_type TEXT" },
   { column: 'day_rates', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN day_rates TEXT" },
   { column: 'setup_completed_at', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN setup_completed_at DATETIME" },
+  // T&Cs acceptance audit trail — recorded on every job submission so the
+  // disclaimer in the Terms (AI output must be verified) is provably agreed.
+  { column: 'terms_accepted_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN terms_accepted_at DATETIME" },
+  { column: 'terms_version', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN terms_version TEXT" },
+  { column: 'terms_accepted_at', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_accepted_at DATETIME" },
+  { column: 'terms_version', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_version TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

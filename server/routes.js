@@ -1317,13 +1317,17 @@ router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res
   try {
     const { title, projectType, description, location } = req.body;
     if (!title || !projectType) return res.status(400).json({ error: 'Project title and type are required' });
+    // Legal gate — same as /submissions: acceptance is mandatory and recorded.
+    if (req.body.terms_accepted !== 'true') {
+      return res.status(400).json({ error: 'Please tick the box to accept the Terms & Conditions before submitting.' });
+    }
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const planInfo = getUserPlanInfo(user);
     if (planInfo.atLimit) return res.status(403).json({ error: 'Monthly project limit reached', code: 'LIMIT_REACHED', usage: planInfo });
     const isPayg = req.body.payg === 'true' || planInfo.isPayg;
     const initialStatus = isPayg ? 'awaiting_payment' : 'submitted';
     const projectId = uuidv4();
-    db.prepare('INSERT INTO projects (id, user_id, title, project_type, description, location, status) VALUES (?, ?, ?, ?, ?, ?, ?)').run(projectId, req.user.id, title, projectType, description || null, location || null, initialStatus);
+    db.prepare('INSERT INTO projects (id, user_id, title, project_type, description, location, status, terms_accepted_at, terms_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(projectId, req.user.id, title, projectType, description || null, location || null, initialStatus, new Date().toISOString(), '2026-03-23');
     if (req.files && req.files.length > 0) {
       const insertFile = db.prepare('INSERT INTO files (id, project_id, filename, original_name, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?)');
       for (const file of req.files) insertFile.run(uuidv4(), projectId, file.filename, file.originalname, path.extname(file.originalname).toLowerCase(), file.size);

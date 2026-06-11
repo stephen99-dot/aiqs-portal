@@ -9,6 +9,7 @@ import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
+import TermsTick from '../components/TermsTick';
 
 const PROJECT_TYPES = [
   'Residential Extension',
@@ -52,6 +53,7 @@ export default function SubmitDrawingsPage() {
   const [files, setFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
   const [status, setStatus] = useState(null); // { type: 'success'|'error', msg: string }
   const [enhancing, setEnhancing] = useState(false);
@@ -68,7 +70,7 @@ export default function SubmitDrawingsPage() {
     apiFetch('/credits').then(setCredits).catch(() => {});
   }, []);
 
-  const canSubmit = !!projectType && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && !submitting;
+  const canSubmit = !!projectType && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting;
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
@@ -161,6 +163,7 @@ export default function SubmitDrawingsPage() {
       const fd = new FormData();
       fd.append('project_type', projectType);
       fd.append('message', message.trim());
+      fd.append('terms_accepted', 'true');
       for (const f of files) fd.append('files', f, f.name);
 
       const data = await apiFetch('/submissions', { method: 'POST', body: fd });
@@ -488,6 +491,8 @@ export default function SubmitDrawingsPage() {
             </>
           )}
         </button>
+
+        <TermsTick checked={termsAccepted} onChange={setTermsAccepted} />
 
         {/* Submit */}
         <button

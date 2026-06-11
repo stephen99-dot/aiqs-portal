@@ -17,6 +17,10 @@ const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
 
 const router = express.Router();
 
+// Matches the "Last updated" date on theaiqs.co.uk/terms.html — bump when the
+// Terms change so acceptance records say WHICH terms were agreed.
+const TERMS_VERSION = '2026-03-23';
+
 const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
 const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';
 
@@ -176,6 +180,11 @@ router.post('/', uploadFiles, async (req, res) => {
     if (!projectType) return res.status(400).json({ error: 'Project type is required' });
     if (message.length < 20) return res.status(400).json({ error: 'Please describe your project (min 20 characters)' });
     if (files.length === 0) return res.status(400).json({ error: 'Please upload at least one drawing or document' });
+    // Legal gate — enforced here, not just in the UI, and recorded with a
+    // timestamp + version below so there's an audit trail of acceptance.
+    if (req.body.terms_accepted !== 'true') {
+      return res.status(400).json({ error: 'Please tick the box to accept the Terms & Conditions before submitting.' });
+    }
 
     const submissionId = 'sub_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
@@ -234,8 +243,8 @@ router.post('/', uploadFiles, async (req, res) => {
 
     db.prepare(`
       INSERT INTO drawing_submissions
-        (id, user_id, submission_id, project_type, message, file_count, file_names, pipedream_status, credits_remaining_after)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, user_id, submission_id, project_type, message, file_count, file_names, pipedream_status, credits_remaining_after, terms_accepted_at, terms_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       uuidv4(),
       user.id,
@@ -245,7 +254,9 @@ router.post('/', uploadFiles, async (req, res) => {
       files.length,
       JSON.stringify(files.map(f => f.originalname)),
       pipedreamStatus,
-      creditsRemaining
+      creditsRemaining,
+      new Date().toISOString(),
+      TERMS_VERSION
     );
 
     res.json({
