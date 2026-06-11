@@ -1295,6 +1295,26 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     return Number.isFinite(parseFloat(it.qty));
   });
 
+  // Strip markup line items the model shouldn't have recorded: contingency,
+  // overheads & profit, margin, and prelim-PERCENTAGE allowances. These are
+  // added by the summary below (contingency_pct + ohp_pct), so a model-emitted
+  // line gets DOUBLE-counted otherwise — the single biggest cause of an Atlas
+  // total running ~20%+ above a like-for-like all-in price. Real itemised
+  // prelims (scaffold, welfare, skips, supervision) are NOT stripped.
+  const _markupRe = /\b(conting\w*|overheads?\s*(&|and)?\s*profit|o\.?h\.?\s*&\s*p|\bohp\b|profit\s+margin|mark-?up|main\s+contractor'?s?\s+(margin|overhead)|design\s+risk\s+allowance)\b/i;
+  const _strippedMarkup = [];
+  lockedItems = lockedItems.filter((it) => {
+    const text = ((it.key || '') + ' ' + (it.description || '')).toLowerCase();
+    // Only treat as a markup line when it reads like a percentage allowance,
+    // not e.g. "contingency plan" prose — require %, "allowance", or a bare
+    // "contingency"/"overheads & profit" heading.
+    if (_markupRe.test(text) && /%|allowance|sum\b|provision|overheads|profit|contingenc/i.test(text)) {
+      _strippedMarkup.push(it.description || it.key);
+      return false;
+    }
+    return true;
+  });
+
   const locationInfo = detectLocationFactor(location);
 
   // Region is driven by the property address (Phase: detect-from-drawings).
@@ -1391,6 +1411,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const duplicateWarnings = detectDuplicatesAndOverlaps(lockedItems);
   warnings.push(...crossResult.warnings);
   warnings.push(...duplicateWarnings);
+  if (_strippedMarkup.length > 0) {
+    warnings.push(`Removed ${_strippedMarkup.length} markup line item${_strippedMarkup.length === 1 ? '' : 's'} (${_strippedMarkup.slice(0, 3).join('; ')}${_strippedMarkup.length > 3 ? '…' : ''}) — contingency and overheads & profit are added automatically in the summary, so keeping these would double-count them.`);
+  }
   if (crossResult.corrections.length > 0) {
     warnings.push(`⚡ ${crossResult.corrections.length} quantities were auto-corrected before pricing to prevent over-counting.`);
   }
