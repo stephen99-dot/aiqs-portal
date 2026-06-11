@@ -240,4 +240,127 @@ async function scrapeUrl(url) {
   };
 }
 
-module.exports = { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS, ADAPTERS, USING_SCRAPER_API };
+// ─── Search-page discovery ────────────────────────────────────────────────────
+// Given a material name, hit the supplier's PUBLIC search page once and pick
+// the best-matching product link off it. Only URLs actually present in the
+// live search HTML are ever returned — nothing is fabricated — and the caller
+// then scrapes that product page, which validates price + image or fails.
+
+const SEARCH_ADAPTERS = {
+  screwfix: {
+    search: (q) => 'https://www.screwfix.com/search?search=' + encodeURIComponent(q),
+    productRe: /href=["']((?:https?:\/\/www\.screwfix\.com)?\/p\/[a-z0-9-]+\/[a-z0-9]+)["']/gi,
+    origin: 'https://www.screwfix.com',
+  },
+  toolstation: {
+    search: (q) => 'https://www.toolstation.com/search?q=' + encodeURIComponent(q),
+    productRe: /href=["']((?:https?:\/\/www\.toolstation\.com)?\/[a-z0-9-]+\/p\d{4,})["']/gi,
+    origin: 'https://www.toolstation.com',
+  },
+  wickes: {
+    search: (q) => 'https://www.wickes.co.uk/search?text=' + encodeURIComponent(q),
+    productRe: /href=["']((?:https?:\/\/www\.wickes\.co\.uk)?\/[A-Za-z0-9-+%]+\/p\/\d{5,})["']/gi,
+    origin: 'https://www.wickes.co.uk',
+  },
+  bandq: {
+    search: (q) => 'https://www.diy.com/search?term=' + encodeURIComponent(q),
+    productRe: /href=["']((?:https?:\/\/www\.diy\.com)?\/departments\/[a-z0-9-]+\/[0-9_]+_BQ\.prd)["']/gi,
+    origin: 'https://www.diy.com',
+  },
+  selco: {
+    search: (q) => 'https://www.selcobw.com/search?q=' + encodeURIComponent(q),
+    productRe: /href=["']((?:https?:\/\/www\.selcobw\.com)?\/[a-z0-9-]+-[a-z0-9-]+-\d+)["']/gi,
+    origin: 'https://www.selcobw.com',
+  },
+};
+
+// Same token collapsing the catalogue search uses: "4 by 2" == "4x2" == "4X2".
+function normToken(s) {
+  return String(s || '').toLowerCase().replace(/\bby\b/g, 'x').replace(/[^a-z0-9.]+/g, '');
+}
+function queryTokens(q) {
+  // Fold "4 by 2" -> "4x2" BEFORE splitting, or the words land in separate
+  // tokens and the dimension is lost.
+  return String(q || '')
+    .toLowerCase()
+    .replace(/(\d)\s*by\s*(\d)/g, '$1x$2')
+    .split(/[\s,/()]+/)
+    .map(normToken)
+    .filter(tok => tok.length >= 2);
+}
+
+// Candidate product links from a search results page: JSON-LD ItemList first
+// (the stable signal), then the adapter's product-URL pattern over anchors.
+function parseSearchLinks(html, sa) {
+  const out = [];
+  const seen = new Set();
+  const push = (u) => {
+    if (!u) return;
+    const abs = u.startsWith('http') ? u : sa.origin + u;
+    const clean = abs.split('#')[0];
+    if (!seen.has(clean)) { seen.add(clean); out.push(clean); }
+  };
+  // JSON-LD ItemList entries
+  const re = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const node = JSON.parse(m[1].trim());
+      const arr = Array.isArray(node) ? node : [node];
+      for (const n of arr) {
+        const items = n && n.itemListElement;
+        if (!Array.isArray(items)) continue;
+        for (const it of items) {
+          push(it?.url || it?.item?.url || (typeof it?.item === 'string' ? it.item : null));
+        }
+      }
+    } catch { /* skip malformed */ }
+  }
+  // Anchor pattern fallback
+  let a;
+  sa.productRe.lastIndex = 0;
+  while ((a = sa.productRe.exec(html))) push(a[1]);
+  return out.slice(0, 10);
+}
+
+// Score a product URL's slug against the query tokens. The slug carries the
+// product name on all five retailers, so this is a cheap relevance check that
+// keeps "Multi-Finish Plaster 25kg" from matching a paintbrush.
+function scoreCandidate(url, tokens) {
+  const slug = normToken(decodeURIComponent(url.replace(/^https?:\/\/[^/]+/, '')));
+  let hits = 0;
+  for (const tok of tokens) if (slug.includes(tok)) hits++;
+  return tokens.length ? hits / tokens.length : 0;
+}
+
+// Find the best product URL for `query` on one supplier. Returns
+// { url, score } or null. Throws on fetch-level failures so callers can log.
+async function discoverProduct(adapterId, query) {
+  const sa = SEARCH_ADAPTERS[adapterId];
+  if (!sa) return null;
+  const searchUrl = sa.search(query);
+  const allowed = USING_SCRAPER_API ? true : await isAllowedByRobots(searchUrl);
+  if (!allowed) {
+    const err = new Error('Search page disallowed by robots.txt');
+    err.code = 'ROBOTS_DISALLOWED';
+    throw err;
+  }
+  if (!USING_SCRAPER_API) await throttle(hostOf(searchUrl));
+  const html = await fetchText(searchUrl);
+  const links = parseSearchLinks(html, sa);
+  if (links.length === 0) return null;
+  const tokens = queryTokens(query);
+  let best = null;
+  for (const url of links) {
+    const score = scoreCandidate(url, tokens);
+    if (!best || score > best.score) best = { url, score };
+  }
+  // Demand a real overlap: at least a third of the words, two words minimum
+  // (one is enough only for single-word queries). Below that, no match is
+  // better than a wrong match.
+  const minHits = tokens.length === 1 ? 1 : 2;
+  if (!best || best.score < 0.34 || Math.round(best.score * tokens.length) < minHits) return null;
+  return best;
+}
+
+module.exports = { scrapeUrl, adapterFor, SUPPORTED_SUPPLIERS, ADAPTERS, USING_SCRAPER_API, discoverProduct, SEARCH_ADAPTERS, parseSearchLinks, scoreCandidate, queryTokens };
