@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -163,8 +163,47 @@ function EstimatorBuilderPageInner() {
   const [targetMarginPct, setTargetMarginPct] = useState(15);
 
   const [phase, setPhase] = useState(isNew ? 'input' : 'loading'); // input | drafting | pricing | ready | loading | error
-  const [phaseMsg, setPhaseMsg] = useState('');
   const [error, setError] = useState('');
+
+  // C1 — "Speak the job": Web Speech API dictation straight into the box.
+  // Quietly absent where the browser doesn't support it.
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const speechSupported = !!SpeechRec;
+  const recognitionRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const toggleListening = () => {
+    if (listening) { try { recognitionRef.current?.stop(); } catch (e) {} setListening(false); return; }
+    try {
+      const rec = new SpeechRec();
+      rec.lang = 'en-GB';
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.onresult = (e) => {
+        let said = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) said += e.results[i][0].transcript;
+        }
+        if (said) setInputText(prev => (prev ? prev.trimEnd() + ' ' : '') + said.trim());
+      };
+      rec.onend = () => setListening(false);
+      rec.onerror = () => setListening(false);
+      recognitionRef.current = rec;
+      rec.start();
+      setListening(true);
+    } catch (e) { setListening(false); }
+  };
+
+  // Plain-English progress while the AI prices the job.
+  const BUSY_MSGS = ['Reading the job…', 'Working out the labour…', 'Adding materials…', 'Adding your markup…', 'Nearly there…'];
+  const [busyMsg, setBusyMsg] = useState(BUSY_MSGS[0]);
+  useEffect(() => {
+    if (phase !== 'drafting' && phase !== 'pricing') return;
+    let i = 0;
+    setBusyMsg(BUSY_MSGS[0]);
+    const timer = setInterval(() => { i = Math.min(i + 1, BUSY_MSGS.length - 1); setBusyMsg(BUSY_MSGS[i]); }, 2200);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line
+  }, [phase]);
 
   // Quote being edited
   const [quoteId, setQuoteId] = useState(id || null);
@@ -290,8 +329,8 @@ function EstimatorBuilderPageInner() {
       setError('Please describe the job in a bit more detail.');
       return;
     }
+    if (listening) { try { recognitionRef.current?.stop(); } catch (e) {} setListening(false); }
     setPhase('drafting');
-    setPhaseMsg('AI is drafting your quote…');
     try {
       const r = await apiFetch('/estimator/draft', {
         method: 'POST',
@@ -306,7 +345,6 @@ function EstimatorBuilderPageInner() {
         }),
       });
       setPhase('pricing');
-      setPhaseMsg('Pricing from rate library…');
       setClientName(r.client_name || '');
       setProjectName(r.project_name || '');
       setLines((r.lines || []).map(l => ({ ...l, est_rate: !!l.est_rate })));
@@ -459,89 +497,82 @@ function EstimatorBuilderPageInner() {
   }
 
   // ─── Input phase (only when starting fresh) ──────────────────────────────
+  // C1 — describing the job (out loud or typed) IS the front door. The quick
+  // form and site measurements still exist, one fold away.
   if (phase === 'input' || phase === 'drafting' || phase === 'pricing') {
     const busy = phase === 'drafting' || phase === 'pricing';
     return (
-      <div style={{ padding: 24, color: t.text, maxWidth: 880, margin: '0 auto' }}>
-        <div style={{ marginBottom: 16 }}>
-          <button onClick={() => nav('/estimator')} style={btnLink(t)}>← Quotes</button>
-        </div>
-        <h1 style={{ margin: '0 0 6px 0', fontSize: 24 }}>New quote</h1>
-        <div style={{ color: t.textSecondary, fontSize: 14, marginBottom: 20 }}>
-          Describe the job, or fill in a few fields. We'll draft an itemised quote in seconds.
+      <div style={{ padding: '20px 16px 120px', color: t.text, maxWidth: 680, margin: '0 auto' }}>
+        <button onClick={() => nav('/jobs')} style={btnLink(t)}>← Back</button>
+        <h1 style={{ margin: '8px 0 4px 0', fontSize: 26 }}>New quote</h1>
+        <div style={{ color: t.textSecondary, fontSize: 14.5, marginBottom: 16 }}>
+          Say it or type it — you get a priced quote you can tweak.
         </div>
 
-        {/* Mode toggle */}
-        <div style={{ display: 'inline-flex', background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 4, marginBottom: 16, flexWrap: 'wrap' }}>
-          <ToggleBtn t={t} active={inputMode === 'describe'} onClick={() => setInputMode('describe')}>Describe the job</ToggleBtn>
-          <ToggleBtn t={t} active={inputMode === 'form'} onClick={() => setInputMode('form')}>Quick form</ToggleBtn>
-          <ToggleBtn t={t} active={inputMode === 'measure'} onClick={() => setInputMode('measure')}>Site measurements</ToggleBtn>
-        </div>
+        {inputMode === 'describe' && (
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+            <textarea
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              placeholder="Describe the job like you'd tell your mate — e.g. Kitchen extension on the back, 5 by 4, brick and block, pitched tiled roof, new kitchen fitted, plumbing and sparks, decorated through."
+              rows={6}
+              disabled={busy}
+              style={{ ...txtarea(t), fontSize: 16, minHeight: 150, lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              {speechSupported && (
+                <button onClick={toggleListening} disabled={busy} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  minHeight: 48, padding: '0 18px', borderRadius: 999, cursor: 'pointer',
+                  background: listening ? t.danger : 'transparent',
+                  color: listening ? '#fff' : t.text,
+                  border: '1.5px solid ' + (listening ? t.danger : t.accent),
+                  fontSize: 14, fontWeight: 700,
+                }}>
+                  {listening ? '◼ Listening — tap when done' : '🎤 Speak the job'}
+                </button>
+              )}
+              <select value={projectType} onChange={e => setProjectType(e.target.value)} disabled={busy}
+                style={{ ...input(t), width: 'auto', minHeight: 48, fontSize: 14 }}>
+                {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
 
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          {inputMode === 'describe' && (
-            <>
-              <label style={lbl(t)}>Describe the job</label>
-              <textarea
-                value={inputText}
-                onChange={e => setInputText(e.target.value)}
-                placeholder="e.g. Single-storey kitchen extension, 5m x 4m, brick & block walls, pitched tiled roof, internal fit-out, plumbing, electrics, decorating."
-                rows={5}
-                style={txtarea(t)}
-              />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-                <div>
-                  <label style={lbl(t)}>Project type</label>
-                  <select value={projectType} onChange={e => setProjectType(e.target.value)} style={input(t)}>
-                    {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={lbl(t)}>Currency</label>
-                  <select value={currency} onChange={e => setCurrency(e.target.value)} style={input(t)}>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="EUR">EUR (€)</option>
-                  </select>
-                </div>
+        {inputMode !== 'describe' && (
+          <button onClick={() => setInputMode('describe')} style={{ ...btnLink(t), marginBottom: 8 }}>← Back to describing the job</button>
+        )}
+        {inputMode === 'form' && (
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <div>
+                <label style={lbl(t)}>Project type</label>
+                <select value={projectType} onChange={e => setProjectType(e.target.value)} style={input(t)}>
+                  {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
               </div>
-            </>
-          )}
-          {inputMode === 'form' && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={lbl(t)}>Project type</label>
-                  <select value={projectType} onChange={e => setProjectType(e.target.value)} style={input(t)}>
-                    {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={lbl(t)}>Currency</label>
-                  <select value={currency} onChange={e => setCurrency(e.target.value)} style={input(t)}>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="EUR">EUR (€)</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={lbl(t)}>Rough size</label>
-                  <input value={formSize} onChange={e => setFormSize(e.target.value)} placeholder="e.g. 5m x 4m, 25 m²" style={input(t)} />
-                </div>
-                <div>
-                  <label style={lbl(t)}>Location</label>
-                  <input value={formLocation} onChange={e => setFormLocation(e.target.value)} placeholder="e.g. Bristol" style={input(t)} />
-                </div>
+              <div>
+                <label style={lbl(t)}>Rough size</label>
+                <input value={formSize} onChange={e => setFormSize(e.target.value)} placeholder="e.g. 5m x 4m, 25 m²" style={input(t)} />
               </div>
-              <label style={lbl(t)}>Notes (optional)</label>
-              <textarea
-                value={formNotes}
-                onChange={e => setFormNotes(e.target.value)}
-                placeholder="Anything specific — materials, finishes, target spec level"
-                rows={3}
-                style={txtarea(t)}
-              />
-            </>
-          )}
-          {inputMode === 'measure' && (
+              <div>
+                <label style={lbl(t)}>Location</label>
+                <input value={formLocation} onChange={e => setFormLocation(e.target.value)} placeholder="e.g. Bristol" style={input(t)} />
+              </div>
+            </div>
+            <label style={lbl(t)}>Notes (optional)</label>
+            <textarea
+              value={formNotes}
+              onChange={e => setFormNotes(e.target.value)}
+              placeholder="Anything specific — materials, finishes, spec level"
+              rows={3}
+              style={txtarea(t)}
+            />
+          </div>
+        )}
+        {inputMode === 'measure' && (
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <MeasurementEditor
               t={t}
               projectType={projectType} setProjectType={setProjectType}
@@ -549,19 +580,33 @@ function EstimatorBuilderPageInner() {
               elements={elements} setElements={setElements}
               notes={measureNotes} setNotes={setMeasureNotes}
             />
-          )}
-        </div>
-
-        {/* Build-up settings */}
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 12 }}>Quote build-up</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-            <PctField t={t} label="Your markup %" value={ohpPct} onChange={setOhpPct} />
-            <PctField t={t} label="Contingency %" value={contPct} onChange={setContPct} />
-            <PctField t={t} label="VAT %" value={vatPct} onChange={setVatPct} />
-            <PctField t={t} label="Target margin %" value={targetMarginPct} onChange={setTargetMarginPct} />
           </div>
-        </div>
+        )}
+
+        {/* The knobs most builders never touch — one fold away */}
+        <details style={{ marginBottom: 12 }}>
+          <summary style={{ cursor: 'pointer', color: t.textSecondary, fontSize: 14, fontWeight: 600, minHeight: 44, display: 'flex', alignItems: 'center' }}>
+            Markup, VAT and other ways to start
+          </summary>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              <ToggleBtn t={t} active={inputMode === 'form'} onClick={() => setInputMode(inputMode === 'form' ? 'describe' : 'form')}>Quick form</ToggleBtn>
+              <ToggleBtn t={t} active={inputMode === 'measure'} onClick={() => setInputMode(inputMode === 'measure' ? 'describe' : 'measure')}>Site measurements</ToggleBtn>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+              <PctField t={t} label="Your markup %" value={ohpPct} onChange={setOhpPct} />
+              <PctField t={t} label="Contingency %" value={contPct} onChange={setContPct} />
+              <PctField t={t} label="VAT %" value={vatPct} onChange={setVatPct} />
+              <div>
+                <label style={lbl(t)}>Currency</label>
+                <select value={currency} onChange={e => setCurrency(e.target.value)} style={input(t)}>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="EUR">EUR (€)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </details>
 
         {error && <div style={errBox(t)}>{error}</div>}
 
@@ -569,15 +614,18 @@ function EstimatorBuilderPageInner() {
           onClick={generate}
           disabled={busy}
           style={{
-            background: busy ? t.surface : t.accent, color: '#fff', border: 'none', borderRadius: 8,
-            padding: '12px 22px', fontSize: 15, fontWeight: 600, cursor: busy ? 'wait' : 'pointer',
-            opacity: busy ? 0.7 : 1,
+            width: '100%', minHeight: 56, borderRadius: 14, border: 'none',
+            background: busy ? t.surface : t.accent, color: busy ? t.textSecondary : '#fff',
+            fontSize: 17, fontWeight: 700, cursor: busy ? 'wait' : 'pointer',
           }}
         >
-          {busy ? phaseMsg : 'Generate quote →'}
+          {busy ? busyMsg : 'Price the job'}
         </button>
-
-        {busy && <PhaseStrip t={t} phase={phase} />}
+        {busy && (
+          <div style={{ textAlign: 'center', color: t.textMuted, fontSize: 13, marginTop: 10 }}>
+            Usually 10–20 seconds. Your rates are being used where they fit.
+          </div>
+        )}
       </div>
     );
   }
@@ -744,10 +792,16 @@ function EstimatorBuilderPageInner() {
                       })}
                       placeholder="Description — type to search materials"
                     />
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr', gap: 8, marginTop: 8 }}>
                       <div>
                         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
-                        <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16 }} />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => updateLine(idx, { qty: Math.max(0, Math.round((num(ln.qty) - 1) * 100) / 100) })}
+                            style={{ width: 40, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>−</button>
+                          <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16, textAlign: 'center' }} />
+                          <button onClick={() => updateLine(idx, { qty: Math.round((num(ln.qty) + 1) * 100) / 100 })}
+                            style={{ width: 40, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>+</button>
+                        </div>
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Unit</div>
@@ -948,30 +1002,6 @@ function EstimatorBuilderPageInner() {
 
 // ─── Small components ──────────────────────────────────────────────────────
 
-function PhaseStrip({ t, phase }) {
-  const steps = [
-    { key: 'drafting', label: 'Drafting' },
-    { key: 'pricing', label: 'Pricing' },
-    { key: 'ready', label: 'Ready' },
-  ];
-  return (
-    <div style={{ marginTop: 18, display: 'flex', gap: 6 }}>
-      {steps.map((s) => {
-        const reached = (phase === 'drafting' && s.key === 'drafting')
-          || (phase === 'pricing' && s.key !== 'ready')
-          || (phase === 'ready');
-        return (
-          <div key={s.key} style={{
-            flex: 1, padding: '6px 10px', borderRadius: 6, textAlign: 'center', fontSize: 12,
-            background: reached ? t.accent : t.surface,
-            color: reached ? '#fff' : t.textMuted,
-            border: '1px solid ' + (reached ? t.accent : t.border),
-          }}>{s.label}</div>
-        );
-      })}
-    </div>
-  );
-}
 
 function SummaryRow({ t, label, value, bold }) {
   return (
