@@ -5,6 +5,7 @@ import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
 import { FileTextIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 // All quotes — reached from Jobs ("All quotes"). Cards, not a table: the
 // customer is the headline, "Quote · 20 May" the subtitle, the reference in
@@ -97,7 +98,7 @@ function EstimatorPageInner() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Office in a Box</div>
-          <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>All quotes</h1>
+          <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>All quotes <HelpTip t={t} title="All quotes" text={"Every quote you've made, newest first.\n\nDay to day you'll mostly work from the job page — this list catches anything not tied to a job yet.\n\n'Send the quote' gives you a link your client opens on their phone, where they can accept it with a typed signature."} /></h1>
         </div>
         <button
           onClick={() => nav('/estimator/new')}

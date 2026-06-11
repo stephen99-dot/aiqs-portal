@@ -16,19 +16,19 @@ const AMBER = '#F59E0B';
 const AMBER_DIM = '#D97706';
 
 const FEATURES = [
-  { Icon: RulerIcon,      title: 'Quotes & Estimates', blurb: 'Turn a priced BOQ into a polished, branded client quote in minutes — win more work with proposals that look the part.' },
-  { Icon: BuildingIcon,   title: 'Project Manager',    blurb: 'Track every job from first enquiry to final account. Tasks, milestones and live status, all in one view.' },
-  { Icon: TrendingUpIcon, title: 'Finance & Cashflow', blurb: "See what's owed, what's overdue and what's coming in. Job-level profit and overhead tracking that actually adds up." },
-  { Icon: CreditCardIcon, title: 'Invoices & Payments',blurb: 'Raise invoices and payment schedules against each job. Clear, branded bills that get you paid faster.' },
-  { Icon: FileTextIcon,   title: 'Documents',          blurb: 'Generate contracts, letters and certificates from templates — stamped with your logo and brand colours.' },
-  { Icon: LayersIcon,     title: 'Trade Calculators',  blurb: 'Brick, block, concrete, plaster, roof and paint quantities — quick maths without leaving the portal.' },
+  { Icon: RulerIcon,      title: 'Speak a job, get a quote', blurb: "Describe the job like you'd tell your mate — out loud if you like. A priced, branded quote comes back in seconds, built on your own rates." },
+  { Icon: CreditCardIcon, title: 'Get paid without chasing', blurb: 'Clients accept quotes and pay invoices on their phone. Polite reminders go out by themselves — due date, a week late, two weeks late.' },
+  { Icon: TrendingUpIcon, title: 'CIS & VAT done right',     blurb: 'CIS deductions split labour from materials automatically, reverse-charge invoices carry the exact HMRC wording, and your accountant gets Xero/QuickBooks files in one tap.' },
+  { Icon: BuildingIcon,   title: 'Every job in one place',   blurb: 'The quote, invoices, payments, changes, photos and paperwork for each job on one screen — with one-tap call and WhatsApp for the customer.' },
+  { Icon: FileTextIcon,   title: 'Paperwork that writes itself', blurb: 'Contracts, terms and letters stamped with your logo. Need an awkward letter? Say what for, read the draft, send it.' },
+  { Icon: LayersIcon,     title: 'Photos & site tools',      blurb: "Snap the rot before it's covered up and pin the photo to the change you price. Trade calculators and live materials prices included." },
 ];
 
 const BENEFITS = [
-  'Everything in one login — no more juggling spreadsheets and apps',
-  'Branded to your company on every quote, invoice and document',
-  'Built on the same AI QS pricing that produces your BOQs',
-  'No setup, no migration — it just appears in your portal',
+  'Send a quote by WhatsApp — your client accepts it on their phone',
+  'Automatic payment reminders and one-tap chasers, politely persistent',
+  'CIS, reverse-charge VAT and retention handled on every invoice',
+  'Branded to your company on every quote, invoice and letter',
 ];
 
 export default function OfficeInABoxPage() {
@@ -154,9 +154,9 @@ export default function OfficeInABoxPage() {
               }}>in one tab.</span>
             </h1>
             <p style={{ margin: '0 0 22px', fontSize: 16.5, lineHeight: 1.55, color: t.textSecondary, maxWidth: 540 }}>
-              Stop stitching together spreadsheets, Word templates and accounting apps.
-              Quoting, project management, invoicing, cashflow and documents — all inside
-              your AI QS portal, powered by the same pricing that builds your BOQs.
+              Say the job out loud and a priced quote comes back. Send it by WhatsApp,
+              watch it get accepted, invoiced and paid — CIS and VAT handled. Built for
+              the van, not the desk.
             </p>
             <div className="oiab-hero-cta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
               {isInterested ? (
@@ -189,6 +189,16 @@ export default function OfficeInABoxPage() {
                   </span>
                 </>
               )}
+              <button
+                onClick={() => navigate('/office-demo')}
+                style={{
+                  padding: '13px 22px', borderRadius: 13,
+                  border: `1.5px solid ${amberBorder}`, background: 'transparent',
+                  color: t.text, fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Try it with example data
+              </button>
             </div>
             {error && <div style={{ fontSize: 12.5, color: t.danger, marginTop: 10 }}>{error}</div>}
           </div>

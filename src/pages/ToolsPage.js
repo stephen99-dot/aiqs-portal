@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import EstimatorGate from '../components/EstimatorGate';
 import { CalculatorIcon, BrickIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 // TOOLS — the reference tools re-homed off the main navigation.
 // Calculators and Materials Pricing keep their own pages and URLs;
@@ -35,7 +36,7 @@ function Inner() {
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
-        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Tools</h1>
+        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Tools <HelpTip t={t} title="Tools" text={"Reference tools for when you're on site: trade calculators (concrete, bricks, plasterboard…) and current supplier prices you can drop into a quote."} /></h1>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {tools.map(tool => (

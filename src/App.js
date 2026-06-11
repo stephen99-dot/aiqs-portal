@@ -42,7 +42,9 @@ import CalculatorsPage from './pages/CalculatorsPage';
 import MaterialsPage from './pages/MaterialsPage';
 import TodayPage from './pages/TodayPage';
 import ToolsPage from './pages/ToolsPage';
+import SetupWizardPage from './pages/SetupWizardPage';
 import OfficeInABoxPage from './pages/OfficeInABoxPage';
+import OfficeDemoPage from './pages/OfficeDemoPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
@@ -114,6 +116,7 @@ function AppInner() {
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           {/* Office in a Box — three destinations: Today / Jobs / Money (+ Tools). */}
           <Route path="/office" element={<TodayPage />} />
+          <Route path="/office/setup" element={<SetupWizardPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/money" element={<MoneyPage />} />
@@ -136,6 +139,8 @@ function AppInner() {
           <Route path="/finance/jobs/:id" element={<JobIdRedirect />} />
           <Route path="/invoices" element={<Navigate to="/money" replace />} />
           <Route path="/office-in-a-box" element={<OfficeInABoxPage />} />
+          {/* D — example-data sandbox, open to non-subscribers on purpose. */}
+          <Route path="/office-demo" element={<OfficeDemoPage />} />
           <Route path="/branding" element={<BrandingPage />} />
           <Route path="/settings" element={<BrandingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />

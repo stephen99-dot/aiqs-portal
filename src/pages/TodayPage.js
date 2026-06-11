@@ -6,6 +6,7 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
 import { CheckCircleIcon, FileTextIcon, PoundIcon, ImageIcon, WrenchIcon } from '../components/Icons';
+import HelpTip from '../components/HelpTip';
 
 // TODAY — the Office in a Box home screen (/office).
 // Glanceable in 5 seconds on a phone: three plain money numbers, the things
@@ -31,14 +32,21 @@ function Inner() {
   const [cards, setCards] = useState(null);     // PM alert cards
   const [error, setError] = useState('');
   const [nudge, setNudge] = useState(null);     // { url } share sheet for a quote follow-up
+  // C2 — grounded Q&A over the builder's own data.
+  const [thread, setThread] = useState([]);     // [{ role, content }]
+  const [question, setQuestion] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [agg, quotes, alerts] = await Promise.all([
+      const [agg, quotes, alerts, settings] = await Promise.all([
         apiFetch('/invoices/_aggregates/dashboard'),
         apiFetch('/estimator/quotes'),
         apiFetch('/pm/alerts'),
+        apiFetch('/finance/settings').catch(() => null),
       ]);
+      setNeedsSetup(!!settings && !settings.settings?.setup_completed_at);
       const quoted = (quotes.quotes || [])
         .filter(q => q.status === 'sent')
         .reduce((s, q) => s + num(q.grand_total), 0);
@@ -75,6 +83,25 @@ function Inner() {
     if (a.link) nav(a.link);
   };
 
+  const ask = async (q) => {
+    const text = (q || question).trim();
+    if (!text || asking) return;
+    setQuestion('');
+    setThread(prev => [...prev, { role: 'user', content: text }]);
+    setAsking(true);
+    try {
+      const r = await apiFetch('/pm/ask', {
+        method: 'POST',
+        body: JSON.stringify({ question: text, history: thread.slice(-6) }),
+      });
+      setThread(prev => [...prev, { role: 'assistant', content: r.answer }]);
+    } catch (e) {
+      setThread(prev => [...prev, { role: 'assistant', content: e.message || 'That didn\'t work — try again.' }]);
+    } finally {
+      setAsking(false);
+    }
+  };
+
   const firstName = (user?.fullName || '').split(' ')[0];
 
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -83,11 +110,25 @@ function Inner() {
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
-        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today</h1>
+        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today <HelpTip t={t} title="Today" text={"Your home screen.\n\nThe three numbers at the top are your money position right now. Below that, anything that needs chasing — each card has one button that does the obvious thing.\n\nIt updates itself every time you come back to it. You never need to refresh."} /></h1>
         <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 2 }}>{today}{firstName ? ' · ' + firstName : ''}</div>
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 16 }}>{error}</div>}
+
+      {/* B2 — first run: two minutes of set-up, never forced */}
+      {needsSetup && (
+        <button onClick={() => nav('/office/setup')} style={{
+          display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+          background: 'rgba(245,158,11,0.08)', border: '1px solid ' + t.accent + '66',
+          borderRadius: 12, padding: '14px 16px', marginBottom: 16, color: t.text,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Two minutes of set-up</div>
+          <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 4 }}>
+            Your name, your logo, your colour — then every quote and invoice goes out looking like yours. Tap to start.
+          </div>
+        </button>
+      )}
 
       {/* The three numbers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 22 }}>
@@ -138,11 +179,59 @@ function Inner() {
       )}
 
       {/* Quick actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 24 }}>
         <QuickAction t={t} Icon={FileTextIcon} label="New quote" onClick={() => nav('/estimator/new')} primary />
         <QuickAction t={t} Icon={PoundIcon} label="New invoice" onClick={() => nav('/money?new=1')} />
         <QuickAction t={t} Icon={ImageIcon} label="Add a photo" onClick={() => nav('/jobs')} />
         <QuickAction t={t} Icon={WrenchIcon} label="Tools" onClick={() => nav('/tools')} />
+      </div>
+
+      {/* C2 — ask about your jobs (answers come only from your own data) */}
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700 }}>Ask about your jobs</div>
+        <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2, marginBottom: 10 }}>
+          Answers come straight from your own quotes, jobs and invoices — nothing made up.
+        </div>
+
+        {thread.length === 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {['Who owes me the most?', 'Am I making money on my jobs?', "What's still to invoice?"].map(sugg => (
+              <button key={sugg} onClick={() => ask(sugg)} style={{
+                minHeight: 38, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
+                background: t.surface, color: t.textSecondary, border: '1px solid ' + t.border,
+                fontSize: 12.5, fontWeight: 600,
+              }}>{sugg}</button>
+            ))}
+          </div>
+        )}
+
+        {thread.map((m, i) => (
+          <div key={i} style={{
+            marginBottom: 8, padding: '10px 12px', borderRadius: 10, fontSize: 14, lineHeight: 1.5,
+            background: m.role === 'user' ? t.surface : 'rgba(245,158,11,0.07)',
+            border: '1px solid ' + (m.role === 'user' ? t.border : t.accent + '33'),
+            color: t.text, whiteSpace: 'pre-wrap',
+          }}>{m.content}</div>
+        ))}
+        {asking && <div style={{ color: t.textMuted, fontSize: 13, marginBottom: 8 }}>Checking your numbers…</div>}
+
+        <form onSubmit={e => { e.preventDefault(); ask(); }} style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            placeholder="e.g. What did I quote for the Patel job?"
+            style={{
+              flex: 1, minHeight: 48, padding: '10px 14px', boxSizing: 'border-box',
+              background: t.bg, border: '1px solid ' + t.border, color: t.text,
+              borderRadius: 10, fontSize: 15, outline: 'none',
+            }}
+          />
+          <button type="submit" disabled={asking || !question.trim()} style={{
+            minHeight: 48, padding: '0 18px', borderRadius: 10, border: 'none',
+            background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', opacity: (asking || !question.trim()) ? 0.5 : 1,
+          }}>Ask</button>
+        </form>
       </div>
 
       {nudge && (

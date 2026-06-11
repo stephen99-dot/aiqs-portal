@@ -153,7 +153,8 @@ router.get('/:token/pdf', (req, res) => {
     const lines = getQuoteLines(q.id);
     const branding = getBranding(q.user_id);
     const userInfo = getUserDisplay(q.user_id);
-    streamQuotePdf(res, q, lines, branding, userInfo);
+    const photos = require('./jobPhotoRoutes').photoPathsFor('quote', q.id);
+    streamQuotePdf(res, q, lines, branding, userInfo, photos);
   } catch (err) {
     console.error('[QuotePublic] pdf error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });

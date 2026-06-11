@@ -163,7 +163,9 @@ router.post('/', (req, res) => {
       if (!job) return res.status(400).json({ error: 'Invalid job_id.' });
     }
 
-    // Optional: pre-fill from a quote (deep-copy lines).
+    // Optional: pre-fill from a quote. Full copy of the lines, or — B5 — a
+    // percentage of the quote ("Invoice the deposit (25%)") as one line on
+    // the ex-VAT contract value; VAT is then added by the invoice itself.
     let seededLines = [];
     let seededClient = null;
     let seededVat = num(b.vat_pct, 20);
@@ -171,15 +173,27 @@ router.post('/', (req, res) => {
     if (b.from_quote_id) {
       const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(b.from_quote_id, userId);
       if (!q) return res.status(400).json({ error: 'Quote not found.' });
-      const qLines = db.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY sort_order ASC, rowid ASC').all(q.id);
-      seededLines = qLines.map(l => ({
-        section: l.section, item: l.item, description: l.description,
-        unit: l.unit, qty: l.qty, rate: l.rate,
-        line_total: l.line_total, sort_order: l.sort_order,
-      }));
+      const pct = num(b.percent, 100);
+      if (pct > 0 && pct < 100) {
+        const exVat = num(q.grand_total) - num(q.vat_amount);
+        seededLines = [{
+          description: (String(b.stage_label || '').slice(0, 120) || pct + '% payment')
+            + ' — ' + (q.project_name || 'as quoted')
+            + (q.quote_number ? ' (' + q.quote_number + ')' : ''),
+          unit: 'item', qty: 1, rate: round2(exVat * pct / 100),
+        }];
+      } else {
+        const qLines = db.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY sort_order ASC, rowid ASC').all(q.id);
+        seededLines = qLines.map(l => ({
+          section: l.section, item: l.item, description: l.description,
+          unit: l.unit, qty: l.qty, rate: l.rate,
+          line_total: l.line_total, sort_order: l.sort_order,
+        }));
+      }
       if (!b.client_name) seededClient = q.client_name;
       if (b.vat_pct == null) seededVat = num(q.vat_pct, 20);
       seededCurrency = b.currency || q.currency || 'GBP';
+      if (!b.job_id && q.job_id) b.job_id = q.job_id; // keep it on the job automatically
     }
 
     const lines = (Array.isArray(b.lines) && b.lines.length > 0) ? b.lines : seededLines;

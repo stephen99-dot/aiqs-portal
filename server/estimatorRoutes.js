@@ -221,7 +221,7 @@ RULES:
 7. Do NOT include VAT, OH&P, contingency or margin lines — those are added separately.
 8. Return ONLY the JSON object. No markdown fences. No commentary.`;
 
-async function callClaude(userText, projectType) {
+async function callClaude(userText, projectType, userId) {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
@@ -229,14 +229,23 @@ async function callClaude(userText, projectType) {
   const userMsg = 'Project type: ' + (projectType || '(not specified)')
     + '\n\nDescription:\n"""\n' + userText + '\n"""\n\nReturn the JSON quote now.';
 
+  // C1 — the builder's own numbers ride in a cached system prefix: their
+  // trade + day rates from the set-up wizard, and the rates they've confirmed
+  // in their own library. Stable per user, so cacheSystem makes repeat drafts
+  // cheap and grounded in THEIR prices instead of national averages.
+  const system = [{ type: 'text', text: DRAFT_SYSTEM_PROMPT }];
+  const ctx = buildBuilderContext(userId);
+  if (ctx) system.push({ type: 'text', text: 'THIS BUILDER:\n' + ctx });
+
   // Forced JSON via tool use — guaranteed-valid JSON, no fence-stripping.
   // Usage is logged by logEstimatorUsage() at the route, so we don't pass
   // userId here (the wrapper would otherwise double-count it).
   const result = await callModel({
-    model: MODELS.FAST,
+    model: MODELS.STANDARD,
     maxTokens: 4000,
     temperature: 0.3,
-    system: DRAFT_SYSTEM_PROMPT,
+    system,
+    cacheSystem: true,
     messages: [{ role: 'user', content: userMsg }],
     tools: [{
       name: 'submit_quote',
@@ -263,6 +272,38 @@ async function callClaude(userText, projectType) {
   // Return the Anthropic-shaped usage logEstimatorUsage() expects.
   const usage = { input_tokens: result.usage.tokensIn, output_tokens: result.usage.tokensOut };
   return { json: result.json, usage, model: result.model };
+}
+
+// The builder's playbook: trade + day rates from the wizard, plus their most
+// used confirmed rates. Kept compact and stable so the prompt prefix caches.
+function buildBuilderContext(userId) {
+  if (!userId) return '';
+  try {
+    const parts = [];
+    const s = db.prepare('SELECT trade_type, day_rates FROM oib_settings WHERE user_id = ?').get(userId);
+    if (s?.trade_type) parts.push('Trade: ' + s.trade_type + '.');
+    if (s?.day_rates) {
+      try {
+        const rates = Object.entries(JSON.parse(s.day_rates))
+          .map(([k, v]) => k + ' £' + v + '/day').join(', ');
+        if (rates) parts.push('Use these day rates for labour: ' + rates + '.');
+      } catch (e) {}
+    }
+    try {
+      const lib = db.prepare(
+        'SELECT display_name, value, unit FROM client_rate_library '
+        + 'WHERE user_id = ? AND is_active = 1 AND value > 0 AND display_name IS NOT NULL '
+        + 'ORDER BY times_applied DESC, times_confirmed DESC LIMIT 25'
+      ).all(userId);
+      if (lib.length > 0) {
+        parts.push('Their confirmed rates (prefer these where they fit): '
+          + lib.map(r => r.display_name + ' £' + r.value + (r.unit ? '/' + r.unit : '')).join('; ') + '.');
+      }
+    } catch (e) { /* table may not exist on a fresh install */ }
+    return parts.join('\n');
+  } catch (e) {
+    return '';
+  }
 }
 
 // Strip optional code fences and parse JSON defensively.
@@ -380,7 +421,7 @@ router.post('/draft', async (req, res) => {
 
     let claudeResult;
     try {
-      claudeResult = await callClaude(text, project_type);
+      claudeResult = await callClaude(text, project_type, req.user.id);
     } catch (err) {
       console.error('[Estimator] Claude call failed:', err.message);
       return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
@@ -836,8 +877,9 @@ router.get('/quotes/:id/pdf', (req, res) => {
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
     // Rendering lives in quotePdf.js so the public acceptance page streams the
-    // identical document.
-    streamQuotePdf(res, q, lines, branding, userInfo);
+    // identical document. B4: attached site photos print at the end.
+    const photos = require('./jobPhotoRoutes').photoPathsFor('quote', q.id);
+    streamQuotePdf(res, q, lines, branding, userInfo, photos);
   } catch (err) {
     console.error('[Estimator] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });

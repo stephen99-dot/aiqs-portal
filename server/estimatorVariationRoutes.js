@@ -622,6 +622,32 @@ ownerRouter.get('/:id/pdf', (req, res) => {
       doc.font('Helvetica-Bold').fontSize(10).text('Notes', 40, y); y += 14;
       doc.font('Helvetica').fontSize(9).fillColor('#333333').text(v.notes, 40, y, { width: 515 });
       doc.fillColor('#111111');
+      y += doc.heightOfString(v.notes, { width: 515 }) + 6;
+    }
+
+    // B4 — attached site photos ("here's the rot we found behind the plaster").
+    const photos = require('./jobPhotoRoutes').photoPathsFor('variation', v.id);
+    if (photos.length > 0) {
+      ensureRoom(30);
+      y += 10;
+      doc.font('Helvetica-Bold').fontSize(10).fillColor('#111111').text('Photos', 40, y);
+      y += 16;
+      const PW = 250, PH = 170, GAP = 15;
+      for (let i = 0; i < photos.length; i += 2) {
+        ensureRoom(PH + 24);
+        for (let col = 0; col < 2 && i + col < photos.length; col++) {
+          const p = photos[i + col];
+          const x = 40 + col * (PW + GAP);
+          try {
+            doc.image(p.path, x, y, { fit: [PW, PH] });
+            if (p.caption) {
+              doc.font('Helvetica').fontSize(8).fillColor('#475569').text(p.caption, x, y + PH + 3, { width: PW });
+            }
+          } catch (e) { /* unreadable image — skip */ }
+        }
+        y += PH + 22;
+      }
+      doc.fillColor('#111111');
     }
 
     // Footer

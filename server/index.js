@@ -72,6 +72,8 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 app.use('/api/public/quotes', quotePublicRoutes);
 // A2: public invoice view (/i/<token>) — same posture.
 app.use('/api/public/invoices', invoicePublicRoutes);
+// B4: photos on jobs.
+app.use('/api/job-photos', require('./jobPhotoRoutes').router);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);

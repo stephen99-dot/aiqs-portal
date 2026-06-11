@@ -426,4 +426,164 @@ router.patch('/thresholds', (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  PART B (C2): GROUNDED Q&A — "Am I making money on the Smith extension?"
+//
+//  A small tool-use loop through anthropicClient. The model can ONLY read
+//  via these four tools — parameterised queries scoped to req.user.id, never
+//  raw SQL from the model. Answers cite the numbers and stay short; if the
+//  data doesn't hold the answer, it says so.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ASK_SYSTEM = `You answer questions for ONE UK builder about THEIR OWN jobs, quotes, invoices and payments, using ONLY the tools provided. Rules:
+1. Always call tools to get the facts — never answer from memory or guess a figure.
+2. Cite the actual numbers (with £) in your answer.
+3. Keep it to a few sentences — they want the number, not an essay. Plain English, no jargon.
+4. If the data doesn't contain the answer, say exactly that in one sentence.
+5. Money on a job = what's been invoiced/paid against it, minus the costs logged on it. Mention when costs haven't been logged so a profit figure would be misleading.
+6. Never invent jobs, clients or amounts that the tools didn't return.`;
+
+function toolGetJobs(userId) {
+  return db.prepare(`
+    SELECT j.name, j.client_name, j.status, j.retention_pct, j.retention_release_date,
+      (SELECT COALESCE(SUM(q.grand_total),0) FROM quotes q WHERE q.job_id = j.id AND q.status IN ('accepted','won')) AS accepted_quotes,
+      (SELECT COALESCE(SUM(i.grand_total),0) FROM invoices i WHERE i.job_id = j.id AND i.status IN ('sent','paid')) AS invoiced,
+      (SELECT COALESCE(SUM(CASE WHEN i.paid_amount > 0 THEN i.paid_amount ELSE i.grand_total END),0)
+         FROM invoices i WHERE i.job_id = j.id AND i.status = 'paid') AS paid,
+      (SELECT COALESCE(SUM(c.total),0) FROM job_costs c WHERE c.job_id = j.id) AS costs_logged
+    FROM estimator_jobs j WHERE j.user_id = ? ORDER BY j.created_at DESC LIMIT 100
+  `).all(userId);
+}
+
+function toolGetJobFinancials(userId, jobQuery) {
+  const like = '%' + String(jobQuery || '').trim() + '%';
+  const job = db.prepare(
+    'SELECT * FROM estimator_jobs WHERE user_id = ? AND (name LIKE ? OR client_name LIKE ?) ORDER BY created_at DESC LIMIT 1'
+  ).get(userId, like, like);
+  if (!job) return { found: false, message: 'No job matches "' + jobQuery + '".' };
+  const budget = db.prepare('SELECT planned_labour, planned_materials, planned_overheads, planned_other, planned_revenue FROM job_budgets WHERE job_id = ?').get(job.id) || null;
+  const costs = db.prepare('SELECT kind, COALESCE(SUM(total),0) AS total FROM job_costs WHERE job_id = ? GROUP BY kind').all(job.id);
+  const invoices = db.prepare('SELECT invoice_number, status, grand_total, paid_amount, due_date FROM invoices WHERE job_id = ? AND user_id = ?').all(job.id, userId);
+  const quotes = db.prepare("SELECT project_name, status, grand_total FROM quotes WHERE job_id = ?").all(job.id);
+  const stages = db.prepare('SELECT stage_label, amount, status, due_date FROM payment_schedules WHERE job_id = ? AND user_id = ?').all(job.id, userId);
+  const variations = db.prepare("SELECT title, status, grand_total FROM estimator_variations WHERE job_id = ? AND user_id = ?").all(job.id, userId);
+  return {
+    found: true,
+    job: { name: job.name, client: job.client_name, status: job.status, retention_pct: job.retention_pct, retention_release_date: job.retention_release_date },
+    budget, costs, invoices, quotes, stages, variations,
+  };
+}
+
+function toolGetInvoices(userId, status) {
+  let sql = "SELECT i.invoice_number, i.client_name, i.status, i.grand_total, i.paid_amount, i.issue_date, i.due_date, j.name AS job_name FROM invoices i LEFT JOIN estimator_jobs j ON j.id = i.job_id WHERE i.user_id = ?";
+  const params = [userId];
+  if (status === 'overdue') {
+    sql += " AND i.status = 'sent' AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')";
+  } else if (['draft', 'sent', 'paid', 'void'].includes(status)) {
+    sql += ' AND i.status = ?';
+    params.push(status);
+  }
+  sql += ' ORDER BY i.created_at DESC LIMIT 100';
+  return db.prepare(sql).all(...params);
+}
+
+function toolGetQuotes(userId, status) {
+  let sql = 'SELECT q.project_name, q.client_name, q.status, q.grand_total, q.sent_at, q.created_at, j.name AS job_name FROM quotes q LEFT JOIN estimator_jobs j ON j.id = q.job_id WHERE q.user_id = ?';
+  const params = [userId];
+  if (['draft', 'sent', 'accepted', 'won', 'lost'].includes(status)) {
+    sql += ' AND q.status = ?';
+    params.push(status);
+  }
+  sql += ' ORDER BY q.created_at DESC LIMIT 100';
+  return db.prepare(sql).all(...params);
+}
+
+const ASK_TOOLS = [
+  {
+    name: 'get_jobs',
+    description: 'Every job with its money pipeline: accepted quote value, invoiced, paid, and costs logged.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_job_financials',
+    description: 'Full detail for ONE job matched by job or customer name: budget, costs by kind, invoices, quotes, payment stages, changes.',
+    input_schema: { type: 'object', properties: { job: { type: 'string', description: 'Job or customer name (partial is fine)' } }, required: ['job'] },
+  },
+  {
+    name: 'get_invoices',
+    description: 'Invoices, optionally filtered by status (draft | sent | overdue | paid).',
+    input_schema: { type: 'object', properties: { status: { type: 'string' } } },
+  },
+  {
+    name: 'get_quotes',
+    description: 'Quotes, optionally filtered by status (draft | sent | accepted | won | lost).',
+    input_schema: { type: 'object', properties: { status: { type: 'string' } } },
+  },
+];
+
+function runAskTool(userId, name, input) {
+  switch (name) {
+    case 'get_jobs': return toolGetJobs(userId);
+    case 'get_job_financials': return toolGetJobFinancials(userId, input?.job);
+    case 'get_invoices': return toolGetInvoices(userId, input?.status);
+    case 'get_quotes': return toolGetQuotes(userId, input?.status);
+    default: return { error: 'Unknown tool.' };
+  }
+}
+
+// POST /api/pm/ask  { question, history?: [{ role, content }] }
+router.post('/ask', async (req, res) => {
+  try {
+    const { callModel, MODELS } = require('./anthropicClient');
+    const question = String((req.body && req.body.question) || '').trim().slice(0, 500);
+    if (question.length < 3) return res.status(400).json({ error: 'Ask a question first.' });
+
+    // A few prior turns of context, text only.
+    const history = Array.isArray(req.body.history) ? req.body.history.slice(-6) : [];
+    const messages = history
+      .filter(h => h && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string')
+      .map(h => ({ role: h.role, content: h.content.slice(0, 1000) }));
+    messages.push({ role: 'user', content: question });
+
+    let answer = null;
+    for (let turn = 0; turn < 5; turn++) {
+      const result = await callModel({
+        model: MODELS.STANDARD,
+        maxTokens: 700,
+        system: ASK_SYSTEM,
+        cacheSystem: true,
+        messages,
+        tools: ASK_TOOLS,
+        userId: req.user.id,
+        action: 'pm_ask',
+      });
+      if (!result.ok) {
+        return res.status(502).json({ error: 'The assistant is temporarily unavailable. Try again in a moment.' });
+      }
+      if (result.stopReason === 'tool_use' && result.toolUse.length > 0) {
+        messages.push({ role: 'assistant', content: result.blocks });
+        messages.push({
+          role: 'user',
+          content: result.toolUse.map(tu => ({
+            type: 'tool_result',
+            tool_use_id: tu.id,
+            content: JSON.stringify(runAskTool(req.user.id, tu.name, tu.input)).slice(0, 20000),
+          })),
+        });
+        continue;
+      }
+      answer = result.text;
+      break;
+    }
+    if (!answer) answer = "I couldn't get to an answer from your data — try asking it a different way.";
+    res.json({ answer });
+  } catch (err) {
+    console.error('[PM] ask error:', err);
+    res.status(500).json({ error: 'Failed to answer.' });
+  }
+});
+
 module.exports = router;
+// Exposed for tests — the ask-tools run real SQL and deserve direct coverage.
+module.exports.runAskTool = runAskTool;
+

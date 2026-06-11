@@ -99,6 +99,17 @@ router.put('/settings', (req, res) => {
     if ('cis_subcontractor' in b) put('cis_subcontractor', b.cis_subcontractor ? 1 : 0);
     if ('cis_default_rate' in b) put('cis_default_rate', [20, 30].includes(num(b.cis_default_rate)) ? num(b.cis_default_rate) : 20);
     if ('accountant_email' in b) put('accountant_email', String(b.accountant_email || '').trim().slice(0, 200) || null);
+    // B2 — first-run wizard fields.
+    if ('trade_type' in b) put('trade_type', String(b.trade_type || '').trim().slice(0, 80) || null);
+    if ('day_rates' in b && b.day_rates && typeof b.day_rates === 'object') {
+      const rates = {};
+      for (const [k, v] of Object.entries(b.day_rates)) {
+        const n = num(v);
+        if (n > 0 && n < 10000) rates[String(k).slice(0, 60)] = n;
+      }
+      put('day_rates', JSON.stringify(rates));
+    }
+    if (b.setup_completed) put('setup_completed_at', new Date().toISOString());
     if (sets.length > 0) {
       sets.push('updated_at = CURRENT_TIMESTAMP');
       vals.push(req.user.id);

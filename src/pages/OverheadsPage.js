@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import HelpTip from '../components/HelpTip';
 
 // Starter examples to seed an empty form. Users can edit / delete freely.
 const STARTER_LINES = [
@@ -106,7 +107,7 @@ function Inner() {
       <button onClick={() => nav('/money')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer', marginBottom: 8 }}>← Money</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 26 }}>Monthly running costs</h1>
+          <h1 style={{ margin: 0, fontSize: 26 }}>Monthly running costs <HelpTip t={t} title="Monthly running costs" text={"The bills you pay whether or not you're on a job — van, insurance, phone, yard. From these we work out the day rate you need to earn before you make a penny of profit."} /></h1>
           <div style={{ color: t.textSecondary, fontSize: 14, marginTop: 4 }}>
             Snapshot for <strong>{month}</strong>. We use this to compute your true break-even rate and to flag under-priced quotes.
           </div>
