@@ -288,6 +288,89 @@ router.post('/jobs', (req, res) => {
   }
 });
 
+// ─── Stripe Connect ─────────────────────────────────────────────────────────
+// The builder connects their OWN Stripe account (Standard, hosted onboarding);
+// "Pay now" invoice payments then settle straight to their bank. Without a
+// connected account the pay-link route falls back to the platform account.
+
+function getOib(userId) {
+  db.prepare('INSERT OR IGNORE INTO oib_settings (user_id) VALUES (?)').run(userId);
+  return db.prepare('SELECT * FROM oib_settings WHERE user_id = ?').get(userId);
+}
+
+// POST /finance/stripe/connect  body: { return_to?: '/invoices/abc' }
+// Creates the connected account on first call, then returns a fresh hosted
+// onboarding link (account links are single-use and expire, so we mint one
+// per click).
+router.post('/stripe/connect', async (req, res) => {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(503).json({ error: 'Stripe is not configured on the server.', code: 'STRIPE_NOT_CONFIGURED' });
+    }
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const { BASE_URL } = require('./mailer');
+    const settings = getOib(req.user.id);
+
+    let accountId = settings.stripe_account_id;
+    if (!accountId) {
+      const u = db.prepare('SELECT email, full_name, company FROM users WHERE id = ?').get(req.user.id);
+      const account = await stripe.accounts.create({
+        type: 'standard',
+        email: (u && u.email) || undefined,
+        business_profile: u && (u.company || u.full_name) ? { name: u.company || u.full_name } : undefined,
+        metadata: { user_id: req.user.id },
+      });
+      accountId = account.id;
+      db.prepare('UPDATE oib_settings SET stripe_account_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
+        .run(accountId, req.user.id);
+    }
+
+    const rawReturn = String((req.body && req.body.return_to) || '/money');
+    const returnTo = rawReturn.startsWith('/') && !rawReturn.startsWith('//') ? rawReturn : '/money';
+    const sep = returnTo.includes('?') ? '&' : '?';
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: BASE_URL + returnTo + sep + 'stripe=refresh',
+      return_url: BASE_URL + returnTo + sep + 'stripe=return',
+      type: 'account_onboarding',
+    });
+    res.json({ url: link.url });
+  } catch (err) {
+    console.error('[Finance] stripe connect error:', err);
+    res.status(500).json({ error: 'Failed to start Stripe onboarding' + (err && err.message ? ': ' + err.message : '.') });
+  }
+});
+
+// GET /finance/stripe/status — refreshes charges_enabled from Stripe
+router.get('/stripe/status', async (req, res) => {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.json({ configured: false, connected: false, charges_enabled: false });
+    }
+    const settings = getOib(req.user.id);
+    if (!settings.stripe_account_id) {
+      return res.json({ configured: true, connected: false, charges_enabled: false });
+    }
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    let chargesEnabled = !!settings.stripe_charges_enabled;
+    let detailsSubmitted = false;
+    try {
+      const account = await stripe.accounts.retrieve(settings.stripe_account_id);
+      chargesEnabled = !!account.charges_enabled;
+      detailsSubmitted = !!account.details_submitted;
+      db.prepare('UPDATE oib_settings SET stripe_charges_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?')
+        .run(chargesEnabled ? 1 : 0, req.user.id);
+    } catch (e) {
+      // Network/permission blip — fall back to the stored flag rather than
+      // telling the builder they're disconnected.
+    }
+    res.json({ configured: true, connected: true, charges_enabled: chargesEnabled, details_submitted: detailsSubmitted });
+  } catch (err) {
+    console.error('[Finance] stripe status error:', err);
+    res.status(500).json({ error: 'Failed to check Stripe status.' });
+  }
+});
+
 // ─── Clients ────────────────────────────────────────────────────────────────
 // Real client records. Created automatically whenever a job/quote/invoice
 // names a customer; the list lazily backfills anything from before the table

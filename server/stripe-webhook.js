@@ -11,6 +11,9 @@ const PRICE_TO_PLAN = {
 module.exports = async function stripeWebhook(req, res) {
   const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
   const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+  // Separate endpoint secret for "events on connected accounts" (Stripe
+  // Connect). Builders' invoice payments arrive signed with this one.
+  const CONNECT_WEBHOOK_SECRET = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
 
   if (!STRIPE_SECRET) {
     console.error('[Stripe] No STRIPE_SECRET_KEY set');
@@ -20,14 +23,18 @@ module.exports = async function stripeWebhook(req, res) {
   let event;
 
   // Verify webhook signature if secret is set
-  if (WEBHOOK_SECRET) {
+  if (WEBHOOK_SECRET || CONNECT_WEBHOOK_SECRET) {
     const stripe = require('stripe')(STRIPE_SECRET);
     const sig = req.headers['stripe-signature'];
 
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig, WEBHOOK_SECRET);
-    } catch (err) {
-      console.error('[Stripe] Webhook signature verification failed:', err.message);
+    for (const secret of [WEBHOOK_SECRET, CONNECT_WEBHOOK_SECRET].filter(Boolean)) {
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, secret);
+        break;
+      } catch (err) { /* try the next secret */ }
+    }
+    if (!event) {
+      console.error('[Stripe] Webhook signature verification failed for all configured secrets');
       return res.status(400).json({ error: 'Webhook signature verification failed' });
     }
   } else {

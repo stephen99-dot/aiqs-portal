@@ -796,6 +796,10 @@ const migrations = [
   { column: 'client_id', table: 'estimator_jobs', sql: 'ALTER TABLE estimator_jobs ADD COLUMN client_id TEXT' },
   { column: 'client_id', table: 'quotes', sql: 'ALTER TABLE quotes ADD COLUMN client_id TEXT' },
   { column: 'client_id', table: 'invoices', sql: 'ALTER TABLE invoices ADD COLUMN client_id TEXT' },
+  // Stripe Connect — each builder's own Stripe account; invoice payments
+  // settle directly to their bank instead of the platform balance.
+  { column: 'stripe_account_id', table: 'oib_settings', sql: 'ALTER TABLE oib_settings ADD COLUMN stripe_account_id TEXT' },
+  { column: 'stripe_charges_enabled', table: 'oib_settings', sql: 'ALTER TABLE oib_settings ADD COLUMN stripe_charges_enabled INTEGER DEFAULT 0' },
   // Admin submissions inbox — actioned state + private notes
   { column: 'actioned_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_at DATETIME" },
   { column: 'actioned_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_by TEXT" },

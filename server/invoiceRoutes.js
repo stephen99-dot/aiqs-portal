@@ -562,8 +562,26 @@ router.post('/:id/stripe-link', async (req, res) => {
     }
     const amount = Math.round(chargeTotal * 100);
 
+    // Stripe's hosted Checkout requires somewhere to land after payment —
+    // use the invoice's public page, minting its share token if the invoice
+    // hasn't been sent yet.
+    const token = inv.public_token || newShareToken();
+    if (!inv.public_token) {
+      db.prepare('UPDATE invoices SET public_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(token, inv.id);
+    }
+    const publicUrl = mailer.BASE_URL + '/i/' + token;
+
+    // When the builder has connected their own Stripe account, the charge is
+    // created there — the money settles to their bank, not the platform's.
+    const requestOpts = {};
+    if (settings.stripe_account_id && settings.stripe_charges_enabled) {
+      requestOpts.stripeAccount = settings.stripe_account_id;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      success_url: publicUrl + '?paid=1',
+      cancel_url: publicUrl,
       line_items: [{
         quantity: 1,
         price_data: {
@@ -579,7 +597,7 @@ router.post('/:id/stripe-link', async (req, res) => {
         },
       }],
       metadata: { invoice_id: inv.id, user_id: req.user.id },
-    });
+    }, requestOpts);
 
     db.prepare(
       'UPDATE invoices SET stripe_payment_link=?, stripe_payment_intent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
@@ -588,7 +606,10 @@ router.post('/:id/stripe-link', async (req, res) => {
     res.json({ url: session.url, fee_added: feeAdded });
   } catch (err) {
     console.error('[Invoices] stripe-link error:', err);
-    res.status(500).json({ error: 'Failed to create Stripe link.' });
+    // Stripe's messages are safe and actionable ("Invalid API key provided",
+    // currency restrictions, etc.) — pass them through so the builder isn't
+    // staring at a generic failure.
+    res.status(500).json({ error: 'Failed to create Stripe link' + (err && err.message ? ': ' + err.message : '.') });
   }
 });
 

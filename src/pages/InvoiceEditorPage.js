@@ -258,6 +258,25 @@ function Inner() {
     }
   };
 
+  // Stripe Connect state for the "pay by card" panel. Checked on load (and
+  // therefore re-checked when the builder lands back here from Stripe's
+  // onboarding, since the return_url points at this page).
+  const [stripeStatus, setStripeStatus] = useState(null); // { configured, connected, charges_enabled }
+  useEffect(() => {
+    apiFetch('/finance/stripe/status').then(setStripeStatus).catch(() => setStripeStatus(null));
+  }, [id]);
+  const [connecting, setConnecting] = useState(false);
+  const startStripeConnect = async () => {
+    setConnecting(true);
+    try {
+      const r = await apiFetch('/finance/stripe/connect', {
+        method: 'POST',
+        body: JSON.stringify({ return_to: '/invoices/' + id }),
+      });
+      window.location.href = r.url;
+    } catch (e) { setError(e.message); setConnecting(false); }
+  };
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
   if (!invoice) return <div style={{ padding: 40, color: t.danger }}>{error || 'Invoice not found.'}</div>;
 
@@ -315,7 +334,11 @@ function Inner() {
             <div>
               <div style={{ color: t.text, fontSize: 14, fontWeight: 700 }}>Let them pay by card</div>
               <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>
-                Adds a "Pay now" button to the invoice your client sees. When they pay, the invoice marks itself as paid.
+                {stripeStatus && stripeStatus.connected && stripeStatus.charges_enabled
+                  ? 'Adds a "Pay now" button to the invoice your client sees. The money goes straight to your bank, and the invoice marks itself as paid.'
+                  : stripeStatus && stripeStatus.connected
+                    ? 'Nearly there — Stripe needs a few more details before you can take payments.'
+                    : 'Connect your own Stripe account (free, takes a few minutes) and clients can pay this invoice by card — straight into your bank.'}
               </div>
             </div>
             {stripeLink ? (
@@ -323,8 +346,14 @@ function Inner() {
                 <a href={stripeLink} target="_blank" rel="noopener noreferrer" style={{ color: t.accent, fontSize: 12 }}>Open link ↗</a>
                 <button onClick={() => navigator.clipboard.writeText(stripeLink)} style={btnSecondary(t)}>Copy</button>
               </div>
+            ) : stripeStatus && stripeStatus.connected && stripeStatus.charges_enabled ? (
+              <button onClick={genStripeLink} style={btnSecondary(t)}>Create payment link</button>
+            ) : stripeStatus && stripeStatus.configured === false ? (
+              <span style={{ color: t.textMuted, fontSize: 12 }}>Card payments aren't enabled on this server yet.</span>
             ) : (
-              <button onClick={genStripeLink} style={btnSecondary(t)}>Set up card payment</button>
+              <button onClick={startStripeConnect} disabled={connecting || !stripeStatus} style={btnSecondary(t)}>
+                {connecting ? 'Opening Stripe…' : stripeStatus && stripeStatus.connected ? 'Finish Stripe setup' : 'Connect your Stripe account'}
+              </button>
             )}
           </div>
         </div>

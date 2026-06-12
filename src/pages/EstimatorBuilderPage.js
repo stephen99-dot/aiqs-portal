@@ -232,6 +232,34 @@ function EstimatorBuilderPageInner() {
   const [jobs, setJobs] = useState([]);                // list of available jobs to link this quote to
   const [jobId, setJobId] = useState(qs.get('job') || null);
 
+  // Start-from-a-completed-job: delivered portal BOQs the quote can be built
+  // from in one tap (instead of describing the job again).
+  const [portalBoqs, setPortalBoqs] = useState(null);  // null = not loaded yet
+  const [boqPick, setBoqPick] = useState('');
+  const [importingBoq, setImportingBoq] = useState(false);
+  useEffect(() => {
+    if (!isNew || portalBoqs !== null) return;
+    apiFetch('/projects')
+      .then(r => {
+        const list = (r.projects || r || []).filter(p => p.boq_filename);
+        setPortalBoqs(list);
+        if (list.length) setBoqPick(list[0].id);
+      })
+      .catch(() => setPortalBoqs([]));
+  }, [isNew, portalBoqs]);
+
+  const importFromBoq = async () => {
+    if (!boqPick) return;
+    setImportingBoq(true); setError('');
+    try {
+      const r = await apiFetch('/finance/jobs/from-project', {
+        method: 'POST',
+        body: JSON.stringify({ project_id: boqPick, job_id: jobId || undefined }),
+      });
+      nav('/estimator/quote/' + r.quote_id);
+    } catch (e) { setError(e.message); setImportingBoq(false); }
+  };
+
   // Load existing quote
   useEffect(() => {
     if (isNew) return;
@@ -581,6 +609,32 @@ function EstimatorBuilderPageInner() {
               elements={elements} setElements={setElements}
               notes={measureNotes} setNotes={setMeasureNotes}
             />
+          </div>
+        )}
+
+        {/* Start from a completed job — the BOQ already priced everything */}
+        {inputMode === 'describe' && portalBoqs !== null && portalBoqs.length > 0 && (
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 2 }}>Got a BOQ for this one already?</div>
+            <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
+              Start from a completed job in your portal — its priced line items become this quote, no describing needed.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={boqPick} onChange={e => setBoqPick(e.target.value)} disabled={busy || importingBoq} style={{ ...input(t), flex: '1 1 220px', width: 'auto', minHeight: 48 }}>
+                {portalBoqs.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}{p.total_value ? ' — £' + Math.round(p.total_value).toLocaleString('en-GB') : ''}
+                  </option>
+                ))}
+              </select>
+              <button onClick={importFromBoq} disabled={busy || importingBoq} style={{
+                minHeight: 48, padding: '0 18px', borderRadius: 10, cursor: 'pointer',
+                background: 'transparent', color: t.accent, border: '1.5px solid ' + t.accent,
+                fontSize: 14, fontWeight: 700, opacity: importingBoq ? 0.7 : 1,
+              }}>
+                {importingBoq ? 'Building the quote…' : 'Use this BOQ'}
+              </button>
+            </div>
           </div>
         )}
 
