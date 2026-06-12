@@ -267,6 +267,7 @@ function SubmissionsTracker({ submissions, t }) {
       </div>
       <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
         Your BOQ and Findings Report will appear under Your Projects below — typically within 24 hours.
+        Once delivered, open the project to amend numbers and produce a Client Copy with your own logo and colours.
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {pending.map(s => {
