@@ -10,6 +10,7 @@ import {
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
 import WhatsNewPopup from './WhatsNewPopup';
+import SurveyPopup from './SurveyPopup';
 
 // Representative swatch colour for each selectable theme.
 const THEME_SWATCH = {
@@ -150,6 +151,11 @@ export default function Layout() {
   const [whatsNewSeen, setWhatsNewSeen] = useState(false);
 
   const isAdmin = user?.role === 'admin';
+
+  // The survey waits until the Office in a Box upsell has been answered or
+  // dismissed (its key in localStorage), so two popups never fight.
+  let officePopupDone = false;
+  try { officePopupDone = !!localStorage.getItem('aiqs_office_interest_v1'); } catch (e) {}
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -528,6 +534,10 @@ export default function Layout() {
       {/* Office in a Box upsell — only for non-subscribers, and not on the page
           itself, and only once the What's New popup has been dismissed */}
       {whatsNewSeen && (isAdmin || !user?.hasEstimator) && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
+
+      {/* Feedback survey — every non-admin user, once. Waits for What's New,
+          and for non-subscribers also for the Office popup, so they never stack. */}
+      {whatsNewSeen && !isAdmin && (user?.hasEstimator || officePopupDone) && <SurveyPopup />}
     </div>
   );
 }
