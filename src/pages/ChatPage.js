@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTheme } from '../context/ThemeContext';
@@ -1303,7 +1304,7 @@ export default function ChatPage() {
           <div style={{ width:1, height:18, background:c.topBorder, flexShrink:0 }}/>
           <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:14, fontWeight:700, color:c.text, flexShrink:0 }}>AI Quantity Surveyor</span>
-            {!mobile && <span style={{ fontSize:12, color:c.textMuted }}>Upload drawings · lock quantities · generate BOQs</span>}
+            {!mobile && <span style={{ fontSize:12, color:c.textMuted }}>Beta — for a QS-checked BOQ, use Submit Drawings</span>}
             {!mobile && currentTakeoffId && <TakeoffBanner/>}
           </div>
           {quotaInfo && quotaInfo.messages_limit > 0 && (() => {
@@ -1344,10 +1345,27 @@ export default function ChatPage() {
             {messages.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', padding:'0 16px' }}>
                 <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:18 }}><RulerIcon size={30} /></div>
-                <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>Ready to analyse your project</h3>
-                <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 24px', maxWidth:460, lineHeight:1.65 }}>
-                  Upload drawings (PDF, ZIP, Excel, images) and describe your scope. Quantities get locked before you generate — so totals stay consistent. Download BOQs as Excel or Word, then raise variations from the project page.
+                <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>AI Chat — beta</h3>
+                <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 14px', maxWidth:460, lineHeight:1.65 }}>
+                  Ask questions, sense-check costs, or explore your drawings — the chat is still in its testing phase, so treat its numbers as a guide.
                 </p>
+                <div style={{
+                  display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', justifyContent:'center',
+                  padding:'12px 16px', borderRadius:10, margin:'0 0 24px', maxWidth:520,
+                  background: dark ? 'rgba(245,158,11,0.07)' : 'rgba(245,158,11,0.06)',
+                  border:'1px solid rgba(245,158,11,0.25)',
+                }}>
+                  <span style={{ fontSize: mobile?12.5:13, color:c.text, lineHeight:1.55, flex:1, minWidth:220, textAlign:'left' }}>
+                    Need a BOQ you can rely on? Submit your drawings and our QS team will deliver it back to your portal — typically within 24 hours.
+                  </span>
+                  <Link to="/submit-drawings" style={{
+                    padding:'8px 14px', borderRadius:8, whiteSpace:'nowrap',
+                    background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C',
+                    textDecoration:'none', fontSize:12.5, fontWeight:700,
+                  }}>
+                    Submit Drawings
+                  </Link>
+                </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', maxWidth:520 }}>
                   {[
                     [RulerIcon,'Extract quantities','Please extract all quantities from these drawings with full working shown.'],

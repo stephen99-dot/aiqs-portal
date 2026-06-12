@@ -171,7 +171,7 @@ export default function SubmitDrawingsPage() {
 
       setStatus({
         type: 'success',
-        msg: "Submitted! We'll be in touch within 24 hours with your professional BOQ and Findings Report. Submission ID: " + data.submission_id,
+        msg: "Submitted! Your BOQ and Findings Report will be delivered to My Projects, typically within 24 hours — you can track progress there. Submission ID: " + data.submission_id,
       });
       setProjectType('');
       setMessage('');

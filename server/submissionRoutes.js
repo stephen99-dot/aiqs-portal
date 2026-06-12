@@ -274,17 +274,29 @@ router.post('/', uploadFiles, async (req, res) => {
 router.get('/', (req, res) => {
   try {
     const rows = db.prepare(`
-      SELECT id, submission_id, project_type, file_count, file_names, credits_remaining_after, created_at
-      FROM drawing_submissions
-      WHERE user_id = ?
-      ORDER BY created_at DESC
+      SELECT s.id, s.submission_id, s.project_type, s.file_count, s.file_names,
+             s.credits_remaining_after, s.created_at, s.actioned_at, s.project_id,
+             p.status AS project_status, p.title AS project_title
+      FROM drawing_submissions s
+      LEFT JOIN projects p ON p.id = s.project_id
+      WHERE s.user_id = ?
+      ORDER BY s.created_at DESC
       LIMIT 50
     `).all(req.user.id);
+
+    // Collapse the admin-side state into three customer-facing stages:
+    // received (with our QS team) → in_progress (being priced) → delivered.
+    function clientStatus(r) {
+      if (r.project_status === 'delivered' || r.project_status === 'completed') return 'delivered';
+      if (r.project_id || r.actioned_at) return 'in_progress';
+      return 'received';
+    }
 
     res.json({
       submissions: rows.map(r => ({
         ...r,
         file_names: r.file_names ? JSON.parse(r.file_names) : [],
+        status: clientStatus(r),
       })),
     });
   } catch (err) {

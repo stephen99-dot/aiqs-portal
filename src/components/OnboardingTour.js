@@ -2,71 +2,64 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon } from './Icons';
 
 // Bump this version whenever tour content changes — existing users will see the updated tour
-export const TOUR_VERSION = 7;
+export const TOUR_VERSION = 8;
 
 const TOUR_STEPS = [
   {
     target: '[data-tour="welcome"]',
     title: 'Welcome to AI QS',
-    description: 'Your AI-powered quantity surveying portal. Upload drawings, chat with the AI, and walk away with a priced BOQ — Excel and Word documents ready to send to clients. This short tour covers everything that is new.',
+    description: 'Getting a Bill of Quantities is simple: submit your drawings, our QS team prices the job, and the finished BOQ and Findings Report land back here in your portal — typically within 24 hours. This short tour shows you around.',
     position: 'center',
-    icon: '\u2726',
+    icon: '✦',
   },
   {
-    target: '[data-tour="start-chat"]',
-    title: 'Start a project',
-    description: 'Open the chat from here. Attach your drawings (PDF, ZIP, Excel, images — up to 5 files, 150 MB each), describe the scope, and hit Send. The AI extracts quantities, applies your trained rates, and produces a priced BOQ with Excel and Word downloads in under a minute.',
-    position: 'bottom',
-    icon: '\u2197',
-  },
-  {
-    target: '[data-tour="welcome"]',
-    title: 'A few questions when you upload',
-    description: 'The first time you attach drawings to a new chat, a short intake form pops up asking for scope, floor area, location and spec level. Your answers feed straight into the pricing so the total is grounded in your numbers instead of guessed from the drawings. Skippable if you would rather the AI infer it.',
-    position: 'center',
-    icon: '\u270E',
-  },
-  {
-    target: '[data-tour="welcome"]',
-    title: 'Editable BOQ with provenance',
-    description: 'After extraction an editable BOQ table appears inline in the chat. Click any quantity to change it and the deterministic pricer re-runs instantly. Every row carries colour-coded badges showing where the number came from — your rate library, SPON\'s base rates, AI estimate, or a manual edit — so you can see exactly what drove the total.',
-    position: 'center',
-    icon: '\u270F',
+    target: '[data-tour="submit-drawings"]',
+    title: 'Submit your drawings',
+    description: 'This is the main way to get a BOQ. Upload your plans, elevations and specs (PDF, ZIP, Excel, images, CAD), describe the project, and send. No back-and-forth needed — our team takes it from there.',
+    position: 'right',
+    icon: '↗',
   },
   {
     target: '[data-tour="projects-list"]',
-    title: 'Projects & Variations',
-    description: 'Every confirmed BOQ lands here. Open any project to re-download the Excel + Word, view the full cost breakdown, or raise a Variation Order when the scope changes — the AI analyses the delta and the new totals flow through automatically. Approve, reject, and generate revised documents all from the Variations page on each project.',
+    title: 'Everything comes back to My Projects',
+    description: 'Track your submission while it is with our QS team, and when it is ready your BOQ, Findings Report and any marked-up drawings appear here. Open a project to download everything or raise a Variation when the scope changes.',
     position: 'top',
-    icon: '\u2630',
+    icon: '☰',
   },
   {
-    target: '[data-tour="ai-memory"]',
-    title: 'AI Memory — it remembers how you work',
-    description: 'Everything the AI has learned about you lives here: default contingency, preferred suppliers, standard exclusions, typical regions, project types. Memories get captured automatically from your chats (with visible undo buttons so you stay in control), added manually, or seeded in 2 minutes via the onboarding questionnaire linked from this page. Every future BOQ uses them as ground truth.',
-    position: 'right',
-    icon: '\u{1F9E0}',
+    target: '[data-tour="welcome"]',
+    title: 'Make it yours — the Client Copy',
+    description: 'From any delivered project you can open the Client Copy editor: adjust quantities and rates, add your margin, and download a polished copy that wears your own logo and colours — ready to hand to your client. Upload your logo once under Settings → Branding & Logo.',
+    position: 'center',
+    icon: '✏',
   },
   {
-    target: '[data-tour="my-rates"]',
-    title: 'My Rates — your pricing library',
-    description: 'Build your own rate library here. Any rate you save, or correct while chatting, gets applied to every future BOQ and is badged "Your rate" on the editable table — so you can see exactly where your numbers are winning over the generic base rates.',
+    target: '[data-tour="chat-nav"]',
+    title: 'AI Chat — beta',
+    description: 'The chat assistant is in a testing phase. Use it to ask questions, sense-check costs, or explore ideas — but when you need a BOQ you can rely on, Submit Drawings is the way to go.',
     position: 'right',
-    icon: '\u00A3',
+    icon: '✨',
+  },
+  {
+    target: '[data-tour="settings"]',
+    title: 'Settings — rates, memory, branding',
+    description: 'My Rates (your own pricing library), AI Memory (preferences the AI has learned about how you work), and Branding & Logo (the logo and colours your documents wear) all live here, tucked away until you need them.',
+    position: 'right',
+    icon: '⚙',
   },
   {
     target: '[data-tour="usage-bar"]',
-    title: 'Messages & BOQ credits',
-    description: 'Your monthly usage at a glance — chat messages and BOQ generations. Hover for the exact numbers. When you run low you will see a warning; upgrade or top up anytime from the Pricing page.',
+    title: 'BOQ credits & messages',
+    description: 'Your usage at a glance — BOQ credits and chat messages. When you run low you will see a warning; top up anytime.',
     position: 'bottom',
-    icon: '\u25CE',
+    icon: '◎',
   },
   {
     target: '[data-tour="sidebar-nav"]',
     title: 'You are all set',
-    description: 'That is the tour. Upload your first set of drawings in the Chat and you will have a priced BOQ in minutes. Any questions, just ask the AI.',
+    description: 'That is the tour. Submit your first set of drawings and your BOQ will be back here, typically within 24 hours.',
     position: 'right',
-    icon: '\u2714',
+    icon: '✔',
   },
 ];
 
