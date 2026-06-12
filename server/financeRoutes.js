@@ -27,6 +27,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const clientStore = require('./clientStore');
 
 const router = express.Router();
 router.use(authMiddleware, requireEstimator, requireEstimatorPassword);
@@ -265,9 +266,11 @@ router.post('/jobs', (req, res) => {
     const name = (b.name || '').toString().trim();
     if (!name) return res.status(400).json({ error: 'Job name is required.' });
     const id = uuidv4();
+    let clientId = null;
+    try { clientId = clientStore.findOrCreateClient(db, req.user.id, { name: b.client_name, phone: b.client_phone }); } catch (e) {}
     db.prepare(
-      'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes) '
-      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes, client_id) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
       id, req.user.id, name.slice(0, 200),
       (b.client_name || '').toString().slice(0, 200) || null,
@@ -275,12 +278,94 @@ router.post('/jobs', (req, res) => {
       (b.project_type || '').toString().slice(0, 80) || null,
       (b.location || '').toString().slice(0, 200) || null,
       ['planned', 'active', 'completed', 'cancelled'].includes(b.status) ? b.status : 'planned',
-      (b.notes || '').toString().slice(0, 4000) || null
+      (b.notes || '').toString().slice(0, 4000) || null,
+      clientId
     );
     res.status(201).json({ id });
   } catch (err) {
     console.error('[Finance] job create error:', err);
     res.status(500).json({ error: 'Failed to create job.' });
+  }
+});
+
+// ─── Clients ────────────────────────────────────────────────────────────────
+// Real client records. Created automatically whenever a job/quote/invoice
+// names a customer; the list lazily backfills anything from before the table
+// existed, so it's populated on first open.
+
+router.get('/clients', (req, res) => {
+  try {
+    clientStore.backfillClients(db, req.user.id);
+    res.json({ clients: clientStore.listClientsWithTotals(db, req.user.id) });
+  } catch (err) {
+    console.error('[Finance] clients list error:', err);
+    res.status(500).json({ error: 'Failed to load clients.' });
+  }
+});
+
+router.post('/clients', (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!(b.name || '').toString().trim()) return res.status(400).json({ error: 'Client name is required.' });
+    const id = clientStore.findOrCreateClient(db, req.user.id, b);
+    // Apply notes/overwrites the find-or-create path doesn't touch
+    if (b.notes) db.prepare('UPDATE estimator_clients SET notes = ? WHERE id = ? AND user_id = ?').run(String(b.notes).slice(0, 4000), id, req.user.id);
+    res.status(201).json({ id });
+  } catch (err) {
+    console.error('[Finance] client create error:', err);
+    res.status(500).json({ error: 'Failed to save client.' });
+  }
+});
+
+router.get('/clients/:id', (req, res) => {
+  try {
+    const detail = clientStore.getClientDetail(db, req.user.id, req.params.id);
+    if (!detail) return res.status(404).json({ error: 'Client not found.' });
+    res.json(detail);
+  } catch (err) {
+    console.error('[Finance] client detail error:', err);
+    res.status(500).json({ error: 'Failed to load client.' });
+  }
+});
+
+router.patch('/clients/:id', (req, res) => {
+  try {
+    const existing = db.prepare('SELECT id FROM estimator_clients WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!existing) return res.status(404).json({ error: 'Client not found.' });
+    const b = req.body || {};
+    const allowed = ['name', 'email', 'phone', 'address', 'notes'];
+    const sets = [];
+    const vals = [];
+    for (const k of allowed) {
+      if (Object.prototype.hasOwnProperty.call(b, k)) {
+        sets.push(k + ' = ?');
+        vals.push(String(b[k] || '').slice(0, k === 'notes' ? 4000 : 300) || null);
+      }
+    }
+    if (!sets.length) return res.json({ ok: true, unchanged: true });
+    vals.push(req.params.id);
+    db.prepare(`UPDATE estimator_clients SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Finance] client update error:', err);
+    res.status(500).json({ error: 'Failed to update client.' });
+  }
+});
+
+router.delete('/clients/:id', (req, res) => {
+  try {
+    const existing = db.prepare('SELECT id FROM estimator_clients WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!existing) return res.status(404).json({ error: 'Client not found.' });
+    // Unlink rather than orphan: jobs/quotes/invoices keep their client_name
+    // strings, they just stop rolling up to a record.
+    db.prepare('UPDATE estimator_jobs SET client_id = NULL WHERE client_id = ?').run(req.params.id);
+    db.prepare('UPDATE quotes SET client_id = NULL WHERE client_id = ?').run(req.params.id);
+    db.prepare('UPDATE invoices SET client_id = NULL WHERE client_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM estimator_clients WHERE id = ?').run(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Finance] client delete error:', err);
+    res.status(500).json({ error: 'Failed to delete client.' });
   }
 });
 
@@ -319,16 +404,25 @@ router.post('/jobs/from-project', async (req, res) => {
       return !Number.isFinite(n) || (n >= ss.ohp_sections[0] && n <= ss.ohp_sections[1]);
     };
 
+    // Client record first, so the job and quote both link to it
+    let clientId = null;
+    try {
+      clientId = clientStore.findOrCreateClient(db, req.user.id, {
+        name: b.client_name, email: b.client_email, phone: b.client_phone,
+      });
+    } catch (e) {}
+
     // Job: reuse an existing one or create one named after the project
     let jobId = b.job_id || null;
     if (jobId) {
       const job = ensureJob(req, jobId);
       if (!job) return res.status(404).json({ error: 'Job not found.' });
+      if (!clientId) clientId = job.client_id || null;
     } else {
       jobId = uuidv4();
       db.prepare(
-        'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes, client_id) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         jobId, req.user.id, (project.title || 'Job from BOQ').slice(0, 200),
         (b.client_name || '').toString().slice(0, 200) || null,
@@ -336,7 +430,8 @@ router.post('/jobs/from-project', async (req, res) => {
         (project.project_type || '').slice(0, 80) || null,
         (project.location || '').slice(0, 200) || null,
         'planned',
-        'Created from portal BOQ: ' + (project.title || project.id)
+        'Created from portal BOQ: ' + (project.title || project.id),
+        clientId
       );
     }
 
@@ -387,8 +482,8 @@ router.post('/jobs/from-project', async (req, res) => {
       db.prepare(
         'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
         + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
-        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, job_id) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, job_id, client_id) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         quoteId, req.user.id,
         (b.client_name || '').toString().slice(0, 200) || null,
@@ -398,7 +493,7 @@ router.post('/jobs/from-project', async (req, res) => {
         'Imported from portal BOQ: ' + project.boq_filename,
         round2(net), 0, 0, contPct, round2(cont), vatPct, round2(vat),
         round2(beforeVat + vat), 0, 0,
-        'draft', null, quoteNumber, jobId
+        'draft', null, quoteNumber, jobId, clientId
       );
       const ins = db.prepare(
         'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '

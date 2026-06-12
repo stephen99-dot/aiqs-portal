@@ -53,6 +53,15 @@ function Inner() {
     } catch (e) { setError(e.message); }
   };
 
+  // Known clients power the autocomplete on the customer fields; picking an
+  // exact match fills in their phone/email automatically.
+  const [knownClients, setKnownClients] = useState([]);
+  useEffect(() => {
+    if (!creating || knownClients.length) return;
+    apiFetch('/finance/clients').then(r => setKnownClients(r.clients || [])).catch(() => {});
+  }, [creating, knownClients.length]);
+  const matchClient = (name) => knownClients.find(c => (c.name || '').toLowerCase() === (name || '').trim().toLowerCase());
+
   const loadPortalProjects = useCallback(async () => {
     try {
       const r = await apiFetch('/projects');
@@ -123,6 +132,9 @@ function Inner() {
       {/* New job form — describe it, or start from a BOQ already in the portal */}
       {creating && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <datalist id="known-clients">
+            {knownClients.map(c => <option key={c.id} value={c.name} />)}
+          </datalist>
           <div style={{ display: 'flex', gap: 6 }}>
             {[['describe', 'Describe the job'], ['boq', 'Start from a BOQ']].map(([m, label]) => (
               <button key={m} onClick={() => { setJobMode(m); setError(''); }} style={{
@@ -137,7 +149,11 @@ function Inner() {
           {jobMode === 'describe' ? (
             <>
               <input style={input} placeholder="Job name — e.g. 12 Hill St extension" value={newJob.name} onChange={e => setNewJob({ ...newJob, name: e.target.value })} />
-              <input style={input} placeholder="Customer name" value={newJob.client_name} onChange={e => setNewJob({ ...newJob, client_name: e.target.value })} />
+              <input style={input} list="known-clients" placeholder="Customer name" value={newJob.client_name} onChange={e => {
+                const v = e.target.value;
+                const m = matchClient(v);
+                setNewJob(j => ({ ...j, client_name: v, client_phone: m && !j.client_phone ? (m.phone || '') : j.client_phone }));
+              }} />
               <input style={input} type="tel" placeholder="Customer phone (so you can call from here)" value={newJob.client_phone} onChange={e => setNewJob({ ...newJob, client_phone: e.target.value })} />
               <input style={input} placeholder="Address (optional)" value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} />
               <button onClick={create} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
@@ -165,7 +181,15 @@ function Inner() {
                       </option>
                     ))}
                   </select>
-                  <input style={input} placeholder="Customer name" value={boqJob.client_name} onChange={e => setBoqJob({ ...boqJob, client_name: e.target.value })} />
+                  <input style={input} list="known-clients" placeholder="Customer name" value={boqJob.client_name} onChange={e => {
+                    const v = e.target.value;
+                    const m = matchClient(v);
+                    setBoqJob(j => ({
+                      ...j, client_name: v,
+                      client_email: m && !j.client_email ? (m.email || '') : j.client_email,
+                      client_phone: m && !j.client_phone ? (m.phone || '') : j.client_phone,
+                    }));
+                  }} />
                   <input style={input} type="email" placeholder="Customer email (to send the quote)" value={boqJob.client_email} onChange={e => setBoqJob({ ...boqJob, client_email: e.target.value })} />
                   <input style={input} type="tel" placeholder="Customer phone (optional)" value={boqJob.client_phone} onChange={e => setBoqJob({ ...boqJob, client_phone: e.target.value })} />
                   <button onClick={createFromBoq} disabled={boqCreating} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: boqCreating ? 0.7 : 1 }}>

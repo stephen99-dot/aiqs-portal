@@ -167,13 +167,14 @@ export default function Layout() {
   const officeInABoxChildren = [
     { path: '/office', label: 'Today' },
     { path: '/jobs', label: 'Jobs' },
+    { path: '/clients', label: 'Clients' },
     { path: '/money', label: 'Money' },
     { path: '/tools', label: 'Tools' },
   ];
   // Pages reached from inside the group (quote editor, invoice editor, job
   // page, documents, tools) keep the group highlighted and open.
   const officeRoutePrefixes = [
-    '/office', '/jobs', '/money', '/tools',
+    '/office', '/jobs', '/clients', '/money', '/tools',
     '/estimator', '/invoices', '/finance', '/change-orders',
     '/documents', '/calculators', '/materials', '/pm',
   ];

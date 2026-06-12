@@ -363,6 +363,24 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_estimator_jobs_user ON estimator_jobs(user_id);
   CREATE INDEX IF NOT EXISTS idx_estimator_jobs_status ON estimator_jobs(user_id, status);
 
+  -- Client records for the estimator. Quotes/invoices/jobs keep their
+  -- client_name string columns for display, but also carry a client_id so
+  -- everything about one customer rolls up on the Clients page. Records are
+  -- find-or-created automatically whenever a job/quote/invoice names a client.
+  CREATE TABLE IF NOT EXISTS estimator_clients (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_estimator_clients_user ON estimator_clients(user_id);
+
   -- Monthly overheads snapshot. One row per user per YYYY-MM.
   CREATE TABLE IF NOT EXISTS overheads (
     id TEXT PRIMARY KEY,
@@ -774,6 +792,10 @@ const migrations = [
   // Client Copy routes need them even on a database where chat was never used.
   { column: 'boq_filename', table: 'projects', sql: 'ALTER TABLE projects ADD COLUMN boq_filename TEXT' },
   { column: 'findings_filename', table: 'projects', sql: 'ALTER TABLE projects ADD COLUMN findings_filename TEXT' },
+  // Client records (estimator_clients) — link columns on the documents
+  { column: 'client_id', table: 'estimator_jobs', sql: 'ALTER TABLE estimator_jobs ADD COLUMN client_id TEXT' },
+  { column: 'client_id', table: 'quotes', sql: 'ALTER TABLE quotes ADD COLUMN client_id TEXT' },
+  { column: 'client_id', table: 'invoices', sql: 'ALTER TABLE invoices ADD COLUMN client_id TEXT' },
   // Admin submissions inbox — actioned state + private notes
   { column: 'actioned_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_at DATETIME" },
   { column: 'actioned_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_by TEXT" },

@@ -1,127 +1,247 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { ClientsIcon } from '../components/Icons';
+import { apiFetch } from '../utils/api';
+import EstimatorGate from '../components/EstimatorGate';
+import HelpTip from '../components/HelpTip';
 
-const MOCK_CLIENTS = [
-  { id: 'CLI-001', name: 'Paul Metalwork', email: 'paul@metalwork.co.uk', plan: 'Pro', drawingsUsed: 14, drawingsLimit: 50, projects: 8, totalSpend: 4250, joined: '2025-11-01', rateCard: 'Metalwork v2' },
-  { id: 'CLI-002', name: 'Marius', email: 'marius@qsconsult.com', plan: 'Standard', drawingsUsed: 22, drawingsLimit: 30, projects: 5, totalSpend: 2100, joined: '2025-12-15', rateCard: 'UK Residential' },
-  { id: 'CLI-003', name: 'BES Construction', email: 'info@besconstruction.com', plan: 'Pro', drawingsUsed: 31, drawingsLimit: 50, projects: 3, totalSpend: 1800, joined: '2026-01-05', rateCard: 'UK Residential' },
-  { id: 'CLI-004', name: 'Penn Contracting', email: 'office@penncontracting.ie', plan: 'Standard', drawingsUsed: 9, drawingsLimit: 30, projects: 4, totalSpend: 1550, joined: '2025-10-20', rateCard: 'Ireland Residential' },
-  { id: 'CLI-005', name: 'Andy Craig', email: 'andy@craigbuild.co.uk', plan: 'Pay-as-you-go', drawingsUsed: 4, drawingsLimit: 10, projects: 2, totalSpend: 650, joined: '2026-02-01', rateCard: 'UK Residential' },
-  { id: 'CLI-006', name: 'Jamie Cheffings', email: 'jamie@jcbuilders.co.uk', plan: 'Standard', drawingsUsed: 7, drawingsLimit: 30, projects: 2, totalSpend: 900, joined: '2026-01-18', rateCard: 'UK Residential' },
-  { id: 'CLI-007', name: 'YDS (Leeds)', email: 'projects@ydsleeds.co.uk', plan: 'Pro', drawingsUsed: 18, drawingsLimit: 50, projects: 1, totalSpend: 750, joined: '2026-02-10', rateCard: 'UK Commercial' },
-  { id: 'CLI-008', name: 'Sandeep — S Sira Group', email: 'sandeep@ssiragroup.com', plan: 'Pro', drawingsUsed: 11, drawingsLimit: 50, projects: 3, totalSpend: 2400, joined: '2026-01-22', rateCard: 'S Sira Custom' },
-];
+// CLIENTS — the builder's customer book. Records build themselves: every job,
+// quote or invoice that names a customer creates/updates one. Each card rolls
+// up the money story for that customer (quoted, invoiced, owed) and links to
+// their jobs.
 
-const PLAN_STYLES = {
-  Pro: { color: '#2563EB', bg: 'rgba(37,99,235,0.1)' },
-  Standard: { color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  'Pay-as-you-go': { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-};
+function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
+function fmt0(n) { return '£' + Math.round(num(n)).toLocaleString('en-GB'); }
 
 export default function ClientsPage() {
-  const { t } = useTheme();
-  const [search, setSearch] = useState('');
-  const [planFilter, setPlanFilter] = useState('all');
+  return <EstimatorGate><Inner /></EstimatorGate>;
+}
 
-  const filtered = MOCK_CLIENTS.filter(c => {
-    if (planFilter !== 'all' && c.plan !== planFilter) return false;
-    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.email.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+function Inner() {
+  const { t } = useTheme();
+  const nav = useNavigate();
+  const [clients, setClients] = useState(null);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: '', email: '', phone: '', address: '' });
+  const [openId, setOpenId] = useState(null);
+  const [detail, setDetail] = useState(null); // { client, jobs, quotes, invoices }
+  const [editing, setEditing] = useState(null); // editable copy of detail.client
+
+  const refresh = useCallback(async () => {
+    setError('');
+    try {
+      const r = await apiFetch('/finance/clients');
+      setClients(r.clients || []);
+    } catch (e) { setError(e.message); setClients([]); }
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const openClient = async (id) => {
+    if (openId === id) { setOpenId(null); setDetail(null); setEditing(null); return; }
+    setOpenId(id); setDetail(null); setEditing(null);
+    try {
+      const d = await apiFetch('/finance/clients/' + id);
+      setDetail(d);
+      setEditing({ ...d.client });
+    } catch (e) { setError(e.message); }
+  };
+
+  const addClient = async () => {
+    if (!draft.name.trim()) { setError('Give the client a name.'); return; }
+    try {
+      await apiFetch('/finance/clients', { method: 'POST', body: JSON.stringify(draft) });
+      setDraft({ name: '', email: '', phone: '', address: '' });
+      setAdding(false);
+      refresh();
+    } catch (e) { setError(e.message); }
+  };
+
+  const saveEdit = async () => {
+    try {
+      await apiFetch('/finance/clients/' + editing.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: editing.name, email: editing.email, phone: editing.phone, address: editing.address, notes: editing.notes }),
+      });
+      refresh();
+    } catch (e) { setError(e.message); }
+  };
+
+  const removeClient = async (id) => {
+    if (!window.confirm('Remove this client? Their jobs, quotes and invoices stay — they just stop rolling up here.')) return;
+    try {
+      await apiFetch('/finance/clients/' + id, { method: 'DELETE' });
+      setOpenId(null); setDetail(null);
+      refresh();
+    } catch (e) { setError(e.message); }
+  };
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = clients || [];
+    if (q) {
+      list = list.filter(c =>
+        (c.name || '').toLowerCase().includes(q)
+        || (c.email || '').toLowerCase().includes(q)
+        || (c.phone || '').toLowerCase().includes(q));
+    }
+    // Customers who owe money float to the top, then biggest book first.
+    return [...list].sort((a, b) => {
+      const aOwes = num(a.owed_total) > 0 ? 1 : 0;
+      const bOwes = num(b.owed_total) > 0 ? 1 : 0;
+      if (aOwes !== bOwes) return bOwes - aOwes;
+      return num(b.invoiced_total) - num(a.invoiced_total);
+    });
+  }, [clients, search]);
+
+  const input = {
+    width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px 14px',
+    background: t.bg, border: '1px solid ' + t.border, color: t.text,
+    borderRadius: 10, fontSize: 15, outline: 'none',
+  };
 
   return (
-    <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, color: t.text, margin: 0 }}>Clients</h1>
-        <button style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '10px 18px', borderRadius: 10,
-          background: t.accent, color: '#fff', border: 'none',
-          cursor: 'pointer', fontSize: 13, fontWeight: 600
-        }}>+ Add Client</button>
+    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
+        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>
+          Clients <HelpTip t={t} title="Clients" text={"One card per customer — every job, quote and invoice that names them rolls up here automatically.\n\nCustomers who owe you money float to the top.\n\nOpen a card to see their full history, or to update their contact details."} />
+        </h1>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-        <input
-          value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search clients..."
-          style={{
-            flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 10,
-            border: `1px solid ${t.border}`, background: t.inputBg,
-            color: t.text, fontSize: 13, outline: 'none'
-          }}
-        />
-        {['all', 'Pro', 'Standard', 'Pay-as-you-go'].map(f => (
-          <button key={f} onClick={() => setPlanFilter(f)} style={{
-            padding: '8px 14px', borderRadius: 8,
-            background: planFilter === f ? t.accentGlow : 'transparent',
-            color: planFilter === f ? t.accentLight : t.textMuted,
-            border: `1px solid ${planFilter === f ? t.accent + '30' : t.border}`,
-            cursor: 'pointer', fontSize: 12, fontWeight: 500
-          }}>
-            {f === 'all' ? 'All Plans' : f}
+      {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 14 }}>{error}</div>}
+
+      <button onClick={() => { setAdding(v => !v); setError(''); }} style={{
+        minHeight: 52, width: '100%', borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
+        fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 14,
+      }}>{adding ? 'Cancel' : '+ New client'}</button>
+
+      {adding && (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input style={input} placeholder="Name — person or company" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+          <input style={input} type="email" placeholder="Email (optional)" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
+          <input style={input} type="tel" placeholder="Phone (optional)" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} />
+          <input style={input} placeholder="Address (optional)" value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} />
+          <button onClick={addClient} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+            Save client
           </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-        {filtered.map(c => {
-          const usagePct = Math.round((c.drawingsUsed / c.drawingsLimit) * 100);
-          const ps = PLAN_STYLES[c.plan] || PLAN_STYLES.Standard;
-          return (
-            <div key={c.id} style={{
-              background: t.card, border: `1px solid ${t.border}`,
-              borderRadius: 14, padding: 20, boxShadow: t.shadowSm,
-              cursor: 'pointer', transition: 'all 0.15s'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 42, height: 42, borderRadius: 10,
-                    background: ps.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, fontWeight: 700, color: ps.color
-                  }}>{c.name.charAt(0)}</div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: t.text }}>{c.name}</div>
-                    <div style={{ fontSize: 11, color: t.textMuted }}>{c.email}</div>
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: 11, padding: '3px 10px', borderRadius: 8,
-                  background: ps.bg, color: ps.color, fontWeight: 600
-                }}>{c.plan}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                <span style={{ color: t.textMuted }}>Drawings: {c.drawingsUsed}/{c.drawingsLimit}</span>
-                <span style={{ color: usagePct > 80 ? t.warning : t.textMuted, fontWeight: usagePct > 80 ? 600 : 400 }}>{usagePct}%</span>
-              </div>
-              <div style={{ width: '100%', height: 4, borderRadius: 4, background: t.border, overflow: 'hidden', marginBottom: 14 }}>
-                <div style={{
-                  width: `${usagePct}%`, height: '100%', borderRadius: 4,
-                  background: usagePct > 80 ? t.warning : `linear-gradient(90deg, ${t.accent}, ${t.accentLight})`,
-                  transition: 'width 0.8s ease'
-                }} />
-              </div>
-
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: t.textMuted }}>
-                <span>{c.projects} projects</span>
-                <span>£{c.totalSpend.toLocaleString()} spend</span>
-                <span>Rate: {c.rateCard}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {filtered.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 60, color: t.textMuted }}>
-          <div style={{ marginBottom: 12 }}><ClientsIcon size={40} /></div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: t.textSecondary }}>No clients found</div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>Try adjusting your filters or search</div>
         </div>
       )}
+
+      {(clients || []).length > 5 && (
+        <input style={{ ...input, marginBottom: 14 }} placeholder="Search name, email or phone" value={search} onChange={e => setSearch(e.target.value)} />
+      )}
+
+      {clients === null ? (
+        <div style={{ color: t.textSecondary, padding: '20px 0' }}>Loading…</div>
+      ) : visible.length === 0 ? (
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '22px 18px', color: t.textMuted, fontSize: 14, lineHeight: 1.6 }}>
+          No clients yet. They'll appear here automatically as you create jobs, quotes and invoices — or add one now.
+        </div>
+      ) : visible.map(c => {
+        const owes = num(c.owed_total) > 0;
+        const isOpen = openId === c.id;
+        return (
+          <div key={c.id} style={{
+            background: t.card, border: '1px solid ' + t.border,
+            borderLeft: owes ? '4px solid ' + (t.danger || '#EF4444') : '1px solid ' + t.border,
+            borderRadius: 12, padding: '14px 16px', marginBottom: 10,
+          }}>
+            <div onClick={() => openClient(c.id)} style={{ cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{c.name}</div>
+                {owes && <div style={{ color: t.danger, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>owes {fmt0(c.owed_total)}</div>}
+              </div>
+              <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+                {[c.email, c.phone].filter(Boolean).join(' · ') || 'No contact details yet'}
+              </div>
+              <div style={{ display: 'flex', gap: 14, marginTop: 8, fontSize: 12.5, color: t.textSecondary, flexWrap: 'wrap' }}>
+                <span>{num(c.job_count)} job{num(c.job_count) === 1 ? '' : 's'}</span>
+                <span>Quoted {fmt0(c.quoted_total)}</span>
+                <span>Invoiced {fmt0(c.invoiced_total)}</span>
+                <span style={{ color: t.success }}>Paid {fmt0(c.paid_total)}</span>
+              </div>
+            </div>
+
+            {isOpen && (
+              <div style={{ borderTop: '1px solid ' + t.border, marginTop: 12, paddingTop: 12 }}>
+                {detail === null || !editing ? (
+                  <div style={{ color: t.textMuted, fontSize: 13 }}>Loading…</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {c.phone && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <a href={'tel:' + c.phone} style={{ flex: 1, textAlign: 'center', minHeight: 42, lineHeight: '42px', borderRadius: 10, background: t.surface, border: '1px solid ' + t.border, color: t.text, textDecoration: 'none', fontSize: 13.5, fontWeight: 700 }}>Call</a>
+                        <a href={'https://wa.me/' + c.phone.replace(/[^0-9]/g, '').replace(/^0/, '44')} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', minHeight: 42, lineHeight: '42px', borderRadius: 10, background: t.surface, border: '1px solid ' + t.border, color: t.text, textDecoration: 'none', fontSize: 13.5, fontWeight: 700 }}>WhatsApp</a>
+                      </div>
+                    )}
+
+                    {(detail.jobs || []).length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Jobs</div>
+                        {detail.jobs.map(j => (
+                          <button key={j.id} onClick={() => nav('/jobs/' + j.id)} style={{
+                            display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8,
+                            background: 'none', border: 'none', borderTop: '1px solid ' + t.border,
+                            padding: '8px 0', cursor: 'pointer', color: t.text, fontSize: 14, textAlign: 'left',
+                          }}>
+                            <span style={{ fontWeight: 600 }}>{j.name}</span>
+                            <span style={{ color: t.textMuted, fontSize: 12.5, textTransform: 'capitalize', flexShrink: 0 }}>{j.status}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {(detail.quotes || []).length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Quotes</div>
+                        {detail.quotes.map(q => (
+                          <button key={q.id} onClick={() => nav('/estimator/quote/' + q.id)} style={{
+                            display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8,
+                            background: 'none', border: 'none', borderTop: '1px solid ' + t.border,
+                            padding: '8px 0', cursor: 'pointer', color: t.text, fontSize: 14, textAlign: 'left',
+                          }}>
+                            <span>{q.project_name || q.quote_number}</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, flexShrink: 0 }}>{fmt0(q.grand_total)} <span style={{ color: t.textMuted, fontWeight: 500, textTransform: 'capitalize' }}>· {q.status}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {(detail.invoices || []).length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Invoices</div>
+                        {detail.invoices.map(inv => (
+                          <button key={inv.id} onClick={() => nav('/invoices/' + inv.id)} style={{
+                            display: 'flex', justifyContent: 'space-between', width: '100%', gap: 8,
+                            background: 'none', border: 'none', borderTop: '1px solid ' + t.border,
+                            padding: '8px 0', cursor: 'pointer', color: t.text, fontSize: 14, textAlign: 'left',
+                          }}>
+                            <span>{inv.invoice_number}</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, flexShrink: 0 }}>{fmt0(inv.grand_total)} <span style={{ color: inv.status === 'paid' ? t.success : t.textMuted, fontWeight: 500, textTransform: 'capitalize' }}>· {inv.status}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Details</div>
+                    <input style={input} placeholder="Name" value={editing.name || ''} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+                    <input style={input} type="email" placeholder="Email" value={editing.email || ''} onChange={e => setEditing({ ...editing, email: e.target.value })} />
+                    <input style={input} type="tel" placeholder="Phone" value={editing.phone || ''} onChange={e => setEditing({ ...editing, phone: e.target.value })} />
+                    <input style={input} placeholder="Address" value={editing.address || ''} onChange={e => setEditing({ ...editing, address: e.target.value })} />
+                    <textarea style={{ ...input, minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }} placeholder="Notes — gate codes, preferences, anything worth remembering" value={editing.notes || ''} onChange={e => setEditing({ ...editing, notes: e.target.value })} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={saveEdit} style={{ flex: 1, minHeight: 44, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Save details</button>
+                      <button onClick={() => removeClient(c.id)} style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: 'transparent', border: '1px solid ' + (t.danger || '#EF4444') + '66', color: t.danger || '#EF4444', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
