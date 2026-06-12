@@ -571,6 +571,13 @@ router.post('/:id/stripe-link', async (req, res) => {
     }
     const publicUrl = mailer.BASE_URL + '/i/' + token;
 
+    // When the builder has connected their own Stripe account, the charge is
+    // created there — the money settles to their bank, not the platform's.
+    const requestOpts = {};
+    if (settings.stripe_account_id && settings.stripe_charges_enabled) {
+      requestOpts.stripeAccount = settings.stripe_account_id;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       success_url: publicUrl + '?paid=1',
@@ -590,7 +597,7 @@ router.post('/:id/stripe-link', async (req, res) => {
         },
       }],
       metadata: { invoice_id: inv.id, user_id: req.user.id },
-    });
+    }, requestOpts);
 
     db.prepare(
       'UPDATE invoices SET stripe_payment_link=?, stripe_payment_intent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
