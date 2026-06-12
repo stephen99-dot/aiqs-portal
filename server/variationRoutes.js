@@ -793,6 +793,10 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
         items: s.items, // full editable line items
       })),
       grand: parsed.grand,
+      // OH&P / contingency / VAT printed on the source BOQ — the client copy
+      // UI seeds its controls from these so the default export reproduces the
+      // delivered bottom line.
+      source_summary: parsed.source_summary || null,
     });
   } catch (err) {
     console.error('[BuilderPack] breakdown error:', err);

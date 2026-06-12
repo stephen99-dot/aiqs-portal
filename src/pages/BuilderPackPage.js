@@ -52,16 +52,20 @@ export default function BuilderPackPage() {
   const [materialsMarkup, setMaterialsMarkup] = useState(0);
 
   // Client-tab controls
-  const [defaultOhp, setDefaultOhp] = useState(12);
-  const [contingency, setContingency] = useState(7.5);
+  // All margins default to 0 (like-for-like with the delivered BOQ); when the
+  // source document prints its own OH&P/contingency/VAT lines, the load effect
+  // seeds these from it so the default export reproduces the same bottom line.
+  const [defaultOhp, setDefaultOhp] = useState(0);
+  const [contingency, setContingency] = useState(0);
   const [vat, setVat] = useState(0);
+  const [sourceSeeded, setSourceSeeded] = useState(false);
   const [perTradeOhp, setPerTradeOhp] = useState({});
   const [prelimsMode, setPrelimsMode] = useState('off');
   const [prelimsAmount, setPrelimsAmount] = useState(0);
   const [prelimsPct, setPrelimsPct] = useState(0);
   const [dayRateOn, setDayRateOn] = useState(false);
   const [dayRate, setDayRate] = useState({ label: 'Project management', days: 0, rate_per_day: 0 });
-  const [rounding, setRounding] = useState(10);
+  const [rounding, setRounding] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +86,24 @@ export default function BuilderPackPage() {
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
+        // Seed the client copy controls from the source BOQ's own summary so
+        // the default export matches its bottom line exactly.
+        const ss = bd.source_summary || {};
+        if (ss.ohp_pct != null) {
+          setDefaultOhp(ss.ohp_pct);
+          if (Array.isArray(ss.ohp_sections) && ss.ohp_sections.length === 2) {
+            const [from, to] = ss.ohp_sections;
+            const overrides = {};
+            for (const s of seeded) {
+              const n = parseFloat(s.number);
+              if (Number.isFinite(n) && (n < from || n > to)) overrides[s.number] = 0;
+            }
+            if (Object.keys(overrides).length) setPerTradeOhp(overrides);
+          }
+        }
+        if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
+        if (ss.vat_pct != null) setVat(ss.vat_pct);
+        setSourceSeeded(ss.ohp_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
         if (br && br.branding) {
           setBranding(br.branding);
           // Logo endpoint needs auth — fetch as blob so <img> can render it.
@@ -380,7 +402,7 @@ export default function BuilderPackPage() {
                 sections={sections} sym={sym}
                 onDownload={downloadClientCopy} downloading={downloading}
                 disabled={clientRows.length === 0}
-                isDirty={isDirty} onReset={resetEdits}
+                isDirty={isDirty} onReset={resetEdits} sourceSeeded={sourceSeeded}
               />
             )}
           </div>
@@ -625,13 +647,16 @@ function ClientControls({
   prelimsAmount, setPrelimsAmount, prelimsPct, setPrelimsPct,
   dayRateOn, setDayRateOn, dayRate, setDayRate,
   perTradeOhp, setPerTradeOhp, sections, sym,
-  onDownload, downloading, disabled, isDirty, onReset,
+  onDownload, downloading, disabled, isDirty, onReset, sourceSeeded,
 }) {
   return (
     <>
       <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px' }}>Client copy controls</h3>
       <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
         What the client sees. No margin shown separately — uplift is baked into rates.
+        {sourceSeeded
+          ? ' These controls are pre-set to match your delivered BOQ, so the default download has the same bottom line — just rebranded. Adjust them to add your own margin.'
+          : ' At 0 the copy matches your delivered BOQ like-for-like — just rebranded.'}
       </p>
       <ResetRow isDirty={isDirty} onReset={onReset} />
 

@@ -184,10 +184,11 @@ async function parseBOQ(filePath) {
   if (!ws) throw new Error('BOQ worksheet not found');
 
   // Collect any row that has a merge anchored at column A, regardless of width.
-  // Some BOQs use A:F, A:G, A:H etc.
+  // Some BOQs use A:F, A:G, A:H etc. Depending on how the file was produced,
+  // exceljs keys merges either by range ("A30:G30") or by anchor alone ("A30").
   const mergedRows = new Set();
   for (const key of Object.keys(ws._merges || {})) {
-    const m = key.match(/^A(\d+):[A-Z]+\1$/i);
+    const m = key.match(/^A(\d+)(?::[A-Z]+\1)?$/i);
     if (m) mergedRows.add(parseInt(m[1], 10));
   }
 
@@ -206,9 +207,12 @@ async function parseBOQ(filePath) {
   const sections = [];
   let current = null;
   let stopped = false;
+  // Summary adders printed at the bottom of the source document (OH&P,
+  // contingency, VAT). Captured so a client copy can default to the same
+  // bottom line as the BOQ it came from.
+  const sourceSummary = { ohp_pct: null, ohp_sections: null, contingency_pct: null, vat_pct: null };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (stopped) return;
     if (rowNumber <= headerRow) return;
 
     const a = cellText(row.getCell(1)).trim();
@@ -216,9 +220,44 @@ async function parseBOQ(filePath) {
     const upperA = a.toUpperCase();
     const upperB = b.toUpperCase();
 
-    // Stop at the project summary block — that's QS-side, not item-level
+    // Source summary lines — may sit beyond the stop marker, so detect them
+    // before the stopped check. Guard: a real summary line has no unit/qty,
+    // just a label and a value. Merged label rows mirror their text into every
+    // column, so a unit cell that just repeats the label doesn't count.
+    const upperLabel = (upperA || upperB);
+    const unitText = cellText(row.getCell(3)).trim();
+    const mirrored = !!unitText && unitText === (a || b);
+    const hasUnitOrQty = !mirrored && (!!unitText || cellNumber(row.getCell(4)) > 0);
+    if (!hasUnitOrQty && cellNumber(row.getCell(8)) > 0) {
+      let m;
+      if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
+        sourceSummary.ohp_pct = parseFloat(m[1]);
+        const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
+        if (sc) sourceSummary.ohp_sections = [parseFloat(sc[1]), parseFloat(sc[2])];
+        return;
+      }
+      if ((m = upperLabel.match(/^CONTINGENCY\D*?([\d.]+)\s*%/))) {
+        sourceSummary.contingency_pct = parseFloat(m[1]);
+        return;
+      }
+      if ((m = upperLabel.match(/^VAT\s*@?\s*([\d.]+)\s*%/))) {
+        sourceSummary.vat_pct = parseFloat(m[1]);
+        return;
+      }
+    }
+
+    if (stopped) return;
+
+    // Section carry-down rows ("PRELIMINARIES — TO COLLECTION") repeat the
+    // section total — skipping them stops the total being counted as an item.
+    // The recomputed subtotal from the items matches the carried figure.
+    if (upperLabel.includes('TO COLLECTION')) return;
+
+    // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
-        upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL')) {
+        upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
+        upperLabel.includes('COLLECTION & SUMMARY') ||
+        upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
       stopped = true;
       return;
     }
@@ -274,13 +313,34 @@ async function parseBOQ(filePath) {
   // Drop empty sections (a heading row with no items beneath it)
   const cleaned = sections.filter((s) => s.items.length > 0);
 
-  // Backfill subtotals from items if missing
+  // Normalise labour/materials to LINE totals. Two shapes exist in the wild:
+  // the chat generator writes line totals (Total = Labour + Materials), while
+  // QS-delivered BOQs write per-unit rates (Total = Rate × Qty, with Labour and
+  // Materials also per unit). The file's own Total column is the ground truth,
+  // so use it to tell the shapes apart line by line.
+  const round2 = (v) => Math.round(v * 100) / 100;
   for (const s of cleaned) {
-    if (s.subtotal.total === 0 && s.items.length) {
-      s.subtotal.labour = s.items.reduce((a, i) => a + (i.labour || 0), 0);
-      s.subtotal.materials = s.items.reduce((a, i) => a + (i.materials || 0), 0);
-      s.subtotal.total = s.items.reduce((a, i) => a + (i.total || 0), 0);
+    for (const it of s.items) {
+      const lm = (it.labour || 0) + (it.materials || 0);
+      const tol = Math.max((it.total || 0) * 0.01, 0.51);
+      if (it.total > 0 && lm > 0 && Math.abs(it.total - lm) > tol) {
+        if (it.qty > 0 && Math.abs(it.total - lm * it.qty) <= tol) {
+          // Per-unit shape: scale up by quantity
+          it.labour = round2((it.labour || 0) * it.qty);
+          it.materials = round2((it.materials || 0) * it.qty);
+        } else {
+          // Neither shape matches — trust Total, keep the labour/materials split
+          it.labour = round2(it.total * ((it.labour || 0) / lm));
+          it.materials = round2(it.total * ((it.materials || 0) / lm));
+        }
+      } else if (!(it.total > 0)) {
+        it.total = lm > 0 ? round2(lm) : round2((it.rate || 0) * (it.qty || 0));
+      }
     }
+    // Recompute subtotals from the normalised items so they always agree
+    s.subtotal.labour = s.items.reduce((a, i) => a + (i.labour || 0), 0);
+    s.subtotal.materials = s.items.reduce((a, i) => a + (i.materials || 0), 0);
+    s.subtotal.total = s.items.reduce((a, i) => a + (i.total || 0), 0);
   }
 
   const grand = cleaned.reduce(
@@ -292,7 +352,7 @@ async function parseBOQ(filePath) {
     { labour: 0, materials: 0, total: 0 }
   );
 
-  return { sections: cleaned, grand };
+  return { sections: cleaned, grand, source_summary: sourceSummary };
 }
 
 /**
