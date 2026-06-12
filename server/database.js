@@ -769,6 +769,11 @@ const migrations = [
   { column: 'onboarding_skipped', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_skipped INTEGER DEFAULT 0" },
   { column: 'free_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN free_credits INTEGER DEFAULT 0" },
   { column: 'total_projects', table: 'users', sql: "ALTER TABLE users ADD COLUMN total_projects INTEGER DEFAULT 0" },
+  // BOQ/Findings files on the project. Historically added lazily by chat.js on
+  // first BOQ generation — but the deliverables upload and Builder Pack /
+  // Client Copy routes need them even on a database where chat was never used.
+  { column: 'boq_filename', table: 'projects', sql: 'ALTER TABLE projects ADD COLUMN boq_filename TEXT' },
+  { column: 'findings_filename', table: 'projects', sql: 'ALTER TABLE projects ADD COLUMN findings_filename TEXT' },
   // Admin submissions inbox — actioned state + private notes
   { column: 'actioned_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_at DATETIME" },
   { column: 'actioned_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN actioned_by TEXT" },
