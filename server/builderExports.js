@@ -919,11 +919,6 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
   ws.headerFooter.oddFooter = '&L' + footerLeft + ' — CLIENT COPY&RPage &P of &N';
 
-  // Now that we know the headline number, fill in the cover sheet's total
-  const totalCell = cover.getCell('C15');
-  const symFmt = (currency === '€' ? '€' : '£');
-  totalCell.value = symFmt + Math.round(exVat).toLocaleString('en-GB');
-
   const buffer = await wb.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }
