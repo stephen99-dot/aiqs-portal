@@ -795,10 +795,71 @@ function CostsTab({ t }) {
   );
 }
 
+// ─── Feedback tab — in-portal survey results ────────────────────────────────
+function SurveyTab({ t }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    apiFetch('/admin/surveys').then(setData).catch(e => setError(e.message));
+  }, []);
+
+  if (error) return <div style={{ color: '#EF4444', padding: 20 }}>{error}</div>;
+  if (!data) return <div style={{ color: t.textMuted, padding: 20 }}>Loading…</div>;
+
+  const responses = data.responses || [];
+  const summary = (data.summary && data.summary[0]) || null;
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '16px 20px' };
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 20 }}>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{summary ? summary.responses : 0}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Responses</div>
+        </div>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#F59E0B' }}>{summary && summary.avg_stars != null ? summary.avg_stars + ' ★' : '—'}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Average rating</div>
+        </div>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{summary && summary.avg_nav_score != null ? summary.avg_nav_score + ' / 10' : '—'}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Ease of navigation</div>
+        </div>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{summary ? summary.feature_requests : 0}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Feature requests</div>
+        </div>
+      </div>
+
+      {responses.length === 0 ? (
+        <div style={{ ...card, color: t.textMuted, fontSize: 13.5 }}>No responses yet — the survey popup is live for every signed-in user.</div>
+      ) : responses.map(r => (
+        <div key={r.id} style={{ ...card, marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <div style={{ fontWeight: 600, color: t.text, fontSize: 14 }}>
+              {r.full_name || r.email}{r.company ? ' · ' + r.company : ''}
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>{(r.created_at || '').slice(0, 10)}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 13, color: t.textMuted, flexWrap: 'wrap' }}>
+            <span style={{ color: '#F59E0B', fontWeight: 700 }}>{'★'.repeat(r.stars || 0)}{'☆'.repeat(5 - (r.stars || 0))}</span>
+            {r.nav_score != null && <span>Navigation {r.nav_score}/10</span>}
+          </div>
+          {r.feature_request && (
+            <div style={{ marginTop: 8, fontSize: 13.5, color: t.text, lineHeight: 1.55, background: t.surface, borderRadius: 8, padding: '10px 12px' }}>
+              "{r.feature_request}"
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'feedback', label: 'Feedback' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -812,6 +873,7 @@ export default function AdminPage() {
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'submissions' && <SubmissionsTab t={t} />}
+      {tab === 'feedback' && <SurveyTab t={t} />}
       {tab === 'costs' && <CostsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
       {tab === 'playbooks' && <PlaybooksTab t={t} />}
