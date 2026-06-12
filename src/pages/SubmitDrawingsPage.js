@@ -171,7 +171,7 @@ export default function SubmitDrawingsPage() {
 
       setStatus({
         type: 'success',
-        msg: "Submitted! We'll be in touch within 24 hours with your professional BOQ and Findings Report. Submission ID: " + data.submission_id,
+        msg: "Submitted! Your BOQ and Findings Report will be delivered to My Projects, typically within 24 hours. Once it arrives you can amend the numbers and produce a Client Copy with your own logo and colours. Submission ID: " + data.submission_id,
       });
       setProjectType('');
       setMessage('');
@@ -200,6 +200,34 @@ export default function SubmitDrawingsPage() {
         <p style={{ color: t.textMuted, fontSize: 14, margin: 0, lineHeight: 1.6 }}>
           Upload your plans, elevations, and specs. We'll produce a professional Bill of Quantities and Findings Report — typically within 24 hours.
         </p>
+      </div>
+
+      {/* What happens next — sets the expectation that everything comes back here */}
+      <div style={{
+        display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap',
+      }}>
+        {[
+          ['1', 'You submit', 'Drawings go straight to our QS team — no email chains needed.'],
+          ['2', 'Delivered to your portal', 'Your BOQ and Findings Report arrive under My Projects, typically within 24 hours.'],
+          ['3', 'Make it yours', 'Amend the numbers and produce a Client Copy with your own logo and colour scheme, ready to send on.'],
+        ].map(([n, title, desc]) => (
+          <div key={n} style={{
+            flex: '1 1 220px', display: 'flex', gap: 10, alignItems: 'flex-start',
+            padding: '12px 14px', borderRadius: 12,
+            background: t.card, border: '1px solid ' + t.border,
+          }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              background: 'rgba(245,158,11,0.12)', color: '#F59E0B',
+              fontSize: 11.5, fontWeight: 800,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{n}</div>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, marginBottom: 2 }}>{title}</div>
+              <div style={{ fontSize: 11.5, color: t.textMuted, lineHeight: 1.5 }}>{desc}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Credit banner */}

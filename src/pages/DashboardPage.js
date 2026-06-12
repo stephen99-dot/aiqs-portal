@@ -8,7 +8,7 @@ import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
-  NewProjectIcon, UploadIcon, DownloadIcon, ChatIcon,
+  UploadIcon, DownloadIcon, ChatIcon,
   BrainIcon,
 } from '../components/Icons';
 
@@ -239,11 +239,69 @@ function MessageUsageBar({ usage, t }) {
   );
 }
 
+// Submissions the QS team hasn't delivered yet — closes the loop between
+// "I uploaded my drawings" and the finished project appearing below.
+function SubmissionsTracker({ submissions, t }) {
+  const pending = (submissions || []).filter(s => s.status !== 'delivered').slice(0, 5);
+  if (pending.length === 0) return null;
+
+  const STAGE = {
+    received:    { label: 'With our QS team', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+    in_progress: { label: 'Being priced',     color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
+  };
+
+  function fmtDate(raw) {
+    if (!raw) return '';
+    const d = new Date(String(raw).replace(' ', 'T') + (String(raw).includes('Z') ? '' : 'Z'));
+    return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  return (
+    <div style={{
+      background: t.card, border: `1px solid ${t.border}`,
+      borderRadius: 12, padding: '16px 20px', marginBottom: 20, boxShadow: t.shadowSm,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <ClockIcon size={14} color="#F59E0B" />
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Drawings with our QS team</span>
+      </div>
+      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
+        Your BOQ and Findings Report will appear under Your Projects below — typically within 24 hours.
+        Once delivered, open the project to amend numbers and produce a Client Copy with your own logo and colours.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {pending.map(s => {
+          const stage = STAGE[s.status] || STAGE.received;
+          return (
+            <div key={s.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              padding: '9px 12px', borderRadius: 8, background: t.surfaceHover,
+            }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: t.text }}>
+                {s.project_type || 'Project'}
+              </span>
+              <span style={{ fontSize: 11.5, color: t.textMuted, flex: 1 }}>
+                {s.file_count} file{s.file_count !== 1 ? 's' : ''}{fmtDate(s.created_at) ? ` · sent ${fmtDate(s.created_at)}` : ''}
+              </span>
+              <span style={{
+                fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 6,
+                color: stage.color, background: stage.bg, whiteSpace: 'nowrap',
+              }}>
+                {stage.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GettingStarted({ projects, t }) {
   const steps = [
     { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
-    { key: 'chat', label: 'Start a chat — upload drawings (PDF, ZIP, Excel)', done: projects.length > 0, icon: UploadIcon },
-    { key: 'boq', label: 'Generate your first BOQ (Excel & Word download)', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
+    { key: 'submit', label: 'Submit your drawings — our QS team takes it from there', done: projects.length > 0, icon: UploadIcon },
+    { key: 'boq', label: 'Receive your BOQ & Findings here, typically within 24 hours', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
   ];
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => { try { if (localStorage.getItem('aiqs_checklist_dismissed') === 'true') setDismissed(true); } catch {} }, []);
@@ -342,6 +400,7 @@ export default function DashboardPage() {
   const [deletingId, setDeletingId] = useState(null);
   const [adminMessages, setAdminMessages] = useState([]);
   const [onboardingStatus, setOnboardingStatus] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -352,13 +411,15 @@ export default function DashboardPage() {
         apiFetch('/usage').catch(() => null),
         apiFetch('/my-messages').catch(() => ({ messages: [] })),
         apiFetch('/onboarding').catch(() => null),
+        apiFetch('/submissions').catch(() => ({ submissions: [] })),
       ])
-        .then(([proj, usg, msgs, onb]) => {
+        .then(([proj, usg, msgs, onb, subs]) => {
           if (cancelled) return;
           setProjects(proj.projects || proj || []);
           setUsage(usg);
           setAdminMessages(msgs.messages || []);
           setOnboardingStatus(onb);
+          setSubmissions(subs.submissions || []);
         })
         .catch(console.error)
         .finally(() => { if (!cancelled && initial) setLoading(false); });
@@ -405,7 +466,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) {
       const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
-      const whatsNewKey = `aiqs_whats_new_v4_${user?.id || 'default'}`;
+      const whatsNewKey = `aiqs_whats_new_v5_${user?.id || 'default'}`;
       try {
         const seen = localStorage.getItem(tourKey);
         // The stored value is the TOUR_VERSION the user last completed.
@@ -491,17 +552,20 @@ export default function DashboardPage() {
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: t.textSecondary, lineHeight: 1.8 }}>
                 <li>
-                  <strong style={{ color: t.text }}>AI Memory</strong> — the AI now remembers your preferences across every project.{' '}
-                  <Link to="/onboarding" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Set up your profile →</Link>
+                  <strong style={{ color: t.text }}>Submit Drawings is now the main way to get a BOQ</strong> — our QS team prices your job and delivers it straight back to this portal, typically within 24 hours.{' '}
+                  <Link to="/submit-drawings" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Submit drawings →</Link>
                 </li>
-                <li><strong style={{ color: t.text }}>Project intake</strong> — confirm scope and floor area when uploading drawings for a grounded BOQ</li>
-                <li><strong style={{ color: t.text }}>Variations</strong> — raise change orders directly from any project page</li>
-                <li><strong style={{ color: t.text }}>My Rates</strong> — build your own pricing library, auto-applied to every estimate</li>
+                <li><strong style={{ color: t.text }}>AI Chat is in a testing phase</strong> — feel free to explore it, but use Submit Drawings when you need numbers you can rely on</li>
+                <li><strong style={{ color: t.text }}>Client Copy with your logo</strong> — open any delivered project to amend the numbers and download a branded copy to send to your client</li>
+                <li>
+                  <strong style={{ color: t.text }}>Your branding</strong> — upload your logo and pick your colours once, and every document wears them.{' '}
+                  <Link to="/branding" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Set up branding →</Link>
+                </li>
               </ul>
             </div>
             <button onClick={() => {
               setShowWhatsNew(false);
-              try { localStorage.setItem(`aiqs_whats_new_v4_${user?.id || 'default'}`, 'true'); } catch {}
+              try { localStorage.setItem(`aiqs_whats_new_v5_${user?.id || 'default'}`, 'true'); } catch {}
             }} style={{
               background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
               textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
@@ -544,15 +608,16 @@ export default function DashboardPage() {
           <h1 className="page-title">Welcome back, {firstName}</h1>
           <p className="page-subtitle">Here's an overview of your projects</p>
         </div>
-        <Link to="/chat" className="btn-primary" data-tour="start-chat">
-          <NewProjectIcon size={15} color="#0A0F1C" />
-          Start Chat
+        <Link to="/submit-drawings" className="btn-primary" data-tour="submit-cta">
+          <UploadIcon size={15} color="#0A0F1C" />
+          Submit Drawings
         </Link>
       </div>
 
       <UsageBar usage={usage} t={t} user={user} />
       <MessageUsageBar usage={usage} t={t} />
       <GettingStarted projects={projectList} t={t} />
+      <SubmissionsTracker submissions={submissions} t={t} />
 
       <div className="stats-row" data-tour="stats">
         <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow}
@@ -588,9 +653,9 @@ export default function DashboardPage() {
               <FolderIcon size={24} color="#F59E0B" />
             </div>
             <h3>No projects yet</h3>
-            <p>Head to the chat, upload your drawings, and generate your first BOQ.</p>
-            <Link to="/chat" className="btn-primary" style={{ marginTop: 16 }}>
-              Start Your First Project
+            <p>Submit your drawings and our QS team will deliver your BOQ and Findings Report right here — typically within 24 hours.</p>
+            <Link to="/submit-drawings" className="btn-primary" style={{ marginTop: 16 }}>
+              Submit Your Drawings
             </Link>
           </div>
         ) : (

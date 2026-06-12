@@ -322,18 +322,18 @@ export default function ProjectDetailPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                        Open Builder Pack & Client Copy
+                        Amend numbers & generate your Client Copy
                       </span>
                       <span style={{
                         fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
                         padding: '2px 7px', borderRadius: 4,
-                        background: 'rgba(239,68,68,0.12)', color: '#EF4444',
-                        border: '1px solid rgba(239,68,68,0.3)',
+                        background: 'rgba(245,158,11,0.12)', color: '#F59E0B',
+                        border: '1px solid rgba(245,158,11,0.3)',
                         textTransform: 'uppercase',
-                      }}>Testing · Beta</span>
+                      }}>New</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      Trade rollup, materials & labour schedules, per-trade OH&P, prelims, rounding, live preview.
+                      Adjust quantities and rates, add your margin, and download a branded copy with your logo — plus trade rollup and materials & labour schedules.
                     </div>
                   </div>
                   <span style={{ color: '#F59E0B', fontSize: 18, fontWeight: 700 }}>→</span>

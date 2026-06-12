@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
-  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon, SparklesIcon,
+  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon,
   UploadIcon, SettingsIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
@@ -39,6 +39,7 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
     <div>
       <button
         onClick={onToggle}
+        data-tour={item.tour}
         style={{
           width: '100%',
           display: 'flex', alignItems: 'center', gap: 10,
@@ -184,16 +185,26 @@ export default function Layout() {
     ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
     : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'Soon' };
 
+  // Personalisation pages live behind one Settings group so the main nav
+  // stays at five entries: the submit → track → deliver loop plus the add-on.
+  const settingsChildren = [
+    { path: '/my-rates', label: 'My Rates' },
+    { path: '/ai-memory', label: 'AI Memory' },
+    { path: '/branding', label: 'Branding & Logo' },
+  ];
+  const settingsRoutePrefixes = ['/my-rates', '/ai-memory', '/branding', '/onboarding'];
+  const isSettingsRouteActive = settingsRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
+
   const navItems = [
-    { path: '/dashboard', label: 'Completed Projects', Icon: NewProjectIcon },
+    // Submit Drawings leads: the QS-team route is the primary path while the
+    // chatbot is in its testing phase.
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
-    officeNavItem,
+    { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
     // OiB users reach variations through the job page — no standalone entry.
     ...(hasEstimator ? [] : [{ path: '/variations', label: 'Variations', Icon: RatesIcon }]),
-    { path: '/chat',      label: 'Chat',     Icon: ChatIcon },
-    { path: '/my-rates',  label: 'My Rates', Icon: RatesIcon },
-    { path: '/ai-memory', label: 'AI Memory', Icon: SparklesIcon },
-    { path: '/branding', label: 'Branding', Icon: SettingsIcon },
+    { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+    officeNavItem,
+    { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
     { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
@@ -207,8 +218,10 @@ export default function Layout() {
 
   // Expanded state for each group. Persists across renders within a session.
   const [officeExpanded, setOfficeExpanded] = useState(isOfficeRouteActive);
+  const [settingsExpanded, setSettingsExpanded] = useState(isSettingsRouteActive);
   // Auto-open when navigating to one of the children.
   useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
+  useEffect(() => { if (isSettingsRouteActive) setSettingsExpanded(true); }, [isSettingsRouteActive]);
 
   // Sidebar uses the theme's sidebar token (keeps the AI QS dark navy by
   // default, but re-skins for ChatGPT / Claude / Copilot themes).
@@ -317,16 +330,17 @@ export default function Layout() {
           {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => {
-              if (item.group === 'office') {
+              if (item.group) {
+                const isOffice = item.group === 'office';
                 return (
                   <OfficeGroup
-                    key="office"
+                    key={item.group}
                     item={item}
                     t={t}
                     mode={mode}
-                    expanded={officeExpanded}
-                    onToggle={() => setOfficeExpanded(v => !v)}
-                    isAnyActive={isOfficeRouteActive}
+                    expanded={isOffice ? officeExpanded : settingsExpanded}
+                    onToggle={() => (isOffice ? setOfficeExpanded(v => !v) : setSettingsExpanded(v => !v))}
+                    isAnyActive={isOffice ? isOfficeRouteActive : isSettingsRouteActive}
                     setMobileOpen={setMobileOpen}
                     location={location}
                   />
@@ -337,7 +351,7 @@ export default function Layout() {
                   key={item.path}
                   to={item.path}
                   end={item.path === '/dashboard'}
-                  data-tour={item.path === '/my-rates' ? 'my-rates' : item.path === '/ai-memory' ? 'ai-memory' : undefined}
+                  data-tour={item.path === '/submit-drawings' ? 'submit-drawings' : item.path === '/chat' ? 'chat-nav' : undefined}
                   style={{ textDecoration: 'none' }}
                   onClick={(e) => {
                     if (window.__aiqs_chat_sending) {
