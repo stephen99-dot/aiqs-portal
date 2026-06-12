@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
-  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon,
+  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
@@ -200,8 +200,8 @@ export default function Layout() {
     // chatbot is in its testing phase.
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
-    // OiB users reach variations through the job page — no standalone entry.
-    ...(hasEstimator ? [] : [{ path: '/variations', label: 'Variations', Icon: RatesIcon }]),
+    // No standalone Variations entry: OiB users raise them from the job page,
+    // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
     officeNavItem,
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
