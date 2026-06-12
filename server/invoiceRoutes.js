@@ -205,23 +205,32 @@ router.post('/', (req, res) => {
     const paymentTermsDays = num(b.payment_terms_days, 30);
     const dueDate = b.due_date || dueDateFromTerms(issueDate, paymentTermsDays);
 
+    // Naming a customer creates/links their client record automatically
+    const finalClientName = (b.client_name || seededClient || job?.client_name || '').toString().slice(0, 200) || null;
+    let clientId = null;
+    try {
+      clientId = require('./clientStore').findOrCreateClient(db, userId, {
+        name: finalClientName, email: b.client_email, address: b.client_address,
+      });
+    } catch (e) {}
+
     const txn = db.transaction(() => {
       db.prepare(
         'INSERT INTO invoices (id, user_id, job_id, quote_id, invoice_number, client_name, client_email, '
         + 'client_address, currency, issue_date, due_date, payment_terms_days, notes, net_total, '
-        + 'discount_amount, vat_pct, vat_amount, grand_total, status) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'discount_amount, vat_pct, vat_amount, grand_total, status, client_id) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         id, userId, b.job_id || null, b.from_quote_id || b.quote_id || null,
         invoiceNumber,
-        (b.client_name || seededClient || job?.client_name || '').toString().slice(0, 200) || null,
+        finalClientName,
         (b.client_email || '').toString().slice(0, 200) || null,
         (b.client_address || '').toString().slice(0, 1000) || null,
         seededCurrency,
         issueDate, dueDate, paymentTermsDays,
         (b.notes || '').toString().slice(0, 4000) || null,
         totals.net_total, totals.discount_amount, totals.vat_pct, totals.vat_amount, totals.grand_total,
-        'draft'
+        'draft', clientId
       );
       const ins = db.prepare(
         'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '

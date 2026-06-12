@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 import { ClipboardIcon } from '../components/Icons';
 
@@ -32,6 +33,9 @@ const STEPS = ['submitted', 'in_review', 'in_progress', 'completed', 'delivered'
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
+  // Variations are an Office in a Box feature
+  const hasOiB = !!user?.hasEstimator || user?.role === 'admin';
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null);
@@ -118,9 +122,11 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
-            <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
-          </Link>
+          {hasOiB && (
+            <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
+              <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
+            </Link>
+          )}
           <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
             {status.label}
           </span>

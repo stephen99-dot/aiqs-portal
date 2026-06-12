@@ -137,6 +137,83 @@ function Inner() {
         <BigNumber t={t} label="Quoted, awaiting answer" value={money ? fmt0(money.quoted) : '—'} />
       </div>
 
+      {/* Ask about your jobs — answers come only from your own data */}
+      <div style={{
+        background: t.card, border: '1.5px solid ' + t.accent + '55', borderRadius: 12,
+        padding: 16, marginBottom: 22, boxShadow: '0 2px 12px ' + t.accent + '14',
+      }}>
+        <style>{'@keyframes askDots{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-2px)}}'}</style>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            background: t.accent + '22', color: t.accent,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
+          }}>✦</span>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Ask about your jobs</div>
+        </div>
+        <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 4, marginBottom: 12 }}>
+          Answers come straight from your own quotes, jobs and invoices — nothing made up.
+        </div>
+
+        {thread.length === 0 && !asking && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {['Who owes me the most?', 'Am I making money on my jobs?', "What's still to invoice?"].map(sugg => (
+              <button key={sugg} onClick={() => ask(sugg)} style={{
+                minHeight: 38, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
+                background: t.surface, color: t.textSecondary, border: '1px solid ' + t.border,
+                fontSize: 12.5, fontWeight: 600,
+              }}>{sugg}</button>
+            ))}
+          </div>
+        )}
+
+        {thread.map((m, i) => (
+          <div key={i} style={{
+            marginBottom: 8, padding: '10px 12px', borderRadius: 10, fontSize: 14, lineHeight: 1.55,
+            background: m.role === 'user' ? t.surface : 'rgba(245,158,11,0.07)',
+            border: '1px solid ' + (m.role === 'user' ? t.border : t.accent + '33'),
+            color: t.text, whiteSpace: 'pre-wrap',
+          }}>{m.role === 'user' ? m.content : renderAnswer(m.content)}</div>
+        ))}
+
+        {asking && (
+          <div style={{
+            marginBottom: 8, padding: '12px 14px', borderRadius: 10,
+            background: 'rgba(245,158,11,0.07)', border: '1px solid ' + t.accent + '33',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ display: 'inline-flex', gap: 4 }}>
+              {[0, 1, 2].map(d => (
+                <span key={d} style={{
+                  width: 7, height: 7, borderRadius: '50%', background: t.accent,
+                  animation: 'askDots 1.2s infinite', animationDelay: (d * 0.18) + 's',
+                }} />
+              ))}
+            </span>
+            <span style={{ color: t.textSecondary, fontSize: 13.5, fontWeight: 600 }}>
+              Looking through your jobs, quotes and invoices…
+            </span>
+          </div>
+        )}
+
+        <form onSubmit={e => { e.preventDefault(); ask(); }} style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            disabled={asking}
+            placeholder="e.g. What did I quote for the Patel job?"
+            style={{
+              flex: 1, minHeight: 48, padding: '10px 14px', boxSizing: 'border-box',
+              background: t.bg, border: '1px solid ' + t.border, color: t.text,
+              borderRadius: 10, fontSize: 15, outline: 'none', opacity: asking ? 0.6 : 1,
+            }}
+          />
+          <button type="submit" disabled={asking || !question.trim()} style={askBtnStyle(t, asking || !question.trim())}>
+            {asking ? '…' : 'Ask'}
+          </button>
+        </form>
+      </div>
+
       {/* Needs your attention */}
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Needs your attention</div>
       {cards === null ? (
@@ -186,53 +263,6 @@ function Inner() {
         <QuickAction t={t} Icon={WrenchIcon} label="Tools" onClick={() => nav('/tools')} />
       </div>
 
-      {/* C2 — ask about your jobs (answers come only from your own data) */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>Ask about your jobs</div>
-        <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2, marginBottom: 10 }}>
-          Answers come straight from your own quotes, jobs and invoices — nothing made up.
-        </div>
-
-        {thread.length === 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {['Who owes me the most?', 'Am I making money on my jobs?', "What's still to invoice?"].map(sugg => (
-              <button key={sugg} onClick={() => ask(sugg)} style={{
-                minHeight: 38, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
-                background: t.surface, color: t.textSecondary, border: '1px solid ' + t.border,
-                fontSize: 12.5, fontWeight: 600,
-              }}>{sugg}</button>
-            ))}
-          </div>
-        )}
-
-        {thread.map((m, i) => (
-          <div key={i} style={{
-            marginBottom: 8, padding: '10px 12px', borderRadius: 10, fontSize: 14, lineHeight: 1.5,
-            background: m.role === 'user' ? t.surface : 'rgba(245,158,11,0.07)',
-            border: '1px solid ' + (m.role === 'user' ? t.border : t.accent + '33'),
-            color: t.text, whiteSpace: 'pre-wrap',
-          }}>{m.content}</div>
-        ))}
-        {asking && <div style={{ color: t.textMuted, fontSize: 13, marginBottom: 8 }}>Checking your numbers…</div>}
-
-        <form onSubmit={e => { e.preventDefault(); ask(); }} style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            placeholder="e.g. What did I quote for the Patel job?"
-            style={{
-              flex: 1, minHeight: 48, padding: '10px 14px', boxSizing: 'border-box',
-              background: t.bg, border: '1px solid ' + t.border, color: t.text,
-              borderRadius: 10, fontSize: 15, outline: 'none',
-            }}
-          />
-          <button type="submit" disabled={asking || !question.trim()} style={{
-            minHeight: 48, padding: '0 18px', borderRadius: 10, border: 'none',
-            background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
-            cursor: 'pointer', opacity: (asking || !question.trim()) ? 0.5 : 1,
-          }}>Ask</button>
-        </form>
-      </div>
 
       {nudge && (
         <ShareLinkModal
@@ -245,6 +275,21 @@ function Inner() {
       )}
     </div>
   );
+}
+
+// The assistant answers with **bold** markers — render them as real bold
+// instead of showing raw asterisks.
+function renderAnswer(text) {
+  const parts = String(text || '').split(/\*\*([^*]+)\*\*/g);
+  return parts.map((p, i) => (i % 2 === 1 ? <strong key={i}>{p}</strong> : p));
+}
+
+function askBtnStyle(t, disabled) {
+  return {
+    minHeight: 48, padding: '0 18px', borderRadius: 10, border: 'none',
+    background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
+    cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+  };
 }
 
 function BigNumber({ t, label, value, tone }) {

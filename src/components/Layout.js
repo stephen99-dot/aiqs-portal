@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
-  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon, RatesIcon,
+  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
@@ -167,13 +167,14 @@ export default function Layout() {
   const officeInABoxChildren = [
     { path: '/office', label: 'Today' },
     { path: '/jobs', label: 'Jobs' },
+    { path: '/clients', label: 'Clients' },
     { path: '/money', label: 'Money' },
     { path: '/tools', label: 'Tools' },
   ];
   // Pages reached from inside the group (quote editor, invoice editor, job
   // page, documents, tools) keep the group highlighted and open.
   const officeRoutePrefixes = [
-    '/office', '/jobs', '/money', '/tools',
+    '/office', '/jobs', '/clients', '/money', '/tools',
     '/estimator', '/invoices', '/finance', '/change-orders',
     '/documents', '/calculators', '/materials', '/pm',
   ];
@@ -200,8 +201,8 @@ export default function Layout() {
     // chatbot is in its testing phase.
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
-    // OiB users reach variations through the job page — no standalone entry.
-    ...(hasEstimator ? [] : [{ path: '/variations', label: 'Variations', Icon: RatesIcon }]),
+    // No standalone Variations entry: OiB users raise them from the job page,
+    // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
     officeNavItem,
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
