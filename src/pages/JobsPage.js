@@ -28,6 +28,12 @@ function Inner() {
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [newJob, setNewJob] = useState({ name: '', client_name: '', client_phone: '', location: '' });
+  // Two ways to start a job: describe it, or pull in a BOQ already delivered
+  // to the portal (creates the job + a ready-to-send draft quote in one go).
+  const [jobMode, setJobMode] = useState('describe'); // 'describe' | 'boq'
+  const [portalProjects, setPortalProjects] = useState(null); // null = not loaded yet
+  const [boqJob, setBoqJob] = useState({ project_id: '', client_name: '', client_email: '', client_phone: '' });
+  const [boqCreating, setBoqCreating] = useState(false);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -45,6 +51,28 @@ function Inner() {
       const r = await apiFetch('/finance/jobs', { method: 'POST', body: JSON.stringify(newJob) });
       nav('/jobs/' + r.id);
     } catch (e) { setError(e.message); }
+  };
+
+  const loadPortalProjects = useCallback(async () => {
+    try {
+      const r = await apiFetch('/projects');
+      const list = (r.projects || r || []).filter(p => p.boq_filename);
+      setPortalProjects(list);
+      setBoqJob(b => (b.project_id || !list.length ? b : { ...b, project_id: list[0].id }));
+    } catch (e) { setPortalProjects([]); }
+  }, []);
+  useEffect(() => {
+    if (creating && jobMode === 'boq' && portalProjects === null) loadPortalProjects();
+  }, [creating, jobMode, portalProjects, loadPortalProjects]);
+
+  const createFromBoq = async () => {
+    if (!boqJob.project_id) { setError('Pick the BOQ to start from.'); return; }
+    setBoqCreating(true); setError('');
+    try {
+      const r = await apiFetch('/finance/jobs/from-project', { method: 'POST', body: JSON.stringify(boqJob) });
+      nav('/jobs/' + r.job_id);
+    } catch (e) { setError(e.message); }
+    setBoqCreating(false);
   };
 
   const visible = useMemo(() => {
@@ -92,16 +120,61 @@ function Inner() {
         }}>+ New quote</button>
       </div>
 
-      {/* New job form */}
+      {/* New job form — describe it, or start from a BOQ already in the portal */}
       {creating && (
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input style={input} placeholder="Job name — e.g. 12 Hill St extension" value={newJob.name} onChange={e => setNewJob({ ...newJob, name: e.target.value })} />
-          <input style={input} placeholder="Customer name" value={newJob.client_name} onChange={e => setNewJob({ ...newJob, client_name: e.target.value })} />
-          <input style={input} type="tel" placeholder="Customer phone (so you can call from here)" value={newJob.client_phone} onChange={e => setNewJob({ ...newJob, client_phone: e.target.value })} />
-          <input style={input} placeholder="Address (optional)" value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} />
-          <button onClick={create} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-            Create the job
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[['describe', 'Describe the job'], ['boq', 'Start from a BOQ']].map(([m, label]) => (
+              <button key={m} onClick={() => { setJobMode(m); setError(''); }} style={{
+                flex: 1, minHeight: 42, borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                background: jobMode === m ? t.accent : 'transparent',
+                color: jobMode === m ? '#fff' : t.textMuted,
+                border: '1px solid ' + (jobMode === m ? t.accent : t.border),
+              }}>{label}</button>
+            ))}
+          </div>
+
+          {jobMode === 'describe' ? (
+            <>
+              <input style={input} placeholder="Job name — e.g. 12 Hill St extension" value={newJob.name} onChange={e => setNewJob({ ...newJob, name: e.target.value })} />
+              <input style={input} placeholder="Customer name" value={newJob.client_name} onChange={e => setNewJob({ ...newJob, client_name: e.target.value })} />
+              <input style={input} type="tel" placeholder="Customer phone (so you can call from here)" value={newJob.client_phone} onChange={e => setNewJob({ ...newJob, client_phone: e.target.value })} />
+              <input style={input} placeholder="Address (optional)" value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} />
+              <button onClick={create} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                Create the job
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 12.5, color: t.textMuted, lineHeight: 1.5 }}>
+                Pick a BOQ from your portal and we'll set up the job with a draft quote built
+                from its priced line items — ready to send to your customer.
+              </div>
+              {portalProjects === null ? (
+                <div style={{ fontSize: 13, color: t.textMuted, padding: '8px 2px' }}>Loading your BOQs…</div>
+              ) : portalProjects.length === 0 ? (
+                <div style={{ fontSize: 13, color: t.textMuted, padding: '8px 2px' }}>
+                  No delivered BOQs in your portal yet — submit drawings first, or describe the job instead.
+                </div>
+              ) : (
+                <>
+                  <select style={input} value={boqJob.project_id} onChange={e => setBoqJob({ ...boqJob, project_id: e.target.value })}>
+                    {portalProjects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}{p.total_value ? ' — £' + Math.round(p.total_value).toLocaleString('en-GB') : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <input style={input} placeholder="Customer name" value={boqJob.client_name} onChange={e => setBoqJob({ ...boqJob, client_name: e.target.value })} />
+                  <input style={input} type="email" placeholder="Customer email (to send the quote)" value={boqJob.client_email} onChange={e => setBoqJob({ ...boqJob, client_email: e.target.value })} />
+                  <input style={input} type="tel" placeholder="Customer phone (optional)" value={boqJob.client_phone} onChange={e => setBoqJob({ ...boqJob, client_phone: e.target.value })} />
+                  <button onClick={createFromBoq} disabled={boqCreating} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: boqCreating ? 0.7 : 1 }}>
+                    {boqCreating ? 'Setting up the job…' : 'Create job + draft quote'}
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 

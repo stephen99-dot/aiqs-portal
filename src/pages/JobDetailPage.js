@@ -65,6 +65,11 @@ function Inner() {
   const [documents, setDocuments] = useState([]);
   const [docTemplates, setDocTemplates] = useState([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
+  // Pull a delivered portal BOQ into this job as a ready-to-send draft quote.
+  const [boqPickerOpen, setBoqPickerOpen] = useState(false);
+  const [portalProjects, setPortalProjects] = useState(null);
+  const [boqProjectId, setBoqProjectId] = useState('');
+  const [boqImporting, setBoqImporting] = useState(false);
 
   // Section anchors for the sticky nav.
   const sections = {
@@ -338,8 +343,62 @@ function Inner() {
       <div ref={sections.quotes} style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <div style={sectionTitle}>Quotes</div>
-          <button onClick={() => nav('/estimator/new?job=' + id)} style={primaryBtn}>+ New quote</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={async () => {
+              setBoqPickerOpen(v => !v);
+              if (portalProjects === null) {
+                try {
+                  const r = await apiFetch('/projects');
+                  const list = (r.projects || r || []).filter(p => p.boq_filename);
+                  setPortalProjects(list);
+                  if (list.length) setBoqProjectId(list[0].id);
+                } catch { setPortalProjects([]); }
+              }
+            }} style={{ ...primaryBtn, background: 'transparent', color: t.text, border: '1px solid ' + t.border }}>
+              From portal BOQ
+            </button>
+            <button onClick={() => nav('/estimator/new?job=' + id)} style={primaryBtn}>+ New quote</button>
+          </div>
         </div>
+        {boqPickerOpen && (
+          <div style={{ borderTop: '1px solid ' + t.border, padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12.5, color: t.textMuted }}>
+              Pick a BOQ delivered to your portal — we'll turn its priced line items into a draft quote on this job.
+            </div>
+            {portalProjects === null ? (
+              <div style={{ fontSize: 13, color: t.textMuted }}>Loading your BOQs…</div>
+            ) : portalProjects.length === 0 ? (
+              <div style={{ fontSize: 13, color: t.textMuted }}>No delivered BOQs in your portal yet.</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <select value={boqProjectId} onChange={e => setBoqProjectId(e.target.value)} style={{
+                  flex: '1 1 220px', minHeight: 42, padding: '8px 12px', borderRadius: 10, fontSize: 14,
+                  background: t.bg, border: '1px solid ' + t.border, color: t.text,
+                }}>
+                  {portalProjects.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}{p.total_value ? ' — £' + Math.round(p.total_value).toLocaleString('en-GB') : ''}
+                    </option>
+                  ))}
+                </select>
+                <button disabled={boqImporting || !boqProjectId} onClick={async () => {
+                  setBoqImporting(true);
+                  try {
+                    await apiFetch('/finance/jobs/from-project', {
+                      method: 'POST',
+                      body: JSON.stringify({ project_id: boqProjectId, job_id: id, client_name: job?.client_name || '', client_phone: job?.client_phone || '' }),
+                    });
+                    setBoqPickerOpen(false);
+                    refresh();
+                  } catch (e) { setError(e.message); }
+                  setBoqImporting(false);
+                }} style={{ ...primaryBtn, opacity: boqImporting ? 0.7 : 1 }}>
+                  {boqImporting ? 'Importing…' : 'Create draft quote'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {quotes.length === 0 ? (
           <div style={{ color: t.textMuted, fontSize: 14, padding: '10px 0' }}>
             No quote on this job yet — price it up and it lands here.

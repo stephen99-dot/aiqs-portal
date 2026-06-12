@@ -284,6 +284,145 @@ router.post('/jobs', (req, res) => {
   }
 });
 
+// Start (or grow) a job from a BOQ already delivered to the portal: creates a
+// draft quote seeded from the BOQ's priced line items, ready to send to the
+// client. The source document's OH&P is baked into the line rates (same
+// philosophy as the Client Copy — no separate margin line shown), and its
+// contingency/VAT seed the quote-level percentages, so the quote's bottom
+// line lands on the delivered tender sum.
+//   body: { project_id, job_id?, client_name?, client_email?, client_phone? }
+//   - no job_id  → creates a new job named after the project, then attaches
+//   - job_id     → attaches the quote to an existing job ("link any BOQ")
+router.post('/jobs/from-project', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { parseBOQ } = require('./builderExports');
+    const b = req.body || {};
+
+    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?')
+      .get(b.project_id || '', req.user.id);
+    if (!project) return res.status(404).json({ error: 'Project not found.' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'That project has no BOQ yet — wait for it to be delivered.' });
+
+    const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+    const filePath = path.join(DATA_DIR, 'outputs', project.boq_filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server.' });
+
+    const parsed = await parseBOQ(filePath);
+    if (!parsed.sections.length) return res.status(400).json({ error: 'Could not read any line items from the BOQ.' });
+    const ss = parsed.source_summary || {};
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const inOhpScope = (sectionNumber) => {
+      if (!Array.isArray(ss.ohp_sections) || ss.ohp_sections.length !== 2) return true;
+      const n = parseFloat(sectionNumber);
+      return !Number.isFinite(n) || (n >= ss.ohp_sections[0] && n <= ss.ohp_sections[1]);
+    };
+
+    // Job: reuse an existing one or create one named after the project
+    let jobId = b.job_id || null;
+    if (jobId) {
+      const job = ensureJob(req, jobId);
+      if (!job) return res.status(404).json({ error: 'Job not found.' });
+    } else {
+      jobId = uuidv4();
+      db.prepare(
+        'INSERT INTO estimator_jobs (id, user_id, name, client_name, client_phone, project_type, location, status, notes) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        jobId, req.user.id, (project.title || 'Job from BOQ').slice(0, 200),
+        (b.client_name || '').toString().slice(0, 200) || null,
+        (b.client_phone || '').toString().slice(0, 40) || null,
+        (project.project_type || '').slice(0, 80) || null,
+        (project.location || '').slice(0, 200) || null,
+        'planned',
+        'Created from portal BOQ: ' + (project.title || project.id)
+      );
+    }
+
+    // Quote lines from the BOQ. Rate carries the client-facing price (source
+    // OH&P baked in, scoped per section); labour/materials stay at raw cost so
+    // the budget seeded on acceptance reflects real cost, not price.
+    const ohpPct = ss.ohp_pct != null ? ss.ohp_pct : 0;
+    const lines = [];
+    for (const s of parsed.sections) {
+      const mult = 1 + (inOhpScope(s.number) ? ohpPct : 0) / 100;
+      for (const it of s.items) {
+        // Zero-value lines ("included elsewhere") stay on the quote — they're
+        // scope the client should see, they just don't add to the total.
+        const base = ((it.labour || 0) + (it.materials || 0)) || (it.total || 0);
+        if (!(it.description || '').trim()) continue;
+        const qty = it.qty > 0 ? it.qty : 1;
+        const lineTotal = round2(base * mult);
+        lines.push({
+          section: s.title || ('Section ' + s.number),
+          item: it.itemRef || '',
+          description: it.description || '',
+          unit: it.unit || 'item',
+          qty,
+          rate: round2(lineTotal / qty),
+          labour: it.labour || 0,
+          materials: it.materials || 0,
+        });
+      }
+    }
+    if (lines.length === 0) return res.status(400).json({ error: 'The BOQ has no priced line items.' });
+
+    // Totals — same shape as POST /api/estimator/quotes (OH&P already in the
+    // rates, so quote-level ohp stays 0; contingency/VAT follow the source).
+    const contPct = ss.contingency_pct != null ? ss.contingency_pct : 0;
+    const vatPct = ss.vat_pct != null ? ss.vat_pct : 20;
+    let net = 0;
+    for (const ln of lines) { ln.line_total = round2(ln.qty * ln.rate); net += ln.qty * ln.rate; }
+    const cont = net * (contPct / 100);
+    const beforeVat = net + cont;
+    const vat = beforeVat * (vatPct / 100);
+
+    const quoteId = uuidv4();
+    const d = new Date();
+    const quoteNumber = 'Q-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0')
+      + '-' + Math.floor(1000 + Math.random() * 9000);
+
+    const txn = db.transaction(() => {
+      db.prepare(
+        'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
+        + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
+        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, job_id) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        quoteId, req.user.id,
+        (b.client_name || '').toString().slice(0, 200) || null,
+        (b.client_email || '').toString().slice(0, 200) || null,
+        project.title || 'Quote from BOQ', project.project_type || null,
+        project.currency === 'EUR' ? 'EUR' : 'GBP',
+        'Imported from portal BOQ: ' + project.boq_filename,
+        round2(net), 0, 0, contPct, round2(cont), vatPct, round2(vat),
+        round2(beforeVat + vat), 0, 0,
+        'draft', null, quoteNumber, jobId
+      );
+      const ins = db.prepare(
+        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL)'
+      );
+      lines.forEach((ln, i) => {
+        ins.run(uuidv4(), quoteId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.labour, ln.materials, ln.line_total, i);
+      });
+    });
+    txn();
+
+    res.status(201).json({
+      job_id: jobId,
+      quote_id: quoteId,
+      quote_number: quoteNumber,
+      line_count: lines.length,
+      grand_total: round2(beforeVat + vat),
+    });
+  } catch (err) {
+    console.error('[Finance] job from project error:', err);
+    res.status(500).json({ error: 'Failed to create job from BOQ: ' + err.message });
+  }
+});
+
 router.get('/jobs/:id', (req, res) => {
   try {
     const job = ensureJob(req, req.params.id);

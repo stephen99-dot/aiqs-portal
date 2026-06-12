@@ -63,6 +63,15 @@ function GuestRoute({ children }) {
   return children;
 }
 
+// Variations are part of the Office in a Box add-on — everyone else lands on
+// the upsell page when they follow an old link.
+function OiBRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
+  if (!user?.hasEstimator && user?.role !== 'admin') return <Navigate to="/office-in-a-box" replace />;
+  return children;
+}
+
 // Office in a Box subscribers land on Today (/office); everyone else on the
 // BOQ-pipeline dashboard. Used for the catch-all and post-login redirect.
 function HomeRedirect() {
@@ -110,8 +119,8 @@ function AppInner() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
           <Route path="/admin/submissions" element={<SubmissionsInboxPage />} />
-          <Route path="/variations" element={<VariationsHubPage />} />
-          <Route path="/project/:id/variations" element={<VariationsPage />} />
+          <Route path="/variations" element={<OiBRoute><VariationsHubPage /></OiBRoute>} />
+          <Route path="/project/:id/variations" element={<OiBRoute><VariationsPage /></OiBRoute>} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           {/* Office in a Box — three destinations: Today / Jobs / Money (+ Tools). */}
