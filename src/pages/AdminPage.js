@@ -415,14 +415,14 @@ function RatesTab({ t }) {
               <span style={{ fontSize: 11, color: t.textDim }}>£{tradeRates.reduce((sum, r) => sum + (r.total_rate || 0), 0).toFixed(0)} total value</span>
             </div>
             {isOpen && (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', padding: '8px 20px', borderTop: '1px solid ' + t.border, borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', minWidth: 520, padding: '8px 20px', borderTop: '1px solid ' + t.border, borderBottom: '1px solid ' + t.border, background: t.surfaceHover || t.surface }}>
                   {['Code', 'Description', 'Unit', 'Labour', 'Material', 'Total', ''].map((h, i) => <span key={i} style={{ fontSize: 10, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</span>)}
                 </div>
                 {tradeRates.map((rate, i) => {
                   const isE = editingId === rate.id;
                   return (
-                    <div key={rate.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', padding: '9px 20px', alignItems: 'center', borderBottom: i < tradeRates.length - 1 ? '1px solid ' + t.border : 'none', background: isE ? (t.surfaceHover || t.surface) : 'transparent' }}>
+                    <div key={rate.id} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 55px 80px 80px 90px 60px', minWidth: 520, padding: '9px 20px', alignItems: 'center', borderBottom: i < tradeRates.length - 1 ? '1px solid ' + t.border : 'none', background: isE ? (t.surfaceHover || t.surface) : 'transparent' }}>
                       {isE ? (<>
                         <input style={{ ...iS, width: 70 }} value={editData.code} onChange={e => setEditData(p => ({ ...p, code: e.target.value }))} />
                         <input style={{ ...iS, width: '100%' }} value={editData.description} onChange={e => setEditData(p => ({ ...p, description: e.target.value }))} />
