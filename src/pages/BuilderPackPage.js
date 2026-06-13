@@ -796,6 +796,7 @@ function Field({ label, children }) {
 const previewHeaderStyle = {
   display: 'grid',
   gridTemplateColumns: '32px 1fr 100px 100px 100px 60px',
+  minWidth: 460,
   gap: 8, padding: '9px 12px',
   background: 'rgba(27,42,74,0.06)',
   fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
@@ -804,6 +805,7 @@ const previewHeaderStyle = {
 const previewRowStyle = {
   display: 'grid',
   gridTemplateColumns: '32px 1fr 100px 100px 100px 60px',
+  minWidth: 460,
   gap: 8, padding: '10px 12px',
   borderTop: '1px solid var(--border)',
   fontSize: 12.5,
@@ -821,6 +823,7 @@ function BuilderPreview({ rows, totals, sym }) {
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px' }}>Trade summary preview</h2>
       <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={previewHeaderStyle}>
           <div>#</div><div>Trade</div>
           <div style={{ textAlign: 'right' }}>Labour</div>
@@ -849,6 +852,7 @@ function BuilderPreview({ rows, totals, sym }) {
           <div style={moneyCell()}>{fmt(sym, totals.materials)}</div>
           <div style={moneyCell('#F59E0B')}>{fmt(sym, totals.total)}</div>
           <div style={moneyCell()}>100%</div>
+        </div>
         </div>
       </div>
     </>

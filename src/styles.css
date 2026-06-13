@@ -433,9 +433,11 @@ body {
 /* === RESPONSIVE — MOBILE (max-width: 768px) === */
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
-  .sidebar-panel { transform: translateX(-100%); }
-  .sidebar-panel.open { transform: translateX(0); }
-  .main-panel { margin-left: 0 !important; padding-top: 56px; }
+  .sidebar-panel { transform: translateX(-100%); width: min(86vw, 300px) !important; }
+  .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.4); }
+  /* The <main> element carries className="main-content" — must match here or the
+     240px sidebar gutter (and the 56px fixed-header offset) is never removed. */
+  .main-content, .main-panel { margin-left: 0 !important; padding-top: 56px; }
   .page { padding: 18px 14px; }
   .page-header { flex-direction: column; gap: 12px; }
   .page-title { font-size: 1.35rem; }
@@ -444,6 +446,28 @@ body {
   .stat-value { font-size: 1.4rem; }
   .stat-label { font-size: 0.66rem; }
   .form-row { grid-template-columns: 1fr; }
+
+  /* Collapse the inline "sidebar + content" two-column layouts to a single
+     stacked column. These are written as inline styles across the pages, so we
+     match on the serialized style attribute. auto-fit/minmax grids already
+     reflow on their own and are intentionally left alone. */
+  [style*="grid-template-columns: 1fr 320px"],
+  [style*="grid-template-columns: 1fr 340px"],
+  [style*="grid-template-columns: 1fr 360px"],
+  [style*="grid-template-columns: 1fr 150px"],
+  [style*="grid-template-columns: 320px 1fr"],
+  [style*="grid-template-columns: 160px 1fr 80px"],
+  [style*="grid-template-columns: minmax(0, 1fr) minmax(0, 380px)"],
+  [style*="grid-template-columns: minmax(280px, 380px) 1fr"],
+  [style*="grid-template-columns: minmax(320px, 360px) 1fr"],
+  [style*="grid-template-columns: minmax(360px, 460px) 1fr"],
+  [style*="grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr)"],
+  [style*="grid-template-columns: 1.25fr 0.75fr"],
+  [style*="grid-template-columns: 1.6fr 0.7fr 1fr"],
+  [style*="grid-template-columns: 100px 1fr 160px 60px 90px 90px"] {
+    grid-template-columns: 1fr !important;
+  }
+
   .section-card-header { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; }
   .card-body { padding: 14px; }
   .project-row { flex-direction: column; align-items: flex-start; padding: 12px 14px; }
@@ -488,6 +512,30 @@ body {
     margin: 0 -14px;
     padding: 0 14px;
   }
+
+  /* Keep the whole app from scrolling sideways. Individual wide elements
+     (tables, code blocks) opt back into their own horizontal scroll. */
+  html, body, #root { max-width: 100%; overflow-x: hidden; }
+  .main-content { width: 100%; max-width: 100vw; overflow-x: hidden; }
+
+  /* Any raw <table> becomes horizontally scrollable rather than forcing the
+     page wide. Wrapping the table in .table-responsive is preferred, but this
+     catches the rest. */
+  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Generous tap targets — Apple/Google guidance is 44px minimum. */
+  button, a.btn-primary, a.btn-secondary, .btn-primary, .btn-secondary { min-height: 44px; }
+
+  /* Images and media never overflow their container. */
+  img, video, canvas, svg.responsive { max-width: 100%; height: auto; }
+
+  /* Modals/dialogs: keep them inside the viewport with room to scroll. */
+  .modal-card, .dialog-card { max-width: calc(100vw - 24px) !important; max-height: 90vh; overflow-y: auto; }
+}
+
+/* === RESPONSIVE — TABLET (max-width: 1024px) === */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .page { padding: 28px 24px; }
 }
 
 /* === RESPONSIVE — SMALL PHONES (max-width: 400px) === */

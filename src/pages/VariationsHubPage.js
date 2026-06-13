@@ -70,9 +70,11 @@ export default function VariationsHubPage() {
           borderRadius: 12, border: '1px solid var(--border)',
           background: 'var(--card-bg)', overflow: 'hidden',
         }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 130px 100px 100px 130px 70px',
+            minWidth: 560,
             gap: 8, padding: '11px 16px',
             background: 'rgba(27,42,74,0.06)',
             fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
@@ -92,6 +94,7 @@ export default function VariationsHubPage() {
               style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 130px 100px 100px 130px 70px',
+                minWidth: 560,
                 gap: 8, padding: '14px 16px',
                 borderTop: '1px solid var(--border)',
                 fontSize: 13, color: 'inherit', textDecoration: 'none',
@@ -125,6 +128,7 @@ export default function VariationsHubPage() {
               <div style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 16 }}>→</div>
             </Link>
           ))}
+          </div>
         </div>
       )}
     </div>
