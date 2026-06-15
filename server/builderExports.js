@@ -766,7 +766,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const preInclVat = preExVat * (1 + (vat / 100));
 
   // ── Cover sheet (shared renderer — same look as the QS-side BOQ) ─────────
-  docTpl.renderCoverSheet(wb, {
+  await docTpl.renderCoverSheet(wb, {
     docKind: 'BILL OF QUANTITIES — CLIENT COPY',
     projectName,
     clientName,

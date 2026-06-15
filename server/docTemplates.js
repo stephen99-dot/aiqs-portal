@@ -32,6 +32,77 @@ function tintHex(hex, pct) {
   b = Math.round(b + (255 - b) * pct);
   return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
+// sharp is optional at runtime — load lazily so doc generation never hard-fails
+// if the native binary is missing in some environment.
+let _sharp;
+function getSharp() {
+  if (_sharp === undefined) {
+    try { _sharp = require('sharp'); } catch (e) { _sharp = null; }
+  }
+  return _sharp;
+}
+
+// Resolve a customer's logo into an embeddable PNG buffer plus its natural
+// pixel dimensions. We rasterise through sharp so *any* uploaded format works
+// — including SVG and WebP, which ExcelJS cannot embed directly and which were
+// previously dropped silently (the "logo doesn't show" bug). Returns null when
+// there is no logo or it can't be read.
+async function resolveLogo(branding) {
+  const p = branding && branding.logo_path;
+  if (!p || !fs.existsSync(p)) return null;
+
+  const sharpLib = getSharp();
+  if (sharpLib) {
+    try {
+      // density helps vector (SVG) logos rasterise crisply rather than blurry.
+      const img = sharpLib(p, { density: 300 });
+      const meta = await img.metadata();
+      const buffer = await img.png().toBuffer();
+      return {
+        buffer,
+        extension: 'png',
+        naturalWidth: meta.width || 0,
+        naturalHeight: meta.height || 0,
+      };
+    } catch (e) { /* fall through to raw embed below */ }
+  }
+
+  // Fallback when sharp is unavailable: only raster formats ExcelJS understands.
+  const ext = path.extname(p).toLowerCase().replace('.', '');
+  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
+    try {
+      return {
+        buffer: fs.readFileSync(p),
+        extension: ext === 'jpg' ? 'jpeg' : ext,
+        naturalWidth: 0,
+        naturalHeight: 0,
+      };
+    } catch (e) { return null; }
+  }
+  return null;
+}
+
+// Scale natural dimensions to fit inside a box while preserving aspect ratio,
+// so a square logo is never stretched into a wide letterbox.
+function fitWithin(natW, natH, maxW, maxH) {
+  if (!natW || !natH) return { width: maxW, height: maxH };
+  const scale = Math.min(maxW / natW, maxH / natH);
+  return { width: Math.max(1, Math.round(natW * scale)), height: Math.max(1, Math.round(natH * scale)) };
+}
+
+// Embed a pre-resolved logo (see resolveLogo) at top-left anchor `tl`, fitted
+// within { maxWidth, maxHeight }. Returns the rendered { width, height } or null.
+function embedResolvedLogo(wb, ws, logo, tl, box) {
+  if (!logo || !logo.buffer) return null;
+  try {
+    const { width, height } = fitWithin(logo.naturalWidth, logo.naturalHeight, box.maxWidth, box.maxHeight);
+    const id = wb.addImage({ buffer: logo.buffer, extension: logo.extension || 'png' });
+    ws.addImage(id, { tl, ext: { width, height } });
+    return { width, height };
+  } catch (e) { return null; }
+}
+
+// Back-compat sync helper (raster formats only). Kept for any external callers.
 function tryEmbedLogo(wb, ws, logoPath, anchor) {
   if (!logoPath || !fs.existsSync(logoPath)) return null;
   try {
@@ -43,6 +114,56 @@ function tryEmbedLogo(wb, ws, logoPath, anchor) {
     ws.addImage(id, anchor);
     return id;
   } catch (e) { return null; }
+}
+
+// ─── Text hygiene for cover/hero copy ────────────────────────────────────────
+// Collapse stray whitespace (incl. trailing spaces baked into branding fields).
+function cleanText(s) {
+  if (s == null) return '';
+  return String(s).replace(/\s+/g, ' ').trim();
+}
+
+// Tidy a person/company name's capitalisation: fix ALL-CAPS or all-lowercase
+// words to Title Case, but leave words that already carry intentional mixed
+// case (McDonald, O'Brien, MacLeod) untouched.
+function tidyName(s) {
+  const t = cleanText(s);
+  if (!t) return t;
+  return t.split(' ').map((w) => {
+    const letters = w.replace(/[^A-Za-z]/g, '');
+    if (!letters) return w;
+    const isAllUpper = letters === letters.toUpperCase();
+    const isAllLower = letters === letters.toLowerCase();
+    if (!isAllUpper && !isAllLower) return w; // already mixed case — keep as typed
+    return w.replace(/[A-Za-z][A-Za-z']*/g, (run) => run.charAt(0).toUpperCase() + run.slice(1).toLowerCase());
+  }).join(' ');
+}
+
+// Strip a date that's been appended to a project title (e.g.
+// "Residential Extension — 09/06/2026") so the hero title reads as a title.
+// The date still appears in the ISSUED tile, so nothing is lost.
+function stripTrailingDate(s) {
+  const t = cleanText(s);
+  if (!t) return t;
+  let out = t
+    .replace(/[\s,·|]*[—–-]?\s*\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}\s*$/, '')
+    .replace(/[\s,·|]*[—–-]\s*(?:19|20)\d{2}\s*$/, '');
+  out = cleanText(out);
+  return out || t; // never return empty
+}
+
+// Pick a hero title font size that keeps the title on ~1–2 lines (so it reads
+// across the page rather than stacking one word per line down the page).
+function titleSizeFor(text, baseSize) {
+  const len = cleanText(text).length;
+  const cap = baseSize || 32;
+  let size = cap;
+  if (len > 16) size = Math.min(cap, 30);
+  if (len > 24) size = Math.min(cap, 26);
+  if (len > 34) size = Math.min(cap, 22);
+  if (len > 46) size = Math.min(cap, 18);
+  if (len > 62) size = Math.min(cap, 15);
+  return size;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -174,17 +295,19 @@ function styleFor(branding) {
 // renderCoverSheet — adds a polished cover sheet to the workbook.
 // Returns the cover worksheet so the caller can fill in any extra fields.
 // ─────────────────────────────────────────────────────────────────────────────
-function renderCoverSheet(wb, opts, style) {
+async function renderCoverSheet(wb, opts, style) {
   const {
     docKind = 'BILL OF QUANTITIES',
-    projectName = 'Project',
-    clientName = 'Client',
     issuedDate = new Date(),
     currency = '£',
     totals = { exVat: 0, inclVat: 0, labour: 0, materials: 0 },
     itemCount = 0,
     sectionCount = 0,
   } = opts;
+  // Clean up the human-entered copy: trim stray whitespace, drop a date that's
+  // been appended to the project title, and normalise odd name capitalisation.
+  const projectName = stripTrailingDate(opts.projectName || 'Project');
+  const clientName = tidyName(opts.clientName || 'Client');
   const f = style.flavour;
   const branding = style.branding || {};
 
@@ -199,13 +322,22 @@ function renderCoverSheet(wb, opts, style) {
     { width: 11 }, { width: 11 }, { width: 11 }, { width: 4 },
   ];
 
-  // Logo (top-left)
-  if (branding.logo_path) {
-    tryEmbedLogo(wb, cover, branding.logo_path, { tl: { col: 1, row: 1 }, ext: { width: 140, height: 56 } });
-    cover.getRow(1).height = 14;
-    cover.getRow(2).height = 14;
-    cover.getRow(3).height = 14;
-    cover.getRow(4).height = 14;
+  // Logo (top-left) — rasterised through sharp and fitted to a box so any
+  // upload format (incl. SVG/WebP) shows and the aspect ratio is preserved.
+  const logo = await resolveLogo(branding);
+  let logoH = 0;
+  if (logo) {
+    const placed = embedResolvedLogo(wb, cover, logo, { col: 1, row: 1 }, { maxWidth: 150, maxHeight: 64 });
+    if (placed) logoH = placed.height;
+  }
+  // Size the header rows so the logo sits comfortably above the hero band.
+  if (logoH > 0) {
+    const total = logoH + 16;            // logo height + a little breathing room
+    cover.getRow(1).height = 6;          // top margin
+    const each = Math.ceil((total - 6) / 3);
+    cover.getRow(2).height = each;
+    cover.getRow(3).height = each;
+    cover.getRow(4).height = each;
   } else {
     cover.getRow(1).height = 18;
     cover.getRow(2).height = 18;
@@ -214,17 +346,19 @@ function renderCoverSheet(wb, opts, style) {
   }
 
   // Company block top-right
-  if (branding.company_name) {
+  const companyName = cleanText(branding.company_name);
+  const companyAddress = cleanText(branding.company_address);
+  if (companyName) {
     cover.mergeCells('E2:G2');
     const cn = cover.getCell('E2');
-    cn.value = branding.company_name;
+    cn.value = companyName;
     cn.font = { name: f.headingFont, size: 13, bold: true, color: { argb: f.heroText === style.WHITE ? style.PRIMARY : f.heroText } };
-    cn.alignment = { horizontal: 'right' };
+    cn.alignment = { horizontal: 'right', vertical: 'middle' };
   }
-  if (branding.company_address) {
+  if (companyAddress) {
     cover.mergeCells('E3:G5');
     const ca = cover.getCell('E3');
-    ca.value = branding.company_address;
+    ca.value = companyAddress;
     ca.font = { name: f.bodyFont, size: 9, color: { argb: style.TEXT_MUTED } };
     ca.alignment = { horizontal: 'right', vertical: 'top', wrapText: true };
   }
@@ -252,11 +386,13 @@ function renderCoverSheet(wb, opts, style) {
   eyebrow.font = { name: f.headingFont, size: f.eyebrowSize, bold: true, color: { argb: f.heroEyebrow }, italic: false };
   eyebrow.alignment = { horizontal: 'left', vertical: 'middle', indent: 0 };
 
-  // Big project title — spans 4 rows for visual presence
+  // Big project title — spans 4 rows for visual presence. Size is chosen to keep
+  // the title reading across the page on ~1–2 lines instead of stacking one word
+  // per line down the page.
   cover.mergeCells('B' + (heroStart + 2) + ':G' + (heroStart + 5));
   const title = cover.getCell('B' + (heroStart + 2));
   title.value = projectName;
-  title.font = { name: f.headingFont, size: f.titleSize, bold: true, color: { argb: f.heroText } };
+  title.font = { name: f.headingFont, size: titleSizeFor(projectName, f.titleSize), bold: true, color: { argb: f.heroText } };
   title.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
   // Prepared-for line inside hero
@@ -349,17 +485,18 @@ function renderCoverSheet(wb, opts, style) {
   }
 
   // Footer
-  if (branding.footer_text) {
+  const footerText = cleanText(branding.footer_text);
+  if (footerText) {
     cover.getRow(40).height = 16;
     cover.mergeCells('A40:H40');
     const ft = cover.getCell('A40');
-    ft.value = branding.footer_text;
+    ft.value = footerText;
     ft.font = { name: f.bodyFont, size: 9, italic: true, color: { argb: style.TEXT_MUTED } };
     ft.alignment = { horizontal: 'center' };
   }
 
   // Common header/footer for printing
-  cover.headerFooter.oddFooter = '&L' + (branding.footer_text || branding.company_name || 'The AI QS') + '&RPage &P';
+  cover.headerFooter.oddFooter = '&L' + (footerText || companyName || 'The AI QS') + '&RPage &P';
 
   return cover;
 }
@@ -371,7 +508,9 @@ function renderCoverSheet(wb, opts, style) {
 // ─────────────────────────────────────────────────────────────────────────────
 function renderHeroBlock(ws, opts, style, lastCol) {
   const f = style.flavour;
-  const { docKind = 'BILL OF QUANTITIES', projectName = 'Project', clientName = 'Client', extraMeta = '' } = opts;
+  const { docKind = 'BILL OF QUANTITIES', extraMeta = '' } = opts;
+  const projectName = stripTrailingDate(opts.projectName || 'Project');
+  const clientName = tidyName(opts.clientName || 'Client');
   const last = lastCol || 'I';
 
   // Rows 1-3: hero fill, big title. Fill the cells individually rather than
@@ -407,7 +546,7 @@ function renderHeroBlock(ws, opts, style, lastCol) {
 
   // Meta line
   ws.mergeCells('A3:' + last + '3');
-  ws.getCell('A3').value = 'Prepared for ' + clientName + '   ·   ' + new Date().toLocaleDateString('en-GB') + (extraMeta ? '   ·   ' + extraMeta : '');
+  ws.getCell('A3').value = 'Prepared for ' + clientName + '   ·   ' + new Date().toLocaleDateString('en-GB') + (cleanText(extraMeta) ? '   ·   ' + cleanText(extraMeta) : '');
   ws.getCell('A3').font = { name: f.bodyFont, size: 10, color: { argb: f.heroEyebrow } };
   ws.getCell('A3').alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
   ws.getRow(3).height = 18;
@@ -427,4 +566,11 @@ module.exports = {
   hexToArgb,
   tintHex,
   tryEmbedLogo,
+  resolveLogo,
+  embedResolvedLogo,
+  fitWithin,
+  cleanText,
+  tidyName,
+  stripTrailingDate,
+  titleSizeFor,
 };
