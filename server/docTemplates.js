@@ -166,6 +166,22 @@ function titleSizeFor(text, baseSize) {
   return size;
 }
 
+// Perceived brightness of an ARGB colour (0–255).
+function luminanceOf(argb) {
+  const h = String(argb || '').replace(/^FF/i, '');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return 0;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+// Choose black or white text for legibility against a given background, so the
+// hero copy is never near-invisible white on a light brand colour.
+function idealTextOn(argb) {
+  return luminanceOf(argb) > 150 ? 'FF0F172A' : 'FFFFFFFF';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // styleFor(branding) — derive a full style pack from the user's branding row.
 // Returns colours pre-converted to ExcelJS argb, plus per-template flavours.
@@ -379,28 +395,37 @@ async function renderCoverSheet(wb, opts, style) {
     }
   }
 
+  // Pick text colours that stay legible against the hero band. On a coloured
+  // band we derive black/white from the fill's brightness, so a light brand
+  // colour never ends up with near-invisible white text.
+  const onColouredBand = f.heroFill !== style.WHITE;
+  const heroTitleCol = onColouredBand ? idealTextOn(f.heroFill) : f.heroText;
+  const heroEyebrowCol = onColouredBand ? idealTextOn(f.heroFill) : f.heroEyebrow;
+
   // Eyebrow text
   cover.mergeCells('B' + (heroStart + 1) + ':G' + (heroStart + 1));
   const eyebrow = cover.getCell('B' + (heroStart + 1));
   eyebrow.value = docKind;
-  eyebrow.font = { name: f.headingFont, size: f.eyebrowSize, bold: true, color: { argb: f.heroEyebrow }, italic: false };
+  eyebrow.font = { name: f.headingFont, size: f.eyebrowSize, bold: true, color: { argb: heroEyebrowCol }, italic: false };
   eyebrow.alignment = { horizontal: 'left', vertical: 'middle', indent: 0 };
 
-  // Big project title — spans 4 rows for visual presence. Size is chosen to keep
-  // the title reading across the page on ~1–2 lines instead of stacking one word
-  // per line down the page.
+  // Big project title. IMPORTANT: wrapText must stay OFF — with it on, low-
+  // fidelity viewers (and email/preview panes) that ignore the merged range
+  // wrap the title inside the single narrow anchor column, so it stacks a few
+  // characters per line straight down the page. With wrap off the text flows
+  // horizontally across the (empty) hero cells, exactly like the eyebrow does.
   cover.mergeCells('B' + (heroStart + 2) + ':G' + (heroStart + 5));
   const title = cover.getCell('B' + (heroStart + 2));
   title.value = projectName;
-  title.font = { name: f.headingFont, size: titleSizeFor(projectName, f.titleSize), bold: true, color: { argb: f.heroText } };
-  title.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+  title.font = { name: f.headingFont, size: titleSizeFor(projectName, f.titleSize), bold: true, color: { argb: heroTitleCol } };
+  title.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
 
   // Prepared-for line inside hero
   cover.mergeCells('B' + (heroStart + 7) + ':G' + (heroStart + 7));
   const prep = cover.getCell('B' + (heroStart + 7));
   prep.value = 'Prepared for ' + clientName;
-  prep.font = { name: f.bodyFont, size: 11, color: { argb: f.heroEyebrow } };
-  prep.alignment = { horizontal: 'left', vertical: 'middle' };
+  prep.font = { name: f.bodyFont, size: 11, color: { argb: heroEyebrowCol } };
+  prep.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
 
   // Accent bar (row 17)
   cover.getRow(17).height = 8;
@@ -530,25 +555,30 @@ function renderHeroBlock(ws, opts, style, lastCol) {
     }
   }
 
+  // Keep hero text legible against the title fill (black/white by brightness).
+  const onColoured = f.boqTitleFill !== style.WHITE;
+  const titleCol = onColoured ? idealTextOn(f.boqTitleFill) : f.boqTitleText;
+  const metaCol = onColoured ? idealTextOn(f.boqTitleFill) : f.heroEyebrow;
+
   // Eyebrow
   ws.mergeCells('A1:' + last + '1');
   ws.getCell('A1').value = docKind;
-  ws.getCell('A1').font = { name: f.headingFont, size: 9.5, bold: true, color: { argb: f.heroEyebrow } };
+  ws.getCell('A1').font = { name: f.headingFont, size: 9.5, bold: true, color: { argb: metaCol } };
   ws.getCell('A1').alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
   ws.getRow(1).height = 18;
 
-  // Big title
+  // Big title — wrap OFF so it flows horizontally even where merges are ignored.
   ws.mergeCells('A2:' + last + '2');
   ws.getCell('A2').value = projectName;
-  ws.getCell('A2').font = { name: f.headingFont, size: 22, bold: true, color: { argb: f.boqTitleText } };
-  ws.getCell('A2').alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getCell('A2').font = { name: f.headingFont, size: titleSizeFor(projectName, 22), bold: true, color: { argb: titleCol } };
+  ws.getCell('A2').alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: false };
   ws.getRow(2).height = 32;
 
   // Meta line
   ws.mergeCells('A3:' + last + '3');
   ws.getCell('A3').value = 'Prepared for ' + clientName + '   ·   ' + new Date().toLocaleDateString('en-GB') + (cleanText(extraMeta) ? '   ·   ' + cleanText(extraMeta) : '');
-  ws.getCell('A3').font = { name: f.bodyFont, size: 10, color: { argb: f.heroEyebrow } };
-  ws.getCell('A3').alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  ws.getCell('A3').font = { name: f.bodyFont, size: 10, color: { argb: metaCol } };
+  ws.getCell('A3').alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: false };
   ws.getRow(3).height = 18;
 
   // Accent stripe row 4
