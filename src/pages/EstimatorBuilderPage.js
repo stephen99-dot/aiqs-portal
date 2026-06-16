@@ -420,6 +420,7 @@ function EstimatorBuilderPageInner() {
             client_email: clientEmail,
             project_name: projectName || 'Untitled quote',
             project_type: projectType,
+            job_id: jobId || undefined,
             currency,
             input_text: inputMode === 'describe' ? inputText : null,
             ohp_pct: ohpPct,
@@ -537,6 +538,40 @@ function EstimatorBuilderPageInner() {
         <div style={{ color: t.textSecondary, fontSize: 14.5, marginBottom: 16 }}>
           Say it or type it — you get a priced quote you can tweak.
         </div>
+
+        {/* Reuse a client/job you've already got in the portal — autofills the
+            details and links the new quote straight to that job. */}
+        {jobs.length > 0 && (
+          <div data-tour="est-existing-job" style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+            <label style={lbl(t)}>Quoting for a job you've already got? <span style={{ fontWeight: 400, color: t.textMuted }}>(optional)</span></label>
+            <select
+              value={jobId || ''}
+              onChange={e => {
+                const v = e.target.value;
+                if (!v) { setJobId(null); return; }
+                const job = jobs.find(j => String(j.id) === String(v));
+                setJobId(v);
+                if (job) {
+                  if (job.client_name) setClientName(job.client_name);
+                  if (job.client_email) setClientEmail(job.client_email);
+                  if (job.name) setProjectName(job.name);
+                  if (job.project_type) setProjectType(job.project_type);
+                }
+              }}
+              style={{ ...input(t), marginTop: 6 }}
+            >
+              <option value="">New client / job</option>
+              {jobs.map(j => (
+                <option key={j.id} value={j.id}>
+                  {[j.client_name, j.name].filter(Boolean).join(' — ') || ('Job ' + String(j.id).slice(0, 6))}
+                </option>
+              ))}
+            </select>
+            <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 8, lineHeight: 1.45 }}>
+              Pick a job already in your portal to reuse its client and details — the new quote links straight to it. Or leave as “New client / job”.
+            </div>
+          </div>
+        )}
 
         {inputMode === 'describe' && (
           <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
