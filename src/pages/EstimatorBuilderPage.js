@@ -531,7 +531,7 @@ function EstimatorBuilderPageInner() {
   if (phase === 'input' || phase === 'drafting' || phase === 'pricing') {
     const busy = phase === 'drafting' || phase === 'pricing';
     return (
-      <div style={{ padding: '20px 16px 120px', color: t.text, maxWidth: 680, margin: '0 auto' }}>
+      <div data-tour="est-input" style={{ padding: '20px 16px 120px', color: t.text, maxWidth: 680, margin: '0 auto' }}>
         <button onClick={() => nav('/jobs')} style={btnLink(t)}>← Back</button>
         <h1 style={{ margin: '8px 0 4px 0', fontSize: 26 }}>New quote <HelpTip t={t} title="New quote" text={"Describe the job — out loud with the mic, or typed — and a priced quote comes back in seconds, built on your own rates.\n\nEvery line stays editable afterwards. Nothing reaches the client until you press send.\n\nPrefer boxes to words? 'Other ways to start' has a quick form and site measurements."} /></h1>
         <div style={{ color: t.textSecondary, fontSize: 14.5, marginBottom: 16 }}>
@@ -666,6 +666,7 @@ function EstimatorBuilderPageInner() {
         {error && <div style={errBox(t)}>{error}</div>}
 
         <button
+          data-tour="est-price"
           onClick={generate}
           disabled={busy}
           style={{

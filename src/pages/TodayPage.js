@@ -275,7 +275,7 @@ function Inner() {
 
       {/* Quick actions */}
       <div data-tour="oiab-quick" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 24 }}>
-        <QuickAction t={t} Icon={FileTextIcon} label="New quote" onClick={() => nav('/estimator/new')} primary />
+        <QuickAction t={t} Icon={FileTextIcon} label="New quote" onClick={() => nav('/estimator/new')} primary dataTour="oiab-new-quote" />
         <QuickAction t={t} Icon={PoundIcon} label="New invoice" onClick={() => nav('/money?new=1')} />
         <QuickAction t={t} Icon={ImageIcon} label="Add a photo" onClick={() => nav('/jobs')} />
         <QuickAction t={t} Icon={WrenchIcon} label="Tools" onClick={() => nav('/tools')} />
@@ -320,9 +320,9 @@ function BigNumber({ t, label, value, tone }) {
   );
 }
 
-function QuickAction({ t, Icon, label, onClick, primary }) {
+function QuickAction({ t, Icon, label, onClick, primary, dataTour }) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} data-tour={dataTour} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
       minHeight: 56, borderRadius: 12, cursor: 'pointer',
       background: primary ? t.accent : t.card,

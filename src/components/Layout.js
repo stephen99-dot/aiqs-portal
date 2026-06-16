@@ -107,7 +107,7 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
                 style={{ textDecoration: 'none' }}
                 onClick={() => setMobileOpen(false)}
               >
-                <div style={{
+                <div data-tour={'nav-' + (c.path === '/office' ? 'today' : c.path.replace('/', ''))} style={{
                   padding: '7px 10px',
                   borderRadius: 6,
                   fontSize: 12.5,
@@ -230,6 +230,13 @@ export default function Layout() {
   // Auto-open when navigating to one of the children.
   useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
   useEffect(() => { if (isSettingsRouteActive) setSettingsExpanded(true); }, [isSettingsRouteActive]);
+  // The Office tour fires this when it needs a sidebar menu item to be reachable
+  // (expanded on desktop, and the drawer open on mobile).
+  useEffect(() => {
+    const open = () => { setOfficeExpanded(true); setMobileOpen(true); };
+    window.addEventListener('aiqs:open-office-nav', open);
+    return () => window.removeEventListener('aiqs:open-office-nav', open);
+  }, []);
 
   // Sidebar uses the theme's sidebar token (keeps the AI QS dark navy by
   // default, but re-skins for ChatGPT / Claude / Copilot themes).

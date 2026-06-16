@@ -224,7 +224,7 @@ function Inner() {
       {/* Segmented control */}
       <div style={{ display: 'flex', gap: 4, background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 4, marginBottom: 16 }}>
         {SEGMENTS.map(s => (
-          <button key={s.key} onClick={() => setSegment(s.key)} style={chip(segment === s.key)}>{s.label}</button>
+          <button key={s.key} data-tour={'money-tab-' + s.key} onClick={() => setSegment(s.key)} style={chip(segment === s.key)}>{s.label}</button>
         ))}
       </div>
 
@@ -232,12 +232,12 @@ function Inner() {
       {segment === 'in' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-            <button onClick={() => { setCreating(v => !v); setError(''); }} style={{ ...primaryBtn, flex: 1 }}>{creating ? 'Cancel' : '+ New invoice'}</button>
+            <button data-tour="money-new-invoice" onClick={() => { setCreating(v => !v); setError(''); }} style={{ ...primaryBtn, flex: 1 }}>{creating ? 'Cancel' : '+ New invoice'}</button>
             <button onClick={() => { setExporting(v => !v); setExpMsg(''); }} style={ghostBtn}>Send to your accountant</button>
           </div>
 
           {creating && (
-            <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div data-tour="money-invoice-form" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginBottom: 4 }}>Which job is it for?</div>
                 <select value={newInv.job_id} onChange={e => setNewInv({ ...newInv, job_id: e.target.value, from_quote_id: '' })} style={input}>
@@ -259,7 +259,7 @@ function Inner() {
               {!newInv.job_id && (
                 <input style={input} placeholder="Who's it for? (customer name)" value={newInv.client_name} onChange={e => setNewInv({ ...newInv, client_name: e.target.value })} />
               )}
-              <button onClick={create} style={primaryBtn}>Create the invoice</button>
+              <button data-tour="money-create-invoice" onClick={create} style={primaryBtn}>Create the invoice</button>
             </div>
           )}
 
