@@ -159,6 +159,23 @@ export default function OfficeInABoxPage() {
               the van, not the desk.
             </p>
             <div className="oiab-hero-cta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
+              {/* Way into the live beta — the working Office in a Box tools. */}
+              <button
+                className="oiab-cta"
+                onClick={() => navigate('/office')}
+                style={{
+                  padding: '14px 26px', borderRadius: 13, border: 'none',
+                  background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                  color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
+                }}
+              >
+                <span style={{
+                  fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  background: 'rgba(10,15,28,0.16)', borderRadius: 5, padding: '2px 6px',
+                }}>Beta</span>
+                Open Office in a Box <ArrowRightIcon size={18} color="#0A0F1C" />
+              </button>
               {isInterested ? (
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -175,14 +192,14 @@ export default function OfficeInABoxPage() {
                     onClick={registerInterest}
                     disabled={submitting}
                     style={{
-                      padding: '14px 26px', borderRadius: 13, border: 'none',
-                      background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                      color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                      padding: '14px 26px', borderRadius: 13, border: `1.5px solid ${amberBorder}`,
+                      background: 'transparent',
+                      color: t.text, fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
                       cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.75 : 1,
                       display: 'inline-flex', alignItems: 'center', gap: 9,
                     }}
                   >
-                    {ctaLabel} {!submitting && <ArrowRightIcon size={18} color="#0A0F1C" />}
+                    {ctaLabel} {!submitting && <ArrowRightIcon size={18} color={t.text} />}
                   </button>
                   <span style={{ fontSize: 13, color: t.textMuted, maxWidth: 230, lineHeight: 1.4 }}>
                     One tap — we already know it's you. No forms, no card.
@@ -272,6 +289,25 @@ export default function OfficeInABoxPage() {
               </div>
             ))}
           </div>
+
+          {/* Straight into the live beta tools. */}
+          <button
+            className="oiab-cta"
+            onClick={() => navigate('/office')}
+            style={{
+              width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
+              background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+              color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              marginBottom: 14,
+            }}
+          >
+            <span style={{
+              fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
+              background: 'rgba(10,15,28,0.16)', borderRadius: 5, padding: '2px 6px',
+            }}>Beta</span>
+            Open Office in a Box <ArrowRightIcon size={17} color="#0A0F1C" />
+          </button>
 
           {isInterested ? (
             <div style={{
