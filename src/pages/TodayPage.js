@@ -109,16 +109,32 @@ function Inner() {
   return (
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
-        <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
-        <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today <HelpTip t={t} title="Today" text={"Your home screen.\n\nThe three numbers at the top are your money position right now. Below that, anything that needs chasing — each card has one button that does the obvious thing.\n\nIt updates itself every time you come back to it. You never need to refresh."} /></h1>
-        <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 2 }}>{today}{firstName ? ' · ' + firstName : ''}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <div>
+            <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
+            <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Today <HelpTip t={t} title="Today" text={"Your home screen.\n\nThe three numbers at the top are your money position right now. Below that, anything that needs chasing — each card has one button that does the obvious thing.\n\nIt updates itself every time you come back to it. You never need to refresh."} /></h1>
+            <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 2 }}>{today}{firstName ? ' · ' + firstName : ''}</div>
+          </div>
+          {/* Always-available walkthrough — replays the guided tour on demand. */}
+          <button
+            onClick={() => window.dispatchEvent(new Event('aiqs:start-office-tour'))}
+            style={{
+              flexShrink: 0, marginTop: 4, minHeight: 38, padding: '0 14px', borderRadius: 999,
+              background: 'rgba(245,158,11,0.1)', border: '1px solid ' + t.accent + '55',
+              color: t.accent, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Show me around
+          </button>
+        </div>
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 16 }}>{error}</div>}
 
       {/* B2 — first run: two minutes of set-up, never forced */}
       {needsSetup && (
-        <button onClick={() => nav('/office/setup')} style={{
+        <button data-tour="oiab-setup" onClick={() => nav('/office/setup')} style={{
           display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
           background: 'rgba(245,158,11,0.08)', border: '1px solid ' + t.accent + '66',
           borderRadius: 12, padding: '14px 16px', marginBottom: 16, color: t.text,
@@ -131,14 +147,14 @@ function Inner() {
       )}
 
       {/* The three numbers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 22 }}>
+      <div data-tour="oiab-money" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 22 }}>
         <BigNumber t={t} label="Owed to you" value={money ? fmt0(money.owed) : '—'} />
         <BigNumber t={t} label="Overdue" value={money ? fmt0(money.overdue) : '—'} tone={money && money.overdue > 0 ? 'danger' : undefined} />
         <BigNumber t={t} label="Quoted, awaiting answer" value={money ? fmt0(money.quoted) : '—'} />
       </div>
 
       {/* Ask about your jobs — answers come only from your own data */}
-      <div style={{
+      <div data-tour="oiab-ask" style={{
         background: t.card, border: '1.5px solid ' + t.accent + '55', borderRadius: 12,
         padding: 16, marginBottom: 22, boxShadow: '0 2px 12px ' + t.accent + '14',
       }}>
@@ -215,6 +231,7 @@ function Inner() {
       </div>
 
       {/* Needs your attention */}
+      <div data-tour="oiab-attention">
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Needs your attention</div>
       {cards === null ? (
         <div style={{ color: t.textSecondary, padding: '20px 0' }}>Loading…</div>
@@ -254,9 +271,10 @@ function Inner() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Quick actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 24 }}>
+      <div data-tour="oiab-quick" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 24 }}>
         <QuickAction t={t} Icon={FileTextIcon} label="New quote" onClick={() => nav('/estimator/new')} primary />
         <QuickAction t={t} Icon={PoundIcon} label="New invoice" onClick={() => nav('/money?new=1')} />
         <QuickAction t={t} Icon={ImageIcon} label="Add a photo" onClick={() => nav('/jobs')} />
