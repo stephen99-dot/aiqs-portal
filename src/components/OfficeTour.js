@@ -350,8 +350,13 @@ export default function OfficeTour({ userId, autoStart }) {
     if (!active || !step.interactive) return;
     let el = null;
     let cancelled = false;
+    let advanced = false;
     let tries = 0;
-    const handler = () => { setTimeout(() => { if (!cancelled) nextRef.current(); }, 180); };
+    // Advance synchronously on the click. We must NOT defer this: the click
+    // often navigates (e.g. "New quote" → /estimator/new), which unmounts the
+    // page and triggers this effect's cleanup — a deferred advance would be
+    // cancelled by that cleanup and the tour would freeze on the step.
+    const handler = () => { if (!advanced) { advanced = true; nextRef.current(); } };
     const attach = () => {
       if (cancelled) return;
       const sel = step.advanceOn || step.target;
