@@ -438,7 +438,11 @@ export default function OfficeTour({ userId, autoStart }) {
   const cardBorder = `1px solid ${isDark ? 'rgba(245,158,11,0.28)' : 'rgba(245,158,11,0.4)'}`;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, animation: 'oTourFade 0.3s ease forwards' }}>
+    // The wrapper itself must NOT capture pointer events, or it would swallow
+    // clicks/keystrokes over the spotlight "hole". Only the dim panels and the
+    // tooltip opt back in — so the highlighted control (a button, a textarea)
+    // stays fully live for the user.
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, pointerEvents: 'none', animation: 'oTourFade 0.3s ease forwards' }}>
       {step.confetti && <Confetti />}
 
       {panels.map((p, i) => <div key={i} style={p} />)}
@@ -459,7 +463,7 @@ export default function OfficeTour({ userId, autoStart }) {
       {/* Tooltip card */}
       <div style={{
         ...getTooltipStyle(rect, step.placement, win),
-        zIndex: 10003,
+        zIndex: 10003, pointerEvents: 'auto',
         animation: step.placement === 'center' ? 'oTourPop 0.32s ease forwards' : 'oTourSlide 0.3s cubic-bezier(0.22,1,0.36,1) forwards',
       }}>
         <div style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '18px 18px 14px', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
