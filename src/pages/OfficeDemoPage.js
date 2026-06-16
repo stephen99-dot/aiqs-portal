@@ -64,7 +64,7 @@ export default function OfficeDemoPage() {
       )}
 
       {/* Today-style numbers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+      <div data-tour="demo-money" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
         {[['Owed to you', fmt(DEMO.money.owed), t.text], ['Overdue', fmt(DEMO.money.overdue), t.danger], ['Quoted, awaiting answer', fmt(DEMO.money.quoted), t.text]].map(([label, value, colour]) => (
           <div key={label} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '14px 16px' }}>
             <div style={{ color: t.textSecondary, fontSize: 12.5, fontWeight: 600 }}>{label}</div>
@@ -106,7 +106,7 @@ export default function OfficeDemoPage() {
         </div>
 
         {/* Quote */}
-        <div style={{ borderTop: '1px solid ' + t.border, marginTop: 14, paddingTop: 12 }}>
+        <div data-tour="demo-quote" style={{ borderTop: '1px solid ' + t.border, marginTop: 14, paddingTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <div>
               <div style={{ fontWeight: 700 }}>{DEMO.job.quote.title}</div>
@@ -124,7 +124,7 @@ export default function OfficeDemoPage() {
 
         {/* Invoices */}
         {DEMO.job.invoices.map(inv => (
-          <div key={inv.detail} style={{ borderTop: '1px dashed ' + t.border, marginTop: 10, paddingTop: 10 }}>
+          <div key={inv.detail} data-tour={inv.chase ? 'demo-invoice' : undefined} style={{ borderTop: '1px dashed ' + t.border, marginTop: 10, paddingTop: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 700 }}>{inv.title}</div>
@@ -145,7 +145,7 @@ export default function OfficeDemoPage() {
         ))}
 
         {/* Change */}
-        <div style={{ borderTop: '1px dashed ' + t.border, marginTop: 10, paddingTop: 10 }}>
+        <div data-tour="demo-change" style={{ borderTop: '1px dashed ' + t.border, marginTop: 10, paddingTop: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <div>
               <div style={{ fontWeight: 700 }}>{DEMO.job.change.title}</div>
@@ -158,7 +158,7 @@ export default function OfficeDemoPage() {
           </div>
         </div>
 
-        <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 12 }}>{DEMO.job.retention}</div>
+        <div data-tour="demo-retention" style={{ color: t.textMuted, fontSize: 12.5, marginTop: 12 }}>{DEMO.job.retention}</div>
       </div>
 
       {/* Sticky CTA */}

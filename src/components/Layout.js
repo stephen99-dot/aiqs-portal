@@ -9,6 +9,7 @@ import {
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
+import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
 
@@ -538,6 +539,11 @@ export default function Layout() {
       {/* Feedback survey — every non-admin user, once. Waits for What's New,
           and for non-subscribers also for the Office popup, so they never stack. */}
       {whatsNewSeen && !isAdmin && (user?.hasEstimator || officePopupDone) && <SurveyPopup />}
+
+      {/* Office in a Box guided walkthrough — auto-runs once for subscribers and
+          stays available afterwards via its "Show me around" launcher. Admins
+          can replay it but it never auto-pops for them. */}
+      {hasEstimator && <OfficeTour userId={user?.id} autoStart={!!user?.hasEstimator} />}
     </div>
   );
 }
