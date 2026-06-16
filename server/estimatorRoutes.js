@@ -581,8 +581,8 @@ router.post('/quotes', (req, res) => {
       db.prepare(
         'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
         + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
-        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, client_id) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, client_id, job_id) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         id, req.user.id,
         b.client_name || null, b.client_email || null, b.project_name || 'Untitled quote', b.project_type || null,
@@ -591,7 +591,7 @@ router.post('/quotes', (req, res) => {
         totals.contingency_pct, totals.contingency_amount,
         totals.vat_pct, totals.vat_amount,
         totals.grand_total, totals.target_margin_pct, totals.margin_pct,
-        b.status || 'draft', b.notes || null, quoteNumber, clientId
+        b.status || 'draft', b.notes || null, quoteNumber, clientId, b.job_id || null
       );
       const ins = db.prepare(
         'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '
