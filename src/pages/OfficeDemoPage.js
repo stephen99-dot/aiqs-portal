@@ -136,7 +136,7 @@ export default function OfficeDemoPage() {
               </div>
             </div>
             {inv.chase && (
-              <button onClick={() => demoTap('draft the chaser and send it with the invoice attached')} style={{
+              <button data-tour="demo-chase" onClick={() => demoTap('draft the chaser and send it with the invoice attached')} style={{
                 marginTop: 8, minHeight: 40, padding: '0 14px', borderRadius: 10, border: 'none',
                 background: t.danger, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
               }}>Chase it</button>

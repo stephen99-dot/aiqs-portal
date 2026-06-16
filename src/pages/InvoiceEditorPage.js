@@ -296,7 +296,7 @@ function Inner() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {!readOnly && <button onClick={save} disabled={saving || !dirty} style={btnPrimary(t, saving || !dirty)}>{saving ? 'Saving…' : (dirty ? 'Save changes' : 'Saved')}</button>}
-          {invoice.status === 'draft' && !readOnly && <button onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send the invoice'}</button>}
+          {invoice.status === 'draft' && !readOnly && <button data-tour="invoice-send" onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send the invoice'}</button>}
           {invoice.status === 'sent' && !readOnly && <button onClick={shareLink} style={btnSecondary(t)}>Share link</button>}
           {invoice.status === 'sent' && !readOnly && (
             <button onClick={openChase} style={{ ...btnPrimary(t), background: invoice.overdue ? t.danger : t.accent }}>Chase this payment</button>

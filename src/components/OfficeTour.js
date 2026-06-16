@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon, ZapIcon, HelpCircleIcon } from './Icons';
 
-// A live, guided walkthrough of Office in a Box — built for a tradesperson who
-// has never used software like this. It physically drives the app: navigating
-// between pages, spotlighting the real controls and narrating each one, then
-// walking a complete example job (quote → accepted → invoiced → paid → change
-// → retention) through the read-only /office-demo sandbox so nothing is saved.
+// A live, hands-on walkthrough of Office in a Box, built for a tradesperson who
+// has never used software like this. It drives the real app — navigating
+// between pages, spotlighting the actual controls, and on the key moments it
+// stops and waits for YOU to tap the highlighted button ("your turn"), so by
+// the end you've genuinely started a quote, raised an invoice, and seen a whole
+// job run through. The read-only /office-demo sandbox is used for the worked
+// example so nothing there is ever saved.
 //
-// It auto-runs once on first visit, and is ALWAYS available afterwards via the
-// floating "Show me around" button (and the matching button on the Today
-// header), so a stuck builder can replay it any time.
+// It auto-runs once on first visit and is ALWAYS available afterwards via the
+// floating "Show me around" launcher and the matching button on the Today
+// header, so a stuck builder can replay it any time.
 
 // Bump when the steps change so returning users see the refreshed walkthrough.
-export const OFFICE_TOUR_VERSION = 1;
+export const OFFICE_TOUR_VERSION = 2;
 
 const AMBER = '#F59E0B';
 const AMBER_DIM = '#D97706';
@@ -28,29 +31,33 @@ const OFFICE_PREFIXES = [
 const isOfficeRoute = (path) =>
   OFFICE_PREFIXES.some(p => path === p || path.startsWith(p + '/'));
 
-// The walkthrough. Each step optionally navigates to `route`, then spotlights
-// the element matching `target` (a [data-tour] selector). A null target shows a
-// centred card. `placement` positions the tooltip around the spotlight.
+// The walkthrough.
+//   route        — navigate here before showing the step (omit to stay put)
+//   target       — [data-tour] selector to spotlight (omit for a centred card)
+//   interactive  — true → wait for the user to click the control to advance
+//   advanceOn    — selector the click is detected on (defaults to `target`)
+//   openNav      — true → open/expand the sidebar so a menu item is reachable
+//   hint         — short "your turn" instruction shown on interactive steps
 const STEPS = [
   // ── Welcome ──────────────────────────────────────────────────────────────
   {
-    chapter: 'Welcome', route: '/office', target: null, placement: 'center',
+    chapter: 'Welcome', route: '/office', placement: 'center',
     title: 'Welcome to Office in a Box',
-    body: "I'll walk you through the whole thing — getting set up, then a complete example job from quote right through to getting paid. It takes about two minutes, and you can stop any time. This tour always lives on your Today screen, so you can run it again whenever you get stuck.",
+    body: "I'll point, you tap. Together we'll set you up, start a real quote, raise an invoice, and walk a whole job from start to finish. It takes about three minutes, and you can stop any time. This tour always lives on your Today screen, so you can run it again whenever you get stuck.",
   },
 
   // ── Get set up ─────────────────────────────────────────────────────────────
   {
     chapter: 'Get set up', route: '/office', target: '[data-tour="oiab-setup"]', placement: 'bottom',
-    title: 'Start here — two minutes of set-up',
-    body: "Tap this to add your business name, logo and colour, and answer two quick tax questions. Do it once and every quote, invoice and letter you send goes out looking like yours — with the VAT and CIS worked out right first time.",
+    title: 'Everything starts here — set-up',
+    body: "Two minutes: your business name, logo and colour, and two quick tax questions. Do it once and every quote, invoice and letter you send goes out looking like yours, with the VAT and CIS worked out right. Come back to it whenever you like — for now, tap Next.",
   },
 
   // ── The Today screen ────────────────────────────────────────────────────────
   {
     chapter: 'Your Today screen', route: '/office', target: '[data-tour="oiab-money"]', placement: 'bottom',
     title: 'Your money, at a glance',
-    body: "The first thing you see every morning: what you're owed, what's overdue, and what you've quoted but not heard back on. It refreshes itself every time you open it — you never need to hit reload.",
+    body: "The first thing you see every morning: what you're owed, what's overdue, and what you've quoted but not heard back on. It refreshes itself — you never need to hit reload.",
   },
   {
     chapter: 'Your Today screen', route: '/office', target: '[data-tour="oiab-ask"]', placement: 'bottom',
@@ -62,54 +69,109 @@ const STEPS = [
     title: 'Things that need chasing',
     body: "Anything that needs you — an overdue invoice, a quote going cold — turns up here, each with one button that does the obvious thing. Clear this list and you know you're on top of the job.",
   },
+
+  // ── Make a real quote ───────────────────────────────────────────────────────
   {
-    chapter: 'Your Today screen', route: '/office', target: '[data-tour="oiab-quick"]', placement: 'top',
-    title: 'Where a real job begins',
-    body: "When you're ready for the real thing, \"New quote\" is the start — describe a job in plain English and a priced, branded quote comes back. For now, let's follow a finished example so you can see the whole journey.",
+    chapter: 'Make a quote', route: '/office', target: '[data-tour="oiab-new-quote"]', interactive: true, placement: 'top',
+    title: 'Let\'s make a real quote',
+    body: "Quoting is where every job begins. Go on — tap \"New quote\" and I'll walk you through it.",
+    hint: 'Tap “New quote”',
+  },
+  {
+    chapter: 'Make a quote', route: '/estimator/new', target: '[data-tour="est-input"]', advanceOn: '[data-tour="est-price"]', interactive: true, placement: 'left',
+    title: 'Describe it like you\'d tell your mate',
+    body: "Type the job in plain words — \"Kitchen extension on the back, 5 by 4, brick and block, pitched tiled roof…\". When you're done, tap \"Price the job\": the AI drafts it and your own day rates price every line.",
+    hint: 'Describe the job, then tap “Price the job”',
+  },
+  {
+    chapter: 'Make a quote', route: '/estimator/new', placement: 'center',
+    title: 'Your priced quote — then send it',
+    body: "Give it about fifteen seconds and your itemised quote appears. Change any line, add your margin, then tap \"Save quote\". When you're happy, \"Send the quote\" fires it to your client by WhatsApp or email — and you'll see the moment they open it and accept on their phone.",
   },
 
   // ── A worked example (read-only demo) ───────────────────────────────────────
   {
-    chapter: 'A worked example', route: '/office-demo', target: null, placement: 'center',
-    title: "Here's a job, start to finish",
-    body: "This is one real-looking job — a rear extension for Dave Patel. Every figure is an example and nothing here is saved. Let's follow it from quote to final payment.",
+    chapter: 'A whole job', route: '/office-demo', placement: 'center',
+    title: 'Here\'s a job already running',
+    body: "Now let's see what happens after the quote. This is one real-looking job — a rear extension for Dave Patel. Every figure is an example and nothing here is saved.",
   },
   {
-    chapter: 'A worked example', route: '/office-demo', target: '[data-tour="demo-money"]', placement: 'bottom',
-    title: '1. The numbers for this job',
-    body: "The same three numbers as your Today screen, but just for this one job: what's owed on it, what's overdue, and what was quoted.",
+    chapter: 'A whole job', route: '/office-demo', target: '[data-tour="demo-quote"]', placement: 'top',
+    title: 'The quote — accepted on the phone',
+    body: "You sent Dave the quote, he tapped to accept and signed it on his phone — no printing, no posting. That's what the green tick means.",
   },
   {
-    chapter: 'A worked example', route: '/office-demo', target: '[data-tour="demo-quote"]', placement: 'top',
-    title: '2. The quote — accepted on the phone',
-    body: "You sent Dave the quote by WhatsApp. He tapped to accept and signed it on his phone — no printing, no posting. That's what the green tick means.",
+    chapter: 'A whole job', route: '/office-demo', target: '[data-tour="demo-invoice"]', advanceOn: '[data-tour="demo-chase"]', interactive: true, placement: 'top',
+    title: 'An invoice gone overdue',
+    body: "The deposit's paid, but this invoice is a couple of days late. Tap \"Chase it\" and see what happens — it writes the polite reminder for you.",
+    hint: 'Tap “Chase it”',
   },
   {
-    chapter: 'A worked example', route: '/office-demo', target: '[data-tour="demo-invoice"]', placement: 'top',
-    title: '3. Invoicing as you go',
-    body: "The deposit's already paid. The next invoice is a couple of days overdue — so \"Chase it\" writes a polite reminder for you to send in one tap. CIS and VAT are handled on every invoice automatically.",
-  },
-  {
-    chapter: 'A worked example', route: '/office-demo', target: '[data-tour="demo-change"]', placement: 'top',
-    title: '4. Changes, signed and priced',
+    chapter: 'A whole job', route: '/office-demo', target: '[data-tour="demo-change"]', placement: 'top',
+    title: 'Changes, signed and priced',
     body: "You found rot behind the plaster. You priced the extra, Dave signed it off, and the photo's attached — so there's no argument later about what was agreed or what it cost.",
   },
   {
-    chapter: 'A worked example', route: '/office-demo', target: '[data-tour="demo-retention"]', placement: 'top',
-    title: '5. Nothing slips through',
-    body: "Money held back as retention gets a reminder when it's due back to you, so you never forget to collect it. That's a whole job, handled from first quote to last payment.",
+    chapter: 'A whole job', route: '/office-demo', target: '[data-tour="demo-retention"]', placement: 'top',
+    title: 'Nothing slips through',
+    body: "Money held back as retention gets a reminder when it's due back to you, so you never forget to collect it. That's a whole job — first quote to last payment.",
+  },
+
+  // ── Raise an invoice ────────────────────────────────────────────────────────
+  {
+    chapter: 'Raise an invoice', route: '/money', target: '[data-tour="money-title"]', placement: 'bottom',
+    title: 'Money — invoices and payments',
+    body: "This is where the money side lives. Let's raise a real invoice now so you've done it once.",
+  },
+  {
+    chapter: 'Raise an invoice', route: '/money', target: '[data-tour="money-new-invoice"]', interactive: true, placement: 'bottom',
+    title: 'Start an invoice',
+    body: "Your turn — tap \"+ New invoice\".",
+    hint: 'Tap “+ New invoice”',
+  },
+  {
+    chapter: 'Raise an invoice', target: '[data-tour="money-invoice-form"]', advanceOn: '[data-tour="money-create-invoice"]', interactive: true, placement: 'top',
+    title: 'Pick the job, then create it',
+    body: "Choose the job it's for — or start from the quote so all the lines fill in for you — then tap \"Create the invoice\".",
+    hint: 'Fill it in, then tap “Create the invoice”',
+  },
+  {
+    chapter: 'Raise an invoice', target: '[data-tour="invoice-send"]', placement: 'bottom',
+    title: 'Ready to send',
+    body: "Here's your invoice, with CIS and VAT already worked out for you. Tap \"Send the invoice\" to email or WhatsApp it — then it looks after itself, chasing politely if it ever goes overdue.",
+  },
+
+  // ── The rest of Money ────────────────────────────────────────────────────────
+  {
+    chapter: 'Money, in full', route: '/money', target: '[data-tour="money-tab-due"]', interactive: true, placement: 'bottom',
+    title: 'What you\'re owed',
+    body: "Money has three views. Tap \"Due in\" — the payments you're expecting but haven't invoiced yet, like stage payments and retention coming back.",
+    hint: 'Tap “Due in”',
+  },
+  {
+    chapter: 'Money, in full', route: '/money', target: '[data-tour="money-tab-numbers"]', interactive: true, placement: 'bottom',
+    title: 'Your numbers',
+    body: "And tap \"Your numbers\" — what your business costs to run each month, and the day rate you need to charge just to break even.",
+    hint: 'Tap “Your numbers”',
   },
 
   // ── Getting around ──────────────────────────────────────────────────────────
+  {
+    chapter: 'Getting around', target: '[data-tour="nav-jobs"]', openNav: true, interactive: true, placement: 'right',
+    title: 'Find your way around',
+    body: "Everything's reached from the menu. Tap \"Jobs\" to see every job in one place.",
+    hint: 'Tap “Jobs” in the menu',
+  },
   {
     chapter: 'Getting around', route: '/jobs', target: '[data-tour="jobs-title"]', placement: 'bottom',
     title: 'Jobs — one card each',
     body: "Every job in one list, with anything owing you money up top. Open a job and the quote, invoices, changes, photos and paperwork for it are all on one screen.",
   },
   {
-    chapter: 'Getting around', route: '/money', target: '[data-tour="money-title"]', placement: 'bottom',
-    title: 'Money — everything in and out',
-    body: "Every invoice coming in, the payments you're due, and what the business costs to run each month — including the day rate you need to charge just to break even.",
+    chapter: 'Getting around', target: '[data-tour="nav-tools"]', openNav: true, interactive: true, placement: 'right',
+    title: 'One more',
+    body: "Last one — tap \"Tools\" in the menu.",
+    hint: 'Tap “Tools” in the menu',
   },
   {
     chapter: 'Getting around', route: '/tools', target: '[data-tour="tools-title"]', placement: 'bottom',
@@ -119,9 +181,9 @@ const STEPS = [
 
   // ── Finish ──────────────────────────────────────────────────────────────────
   {
-    chapter: "You're ready", route: '/office', target: null, placement: 'center', confetti: true,
+    chapter: "You're set", route: '/office', placement: 'center', confetti: true,
     title: "That's the tour",
-    body: "Start with set-up, then send your first quote. If you ever get lost, tap \"Show me around\" on the Today screen and I'll walk you through it all again.",
+    body: "You've set up, started a quote, raised an invoice and walked a whole job. If you ever get lost, tap \"Show me around\" on the Today screen and I'll walk you through it all again.",
   },
 ];
 
@@ -162,7 +224,7 @@ function Confetti() {
 }
 
 function getTooltipStyle(rect, placement, win) {
-  const w = Math.min(360, win.width - 32);
+  const w = Math.min(380, win.width - 32);
   const m = 16;
   if (placement === 'center' || !rect) {
     return { position: 'fixed', top: '50%', left: '50%', width: w, transform: 'translate(-50%, -50%)' };
@@ -183,14 +245,15 @@ function getTooltipStyle(rect, placement, win) {
 export default function OfficeTour({ userId, autoStart }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, mode } = useTheme();
 
   const [active, setActive] = useState(false);
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState(null);
   const [win, setWin] = useState({ width: window.innerWidth, height: window.innerHeight });
-  const overlayRef = useRef(null);
 
   const step = STEPS[index];
+  const isDark = mode === 'dark';
 
   const start = useCallback(() => { setIndex(0); setRect(null); setActive(true); }, []);
 
@@ -204,15 +267,18 @@ export default function OfficeTour({ userId, autoStart }) {
   const finish = useCallback(() => {
     setActive(false);
     try { localStorage.setItem(key(userId), String(OFFICE_TOUR_VERSION)); } catch {}
-    // Always leave the builder back on a sensible home screen.
     if (location.pathname !== '/office') navigate('/office');
   }, [userId, navigate, location.pathname]);
 
   const next = useCallback(() => {
-    setIndex(i => (i < STEPS.length - 1 ? i + 1 : i));
     if (index >= STEPS.length - 1) finish();
+    else setIndex(index + 1);
   }, [index, finish]);
   const prev = useCallback(() => setIndex(i => Math.max(0, i - 1)), []);
+
+  // Keep a stable reference to next() for DOM click handlers.
+  const nextRef = useRef(next);
+  useEffect(() => { nextRef.current = next; });
 
   // Auto-run once for subscribers who have never seen the current version.
   useEffect(() => {
@@ -225,17 +291,15 @@ export default function OfficeTour({ userId, autoStart }) {
     return () => clearTimeout(id);
   }, [autoStart, active, userId, location.pathname, start]);
 
-  // Re-measure the current target without scrolling — used while the page
-  // scrolls or resizes so the spotlight stays glued to it.
+  // Re-measure the current target without scrolling — keeps the spotlight glued
+  // to its element while the page scrolls or resizes.
   const reposition = useCallback(() => {
     if (!step.target) { setRect(null); return; }
     const el = document.querySelector(step.target);
     if (el) setRect(el.getBoundingClientRect());
   }, [step]);
 
-  // Find the spotlight target for the current step, scrolling it into view if
-  // needed. Returns false if the element isn't present/ready yet (so the caller
-  // can keep polling — the target may live on a page we just navigated to).
+  // Locate (and scroll to) the spotlight target. Returns false until it's ready.
   const locateTarget = useCallback(() => {
     if (!step.target) { setRect(null); return true; }
     const el = document.querySelector(step.target);
@@ -248,14 +312,22 @@ export default function OfficeTour({ userId, autoStart }) {
     return true;
   }, [step]);
 
+  // Tracks the step index we've already performed the entry-navigation for, so
+  // that a user-initiated navigation (e.g. tapping the highlighted button)
+  // doesn't make us bounce back to the step's own route before we advance.
+  const navedFor = useRef(-1);
+
+  // Drive the current step: navigate if needed, open the nav if needed, then
+  // poll for the spotlight target (it may live on a page we just navigated to).
   useEffect(() => {
     if (!active) return;
-    // Navigate first if this step belongs to another page; the location change
-    // re-runs the effect and we then look for the element.
-    if (step.route && location.pathname !== step.route) {
+    if (step.route && location.pathname !== step.route && navedFor.current !== index) {
+      navedFor.current = index;
       navigate(step.route);
       return;
     }
+    navedFor.current = index;
+    if (step.openNav) window.dispatchEvent(new Event('aiqs:open-office-nav'));
     if (!step.target) { setRect(null); return; }
 
     let cancelled = false;
@@ -263,16 +335,33 @@ export default function OfficeTour({ userId, autoStart }) {
     const tick = () => {
       if (cancelled) return;
       if (locateTarget()) {
-        // Recompute once more after any smooth-scroll settles.
         setTimeout(() => { if (!cancelled) locateTarget(); }, 320);
         return;
       }
-      if (tries++ < 28) setTimeout(tick, 110);
-      else setRect(null); // give up gracefully → centred card
+      if (tries++ < 40) setTimeout(tick, 120);
+      else setRect(null); // give up gracefully → centred card; Skip still works
     };
     tick();
     return () => { cancelled = true; };
   }, [active, index, location.pathname, step, navigate, locateTarget]);
+
+  // Interactive steps: wait for the user to actually click the control.
+  useEffect(() => {
+    if (!active || !step.interactive) return;
+    let el = null;
+    let cancelled = false;
+    let tries = 0;
+    const handler = () => { setTimeout(() => { if (!cancelled) nextRef.current(); }, 180); };
+    const attach = () => {
+      if (cancelled) return;
+      const sel = step.advanceOn || step.target;
+      el = sel && document.querySelector(sel);
+      if (el) { el.addEventListener('click', handler); return; }
+      if (tries++ < 60) setTimeout(attach, 120);
+    };
+    attach();
+    return () => { cancelled = true; if (el) el.removeEventListener('click', handler); };
+  }, [active, index, location.pathname, step]);
 
   // Keep the spotlight glued to its target while scrolling / resizing.
   useEffect(() => {
@@ -287,19 +376,19 @@ export default function OfficeTour({ userId, autoStart }) {
       window.removeEventListener('resize', onMove);
       window.removeEventListener('scroll', onMove, true);
     };
-  }, [active, step, reposition]);
+  }, [active, reposition]);
 
-  // Keyboard: Esc closes, arrows move.
+  // Keyboard: Esc closes; arrows move (Next only on narrated steps).
   useEffect(() => {
     if (!active) return;
     const onKey = (e) => {
       if (e.key === 'Escape') finish();
-      else if (e.key === 'ArrowRight') next();
+      else if (e.key === 'ArrowRight' && !step.interactive) next();
       else if (e.key === 'ArrowLeft') prev();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, finish, next, prev]);
+  }, [active, step, finish, next, prev]);
 
   // ── Floating launcher — always available on Office pages when not running ──
   if (!active) {
@@ -326,32 +415,30 @@ export default function OfficeTour({ userId, autoStart }) {
   const pad = 8;
   const rad = 12;
   const progress = ((index + 1) / STEPS.length) * 100;
+  const dim = isDark ? 'rgba(2,6,12,0.74)' : 'rgba(15,23,42,0.45)';
+  const isLast = index === STEPS.length - 1;
+
+  // Four dim panels around the spotlight leave the highlighted control exposed
+  // and clickable through the "hole"; a full-screen dim is used for centre cards.
+  const panel = (s) => ({ position: 'fixed', background: dim, zIndex: 10001, pointerEvents: 'auto', ...s });
+  const panels = rect ? [
+    panel({ left: 0, top: 0, width: '100%', height: Math.max(0, rect.top - pad) }),
+    panel({ left: 0, top: rect.bottom + pad, width: '100%', height: Math.max(0, win.height - (rect.bottom + pad)) }),
+    panel({ left: 0, top: rect.top - pad, width: Math.max(0, rect.left - pad), height: rect.height + pad * 2 }),
+    panel({ left: rect.right + pad, top: rect.top - pad, width: Math.max(0, win.width - (rect.right + pad)), height: rect.height + pad * 2 }),
+  ] : [panel({ inset: 0 })];
+
+  // Theme-aware tooltip surface.
+  const cardBg = t.card;
+  const cardBorder = `1px solid ${isDark ? 'rgba(245,158,11,0.28)' : 'rgba(245,158,11,0.4)'}`;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, animation: 'oTourFade 0.35s ease forwards' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, animation: 'oTourFade 0.3s ease forwards' }}>
       {step.confetti && <Confetti />}
 
-      {/* Dimmer with a hole punched over the spotlight target */}
-      <svg
-        ref={overlayRef}
-        style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 10001 }}
-      >
-        <defs>
-          <mask id="office-tour-mask">
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            {rect && (
-              <rect
-                x={rect.left - pad} y={rect.top - pad}
-                width={rect.width + pad * 2} height={rect.height + pad * 2}
-                rx={rad} fill="black"
-              />
-            )}
-          </mask>
-        </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.72)" mask="url(#office-tour-mask)" />
-      </svg>
+      {panels.map((p, i) => <div key={i} style={p} />)}
 
-      {/* Glowing ring around the spotlight */}
+      {/* Glowing ring around the spotlight (never blocks the click) */}
       {rect && (
         <div style={{
           position: 'fixed',
@@ -360,7 +447,7 @@ export default function OfficeTour({ userId, autoStart }) {
           borderRadius: rad + 2, border: `2px solid ${AMBER}`,
           boxShadow: '0 0 0 4px rgba(245,158,11,0.18)',
           zIndex: 10002, pointerEvents: 'none',
-          animation: 'oTourPulse 2.4s ease infinite',
+          animation: 'oTourPulse 1.8s ease infinite',
         }} />
       )}
 
@@ -368,79 +455,68 @@ export default function OfficeTour({ userId, autoStart }) {
       <div style={{
         ...getTooltipStyle(rect, step.placement, win),
         zIndex: 10003,
-        animation: step.placement === 'center' ? 'oTourPop 0.35s ease forwards' : 'oTourSlide 0.32s cubic-bezier(0.22,1,0.36,1) forwards',
+        animation: step.placement === 'center' ? 'oTourPop 0.32s ease forwards' : 'oTourSlide 0.3s cubic-bezier(0.22,1,0.36,1) forwards',
       }}>
-        <div style={{
-          background: '#0E1626', border: '1px solid rgba(245,158,11,0.22)',
-          borderRadius: 16, padding: '20px 20px 16px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
-        }}>
+        <div style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '18px 18px 14px', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
           {/* Header row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: AMBER,
-            }}>
-              <span style={{
-                width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: AMBER_DIM }}>
+              <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ZapIcon size={11} color="#0A0F1C" />
               </span>
               {step.chapter}
             </span>
-            <button onClick={finish} aria-label="Close tour" style={{
-              background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 7,
-              padding: 5, cursor: 'pointer', color: '#94A3B8', display: 'flex',
-            }}>
-              <XIcon size={14} color="#94A3B8" />
+            <button onClick={finish} aria-label="Close tour" style={{ background: t.surface, border: 'none', borderRadius: 7, padding: 5, cursor: 'pointer', color: t.textMuted, display: 'flex' }}>
+              <XIcon size={14} color={t.textMuted} />
             </button>
           </div>
 
-          <h3 style={{ fontSize: 17, fontWeight: 800, color: '#F1F5F9', margin: '0 0 7px', lineHeight: 1.25 }}>
-            {step.title}
-          </h3>
-          <p style={{ fontSize: 13.5, color: '#9FB0C5', lineHeight: 1.6, margin: '0 0 18px' }}>
-            {step.body}
-          </p>
+          <h3 style={{ fontSize: 17, fontWeight: 800, color: t.text, margin: '0 0 7px', lineHeight: 1.25 }}>{step.title}</h3>
+          <p style={{ fontSize: 13.5, color: t.textSecondary, lineHeight: 1.6, margin: '0 0 16px' }}>{step.body}</p>
 
-          {/* Progress bar + counter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ flex: 1, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+          {/* "Your turn" prompt on interactive steps */}
+          {step.interactive && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16,
+              padding: '10px 12px', borderRadius: 10,
+              background: isDark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.1)',
+              border: `1px solid ${isDark ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.4)'}`,
+            }}>
+              <span style={{ fontSize: 18, animation: 'oTourPoint 1.1s ease-in-out infinite' }}>👆</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>
+                Your turn — {step.hint || 'tap the highlighted button'}
+              </span>
+            </div>
+          )}
+
+          {/* Progress */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ flex: 1, height: 4, borderRadius: 999, background: t.border, overflow: 'hidden' }}>
               <div style={{ width: progress + '%', height: '100%', background: `linear-gradient(90deg, ${AMBER}, ${AMBER_DIM})`, borderRadius: 999, transition: 'width 0.3s ease' }} />
             </div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', whiteSpace: 'nowrap' }}>
-              {index + 1} / {STEPS.length}
-            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, whiteSpace: 'nowrap' }}>{index + 1} / {STEPS.length}</span>
           </div>
 
+          {/* Controls */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <button onClick={finish} style={{
-              background: 'none', border: 'none', color: '#475569', fontSize: 12,
-              cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0,
-            }}>
-              {index < STEPS.length - 1 ? 'Skip tour' : 'Close'}
+            <button onClick={finish} style={{ background: 'none', border: 'none', color: t.textMuted, fontSize: 12, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3, padding: 0 }}>
+              {isLast ? 'Close' : 'Skip tour'}
             </button>
             <div style={{ display: 'flex', gap: 6 }}>
               {index > 0 && (
-                <button onClick={prev} style={{
-                  display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#9FB0C5', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-                }}>
-                  <ArrowLeftIcon size={13} color="#9FB0C5" /> Back
+                <button onClick={prev} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8, background: t.surface, border: `1px solid ${t.border}`, color: t.textSecondary, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                  <ArrowLeftIcon size={13} color={t.textSecondary} /> Back
                 </button>
               )}
-              <button onClick={next} style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '8px 16px', borderRadius: 8,
-                background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`, border: 'none',
-                color: '#0A0F1C', fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
-                boxShadow: '0 3px 12px rgba(245,158,11,0.3)',
-              }}>
-                {index < STEPS.length - 1 ? <>Next <ArrowRightIcon size={13} color="#0A0F1C" /></> : <>Finish <ArrowRightIcon size={13} color="#0A0F1C" /></>}
-              </button>
+              {step.interactive ? (
+                <button onClick={next} title="Skip this step" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', borderRadius: 8, background: 'transparent', border: `1px solid ${t.border}`, color: t.textMuted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                  Skip step <ArrowRightIcon size={13} color={t.textMuted} />
+                </button>
+              ) : (
+                <button onClick={next} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 16px', borderRadius: 8, background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`, border: 'none', color: '#0A0F1C', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', boxShadow: '0 3px 12px rgba(245,158,11,0.3)' }}>
+                  {isLast ? 'Finish' : 'Next'} <ArrowRightIcon size={13} color="#0A0F1C" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -450,10 +526,9 @@ export default function OfficeTour({ userId, autoStart }) {
         @keyframes oTourFade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes oTourPop { from { opacity: 0; transform: translate(-50%, -48%); } to { opacity: 1; transform: translate(-50%, -50%); } }
         @keyframes oTourSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
-        @keyframes oTourPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
-        @media (prefers-reduced-motion: reduce) {
-          [style*="oTourPulse"] { animation: none !important; }
-        }
+        @keyframes oTourPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes oTourPoint { 0%,100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+        @media (prefers-reduced-motion: reduce) { [style*="oTour"] { animation: none !important; } }
       `}</style>
     </div>
   );
