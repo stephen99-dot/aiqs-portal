@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap } from 'lucide-react';
 import { KeyIcon } from '../components/Icons';
 
 const API_BASE = '/api';
@@ -171,6 +171,15 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     }
   });
 
+  const toggleEstimator = () => doAction('estimator', async () => {
+    const enabled = !user.has_estimator;
+    await apiFetch('/admin/users/' + user.id + '/estimator', { method: 'PUT', body: JSON.stringify({ enabled }) });
+    onUpdate({ ...user, has_estimator: enabled ? 1 : 0 });
+    showSuccess(enabled
+      ? 'Office in a Box beta enabled — they get in once they enter the access password'
+      : 'Office in a Box beta turned off for this account');
+  });
+
   const genMagicLink = () => doAction('magic', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
     setMagicLink(res.magicLink || res.link || res.magicUrl || '');
@@ -338,6 +347,24 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             {user.suspended && user.suspended_reason && (
               <div style={{ fontSize: 11, color: '#EF4444', marginTop: 6 }}>Reason: {user.suspended_reason}</div>
             )}
+          </div>
+
+          {/* Office in a Box beta access */}
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+            <div style={lbl}><Zap size={11} style={{ verticalAlign: 'middle', marginRight: 4, color: '#F59E0B' }} />Office in a Box (beta)</div>
+            <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
+              {user.role === 'admin'
+                ? 'Admins always have access.'
+                : user.has_estimator
+                  ? 'Enabled — this client can use the beta tools.'
+                  : 'Not enabled — the client sees a “request access” screen.'}
+            </div>
+            <button onClick={toggleEstimator} disabled={!!loading || user.role === 'admin'}
+              style={user.has_estimator
+                ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
+                : { ...btn('#F59E0B'), color: '#0F172A' }}>
+              <Zap size={12} /> {user.has_estimator ? 'Turn off beta access' : 'Enable beta access'}
+            </button>
           </div>
 
           {/* Tools */}
