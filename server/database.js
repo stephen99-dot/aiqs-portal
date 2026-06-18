@@ -766,6 +766,63 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_pending_credits_email ON pending_credits(email);
   CREATE INDEX IF NOT EXISTS idx_pending_credits_claimed ON pending_credits(claimed_at);
+
+  -- ── Wave 6: Intelligent Build Schedule (Stage 1) ──────────────────────────
+  -- A build programme generated off the back of an estimate. One plan per job
+  -- (a job can hold several — e.g. a baseline plus a re-plan). Tasks carry a
+  -- dependency chain so dates re-flow when a duration or start changes; actual_*
+  -- columns and snapshots are written from day one so baseline-vs-actual slip
+  -- is recordable even before the Stage 2 conversational updates land.
+  CREATE TABLE IF NOT EXISTS schedule_plans (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    quote_id TEXT,                              -- the quote it was generated from (nullable)
+    title TEXT NOT NULL DEFAULT 'Build programme',
+    start_date DATE,                            -- programme start (working-calendar anchor)
+    working_days TEXT DEFAULT '[1,2,3,4,5]',    -- JSON weekday numbers (0=Sun..6=Sat) that are working days
+    status TEXT DEFAULT 'draft',                -- draft | active | complete
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (job_id) REFERENCES estimator_jobs(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedule_plans_job ON schedule_plans(job_id);
+  CREATE INDEX IF NOT EXISTS idx_schedule_plans_user ON schedule_plans(user_id);
+
+  CREATE TABLE IF NOT EXISTS schedule_tasks (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    phase TEXT,                                 -- groups tasks (Groundworks, Frame, …)
+    name TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    duration_days INTEGER DEFAULT 1,            -- planned working days
+    lag_days INTEGER DEFAULT 0,                  -- working days this task is pushed back beyond its deps (accumulated slip)
+    depends_on TEXT DEFAULT '[]',               -- JSON array of schedule_tasks.id
+    planned_start DATE,
+    planned_end DATE,
+    actual_start DATE,
+    actual_end DATE,
+    percent_complete INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'not_started',          -- not_started | in_progress | done | blocked
+    source_line_ids TEXT DEFAULT '[]',          -- JSON array of quote_lines.id this task came from
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plan_id) REFERENCES schedule_plans(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedule_tasks_plan ON schedule_tasks(plan_id);
+
+  -- A frozen copy of every task at a moment in time. The "Baseline" snapshot is
+  -- taken at generation; later snapshots make slippage against the plan visible.
+  CREATE TABLE IF NOT EXISTS schedule_snapshots (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    label TEXT,
+    taken_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    data TEXT,                                  -- JSON freeze of all tasks
+    FOREIGN KEY (plan_id) REFERENCES schedule_plans(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedule_snapshots_plan ON schedule_snapshots(plan_id);
 `);
 
 // Migrations for existing databases
@@ -879,6 +936,9 @@ const migrations = [
   { column: 'site_address', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN site_address TEXT" },
   { column: 'terms_accepted_at', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_accepted_at DATETIME" },
   { column: 'terms_version', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_version TEXT" },
+  // Wave 6 Stage 2: accumulated slip (working days) used by the schedule
+  // assistant to push a task and everything after it back when site work slips.
+  { column: 'lag_days', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN lag_days INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {
