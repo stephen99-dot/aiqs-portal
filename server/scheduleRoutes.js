@@ -96,13 +96,19 @@ function serialiseTask(t) {
 // Called after any change that affects dates (durations, dependencies, order,
 // the plan's start date or working calendar).
 function reflowPlan(plan) {
-  const rows = db.prepare('SELECT id, duration_days, depends_on, sort_order FROM schedule_tasks WHERE plan_id = ?').all(plan.id);
+  const rows = db.prepare(
+    'SELECT id, duration_days, lag_days, depends_on, sort_order, actual_start, actual_end FROM schedule_tasks WHERE plan_id = ?'
+  ).all(plan.id);
   if (rows.length === 0) {
     db.prepare('UPDATE schedule_plans SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(plan.id);
     return;
   }
   const computed = computeSchedule(
-    rows.map((r) => ({ id: r.id, duration_days: r.duration_days, depends_on: r.depends_on, sort_order: r.sort_order })),
+    rows.map((r) => ({
+      id: r.id, duration_days: r.duration_days, lag_days: r.lag_days,
+      depends_on: r.depends_on, sort_order: r.sort_order,
+      actual_start: r.actual_start, actual_end: r.actual_end,
+    })),
     plan.start_date,
     plan.working_days
   );
@@ -459,8 +465,9 @@ router.patch('/tasks/:id', (req, res) => {
     if ('notes' in b) { sets.push('notes = ?'); vals.push(b.notes != null ? String(b.notes).slice(0, 1000) : null); }
     if ('status' in b && TASK_STATUSES.has(b.status)) { sets.push('status = ?'); vals.push(b.status); }
     if ('percent_complete' in b) { sets.push('percent_complete = ?'); vals.push(clampInt(b.percent_complete, 0, 100, 0)); }
-    if ('actual_start' in b) { sets.push('actual_start = ?'); vals.push((b.actual_start && /^\d{4}-\d{2}-\d{2}$/.test(b.actual_start)) ? b.actual_start : null); }
-    if ('actual_end' in b) { sets.push('actual_end = ?'); vals.push((b.actual_end && /^\d{4}-\d{2}-\d{2}$/.test(b.actual_end)) ? b.actual_end : null); }
+    if ('actual_start' in b) { sets.push('actual_start = ?'); vals.push((b.actual_start && /^\d{4}-\d{2}-\d{2}$/.test(b.actual_start)) ? b.actual_start : null); needsReflow = true; }
+    if ('actual_end' in b) { sets.push('actual_end = ?'); vals.push((b.actual_end && /^\d{4}-\d{2}-\d{2}$/.test(b.actual_end)) ? b.actual_end : null); needsReflow = true; }
+    if ('lag_days' in b) { sets.push('lag_days = ?'); vals.push(clampInt(b.lag_days, 0, 1000, 0)); needsReflow = true; }
     if ('duration_days' in b) { sets.push('duration_days = ?'); vals.push(clampInt(b.duration_days, 1, 365, 1)); needsReflow = true; }
     if ('sort_order' in b) { sets.push('sort_order = ?'); vals.push(clampInt(b.sort_order, 0, 100000, task.sort_order)); needsReflow = true; }
     if ('depends_on' in b) {
@@ -516,6 +523,200 @@ router.post('/plans/:id/snapshot', (req, res) => {
   } catch (err) {
     console.error('[Schedule] snapshot error:', err);
     res.status(500).json({ error: 'Failed to snapshot the schedule.' });
+  }
+});
+
+// ─── Stage 2: conversational progress updates ────────────────────────────────
+// The builder describes site progress in plain English; the assistant records it
+// via a tool, the dates re-flow, a snapshot is taken, and it replies with the
+// new completion date.
+
+const ASSISTANT_TOOL = {
+  name: 'update_schedule_progress',
+  description: 'Record site progress against the build programme. Mark tasks done/in-progress/blocked, set actual start/finish dates, set percent complete, and push tasks back when work slips. After this runs, downstream dates re-flow automatically — so only delay the task that actually slipped, not the ones after it.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      updates: {
+        type: 'array',
+        description: 'One entry per task the builder mentioned.',
+        items: {
+          type: 'object',
+          properties: {
+            task_id: { type: 'string', description: 'The [id] of the task from the list provided. Preferred.' },
+            task_name: { type: 'string', description: 'The task name, if you cannot use the id.' },
+            status: { type: 'string', enum: ['not_started', 'in_progress', 'done', 'blocked'] },
+            actual_start: { type: 'string', description: 'ISO date YYYY-MM-DD when work actually started.' },
+            actual_end: { type: 'string', description: 'ISO date YYYY-MM-DD when work actually finished.' },
+            percent_complete: { type: 'number', description: '0–100.' },
+            delay_days: { type: 'number', description: 'NEW slippage to add, in working days (a one-week slip = 5). Pushes this task and everything after it back.' },
+            note: { type: 'string', description: 'Short note, e.g. "waiting on screed pump".' },
+          },
+        },
+      },
+    },
+    required: ['updates'],
+  },
+};
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Apply the model's structured updates to a plan: resolve each task (by id, then
+// by name), set the recorded fields, re-flow, snapshot. Returns a human summary
+// (fed back to the model) plus the list of applied changes.
+function applyScheduleUpdates(plan, input) {
+  const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?').all(plan.id);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const updates = Array.isArray(input && input.updates) ? input.updates : [];
+
+  const before = programmeWindow(tasks);
+  const applied = [];
+  const notes = [];
+
+  const resolve = (u) => {
+    if (u.task_id && byId.has(u.task_id)) return byId.get(u.task_id);
+    const name = (u.task_name || '').toString().trim().toLowerCase();
+    if (!name) return null;
+    let hit = tasks.find((t) => (t.name || '').toLowerCase() === name);
+    if (!hit) hit = tasks.find((t) => (t.name || '').toLowerCase().includes(name) || name.includes((t.name || '').toLowerCase()));
+    return hit || null;
+  };
+
+  const txn = db.transaction(() => {
+    for (const u of updates) {
+      const task = resolve(u);
+      if (!task) { notes.push('Could not match a task for "' + (u.task_name || u.task_id || '?') + '".'); continue; }
+      const sets = [];
+      const vals = [];
+      const changed = [];
+
+      if (u.status && TASK_STATUSES.has(u.status)) { sets.push('status = ?'); vals.push(u.status); changed.push(u.status.replace('_', ' ')); }
+      if (u.actual_start && ISO_RE.test(u.actual_start)) { sets.push('actual_start = ?'); vals.push(u.actual_start); changed.push('started ' + u.actual_start); }
+      if (u.actual_end && ISO_RE.test(u.actual_end)) { sets.push('actual_end = ?'); vals.push(u.actual_end); changed.push('finished ' + u.actual_end); }
+      if (u.percent_complete != null) { sets.push('percent_complete = ?'); vals.push(clampInt(u.percent_complete, 0, 100, 0)); changed.push(clampInt(u.percent_complete, 0, 100, 0) + '%'); }
+      if (u.delay_days != null) {
+        const add = clampInt(u.delay_days, 0, 1000, 0);
+        if (add > 0) { sets.push('lag_days = lag_days + ?'); vals.push(add); changed.push('+' + add + 'd slip'); }
+      }
+      if (u.note != null) { sets.push('notes = ?'); vals.push(String(u.note).slice(0, 1000)); }
+
+      if (sets.length) {
+        vals.push(task.id);
+        db.prepare('UPDATE schedule_tasks SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+        applied.push({ task_id: task.id, name: task.name, changes: changed });
+        if (changed.length) notes.push(task.name + ': ' + changed.join(', ') + '.');
+      }
+    }
+  });
+  txn();
+
+  reflowPlan(ownedPlan(plan.id, plan.user_id));
+  takeSnapshot(plan.id, 'Update ' + new Date().toISOString().slice(0, 10));
+
+  const after = programmeWindow(db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?').all(plan.id));
+  let summary = applied.length ? notes.join(' ') : 'No tasks were changed.';
+  if (after.end) {
+    summary += ' Expected completion is now ' + after.end
+      + (before.end && before.end !== after.end ? ' (was ' + before.end + ').' : '.');
+  }
+  return { summary, applied, before: before.end, after: after.end };
+}
+
+function buildAssistantSystem(plan, tasks) {
+  const lines = tasks.map((t) => '- [' + t.id + '] ' + t.name
+    + (t.phase ? ' (' + t.phase + ')' : '')
+    + ' — planned ' + (t.planned_start || '?') + '..' + (t.planned_end || '?')
+    + ' — ' + (t.status || 'not_started')).join('\n');
+  return 'You are the build-schedule assistant for the programme "' + (plan.title || 'Build programme') + '".\n'
+    + "Today's date is " + new Date().toISOString().slice(0, 10) + '.\n\n'
+    + 'The builder tells you, in plain English, what has happened on site. Use the update_schedule_progress tool to record it. '
+    + 'After your update the dates re-flow automatically — downstream tasks move on their own, so only apply delay_days to the task that actually slipped.\n\n'
+    + 'Current tasks (use task_id):\n' + (lines || '(no tasks yet)') + '\n\n'
+    + 'Rules:\n'
+    + '- Only act on what the builder tells you; never invent progress.\n'
+    + '- delay_days is NEW slippage in working days (a one-week slip = 5).\n'
+    + '- Convert spoken dates ("Tuesday", "last week") to ISO YYYY-MM-DD near the plan dates; if unsure, pick a sensible date and say so.\n'
+    + '- After calling the tool, reply in one or two short sentences: what you changed and the new expected completion date.\n'
+    + '- If nothing is actionable, reply briefly and do not call the tool.';
+}
+
+async function runScheduleAssistant({ plan, userId, message, history }) {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ? ORDER BY planned_start ASC, sort_order ASC').all(plan.id);
+  const system = buildAssistantSystem(plan, tasks);
+
+  // Short, sanitised history: last few turns as plain strings.
+  const hist = (Array.isArray(history) ? history : [])
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .slice(-6)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+
+  const messages = [...hist, { role: 'user', content: String(message).slice(0, 2000) }];
+  let applied = [];
+  let lastText = '';
+
+  for (let i = 0; i < 4; i++) {
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: 1500,
+      temperature: 0.2,
+      system: [{ type: 'text', text: system }],
+      messages,
+      tools: [ASSISTANT_TOOL],
+      userId,
+      action: 'schedule_assistant',
+    });
+    if (!result.ok) {
+      const msg = result.error?.error?.message || result.error?.message || '';
+      throw new Error('Claude API ' + result.status + ': ' + String(msg).slice(0, 200));
+    }
+    if (result.text) lastText = result.text;
+    messages.push({ role: 'assistant', content: result.blocks });
+
+    const toolUses = (result.blocks || []).filter((b) => b.type === 'tool_use');
+    if (!toolUses.length) return { reply: lastText || 'Done.', applied };
+
+    const toolResults = [];
+    for (const tu of toolUses) {
+      if (tu.name === 'update_schedule_progress') {
+        const r = applyScheduleUpdates(plan, tu.input || {});
+        applied = applied.concat(r.applied);
+        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: r.summary });
+      } else {
+        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: 'Unknown tool.', is_error: true });
+      }
+    }
+    messages.push({ role: 'user', content: toolResults });
+  }
+  return { reply: lastText || 'Schedule updated.', applied };
+}
+
+// POST /plans/:id/assistant  — body: { message, history? }
+router.post('/plans/:id/assistant', async (req, res) => {
+  try {
+    const plan = ownedPlan(req.params.id, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
+    const message = (req.body && req.body.message ? String(req.body.message) : '').trim();
+    if (!message) return res.status(400).json({ error: 'Tell me what happened on site.' });
+
+    let out;
+    try {
+      out = await runScheduleAssistant({ plan, userId: req.user.id, message, history: req.body.history });
+    } catch (err) {
+      console.error('[Schedule] assistant failed:', err.message);
+      return res.status(502).json({ error: 'The assistant is unavailable right now. Please try again in a moment.' });
+    }
+
+    const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ? ORDER BY planned_start ASC, sort_order ASC').all(plan.id);
+    res.json({
+      reply: out.reply,
+      applied: out.applied,
+      tasks: tasks.map(serialiseTask),
+      window: programmeWindow(tasks),
+    });
+  } catch (err) {
+    console.error('[Schedule] assistant error:', err);
+    res.status(500).json({ error: 'Failed to update the schedule.' });
   }
 });
 

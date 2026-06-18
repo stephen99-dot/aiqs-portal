@@ -797,6 +797,7 @@ db.exec(`
     name TEXT NOT NULL,
     sort_order INTEGER DEFAULT 0,
     duration_days INTEGER DEFAULT 1,            -- planned working days
+    lag_days INTEGER DEFAULT 0,                  -- working days this task is pushed back beyond its deps (accumulated slip)
     depends_on TEXT DEFAULT '[]',               -- JSON array of schedule_tasks.id
     planned_start DATE,
     planned_end DATE,
@@ -935,6 +936,9 @@ const migrations = [
   { column: 'site_address', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN site_address TEXT" },
   { column: 'terms_accepted_at', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_accepted_at DATETIME" },
   { column: 'terms_version', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_version TEXT" },
+  // Wave 6 Stage 2: accumulated slip (working days) used by the schedule
+  // assistant to push a task and everything after it back when site work slips.
+  { column: 'lag_days', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN lag_days INTEGER DEFAULT 0" },
 ];
 
 for (const { column, table, sql } of migrations) {

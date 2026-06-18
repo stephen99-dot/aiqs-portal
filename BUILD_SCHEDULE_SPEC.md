@@ -1,7 +1,29 @@
 # Intelligent Build Schedule (Wave 6) — Spec
 
-> Status: **Stage 1 built (admin-only)**. Stage 2 proposed. Admin-only rollout
-> first, then flip the gate to all estimator users.
+> Status: **Stage 1 + Stage 2 built (admin-only)**. Admin-only rollout first,
+> then flip the gate to all estimator users.
+>
+> **Stage 2 is implemented** behind the admin gate:
+> - Engine: `scheduleEngine.js` now honours `actual_start` / `actual_end`
+>   (a recorded date pins the task and downstream flows from the real finish) and
+>   `lag_days` (accumulated slip that pushes a task and everything after it back).
+>   New `schedule_tasks.lag_days` column (created + migrated in `database.js`).
+> - Assistant: `POST /api/schedule/plans/:id/assistant` runs a short tool loop
+>   with the `update_schedule_progress` tool — resolves tasks by id or name,
+>   records status / actual dates / % / slip, re-flows, snapshots, and replies
+>   with the new completion date.
+> - UI: an "Update from site" chat box on the Build schedule section
+>   (`src/components/JobSchedule.js`); the timeline updates live from the reply.
+>
+> **Design note:** Stage 2 was specified as "an agent tool wired into the
+> existing chat loop". In practice the general `/chat` endpoint (`chat.js`) only
+> runs web-search, with no custom tool-dispatch loop, and the `agent.js` tool
+> framework is the drawings→BOQ takeoff agent (wrong context). Rather than bolt a
+> tool loop onto the 265KB streaming chat, Stage 2 ships as a focused, self-
+> contained assistant under the already-admin-gated `/api/schedule`, surfaced
+> where the schedule lives. Same outcome — "explain what happened → the bot
+> updates the schedule" — with the job context implicit and far lower risk. The
+> general-chat integration remains available as a later enhancement.
 >
 > **Stage 1 is implemented** behind the admin gate:
 > - DB: `schedule_plans`, `schedule_tasks`, `schedule_snapshots` (`server/database.js`).
@@ -219,6 +241,6 @@ re-flows downstream dates.
 2. ✅ Date-flow helper (durations + dependencies → dates over a working calendar).
 3. ✅ Stage 1 routes (admin-gated) + AI generation.
 4. ✅ Timeline UI + PDF export.
-5. ⬜ Stage 2 agent tool + conversational re-flow.
+5. ✅ Stage 2 assistant (`update_schedule_progress`) + conversational re-flow.
 6. ⬜ Flip the gate from `adminMiddleware` → `requireEstimator` and surface in nav
    for all estimator users.

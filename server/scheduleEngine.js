@@ -90,11 +90,17 @@ function workingDaysBetween(startISO, endISO, workingDays) {
 }
 
 // ── The core pass ──────────────────────────────────────────────────────────
-// tasks: [{ id, duration_days, depends_on:[id], sort_order }]
+// tasks: [{ id, duration_days, depends_on:[id], sort_order,
+//           lag_days?, actual_start?, actual_end? }]
 // Returns a NEW array (same objects, cloned) with planned_start / planned_end
 // set as ISO strings, ordered by start then sort_order. Dependency cycles and
 // dangling references are handled defensively so a bad graph never throws and
 // never loses a task.
+//
+// Actuals and slip (Stage 2): a task with actual_start is pinned to it; a task
+// with actual_end is pinned to it (downstream flows from the real finish);
+// lag_days pushes a task's start back by that many working days beyond its
+// dependencies, so a reported slip cascades through everything after it.
 function computeSchedule(tasks, planStartISO, workingDays) {
   const set = normWorkingDays(workingDays);
   const anchor = snapForward(parseISO(planStartISO) || todayUTC(), set);
@@ -102,6 +108,7 @@ function computeSchedule(tasks, planStartISO, workingDays) {
   const list = (Array.isArray(tasks) ? tasks : []).map((t, i) => ({
     ...t,
     duration_days: Math.max(1, parseInt(t.duration_days, 10) || 1),
+    lag_days: Math.max(0, parseInt(t.lag_days, 10) || 0),
     sort_order: t.sort_order != null ? Number(t.sort_order) : i,
   }));
 
@@ -147,18 +154,26 @@ function computeSchedule(tasks, planStartISO, workingDays) {
 
   for (const t of order) {
     const tDeps = deps.get(t.id).filter((d) => endById.has(d));
-    let start;
+    let baseStart;
     if (tDeps.length) {
       let latest = null;
       for (const d of tDeps) {
         const e = endById.get(d);
         if (!latest || e > latest) latest = e;
       }
-      start = nextWorkingDay(latest, set);
+      baseStart = nextWorkingDay(latest, set);
     } else {
-      start = anchor;
+      baseStart = anchor;
     }
-    const end = addWorkingDays(start, t.duration_days - 1, set);
+
+    // A recorded actual start pins the task; otherwise apply any slip (lag).
+    const actualStart = parseISO(t.actual_start);
+    const start = actualStart || addWorkingDays(baseStart, t.lag_days, set);
+
+    // A recorded actual finish pins the end; otherwise run the duration out.
+    const actualEnd = parseISO(t.actual_end);
+    const end = (actualEnd && actualEnd >= start) ? actualEnd : addWorkingDays(start, t.duration_days - 1, set);
+
     endById.set(t.id, end);
     t.planned_start = toISO(start);
     t.planned_end = toISO(end);

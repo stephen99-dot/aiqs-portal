@@ -37,6 +37,11 @@ export default function JobSchedule({ t, jobId, quotes }) {
   const [startDate, setStartDate] = useState(todayIso());
   const [newTask, setNewTask] = useState({ name: '', phase: '', duration_days: 1 });
 
+  // Stage 2: conversational progress updates.
+  const [chat, setChat] = useState([]); // [{ role, content }]
+  const [chatInput, setChatInput] = useState('');
+  const [sending, setSending] = useState(false);
+
   const hasQuote = (quotes || []).length > 0;
 
   const loadDetail = useCallback(async (planId) => {
@@ -129,6 +134,25 @@ export default function JobSchedule({ t, jobId, quotes }) {
       setNewTask({ name: '', phase: '', duration_days: 1 });
       await loadDetail(plan.id);
     } catch (e) { setError(e.message); }
+  };
+
+  const sendChat = async () => {
+    const message = chatInput.trim();
+    if (!message || sending) return;
+    setSending(true); setError('');
+    const history = chat.slice(-6);
+    setChat(prev => [...prev, { role: 'user', content: message }]);
+    setChatInput('');
+    try {
+      const r = await apiFetch('/schedule/plans/' + plan.id + '/assistant', {
+        method: 'POST', body: JSON.stringify({ message, history }),
+      });
+      setChat(prev => [...prev, { role: 'assistant', content: r.reply || 'Done.' }]);
+      if (r.tasks) setTasks(r.tasks);
+      if (r.window) setWin(r.window);
+    } catch (e) {
+      setChat(prev => [...prev, { role: 'assistant', content: '⚠️ ' + e.message }]);
+    } finally { setSending(false); }
   };
 
   const exportPdf = () => {
@@ -285,6 +309,41 @@ export default function JobSchedule({ t, jobId, quotes }) {
       </div>
       <div style={{ color: t.textMuted, fontSize: 11.5, marginTop: 8 }}>
         New tasks run after the current programme. Edit durations and the dates re-flow automatically.
+      </div>
+
+      {/* Stage 2: tell the assistant what happened on site */}
+      <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + t.border }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Update from site</div>
+        <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
+          Tell me what's happened — e.g. “Roof finished Tuesday, but screed slipped a week waiting on the pump.” I'll update the programme and re-flow the dates.
+        </div>
+
+        {chat.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+            {chat.map((m, i) => (
+              <div key={i} style={{
+                alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                maxWidth: '85%', padding: '8px 12px', borderRadius: 12, fontSize: 13.5, lineHeight: 1.45,
+                background: m.role === 'user' ? t.accent : t.bg,
+                color: m.role === 'user' ? '#fff' : t.text,
+                border: m.role === 'user' ? 'none' : '1px solid ' + t.border,
+              }}>{m.content}</div>
+            ))}
+            {sending && <div style={{ alignSelf: 'flex-start', color: t.textMuted, fontSize: 12.5 }}>Updating…</div>}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={chatInput}
+            onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+            placeholder="What happened on site?"
+            disabled={sending}
+            style={{ ...input, flex: 1 }}
+          />
+          <button onClick={sendChat} disabled={sending || !chatInput.trim()} style={{ ...primaryBtn, opacity: (sending || !chatInput.trim()) ? 0.6 : 1 }}>Send</button>
+        </div>
       </div>
     </div>
   );
