@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiFetch, getToken } from '../utils/api';
+
+// Compact markdown so the assistant's bold/lists render nicely in a small bubble
+// instead of showing raw ** and 1. markers.
+const MD_COMPONENTS = {
+  p: (props) => <p style={{ margin: '0 0 4px' }} {...props} />,
+  ul: (props) => <ul style={{ margin: '4px 0', paddingLeft: 18 }} {...props} />,
+  ol: (props) => <ol style={{ margin: '4px 0', paddingLeft: 18 }} {...props} />,
+  li: (props) => <li style={{ margin: '2px 0' }} {...props} />,
+  strong: (props) => <strong style={{ fontWeight: 700 }} {...props} />,
+  code: (props) => <code style={{ fontFamily: 'monospace', fontSize: '0.92em' }} {...props} />,
+};
 
 // ── Wave 6 / Stage 1: build schedule on the job page (admin only) ───────────
 // Generate a programme from the job's quote, view it as a timeline, edit task
@@ -332,7 +345,12 @@ export default function JobSchedule({ t, jobId, quotes }) {
                 background: m.role === 'user' ? t.accent : t.bg,
                 color: m.role === 'user' ? '#fff' : t.text,
                 border: m.role === 'user' ? 'none' : '1px solid ' + t.border,
-              }}>{m.content}</div>
+                wordBreak: 'break-word',
+              }}>
+                {m.role === 'assistant'
+                  ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{m.content}</ReactMarkdown>
+                  : m.content}
+              </div>
             ))}
             {sending && <div style={{ alignSelf: 'flex-start', color: t.textMuted, fontSize: 12.5 }}>Updating…</div>}
           </div>
