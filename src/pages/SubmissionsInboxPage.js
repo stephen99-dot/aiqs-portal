@@ -24,6 +24,12 @@ export default function SubmissionsInboxPage() {
   const [notesDraft, setNotesDraft] = useState('');
   const [driveDraft, setDriveDraft] = useState('');
   const [statusMsg, setStatusMsg] = useState(null); // { kind: 'ok'|'err', text }
+  // Manual "Add job" — create a job for a customer without waiting for a submission.
+  const [showAddJob, setShowAddJob] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [jobDraft, setJobDraft] = useState({ user_id: '', project_type: '', site_address: '', message: '', title: '' });
+  const [creatingJob, setCreatingJob] = useState(false);
+  const [addJobError, setAddJobError] = useState('');
 
   const isAdmin = user && user.role === 'admin';
 
@@ -160,6 +166,55 @@ export default function SubmissionsInboxPage() {
     }
   }
 
+  function openAddJob() {
+    setAddJobError('');
+    setJobDraft({ user_id: '', project_type: '', site_address: '', message: '', title: '' });
+    setShowAddJob(true);
+    // Load the customer list lazily — only when the admin opens the form.
+    if (customers.length === 0) {
+      apiFetch('/admin/users')
+        .then((d) => {
+          const list = (d.users || d || []).filter((u) => u.role !== 'admin');
+          list.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
+          setCustomers(list);
+        })
+        .catch((e) => setAddJobError(e.message || 'Could not load customers'));
+    }
+  }
+
+  async function submitManualJob(e) {
+    if (e) e.preventDefault();
+    if (creatingJob) return;
+    if (!jobDraft.user_id) { setAddJobError('Pick a customer for this job.'); return; }
+    setCreatingJob(true);
+    setAddJobError('');
+    try {
+      const data = await apiFetch('/submissions/admin/manual-job', {
+        method: 'POST',
+        body: JSON.stringify(jobDraft),
+      });
+      if (data && data.submission) {
+        // Prepend the new job and select it — the detail pane then shows the
+        // full deliverables uploader straight away.
+        setSubmissions((prev) => [data.submission, ...prev]);
+        setSelectedId(data.submission.id);
+        setFilter('all'); // manual jobs land actioned, so they live under All/Done
+        if (data.project_id) {
+          try {
+            const proj = await apiFetch(`/projects/${data.project_id}`);
+            setLinkedProject(proj);
+          } catch (_) { /* ignore */ }
+        }
+        setStatusMsg({ kind: 'ok', text: 'Job created — ready to upload documents' });
+      }
+      setShowAddJob(false);
+    } catch (err) {
+      setAddJobError(err.message || 'Could not create job');
+    } finally {
+      setCreatingJob(false);
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="page" style={{ padding: '40px 28px' }}>
@@ -176,22 +231,152 @@ export default function SubmissionsInboxPage() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1400, margin: '0 auto' }}>
+      {/* Add-job modal — create a job for a customer without a submission */}
+      {showAddJob && (
+        <div
+          onClick={() => !creatingJob && setShowAddJob(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            padding: '6vh 16px', overflowY: 'auto',
+          }}
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={submitManualJob}
+            style={{
+              width: '100%', maxWidth: 520,
+              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              borderRadius: 14, padding: 22,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <h2 style={{ fontSize: 19, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Add a job manually</h2>
+              <button type="button" onClick={() => setShowAddJob(false)} aria-label="Close"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Creates the job in the customer's portal right away. You can then send priced
+              documents to them just like a submitted job.
+            </p>
+
+            {addJobError && (
+              <div style={{
+                padding: '9px 12px', marginBottom: 12, borderRadius: 8,
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+                color: '#EF4444', fontSize: 12.5,
+              }}>{addJobError}</div>
+            )}
+
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Customer *</label>
+            <select
+              value={jobDraft.user_id}
+              onChange={(e) => setJobDraft((d) => ({ ...d, user_id: e.target.value }))}
+              required
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
+                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                fontSize: 13.5, outline: 'none',
+              }}
+            >
+              <option value="">Select a customer…</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {(c.full_name || c.email)}{c.company ? ' · ' + c.company : ''}{c.full_name && c.email ? ' (' + c.email + ')' : ''}
+                </option>
+              ))}
+            </select>
+
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Site address / job title</label>
+            <input
+              type="text"
+              value={jobDraft.site_address}
+              onChange={(e) => setJobDraft((d) => ({ ...d, site_address: e.target.value }))}
+              placeholder="e.g. 14 Oak Lane, Leeds"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
+                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                fontSize: 13.5, outline: 'none',
+              }}
+            />
+
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Job type</label>
+            <input
+              type="text"
+              value={jobDraft.project_type}
+              onChange={(e) => setJobDraft((d) => ({ ...d, project_type: e.target.value }))}
+              placeholder="e.g. Extension, New build, Refurbishment"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
+                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                fontSize: 13.5, outline: 'none',
+              }}
+            />
+
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Brief / notes (optional)</label>
+            <textarea
+              value={jobDraft.message}
+              onChange={(e) => setJobDraft((d) => ({ ...d, message: e.target.value }))}
+              rows={3}
+              placeholder="Anything worth recording about this job."
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 18,
+                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                fontSize: 13.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setShowAddJob(false)} disabled={creatingJob}
+                style={{ padding: '10px 16px', borderRadius: 9, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="submit" disabled={creatingJob}
+                style={{
+                  padding: '10px 18px', borderRadius: 9, border: 'none',
+                  background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                  color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
+                  cursor: creatingJob ? 'wait' : 'pointer',
+                }}>
+                {creatingJob ? 'Creating…' : 'Create job'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
-        }}>
-          Submissions Inbox
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
-          Every drawing submission from the portal — full briefs, files, and your private notes.
-          {unactionedCount > 0 && (
-            <span style={{ marginLeft: 10, color: '#F59E0B', fontWeight: 600 }}>
-              {unactionedCount} unactioned
-            </span>
-          )}
-        </p>
+      <div style={{ marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{
+            fontFamily: "'DM Serif Display', Georgia, serif",
+            fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
+          }}>
+            Submissions Inbox
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
+            Every drawing submission from the portal — full briefs, files, and your private notes.
+            {unactionedCount > 0 && (
+              <span style={{ marginLeft: 10, color: '#F59E0B', fontWeight: 600 }}>
+                {unactionedCount} unactioned
+              </span>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={openAddJob}
+          style={{
+            flexShrink: 0,
+            padding: '10px 16px', borderRadius: 9, border: 'none',
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+            color: '#0A0F1C', fontWeight: 700, fontSize: 13.5, cursor: 'pointer',
+            boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+          }}
+        >
+          + Add job manually
+        </button>
       </div>
 
       {/* Toolbar */}

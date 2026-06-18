@@ -446,6 +446,65 @@ router.post('/admin/:id/create-project', (req, res) => {
   }
 });
 
+// Admin: create a job (project) manually for a customer, without waiting for
+// them to submit drawings. Produces the same submission + project pair the
+// "create-project" flow does, so the manual job lands in the inbox with the
+// full detail pane — deliverables uploader, notes, Drive link, view-as-customer.
+//
+// Body: { user_id, project_type, site_address, message, title? }
+router.post('/admin/manual-job', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const userId = (req.body && req.body.user_id || '').trim();
+    if (!userId) return res.status(400).json({ error: 'Pick a customer for this job' });
+
+    const customer = db.prepare("SELECT id, full_name, email FROM users WHERE id = ? AND role != 'system'").get(userId);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+
+    const projectType = (req.body.project_type || '').trim() || 'Other';
+    const siteAddress = (req.body.site_address || '').trim();
+    const message = (req.body.message || '').trim();
+    const title = (req.body.title || '').trim()
+      || siteAddress
+      || (projectType + ' — ' + new Date().toLocaleDateString('en-GB'));
+
+    const projectId = uuidv4();
+    db.prepare(`
+      INSERT INTO projects (id, user_id, title, project_type, description, location, status, source)
+      VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'manual')
+    `).run(projectId, customer.id, title, projectType, message || null, siteAddress || null);
+
+    // Mirror it as a submission row so the inbox shows it like any other job.
+    // pipedream_status 'manual' marks it so it isn't counted against the
+    // customer's BOQ allowance (admin added it as a courtesy, no credit spent).
+    const submissionId = 'man_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const rowId = uuidv4();
+    db.prepare(`
+      INSERT INTO drawing_submissions
+        (id, user_id, submission_id, project_type, site_address, message, file_count, file_names,
+         pipedream_status, project_id, actioned_at, actioned_by)
+      VALUES (?, ?, ?, ?, ?, ?, 0, '[]', 'manual', ?, CURRENT_TIMESTAMP, ?)
+    `).run(rowId, customer.id, submissionId, projectType, siteAddress || null, message || null,
+           projectId, req.user.email || req.user.id);
+
+    const submission = db.prepare(`
+      SELECT s.*, u.full_name AS user_name, u.email AS user_email,
+             u.company AS user_company, u.phone AS user_phone
+      FROM drawing_submissions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?
+    `).get(rowId);
+    if (submission && submission.file_names) {
+      try { submission.file_names = JSON.parse(submission.file_names); } catch (e) { submission.file_names = []; }
+    }
+
+    res.json({ ok: true, project_id: projectId, submission });
+  } catch (err) {
+    console.error('[Submissions] manual-job error:', err);
+    res.status(500).json({ error: 'Failed to create job: ' + err.message });
+  }
+});
+
 // Inbound webhook: Pipedream calls this once it has finished uploading the
 // customer's drawings to Drive, posting the folder URL back so the inbox
 // auto-fills the "Open in Drive" link without any manual pasting.

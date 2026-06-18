@@ -784,7 +784,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, userCycleStart);
       let dlSubs = 0;
       try {
-        dlSubs = db.prepare('SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ?').get(u.id, userCycleStart).c || 0;
+        dlSubs = db.prepare("SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ? AND (pipedream_status IS NULL OR pipedream_status != 'manual')").get(u.id, userCycleStart).c || 0;
       } catch(e) {}
       docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
     } catch(e) {}
