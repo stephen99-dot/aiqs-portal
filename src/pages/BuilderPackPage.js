@@ -26,7 +26,9 @@ function fmt(sym, v, decimals = 0) {
     .toLocaleString('en-GB', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 function roundMoney(rounding, v) {
-  if (!rounding || rounding < 1) return Math.round(v * 100) / 100;
+  // rounding 0 = penny-accurate: keep full precision so summed totals reconcile
+  // exactly with the delivered tender (display is formatted to 2 dp).
+  if (!rounding || rounding < 1) return v;
   return Math.round(v / rounding) * rounding;
 }
 function num(v) {
@@ -55,7 +57,8 @@ export default function BuilderPackPage() {
   // All margins default to 0 (like-for-like with the delivered BOQ); when the
   // source document prints its own OH&P/contingency/VAT lines, the load effect
   // seeds these from it so the default export reproduces the same bottom line.
-  const [defaultOhp, setDefaultOhp] = useState(0);
+  const [defaultOhp, setDefaultOhp] = useState(0); // overhead %
+  const [profit, setProfit] = useState(0);          // profit %, applied on net + overhead
   const [contingency, setContingency] = useState(0);
   const [vat, setVat] = useState(0);
   const [sourceSeeded, setSourceSeeded] = useState(false);
@@ -89,21 +92,23 @@ export default function BuilderPackPage() {
         // Seed the client copy controls from the source BOQ's own summary so
         // the default export matches its bottom line exactly.
         const ss = bd.source_summary || {};
-        if (ss.ohp_pct != null) {
-          setDefaultOhp(ss.ohp_pct);
-          if (Array.isArray(ss.ohp_sections) && ss.ohp_sections.length === 2) {
-            const [from, to] = ss.ohp_sections;
-            const overrides = {};
-            for (const s of seeded) {
-              const n = parseFloat(s.number);
-              if (Number.isFinite(n) && (n < from || n > to)) overrides[s.number] = 0;
-            }
-            if (Object.keys(overrides).length) setPerTradeOhp(overrides);
+        // Overhead seeds from a split tender summary if present, otherwise from
+        // a single combined OH&P line. Profit seeds only from a split summary.
+        if (ss.overhead_pct != null) setDefaultOhp(ss.overhead_pct);
+        else if (ss.ohp_pct != null) setDefaultOhp(ss.ohp_pct);
+        if (ss.profit_pct != null) setProfit(ss.profit_pct);
+        if (ss.ohp_pct != null && Array.isArray(ss.ohp_sections) && ss.ohp_sections.length === 2) {
+          const [from, to] = ss.ohp_sections;
+          const overrides = {};
+          for (const s of seeded) {
+            const n = parseFloat(s.number);
+            if (Number.isFinite(n) && (n < from || n > to)) overrides[s.number] = 0;
           }
+          if (Object.keys(overrides).length) setPerTradeOhp(overrides);
         }
         if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
-        setSourceSeeded(ss.ohp_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
+        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
         if (br && br.branding) {
           setBranding(br.branding);
           // Logo endpoint needs auth — fetch as blob so <img> can render it.
@@ -192,27 +197,33 @@ export default function BuilderPackPage() {
   );
 
   // ─── Client tab calculations ─────────────────────────────────────────────
+  // Overhead and profit compound exactly as a tender summary applies them
+  // (profit on net + overhead), baked into the client's rates.
+  const baseUplift = (1 + defaultOhp / 100) * (1 + profit / 100);
   const clientRows = useMemo(
     () => sections.map((s, i) => {
-      const sectionOhp = Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
-        ? num(perTradeOhp[s.number])
-        : defaultOhp;
+      const factor = Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
+        ? 1 + num(perTradeOhp[s.number]) / 100
+        : baseUplift;
       const base = sectionTotals[i].total;
-      const subtotal = roundMoney(rounding, base * (1 + sectionOhp / 100));
-      return { number: s.number, title: s.title, item_count: s.items.length, ohp: sectionOhp, base, subtotal };
+      const subtotal = roundMoney(rounding, base * factor);
+      return { number: s.number, title: s.title, item_count: s.items.length, uplift: factor, base, subtotal };
     }),
-    [sections, sectionTotals, perTradeOhp, defaultOhp, rounding]
+    [sections, sectionTotals, perTradeOhp, baseUplift, rounding]
   );
   const netConstruction = clientRows.reduce((a, r) => a + r.subtotal, 0);
+  // Contingency / prelims-% are charged on the construction net (pre-uplift),
+  // matching how the delivered tender computes them.
+  const originalNet = sectionTotals.reduce((a, t) => a + t.total, 0);
 
   let runningTotal = netConstruction;
-  const summaryLines = [{ label: 'Net construction (incl. trade OH&P)', value: netConstruction, key: 'net' }];
+  const summaryLines = [{ label: 'Net construction (incl. overhead & profit)', value: netConstruction, key: 'net' }];
   if (prelimsMode === 'flat' && prelimsAmount > 0) {
     summaryLines.push({ label: 'Preliminaries (flat)', value: prelimsAmount, key: 'prel-flat' });
     runningTotal += prelimsAmount;
   }
   if (prelimsMode === 'pct' && prelimsPct > 0) {
-    const v = netConstruction * (prelimsPct / 100);
+    const v = originalNet * (prelimsPct / 100);
     summaryLines.push({ label: `Preliminaries (${prelimsPct}% of net)`, value: v, key: 'prel-pct' });
     runningTotal += v;
   }
@@ -225,7 +236,7 @@ export default function BuilderPackPage() {
     runningTotal += v;
   }
   if (contingency > 0) {
-    const v = netConstruction * (contingency / 100);
+    const v = originalNet * (contingency / 100);
     summaryLines.push({ label: `Contingency (${contingency}% of net)`, value: v, key: 'contingency' });
     runningTotal += v;
   }
@@ -274,7 +285,7 @@ export default function BuilderPackPage() {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contingency, default_ohp: defaultOhp, vat,
+          contingency, default_ohp: defaultOhp, overhead_pct: defaultOhp, profit_pct: profit, vat,
           per_trade_ohp: perTradeOhp,
           prelims_amount: prelimsMode === 'flat' ? prelimsAmount : 0,
           prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
@@ -390,6 +401,7 @@ export default function BuilderPackPage() {
             ) : (
               <ClientControls
                 defaultOhp={defaultOhp} setDefaultOhp={setDefaultOhp}
+                profit={profit} setProfit={setProfit}
                 contingency={contingency} setContingency={setContingency}
                 vat={vat} setVat={setVat}
                 rounding={rounding} setRounding={setRounding}
@@ -642,7 +654,7 @@ function BuilderControls({
 }
 
 function ClientControls({
-  defaultOhp, setDefaultOhp, contingency, setContingency, vat, setVat,
+  defaultOhp, setDefaultOhp, profit, setProfit, contingency, setContingency, vat, setVat,
   rounding, setRounding, prelimsMode, setPrelimsMode,
   prelimsAmount, setPrelimsAmount, prelimsPct, setPrelimsPct,
   dayRateOn, setDayRateOn, dayRate, setDayRate,
@@ -660,7 +672,8 @@ function ClientControls({
       </p>
       <ResetRow isDirty={isDirty} onReset={onReset} />
 
-      <Slider label="Default OH&P" value={defaultOhp} onChange={setDefaultOhp} max={30} hint="Applied unless a trade is overridden below" />
+      <Slider label="Overhead" value={defaultOhp} onChange={setDefaultOhp} max={40} hint="% on net — baked into rates (overridable per trade below)" />
+      <Slider label="Profit" value={profit} onChange={setProfit} max={40} hint="% on net + overhead — compounds with overhead" />
       <Slider label="Contingency" value={contingency} onChange={setContingency} max={20} hint="% of construction net — separate summary line" />
       <Slider label="VAT" value={vat} onChange={setVat} max={25} hint="Set 0 if quoting ex-VAT" />
 
@@ -722,7 +735,7 @@ function ClientControls({
 
       <details style={{ marginBottom: 12 }}>
         <summary style={{ fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 0' }}>
-          Per-trade OH&P override ({Object.keys(perTradeOhp).length})
+          Per-trade uplift override ({Object.keys(perTradeOhp).length})
         </summary>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
           {sections.map((s) => {
@@ -737,8 +750,9 @@ function ClientControls({
                 <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.number}. {s.title}
                 </span>
-                <input type="number" min="0" max="50" step="0.5"
-                  value={has ? perTradeOhp[s.number] : ''} placeholder={defaultOhp + '%'}
+                <input type="number" min="0" max="80" step="0.5"
+                  value={has ? perTradeOhp[s.number] : ''}
+                  placeholder={(Math.round(((1 + defaultOhp / 100) * (1 + profit / 100) - 1) * 1e4) / 100) + '%'}
                   onChange={(e) => {
                     const v = e.target.value;
                     setPerTradeOhp((m) => {
