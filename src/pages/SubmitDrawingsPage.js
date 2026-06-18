@@ -49,6 +49,7 @@ export default function SubmitDrawingsPage() {
   const { user } = useAuth();
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
+  const [siteAddress, setSiteAddress] = useState('');
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState([]);
   const [dragOver, setDragOver] = useState(false);
@@ -70,7 +71,7 @@ export default function SubmitDrawingsPage() {
     apiFetch('/credits').then(setCredits).catch(() => {});
   }, []);
 
-  const canSubmit = !!projectType && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting;
+  const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting;
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
@@ -143,6 +144,7 @@ export default function SubmitDrawingsPage() {
       return;
     }
     if (!projectType) return setStatus({ type: 'error', msg: 'Please select a project type.' });
+    if (!siteAddress.trim()) return setStatus({ type: 'error', msg: 'Please enter the site address.' });
     if (message.trim().length < MIN_SUBMIT_CHARS) {
       return setStatus({ type: 'error', msg: 'Please describe your project (min ' + MIN_SUBMIT_CHARS + ' characters).' });
     }
@@ -162,6 +164,7 @@ export default function SubmitDrawingsPage() {
     try {
       const fd = new FormData();
       fd.append('project_type', projectType);
+      fd.append('site_address', siteAddress.trim());
       fd.append('message', message.trim());
       fd.append('terms_accepted', 'true');
       for (const f of files) fd.append('files', f, f.name);
@@ -277,6 +280,26 @@ export default function SubmitDrawingsPage() {
             <option value="">Select a project type…</option>
             {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
+        </label>
+
+        {/* Site Address */}
+        <label style={{ display: 'block', marginBottom: 18 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
+            Site Address <span style={{ color: '#F59E0B' }}>*</span>
+          </div>
+          <input
+            type="text"
+            value={siteAddress}
+            onChange={e => setSiteAddress(e.target.value)}
+            disabled={submitting}
+            placeholder="e.g. 14 Mill Lane, Harrogate, HG1 2AB"
+            style={{
+              width: '100%', padding: '11px 14px', borderRadius: 9,
+              background: t.surface, color: t.text,
+              border: '1px solid ' + t.border, fontSize: 14,
+              outline: 'none', boxSizing: 'border-box',
+            }}
+          />
         </label>
 
         {/* Drawings / Files */}

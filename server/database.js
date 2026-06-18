@@ -254,6 +254,7 @@ db.exec(`
     user_id TEXT NOT NULL,
     submission_id TEXT UNIQUE NOT NULL,
     project_type TEXT,
+    site_address TEXT,
     message TEXT,
     file_count INTEGER DEFAULT 0,
     file_names TEXT,
@@ -874,6 +875,8 @@ const migrations = [
   // disclaimer in the Terms (AI output must be verified) is provably agreed.
   { column: 'terms_accepted_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN terms_accepted_at DATETIME" },
   { column: 'terms_version', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN terms_version TEXT" },
+  // Site address of the job — used as the submission card title on the board.
+  { column: 'site_address', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN site_address TEXT" },
   { column: 'terms_accepted_at', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_accepted_at DATETIME" },
   { column: 'terms_version', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN terms_version TEXT" },
 ];
