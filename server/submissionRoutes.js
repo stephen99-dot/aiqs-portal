@@ -19,7 +19,7 @@ const router = express.Router();
 
 // Matches the "Last updated" date on theaiqs.co.uk/terms.html — bump when the
 // Terms change so acceptance records say WHICH terms were agreed.
-const TERMS_VERSION = '2026-03-23';
+const TERMS_VERSION = '2026-06-18';
 
 const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
 const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';

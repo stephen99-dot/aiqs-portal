@@ -13,7 +13,7 @@ import {
 } from '../components/Icons';
 
 const STRIPE = {
-  starter_payg:    'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',  // £99 PAYG BOQ
+  starter_payg:    'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
   professional:    'https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04',  // £347/mo Professional
   premium:         'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // £447/mo Premium
   extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',  // £79 extra BOQ (subscribers)
@@ -49,11 +49,11 @@ function UsageBar({ usage, t, user }) {
             <ZapIcon size={12} color={t.warning} /> Pay As You Go
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            {used} BOQ{used !== 1 ? 's' : ''} this month · £99 per BOQ
+            {used} BOQ{used !== 1 ? 's' : ''} this month · £150 per BOQ
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* £99 per BOQ button */}
+          {/* £150 per BOQ button */}
           <a href={withUserRef(STRIPE.starter_payg, user)} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 12px', borderRadius: 7,
@@ -61,7 +61,7 @@ function UsageBar({ usage, t, user }) {
             fontSize: 12, fontWeight: 700, color: '#0A0F1C', textDecoration: 'none',
             boxShadow: '0 2px 8px rgba(245,158,11,0.25)',
           }}>
-            <ZapIcon size={11} color="#0A0F1C" /> £99 per BOQ
+            <ZapIcon size={11} color="#0A0F1C" /> £150 per BOQ
           </a>
           <a href={STRIPE.professional} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -155,7 +155,7 @@ function UsageBar({ usage, t, user }) {
                 textDecoration: 'none', whiteSpace: 'nowrap',
               }}
             >
-              Buy Extra BOQ — {plan === 'professional' || plan === 'premium' ? '£79' : '£99'}
+              Buy Extra BOQ — {plan === 'professional' || plan === 'premium' ? '£79' : '£150'}
             </a>
           </div>
         </div>
