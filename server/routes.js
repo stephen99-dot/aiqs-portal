@@ -1091,10 +1091,22 @@ router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, re
     if (!user) return res.status(404).json({ error: 'User not found' });
     const bonus_messages = parseInt(req.body.bonus_messages) || 0;
     const bonus_docs     = parseInt(req.body.bonus_docs)     || 0;
-    db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(bonus_messages, bonus_docs, req.params.id);
-    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_messages + ' bonus messages, ' + bonus_docs + ' bonus docs', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ success: true, bonus_messages, bonus_docs });
+    // free_credits is the never-expiring purchased/granted bucket. Only touch it
+    // when the caller explicitly sends it, so older callers that omit it don't
+    // wipe a user's purchased credits. When present, it lets an admin set the
+    // true spendable balance (e.g. zero a test account).
+    const hasFree = req.body.free_credits !== undefined && req.body.free_credits !== null && req.body.free_credits !== '';
+    const free_credits = Math.max(0, parseInt(req.body.free_credits) || 0);
+    if (hasFree) {
+      db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, free_credits = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(bonus_messages, bonus_docs, free_credits, req.params.id);
+    } else {
+      db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(bonus_messages, bonus_docs, req.params.id);
+    }
+    const balance = getBoqBalance(req.params.id);
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_messages + ' bonus messages, ' + bonus_docs + ' bonus docs' + (hasFree ? ', ' + free_credits + ' free credits' : '') + ' → ' + balance.total + ' BOQ balance', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true, bonus_messages, bonus_docs, free_credits: hasFree ? free_credits : (user.free_credits || 0), boq_balance: balance.total, breakdown: balance });
   } catch (err) {
     console.error('Set credits error:', err);
     res.status(500).json({ error: 'Failed to update credits' });
