@@ -1,10 +1,13 @@
 import React from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { withUserRef } from '../utils/stripeLinks';
 import { StarIcon, ChatIcon, MailIcon } from '../components/Icons';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PRICING PAGE — src/pages/PricingPage.js
-// Matches theaiqs.co.uk pricing exactly
+// Matches theaiqs.co.uk pricing exactly: pay-as-you-go single BOQ, or save with
+// a 5- or 10-BOQ bundle. No subscriptions.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const WHATSAPP_NUMBER = '447534808399';
@@ -17,89 +20,68 @@ const CheckIcon = ({ color }) => (
 
 const plans = [
   {
-    name: 'Starter',
+    name: 'Single BOQ',
     subtitle: 'Pay As You Go',
     price: '£150',
-    period: 'per job',
-    description: 'No monthly commitment. Perfect for one-off jobs.',
+    period: 'per BOQ',
+    description: 'Perfect for one-off jobs. Only pay when your documents are ready.',
     features: [
-      'No monthly commitment',
-      'Same-day delivery',
-      'Full Bills of Quantities',
-      'UK regional rates',
-      'Professional PDF report',
-      'Email support',
-      'Revisions included',
-      'Value engineering',
+      'Full Excel Bill of Quantities',
+      'Word Findings Report',
+      'Current UK & Ireland market rates',
+      'Location-adjusted pricing',
+      '1 revision included',
+      'No subscription — pay per job',
     ],
-    cta: 'Get Started',
+    cta: 'Get Your BOQ',
     stripeLink: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',
     popular: false,
   },
   {
-    name: 'Professional',
-    subtitle: 'Most Popular Choice',
-    price: '£347',
-    period: 'per month',
-    description: 'For builders and contractors with regular pricing needs. Save up to 65% vs single projects.',
+    name: '5 BOQ Bundle',
+    subtitle: 'Bundle',
+    price: '£349',
+    period: 'per 5 BOQs',
+    note: 'Just £69.80 per BOQ — save £401',
+    description: 'For builders and contractors pricing jobs regularly. Five BOQs, one simple price.',
     features: [
-      'Up to 10 projects/month',
-      'Same-day delivery',
-      'Full Bills of Quantities',
-      'UK regional rates',
-      '1 revision included',
-      'Priority email support',
-      'Value engineering notes',
-      'Professional PDF report',
+      '5 × Excel BOQ + Word Findings Report',
+      'Current UK & Ireland market rates',
+      'Location-adjusted pricing',
+      '1 revision per document',
+      'Credits never expire',
+      'Priority support',
     ],
-    cta: 'Get Professional',
-    stripeLink: 'https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04',
+    cta: 'Get the Bundle',
+    stripeLink: 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h',
+    badge: 'Most Popular',
     popular: true,
   },
   {
-    name: 'Premium',
-    subtitle: 'For Busy QS Practices',
-    price: '£447',
-    period: 'per month',
-    description: 'Higher volume with dedicated support and revisions. Up to 20 projects per month included.',
+    name: '10 BOQ Bundle',
+    subtitle: 'Bundle',
+    price: '£580',
+    period: 'per 10 BOQs',
+    note: 'Just £58 per BOQ — save £920',
+    description: 'Our best per-BOQ rate. For busy builders and QS firms pricing jobs week in, week out.',
     features: [
-      'Up to 20 projects/month',
-      'Same-day delivery',
-      'Full BOQ + cost plans',
-      'UK regional rates',
-      '2 revisions included',
-      'Phone & email support',
-      'Value engineering notes',
-      'Dedicated account manager',
+      '10 × Excel BOQ + Word Findings Report',
+      'Current UK & Ireland market rates',
+      'Location-adjusted pricing',
+      '1 revision per document',
+      'Credits never expire',
+      'Priority support',
     ],
-    cta: 'Get Premium',
-    stripeLink: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',
-    popular: false,
-  },
-  {
-    name: 'Custom',
-    subtitle: 'Tailored to Your Needs',
-    price: 'POA',
-    period: 'price on application',
-    description: 'Bespoke service for firms with specific requirements.',
-    features: [
-      'Unlimited projects',
-      'Same-day delivery',
-      'Full BOQ + cost plans',
-      'UK regional rates',
-      'Revisions included',
-      'Dedicated account manager',
-      'Value engineering notes',
-      'Bespoke reporting',
-    ],
-    cta: 'Contact Us',
-    stripeLink: null,
+    cta: 'Get the Bundle',
+    stripeLink: 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f',
+    badge: 'Best Value',
     popular: false,
   },
 ];
 
 export default function PricingPage() {
   const { t, mode } = useTheme();
+  const { user } = useAuth();
   const isDark = mode === 'dark';
 
   const openWhatsApp = (plan) => {
@@ -109,7 +91,9 @@ export default function PricingPage() {
 
   const handleCTA = (plan) => {
     if (plan.stripeLink) {
-      window.open(plan.stripeLink, '_blank');
+      // Stamp the logged-in account onto the checkout so the payment reliably
+      // credits the right portal user.
+      window.open(withUserRef(plan.stripeLink, user), '_blank');
     } else {
       openWhatsApp(plan.name);
     }
@@ -140,7 +124,7 @@ export default function PricingPage() {
           margin: 0, fontSize: 16, color: t.textSecondary,
           maxWidth: 520, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6,
         }}>
-          Pay per project or save with a monthly plan. Every plan includes professional Excel BOQs and findings reports.
+          Pay as you go, or save with a bundle — the more you buy, the less each BOQ costs. No subscriptions, no lock-in. Every BOQ includes a professional Excel bill and a Word findings report.
         </p>
       </div>
 
@@ -162,15 +146,16 @@ export default function PricingPage() {
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            {plan.popular && (
+            {plan.badge && (
               <div style={{
                 position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
                 padding: '4px 14px', borderRadius: 10,
-                background: '#F59E0B', color: '#0A0F1C',
+                background: plan.popular ? '#F59E0B' : '#7C3AED',
+                color: plan.popular ? '#0A0F1C' : '#FFFFFF',
                 fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
                 whiteSpace: 'nowrap',
               }}>
-                <StarIcon size={14} style={{ verticalAlign: 'middle' }} /> Most Popular
+                <StarIcon size={14} style={{ verticalAlign: 'middle' }} /> {plan.badge}
               </div>
             )}
 
@@ -184,10 +169,15 @@ export default function PricingPage() {
               {plan.description}
             </p>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: plan.note ? 6 : 20 }}>
               <span style={{ fontSize: 30, fontWeight: 800, color: '#F59E0B' }}>{plan.price}</span>
               <span style={{ fontSize: 13, color: t.textMuted, marginLeft: 6 }}>/{plan.period}</span>
             </div>
+            {plan.note && (
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#F59E0B', marginBottom: 16 }}>
+                {plan.note}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
               {plan.features.map((feature, j) => (
