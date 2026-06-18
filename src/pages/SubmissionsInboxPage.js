@@ -253,6 +253,18 @@ export default function SubmissionsInboxPage() {
           )}
           {filtered.map((s) => {
             const active = s.id === selectedId;
+            // Card title is the site address. Older submissions predate the
+            // address field, so fall back to the client name (then project
+            // type) to keep the card from going blank.
+            const hasAddress = !!(s.site_address && s.site_address.trim());
+            const title = (hasAddress && s.site_address.trim())
+              || s.user_name || s.user_email || s.project_type || 'Untitled job';
+            // Keep the submitter visible in the subtitle when the title is the
+            // address; for fallback titles it's already the name, so skip it.
+            const subtitleParts = [];
+            if (hasAddress && (s.user_name || s.user_email)) subtitleParts.push(s.user_name || s.user_email);
+            subtitleParts.push(s.project_type || 'Untyped');
+            subtitleParts.push(`${s.file_count} file${s.file_count === 1 ? '' : 's'}`);
             return (
               <button
                 key={s.id}
@@ -273,14 +285,14 @@ export default function SubmissionsInboxPage() {
                     background: s.actioned_at ? '#10B981' : '#F59E0B',
                   }} />
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.user_name || s.user_email}
+                    {title}
                   </span>
                   <span style={{ fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>
                     {new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </span>
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {s.project_type || 'Untyped'} · {s.file_count} file{s.file_count === 1 ? '' : 's'}
+                  {subtitleParts.join(' · ')}
                 </div>
                 <div style={{
                   fontSize: 12, color: 'var(--text-primary)', opacity: 0.8,
@@ -366,6 +378,7 @@ export default function SubmissionsInboxPage() {
                 fontSize: 11.5,
               }}>
                 <span><span style={{ color: 'var(--text-muted)' }}>Submitted</span>{' '}<strong>{new Date(selected.created_at).toLocaleString('en-GB')}</strong></span>
+                <span><span style={{ color: 'var(--text-muted)' }}>Site</span>{' '}<strong>{selected.site_address || '—'}</strong></span>
                 <span><span style={{ color: 'var(--text-muted)' }}>Type</span>{' '}<strong>{selected.project_type || '—'}</strong></span>
                 <span><span style={{ color: 'var(--text-muted)' }}>Files</span>{' '}<strong>{selected.file_count}</strong></span>
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', opacity: 0.6 }}>{selected.submission_id}</span>

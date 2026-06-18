@@ -174,10 +174,12 @@ router.post('/', uploadFiles, async (req, res) => {
     }
 
     const projectType = (req.body.project_type || '').trim();
+    const siteAddress = (req.body.site_address || '').trim();
     const message = (req.body.message || '').trim();
     const files = req.files || [];
 
     if (!projectType) return res.status(400).json({ error: 'Project type is required' });
+    if (!siteAddress) return res.status(400).json({ error: 'Site address is required' });
     if (message.length < 20) return res.status(400).json({ error: 'Please describe your project (min 20 characters)' });
     if (files.length === 0) return res.status(400).json({ error: 'Please upload at least one drawing or document' });
     // Legal gate — enforced here, not just in the UI, and recorded with a
@@ -205,6 +207,7 @@ router.post('/', uploadFiles, async (req, res) => {
         phone: user.phone || '',
         company: user.company || '',
         project_type: projectType,
+        site_address: siteAddress,
         message,
         submission_id: submissionId,
         file_names: files.map(f => f.originalname),
@@ -243,13 +246,14 @@ router.post('/', uploadFiles, async (req, res) => {
 
     db.prepare(`
       INSERT INTO drawing_submissions
-        (id, user_id, submission_id, project_type, message, file_count, file_names, pipedream_status, credits_remaining_after, terms_accepted_at, terms_version)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, user_id, submission_id, project_type, site_address, message, file_count, file_names, pipedream_status, credits_remaining_after, terms_accepted_at, terms_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       uuidv4(),
       user.id,
       submissionId,
       projectType,
+      siteAddress,
       message,
       files.length,
       JSON.stringify(files.map(f => f.originalname)),
@@ -274,7 +278,7 @@ router.post('/', uploadFiles, async (req, res) => {
 router.get('/', (req, res) => {
   try {
     const rows = db.prepare(`
-      SELECT s.id, s.submission_id, s.project_type, s.file_count, s.file_names,
+      SELECT s.id, s.submission_id, s.project_type, s.site_address, s.file_count, s.file_names,
              s.credits_remaining_after, s.created_at, s.actioned_at, s.project_id,
              p.status AS project_status, p.title AS project_title
       FROM drawing_submissions s
@@ -311,7 +315,7 @@ router.get('/admin/all', (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
 
     const rows = db.prepare(`
-      SELECT s.id, s.submission_id, s.project_type, s.message, s.file_count, s.file_names,
+      SELECT s.id, s.submission_id, s.project_type, s.site_address, s.message, s.file_count, s.file_names,
              s.pipedream_status, s.credits_remaining_after, s.created_at,
              s.actioned_at, s.actioned_by, s.admin_notes, s.project_id, s.drive_link,
              u.id AS user_id,
