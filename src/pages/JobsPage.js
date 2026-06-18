@@ -239,6 +239,7 @@ function Inner() {
                 display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
                 background: t.card, color: t.text,
                 border: '1px solid ' + (needsAttention ? (t.danger + '66') : t.border),
+                boxShadow: needsAttention ? '0 4px 14px ' + t.danger + '22' : t.shadowSm,
                 borderRadius: 14, padding: '14px 16px',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>

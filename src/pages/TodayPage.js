@@ -250,7 +250,8 @@ function Inner() {
               background: t.card,
               border: '1px solid ' + t.border,
               borderLeft: '4px solid ' + (SEV_COLOUR[card.severity] || SEV_COLOUR.low),
-              borderRadius: 12, padding: '14px 16px',
+              boxShadow: t.shadowSm,
+              borderRadius: 14, padding: '14px 16px',
             }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>{card.headline || card.title}</div>
               <div style={{ color: t.textSecondary, fontSize: 13.5, marginTop: 4, lineHeight: 1.45 }}>
@@ -313,7 +314,7 @@ function askBtnStyle(t, disabled) {
 function BigNumber({ t, label, value, tone }) {
   const colour = tone === 'danger' ? (t.danger || '#EF4444') : t.text;
   return (
-    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '14px 16px' }}>
+    <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '14px 16px' }}>
       <div style={{ color: t.textSecondary, fontSize: 12.5, fontWeight: 600 }}>{label}</div>
       <div style={{ color: colour, fontSize: 30, fontWeight: 800, fontVariantNumeric: 'tabular-nums', marginTop: 2, letterSpacing: -0.6 }}>{value}</div>
     </div>
@@ -324,10 +325,11 @@ function QuickAction({ t, Icon, label, onClick, primary, dataTour }) {
   return (
     <button onClick={onClick} data-tour={dataTour} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-      minHeight: 56, borderRadius: 12, cursor: 'pointer',
+      minHeight: 56, borderRadius: 14, cursor: 'pointer',
       background: primary ? t.accent : t.card,
       color: primary ? '#fff' : t.text,
       border: primary ? 'none' : '1px solid ' + t.border,
+      boxShadow: primary ? '0 6px 16px ' + t.accent + '33' : t.shadowSm,
       fontSize: 15, fontWeight: 700,
     }}>
       <Icon size={20} color={primary ? '#fff' : t.accent} />
