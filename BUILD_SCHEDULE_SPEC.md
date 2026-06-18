@@ -1,8 +1,22 @@
 # Intelligent Build Schedule (Wave 6) — Spec
 
-> Status: **proposed**. Admin-only rollout first, then flip the gate to all
-> estimator users. No code written yet — this document locks the shape before we
-> build.
+> Status: **Stage 1 built (admin-only)**. Stage 2 proposed. Admin-only rollout
+> first, then flip the gate to all estimator users.
+>
+> **Stage 1 is implemented** behind the admin gate:
+> - DB: `schedule_plans`, `schedule_tasks`, `schedule_snapshots` (`server/database.js`).
+> - Date-flow engine: `server/scheduleEngine.js` (durations + dependencies over a
+>   working calendar; cycle- and bad-input-safe).
+> - API: `server/scheduleRoutes.js`, mounted at `/api/schedule`
+>   (`authMiddleware` + `adminMiddleware`). AI generation via `callModel`
+>   (`schedule_generate`, logged to `usage_log`).
+> - PDF: `server/schedulePdf.js` (branded landscape Gantt-style programme).
+> - UI: `src/components/JobSchedule.js`, surfaced as an admin-only "Build
+>   schedule" section + chip on the job page (`src/pages/JobDetailPage.js`).
+>
+> To roll out to all estimator users: swap `adminMiddleware` → `requireEstimator`
+> in `scheduleRoutes.js`, and gate the job-page section/chip on `hasEstimator`
+> instead of `isAdmin`.
 
 ## The ask (customer, verbatim intent)
 
@@ -201,10 +215,10 @@ re-flows downstream dates.
 
 ## Suggested build order
 
-1. Schema (`schedule_plans`, `schedule_tasks`, `schedule_snapshots`) + migrations.
-2. Date-flow helper (durations + dependencies → dates over a working calendar).
-3. Stage 1 routes (admin-gated) + AI generation.
-4. Timeline UI + PDF export.
-5. Stage 2 agent tool + conversational re-flow.
-6. Flip the gate from `adminMiddleware` → `requireEstimator` and surface in nav
+1. ✅ Schema (`schedule_plans`, `schedule_tasks`, `schedule_snapshots`).
+2. ✅ Date-flow helper (durations + dependencies → dates over a working calendar).
+3. ✅ Stage 1 routes (admin-gated) + AI generation.
+4. ✅ Timeline UI + PDF export.
+5. ⬜ Stage 2 agent tool + conversational re-flow.
+6. ⬜ Flip the gate from `adminMiddleware` → `requireEstimator` and surface in nav
    for all estimator users.
