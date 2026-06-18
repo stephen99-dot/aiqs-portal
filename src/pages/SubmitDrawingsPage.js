@@ -218,7 +218,7 @@ export default function SubmitDrawingsPage() {
           <div key={n} style={{
             flex: '1 1 220px', display: 'flex', gap: 10, alignItems: 'flex-start',
             padding: '12px 14px', borderRadius: 12,
-            background: t.card, border: '1px solid ' + t.border,
+            background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm,
           }}>
             <div style={{
               width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
@@ -258,7 +258,7 @@ export default function SubmitDrawingsPage() {
       )}
 
       <form onSubmit={handleSubmit} style={{
-        background: t.card, border: '1px solid ' + t.border,
+        background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadow,
         borderRadius: 16, padding: '28px 26px',
       }}>
 
@@ -604,7 +604,7 @@ export default function SubmitDrawingsPage() {
             background: t.card, border: '1px solid ' + t.border,
             borderRadius: 16, padding: '28px 28px 22px',
             width: '100%', maxWidth: 460,
-            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
             textAlign: 'center',
           }}>
             <div style={{
@@ -659,7 +659,7 @@ export default function SubmitDrawingsPage() {
             background: t.card, border: '1px solid ' + t.border,
             borderRadius: 18, padding: '32px 30px 26px',
             width: '100%', maxWidth: 480,
-            boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
           }}>
             <button
               type="button"
