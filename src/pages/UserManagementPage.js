@@ -101,6 +101,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [plan, setPlan] = useState(user.plan || 'starter');
   const [msgAllowance, setMsgAllowance] = useState(user.monthly_quota || user.quota || 0);
   const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
+  const [freeCredits, setFreeCredits] = useState(user.free_credits || 0);
+  const [bonusDocs, setBonusDocs] = useState(user.bonus_docs || 0);
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
@@ -157,6 +159,36 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     });
     onUpdate({ ...user, monthly_quota: msgs, quota: msgs, monthly_boq_quota: docs, boq_quota: docs });
     showSuccess('Allowances updated — ' + msgs + ' messages, ' + docs + ' documents');
+  });
+
+  // Set the true spendable BOQ balance: purchased/granted (free_credits) +
+  // bonus_docs. The monthly allowance is managed by the allowances control above.
+  const saveBoqBalance = () => doAction('boqbal', async () => {
+    const free = Math.max(0, parseInt(freeCredits) || 0);
+    const bonus = Math.max(0, parseInt(bonusDocs) || 0);
+    const res = await apiFetch('/admin/users/' + user.id + '/credits', {
+      method: 'PUT',
+      body: JSON.stringify({ bonus_messages: user.bonus_messages || 0, bonus_docs: bonus, free_credits: free }),
+    });
+    setFreeCredits(free); setBonusDocs(bonus);
+    onUpdate({ ...user, free_credits: free, bonus_docs: bonus, boq_remaining: res.boq_balance });
+    showSuccess('BOQ balance saved — ' + res.boq_balance + ' spendable');
+  });
+
+  // Zero every bucket (free + bonus + monthly allowance) so the spendable
+  // balance is exactly 0 — handy for testing the out-of-credits screens.
+  const zeroBoqBalance = () => doAction('boqzero', async () => {
+    await apiFetch('/admin/users/' + user.id + '/credits', {
+      method: 'PUT',
+      body: JSON.stringify({ bonus_messages: user.bonus_messages || 0, bonus_docs: 0, free_credits: 0 }),
+    });
+    await apiFetch('/admin/users/' + user.id + '/plan', {
+      method: 'PUT',
+      body: JSON.stringify({ plan, monthlyQuota: parseInt(msgAllowance) || 0, boqQuota: 0 }),
+    });
+    setFreeCredits(0); setBonusDocs(0); setDocAllowance(0);
+    onUpdate({ ...user, free_credits: 0, bonus_docs: 0, monthly_boq_quota: 0, boq_remaining: 0 });
+    showSuccess('BOQ balance zeroed (free, bonus and monthly allowance all set to 0)');
   });
 
   const toggleSuspend = () => doAction('suspend', async () => {
@@ -246,6 +278,18 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const boqPct = boqTotal > 0 ? Math.min(100, (boqUsed / boqTotal) * 100) : 0;
   const boqBarColor = boqPct >= 90 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
 
+  // The TRUE spendable BOQ balance the user can actually spend right now —
+  // free_credits + bonus_docs + monthly allowance remaining. Prefer the
+  // authoritative figure the server computed via getBoqBalance (user.boq_remaining)
+  // so the headline always matches what the user sees; the breakdown below uses
+  // the same saved buckets so it sums to that figure.
+  const monthlyRemaining = Math.max(0, (user.monthly_boq_quota || 0) - boqUsed);
+  const spendableBalance = user.role === 'admin'
+    ? Infinity
+    : (user.boq_remaining != null
+        ? user.boq_remaining
+        : (user.free_credits || 0) + (user.bonus_docs || 0) + monthlyRemaining);
+
   return (
     <>
       {showResetModal && (
@@ -273,7 +317,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           {[
             { label: 'Messages This Month', used: msgsUsed, total: msgsTotal, pct: msgPct, color: msgBarColor },
-            { label: 'BOQ Credits (' + boqRemaining + ' left)', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
+            { label: 'Monthly BOQ Allowance', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
           ].map(({ label, used, total, pct, color }) => (
             <div key={label} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -290,6 +334,45 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             </div>
           ))}
         </div>
+
+        {/* TRUE spendable BOQ balance — free_credits + bonus_docs + monthly
+            allowance remaining. This is what the user actually sees and spends,
+            and what the admin can set here (the monthly piece is set above). */}
+        {user.role !== 'admin' && (
+          <div style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spendable BOQ Balance</span>
+              <span style={{ fontSize: 18, fontWeight: 800, color: spendableBalance <= 0 ? '#EF4444' : '#10B981' }}>
+                {spendableBalance} <span style={{ fontSize: 11, fontWeight: 600, color: muted }}>credit{spendableBalance === 1 ? '' : 's'}</span>
+              </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: muted, marginBottom: 12 }}>
+              Free (purchased/granted) <strong style={{ color: text }}>{user.free_credits || 0}</strong>
+              {'  ·  '}Bonus <strong style={{ color: text }}>{user.bonus_docs || 0}</strong>
+              {'  ·  '}Monthly left <strong style={{ color: text }}>{monthlyRemaining}</strong>
+              {' '}(of {user.monthly_boq_quota || 0}, {boqUsed} used)
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <div style={lbl}>Free credits</div>
+                <input type="number" min="0" value={freeCredits} onChange={e => setFreeCredits(e.target.value)} style={{ ...sInp, width: 90 }} />
+              </div>
+              <div>
+                <div style={lbl}>Bonus credits</div>
+                <input type="number" min="0" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={{ ...sInp, width: 90 }} />
+              </div>
+              <button onClick={saveBoqBalance} disabled={loading === 'boqbal'} style={btn('#2563EB')}>
+                {loading === 'boqbal' ? 'Saving…' : 'Save balance'}
+              </button>
+              <button onClick={zeroBoqBalance} disabled={loading === 'boqzero'} style={outBtn}>
+                {loading === 'boqzero' ? 'Zeroing…' : 'Zero balance'}
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
+              "Zero balance" sets free, bonus and the monthly allowance all to 0 — use it to test the out-of-credits screens.
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
 
@@ -849,7 +932,12 @@ export default function UserManagementPage({ theme }) {
                             const docsUsed = user.docs_used || 0;
                             // Usage against the monthly Documents/BOQs allowance.
                             const granted = user.monthly_boq_quota || user.boq_quota || 0;
-                            const remaining = Math.max(0, granted - docsUsed);
+                            // True spendable balance (free + bonus + monthly left),
+                            // not just the monthly bucket — matches what the user sees.
+                            const monthlyLeft = Math.max(0, granted - docsUsed);
+                            const remaining = user.boq_remaining != null
+                              ? user.boq_remaining
+                              : (user.free_credits || 0) + (user.bonus_docs || 0) + monthlyLeft;
                             const pct = granted > 0 ? Math.min(100, (docsUsed / granted) * 100) : 0;
                             const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
                             return (
