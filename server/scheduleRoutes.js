@@ -610,11 +610,14 @@ function applyScheduleUpdates(plan, input) {
   });
   txn();
 
-  reflowPlan(ownedPlan(plan.id, plan.user_id));
-  takeSnapshot(plan.id, 'Update ' + new Date().toISOString().slice(0, 10));
+  // Only re-flow and snapshot when something actually changed.
+  if (applied.length) {
+    reflowPlan(ownedPlan(plan.id, plan.user_id));
+    takeSnapshot(plan.id, 'Update ' + new Date().toISOString().slice(0, 10));
+  }
 
   const after = programmeWindow(db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?').all(plan.id));
-  let summary = applied.length ? notes.join(' ') : 'No tasks were changed.';
+  let summary = applied.length ? notes.join(' ') : (notes.length ? notes.join(' ') : 'No tasks were changed.');
   if (after.end) {
     summary += ' Expected completion is now ' + after.end
       + (before.end && before.end !== after.end ? ' (was ' + before.end + ').' : '.');

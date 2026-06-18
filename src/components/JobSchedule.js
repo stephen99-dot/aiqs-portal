@@ -80,11 +80,15 @@ export default function JobSchedule({ t, jobId, quotes }) {
     if (!plan) return;
     if (!window.confirm('Replace this schedule with a fresh one from the quote? Your edits will be lost.')) return;
     setBusy(true); setError('');
+    const oldId = plan.id;
     try {
-      await apiFetch('/schedule/plans/' + plan.id, { method: 'DELETE' });
+      // Create the new plan first; only remove the old one once that succeeds,
+      // so a failed AI call never leaves the job with no schedule.
       const r = await apiFetch('/schedule/plans', {
         method: 'POST', body: JSON.stringify({ job_id: jobId, start_date: plan.start_date || startDate }),
       });
+      try { await apiFetch('/schedule/plans/' + oldId, { method: 'DELETE' }); } catch (e) { /* leave the old one if cleanup fails */ }
+      setChat([]);
       await loadDetail(r.id);
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
@@ -140,7 +144,8 @@ export default function JobSchedule({ t, jobId, quotes }) {
     const message = chatInput.trim();
     if (!message || sending) return;
     setSending(true); setError('');
-    const history = chat.slice(-6);
+    // Send recent turns for context, but never the error bubbles.
+    const history = chat.filter(m => !(m.role === 'assistant' && m.content.startsWith('⚠️'))).slice(-6);
     setChat(prev => [...prev, { role: 'user', content: message }]);
     setChatInput('');
     try {

@@ -80,10 +80,10 @@ function streamSchedulePdf(res, plan, tasks, branding, userInfo) {
   const span = Math.max(1, win1 - win0 + 1);   // total calendar days, inclusive
   const xForDay = (di) => barLeft + ((di - win0) / span) * barAreaW;
 
-  let y = 96;
-
-  // Month gridlines + labels across the bar area.
-  if (win.start && win.end) {
+  // Month gridlines + labels across the bar area, drawn from a given top down to
+  // the page bottom. Re-run on every page so the date axis is never lost.
+  const drawMonthGrid = (topY) => {
+    if (!win.start || !win.end) return;
     doc.fontSize(7.5).font('Helvetica').fillColor('#94A3B8');
     const start = new Date(win0 * 86400000);
     let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
@@ -92,15 +92,18 @@ function streamSchedulePdf(res, plan, tasks, branding, userInfo) {
       const di = dayIndex(cur.toISOString());
       if (di >= win0) {
         const x = xForDay(di);
-        doc.moveTo(x, y).lineTo(x, pageBottom).strokeColor('#EEF2F7').lineWidth(1).stroke();
+        doc.moveTo(x, topY).lineTo(x, pageBottom).strokeColor('#EEF2F7').lineWidth(1).stroke();
         doc.fillColor('#94A3B8').text(
           cur.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
-          x + 2, y - 10, { width: 60, lineBreak: false }
+          x + 2, topY - 10, { width: 60, lineBreak: false }
         );
       }
       cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
     }
-  }
+  };
+
+  let y = 96;
+  drawMonthGrid(y);
 
   // ── Rows, grouped by phase ──
   const rowH = 20;
@@ -109,7 +112,8 @@ function streamSchedulePdf(res, plan, tasks, branding, userInfo) {
   const ensureSpace = (needed) => {
     if (y + needed <= pageBottom) return;
     doc.addPage();
-    y = doc.page.margins.top;
+    y = doc.page.margins.top + 14; // leave room for the month labels
+    drawMonthGrid(y);
     lastPhase = null;
   };
 
