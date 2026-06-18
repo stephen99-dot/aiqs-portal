@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken } from '../utils/api';
 import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
@@ -264,6 +265,39 @@ export default function DeliverablesPanel({ projectId, project }) {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Builder Pack / Client Copy entry point. The generator lives in its own
+            workspace and needs a portal-readable BOQ on the project — uploading a
+            BOQ deliverable (kind "BOQ", .xlsx) wires that up, so once it's present
+            we surface a direct link here instead of making the user hunt for it. */}
+        {project && project.boq_filename && (
+          <Link
+            to={`/project/${projectId}/builder-pack`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 16px', borderRadius: 10, marginBottom: 12,
+              background: 'linear-gradient(135deg, rgba(245,158,11,0.1), rgba(168,85,247,0.06))',
+              border: '1px solid rgba(245,158,11,0.3)',
+              textDecoration: 'none',
+            }}
+          >
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+              color: '#0A0F1C', fontWeight: 800, fontSize: 12,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>BP</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Amend numbers &amp; generate a Client Copy
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                Open the Builder Pack workspace — edit line items, add margin, download a branded copy.
+              </div>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B', flexShrink: 0 }}>Open →</span>
+          </Link>
         )}
 
         {/* Customer-dashboard preview — proves the job is (or isn't) visible. */}
