@@ -140,7 +140,8 @@ RULES:
 4. Give every task a short unique ref ("t1", "t2", …) and reference those refs in depends_on.
 5. Produce 8–30 tasks — enough to manage the build, not a micro-plan. Merge trivial items into a sensible task.
 6. Durations are whole working days and must be at least 1.
-7. Use UK construction terminology.`;
+7. Use UK construction terminology.
+8. The "name" must be a SHORT task title — 2 to 5 words (e.g. "Gable foundations", "Roof covering", "First fix carpentry"). Do NOT put descriptions, quantities, or line-item references in the name; the phase already gives context.`;
 
 const SUBMIT_SCHEDULE_TOOL = {
   name: 'submit_schedule',
