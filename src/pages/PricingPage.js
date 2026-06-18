@@ -19,7 +19,7 @@ const plans = [
   {
     name: 'Starter',
     subtitle: 'Pay As You Go',
-    price: 'From £99',
+    price: '£150',
     period: 'per job',
     description: 'No monthly commitment. Perfect for one-off jobs.',
     features: [
@@ -33,7 +33,7 @@ const plans = [
       'Value engineering',
     ],
     cta: 'Get Started',
-    stripeLink: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01',
+    stripeLink: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',
     popular: false,
   },
   {

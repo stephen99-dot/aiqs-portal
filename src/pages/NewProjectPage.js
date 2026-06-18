@@ -22,7 +22,7 @@ const PROJECT_TYPES = [
   'Other',
 ];
 
-const STRIPE_PAYG_LINK = 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01';
+const STRIPE_PAYG_LINK = 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g';
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
@@ -82,7 +82,7 @@ function LimitReachedModal({ usage, t, onClose }) {
 
           {/* Buy Extra Project — always shown */}
           <a
-            href={withUserRef(isSubscriber ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01", user)}
+            href={withUserRef(isSubscriber ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)}
             target="_blank" rel="noopener noreferrer"
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
@@ -108,7 +108,7 @@ function LimitReachedModal({ usage, t, onClose }) {
               background: 'linear-gradient(135deg, #10B981, #059669)',
               color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              {isSubscriber ? '£79' : '£99'}
+              {isSubscriber ? '£79' : '£150'}
             </span>
           </a>
 
@@ -307,7 +307,7 @@ export default function NewProjectPage() {
               <CreditCardIcon size={16} color="#F59E0B" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Pay As You Go — £99 per project</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Pay As You Go — £150 per project</div>
               <div style={{ fontSize: 11.5, color: t.textMuted }}>You'll be taken to Stripe to pay after submitting</div>
             </div>
           </div>
@@ -414,7 +414,7 @@ export default function NewProjectPage() {
             ) : usage && usage.atLimit ? (
               <><BanIcon size={14} color="#0A0F1C" /> Limit Reached</>
             ) : isPayg ? (
-              <>Submit & Pay £99 <ArrowRightIcon size={14} color="#0A0F1C" /></>
+              <>Submit & Pay £150 <ArrowRightIcon size={14} color="#0A0F1C" /></>
             ) : (
               <>Submit Project <ArrowRightIcon size={14} color="#0A0F1C" /></>
             )}

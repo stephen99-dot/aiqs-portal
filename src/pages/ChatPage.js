@@ -1153,9 +1153,9 @@ export default function ChatPage() {
               <div style={{ marginTop:14, padding:16, borderRadius:10, background:c.warnBg, border:`1px solid ${c.warnBorder}` }}>
                 <div style={{ fontSize:13, fontWeight:600, color:c.text, marginBottom:4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
-                  <a href={withUserRef("https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01", user)} target="_blank" rel="noopener noreferrer"
+                  <a href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)} target="_blank" rel="noopener noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 18px', borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C', textDecoration:'none', fontSize:13, fontWeight:700 }}>
-                    Pay £99 — Generate this BOQ
+                    Pay £150 — Generate this BOQ
                   </a>
                   <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                     <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer"

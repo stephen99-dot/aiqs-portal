@@ -3153,11 +3153,11 @@ CRITICAL RULES:
         } else if (dPlan === 'starter') {
           wantsDocuments = false;
           paymentRequired = {
-            type: 'boq_payment', plan: 'starter', price: 99, currency: 'GBP',
-            url: 'https://buy.stripe.com/7sY00j1oY4Ni5sAcqo73G01?client_reference_id=' + userId,
-            message: "You're out of BOQ credits. A one-off payment of £99 generates this BOQ and Findings Report — includes a full Excel BOQ with your trained rates and 1 free revision.",
+            type: 'boq_payment', plan: 'starter', price: 150, currency: 'GBP',
+            url: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g?client_reference_id=' + userId,
+            message: "You're out of BOQ credits. A one-off payment of £150 generates this BOQ and Findings Report — includes a full Excel BOQ with your trained rates and 1 free revision.",
           };
-          console.log('[Credits] Out of credits — £99 pay gate shown');
+          console.log('[Credits] Out of credits — £150 pay gate shown');
         } else {
           reply += "\n\nYou're out of BOQ credits this cycle. Top up or upgrade your plan to generate more.";
           wantsDocuments = false;
