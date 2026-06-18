@@ -215,7 +215,7 @@ async function parseBOQ(filePath) {
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
-  const sourceSummary = { ohp_pct: null, ohp_sections: null, contingency_pct: null, vat_pct: null };
+  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber <= headerRow) return;
@@ -239,6 +239,17 @@ async function parseBOQ(filePath) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
         const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
         if (sc) sourceSummary.ohp_sections = [parseFloat(sc[1]), parseFloat(sc[2])];
+        return;
+      }
+      // Tender summaries that print overhead and profit on separate lines
+      // (profit usually "applied to Net + Overhead"). Captured so the client
+      // copy can reproduce the same compounded bottom line.
+      if ((m = upperLabel.match(/^OVERHEAD\b(?!S?\s*(?:&|AND)\s*PROFIT)\D*?([\d.]+)\s*%/))) {
+        sourceSummary.overhead_pct = parseFloat(m[1]);
+        return;
+      }
+      if ((m = upperLabel.match(/^PROFIT\b\D*?([\d.]+)\s*%/))) {
+        sourceSummary.profit_pct = parseFloat(m[1]);
         return;
       }
       if ((m = upperLabel.match(/^CONTINGENCY\D*?([\d.]+)\s*%/))) {
@@ -694,8 +705,11 @@ async function generateBuilderPack(parsed, opts = {}) {
  * opts:
  *   currency:        '£' | '€'
  *   contingency:     number  (% on construction net, default 0)
- *   default_ohp:     number  (% applied unless a per-trade override exists)
- *   vat:             number  (% on the post-OH&P, post-contingency total)
+ *   overhead_pct:    number  (% overhead, baked into rates; default 0)
+ *   profit_pct:      number  (% profit on net+overhead, baked into rates; default 0)
+ *   default_ohp:     number  (legacy single OH&P; used as overhead_pct when the
+ *                             split overhead/profit aren't supplied)
+ *   vat:             number  (% on the post-uplift, post-contingency total)
  *   per_trade_ohp:   { [tradeNumber: string]: number }   override OH&P per section
  *   prelims_amount:  number  (£ flat — appears as a separate summary line)
  *   prelims_pct:     number  (% of net — alternative to flat amount)
@@ -707,6 +721,12 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const currency = opts.currency || '£';
   const contingency = parseFloat(opts.contingency) || 0;
   const defaultOhp = parseFloat(opts.default_ohp) || 0;
+  // Overhead and profit are applied the way a tender summary applies them:
+  // profit sits on (net + overhead), so the two compound. They're baked into
+  // the client's line rates (no margin shown separately). `overhead_pct` falls
+  // back to the legacy single `default_ohp` when a caller hasn't split them.
+  const overheadPct = Number.isFinite(parseFloat(opts.overhead_pct)) ? parseFloat(opts.overhead_pct) : defaultOhp;
+  const profitPct = parseFloat(opts.profit_pct) || 0;
   const vat = parseFloat(opts.vat) || 0;
   const perTradeOhp = opts.per_trade_ohp || {};
   const prelimsAmount = parseFloat(opts.prelims_amount) || 0;
@@ -719,15 +739,26 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const clientName = opts.client_name || 'Client';
 
   function roundMoney(v) {
-    if (!rounding || rounding < 1) return Math.round(v * 100) / 100;
+    // rounding 0 = penny-accurate: keep full precision so the summed totals
+    // reconcile to the penny with the delivered tender (Excel still shows 2 dp).
+    if (!rounding || rounding < 1) return v;
     return Math.round(v / rounding) * rounding;
   }
-  function ohpForSection(sectionNumber) {
+  // Combined overhead+profit uplift for a section, as a multiplier (e.g. 1.32825
+  // for 15.5% overhead + 15% profit). A per-trade override, when present, is the
+  // single combined % for that trade.
+  const baseUpliftFactor = (1 + overheadPct / 100) * (1 + profitPct / 100);
+  function upliftFactorForSection(sectionNumber) {
     if (Object.prototype.hasOwnProperty.call(perTradeOhp, sectionNumber)) {
       const v = parseFloat(perTradeOhp[sectionNumber]);
-      if (Number.isFinite(v)) return v;
+      if (Number.isFinite(v)) return 1 + v / 100;
     }
-    return defaultOhp;
+    return baseUpliftFactor;
+  }
+  // The same uplift expressed as a percentage, for the section-header note only.
+  const baseCombinedPct = Math.round((baseUpliftFactor - 1) * 1e4) / 100;
+  function combinedPctForSection(sectionNumber) {
+    return Math.round((upliftFactorForSection(sectionNumber) - 1) * 1e4) / 100;
   }
 
   // ── Branding via the shared style pack ───────────────────────────────────
@@ -751,23 +782,23 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // We need totals to pass to the cover renderer up-front. Compute the full
   // ex-VAT figure (construction net + prelims + day-rate + contingency) so the
   // headline on the cover matches the bottom of the BOQ.
-  let preNet = 0, preLabour = 0, preMaterials = 0, preItemCount = 0;
+  let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0;
   for (const s of (parsed.sections || [])) {
-    const sectionOhp = ohpForSection(s.number);
-    const mult = 1 + sectionOhp / 100;
+    const factor = upliftFactorForSection(s.number);
     for (const it of (s.items || [])) {
       preLabour += (parseFloat(it.labour) || 0);
       preMaterials += (parseFloat(it.materials) || 0);
       const base = (parseFloat(it.labour) || 0) + (parseFloat(it.materials) || 0) || (parseFloat(it.total) || 0);
-      preNet += roundMoney(base * mult);
+      preNetOriginal += base;
+      preNet += roundMoney(base * factor);
       preItemCount++;
     }
   }
   let preExVat = preNet;
   if (prelimsAmount > 0) preExVat += prelimsAmount;
-  if (prelimsPct > 0)    preExVat += preNet * (prelimsPct / 100);
+  if (prelimsPct > 0)    preExVat += preNetOriginal * (prelimsPct / 100);
   if (dayRate)           preExVat += dayRate.days * dayRate.rate_per_day;
-  if (contingency > 0)   preExVat += preNet * (contingency / 100);
+  if (contingency > 0)   preExVat += preNetOriginal * (contingency / 100);
   const preInclVat = preExVat * (1 + (vat / 100));
 
   // ── Cover sheet (shared renderer — same look as the QS-side BOQ) ─────────
@@ -834,16 +865,17 @@ async function generateClientCopyPro(parsed, opts = {}) {
 
   // Per-section item rows. Each section has its own OH&P; line totals are
   // (labour + materials) × (1 + ohp/100), rounded as configured.
-  const sectionTotals = []; // post-OH&P per section
+  const sectionTotals = []; // post-uplift per section
+  let originalNet = 0;      // pre-uplift construction net (contingency base)
   parsed.sections.forEach((s, idx) => {
-    const sectionOhp = ohpForSection(s.number);
-    const sectionMult = 1 + sectionOhp / 100;
+    const sectionFactor = upliftFactorForSection(s.number);
+    const sectionCombinedPct = combinedPctForSection(s.number);
 
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
     sec.getCell(1).value = '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase() +
-      (sectionOhp !== defaultOhp ? '   (OH&P ' + sectionOhp + '%)' : '');
+      (Math.abs(sectionCombinedPct - baseCombinedPct) > 0.001 ? '   (uplift ' + sectionCombinedPct + '%)' : '');
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
       sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.sectionFill } };
@@ -859,9 +891,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
     let sectionTotal = 0;
     for (const it of s.items) {
       const baseLineTotal = (it.labour || 0) + (it.materials || 0) || (it.total || 0);
-      const upliftedTotal = roundMoney(baseLineTotal * sectionMult);
+      originalNet += baseLineTotal;
+      const upliftedTotal = roundMoney(baseLineTotal * sectionFactor);
       sectionTotal += upliftedTotal;
-      const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionMult;
+      const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionFactor;
 
       const row = ws.getRow(r);
       row.getCell(1).value = sanitizeXmlText(it.itemRef || '');
@@ -946,7 +979,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     runningTotal += prelimsAmount;
   }
   if (prelimsPct > 0) {
-    const v = netConstruction * (prelimsPct / 100);
+    const v = originalNet * (prelimsPct / 100);
     addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', v);
     runningTotal += v;
   }
@@ -956,7 +989,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     runningTotal += v;
   }
   if (contingency > 0) {
-    const v = netConstruction * (contingency / 100);
+    const v = originalNet * (contingency / 100);
     addSummaryLine('Contingency (' + contingency + '% of net)', v);
     runningTotal += v;
   }
@@ -974,9 +1007,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
   r++;
   const note = ws.getRow(r);
   note.getCell(2).value =
-    'This document is prepared for client use. Rates are final and inclusive of overheads, profit'
-    + (contingency > 0 ? ', contingency' : '')
-    + (vat > 0 ? ' and VAT' : '')
+    'This document is prepared for client use. Rates are final and inclusive of overheads and profit'
+    + (vat > 0 ? ', with VAT as shown' : '')
     + '. No contractor margin is shown separately.';
   note.getCell(2).font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF888888' } };
 
