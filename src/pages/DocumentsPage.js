@@ -138,7 +138,7 @@ function Inner() {
       </div>
 
       {picking && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20, marginBottom: 16 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Pick a template</div>
           <div style={{ marginBottom: 12 }}>
             <label style={{ display: 'block', color: t.textSecondary, fontSize: 12, marginBottom: 4 }}>Attach to job (optional)</label>
@@ -172,7 +172,7 @@ function Inner() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {documents.map(d => (
-            <div key={d.id} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '14px 16px' }}>
+            <div key={d.id} style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '14px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                 <div style={{ minWidth: 0 }}>
                   <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ color: t.text, textDecoration: 'none', fontWeight: 700, fontSize: 15 }}>{d.title}</a>

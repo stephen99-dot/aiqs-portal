@@ -260,7 +260,7 @@ function Inner() {
   const sc = stageColours(stage.key, t);
   const phoneDigits = (job.client_phone || '').replace(/[^\d+]/g, '');
 
-  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '16px 16px', marginBottom: 14, scrollMarginTop: 64 };
+  const card = { background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '16px 16px', marginBottom: 14, scrollMarginTop: 64 };
   const sectionTitle = { fontSize: 15, fontWeight: 700, marginBottom: 10 };
   const chipBtn = (active) => ({
     flexShrink: 0, minHeight: 36, padding: '0 14px', borderRadius: 999, cursor: 'pointer',
@@ -783,7 +783,7 @@ function Inner() {
 function MoneyFig({ t, label, value, tone }) {
   const colour = tone === 'danger' ? t.danger : tone === 'success' ? t.success : tone === 'warning' ? t.warning : t.text;
   return (
-    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '10px 12px' }}>
+    <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: '10px 12px' }}>
       <div style={{ color: t.textSecondary, fontSize: 11.5, fontWeight: 600 }}>{label}</div>
       <div style={{ color: colour, fontSize: 18, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>

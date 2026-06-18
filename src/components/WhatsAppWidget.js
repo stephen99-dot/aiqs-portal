@@ -130,7 +130,7 @@ export default function WhatsAppWidget({ theme, userName }) {
           background: isDark ? '#131B2E' : '#FFFFFF',
           border: `1px solid ${isDark ? '#1C2A44' : '#E2E8F0'}`,
           borderRadius: 20,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.3)',
+          boxShadow: isDark ? '0 16px 48px rgba(0,0,0,0.3)' : '0 16px 48px rgba(15,23,42,0.16)',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
           animation: 'waSlideUp 0.3s cubic-bezier(0.16,1,0.3,1)',

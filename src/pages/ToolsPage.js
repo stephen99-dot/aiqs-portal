@@ -42,7 +42,7 @@ function Inner() {
         {tools.map(tool => (
           <button key={tool.path} onClick={() => nav(tool.path)} style={{
             display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left',
-            background: t.card, border: '1px solid ' + t.border, borderRadius: 14,
+            background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14,
             padding: '18px 18px', minHeight: 64, cursor: 'pointer', color: t.text,
           }}>
             <span style={{ color: t.accent, flexShrink: 0 }}><tool.Icon size={26} /></span>

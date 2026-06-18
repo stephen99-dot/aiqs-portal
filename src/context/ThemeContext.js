@@ -24,23 +24,25 @@ const aiqsDark = {
   accentText: '#0A0F1C', userBubble: '#1B3557', userText: '#F1F5F9', sidebar: '#0A0D16', sidebarBorder: '#161E2E',
   gradientAccent: 'linear-gradient(135deg, #F59E0B, #D97706)',
 };
+// Refreshed light palette — clean, high-contrast, site-friendly, amber accent.
+// This is now the default look across the whole portal.
 const aiqsLight = {
   name: 'light',
-  '--bg-primary': '#F4F6FA', '--bg-secondary': '#FFFFFF', '--bg-card': '#FFFFFF',
-  '--bg-card-hover': '#F8FAFD', '--bg-input': '#F1F5F9',
+  '--bg-primary': '#F5F7FA', '--bg-secondary': '#FFFFFF', '--bg-card': '#FFFFFF',
+  '--bg-card-hover': '#F7F9FC', '--bg-input': '#FFFFFF',
   '--accent': '#D97706', '--accent-bright': '#F59E0B', '--accent-dim': '#B45309',
-  '--text-primary': '#0F172A', '--text-secondary': '#475569', '--text-muted': '#94A3B8',
-  '--border': 'rgba(15,23,42,0.08)', '--border-accent': 'rgba(217,119,6,0.3)', '--border-input': 'rgba(15,23,42,0.12)',
-  '--danger': '#DC2626', '--success': '#059669',
+  '--text-primary': '#14181F', '--text-secondary': '#5A6577', '--text-muted': '#8A94A6',
+  '--border': '#E3E8EF', '--border-accent': 'rgba(217,119,6,0.3)', '--border-input': '#D6DCE5',
+  '--danger': '#DC2626', '--success': '#16A34A',
   '--gradient-amber': 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)', '--shadow-glow': '0 0 60px rgba(245,158,11,0.04)',
-  bg: '#F4F6FA', bgAlt: '#EDF0F7', surface: '#FFFFFF', surfaceHover: '#F8F9FC', card: '#FFFFFF', cardHover: '#F8FAFD',
-  border: '#E2E8F0', borderLight: '#CBD5E1', text: '#0F172A', textSecondary: '#475569', textMuted: '#94A3B8', textDim: '#CBD5E1',
-  accent: '#2563EB', accentHover: '#1D4FD7', accentLight: '#3B82F6', accentGlow: 'rgba(37,99,235,0.08)',
-  success: '#059669', successBg: 'rgba(5,150,105,0.08)', warning: '#D97706', warningBg: 'rgba(217,119,6,0.08)',
-  danger: '#DC2626', dangerBg: 'rgba(220,38,38,0.08)', info: '#7C3AED', infoBg: 'rgba(124,58,237,0.08)',
-  gold: '#B8860B', goldBg: 'rgba(184,134,11,0.06)', inputBg: '#F8FAFC',
-  shadow: '0 4px 24px rgba(0,0,0,0.06)', shadowSm: '0 2px 8px rgba(0,0,0,0.04)',
-  accentText: '#FFFFFF', userBubble: '#2563EB', userText: '#FFFFFF', sidebar: '#FFFFFF', sidebarBorder: '#E2E8F0',
+  bg: '#F5F7FA', bgAlt: '#EEF2F7', surface: '#FFFFFF', surfaceHover: '#F5F8FC', card: '#FFFFFF', cardHover: '#F7F9FC',
+  border: '#E3E8EF', borderLight: '#D6DCE5', text: '#14181F', textSecondary: '#5A6577', textMuted: '#8A94A6', textDim: '#C2CAD6',
+  accent: '#D97706', accentHover: '#B45309', accentLight: '#F59E0B', accentGlow: 'rgba(217,119,6,0.10)',
+  success: '#16A34A', successBg: 'rgba(22,163,74,0.10)', warning: '#D97706', warningBg: 'rgba(217,119,6,0.10)',
+  danger: '#DC2626', dangerBg: 'rgba(220,38,38,0.08)', info: '#2563EB', infoBg: 'rgba(37,99,235,0.08)',
+  gold: '#B8860B', goldBg: 'rgba(184,134,11,0.08)', inputBg: '#FFFFFF',
+  shadow: '0 6px 24px rgba(15,23,42,0.08)', shadowSm: '0 2px 8px rgba(15,23,42,0.05)',
+  accentText: '#FFFFFF', userBubble: '#D97706', userText: '#FFFFFF', sidebar: '#FFFFFF', sidebarBorder: '#E3E8EF',
   gradientAccent: 'linear-gradient(135deg, #F59E0B, #D97706)',
 };
 
@@ -106,11 +108,19 @@ function resolve(theme, mode) {
 }
 
 export function ThemeProvider({ children }) {
+  // One-time migration onto the refreshed light look (v2): everyone lands on the
+  // clean light theme once, then their own toggle choice is respected from there.
   const [theme, setThemeState] = useState(() => {
-    try { return localStorage.getItem('aiqs-brand') || 'aiqs'; } catch { return 'aiqs'; }
+    try {
+      if (localStorage.getItem('aiqs-ui-v') !== '2') return 'aiqs';
+      return localStorage.getItem('aiqs-brand') || 'aiqs';
+    } catch { return 'aiqs'; }
   });
   const [mode, setMode] = useState(() => {
-    try { return localStorage.getItem('aiqs-theme') || 'dark'; } catch { return 'dark'; }
+    try {
+      if (localStorage.getItem('aiqs-ui-v') !== '2') { localStorage.setItem('aiqs-ui-v', '2'); return 'light'; }
+      return localStorage.getItem('aiqs-theme') || 'light';
+    } catch { return 'light'; }
   });
 
   useEffect(() => {

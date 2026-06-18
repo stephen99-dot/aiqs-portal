@@ -102,7 +102,7 @@ export default function WhatsNewPopup({ onClose }) {
           width: 'min(500px, 100%)',
           maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
           background: cardBg, border: `1px solid ${border}`, borderRadius: 22,
-          boxShadow: '0 30px 80px rgba(0,0,0,0.55)',
+          boxShadow: '0 24px 70px rgba(15,23,42,0.28)',
           animation: 'wn-card-in 0.34s cubic-bezier(0.22,1,0.36,1)',
         }}
       >

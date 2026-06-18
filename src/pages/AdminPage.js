@@ -185,7 +185,7 @@ function ClientsTab({ t }) {
       {/* Reset Password Modal */}
       {showResetModal && resetTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 28, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 28, width: 360, boxShadow: '0 20px 60px rgba(15,23,42,0.22)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: t.text, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}><KeyIcon size={16} /> Reset Password</h3>
             <p style={{ fontSize: 13, color: t.textMuted, margin: '0 0 18px', lineHeight: 1.5 }}>
               Setting a new password for <strong style={{ color: t.text }}>{resetTarget.fullName || resetTarget.email}</strong>. They will be prompted to change it on next login.

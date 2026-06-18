@@ -4,26 +4,28 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-primary: #0A0F1C;
-  --bg-secondary: #111827;
-  --bg-card: #161E2E;
-  --bg-card-hover: #1C2640;
-  --bg-input: #0D1323;
-  --accent: #F59E0B;
-  --accent-bright: #FBBF24;
-  --accent-dim: #D97706;
-  --text-primary: #F8FAFC;
-  --text-secondary: #94A3B8;
-  --text-muted: #64748B;
-  --border: rgba(248,250,252,0.08);
-  --border-accent: rgba(245,158,11,0.3);
-  --border-input: rgba(248,250,252,0.12);
-  --danger: #EF4444;
-  --success: #10B981;
+  /* Clean, light, site-friendly default (the design-system refresh). Pages read
+     these via the theme tokens; ThemeContext overrides them live per theme. */
+  --bg-primary: #F5F7FA;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F7F9FC;
+  --bg-input: #FFFFFF;
+  --accent: #D97706;
+  --accent-bright: #F59E0B;
+  --accent-dim: #B45309;
+  --text-primary: #14181F;
+  --text-secondary: #5A6577;
+  --text-muted: #8A94A6;
+  --border: #E3E8EF;
+  --border-accent: rgba(217,119,6,0.30);
+  --border-input: #D6DCE5;
+  --danger: #DC2626;
+  --success: #16A34A;
   --gradient-amber: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
-  --radius: 10px;
-  --radius-lg: 12px;
-  --shadow-glow: 0 0 60px rgba(245,158,11,0.06);
+  --radius: 12px;
+  --radius-lg: 16px;
+  --shadow-glow: 0 0 60px rgba(245,158,11,0.04);
   --sidebar-width: 240px;
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -105,7 +107,7 @@ body {
 .auth-card {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 36px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  box-shadow: 0 20px 60px rgba(15,23,42,0.12);
 }
 .auth-header { text-align: center; margin-bottom: 28px; }
 .auth-logo-mark {
@@ -434,7 +436,7 @@ body {
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
   .sidebar-panel { transform: translateX(-100%); width: min(86vw, 300px) !important; }
-  .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.4); }
+  .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,0.18); }
   /* The <main> element carries className="main-content" — must match here or the
      240px sidebar gutter (and the 56px fixed-header offset) is never removed. */
   .main-content, .main-panel { margin-left: 0 !important; padding-top: 56px; }

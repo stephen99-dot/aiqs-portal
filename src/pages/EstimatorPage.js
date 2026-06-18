@@ -131,7 +131,7 @@ function EstimatorPageInner() {
           {quotes.map(q => {
             const sc = statusColour(q.status, t);
             return (
-              <div key={q.id} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: '14px 16px' }}>
+              <div key={q.id} style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
                   <div style={{ minWidth: 0 }}>
                     <button onClick={() => nav('/estimator/quote/' + q.id)} style={{ background: 'none', border: 'none', padding: 0, color: t.text, fontWeight: 700, fontSize: 16, cursor: 'pointer', textAlign: 'left' }}>

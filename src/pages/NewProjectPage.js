@@ -51,7 +51,7 @@ function LimitReachedModal({ usage, t, onClose }) {
         background: t.card, border: `1px solid ${t.border}`,
         borderRadius: 16, padding: '32px 28px',
         maxWidth: 500, width: '100%',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.4)',
+        boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{
