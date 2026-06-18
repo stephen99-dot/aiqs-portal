@@ -21,6 +21,11 @@
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
+// Scrub XML-illegal characters out of any data-derived text before it reaches a
+// cell. BOQ descriptions scraped from PDFs occasionally carry Unicode
+// non-characters / lone surrogates that ExcelJS writes verbatim, which makes
+// Excel reject the whole workbook ("We found a problem with some content").
+const { sanitizeXmlText } = require('./docTemplates');
 
 // Convert "#RRGGBB" to ExcelJS argb ("FFRRGGBB"). Returns null if invalid.
 function hexToArgb(hex) {
@@ -369,8 +374,8 @@ async function generateBuilderPack(parsed, opts = {}) {
   const currency = opts.currency || '£';
   const builderMargin = parseFloat(opts.builder_margin) || 0;
   const materialsMarkup = parseFloat(opts.materials_markup) || 0;
-  const projectName = opts.project_name || 'Project';
-  const clientName = opts.client_name || 'Client';
+  const projectName = sanitizeXmlText(opts.project_name || 'Project');
+  const clientName = sanitizeXmlText(opts.client_name || 'Client');
 
   const labourMult = 1 + builderMargin / 100;
   const matMult = 1 + builderMargin / 100 + materialsMarkup / 100;
@@ -455,7 +460,7 @@ async function generateBuilderPack(parsed, opts = {}) {
     const total = labour + materials;
     const row = ts.getRow(r++);
     row.getCell(1).value = idx + 1;
-    row.getCell(2).value = s.title;
+    row.getCell(2).value = sanitizeXmlText(s.title);
     row.getCell(3).value = Math.round(labour * 100) / 100;
     row.getCell(4).value = Math.round(materials * 100) / 100;
     row.getCell(5).value = Math.round(total * 100) / 100;
@@ -519,7 +524,7 @@ async function generateBuilderPack(parsed, opts = {}) {
     // Section row
     const sec = ms.getRow(mr++);
     ms.mergeCells('A' + (mr - 1) + ':E' + (mr - 1));
-    sec.getCell(1).value = s.title.toUpperCase();
+    sec.getCell(1).value = sanitizeXmlText(s.title).toUpperCase();
     sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
     sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
     sec.getCell(1).border = allBorders;
@@ -530,9 +535,9 @@ async function generateBuilderPack(parsed, opts = {}) {
       const matVal = it.materials * matMult;
       sectionMat += matVal;
       const row = ms.getRow(mr++);
-      row.getCell(1).value = it.itemRef;
-      row.getCell(2).value = it.description;
-      row.getCell(3).value = it.unit;
+      row.getCell(1).value = sanitizeXmlText(it.itemRef);
+      row.getCell(2).value = sanitizeXmlText(it.description);
+      row.getCell(3).value = sanitizeXmlText(it.unit);
       row.getCell(4).value = it.qty;
       row.getCell(5).value = Math.round(matVal * 100) / 100;
       for (let c = 1; c <= 5; c++) {
@@ -553,7 +558,7 @@ async function generateBuilderPack(parsed, opts = {}) {
     materialsRunning += sectionMat;
 
     const sub = ms.getRow(mr++);
-    sub.getCell(2).value = 'Subtotal — ' + s.title;
+    sub.getCell(2).value = 'Subtotal — ' + sanitizeXmlText(s.title);
     sub.getCell(5).value = Math.round(sectionMat * 100) / 100;
     for (let c = 1; c <= 5; c++) {
       sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
@@ -611,7 +616,7 @@ async function generateBuilderPack(parsed, opts = {}) {
     if (!itemsWithLab.length) return;
     const sec = ls.getRow(lr++);
     ls.mergeCells('A' + (lr - 1) + ':E' + (lr - 1));
-    sec.getCell(1).value = s.title.toUpperCase();
+    sec.getCell(1).value = sanitizeXmlText(s.title).toUpperCase();
     sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
     sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
     sec.getCell(1).border = allBorders;
@@ -622,9 +627,9 @@ async function generateBuilderPack(parsed, opts = {}) {
       const labVal = it.labour * labourMult;
       sectionLab += labVal;
       const row = ls.getRow(lr++);
-      row.getCell(1).value = it.itemRef;
-      row.getCell(2).value = it.description;
-      row.getCell(3).value = it.unit;
+      row.getCell(1).value = sanitizeXmlText(it.itemRef);
+      row.getCell(2).value = sanitizeXmlText(it.description);
+      row.getCell(3).value = sanitizeXmlText(it.unit);
       row.getCell(4).value = it.qty;
       row.getCell(5).value = Math.round(labVal * 100) / 100;
       for (let c = 1; c <= 5; c++) {
@@ -645,7 +650,7 @@ async function generateBuilderPack(parsed, opts = {}) {
     labourRunning += sectionLab;
 
     const sub = ls.getRow(lr++);
-    sub.getCell(2).value = 'Subtotal — ' + s.title;
+    sub.getCell(2).value = 'Subtotal — ' + sanitizeXmlText(s.title);
     sub.getCell(5).value = Math.round(sectionLab * 100) / 100;
     for (let c = 1; c <= 5; c++) {
       sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
@@ -837,7 +842,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
-    sec.getCell(1).value = '   ' + s.number + '.   ' + s.title.toUpperCase() +
+    sec.getCell(1).value = '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase() +
       (sectionOhp !== defaultOhp ? '   (OH&P ' + sectionOhp + '%)' : '');
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
@@ -859,9 +864,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
       const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionMult;
 
       const row = ws.getRow(r);
-      row.getCell(1).value = it.itemRef || '';
-      row.getCell(2).value = it.description;
-      row.getCell(3).value = it.unit;
+      row.getCell(1).value = sanitizeXmlText(it.itemRef || '');
+      row.getCell(2).value = sanitizeXmlText(it.description);
+      row.getCell(3).value = sanitizeXmlText(it.unit);
       row.getCell(4).value = it.qty;
       row.getCell(5).value = Math.round(upliftedRate * 100) / 100;
       row.getCell(6).value = upliftedTotal;
@@ -880,7 +885,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
 
     // Section subtotal
     const sub = ws.getRow(r);
-    sub.getCell(2).value = 'Sub-total — ' + s.title;
+    sub.getCell(2).value = 'Sub-total — ' + sanitizeXmlText(s.title);
     sub.getCell(6).value = sectionTotal;
     for (let c = 1; c <= 6; c++) {
       if (f.subtotalFill !== style.WHITE) {
