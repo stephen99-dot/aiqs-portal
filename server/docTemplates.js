@@ -117,10 +117,28 @@ function tryEmbedLogo(wb, ws, logoPath, anchor) {
 }
 
 // ─── Text hygiene for cover/hero copy ────────────────────────────────────────
-// Collapse stray whitespace (incl. trailing spaces baked into branding fields).
+// Strip characters that are illegal inside the XML the XLSX is built from.
+// ExcelJS escapes the C0 control range but lets a handful of code points
+// through verbatim — Unicode non-characters (U+FFFE/U+FFFF and the
+// U+FDD0–U+FDEF block) and lone UTF-16 surrogates. These routinely arrive in
+// BOQ text scraped out of PDFs, and a single one anywhere in a sheet makes
+// the whole workbook fail to open ("We found a problem with some content").
+// We scrub every data-derived string before it reaches a cell so the file is
+// always valid. Tabs / newlines / carriage returns are kept — they're legal.
+function sanitizeXmlText(value) {
+  if (value == null) return value;
+  return String(value)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')        // XML-forbidden C0 controls
+    .replace(/[\uFDD0-\uFDEF\uFFFE\uFFFF]/g, '')             // Unicode non-characters
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')   // lone high surrogate
+    .replace(/([^\uD800-\uDBFF]|^)([\uDC00-\uDFFF])/g, '$1'); // lone low surrogate
+}
+
+// Collapse stray whitespace (incl. trailing spaces baked into branding fields)
+// and scrub any XML-illegal characters so cover/hero copy can never corrupt.
 function cleanText(s) {
   if (s == null) return '';
-  return String(s).replace(/\s+/g, ' ').trim();
+  return sanitizeXmlText(String(s)).replace(/\s+/g, ' ').trim();
 }
 
 // Tidy a person/company name's capitalisation: fix ALL-CAPS or all-lowercase
@@ -600,6 +618,7 @@ module.exports = {
   embedResolvedLogo,
   fitWithin,
   cleanText,
+  sanitizeXmlText,
   tidyName,
   stripTrailingDate,
   titleSizeFor,

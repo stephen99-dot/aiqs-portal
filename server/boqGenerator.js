@@ -7,7 +7,7 @@
  * the customer's chosen template (modern / professional / heritage / minimalist).
  */
 const ExcelJS = require('exceljs');
-const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex } = require('./docTemplates');
+const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex, sanitizeXmlText } = require('./docTemplates');
 
 async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const currency = opts.currency || '\u00a3';
@@ -142,7 +142,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     metaRow.getCell(1).font = { name: headingFont, size: 9.5, bold: true, color: { argb: PRIMARY } };
     metaRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
     ws.mergeCells('B' + row + ':I' + row);
-    metaRow.getCell(2).value = String(metaRows[mr][1]);
+    metaRow.getCell(2).value = sanitizeXmlText(String(metaRows[mr][1]));
     metaRow.getCell(2).font = { name: bodyFont, size: 9.5, color: { argb: 'FF334155' } };
     metaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
     metaRow.height = 15;
@@ -185,7 +185,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     var secRow = ws.getRow(row);
     ws.mergeCells('A' + row + ':I' + row);
     var secNum = section.number || String(si + 1);
-    var secTitle = (section.title || 'Section').toUpperCase();
+    var secTitle = sanitizeXmlText(section.title || 'Section').toUpperCase();
     secRow.getCell(1).value = '   ' + secNum + '.   ' + secTitle;
     secRow.getCell(1).font = {
       name: headingFont, size: 11, bold: true,
@@ -226,9 +226,9 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       else if (rs === 'fallback_estimated' || rs === 'fallback_corrected') srcLabel = 'Estimate';
 
       var dataRow = ws.getRow(row);
-      dataRow.getCell(1).value = item.item || '';
-      dataRow.getCell(2).value = item.description || '';
-      dataRow.getCell(3).value = item.unit || '';
+      dataRow.getCell(1).value = sanitizeXmlText(item.item || '');
+      dataRow.getCell(2).value = sanitizeXmlText(item.description || '');
+      dataRow.getCell(3).value = sanitizeXmlText(item.unit || '');
       dataRow.getCell(4).value = parseFloat(item.qty) || 0;
       dataRow.getCell(5).value = parseFloat(item.rate) || 0;
       dataRow.getCell(6).value = labour;
