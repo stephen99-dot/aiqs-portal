@@ -639,8 +639,9 @@ function buildAssistantSystem(plan, tasks) {
     + 'Rules:\n'
     + '- Only act on what the builder tells you; never invent progress.\n'
     + '- delay_days is NEW slippage in working days (a one-week slip = 5).\n'
-    + '- Convert spoken dates ("Tuesday", "last week") to ISO YYYY-MM-DD near the plan dates; if unsure, pick a sensible date and say so.\n'
-    + '- After calling the tool, reply in one or two short sentences: what you changed and the new expected completion date.\n'
+    + '- Convert spoken dates ("Tuesday", "last week") to ISO YYYY-MM-DD near the plan dates.\n'
+    + '- Prefer acting over asking: if something is reasonable but not spelled out, make a sensible assumption, apply it, and note the assumption in one short line. Only ask a clarifying question when a reference genuinely matches two or more tasks and you cannot tell which.\n'
+    + '- Keep replies to one or two short, plain sentences (no headings, no long lists): what you changed and the new expected completion date.\n'
     + '- If nothing is actionable, reply briefly and do not call the tool.';
 }
 

@@ -211,6 +211,13 @@ export default function JobSchedule({ t, jobId, quotes }) {
     : status === 'blocked' ? t.danger
     : t.textSecondary;
 
+  // "Today" marker position across the programme window, and at-a-glance metrics.
+  const todayIdx = dayIndex(todayIso());
+  const todayPct = (win.start && todayIdx != null && todayIdx >= win0 && todayIdx <= win1 + 1)
+    ? ((todayIdx - win0) / span) * 100 : null;
+  const behindCount = tasks.filter(x => (Number(x.lag_days) || 0) > 0 || x.status === 'blocked').length;
+  const doneCount = tasks.filter(x => x.status === 'done').length;
+
   // ── Empty state ──
   if (!plan) {
     return (
@@ -257,9 +264,29 @@ export default function JobSchedule({ t, jobId, quotes }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        <label style={{ fontSize: 13, color: t.textSecondary }}>Start date</label>
-        <input type="date" defaultValue={plan.start_date || ''} onBlur={e => { if (e.target.value !== plan.start_date) patchPlan({ start_date: e.target.value }); }} style={input} />
+      {/* At-a-glance metrics */}
+      {tasks.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8, marginBottom: 12 }}>
+          <Stat t={t} label="Completion" value={win.end ? shortDate(win.end) : '—'} />
+          <Stat t={t} label="Progress" value={doneCount + ' / ' + tasks.length} />
+          <Stat t={t} label="Status"
+            value={behindCount > 0 ? behindCount + ' behind' : 'On track'}
+            tone={behindCount > 0 ? 'warn' : 'ok'} />
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ fontSize: 13, color: t.textSecondary }}>Start date</label>
+          <input type="date" defaultValue={plan.start_date || ''} onBlur={e => { if (e.target.value !== plan.start_date) patchPlan({ start_date: e.target.value }); }} style={input} />
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: t.textMuted, alignItems: 'center' }}>
+          <Legend t={t} colour={t.success} label="Done" />
+          <Legend t={t} colour={t.accent} label="In progress" />
+          <Legend t={t} colour={t.danger} label="Blocked" />
+          <Legend t={t} colour={t.textSecondary} label="To do" />
+          {todayPct != null && <Legend t={t} colour={t.danger} label="Today" line />}
+        </div>
       </div>
 
       {/* Timeline */}
@@ -292,6 +319,11 @@ export default function JobSchedule({ t, jobId, quotes }) {
                       style={{ ...input, width: 56, minHeight: 32, padding: '4px 8px' }}
                     />
                     <span style={{ fontSize: 12, color: t.textMuted }}>days · {shortDate(task.planned_start)}–{shortDate(task.planned_end)}</span>
+                    {Number(task.lag_days) > 0 && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: t.warning, background: t.warningBg, padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        +{task.lag_days}d late
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -302,6 +334,9 @@ export default function JobSchedule({ t, jobId, quotes }) {
                       position: 'absolute', top: 4, bottom: 4, ...bar,
                       background: barColour(task.status), borderRadius: 4, opacity: 0.9,
                     }} />
+                  )}
+                  {todayPct != null && (
+                    <div title="Today" style={{ position: 'absolute', top: -2, bottom: -2, left: todayPct + '%', width: 2, background: t.danger, opacity: 0.55 }} />
                   )}
                 </div>
 
@@ -369,5 +404,24 @@ export default function JobSchedule({ t, jobId, quotes }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function Stat({ t, label, value, tone }) {
+  const colour = tone === 'warn' ? t.warning : tone === 'ok' ? t.success : t.text;
+  return (
+    <div style={{ background: t.bg, border: '1px solid ' + t.border, borderRadius: 12, padding: '8px 12px' }}>
+      <div style={{ color: t.textSecondary, fontSize: 11, fontWeight: 600 }}>{label}</div>
+      <div style={{ color: colour, fontSize: 16, fontWeight: 800, marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+function Legend({ t, colour, label, line }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ width: line ? 2 : 10, height: 10, background: colour, borderRadius: line ? 0 : 3, display: 'inline-block', opacity: line ? 0.6 : 0.9 }} />
+      {label}
+    </span>
   );
 }
