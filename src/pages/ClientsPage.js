@@ -144,7 +144,7 @@ function Inner() {
         const isOpen = openId === c.id;
         return (
           <div key={c.id} style={{
-            background: t.card, border: '1px solid ' + t.border,
+            background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm,
             borderLeft: owes ? '4px solid ' + (t.danger || '#EF4444') : '1px solid ' + t.border,
             borderRadius: 12, padding: '14px 16px', marginBottom: 10,
           }}>

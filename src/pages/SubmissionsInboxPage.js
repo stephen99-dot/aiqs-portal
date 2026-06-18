@@ -249,7 +249,7 @@ export default function SubmissionsInboxPage() {
               width: '100%', maxWidth: 520,
               background: 'var(--card-bg)', border: '1px solid var(--border)',
               borderRadius: 14, padding: 22,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>

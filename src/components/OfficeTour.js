@@ -466,7 +466,7 @@ export default function OfficeTour({ userId, autoStart }) {
         zIndex: 10003, pointerEvents: 'auto',
         animation: step.placement === 'center' ? 'oTourPop 0.32s ease forwards' : 'oTourSlide 0.3s cubic-bezier(0.22,1,0.36,1) forwards',
       }}>
-        <div style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '18px 18px 14px', boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
+        <div style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '18px 18px 14px', boxShadow: '0 24px 64px rgba(15,23,42,0.24)' }}>
           {/* Header row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: AMBER_DIM }}>

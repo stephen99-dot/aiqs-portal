@@ -111,7 +111,7 @@ function Inner() {
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 
       {/* Attach to job */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <label style={lbl(t)}>Linked job</label>
         <select value={jobId} onChange={e => { setJobId(e.target.value); setDirty(true); }} style={{ width: 380, maxWidth: '100%', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 6, padding: '8px 10px', fontSize: 14, outline: 'none' }}>
           <option value="">— None —</option>
@@ -120,7 +120,7 @@ function Inner() {
       </div>
 
       {/* Field form */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
         {tpl.fields.map(f => (
           <Field key={f.key} t={t} field={f} value={fields[f.key]} onChange={(v) => update(f.key, v)} />
         ))}

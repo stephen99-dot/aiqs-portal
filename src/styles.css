@@ -107,7 +107,7 @@ body {
 .auth-card {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 36px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  box-shadow: 0 20px 60px rgba(15,23,42,0.12);
 }
 .auth-header { text-align: center; margin-bottom: 28px; }
 .auth-logo-mark {
@@ -436,7 +436,7 @@ body {
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
   .sidebar-panel { transform: translateX(-100%); width: min(86vw, 300px) !important; }
-  .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.4); }
+  .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,0.18); }
   /* The <main> element carries className="main-content" — must match here or the
      240px sidebar gutter (and the 56px fixed-header offset) is never removed. */
   .main-content, .main-panel { margin-left: 0 !important; padding-top: 56px; }

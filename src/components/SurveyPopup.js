@@ -99,7 +99,7 @@ export default function SurveyPopup() {
     background: isDark ? '#111827' : '#FFFFFF',
     border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
     borderRadius: 16, padding: '22px 22px 18px',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+    boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.35)' : '0 24px 64px rgba(15,23,42,0.24)',
   };
   const label = { fontSize: 13.5, fontWeight: 700, color: t.text, marginBottom: 8 };
 

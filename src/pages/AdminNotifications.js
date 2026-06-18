@@ -124,7 +124,7 @@ export default function AdminNotifications() {
               border: '1px solid rgba(255,255,255,0.1)',
               borderLeft: '3px solid ' + config.color,
               borderRadius: 12,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)',
+              boxShadow: '0 8px 32px rgba(15,23,42,0.18)',
               animation: 'toast-slide-in 0.3s ease-out',
               cursor: 'pointer',
             }}
