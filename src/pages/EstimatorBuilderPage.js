@@ -542,7 +542,7 @@ function EstimatorBuilderPageInner() {
         {/* Reuse a client/job you've already got in the portal — autofills the
             details and links the new quote straight to that job. */}
         {jobs.length > 0 && (
-          <div data-tour="est-existing-job" style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div data-tour="est-existing-job" style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <label style={lbl(t)}>Quoting for a job you've already got? <span style={{ fontWeight: 400, color: t.textMuted }}>(optional)</span></label>
             <select
               value={jobId || ''}
@@ -574,7 +574,7 @@ function EstimatorBuilderPageInner() {
         )}
 
         {inputMode === 'describe' && (
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <textarea
               value={inputText}
               onChange={e => setInputText(e.target.value)}
@@ -608,7 +608,7 @@ function EstimatorBuilderPageInner() {
           <button onClick={() => setInputMode('describe')} style={{ ...btnLink(t), marginBottom: 8 }}>← Back to describing the job</button>
         )}
         {inputMode === 'form' && (
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div>
                 <label style={lbl(t)}>Project type</label>
@@ -636,7 +636,7 @@ function EstimatorBuilderPageInner() {
           </div>
         )}
         {inputMode === 'measure' && (
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <MeasurementEditor
               t={t}
               projectType={projectType} setProjectType={setProjectType}
@@ -649,7 +649,7 @@ function EstimatorBuilderPageInner() {
 
         {/* Start from a completed job — the BOQ already priced everything */}
         {inputMode === 'describe' && portalBoqs !== null && portalBoqs.length > 0 && (
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 2 }}>Got a BOQ for this one already?</div>
             <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
               Start from a completed job in your portal — its priced line items become this quote, no describing needed.
@@ -678,7 +678,7 @@ function EstimatorBuilderPageInner() {
           <summary style={{ cursor: 'pointer', color: t.textSecondary, fontSize: 14, fontWeight: 600, minHeight: 44, display: 'flex', alignItems: 'center' }}>
             Markup, VAT and other ways to start
           </summary>
-          <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginTop: 8 }}>
+          <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginTop: 8 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
               <ToggleBtn t={t} active={inputMode === 'form'} onClick={() => setInputMode(inputMode === 'form' ? 'describe' : 'form')}>Quick form</ToggleBtn>
               <ToggleBtn t={t} active={inputMode === 'measure'} onClick={() => setInputMode(inputMode === 'measure' ? 'describe' : 'measure')}>Site measurements</ToggleBtn>
@@ -766,7 +766,7 @@ function EstimatorBuilderPageInner() {
 
       {/* Questions the client asked from the public quote page */}
       {clientQuestions.length > 0 && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Questions from your client</div>
           {clientQuestions.map(m => (
             <div key={m.id} style={{ borderTop: '1px solid ' + t.border, padding: '10px 0', fontSize: 14 }}>
@@ -782,7 +782,7 @@ function EstimatorBuilderPageInner() {
       {error && <div style={errBox(t)}>{error}</div>}
 
       {/* Header fields */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <div>
             <label style={lbl(t)}>Client name</label>
@@ -830,7 +830,7 @@ function EstimatorBuilderPageInner() {
       </div>
 
       {/* Build-up */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20, marginBottom: 16 }}>
         <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 12 }}>Build-up</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           <PctField t={t} label="Your markup %" value={ohpPct} onChange={setOhpPct} />
@@ -841,7 +841,7 @@ function EstimatorBuilderPageInner() {
       </div>
 
       {/* Lines */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
         {isMobile ? (
         <div style={{ padding: 12 }}>
           {sections.order.map(sec => (
@@ -1021,11 +1021,11 @@ function EstimatorBuilderPageInner() {
 
       {/* Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 16, alignItems: 'start' }}>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <label style={lbl(t)}>Notes / terms</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5} style={txtarea(t)} placeholder="Payment terms, exclusions, etc. (appears on the PDF)" />
         </div>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmtMoney(totals.net, currency)} />
           <SummaryRow t={t} label={'Your markup (' + num(ohpPct).toFixed(1) + '%)'} value={fmtMoney(totals.ohp, currency)} />
           <SummaryRow t={t} label={'Contingency (' + num(contPct).toFixed(1) + '%)'} value={fmtMoney(totals.cont, currency)} />

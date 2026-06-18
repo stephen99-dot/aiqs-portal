@@ -314,7 +314,7 @@ function Inner() {
 
       {/* Reminders toggle — visible while there's something to chase */}
       {(invoice.status === 'sent' || invoice.status === 'draft') && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={reminders} onChange={e => toggleReminders(e.target.checked)} style={{ width: 20, height: 20 }} />
             <div>
@@ -329,7 +329,7 @@ function Inner() {
 
       {/* Stripe link panel */}
       {invoice.status !== 'paid' && invoice.status !== 'void' && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
               <div style={{ color: t.text, fontSize: 14, fontWeight: 700 }}>Let them pay by card</div>
@@ -361,7 +361,7 @@ function Inner() {
 
       {/* Header form */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Bill to</div>
           <label style={lbl(t)}>Client name</label>
           <input value={client.name} disabled={readOnly} onChange={e => { setClient({ ...client, name: e.target.value }); onHeaderChange(); }} style={fld(t)} />
@@ -370,7 +370,7 @@ function Inner() {
           <label style={lbl(t, 12)}>Address</label>
           <textarea value={client.address} disabled={readOnly} onChange={e => { setClient({ ...client, address: e.target.value }); onHeaderChange(); }} rows={3} style={ta(t)} />
         </div>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Invoice details</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
@@ -399,7 +399,7 @@ function Inner() {
 
       {/* A4 — Tax & CIS for this invoice */}
       {!readOnly && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Tax & CIS on this invoice</div>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
             <input type="checkbox" checked={cisApplies} onChange={e => toggleCis(e.target.checked)} style={{ width: 20, height: 20, marginTop: 2 }} />
@@ -438,7 +438,7 @@ function Inner() {
       )}
 
       {/* Lines */}
-      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
         {isMobile ? (
         <div style={{ padding: 12 }}>
           {lines.map((ln, idx) => {
@@ -650,11 +650,11 @@ function Inner() {
 
       {/* Summary + notes */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <label style={lbl(t)}>Payment terms / notes</label>
           <textarea value={notes} disabled={readOnly} onChange={e => { setNotes(e.target.value); onHeaderChange(); }} rows={5} placeholder="e.g. Bank: ... Sort code: ... Account: ...   Late payment interest applies per Late Payment of Commercial Debts Act." style={ta(t)} />
         </div>
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <SummaryRow t={t} label="Net" value={fmt(totals.net)} />
           {num(discount) > 0 && <SummaryRow t={t} label="Discount" value={'−' + fmt(num(discount))} />}
           {reverseCharge ? (

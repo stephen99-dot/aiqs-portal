@@ -199,7 +199,7 @@ function Inner() {
     background: t.bg, border: '1px solid ' + t.border, color: t.text,
     borderRadius: 10, fontSize: 14, outline: 'none',
   };
-  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 };
+  const card = { background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 };
   const primaryBtn = { minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' };
   const ghostBtn = { minHeight: 44, padding: '0 14px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 
@@ -297,7 +297,7 @@ function Inner() {
           </div>
 
           {filteredInvoices.length === 0 ? (
-            <div style={{ ...card, borderStyle: 'dashed', textAlign: 'center', padding: 32 }}>
+            <div style={{ ...card, boxShadow: 'none', borderStyle: 'dashed', textAlign: 'center', padding: 32 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{filter ? 'Nothing here' : 'No invoices yet'}</div>
               <div style={{ color: t.textSecondary, fontSize: 14, marginBottom: filter ? 0 : 14 }}>
                 {filter ? 'Try a different filter.' : 'Turn a finished quote into an invoice in one tap — open the job and press the green button.'}
@@ -339,7 +339,7 @@ function Inner() {
       {segment === 'due' && (
         <>
           {upcomingStages.length === 0 && retentions.length === 0 ? (
-            <div style={{ ...card, borderStyle: 'dashed', textAlign: 'center', padding: 32 }}>
+            <div style={{ ...card, boxShadow: 'none', borderStyle: 'dashed', textAlign: 'center', padding: 32 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Nothing scheduled</div>
               <div style={{ color: t.textSecondary, fontSize: 14 }}>
                 Paid in stages on a job — deposit, first fix, completion? List the stages on the job page and they'll show up here so nothing slips.
