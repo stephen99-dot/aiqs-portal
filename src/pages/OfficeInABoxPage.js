@@ -192,7 +192,7 @@ export default function OfficeInABoxPage() {
                     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
                   }}
                 >
-                  Subscribe — £100/month <ArrowRightIcon size={18} color="#0A0F1C" />
+                  Start 7-day free trial <ArrowRightIcon size={18} color="#0A0F1C" />
                 </button>
               )}
               {hasAddon ? null : isInterested ? (
@@ -297,7 +297,7 @@ export default function OfficeInABoxPage() {
             <span style={{ fontSize: 16, fontWeight: 600, color: t.textSecondary }}>/ month</span>
           </div>
           <div style={{ fontSize: 12.5, color: t.textSecondary, marginBottom: 18 }}>
-            One flat price for everything. Added to your existing AI QS account — cancel anytime.
+            7 days free, then one flat price for everything. Added to your existing AI QS account — cancel anytime.
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -334,10 +334,10 @@ export default function OfficeInABoxPage() {
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                Subscribe — £100/month <ArrowRightIcon size={17} color="#0A0F1C" />
+                Start 7-day free trial <ArrowRightIcon size={17} color="#0A0F1C" />
               </button>
               <div style={{ fontSize: 11.5, color: t.textMuted, textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
-                Secure checkout by Stripe. Cancel anytime — access ends when your billing month does.
+                7 days free, then £100/month. No charge today — cancel anytime before your trial ends.
               </div>
             </>
           )}
