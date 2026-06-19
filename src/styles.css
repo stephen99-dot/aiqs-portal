@@ -33,6 +33,9 @@
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+/* Long words, URLs and reference codes wrap instead of pushing the layout
+   sideways or spilling off the edge. */
+p, h1, h2, h3, h4, h5, span, div, td, th, li, a, button, label, strong, em { overflow-wrap: break-word; }
 html { font-size: 15px; }
 body {
   font-family: var(--font-body);
@@ -527,6 +530,11 @@ body {
 
   /* Generous tap targets — Apple/Google guidance is 44px minimum. */
   button, a.btn-primary, a.btn-secondary, .btn-primary, .btn-secondary { min-height: 44px; }
+
+  /* iOS zooms the whole page in when you focus an input smaller than 16px —
+     the #1 cause of a form feeling "not optimised" on a phone. Force every
+     field to 16px on mobile so focusing never triggers that jarring zoom. */
+  input, select, textarea { font-size: 16px !important; }
 
   /* Images and media never overflow their container. */
   img, video, canvas, svg.responsive { max-width: 100%; height: auto; }
