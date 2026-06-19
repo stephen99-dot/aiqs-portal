@@ -14,8 +14,9 @@ export default function PaymentSuccessPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const isOffice = new URLSearchParams(window.location.search).get('office') === '1';
-    if (isOffice) activateOfficeAddon();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('office') === '1') activateOfficeAddon();
+    else if (params.get('credits') === '1') confirmCredits();
     else activateProject();
   }, []);
 
@@ -32,6 +33,16 @@ export default function PaymentSuccessPage() {
     }
     // Payment went through but the flag hasn't synced yet — don't alarm them.
     setStatus('office');
+  }
+
+  // BOQ credit top-up: credits are added by the Stripe webhook. Give it a few
+  // seconds to land, refreshing the account so the new balance shows.
+  async function confirmCredits() {
+    for (let i = 0; i < 6; i++) {
+      await refreshUser();
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    setStatus('credits');
   }
 
   async function activateProject() {
@@ -76,9 +87,53 @@ export default function PaymentSuccessPage() {
               Processing Payment...
             </h2>
             <p style={{ fontSize: 14, color: t.textMuted }}>
-              Activating your project. Just a moment.
+              Confirming your payment. Just a moment.
             </p>
             <div className="loading-spinner" style={{ margin: '24px auto 0' }} />
+          </>
+        )}
+
+        {status === 'office' && (
+          <>
+            <div style={{ marginBottom: 16 }}><CheckCircleIcon size={56} /></div>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
+              Welcome to Office in a Box!
+            </h2>
+            <p style={{ fontSize: 14, color: t.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
+              Your trial is live and your account is unlocked. Speak your first job
+              and a priced, branded quote comes straight back.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+              <Link to="/office" style={{
+                padding: '12px 24px', borderRadius: 10,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C', fontSize: 14, fontWeight: 700, textDecoration: 'none',
+              }}>
+                Open Office in a Box
+              </Link>
+            </div>
+          </>
+        )}
+
+        {status === 'credits' && (
+          <>
+            <div style={{ marginBottom: 16 }}><CheckCircleIcon size={56} /></div>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
+              You're topped up!
+            </h2>
+            <p style={{ fontSize: 14, color: t.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
+              Your BOQ credits have been added to your account. They never expire —
+              use them whenever you like.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+              <Link to="/dashboard" style={{
+                padding: '12px 24px', borderRadius: 10,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C', fontSize: 14, fontWeight: 700, textDecoration: 'none',
+              }}>
+                Back to Dashboard
+              </Link>
+            </div>
           </>
         )}
 
