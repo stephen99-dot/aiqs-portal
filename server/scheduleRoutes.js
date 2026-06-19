@@ -6,9 +6,9 @@
 // PDF. Stage 2 (conversational "tell the bot what happened on site") will add an
 // agent tool on top of this same data model.
 //
-// ADMIN ONLY for now. Mounted at /api/schedule with authMiddleware +
-// adminMiddleware. Rolling out to all estimator users later is a one-line gate
-// swap (adminMiddleware -> requireEstimator), per BUILD_SCHEDULE_SPEC.md.
+// Available to all Office in a Box users. Mounted at /api/schedule with
+// authMiddleware + requireEstimator (admin or any account with the estimator
+// add-on enabled), per BUILD_SCHEDULE_SPEC.md.
 //
 //   GET    /api/schedule/plans?job_id=       list a job's plans (with window)
 //   POST   /api/schedule/plans               generate (AI) or create a blank plan
@@ -28,7 +28,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
-const { authMiddleware, adminMiddleware } = require('./auth');
+const { authMiddleware, requireEstimator } = require('./auth');
 const { computeSchedule, programmeWindow } = require('./scheduleEngine');
 const { streamSchedulePdf } = require('./schedulePdf');
 
@@ -241,7 +241,7 @@ function aiTasksToRows(aiTasks) {
 //  ROUTES — admin only
 // ═══════════════════════════════════════════════════════════════════════════
 
-router.use(authMiddleware, adminMiddleware);
+router.use(authMiddleware, requireEstimator);
 
 // GET /plans?job_id=
 router.get('/plans', (req, res) => {
