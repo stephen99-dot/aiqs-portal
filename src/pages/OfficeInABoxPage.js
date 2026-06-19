@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
 import {
   ZapIcon, RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon,
   FileTextIcon, LayersIcon, CheckCircleIcon, ArrowRightIcon, ClockIcon,
@@ -37,37 +36,7 @@ export default function OfficeInABoxPage() {
   const navigate = useNavigate();
   const isDark = mode === 'dark';
 
-  const [status, setStatus] = useState(null);   // null | 'interested' | 'not_now'
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
   const hasAddon = !!user?.hasEstimator || user?.role === 'admin';
-  const isInterested = status === 'interested';
-
-  useEffect(() => {
-    let alive = true;
-    apiFetch('/office-in-a-box/interest')
-      .then(d => { if (alive && d.responded) setStatus(d.status); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
-  async function registerInterest() {
-    setSubmitting(true);
-    setError('');
-    try {
-      await apiFetch('/office-in-a-box/interest', {
-        method: 'POST',
-        body: JSON.stringify({ status: 'interested', source: 'page' }),
-      });
-      setStatus('interested');
-      try { localStorage.setItem('aiqs_office_interest_v1', 'interested'); } catch (e) {}
-    } catch (err) {
-      setError(err.message || 'Could not register interest — please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   // Send the user to Stripe for the £100/month subscription. The link is
   // stamped with their account id so the webhook flips on access the moment
@@ -82,8 +51,6 @@ export default function OfficeInABoxPage() {
   const heroBg = isDark
     ? 'radial-gradient(90% 120% at 85% 0%, rgba(245,158,11,0.22) 0%, rgba(245,158,11,0.05) 45%, transparent 75%), #0E1626'
     : 'radial-gradient(90% 120% at 85% 0%, rgba(245,158,11,0.20) 0%, rgba(245,158,11,0.06) 45%, transparent 75%), #FFFFFF';
-
-  const ctaLabel = submitting ? 'Saving…' : "Yes — I'm interested";
 
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 1060, margin: '0 auto' }}>
@@ -195,35 +162,10 @@ export default function OfficeInABoxPage() {
                   Start 7-day free trial <ArrowRightIcon size={18} color="#0A0F1C" />
                 </button>
               )}
-              {hasAddon ? null : isInterested ? (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 8,
-                  fontSize: 15, fontWeight: 700, color: t.success,
-                  background: t.successBg, border: `1px solid ${t.success}`,
-                  borderRadius: 12, padding: '12px 18px',
-                }}>
-                  <CheckCircleIcon size={18} color={t.success} /> You're on the list — we'll be in touch
+              {!hasAddon && (
+                <span style={{ fontSize: 13, color: t.textMuted, maxWidth: 240, lineHeight: 1.4 }}>
+                  7 days free, then £100/month. No charge today — cancel anytime before it ends.
                 </span>
-              ) : (
-                <>
-                  <button
-                    className="oiab-cta"
-                    onClick={registerInterest}
-                    disabled={submitting}
-                    style={{
-                      padding: '14px 26px', borderRadius: 13, border: `1.5px solid ${amberBorder}`,
-                      background: 'transparent',
-                      color: t.text, fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
-                      cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.75 : 1,
-                      display: 'inline-flex', alignItems: 'center', gap: 9,
-                    }}
-                  >
-                    {ctaLabel} {!submitting && <ArrowRightIcon size={18} color={t.text} />}
-                  </button>
-                  <span style={{ fontSize: 13, color: t.textMuted, maxWidth: 230, lineHeight: 1.4 }}>
-                    One tap — we already know it's you. No forms, no card.
-                  </span>
-                </>
               )}
               <button
                 onClick={() => navigate('/office-demo')}
@@ -236,7 +178,6 @@ export default function OfficeInABoxPage() {
                 Try it with example data
               </button>
             </div>
-            {error && <div style={{ fontSize: 12.5, color: t.danger, marginTop: 10 }}>{error}</div>}
           </div>
 
           <div className="oiab-hero-art">
