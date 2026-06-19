@@ -111,6 +111,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [userMsg, setUserMsg] = useState('');
   const [userMsgs, setUserMsgs] = useState([]);
   const [msgsLoaded, setMsgsLoaded] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const fileInputRef = React.useRef(null);
 
   // Load existing messages for this user
@@ -271,12 +272,8 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const msgsTotal = parseInt(msgAllowance) || user.monthly_quota || user.quota || 0;
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
+  // Used this month, for the monthly-allowance figures in the breakdown below.
   const boqUsed = user.boq_used || user.docs_used || 0;
-  // Show usage against the monthly Documents/BOQs allowance, mirroring the Messages bar above.
-  const boqTotal = parseInt(docAllowance) || user.monthly_boq_quota || user.boq_quota || 0;
-  const boqRemaining = Math.max(0, boqTotal - boqUsed);
-  const boqPct = boqTotal > 0 ? Math.min(100, (boqUsed / boqTotal) * 100) : 0;
-  const boqBarColor = boqPct >= 90 ? '#EF4444' : boqPct >= 70 ? '#F59E0B' : '#10B981';
 
   // The TRUE spendable BOQ balance the user can actually spend right now —
   // free_credits + bonus_docs + monthly allowance remaining. Prefer the
@@ -313,66 +310,73 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           </div>
         )}
 
-        {/* Usage bars */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          {[
-            { label: 'Messages This Month', used: msgsUsed, total: msgsTotal, pct: msgPct, color: msgBarColor },
-            { label: 'Monthly BOQ Allowance', used: boqUsed, total: boqTotal, pct: boqPct, color: boqBarColor },
-          ].map(({ label, used, total, pct, color }) => (
-            <div key={label} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: total > 0 && pct >= 90 ? '#EF4444' : text }}>{used} / {total > 0 ? total : '—'}</span>
-              </div>
-              {total > 0 ? (
-                <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
-                  <div style={{ width: pct + '%', height: '100%', borderRadius: 4, background: color, transition: 'width 0.3s' }} />
-                </div>
-              ) : (
-                <div style={{ fontSize: 11, color: muted }}>No allowance set</div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* TRUE spendable BOQ balance — free_credits + bonus_docs + monthly
-            allowance remaining. This is what the user actually sees and spends,
-            and what the admin can set here (the monthly piece is set above). */}
+        {/* Available BOQs — the number that matters for pay-as-you-go accounts:
+            purchased/granted credits (never expire) plus any monthly allowance
+            left. This is the primary control; the monthly plan allowance lives
+            under "Subscription allowances" below for the few on monthly plans. */}
         {user.role !== 'admin' && (
-          <div style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spendable BOQ Balance</span>
-              <span style={{ fontSize: 18, fontWeight: 800, color: spendableBalance <= 0 ? '#EF4444' : '#10B981' }}>
-                {spendableBalance} <span style={{ fontSize: 11, fontWeight: 600, color: muted }}>credit{spendableBalance === 1 ? '' : 's'}</span>
+          <div style={{ padding: '16px 18px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Available BOQs</span>
+              <span style={{ fontSize: 26, fontWeight: 800, color: spendableBalance <= 0 ? '#EF4444' : '#10B981', lineHeight: 1 }}>
+                {spendableBalance}
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: muted, marginBottom: 12 }}>
-              Free (purchased/granted) <strong style={{ color: text }}>{user.free_credits || 0}</strong>
-              {'  ·  '}Bonus <strong style={{ color: text }}>{user.bonus_docs || 0}</strong>
-              {'  ·  '}Monthly left <strong style={{ color: text }}>{monthlyRemaining}</strong>
-              {' '}(of {user.monthly_boq_quota || 0}, {boqUsed} used)
+            <div style={{ fontSize: 11.5, color: muted, marginBottom: 14 }}>
+              {(user.free_credits || 0) + (user.bonus_docs || 0)} credit{((user.free_credits || 0) + (user.bonus_docs || 0)) === 1 ? '' : 's'} that never expire
+              {monthlyRemaining > 0 ? ' + ' + monthlyRemaining + " from this month's plan" : ''}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
-                <div style={lbl}>Free credits</div>
-                <input type="number" min="0" value={freeCredits} onChange={e => setFreeCredits(e.target.value)} style={{ ...sInp, width: 90 }} />
+                <div style={lbl}>Credits (purchased / granted)</div>
+                <input type="number" min="0" value={freeCredits} onChange={e => setFreeCredits(e.target.value)} style={{ ...sInp, width: 120 }} />
               </div>
               <div>
-                <div style={lbl}>Bonus credits</div>
+                <div style={lbl}>Bonus</div>
                 <input type="number" min="0" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={{ ...sInp, width: 90 }} />
               </div>
               <button onClick={saveBoqBalance} disabled={loading === 'boqbal'} style={btn('#2563EB')}>
-                {loading === 'boqbal' ? 'Saving…' : 'Save balance'}
+                {loading === 'boqbal' ? 'Saving…' : 'Save credits'}
               </button>
               <button onClick={zeroBoqBalance} disabled={loading === 'boqzero'} style={outBtn}>
-                {loading === 'boqzero' ? 'Zeroing…' : 'Zero balance'}
+                {loading === 'boqzero' ? 'Zeroing…' : 'Zero'}
               </button>
             </div>
             <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
-              "Zero balance" sets free, bonus and the monthly allowance all to 0 — use it to test the out-of-credits screens.
+              Most accounts run on credits. "Zero" sets credits, bonus and the monthly allowance all to 0.
             </div>
           </div>
         )}
+
+        {/* Messages this month — allowance is editable inline so it's always to hand. */}
+        <div style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Messages This Month</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: msgsTotal > 0 && msgPct >= 90 ? '#EF4444' : text }}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '—'}</span>
+          </div>
+          {msgsTotal > 0 ? (
+            <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
+              <div style={{ width: msgPct + '%', height: '100%', borderRadius: 4, background: msgBarColor, transition: 'width 0.3s' }} />
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: muted }}>No allowance set</div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <span style={{ fontSize: 12, color: muted }}>Allowance</span>
+            <input type="number" min={0} max={9999} value={msgAllowance} onChange={e => setMsgAllowance(e.target.value)}
+              style={{ ...sInp, width: 80, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
+            <span style={{ fontSize: 11, color: muted }}>/mo</span>
+            <button onClick={saveAllowances} disabled={!!loading} style={btn('#2563EB')}>
+              {loading === 'allowances' ? 'Saving…' : 'Save messages'}
+            </button>
+          </div>
+        </div>
+
+        {/* Subscription allowances — only relevant for the few on monthly plans. */}
+        <button onClick={() => setShowAdvanced(v => !v)}
+          style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: 12 }}>
+          {showAdvanced ? '▾ Hide subscription allowances' : '▸ Subscription allowances (monthly plans)'}
+        </button>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
 
@@ -395,9 +399,11 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             </button>
           </div>
 
-          {/* Allowances */}
+          {/* Allowances — monthly plan entitlement, hidden by default since most
+              accounts are pay-as-you-go (credits above). */}
+          {showAdvanced && (
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
-            <div style={lbl}>Allowances (this month)</div>
+            <div style={lbl}>Monthly plan allowances</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
               {[
                 { label: 'Messages', val: msgAllowance, set: setMsgAllowance },
@@ -414,6 +420,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </button>
             </div>
           </div>
+          )}
 
           {/* Suspend */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
