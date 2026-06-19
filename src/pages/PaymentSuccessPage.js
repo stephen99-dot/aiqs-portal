@@ -20,18 +20,19 @@ export default function PaymentSuccessPage() {
     else activateProject();
   }, []);
 
-  // Office in a Box subscription: the Stripe webhook flips has_estimator on a
-  // moment after payment. Poll /auth/me until it lands, then send them in.
+  // Office in a Box subscription: verify directly with Stripe (reliable) and
+  // fall back to polling /auth/me, until access switches on, then send them in.
   async function activateOfficeAddon() {
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 8; i++) {
+      try {
+        const r = await apiFetch('/office/verify', { method: 'POST' });
+        if (r && r.activated) { await refreshUser(); setStatus('office'); return; }
+      } catch (e) { /* keep trying */ }
       const fresh = await refreshUser();
-      if (fresh && fresh.hasEstimator) {
-        setStatus('office');
-        return;
-      }
-      await new Promise(r => setTimeout(r, 2500));
+      if (fresh && fresh.hasEstimator) { setStatus('office'); return; }
+      await new Promise(r => setTimeout(r, 2000));
     }
-    // Payment went through but the flag hasn't synced yet — don't alarm them.
+    // Paid but not yet confirmed — show success anyway; verify runs again on /office.
     setStatus('office');
   }
 
