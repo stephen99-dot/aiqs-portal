@@ -287,9 +287,12 @@ function handleInvoicePaymentComplete(session) {
 // Map a one-off Stripe payment to a number of BOQ credits. Tries the exact
 // amount paid, then the pre-tax subtotal (so a pack still maps if VAT was added
 // on top at checkout). Overridable via STRIPE_BOQ_PACKS env var as JSON,
-// e.g. '{"9900":1,"30000":5}'.
+// e.g. '{"15000":1,"34900":5,"58000":10}'.
 function resolvePackCredits(session) {
-  let PACKS = { 9900: 1, 7900: 1, 34900: 5, 30000: 5 };
+  // Pence -> BOQ credits. Keep in step with the live pack prices:
+  //   £150 single = 1, £349 five-pack = 5, £580 ten-pack = 10.
+  // The £79/£99/£300 entries are legacy/subscriber prices kept for back-compat.
+  let PACKS = { 7900: 1, 9900: 1, 15000: 1, 30000: 5, 34900: 5, 58000: 10 };
   if (process.env.STRIPE_BOQ_PACKS) {
     try {
       const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
