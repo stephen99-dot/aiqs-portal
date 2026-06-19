@@ -86,9 +86,9 @@ app.use('/api/pm', projectManagerRoutes);
 // UK Materials Pricing — searchable catalogue + supplier price comparison that
 // plugs into the quote builder. Gated behind the Office-in-a-Box add-on.
 app.use('/api/materials', materialsRoutes);
-// Wave 6: Intelligent Build Schedule (Stage 1). Admin-only for now (the router
-// gates itself with authMiddleware + adminMiddleware); flip to requireEstimator
-// to roll out to all estimator users. See BUILD_SCHEDULE_SPEC.md.
+// Wave 6: Intelligent Build Schedule (Stage 1). Available to all Office in a
+// Box users — the router gates itself with authMiddleware + requireEstimator.
+// See BUILD_SCHEDULE_SPEC.md.
 app.use('/api/schedule', require('./scheduleRoutes'));
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');

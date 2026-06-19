@@ -67,12 +67,16 @@ async function resolveLogo(branding) {
     } catch (e) { /* fall through to raw embed below */ }
   }
 
-  // Fallback when sharp is unavailable: only raster formats ExcelJS understands.
+  // Fallback when sharp is unavailable: only raster formats ExcelJS understands,
+  // and only when the file's bytes really are that raster (a .png that's secretly
+  // an SVG would otherwise embed as an unreadable image and corrupt the file).
   const ext = path.extname(p).toLowerCase().replace('.', '');
   if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
     try {
+      const buffer = fs.readFileSync(p);
+      if (!isEmbeddableRaster(buffer)) return null;
       return {
-        buffer: fs.readFileSync(p),
+        buffer,
         extension: ext === 'jpg' ? 'jpeg' : ext,
         naturalWidth: 0,
         naturalHeight: 0,
@@ -90,10 +94,25 @@ function fitWithin(natW, natH, maxW, maxH) {
   return { width: Math.max(1, Math.round(natW * scale)), height: Math.max(1, Math.round(natH * scale)) };
 }
 
+// ExcelJS embeds the raw bytes we hand it as-is. If those bytes aren't actually
+// a raster image (e.g. an SVG, or an upload mislabeled .png that slipped past
+// rasterisation), Excel can't read the resulting media part — it strips it and
+// warns the user the workbook "had unreadable content" (Repaired Part: the
+// sheet that hosts the logo). So only embed bytes whose magic number is a real
+// PNG / JPEG / GIF; anything else means we skip the logo rather than corrupt
+// the whole file.
+function isEmbeddableRaster(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 4) return false;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return true; // PNG
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return true;                     // JPEG
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return true;  // GIF
+  return false;
+}
+
 // Embed a pre-resolved logo (see resolveLogo) at top-left anchor `tl`, fitted
 // within { maxWidth, maxHeight }. Returns the rendered { width, height } or null.
 function embedResolvedLogo(wb, ws, logo, tl, box) {
-  if (!logo || !logo.buffer) return null;
+  if (!logo || !logo.buffer || !isEmbeddableRaster(logo.buffer)) return null;
   try {
     const { width, height } = fitWithin(logo.naturalWidth, logo.naturalHeight, box.maxWidth, box.maxHeight);
     const id = wb.addImage({ buffer: logo.buffer, extension: logo.extension || 'png' });

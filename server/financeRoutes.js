@@ -658,9 +658,18 @@ router.delete('/jobs/:id', (req, res) => {
     const job = ensureJob(req, req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found.' });
     const txn = db.transaction(() => {
+      // Remove everything that belongs to the job…
       db.prepare('DELETE FROM job_costs WHERE job_id = ?').run(job.id);
       db.prepare('DELETE FROM job_budgets WHERE job_id = ?').run(job.id);
+      db.prepare('DELETE FROM estimator_variations WHERE job_id = ?').run(job.id);
+      db.prepare('DELETE FROM payment_schedules WHERE job_id = ?').run(job.id);
+      db.prepare('DELETE FROM job_photos WHERE job_id = ?').run(job.id);
+      db.prepare('DELETE FROM schedule_tasks WHERE plan_id IN (SELECT id FROM schedule_plans WHERE job_id = ?)').run(job.id);
+      db.prepare('DELETE FROM schedule_plans WHERE job_id = ?').run(job.id);
+      // …but keep the financial/paper records, just unlinked from the job.
       db.prepare('UPDATE quotes SET job_id = NULL WHERE job_id = ?').run(job.id);
+      db.prepare('UPDATE invoices SET job_id = NULL WHERE job_id = ?').run(job.id);
+      db.prepare('UPDATE documents SET job_id = NULL WHERE job_id = ?').run(job.id);
       db.prepare('DELETE FROM estimator_jobs WHERE id = ?').run(job.id);
     });
     txn();

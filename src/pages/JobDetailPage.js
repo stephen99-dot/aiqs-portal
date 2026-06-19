@@ -8,7 +8,6 @@ import { jobStage, stageColours } from '../utils/jobStages';
 import { PhoneIcon } from '../components/Icons';
 import JobPhotos from '../components/JobPhotos';
 import JobSchedule from '../components/JobSchedule';
-import { useAuth } from '../context/AuthContext';
 
 // THE JOB PAGE — one screen with everything about one job, sectioned
 // vertically: money strip, quotes, invoices & payments, changes, documents,
@@ -40,9 +39,6 @@ function Inner() {
   const { t } = useTheme();
   const { id } = useParams();
   const nav = useNavigate();
-  const { user } = useAuth();
-  // Wave 6 build schedule is admin-only for now (the API is gated the same way).
-  const isAdmin = user?.role === 'admin';
 
   const [job, setJob] = useState(null);
   const [quotes, setQuotes] = useState([]);
@@ -330,7 +326,7 @@ function Inner() {
         <button style={chipBtn()} onClick={() => jumpTo('quotes')}>Quotes</button>
         <button style={chipBtn()} onClick={() => jumpTo('invoices')}>Invoices & payments</button>
         <button style={chipBtn()} onClick={() => jumpTo('changes')}>Changes</button>
-        {isAdmin && <button style={chipBtn()} onClick={() => jumpTo('schedule')}>Schedule</button>}
+        <button style={chipBtn()} onClick={() => jumpTo('schedule')}>Schedule</button>
         <button style={chipBtn()} onClick={() => jumpTo('photos')}>Photos</button>
         <button style={chipBtn()} onClick={() => jumpTo('documents')}>Documents</button>
         <button style={chipBtn()} onClick={() => jumpTo('notes')}>Notes</button>
@@ -591,16 +587,14 @@ function Inner() {
         })}
       </div>
 
-      {/* Build schedule (admin-only for now — Wave 6 Stage 1) */}
-      {isAdmin && (
-        <div ref={sections.schedule} style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <div style={sectionTitle}>Build schedule</div>
-            <span style={{ background: t.accent + '22', color: t.accent, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>Beta</span>
-          </div>
-          <JobSchedule t={t} jobId={id} quotes={quotes} />
+      {/* Build schedule (Wave 6 Stage 1) — available to all Office in a Box users */}
+      <div ref={sections.schedule} style={card}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div style={sectionTitle}>Build schedule</div>
+          <span style={{ background: t.accent + '22', color: t.accent, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>Beta</span>
         </div>
-      )}
+        <JobSchedule t={t} jobId={id} quotes={quotes} />
+      </div>
 
       {/* Photos */}
       <div ref={sections.photos} style={card}>

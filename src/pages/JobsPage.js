@@ -5,7 +5,7 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
 import { jobStage, stageColours, stageFigure } from '../utils/jobStages';
-import { FolderIcon } from '../components/Icons';
+import { FolderIcon, TrashIcon } from '../components/Icons';
 
 // JOBS — the centre of gravity. One card per job: customer + job name, a
 // stage chip, and the one number that matters at that stage. Jobs that need
@@ -34,6 +34,7 @@ function Inner() {
   const [portalProjects, setPortalProjects] = useState(null); // null = not loaded yet
   const [boqJob, setBoqJob] = useState({ project_id: '', client_name: '', client_email: '', client_phone: '' });
   const [boqCreating, setBoqCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
 
   const refresh = useCallback(async () => {
     setError('');
@@ -82,6 +83,17 @@ function Inner() {
       nav('/jobs/' + r.job_id);
     } catch (e) { setError(e.message); }
     setBoqCreating(false);
+  };
+
+  const deleteJob = async (j) => {
+    const label = [j.client_name, j.name].filter(Boolean).join(' — ') || j.name || 'this job';
+    if (!window.confirm(`Delete "${label}" and everything in it — its plan, logged costs and photos? Quotes and invoices are kept (just unlinked). This cannot be undone.`)) return;
+    setDeletingId(j.id); setError('');
+    try {
+      await apiFetch('/finance/jobs/' + j.id, { method: 'DELETE' });
+      setJobs(prev => prev.filter(x => x.id !== j.id));
+    } catch (e) { setError(e.message); }
+    finally { setDeletingId(''); }
   };
 
   const visible = useMemo(() => {
@@ -235,12 +247,16 @@ function Inner() {
             const fig = stageFigure(j, fmt0);
             const needsAttention = num(j.overdue_count) > 0;
             return (
-              <button key={j.id} onClick={() => nav('/jobs/' + j.id)} style={{
-                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+              <div key={j.id} role="button" tabIndex={0}
+                onClick={() => nav('/jobs/' + j.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav('/jobs/' + j.id); } }}
+                style={{
+                width: '100%', textAlign: 'left', cursor: 'pointer',
                 background: t.card, color: t.text,
                 border: '1px solid ' + (needsAttention ? (t.danger + '66') : t.border),
                 boxShadow: needsAttention ? '0 4px 14px ' + t.danger + '22' : t.shadowSm,
                 borderRadius: 14, padding: '14px 16px',
+                opacity: deletingId === j.id ? 0.5 : 1,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
@@ -249,10 +265,25 @@ function Inner() {
                     </div>
                     {j.location && <div style={{ color: t.textMuted, fontSize: 13, marginTop: 2 }}>{j.location}</div>}
                   </div>
-                  <span style={{
-                    background: sc.bg, color: sc.fg, padding: '4px 10px', borderRadius: 999,
-                    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
-                  }}>{stage.label}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <span style={{
+                      background: sc.bg, color: sc.fg, padding: '4px 10px', borderRadius: 999,
+                      fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                    }}>{stage.label}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteJob(j); }}
+                      disabled={deletingId === j.id}
+                      aria-label={'Delete ' + (j.name || 'job')}
+                      title="Delete job"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 36, height: 36, flexShrink: 0,
+                        background: 'transparent', border: '1px solid ' + t.border, borderRadius: 9,
+                        color: t.textMuted, cursor: deletingId === j.id ? 'default' : 'pointer',
+                      }}>
+                      <TrashIcon size={16} />
+                    </button>
+                  </div>
                 </div>
                 {fig.label && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10 }}>
@@ -265,7 +296,7 @@ function Inner() {
                     {num(j.overdue_count) === 1 ? 'An invoice is overdue' : j.overdue_count + ' invoices are overdue'} — open the job to chase it
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
