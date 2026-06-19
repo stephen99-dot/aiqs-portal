@@ -104,7 +104,7 @@ function Inner() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
 
   return (
-    <div style={{ padding: 24, color: t.text }}>
+    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 760, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26 }}>Documents <HelpTip t={t} title="Documents" text={"Branded paperwork from fill-in templates — contract, terms, scope of work, payment terms, RAMS, letters.\n\nOr just say what letter you need ('polite letter about the two-week delay') and read the draft before you do anything with it."} /></h1>
@@ -186,9 +186,9 @@ function Inner() {
           {documents.map(d => (
             <div key={d.id} style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '14px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                <div style={{ minWidth: 0 }}>
-                  <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ color: t.text, textDecoration: 'none', fontWeight: 700, fontSize: 15 }}>{d.title}</a>
-                  <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents/' + d.id); }} style={{ display: 'block', color: t.text, textDecoration: 'none', fontWeight: 700, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</a>
+                  <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {(d.template_label || d.template_id)}{d.job_name ? ' · ' + d.job_name : ''} · {(d.updated_at || d.created_at || '').slice(0, 10)}
                   </div>
                 </div>

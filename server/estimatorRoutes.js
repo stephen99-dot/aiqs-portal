@@ -33,6 +33,7 @@ const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 const { streamQuotePdf } = require('./quotePdf');
+const { computeFinancials } = require('./lib/money');
 const mailer = require('./mailer');
 
 const router = express.Router();
@@ -97,6 +98,8 @@ function getUserDisplay(userId) {
 }
 
 // Compute totals from a list of lines + percentages. Pure function.
+// The financial cascade lives in ./lib/money (unit-tested); this wrapper sets
+// each line_total and threads the percentages back through for storage.
 function computeTotals(lines, opts) {
   const ohpPct = num(opts.ohp_pct);
   const contPct = num(opts.contingency_pct);
@@ -105,29 +108,15 @@ function computeTotals(lines, opts) {
 
   let net = 0;
   for (const ln of lines) {
-    const qty = num(ln.qty);
-    const rate = num(ln.rate);
-    const lt = qty * rate;
-    ln.line_total = Math.round(lt * 100) / 100;
+    const lt = num(ln.qty) * num(ln.rate);
+    ln.line_total = round2(lt);
     net += lt;
   }
 
-  const ohp = net * (ohpPct / 100);
-  const cont = (net + ohp) * (contPct / 100);
-  const beforeVat = net + ohp + cont;
-  const vat = beforeVat * (vatPct / 100);
-  const grand = beforeVat + vat;
-
-  // Margin: OH&P is the "profit" component. Margin % = OH&P / (net + OH&P).
-  const margin = (net + ohp) > 0 ? (ohp / (net + ohp)) * 100 : 0;
+  const fin = computeFinancials(net, { ohp_pct: ohpPct, contingency_pct: contPct, vat_pct: vatPct });
 
   return {
-    net_total: round2(net),
-    ohp_amount: round2(ohp),
-    contingency_amount: round2(cont),
-    vat_amount: round2(vat),
-    grand_total: round2(grand),
-    margin_pct: round2(margin),
+    ...fin,
     ohp_pct: ohpPct,
     contingency_pct: contPct,
     vat_pct: vatPct,
