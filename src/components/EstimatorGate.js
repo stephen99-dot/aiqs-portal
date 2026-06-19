@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import { OFFICE_PAYMENT_LINK, withUserRef } from '../utils/stripeLinks';
 import { ZapIcon } from './Icons';
 
 // Office in a Box is a paid add-on, gated purely by has_estimator. This wrapper
@@ -12,21 +14,30 @@ import { ZapIcon } from './Icons';
 export default function EstimatorGate({ children }) {
   const { t } = useTheme();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [phase, setPhase] = useState('checking'); // checking | ready | not_enabled
 
   const verify = useCallback(async () => {
     try {
       await apiFetch('/estimator/stats');
       setPhase('ready');
+      return;
     } catch (e) {
-      // Only an inactive add-on blocks the page; anything else (a transient
-      // error) lets the wrapped page render and surface its own message.
-      if (e.data && e.data.code === 'ESTIMATOR_DISABLED') setPhase('not_enabled');
-      else setPhase('ready');
+      if (!(e.data && e.data.code === 'ESTIMATOR_DISABLED')) { setPhase('ready'); return; }
     }
+    // Disabled — but they may have just paid. Verify with Stripe before blocking.
+    try {
+      const r = await apiFetch('/office/verify', { method: 'POST' });
+      if (r && r.activated) { setPhase('ready'); return; }
+    } catch (e) { /* fall through to the upsell */ }
+    setPhase('not_enabled');
   }, []);
 
   useEffect(() => { verify(); }, [verify]);
+
+  function startTrial() {
+    window.location.href = withUserRef(OFFICE_PAYMENT_LINK, user);
+  }
 
   if (phase === 'ready') return children;
 
@@ -50,7 +61,7 @@ export default function EstimatorGate({ children }) {
         trial and it switches on straight away — no charge today.
       </p>
       <button
-        onClick={() => navigate('/office-in-a-box')}
+        onClick={startTrial}
         style={{
           width: '100%', minHeight: 48, borderRadius: 10, border: 'none',
           background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#0A0F1C',

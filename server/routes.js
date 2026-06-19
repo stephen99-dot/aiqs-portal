@@ -263,6 +263,47 @@ router.post('/office-in-a-box/interest', authMiddleware, async (req, res) => {
   }
 });
 
+// Verify the logged-in user's Office in a Box subscription straight from Stripe
+// and switch on access (has_estimator) if they have an active or trialing one.
+// This is the reliable path: it doesn't wait on the async webhook, so a buyer
+// returning from checkout is activated immediately. Safe to call repeatedly.
+router.post('/office/verify', authMiddleware, async (req, res) => {
+  try {
+    const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+    if (!STRIPE_SECRET) return res.status(500).json({ error: 'Stripe not configured' });
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.has_estimator) return res.json({ activated: true });
+
+    const stripe = require('stripe')(STRIPE_SECRET);
+    const officeIds = (process.env.STRIPE_OFFICE_PRICE_IDS || process.env.STRIPE_OFFICE_PRICE_ID || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const isOffice = (sub) => {
+      const price = sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price;
+      if (!price) return false;
+      return officeIds.length ? officeIds.includes(price.id) : price.unit_amount === 10000;
+    };
+
+    // A user may have more than one Stripe customer record under their email.
+    const customers = await stripe.customers.list({ email: user.email, limit: 5 });
+    for (const customer of customers.data) {
+      const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
+      for (const sub of subs.data) {
+        if (!['active', 'trialing', 'past_due'].includes(sub.status)) continue;
+        if (!isOffice(sub)) continue;
+        db.prepare('UPDATE users SET has_estimator = 1, office_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(sub.id, user.id);
+        logActivity({ event_type: 'estimator_toggled', title: (user.full_name || user.email) + ' — Office in a Box activated (Stripe verify)', user_id: user.id, user_name: user.full_name, user_email: user.email });
+        return res.json({ activated: true });
+      }
+    }
+    res.json({ activated: false });
+  } catch (err) {
+    console.error('Office verify error:', err);
+    res.status(500).json({ error: 'Could not verify subscription' });
+  }
+});
+
 // ── File Upload Config ────────────────────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
