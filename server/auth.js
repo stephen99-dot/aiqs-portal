@@ -1,7 +1,20 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('./database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+// Never sign production tokens with a publicly-known secret. If JWT_SECRET is
+// unset in production we fall back to a strong random per-boot secret (and warn
+// loudly) — sessions reset on restart, but tokens can't be forged. In dev a
+// stable secret keeps you logged in across restarts.
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    JWT_SECRET = crypto.randomBytes(32).toString('hex');
+    console.error('[auth] WARNING: JWT_SECRET is not set. Using a random secret for this process — set JWT_SECRET in the environment so sessions persist across restarts.');
+  } else {
+    JWT_SECRET = 'dev-secret-change-in-production';
+  }
+}
 
 function generateToken(user) {
   return jwt.sign(
