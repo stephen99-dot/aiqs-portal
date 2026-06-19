@@ -333,6 +333,47 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .demo-input-bar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; margin-top: 14px; border-radius: 10px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); }
 .demo-input-bar input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-body); font-size: 12.5px; }
 .demo-input-bar input::placeholder { color: var(--text-muted); }
+.demo-est { flex: 1; display: flex; flex-direction: column; padding: 18px; overflow: hidden; }
+.demo-screen { display: flex; flex-direction: column; flex: 1; min-height: 0; opacity: 0; transform: translateY(10px); }
+.demo-screen.in { opacity: 1; transform: translateY(0); transition: opacity .45s ease, transform .45s ease; }
+.demo-est-h1 { font-family: var(--font-display); font-size: 18px; margin-bottom: 3px; }
+.demo-est-sub { font-size: 11.5px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.5; }
+.demo-field { background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px; min-height: 84px; }
+.demo-field-text { font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); }
+.demo-field-text .ph { color: var(--text-muted); }
+.demo-caret { display: inline-block; width: 2px; height: 13px; background: var(--accent); margin-left: 1px; vertical-align: -2px; animation: demoCaret 0.9s steps(1) infinite; }
+@keyframes demoCaret { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+.demo-est-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.demo-speak { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; border-radius: 9px; font-size: 11.5px; font-weight: 600; border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); }
+.demo-speak svg { width: 13px; height: 13px; }
+.demo-speak.live { border-color: var(--accent); color: var(--accent); background: rgba(245,158,11,0.08); }
+.demo-speak.live .demo-voice-wave span { background: var(--accent); }
+.demo-price { margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; border-radius: 10px; border: none; background: var(--gradient-amber); color: var(--bg-primary); font-size: 13px; font-weight: 700; font-family: var(--font-body); }
+.demo-price.busy { opacity: 0.9; }
+.demo-price-note { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 9px; }
+.demo-mini-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(10,15,28,0.3); border-top-color: #0A0F1C; animation: demoSpin 0.7s linear infinite; }
+@keyframes demoSpin { to { transform: rotate(360deg); } }
+.demo-q { border-radius: 9px; overflow: hidden; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 10px; }
+.demo-q-hdr, .demo-q-row { display: grid; grid-template-columns: 1.9fr 0.5fr 0.5fr 0.8fr; padding: 5px 10px; gap: 4px; }
+.demo-q-hdr { background: #1B2A4A; color: rgba(255,255,255,0.85); font-weight: 600; }
+.demo-q-row { background: var(--bg-card); border-bottom: 1px solid rgba(255,255,255,0.02); color: var(--text-muted); }
+.demo-q-row .r { text-align: right; }
+.demo-q-row .amt { color: var(--text-secondary); }
+.demo-buildup { margin-top: 8px; font-family: var(--font-mono); font-size: 10.5px; }
+.demo-buildup div { display: flex; justify-content: space-between; padding: 3px 2px; color: var(--text-muted); }
+.demo-buildup div.grand { color: var(--accent); font-weight: 700; border-top: 1px solid var(--accent); margin-top: 4px; padding-top: 6px; font-size: 12px; }
+.demo-q-actions { display: flex; gap: 8px; margin-top: 12px; }
+.demo-qbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 14px; border-radius: 9px; font-size: 11.5px; font-weight: 700; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); }
+.demo-qbtn.send { border: none; background: var(--gradient-amber); color: var(--bg-primary); flex: 1; }
+.demo-qbtn.send svg { width: 13px; height: 13px; }
+.demo-link { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 12px; border-radius: 9px; background: rgba(37,211,102,0.06); border: 1px solid rgba(37,211,102,0.18); font-family: var(--font-mono); font-size: 10px; color: #25D366; }
+.demo-link svg { flex-shrink: 0; }
+.demo-accepted { margin-top: 4px; padding: 14px; border-radius: 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); }
+.demo-accepted .row { display: flex; align-items: center; gap: 9px; }
+.demo-accepted .tick { width: 30px; height: 30px; border-radius: 50%; background: rgba(16,185,129,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.demo-accepted .ttl { font-size: 12.5px; font-weight: 700; color: var(--text-primary); }
+.demo-accepted .sub { font-size: 11px; color: var(--text-secondary); }
+.demo-sign { margin-top: 10px; font-family: 'DM Serif Display', Georgia, serif; font-style: italic; font-size: 18px; color: var(--text-primary); border-top: 1px dashed var(--border); padding-top: 8px; }
 .demo-send { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .demo-send svg { width: 14px; height: 14px; color: var(--bg-primary); }
 .demo-steps { display: flex; justify-content: center; margin-top: 48px; position: relative; }
@@ -547,21 +588,9 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 <nav class="nav" id="nav">
   <div class="nav-inner">
     <a href="#" class="nav-logo" aria-label="Office in a Box Home">
-      <svg class="logo-svg" width="200" height="36" viewBox="0 0 300 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="nav-mark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#F59E0B"/></linearGradient>
-          <filter id="nav-glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <clipPath id="nav-clip"><rect width="48" height="48" rx="12"/></clipPath>
-        </defs>
-        <g clip-path="url(#nav-clip)" filter="url(#nav-glow)">
-          <rect width="48" height="48" rx="12" fill="url(#nav-mark)"/>
-          <rect x="1" y="1" width="46" height="46" rx="11" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-          <path d="M11 18 L24 12 L37 18 L37 34 L24 40 L11 34 Z" fill="none" stroke="#0A0F1C" stroke-width="2.2" stroke-linejoin="round"/>
-          <path d="M11 18 L24 24 L37 18 M24 24 L24 40" stroke="#0A0F1C" stroke-width="2.2" stroke-linejoin="round" fill="none"/>
-        </g>
-        <text x="60" y="24" font-family="Georgia, 'DM Serif Display', serif" font-size="22" font-weight="700" fill="#F8FAFC" letter-spacing="-0.4">Office</text>
-        <text x="135" y="24" font-family="Georgia, 'DM Serif Display', serif" font-size="22" font-weight="700" fill="#FBBF24" font-style="italic" letter-spacing="-0.3">in a Box</text>
-        <text x="60" y="42" font-family="'Courier New', monospace" font-size="9.5" fill="#F59E0B" font-weight="700" letter-spacing="1.8">BY AI QS &#183; FOR THE TRADES</text>
+      <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
+        <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+        <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
       </svg>
     </a>
     <div class="nav-links" id="navLinks">
@@ -673,28 +702,21 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
         <div class="demo-body">
           <div class="demo-sidebar">
             <div class="demo-sidebar-brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8" stroke-linejoin="round"/></svg> Office in a Box</div>
-            <div class="demo-nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Speak a Job</div>
-            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Quotes</div>
-            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Invoices &amp; Pay</div>
+            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Today</div>
+            <div class="demo-nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Quotes</div>
             <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg> Jobs</div>
-            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z"/></svg> CIS &amp; VAT</div>
+            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Money</div>
+            <div class="demo-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.5-2.5z"/></svg> Tools</div>
           </div>
-          <div class="demo-chat">
-            <div class="demo-messages" id="demoMessages"></div>
-            <div class="demo-input-bar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4"/></svg>
-              <input type="text" placeholder="Tap the mic and say the job, or type it..." id="demoInput" readonly>
-              <div class="demo-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
-            </div>
-          </div>
+          <div class="demo-est" id="demoEstimator"></div>
         </div>
       </div>
       <div class="demo-steps" id="demoSteps">
         <div class="demo-connector c1" id="dConn1"></div>
         <div class="demo-connector c2" id="dConn2"></div>
-        <div class="demo-step" id="dStep1"><div class="demo-step-num">1</div><div class="demo-step-label">Speak the Job</div><div class="demo-step-desc">Out loud or in plain English</div></div>
-        <div class="demo-step" id="dStep2"><div class="demo-step-num">2</div><div class="demo-step-label">Quote Built</div><div class="demo-step-desc">Priced on your own rates</div></div>
-        <div class="demo-step" id="dStep3"><div class="demo-step-num">3</div><div class="demo-step-label">Sent &amp; Paid</div><div class="demo-step-desc">WhatsApp &#8594; accepted &#8594; paid</div></div>
+        <div class="demo-step" id="dStep1"><div class="demo-step-num">1</div><div class="demo-step-label">Describe the Job</div><div class="demo-step-desc">Type it or speak it</div></div>
+        <div class="demo-step" id="dStep2"><div class="demo-step-num">2</div><div class="demo-step-label">Price the Job</div><div class="demo-step-desc">Your rates &#183; ~15 seconds</div></div>
+        <div class="demo-step" id="dStep3"><div class="demo-step-num">3</div><div class="demo-step-label">Send &amp; Accepted</div><div class="demo-step-desc">Signed on their phone</div></div>
       </div>
     </div>
   </div>
@@ -857,21 +879,9 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
     <div class="footer-inner">
       <div class="footer-brand">
         <a href="#" class="nav-logo" aria-label="Office in a Box Home">
-          <svg class="logo-svg" width="200" height="36" viewBox="0 0 300 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="ft-mark" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#F59E0B"/></linearGradient>
-              <filter id="ft-glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-              <clipPath id="ft-clip"><rect width="48" height="48" rx="12"/></clipPath>
-            </defs>
-            <g clip-path="url(#ft-clip)" filter="url(#ft-glow)">
-              <rect width="48" height="48" rx="12" fill="url(#ft-mark)"/>
-              <rect x="1" y="1" width="46" height="46" rx="11" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-              <path d="M11 18 L24 12 L37 18 L37 34 L24 40 L11 34 Z" fill="none" stroke="#0A0F1C" stroke-width="2.2" stroke-linejoin="round"/>
-              <path d="M11 18 L24 24 L37 18 M24 24 L24 40" stroke="#0A0F1C" stroke-width="2.2" stroke-linejoin="round" fill="none"/>
-            </g>
-            <text x="60" y="24" font-family="Georgia, 'DM Serif Display', serif" font-size="22" font-weight="700" fill="#F8FAFC" letter-spacing="-0.4">Office</text>
-            <text x="135" y="24" font-family="Georgia, 'DM Serif Display', serif" font-size="22" font-weight="700" fill="#FBBF24" font-style="italic" letter-spacing="-0.3">in a Box</text>
-            <text x="60" y="42" font-family="'Courier New', monospace" font-size="9.5" fill="#F59E0B" font-weight="700" letter-spacing="1.8">BY AI QS &#183; FOR THE TRADES</text>
+          <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
+            <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+            <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
           </svg>
         </a>
         <p>The whole office for builders and tradespeople, in one tab. Speak a job, send a quote, get paid -- with CIS and VAT handled. By AI QS.</p>
@@ -1048,11 +1058,16 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// ANIMATED DEMO — speak a job → quote built → sent & paid
+// ANIMATED DEMO — the real estimator flow: describe the job → Price the job → Send the quote → accepted & signed on the client's phone
 (function() {
-  var chat = document.getElementById('demoMessages'); var inputEl = document.getElementById('demoInput');
-  if (!chat || !inputEl) return;
-  var started = false, stageVisible = false, pendingRestart = false;
+  var est = document.getElementById('demoEstimator');
+  if (!est) return;
+  var started = false, stageVisible = false, pendingRestart = false, runId = 0;
+  var WA = 'M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.99.59 3.84 1.6 5.4L2 22l4.8-1.26a9.9 9.9 0 005.24 1.5h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2z';
+  var MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4"/></svg> Speak the job';
+  var DESC = "Kitchen extension on the back, 5 by 4, brick and block, pitched tiled roof, new kitchen fitted, plumbing and sparks, decorated through.";
+  var PLACEHOLDER = "Describe the job like you’d tell your mate — e.g. Kitchen extension on the back, 5 by 4, brick and block, pitched tiled roof…";
+
   var stageObs = new IntersectionObserver(function(entries) {
     entries.forEach(function(e) { stageVisible = e.isIntersecting;
       if (e.isIntersecting) { e.target.classList.add('visible');
@@ -1060,54 +1075,90 @@ document.addEventListener('click', function(e) {
         else if (pendingRestart) { pendingRestart = false; if (!OIAB_REDUCE_MOTION) runDemo(); } } }); }, { threshold: 0.2 });
   stageObs.observe(document.getElementById('demoStage'));
   document.addEventListener('visibilitychange', function() { if (!document.hidden && stageVisible && pendingRestart) { pendingRestart = false; if (!OIAB_REDUCE_MOTION) runDemo(); } });
+
   function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
-  function addMsg(type, html) {
-    var msg = document.createElement('div'); msg.className = 'demo-msg ' + type;
-    var av = document.createElement('div'); av.className = 'demo-avatar'; av.textContent = type === 'user' ? 'You' : 'OB';
-    var bub = document.createElement('div'); bub.className = 'demo-bubble'; bub.innerHTML = html;
-    msg.appendChild(av); msg.appendChild(bub); chat.appendChild(msg);
-    requestAnimationFrame(function() { msg.style.transition = 'opacity 0.5s ease, transform 0.5s ease'; msg.style.opacity = '1'; msg.style.transform = 'translateY(0)'; });
-    chat.scrollTop = chat.scrollHeight; return msg; }
-  function addTyping() {
-    var msg = document.createElement('div'); msg.className = 'demo-msg ai'; msg.id = 'demoTyping';
-    msg.innerHTML = '<div class="demo-avatar">OB</div><div class="demo-bubble"><div class="demo-typing"><div class="demo-typing-dot"></div><div class="demo-typing-dot"></div><div class="demo-typing-dot"></div></div></div>';
-    msg.style.opacity = '0'; msg.style.transform = 'translateY(16px)'; chat.appendChild(msg);
-    requestAnimationFrame(function() { msg.style.transition = 'opacity 0.4s ease, transform 0.4s ease'; msg.style.opacity = '1'; msg.style.transform = 'translateY(0)'; });
-    chat.scrollTop = chat.scrollHeight; }
-  function removeTyping() { var el = document.getElementById('demoTyping'); if (el) el.remove(); }
-  function typeInput(text) { return new Promise(function(resolve) { inputEl.value = ''; var i = 0;
-    var iv = setInterval(function() { if (i < text.length) { inputEl.value += text[i]; i++; }
-      else { clearInterval(iv); setTimeout(function() { inputEl.value = ''; resolve(); }, 300); } }, 35); }); }
-  function markStep(n) { document.getElementById('dStep' + n).classList.add('done');
-    if (n > 1) document.getElementById('dConn' + (n - 1)).classList.add('done'); }
-  function resetSteps() { [1,2,3].forEach(function(n) { document.getElementById('dStep' + n).classList.remove('done'); });
-    [1,2].forEach(function(n) { document.getElementById('dConn' + n).classList.remove('done'); }); }
-  var quoteHTML = '<div class="demo-quote"><div class="demo-quote-hdr"><span>Quote &#183; 5m x 4m rear extension</span><span>Total</span></div>'
-    + '<div class="demo-quote-row"><span>Groundworks &amp; foundations <span class="demo-rbadge v">Your rate</span></span><span>£6,400</span></div>'
-    + '<div class="demo-quote-row"><span>Brickwork &amp; blockwork</span><span>£5,150</span></div>'
-    + '<div class="demo-quote-row"><span>Flat roof &amp; lantern</span><span>£3,200</span></div>'
-    + '<div class="demo-quote-row"><span>First fix &amp; plastering <span class="demo-rbadge g">Guide</span></span><span>£2,950</span></div>'
-    + '<div class="demo-quote-row sub"><span>Total (excl. VAT)</span><span>£17,700</span></div></div>';
-  var sendHTML = '<div class="demo-dl"><div class="demo-dl-btn wa"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.99.59 3.84 1.6 5.4L2 22l4.8-1.26a9.9 9.9 0 005.24 1.5h.01c5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2z"/></svg> Send by WhatsApp</div>'
-    + '<div class="demo-dl-btn pay"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Take deposit</div></div>';
-  async function runDemo() { chat.innerHTML = ''; resetSteps(); await sleep(800);
-    addMsg('user', 'Five by four metre rear extension on a semi in Leeds — cavity walls, flat roof with a lantern, full first fix. Customer’s Dave Patel.'
-      + '<div class="demo-voice"><div class="demo-voice-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>'
-      + '<div class="demo-voice-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div><span class="demo-voice-time">0:09</span></div>');
-    markStep(1); await sleep(1500);
-    addTyping(); markStep(2); await sleep(2800); removeTyping();
-    addMsg('ai', 'Got it — 5m x 4m rear extension, cavity walls, flat roof with lantern, full first fix, for Dave Patel.'
-      + '<br><br>I’ve priced it on your rates where I have them and used guide rates for the rest. Here’s the quote:'
-      + quoteHTML
-      + '<br>That’s <strong style="color:var(--accent)">£17,700 excl. VAT</strong>, branded with your logo and ready to send.');
-    await sleep(2400);
-    await typeInput('Send it to Dave and take a 25% deposit'); addMsg('user', 'Send it to Dave and take a 25% deposit'); await sleep(900);
-    addTyping(); await sleep(2200); removeTyping(); markStep(3);
-    addMsg('ai', 'Sent to Dave on WhatsApp with a deposit request for <strong>£4,425</strong>. He can accept and sign on his phone, then pay the deposit on the spot.'
-      + '<br><br>Once it’s accepted I’ll raise the invoice, log the CIS split, and start the reminders for you — nothing left for you to chase.' + sendHTML);
-    await sleep(8500);
-    if (OIAB_REDUCE_MOTION) return;
-    if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; } }
+  function markStep(n) { var s = document.getElementById('dStep' + n); if (s) s.classList.add('done');
+    if (n > 1) { var c = document.getElementById('dConn' + (n - 1)); if (c) c.classList.add('done'); } }
+  function resetSteps() { [1,2,3].forEach(function(n) { var s = document.getElementById('dStep' + n); if (s) s.classList.remove('done'); });
+    [1,2].forEach(function(n) { var c = document.getElementById('dConn' + n); if (c) c.classList.remove('done'); }); }
+  function show(html) { est.innerHTML = '<div class="demo-screen">' + html + '</div>';
+    var sc = est.firstChild; requestAnimationFrame(function() { sc.classList.add('in'); }); return sc; }
+  function typeNode(node, text, myId) { return new Promise(function(resolve) { var i = 0;
+    (function step() { if (myId !== runId || !node) { resolve(); return; }
+      node.innerHTML = text.slice(0, i) + '<span class="demo-caret"></span>';
+      if (i++ < text.length) setTimeout(step, 26); else resolve(); })(); }); }
+
+  function describeHTML(live) {
+    return '<div class="demo-est-h1">New quote</div>'
+      + '<div class="demo-est-sub">Describe the job — out loud with the mic, or typed — and a priced quote comes back in seconds, built on your own rates.</div>'
+      + '<div class="demo-field"><div class="demo-field-text" id="demoField"><span class="ph">' + PLACEHOLDER + '</span></div></div>'
+      + '<div class="demo-est-actions"><span class="demo-speak' + (live ? ' live' : '') + '" id="demoSpeak">'
+      + (live ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Listening — tap when done <span class="demo-voice-wave"><span></span><span></span><span></span><span></span><span></span></span>' : MIC)
+      + '</span></div>'
+      + '<button class="demo-price" id="demoPrice">Price the job</button>';
+  }
+
+  function row(item, badge, cls, qty, unit, amt) {
+    var b = badge ? ' <span class="demo-rbadge ' + cls + '">' + badge + '</span>' : '';
+    return '<div class="demo-q-row"><span>' + item + b + '</span><span class="r">' + qty + '</span><span class="r">' + unit + '</span><span class="r amt">£' + amt + '</span></div>';
+  }
+  function quoteHTML() {
+    return '<div class="demo-est-h1">Your priced quote</div>'
+      + '<div class="demo-est-sub">Built on your rates where they fit; AI-guessed where they don’t. Every line stays editable — change anything, then save and send.</div>'
+      + '<div class="demo-q"><div class="demo-q-hdr"><span>Item</span><span class="r">Qty</span><span class="r">Unit</span><span class="r">£</span></div>'
+      + row('Foundations &amp; groundwork', 'Your rate', 'v', '20', 'm', '6,400')
+      + row('Cavity walls, brick &amp; block', 'Your rate', 'v', '42', 'm²', '5,150')
+      + row('Pitched roof, tiled', '', '', '24', 'm²', '4,200')
+      + row('Kitchen — supply &amp; fit', 'AI guess', 'g', '1', 'sum', '8,500')
+      + row('Plumbing &amp; electrics', '', '', '1', 'sum', '4,600')
+      + row('Plaster &amp; decoration', 'AI guess', 'g', '1', 'sum', '3,950')
+      + '</div>'
+      + '<div class="demo-buildup">'
+      + '<div><span>Net</span><span>£32,800</span></div>'
+      + '<div><span>Overheads &amp; profit (12%)</span><span>£3,936</span></div>'
+      + '<div><span>Contingency (5%)</span><span>£1,837</span></div>'
+      + '<div><span>VAT (20%)</span><span>£7,715</span></div>'
+      + '<div class="grand"><span>Total</span><span>£46,288</span></div>'
+      + '</div>'
+      + '<div class="demo-q-actions"><span class="demo-qbtn">Save quote</span>'
+      + '<span class="demo-qbtn send" id="demoSend"><svg viewBox="0 0 24 24" fill="currentColor"><path d="' + WA + '"/></svg> Send the quote</span></div>';
+  }
+  function acceptedHTML() {
+    return '<div class="demo-est-h1">Quote accepted</div>'
+      + '<div class="demo-est-sub">Dave opened the link on his phone and accepted it — no printing, no posting. You saw it the moment it happened.</div>'
+      + '<div class="demo-accepted"><div class="row"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></span>'
+      + '<div><div class="ttl">Accepted &amp; signed — £46,288</div><div class="sub">Kitchen extension · accepted on phone, 7:42pm</div></div></div>'
+      + '<div class="demo-sign">D. Patel</div></div>'
+      + '<div class="demo-q-actions"><span class="demo-qbtn">Turn into a job</span><span class="demo-qbtn send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Raise deposit invoice</span></div>';
+  }
+
+  async function runDemo() {
+    var myId = ++runId; resetSteps();
+    // Step 1 — describe the job (dictation into the box)
+    var sc = show(describeHTML(true));
+    var field = document.getElementById('demoField');
+    await sleep(750); if (myId !== runId) return;
+    await typeNode(field, DESC, myId); if (myId !== runId) return;
+    var speak = document.getElementById('demoSpeak');
+    if (speak) { speak.classList.remove('live'); speak.innerHTML = MIC; }
+    markStep(1); await sleep(750); if (myId !== runId) return;
+    // Step 2 — Price the job
+    var price = document.getElementById('demoPrice');
+    if (price) { price.classList.add('busy'); price.innerHTML = '<span class="demo-mini-spin"></span> Pricing the job…';
+      price.insertAdjacentHTML('afterend', '<div class="demo-price-note">Usually 10–20 seconds. Your rates are being used where they fit.</div>'); }
+    markStep(2); await sleep(2600); if (myId !== runId) return;
+    show(quoteHTML()); await sleep(3000); if (myId !== runId) return;
+    // Step 3 — Send the quote → link → accepted & signed
+    var send = document.getElementById('demoSend');
+    if (send) send.innerHTML = '<span class="demo-mini-spin"></span> Getting link…';
+    await sleep(1300); if (myId !== runId) return;
+    var screen = est.querySelector('.demo-screen');
+    if (screen) screen.insertAdjacentHTML('beforeend', '<div class="demo-link"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="' + WA + '"/></svg> Sent by WhatsApp · theaiqs.co.uk/q/8fK2 — opening on Dave’s phone…</div>');
+    await sleep(1700); if (myId !== runId) return;
+    markStep(3); show(acceptedHTML()); await sleep(7500);
+    if (OIAB_REDUCE_MOTION || myId !== runId) return;
+    if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; }
+  }
 })();
 </script>
 </body>
