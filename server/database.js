@@ -943,6 +943,10 @@ const migrations = [
   // Wave 6 Stage 2: accumulated slip (working days) used by the schedule
   // assistant to push a task and everything after it back when site work slips.
   { column: 'lag_days', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN lag_days INTEGER DEFAULT 0" },
+  // Builder Pack working state — the in-progress edits (figures, margins,
+  // colour scheme, included/excluded lines) the user makes on the Builder Pack
+  // screen, stored as JSON so they survive leaving and re-opening the screen.
+  { column: 'builder_pack_state', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN builder_pack_state TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

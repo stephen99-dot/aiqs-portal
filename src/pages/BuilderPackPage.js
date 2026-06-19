@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 
@@ -109,6 +109,26 @@ export default function BuilderPackPage() {
         if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
         setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
+        // Restore any previously-saved working state on top of the freshly-parsed
+        // BOQ, so the user picks up exactly where they left off. originalSections
+        // stays the pristine BOQ so "Reset" still returns to the delivered figures.
+        const saved = bd.saved_state;
+        if (saved && typeof saved === 'object') {
+          if (Array.isArray(saved.sections) && saved.sections.length) setSections(saved.sections);
+          if (saved.builder_margin != null) setBuilderMargin(saved.builder_margin);
+          if (saved.materials_markup != null) setMaterialsMarkup(saved.materials_markup);
+          if (saved.default_ohp != null) setDefaultOhp(saved.default_ohp);
+          if (saved.profit != null) setProfit(saved.profit);
+          if (saved.contingency != null) setContingency(saved.contingency);
+          if (saved.vat != null) setVat(saved.vat);
+          if (saved.per_trade_ohp && typeof saved.per_trade_ohp === 'object') setPerTradeOhp(saved.per_trade_ohp);
+          if (saved.prelims_mode) setPrelimsMode(saved.prelims_mode);
+          if (saved.prelims_amount != null) setPrelimsAmount(saved.prelims_amount);
+          if (saved.prelims_pct != null) setPrelimsPct(saved.prelims_pct);
+          if (saved.day_rate_on != null) setDayRateOn(saved.day_rate_on);
+          if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
+          if (saved.rounding != null) setRounding(saved.rounding);
+        }
         if (br && br.branding) {
           setBranding(br.branding);
           // Logo endpoint needs auth — fetch as blob so <img> can render it.
@@ -321,6 +341,85 @@ export default function BuilderPackPage() {
     [sections, originalSections]
   );
 
+  // ─── Persistence ──────────────────────────────────────────────────────────
+  // Everything the user can change on this screen, captured as one object that
+  // is saved to the server so it survives leaving and re-opening the screen.
+  const workingState = useMemo(() => ({
+    v: 1,
+    sections,
+    builder_margin: builderMargin,
+    materials_markup: materialsMarkup,
+    default_ohp: defaultOhp,
+    profit,
+    contingency,
+    vat,
+    per_trade_ohp: perTradeOhp,
+    prelims_mode: prelimsMode,
+    prelims_amount: prelimsAmount,
+    prelims_pct: prelimsPct,
+    day_rate_on: dayRateOn,
+    day_rate: dayRate,
+    rounding,
+  }), [sections, builderMargin, materialsMarkup, defaultOhp, profit, contingency, vat,
+       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding]);
+
+  const workingStateRef = useRef(workingState);
+  workingStateRef.current = workingState;
+  const hydratedRef = useRef(false);      // becomes true once the initial load is captured
+  const lastSavedJsonRef = useRef(null);  // JSON of the last state we persisted
+  const saveTimerRef = useRef(null);
+  const [saveStatus, setSaveStatus] = useState('saved'); // saved | saving | unsaved | error
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+
+  const saveNow = useCallback(async () => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    const snapshot = workingStateRef.current;
+    const json = JSON.stringify(snapshot);
+    if (json === lastSavedJsonRef.current) { setSaveStatus('saved'); return; }
+    try {
+      setSaveStatus('saving');
+      await apiFetch(`/projects/${id}/builder-pack-state`, {
+        method: 'PUT',
+        body: JSON.stringify({ state: snapshot }),
+      });
+      lastSavedJsonRef.current = json;
+      setLastSavedAt(Date.now());
+      setSaveStatus('saved');
+    } catch (e) {
+      setSaveStatus('error');
+    }
+  }, [id]);
+
+  // Capture the loaded state as the baseline once (so we don't immediately
+  // re-save what we just read back), then enable auto-save.
+  useEffect(() => {
+    if (loading || hydratedRef.current) return;
+    hydratedRef.current = true;
+    lastSavedJsonRef.current = JSON.stringify(workingStateRef.current);
+    setSaveStatus('saved');
+  }, [loading]);
+
+  // Debounced auto-save: persist ~1s after the user stops editing, so it "just
+  // saves as you go". The manual Save button (below) flushes immediately.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const json = JSON.stringify(workingState);
+    if (json === lastSavedJsonRef.current) { setSaveStatus('saved'); return; }
+    setSaveStatus('unsaved');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { saveNow(); }, 1000);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [workingState, saveNow]);
+
+  // Warn before leaving the tab/window with unsaved or in-flight changes.
+  useEffect(() => {
+    const handler = (e) => {
+      if (saveStatus === 'unsaved' || saveStatus === 'saving') { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [saveStatus]);
+
   return (
     <div style={{ padding: '20px 24px 60px', maxWidth: 1480, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
@@ -366,6 +465,35 @@ export default function BuilderPackPage() {
           >{t.label}</button>
         ))}
       </div>
+
+      {!loading && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          marginBottom: 14, padding: '10px 14px', borderRadius: 10,
+          background: 'var(--card-bg)', border: '1px solid var(--border)',
+        }}>
+          <button
+            onClick={saveNow}
+            disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+            style={{
+              padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none',
+              cursor: (saveStatus === 'saving' || saveStatus === 'saved') ? 'default' : 'pointer',
+              background: (saveStatus === 'unsaved' || saveStatus === 'error') ? '#10B981' : 'var(--border)',
+              color: (saveStatus === 'unsaved' || saveStatus === 'error') ? '#fff' : 'var(--text-muted)',
+            }}
+          >
+            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Save changes'}
+          </button>
+          <span style={{ fontSize: 12.5, color: saveStatus === 'error' ? '#EF4444' : 'var(--text-muted)' }}>
+            {saveStatus === 'saving' && 'Saving your changes…'}
+            {saveStatus === 'unsaved' && 'Unsaved changes — saving automatically…'}
+            {saveStatus === 'error' && 'Could not save — click Save changes to retry.'}
+            {saveStatus === 'saved' && (lastSavedAt
+              ? 'All changes saved — your figures, colours and exclusions are kept.'
+              : 'Your edits save automatically as you go.')}
+          </span>
+        </div>
+      )}
 
       {error && (
         <div style={{
