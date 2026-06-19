@@ -672,9 +672,12 @@ export default function DashboardPage() {
                     to={`/project/${project.id}`}
                     style={{ flex: 1, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', minWidth: 0 }}
                   >
-                    <div className="project-info">
-                      <div className="project-title">{project.title}</div>
-                      <div className="project-meta">
+                    <div className="project-info" style={{ minWidth: 0, flex: 1 }}>
+                      <div className="project-title" style={{
+                        fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{project.title}</div>
+                      <div className="project-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {project.item_count > 0 && <span>{project.item_count} items</span>}
                         {project.total_value > 0 && (
                           <span style={{ marginLeft: 8 }}>
