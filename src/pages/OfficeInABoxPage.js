@@ -150,7 +150,7 @@ export default function OfficeInABoxPage() {
               border: `1px solid ${amberBorder}`, borderRadius: 999, padding: '5px 13px',
               marginBottom: 18,
             }}>
-              <ClockIcon size={13} color={AMBER_DIM} /> Coming soon · Founder pricing
+              <ClockIcon size={13} color={AMBER_DIM} /> Now live · 7-day free trial
             </span>
             <h1 style={{ margin: '0 0 14px', fontSize: 40, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.05 }}>
               Your whole office,{' '}

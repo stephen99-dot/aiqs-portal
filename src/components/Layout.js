@@ -192,7 +192,7 @@ export default function Layout() {
   // single "Office in a Box" entry that opens the Coming Soon / upsell page.
   const officeNavItem = hasEstimator
     ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
-    : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'Soon' };
+    : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'New' };
 
   // Personalisation pages live behind one Settings group so the main nav
   // stays at five entries: the submit → track → deliver loop plus the add-on.
