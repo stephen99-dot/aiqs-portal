@@ -35,6 +35,19 @@ function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
 }
+function round2(v) {
+  return Math.round((v || 0) * 100) / 100;
+}
+// The per-unit labour/materials rate implied by a parsed line (labour & materials
+// are LINE totals). Used so that changing Qty rescales the line at a fixed rate —
+// the accurate BOQ behaviour (line total = qty × rate).
+function unitRates(it) {
+  const q = num(it.qty);
+  return {
+    unitLabour: it.unitLabour != null ? it.unitLabour : (q > 0 ? num(it.labour) / q : num(it.labour)),
+    unitMaterials: it.unitMaterials != null ? it.unitMaterials : (q > 0 ? num(it.materials) / q : num(it.materials)),
+  };
+}
 
 export default function BuilderPackPage() {
   const { id } = useParams();
@@ -84,7 +97,10 @@ export default function BuilderPackPage() {
         const seeded = (bd.sections || []).map((s) => ({
           number: s.number,
           title: s.title,
-          items: (s.items || []).map((it) => ({ ...it })),
+          items: (s.items || []).map((it) => {
+            const { unitLabour, unitMaterials } = unitRates(it);
+            return { ...it, unitLabour, unitMaterials };
+          }),
         }));
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
@@ -153,7 +169,29 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      sec.items[iIdx] = { ...sec.items[iIdx], ...patch };
+      const cur = sec.items[iIdx];
+      const merged = { ...cur, ...patch };
+      // Keep the maths accurate: a line total = qty × rate.
+      if ('qty' in patch) {
+        // Changing the quantity rescales labour & materials at the line's
+        // existing unit rate, so the nett moves the way a builder expects.
+        const { unitLabour, unitMaterials } = unitRates(cur);
+        const q = num(patch.qty);
+        merged.unitLabour = unitLabour;
+        merged.unitMaterials = unitMaterials;
+        merged.labour = round2(unitLabour * q);
+        merged.materials = round2(unitMaterials * q);
+      }
+      // Editing a money column directly redefines that line's unit rate.
+      if ('labour' in patch) {
+        const q = num(merged.qty);
+        merged.unitLabour = q > 0 ? num(patch.labour) / q : num(patch.labour);
+      }
+      if ('materials' in patch) {
+        const q = num(merged.qty);
+        merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
+      }
+      sec.items[iIdx] = merged;
       next[sIdx] = sec;
       return next;
     });
@@ -177,7 +215,7 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      sec.items.push({ itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0 });
+      sec.items.push({ itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0, unitLabour: 0, unitMaterials: 0 });
       next[sIdx] = sec;
       return next;
     });
@@ -557,7 +595,7 @@ export default function BuilderPackPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Line items (editable)</h2>
                 <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                  Edit description, qty, labour or materials. Rates and totals recompute automatically.
+                  Edit qty, labour or materials — the line total and nett recompute automatically. Changing qty rescales the line at its rate.
                 </span>
               </div>
 
@@ -1061,7 +1099,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
           <div key={s.number + '-' + i} style={{ ...previewRowStyle, gridTemplateColumns: '32px 1fr 80px 110px' }}>
             <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
             <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items</span></div>
-            <div style={moneyCell(accent)}>{s.ohp}%</div>
+            <div style={moneyCell(accent)}>{((num(s.uplift) - 1) * 100).toFixed(1)}%</div>
             <div style={{ ...moneyCell(), fontWeight: 600 }}>{fmt(sym, s.subtotal)}</div>
           </div>
         ))}
