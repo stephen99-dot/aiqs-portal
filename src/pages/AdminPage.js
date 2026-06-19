@@ -170,6 +170,21 @@ function ClientsTab({ t }) {
 
   function handlePlanChange(value) { setEditPlan(value); const p = PLAN_OPTIONS.find(p => p.value === value); if (p) setEditQuota(p.quota); }
 
+  // Inline message-allowance save, straight from the row — no need to open an
+  // edit panel. Keeps the user's current plan, just changes monthly_quota.
+  async function saveQuotaInline(user, value) {
+    const q = parseInt(value);
+    if (isNaN(q) || q === (user.quota || 0)) return;
+    try {
+      const result = await apiFetch('/admin/users/' + user.id + '/plan', {
+        method: 'PUT',
+        body: JSON.stringify({ plan: user.plan || 'starter', monthlyQuota: q }),
+      });
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, quota: result.quota, used: result.used, remaining: result.remaining } : u));
+      showMsg((user.fullName || user.email) + ': messages set to ' + q + '/mo');
+    } catch (err) { alert('Failed to update messages: ' + err.message); }
+  }
+
   const planBadge = (plan) => {
     const s = { starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' }, professional: { bg: t.warningBg, color: t.warning, label: 'Pro' }, premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' }, custom: { bg: t.goldBg, color: t.gold, label: 'Custom' } }[plan] || { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' };
     return <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>;
@@ -276,7 +291,7 @@ function ClientsTab({ t }) {
                       <input type="number" value={editQuota} onChange={e => setEditQuota(e.target.value)} style={{ width: 60, padding: '6px 8px', borderRadius: 6, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, textAlign: 'center' }} /><span style={{ fontSize: 11, color: t.textMuted }}>/mo</span>
                     </div>
                   ) : (
-                    <>{planBadge(user.plan)}{user.quota > 0 ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}><div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}><div style={{ width: pct + '%', height: '100%', borderRadius: 4, background: barColor }} /></div><span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>{user.used}/{user.quota}</span></div> : <span style={{ fontSize: 11, color: t.textMuted }}>{user.used || 0} projects this month</span>}</>
+                    <>{planBadge(user.plan)}<label title="Monthly AI message allowance" style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 11, color: t.textMuted }}>Msgs</span><input type="number" min={0} defaultValue={user.quota || 0} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveQuotaInline(user, e.target.value); e.target.blur(); } }} onBlur={e => saveQuotaInline(user, e.target.value)} style={{ width: 56, padding: '5px 6px', borderRadius: 6, fontSize: 12, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, textAlign: 'center' }} /><span style={{ fontSize: 11, color: t.textMuted }}>/mo</span></label>{user.quota > 0 ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 }}><div style={{ flex: 1, height: 6, borderRadius: 4, background: t.surfaceHover, overflow: 'hidden' }}><div style={{ width: pct + '%', height: '100%', borderRadius: 4, background: barColor }} /></div><span style={{ fontSize: 11, color: t.textMuted, whiteSpace: 'nowrap' }}>{user.used}/{user.quota}</span></div> : <span style={{ fontSize: 11, color: t.textMuted }}>{user.used || 0} projects this month</span>}</>
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
