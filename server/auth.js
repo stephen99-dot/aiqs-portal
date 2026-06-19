@@ -59,26 +59,11 @@ function requireEstimator(req, res, next) {
   next();
 }
 
-// Temporary password lock — applies to everyone, including admins. Set
-// ESTIMATOR_PASSWORD in the environment to turn it on; if it's not set,
-// the estimator is locked entirely (fail safe).
+// Office in a Box is now a paid product gated by has_estimator (see
+// requireEstimator). The old beta password lock is retired: this middleware is
+// kept as a no-op so the routes that reference it keep working, but it no longer
+// asks for ESTIMATOR_PASSWORD or blocks anyone.
 function requireEstimatorPassword(req, res, next) {
-  const expected = process.env.ESTIMATOR_PASSWORD;
-  if (!expected) {
-    return res.status(503).json({
-      error: 'Estimator is temporarily locked. Set ESTIMATOR_PASSWORD on the server to enable it.',
-      code: 'ESTIMATOR_LOCKED',
-    });
-  }
-  const provided = req.headers['x-estimator-key']
-    || (req.query && req.query.estimator_key)
-    || '';
-  if (!provided || !safeEqual(String(provided), String(expected))) {
-    return res.status(403).json({
-      error: 'Estimator password required.',
-      code: 'ESTIMATOR_PASSWORD_REQUIRED',
-    });
-  }
   next();
 }
 
