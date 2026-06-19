@@ -666,11 +666,11 @@ export default function DashboardPage() {
                 <div
                   key={project.id}
                   className="project-row"
-                  style={{ display: 'flex', alignItems: 'center' }}
+                  style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '100%', overflow: 'hidden', gap: 10 }}
                 >
                   <Link
                     to={`/project/${project.id}`}
-                    style={{ flex: 1, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', minWidth: 0 }}
+                    style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
                   >
                     <div className="project-info" style={{ minWidth: 0, flex: 1 }}>
                       <div className="project-title" style={{
@@ -689,7 +689,7 @@ export default function DashboardPage() {
                         )}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {project.deliverableCount > 0 && (
                         <span title="Files from your QS are ready to download" style={{
                           padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700,
