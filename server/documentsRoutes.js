@@ -199,6 +199,97 @@ const LETTER_SYSTEM = `You draft letters for a UK builder to send to their custo
 3. Use ONLY the facts provided. Never invent amounts, dates or names. If a needed detail is missing, leave a clearly marked gap like [DATE].
 4. Sign-off plain (e.g. "Yours sincerely" / "Kind regards"). Do not include the sender name in the body — it is added under the sign-off automatically.`;
 
+// Map a template field to a JSON-schema property for the AI tool.
+function fieldToSchema(f) {
+  const desc = (f.label || f.key) + (f.help ? ' — ' + f.help : '')
+    + (f.type === 'list' ? ' (one item per line)' : '')
+    + (f.type === 'date' ? ' (YYYY-MM-DD)' : '');
+  if (f.type === 'number') return { type: 'number', description: desc };
+  if (f.type === 'checkbox') return { type: 'boolean', description: desc };
+  return { type: 'string', description: desc };
+}
+
+// Coerce an AI-supplied value to the field's type and cap its size.
+function coerceField(f, v) {
+  if (v == null) return undefined;
+  if (f.type === 'number') { const n = parseFloat(v); return Number.isFinite(n) ? n : undefined; }
+  if (f.type === 'checkbox') return !!v;
+  return String(v).slice(0, 8000);
+}
+
+// POST /api/documents/ai-generate  — fill ANY template from a plain-English brief.
+// Body: { template_id, job_id?, prompt }
+router.post('/ai-generate', async (req, res) => {
+  try {
+    const { callModel, MODELS } = require('./anthropicClient');
+    const b = req.body || {};
+    const tpl = TEMPLATE_INDEX[b.template_id];
+    if (!tpl) return res.status(400).json({ error: 'Unknown template.' });
+    const prompt = String(b.prompt || '').trim().slice(0, 2000);
+    if (prompt.length < 5) return res.status(400).json({ error: 'Describe what you need first.' });
+
+    const userId = req.user.id;
+    const branding = getBranding(userId);
+    const user = getUserDisplay(userId);
+    const companyName = branding.company_name || user?.company || user?.full_name || '';
+
+    // Ground the model in real job facts where a job is linked.
+    const facts = ['Builder/company: ' + companyName, 'Today: ' + new Date().toISOString().slice(0, 10)];
+    let job = null;
+    if (b.job_id) {
+      job = db.prepare('SELECT * FROM estimator_jobs WHERE id = ? AND user_id = ?').get(b.job_id, userId);
+      if (job) {
+        facts.push('Job: ' + job.name + (job.client_name ? ' for ' + job.client_name : '') + (job.location ? ' at ' + job.location : ''));
+        const q = db.prepare("SELECT project_name, grand_total FROM quotes WHERE job_id = ? ORDER BY created_at DESC LIMIT 2").all(job.id);
+        for (const x of q) facts.push('Quote: ' + (x.project_name || '') + ' — £' + (x.grand_total || 0));
+      }
+    }
+
+    const properties = {};
+    for (const f of tpl.fields) properties[f.key] = fieldToSchema(f);
+
+    const system = 'You prepare UK building documents for a small builder/contractor. Fill in the fields for a "'
+      + tpl.label + '" document from what the builder describes.\n'
+      + 'Rules:\n'
+      + '- British English, professional, clear and practical.\n'
+      + '- Use ONLY facts the builder gives, the FACTS block, or standard sensible defaults for UK building work. Never invent specific client names, addresses or money amounts that were not provided — leave those blank.\n'
+      + '- Be genuinely useful and specific: real hazards and control measures for RAMS, real inclusions/exclusions for a scope, sensible clauses for a contract.\n'
+      + '- List fields: one item per line. Dates: YYYY-MM-DD, default to today if needed.';
+
+    const result = await callModel({
+      model: MODELS.STANDARD,
+      maxTokens: 2500,
+      temperature: 0.3,
+      system,
+      messages: [{ role: 'user', content: 'What the builder needs:\n' + prompt + '\n\nFACTS:\n' + facts.join('\n') + '\n\nFill in the document now.' }],
+      tools: [{ name: 'fill_document', description: 'Submit the filled-in ' + tpl.label + '.', input_schema: { type: 'object', properties, required: [] } }],
+      toolChoice: { type: 'tool', name: 'fill_document' },
+      userId,
+      action: 'document_ai_generate',
+    });
+    if (!result.ok || !result.json) {
+      return res.status(502).json({ error: 'The AI is temporarily unavailable. Please try again in a moment.' });
+    }
+
+    // Start from template defaults, overlay the AI's values (type-coerced).
+    const fields = { ...defaultsFor(tpl) };
+    for (const f of tpl.fields) {
+      const v = coerceField(f, result.json[f.key]);
+      if (v !== undefined) fields[f.key] = v;
+    }
+
+    const title = (job ? (tpl.label + ' — ' + (job.client_name || job.name)) : tpl.label).slice(0, 200);
+    const id = uuidv4();
+    db.prepare(
+      'INSERT INTO documents (id, user_id, job_id, template_id, title, fields) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(id, userId, job ? job.id : (b.job_id || null), tpl.id, title, JSON.stringify(fields));
+    res.status(201).json({ id });
+  } catch (err) {
+    console.error('[Documents] ai-generate error:', err);
+    res.status(500).json({ error: 'Failed to generate the document.' });
+  }
+});
+
 router.post('/draft', async (req, res) => {
   try {
     const { callModel, MODELS } = require('./anthropicClient');
@@ -458,11 +549,18 @@ function paintFooter(doc, ctx) {
   );
 }
 
+// Add a page before drawing if there isn't room for `needed` points, so content
+// (and signature blocks) never run off the bottom of the page.
+function ensureSpace(doc, needed) {
+  if (doc.y + (needed || 60) > doc.page.height - 50) doc.addPage();
+}
+
 // Section heading bar inside the body.
 function sectionH(doc, text, opts = {}) {
+  ensureSpace(doc, 60);
   const y = doc.y + (opts.gap ?? 10);
   doc.y = y;
-  doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(text, 50, y);
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(text, 50, y, { width: doc.page.width - 100 });
   doc.moveDown(0.4);
   doc.font('Helvetica').fontSize(10).fillColor('#333333');
 }
@@ -470,15 +568,16 @@ function sectionH(doc, text, opts = {}) {
 // Paragraph block helper.
 function para(doc, text) {
   if (!text) return;
-  doc.font('Helvetica').fontSize(10).fillColor('#333333').text(text, { width: doc.page.width - 100 });
+  doc.font('Helvetica').fontSize(10).fillColor('#333333').text(String(text), 50, doc.y, { width: doc.page.width - 100 });
   doc.moveDown(0.3);
 }
 
-// Key-value row: "Label: value".
+// Key-value row: "Label: value". Width-constrained so long values wrap instead
+// of running off the right edge.
 function kvRow(doc, label, value) {
   if (value == null || value === '') return;
   doc.font('Helvetica-Bold').fontSize(10).fillColor('#111111');
-  doc.text(label + ': ', { continued: true });
+  doc.text(label + ': ', 50, doc.y, { continued: true, width: doc.page.width - 100 });
   doc.font('Helvetica').fillColor('#333333').text(String(value));
 }
 
@@ -489,7 +588,8 @@ function bulletList(doc, text) {
   if (items.length === 0) return;
   doc.font('Helvetica').fontSize(10).fillColor('#333333');
   for (const item of items) {
-    doc.text('•  ' + item, { width: doc.page.width - 100, indent: 0 });
+    ensureSpace(doc, 28);
+    doc.text('•  ' + item, 50, doc.y, { width: doc.page.width - 100, indent: 0 });
   }
   doc.moveDown(0.3);
 }
@@ -562,8 +662,8 @@ function renderContract(doc, ctx) {
 }
 
 function signatureLine(doc, role, name) {
-  const startY = doc.y;
-  doc.font('Helvetica').fontSize(10).fillColor('#111111').text(role + ': ' + (name || ''));
+  ensureSpace(doc, 90);
+  doc.font('Helvetica').fontSize(10).fillColor('#111111').text(role + ': ' + (name || ''), 50, doc.y, { width: doc.page.width - 100 });
   doc.moveDown(2);
   const y = doc.y;
   doc.moveTo(50, y).lineTo(280, y).strokeColor('#333333').lineWidth(0.5).stroke();

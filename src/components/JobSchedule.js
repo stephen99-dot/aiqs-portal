@@ -218,6 +218,20 @@ export default function JobSchedule({ t, jobId, quotes }) {
   const behindCount = tasks.filter(x => (Number(x.lag_days) || 0) > 0 || x.status === 'blocked').length;
   const doneCount = tasks.filter(x => x.status === 'done').length;
 
+  // Month ticks across the window — gives the timeline a real date scale.
+  const months = [];
+  if (win.start && win.end) {
+    const p = String(win.start).slice(0, 10).split('-').map(Number);
+    let cur = new Date(Date.UTC(p[0], p[1] - 1, 1));
+    let guard = 0;
+    while (guard++ < 60) {
+      const idx = Math.floor(cur.getTime() / 86400000);
+      if (idx > win1) break;
+      if (idx >= win0) months.push({ pct: ((idx - win0) / span) * 100, label: cur.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }) });
+      cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+    }
+  }
+
   // ── Empty state ──
   if (!plan) {
     return (
@@ -291,6 +305,17 @@ export default function JobSchedule({ t, jobId, quotes }) {
 
       {/* Timeline */}
       <div style={{ overflowX: 'auto' }}>
+        {tasks.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.4fr) 2fr auto', gap: 10, alignItems: 'flex-end', paddingBottom: 6 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3 }}>Task &amp; duration</div>
+            <div style={{ position: 'relative', height: 14 }}>
+              {months.map((m, i) => (
+                <span key={i} style={{ position: 'absolute', left: m.pct + '%', fontSize: 10, color: t.textMuted, whiteSpace: 'nowrap' }}>{m.label}</span>
+              ))}
+            </div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, textAlign: 'right' }}>Status</div>
+          </div>
+        )}
         {tasks.length === 0 ? (
           <div style={{ color: t.textMuted, fontSize: 14, padding: '8px 0' }}>No tasks yet — add one below.</div>
         ) : tasks.map(task => {
@@ -328,15 +353,18 @@ export default function JobSchedule({ t, jobId, quotes }) {
                 </div>
 
                 {/* Bar */}
-                <div style={{ position: 'relative', height: 26, background: t.bg, borderRadius: 6, border: '1px solid ' + t.border }}>
+                <div style={{ position: 'relative', height: 26, background: t.bg, borderRadius: 6, border: '1px solid ' + t.border, overflow: 'hidden' }}>
+                  {months.map((m, i) => (m.pct > 0 && m.pct < 100) && (
+                    <div key={'g' + i} style={{ position: 'absolute', top: 0, bottom: 0, left: m.pct + '%', width: 1, background: t.border, opacity: 0.6 }} />
+                  ))}
                   {bar && (
                     <div title={shortDate(task.planned_start) + ' – ' + shortDate(task.planned_end)} style={{
-                      position: 'absolute', top: 4, bottom: 4, ...bar,
-                      background: barColour(task.status), borderRadius: 4, opacity: 0.9,
+                      position: 'absolute', top: 4, bottom: 4, ...bar, minWidth: 8,
+                      background: barColour(task.status), borderRadius: 4, opacity: 0.92,
                     }} />
                   )}
                   {todayPct != null && (
-                    <div title="Today" style={{ position: 'absolute', top: -2, bottom: -2, left: todayPct + '%', width: 2, background: t.danger, opacity: 0.55 }} />
+                    <div title="Today" style={{ position: 'absolute', top: 0, bottom: 0, left: todayPct + '%', width: 2, background: t.danger, opacity: 0.6 }} />
                   )}
                 </div>
 

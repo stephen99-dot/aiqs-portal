@@ -33,6 +33,7 @@ function Inner() {
   const [draftText, setDraftText] = useState('');
   const [draftJobId, setDraftJobId] = useState('');
   const [drafting, setDrafting] = useState(false);
+  const [draftType, setDraftType] = useState('letter');
 
   const refresh = useCallback(async () => {
     setError('');
@@ -63,10 +64,17 @@ function Inner() {
     if (!draftText.trim() || drafting) return;
     setDrafting(true); setError('');
     try {
-      const r = await apiFetch('/documents/draft', {
-        method: 'POST',
-        body: JSON.stringify({ description: draftText.trim(), job_id: draftJobId || null }),
-      });
+      // Letters have a dedicated drafter; every other template uses the generic
+      // AI filler that populates that template's fields from the description.
+      const r = draftType === 'letter'
+        ? await apiFetch('/documents/draft', {
+            method: 'POST',
+            body: JSON.stringify({ description: draftText.trim(), job_id: draftJobId || null }),
+          })
+        : await apiFetch('/documents/ai-generate', {
+            method: 'POST',
+            body: JSON.stringify({ template_id: draftType, prompt: draftText.trim(), job_id: draftJobId || null }),
+          });
       nav('/documents/' + r.id);
     } catch (e) { setError(e.message); }
     finally { setDrafting(false); }
@@ -111,21 +119,25 @@ function Inner() {
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 
-      {/* C3 — describe what you need, get a letter to review */}
-      <div style={{ background: t.card, border: '1px solid ' + t.accent + '55', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Need a letter? Just say what for</div>
+      {/* Describe what you need — AI fills in any template for you to review */}
+      <div style={{ background: t.card, border: '1px solid ' + t.accent + '55', boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Let AI write it — just say what you need</div>
         <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
-          e.g. "A polite letter to Mrs Patel explaining the job will finish two weeks late because of the steel delay." You'll see the draft before anything goes anywhere.
+          Pick the type, describe the job in your own words, and the AI fills the whole document in. You review and edit everything before it goes anywhere — e.g. "RAMS for stripping a slate roof on a two-storey terrace" or "contract for the Patel kitchen extension, £42k, starting March."
         </div>
         <textarea
           value={draftText}
           onChange={e => setDraftText(e.target.value)}
           rows={2}
-          placeholder="What do you need to say, and to whom?"
+          placeholder="Describe what you need…"
           style={{ width: '100%', boxSizing: 'border-box', minHeight: 64, padding: '10px 12px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 14.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
         />
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <select value={draftJobId} onChange={e => setDraftJobId(e.target.value)} style={{ flex: 1, minWidth: 180, minHeight: 44, padding: '8px 10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 13.5 }}>
+          <select value={draftType} onChange={e => setDraftType(e.target.value)} style={{ minWidth: 150, minHeight: 44, padding: '8px 10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 13.5 }}>
+            <option value="letter">Letter</option>
+            {templates.filter(tp => tp.id !== 'letter').map(tp => <option key={tp.id} value={tp.id}>{tp.label}</option>)}
+          </select>
+          <select value={draftJobId} onChange={e => setDraftJobId(e.target.value)} style={{ flex: 1, minWidth: 160, minHeight: 44, padding: '8px 10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 13.5 }}>
             <option value="">Not about a particular job</option>
             {jobs.map(j => <option key={j.id} value={j.id}>{[j.client_name, j.name].filter(Boolean).join(' — ')}</option>)}
           </select>
@@ -133,7 +145,7 @@ function Inner() {
             minHeight: 44, padding: '0 18px', borderRadius: 10, border: 'none',
             background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
             cursor: 'pointer', opacity: (drafting || !draftText.trim()) ? 0.5 : 1,
-          }}>{drafting ? 'Writing it…' : 'Draft the letter'}</button>
+          }}>{drafting ? 'Writing it…' : 'Generate with AI'}</button>
         </div>
       </div>
 

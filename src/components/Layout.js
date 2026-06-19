@@ -176,6 +176,7 @@ export default function Layout() {
     { path: '/jobs', label: 'Jobs' },
     { path: '/clients', label: 'Clients' },
     { path: '/money', label: 'Money' },
+    { path: '/documents', label: 'Documents' },
     { path: '/tools', label: 'Tools' },
   ];
   // Pages reached from inside the group (quote editor, invoice editor, job
