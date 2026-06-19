@@ -1,19 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { CheckCircleIcon, AlertTriangleIcon, ClockIcon } from '../components/Icons';
 
 export default function PaymentSuccessPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
-  const [status, setStatus] = useState('processing'); // processing, success, error
+  const { refreshUser } = useAuth();
+  const [status, setStatus] = useState('processing'); // processing, success, office, error
   const [project, setProject] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    activateProject();
+    const isOffice = new URLSearchParams(window.location.search).get('office') === '1';
+    if (isOffice) activateOfficeAddon();
+    else activateProject();
   }, []);
+
+  // Office in a Box subscription: the Stripe webhook flips has_estimator on a
+  // moment after payment. Poll /auth/me until it lands, then send them in.
+  async function activateOfficeAddon() {
+    for (let i = 0; i < 12; i++) {
+      const fresh = await refreshUser();
+      if (fresh && fresh.hasEstimator) {
+        setStatus('office');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    // Payment went through but the flag hasn't synced yet — don't alarm them.
+    setStatus('office');
+  }
 
   async function activateProject() {
     try {

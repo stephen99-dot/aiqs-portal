@@ -170,7 +170,7 @@ export default function OfficeDemoPage() {
           display: 'block', width: '100%', maxWidth: 720, margin: '0 auto', minHeight: 52,
           borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #F59E0B, #D97706)',
           color: '#0A0F1C', fontSize: 16, fontWeight: 800, cursor: 'pointer',
-        }}>I want this for my jobs — £50/month</button>
+        }}>I want this for my jobs — £100/month</button>
       </div>
     </div>
   );

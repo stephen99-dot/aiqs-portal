@@ -10,6 +10,13 @@
 //     likely to pay under a different address in the first place.
 //
 // Both are query params Stripe Payment Links natively support.
+// The Office in a Box subscription — £100/month. A Stripe Payment Link; stamp it
+// with withUserRef() before sending the user, so the webhook can match the
+// payment back to this exact account and flip on access. Overridable at build
+// time with REACT_APP_OFFICE_PAYMENT_LINK.
+export const OFFICE_PAYMENT_LINK =
+  process.env.REACT_APP_OFFICE_PAYMENT_LINK || 'https://buy.stripe.com/8x26oHc3CfrWf3adus73G0i';
+
 export function withUserRef(url, user) {
   if (!url || !user) return url;
   try {

@@ -869,6 +869,10 @@ const migrations = [
   { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
   // Estimator add-on capability flag
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
+  // Office in a Box add-on: the Stripe subscription that pays for has_estimator.
+  // Kept separate from stripe_subscription_id (the main BOQ plan) so a user can
+  // hold both without the IDs colliding.
+  { column: 'office_subscription_id', table: 'users', sql: "ALTER TABLE users ADD COLUMN office_subscription_id TEXT" },
   // Wave 2: optional link from a quote to an estimator_job (umbrella for budgets/actuals/variations)
   { column: 'job_id', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN job_id TEXT" },
   // Materials Pricing: store the audit link of a chosen price entry against the BOQ line.
