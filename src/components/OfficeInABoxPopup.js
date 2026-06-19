@@ -192,7 +192,7 @@ export default function OfficeInABoxPopup() {
                 color: AMBER_DIM, background: 'rgba(245,158,11,0.14)',
                 border: `1px solid rgba(245,158,11,0.35)`, borderRadius: 999, padding: '4px 12px',
               }}>
-                New add-on · Coming soon
+                New add-on · 7 days free
               </span>
               <OfficeBoxArt size={210} style={{ marginTop: 4 }} />
             </div>
@@ -242,7 +242,7 @@ export default function OfficeInABoxPopup() {
                   fontSize: 10.5, fontWeight: 700, color: t.success,
                   background: t.successBg, borderRadius: 6, padding: '4px 8px',
                 }}>
-                  Founder pricing
+                  7 days free
                 </span>
               </div>
 
