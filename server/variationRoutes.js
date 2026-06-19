@@ -797,10 +797,69 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       // UI seeds its controls from these so the default export reproduces the
       // delivered bottom line.
       source_summary: parsed.source_summary || null,
+      // Any previously-saved working state (edited figures, margins, colours,
+      // included/excluded lines). When present the UI restores it over the
+      // freshly-parsed BOQ so the user picks up exactly where they left off.
+      saved_state: parseBuilderPackState(project.builder_pack_state),
     });
   } catch (err) {
     console.error('[BuilderPack] breakdown error:', err);
     res.status(500).json({ error: 'Failed to read BOQ: ' + err.message });
+  }
+});
+
+// Safely parse the stored builder-pack JSON; never throw on a corrupt value.
+function parseBuilderPackState(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// GET /api/projects/:projectId/builder-pack-state
+//   → { saved_state: {...} | null }  (lightweight read used on reload)
+router.get('/projects/:projectId/builder-pack-state', authMiddleware, (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json({ saved_state: parseBuilderPackState(project.builder_pack_state) });
+  } catch (err) {
+    console.error('[BuilderPack] state read error:', err);
+    res.status(500).json({ error: 'Failed to read saved Builder Pack' });
+  }
+});
+
+// PUT /api/projects/:projectId/builder-pack-state
+//   body: { state: {...} }  — persists the user's in-progress edits so they
+//   survive leaving the screen. Returns { saved: true, saved_at }.
+router.put('/projects/:projectId/builder-pack-state', authMiddleware, (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    const { state } = req.body || {};
+    if (state == null || typeof state !== 'object') {
+      return res.status(400).json({ error: 'Missing state object' });
+    }
+    let json;
+    try {
+      json = JSON.stringify(state);
+    } catch (err) {
+      return res.status(400).json({ error: 'State is not serialisable' });
+    }
+    // Guard against an unbounded blob — a very large BOQ is still well under this.
+    if (json.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Builder Pack state too large to save' });
+    }
+    const savedAt = new Date().toISOString();
+    db.prepare('UPDATE projects SET builder_pack_state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(json, project.id);
+    res.json({ saved: true, saved_at: savedAt });
+  } catch (err) {
+    console.error('[BuilderPack] state save error:', err);
+    res.status(500).json({ error: 'Failed to save Builder Pack' });
   }
 });
 

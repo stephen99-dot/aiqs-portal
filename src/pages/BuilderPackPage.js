@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 
@@ -34,6 +34,19 @@ function roundMoney(rounding, v) {
 function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
+}
+function round2(v) {
+  return Math.round((v || 0) * 100) / 100;
+}
+// The per-unit labour/materials rate implied by a parsed line (labour & materials
+// are LINE totals). Used so that changing Qty rescales the line at a fixed rate —
+// the accurate BOQ behaviour (line total = qty × rate).
+function unitRates(it) {
+  const q = num(it.qty);
+  return {
+    unitLabour: it.unitLabour != null ? it.unitLabour : (q > 0 ? num(it.labour) / q : num(it.labour)),
+    unitMaterials: it.unitMaterials != null ? it.unitMaterials : (q > 0 ? num(it.materials) / q : num(it.materials)),
+  };
 }
 
 export default function BuilderPackPage() {
@@ -84,7 +97,10 @@ export default function BuilderPackPage() {
         const seeded = (bd.sections || []).map((s) => ({
           number: s.number,
           title: s.title,
-          items: (s.items || []).map((it) => ({ ...it })),
+          items: (s.items || []).map((it) => {
+            const { unitLabour, unitMaterials } = unitRates(it);
+            return { ...it, unitLabour, unitMaterials };
+          }),
         }));
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
@@ -109,6 +125,26 @@ export default function BuilderPackPage() {
         if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
         setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
+        // Restore any previously-saved working state on top of the freshly-parsed
+        // BOQ, so the user picks up exactly where they left off. originalSections
+        // stays the pristine BOQ so "Reset" still returns to the delivered figures.
+        const saved = bd.saved_state;
+        if (saved && typeof saved === 'object') {
+          if (Array.isArray(saved.sections) && saved.sections.length) setSections(saved.sections);
+          if (saved.builder_margin != null) setBuilderMargin(saved.builder_margin);
+          if (saved.materials_markup != null) setMaterialsMarkup(saved.materials_markup);
+          if (saved.default_ohp != null) setDefaultOhp(saved.default_ohp);
+          if (saved.profit != null) setProfit(saved.profit);
+          if (saved.contingency != null) setContingency(saved.contingency);
+          if (saved.vat != null) setVat(saved.vat);
+          if (saved.per_trade_ohp && typeof saved.per_trade_ohp === 'object') setPerTradeOhp(saved.per_trade_ohp);
+          if (saved.prelims_mode) setPrelimsMode(saved.prelims_mode);
+          if (saved.prelims_amount != null) setPrelimsAmount(saved.prelims_amount);
+          if (saved.prelims_pct != null) setPrelimsPct(saved.prelims_pct);
+          if (saved.day_rate_on != null) setDayRateOn(saved.day_rate_on);
+          if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
+          if (saved.rounding != null) setRounding(saved.rounding);
+        }
         if (br && br.branding) {
           setBranding(br.branding);
           // Logo endpoint needs auth — fetch as blob so <img> can render it.
@@ -133,7 +169,29 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      sec.items[iIdx] = { ...sec.items[iIdx], ...patch };
+      const cur = sec.items[iIdx];
+      const merged = { ...cur, ...patch };
+      // Keep the maths accurate: a line total = qty × rate.
+      if ('qty' in patch) {
+        // Changing the quantity rescales labour & materials at the line's
+        // existing unit rate, so the nett moves the way a builder expects.
+        const { unitLabour, unitMaterials } = unitRates(cur);
+        const q = num(patch.qty);
+        merged.unitLabour = unitLabour;
+        merged.unitMaterials = unitMaterials;
+        merged.labour = round2(unitLabour * q);
+        merged.materials = round2(unitMaterials * q);
+      }
+      // Editing a money column directly redefines that line's unit rate.
+      if ('labour' in patch) {
+        const q = num(merged.qty);
+        merged.unitLabour = q > 0 ? num(patch.labour) / q : num(patch.labour);
+      }
+      if ('materials' in patch) {
+        const q = num(merged.qty);
+        merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
+      }
+      sec.items[iIdx] = merged;
       next[sIdx] = sec;
       return next;
     });
@@ -157,7 +215,7 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      sec.items.push({ itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0 });
+      sec.items.push({ itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0, unitLabour: 0, unitMaterials: 0 });
       next[sIdx] = sec;
       return next;
     });
@@ -321,6 +379,85 @@ export default function BuilderPackPage() {
     [sections, originalSections]
   );
 
+  // ─── Persistence ──────────────────────────────────────────────────────────
+  // Everything the user can change on this screen, captured as one object that
+  // is saved to the server so it survives leaving and re-opening the screen.
+  const workingState = useMemo(() => ({
+    v: 1,
+    sections,
+    builder_margin: builderMargin,
+    materials_markup: materialsMarkup,
+    default_ohp: defaultOhp,
+    profit,
+    contingency,
+    vat,
+    per_trade_ohp: perTradeOhp,
+    prelims_mode: prelimsMode,
+    prelims_amount: prelimsAmount,
+    prelims_pct: prelimsPct,
+    day_rate_on: dayRateOn,
+    day_rate: dayRate,
+    rounding,
+  }), [sections, builderMargin, materialsMarkup, defaultOhp, profit, contingency, vat,
+       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding]);
+
+  const workingStateRef = useRef(workingState);
+  workingStateRef.current = workingState;
+  const hydratedRef = useRef(false);      // becomes true once the initial load is captured
+  const lastSavedJsonRef = useRef(null);  // JSON of the last state we persisted
+  const saveTimerRef = useRef(null);
+  const [saveStatus, setSaveStatus] = useState('saved'); // saved | saving | unsaved | error
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+
+  const saveNow = useCallback(async () => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    const snapshot = workingStateRef.current;
+    const json = JSON.stringify(snapshot);
+    if (json === lastSavedJsonRef.current) { setSaveStatus('saved'); return; }
+    try {
+      setSaveStatus('saving');
+      await apiFetch(`/projects/${id}/builder-pack-state`, {
+        method: 'PUT',
+        body: JSON.stringify({ state: snapshot }),
+      });
+      lastSavedJsonRef.current = json;
+      setLastSavedAt(Date.now());
+      setSaveStatus('saved');
+    } catch (e) {
+      setSaveStatus('error');
+    }
+  }, [id]);
+
+  // Capture the loaded state as the baseline once (so we don't immediately
+  // re-save what we just read back), then enable auto-save.
+  useEffect(() => {
+    if (loading || hydratedRef.current) return;
+    hydratedRef.current = true;
+    lastSavedJsonRef.current = JSON.stringify(workingStateRef.current);
+    setSaveStatus('saved');
+  }, [loading]);
+
+  // Debounced auto-save: persist ~1s after the user stops editing, so it "just
+  // saves as you go". The manual Save button (below) flushes immediately.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const json = JSON.stringify(workingState);
+    if (json === lastSavedJsonRef.current) { setSaveStatus('saved'); return; }
+    setSaveStatus('unsaved');
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { saveNow(); }, 1000);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [workingState, saveNow]);
+
+  // Warn before leaving the tab/window with unsaved or in-flight changes.
+  useEffect(() => {
+    const handler = (e) => {
+      if (saveStatus === 'unsaved' || saveStatus === 'saving') { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [saveStatus]);
+
   return (
     <div style={{ padding: '20px 24px 60px', maxWidth: 1480, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
@@ -366,6 +503,35 @@ export default function BuilderPackPage() {
           >{t.label}</button>
         ))}
       </div>
+
+      {!loading && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          marginBottom: 14, padding: '10px 14px', borderRadius: 10,
+          background: 'var(--card-bg)', border: '1px solid var(--border)',
+        }}>
+          <button
+            onClick={saveNow}
+            disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+            style={{
+              padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none',
+              cursor: (saveStatus === 'saving' || saveStatus === 'saved') ? 'default' : 'pointer',
+              background: (saveStatus === 'unsaved' || saveStatus === 'error') ? '#10B981' : 'var(--border)',
+              color: (saveStatus === 'unsaved' || saveStatus === 'error') ? '#fff' : 'var(--text-muted)',
+            }}
+          >
+            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : 'Save changes'}
+          </button>
+          <span style={{ fontSize: 12.5, color: saveStatus === 'error' ? '#EF4444' : 'var(--text-muted)' }}>
+            {saveStatus === 'saving' && 'Saving your changes…'}
+            {saveStatus === 'unsaved' && 'Unsaved changes — saving automatically…'}
+            {saveStatus === 'error' && 'Could not save — click Save changes to retry.'}
+            {saveStatus === 'saved' && (lastSavedAt
+              ? 'All changes saved — your figures, colours and exclusions are kept.'
+              : 'Your edits save automatically as you go.')}
+          </span>
+        </div>
+      )}
 
       {error && (
         <div style={{
@@ -429,7 +595,7 @@ export default function BuilderPackPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Line items (editable)</h2>
                 <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                  Edit description, qty, labour or materials. Rates and totals recompute automatically.
+                  Edit qty, labour or materials — the line total and nett recompute automatically. Changing qty rescales the line at its rate.
                 </span>
               </div>
 
@@ -933,7 +1099,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
           <div key={s.number + '-' + i} style={{ ...previewRowStyle, gridTemplateColumns: '32px 1fr 80px 110px' }}>
             <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
             <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items</span></div>
-            <div style={moneyCell(accent)}>{s.ohp}%</div>
+            <div style={moneyCell(accent)}>{((num(s.uplift) - 1) * 100).toFixed(1)}%</div>
             <div style={{ ...moneyCell(), fontWeight: 600 }}>{fmt(sym, s.subtotal)}</div>
           </div>
         ))}
