@@ -8,6 +8,66 @@ const PRICE_TO_PLAN = {
   'price_1T52g5EOVz3JQx7AP7CnGabY': { plan: 'premium', msgQuota: 200, boqQuota: 20 },
 };
 
+// ─── Office in a Box add-on ─────────────────────────────────────────────────
+// Paying the Office in a Box subscription flips the user's has_estimator flag
+// on (and cancelling flips it off). Match is by Stripe Price ID when configured
+// via STRIPE_OFFICE_PRICE_ID / STRIPE_OFFICE_PRICE_IDS (comma-separated);
+// otherwise we fall back to a £100.00/mo amount, which is what the Payment Link
+// charges. Set the env var to lock it to an exact price later.
+function officePriceIds() {
+  const raw = process.env.STRIPE_OFFICE_PRICE_IDS || process.env.STRIPE_OFFICE_PRICE_ID || '';
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+function isOfficeSubscription(subscription) {
+  const item = subscription && subscription.items && subscription.items.data && subscription.items.data[0];
+  const priceId = item && item.price && item.price.id;
+  const amount = item && item.price && item.price.unit_amount;
+  const ids = officePriceIds();
+  if (ids.length) return ids.includes(priceId);
+  return amount === 10000; // £100.00 fallback
+}
+function activateOffice(user, subscriptionId) {
+  if (!user) return;
+  db.prepare('UPDATE users SET has_estimator = 1, office_subscription_id = COALESCE(?, office_subscription_id), updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(subscriptionId || null, user.id);
+  console.log(`[Stripe] Office in a Box ACTIVATED for ${user.email} (sub ${subscriptionId || 'n/a'})`);
+}
+function deactivateOffice(user) {
+  if (!user) return;
+  db.prepare('UPDATE users SET has_estimator = 0, office_subscription_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(user.id);
+  console.log(`[Stripe] Office in a Box DEACTIVATED for ${user.email}`);
+}
+// Resolve the portal account for a checkout: account id (client_reference_id,
+// stamped by withUserRef) first — exact and reliable — then the email typed.
+function resolveCheckoutUser(session, email) {
+  if (session.client_reference_id) {
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(session.client_reference_id);
+    if (u) return u;
+  }
+  if (email) return db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+  return null;
+}
+// Find the account behind an Office subscription event: by the stored
+// office_subscription_id first, then by the Stripe customer's email.
+async function findUserForOfficeSub(subscription, stripeSecret) {
+  let user = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
+  if (user) return user;
+  if (subscription.customer) {
+    try {
+      const stripe = require('stripe')(stripeSecret);
+      const customer = await stripe.customers.retrieve(subscription.customer);
+      if (customer && customer.email) {
+        user = db.prepare('SELECT * FROM users WHERE email = ?').get(customer.email.toLowerCase());
+        if (user) return user;
+      }
+    } catch (err) {
+      console.error('[Stripe] Office customer lookup failed:', err.message);
+    }
+  }
+  return null;
+}
+
 module.exports = async function stripeWebhook(req, res) {
   const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
   const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
@@ -149,6 +209,14 @@ async function handleCheckoutComplete(session, stripeSecret) {
     const subscription = await stripe.subscriptions.retrieve(session.subscription);
     const priceId = subscription.items.data[0]?.price?.id;
 
+    // Office in a Box add-on — flip has_estimator on and stop.
+    if (isOfficeSubscription(subscription)) {
+      const user = resolveCheckoutUser(session, customerEmail);
+      if (user) activateOffice(user, subscription.id);
+      else console.error(`[Stripe] Office subscription paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
+      return;
+    }
+
     if (priceId && PRICE_TO_PLAN[priceId]) {
       const planInfo = PRICE_TO_PLAN[priceId];
       // Set billing_cycle_start to subscription's current period start
@@ -287,6 +355,16 @@ function grantPackCredits(session, customerEmail) {
 async function handleSubscriptionUpdate(subscription, stripeSecret) {
   const priceId = subscription.items.data[0]?.price?.id;
 
+  // Office in a Box add-on — keep has_estimator in step with the subscription.
+  if (isOfficeSubscription(subscription)) {
+    const user = await findUserForOfficeSub(subscription, stripeSecret);
+    if (!user) { console.log(`[Stripe] Office sub ${subscription.id} updated but no user matched`); return; }
+    if (subscription.status === 'active' || subscription.status === 'trialing') activateOffice(user, subscription.id);
+    else if (['canceled', 'unpaid', 'incomplete_expired'].includes(subscription.status)) deactivateOffice(user);
+    else console.log(`[Stripe] Office sub for ${user.email} is ${subscription.status} — leaving access unchanged`);
+    return;
+  }
+
   if (!priceId || !PRICE_TO_PLAN[priceId]) {
     console.error(`[Stripe] Unknown price ID on update: ${priceId} — subscription: ${subscription.id}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     return;
@@ -376,6 +454,10 @@ async function handleInvoicePaid(invoice, stripeSecret) {
 }
 
 async function handleSubscriptionCancelled(subscription) {
+  // Office in a Box add-on cancellation — revoke access and stop.
+  const officeUser = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
+  if (officeUser) { deactivateOffice(officeUser); return; }
+
   const user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(subscription.id);
 
   if (!user) {

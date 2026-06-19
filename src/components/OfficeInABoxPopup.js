@@ -235,7 +235,7 @@ export default function OfficeInABoxPopup() {
                 marginBottom: 16,
               }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                  <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£50</span>
+                  <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£100</span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: t.textSecondary }}>/month</span>
                 </div>
                 <span style={{

@@ -6,9 +6,9 @@ import { apiFetch } from '../utils/api';
 import {
   ZapIcon, RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon,
   FileTextIcon, LayersIcon, CheckCircleIcon, ArrowRightIcon, ClockIcon,
-  PartyIcon,
 } from '../components/Icons';
 import OfficeBoxArt from '../components/OfficeBoxArt';
+import { OFFICE_PAYMENT_LINK, withUserRef } from '../utils/stripeLinks';
 
 // Amber accent — matches the "Office in a Box" branding in the sidebar,
 // rather than the portal's default blue accent.
@@ -67,6 +67,13 @@ export default function OfficeInABoxPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Send the user to Stripe for the £100/month subscription. The link is
+  // stamped with their account id so the webhook flips on access the moment
+  // they pay and lands them back on the success page.
+  function startCheckout() {
+    window.location.href = withUserRef(OFFICE_PAYMENT_LINK, user);
   }
 
   const cardBg = t.card;
@@ -159,24 +166,36 @@ export default function OfficeInABoxPage() {
               the van, not the desk.
             </p>
             <div className="oiab-hero-cta-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}>
-              {/* Way into the live beta — the working Office in a Box tools. */}
-              <button
-                className="oiab-cta"
-                onClick={() => navigate('/office')}
-                style={{
-                  padding: '14px 26px', borderRadius: 13, border: 'none',
-                  background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                  color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
-                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
-                }}
-              >
-                <span style={{
-                  fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
-                  background: 'rgba(10,15,28,0.16)', borderRadius: 5, padding: '2px 6px',
-                }}>Beta</span>
-                Open Office in a Box <ArrowRightIcon size={18} color="#0A0F1C" />
-              </button>
-              {isInterested ? (
+              {/* Primary action: subscribers open their tools; everyone else
+                  is sent to Stripe to subscribe for £100/month. */}
+              {hasAddon ? (
+                <button
+                  className="oiab-cta"
+                  onClick={() => navigate('/office')}
+                  style={{
+                    padding: '14px 26px', borderRadius: 13, border: 'none',
+                    background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                    color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
+                  }}
+                >
+                  Open Office in a Box <ArrowRightIcon size={18} color="#0A0F1C" />
+                </button>
+              ) : (
+                <button
+                  className="oiab-cta"
+                  onClick={startCheckout}
+                  style={{
+                    padding: '14px 26px', borderRadius: 13, border: 'none',
+                    background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                    color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
+                  }}
+                >
+                  Subscribe — £100/month <ArrowRightIcon size={18} color="#0A0F1C" />
+                </button>
+              )}
+              {hasAddon ? null : isInterested ? (
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
                   fontSize: 15, fontWeight: 700, color: t.success,
@@ -274,7 +293,7 @@ export default function OfficeInABoxPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-            <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£50</span>
+            <span style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-0.03em', color: t.text }}>£100</span>
             <span style={{ fontSize: 16, fontWeight: 600, color: t.textSecondary }}>/ month</span>
           </div>
           <div style={{ fontSize: 12.5, color: t.textSecondary, marginBottom: 18 }}>
@@ -290,59 +309,36 @@ export default function OfficeInABoxPage() {
             ))}
           </div>
 
-          {/* Straight into the live beta tools. */}
-          <button
-            className="oiab-cta"
-            onClick={() => navigate('/office')}
-            style={{
-              width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
-              background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-              color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              marginBottom: 14,
-            }}
-          >
-            <span style={{
-              fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase',
-              background: 'rgba(10,15,28,0.16)', borderRadius: 5, padding: '2px 6px',
-            }}>Beta</span>
-            Open Office in a Box <ArrowRightIcon size={17} color="#0A0F1C" />
-          </button>
-
-          {isInterested ? (
-            <div style={{
-              background: t.successBg, border: `1px solid ${t.success}`, borderRadius: 12,
-              padding: '16px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: t.text, marginBottom: 4 }}>
-                You're on the list <PartyIcon size={16} style={{ verticalAlign: 'middle' }} />
-              </div>
-              <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.45 }}>
-                We've noted your interest and we'll email you the moment Office in a Box goes live.
-              </div>
-            </div>
+          {hasAddon ? (
+            <button
+              className="oiab-cta"
+              onClick={() => navigate('/office')}
+              style={{
+                width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
+                background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
+                color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              Open Office in a Box <ArrowRightIcon size={17} color="#0A0F1C" />
+            </button>
           ) : (
             <>
               <button
                 className="oiab-cta"
-                onClick={registerInterest}
-                disabled={submitting}
+                onClick={startCheckout}
                 style={{
                   width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
                   background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                  color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: submitting ? 'wait' : 'pointer',
-                  opacity: submitting ? 0.75 : 1,
+                  color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                {ctaLabel} {!submitting && <ArrowRightIcon size={17} color="#0A0F1C" />}
+                Subscribe — £100/month <ArrowRightIcon size={17} color="#0A0F1C" />
               </button>
               <div style={{ fontSize: 11.5, color: t.textMuted, textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
-                Register now and lock in founder pricing for early access.
+                Secure checkout by Stripe. Cancel anytime — access ends when your billing month does.
               </div>
-              {error && (
-                <div style={{ fontSize: 12, color: t.danger, textAlign: 'center', marginTop: 8 }}>{error}</div>
-              )}
             </>
           )}
         </div>
