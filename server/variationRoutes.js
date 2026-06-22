@@ -8,6 +8,7 @@ const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
 const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
+const { writeXlsxBuffer } = require('./docTemplates');
 const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
 
@@ -692,7 +693,7 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
     newWs.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
     newWs.headerFooter.oddFooter = '&LThe AI QS - theaiqs.co.uk — CLIENT COPY&RPage &P of &N';
 
-    const buffer = await newWb.xlsx.writeBuffer();
+    const buffer = await writeXlsxBuffer(newWb);
     const filename = 'ClientCopy_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

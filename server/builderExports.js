@@ -25,7 +25,7 @@ const path = require('path');
 // cell. BOQ descriptions scraped from PDFs occasionally carry Unicode
 // non-characters / lone surrogates that ExcelJS writes verbatim, which makes
 // Excel reject the whole workbook ("We found a problem with some content").
-const { sanitizeXmlText } = require('./docTemplates');
+const { sanitizeXmlText, writeXlsxBuffer } = require('./docTemplates');
 
 // Convert "#RRGGBB" to ExcelJS argb ("FFRRGGBB"). Returns null if invalid.
 function hexToArgb(hex) {
@@ -697,7 +697,7 @@ async function generateBuilderPack(parsed, opts = {}) {
       '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N';
   }
 
-  const buffer = await wb.xlsx.writeBuffer();
+  const buffer = await writeXlsxBuffer(wb);
   return Buffer.from(buffer);
 }
 
@@ -1019,7 +1019,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
   ws.headerFooter.oddFooter = '&L' + footerLeft + ' — CLIENT COPY&RPage &P of &N';
 
-  const buffer = await wb.xlsx.writeBuffer();
+  const buffer = await writeXlsxBuffer(wb);
   return Buffer.from(buffer);
 }
 

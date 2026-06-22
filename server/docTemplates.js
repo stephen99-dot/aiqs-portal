@@ -626,10 +626,32 @@ function renderHeroBlock(ws, opts, style, lastCol) {
   return 5; // next row available
 }
 
+// ExcelJS hardcodes horizontalDpi / verticalDpi to 4294967295 (0xFFFFFFFF) on
+// every worksheet's pageSetup. That value is out of the range Excel accepts, so
+// Excel declares the workbook damaged ("We found a problem with some content")
+// and strips the worksheet on open — the corruption customers were hitting on
+// the Client Copy. Other XML validators (saxes, openpyxl, ExcelJS itself) accept
+// it, which is why it hid for so long. Force a valid printer DPI on every sheet,
+// then write — use this everywhere instead of wb.xlsx.writeBuffer().
+function fixXlsxDpi(wb) {
+  wb.eachSheet((ws) => {
+    try {
+      ws.pageSetup = { ...(ws.pageSetup || {}), horizontalDpi: 300, verticalDpi: 300 };
+    } catch (e) { /* non-fatal: still write the book */ }
+  });
+  return wb;
+}
+async function writeXlsxBuffer(wb) {
+  fixXlsxDpi(wb);
+  return wb.xlsx.writeBuffer();
+}
+
 module.exports = {
   styleFor,
   renderCoverSheet,
   renderHeroBlock,
+  writeXlsxBuffer,
+  fixXlsxDpi,
   hexToArgb,
   tintHex,
   tryEmbedLogo,
