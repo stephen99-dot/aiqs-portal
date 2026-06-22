@@ -188,34 +188,9 @@
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body: 'Instrument Sans', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  /* Semantic tokens (theme-aware) */
-  --on-accent: #0A0F1C;                    /* text/icons sitting on the amber accent */
-  --nav-bg: rgba(10,15,28,0.8);
-  --nav-bg-scrolled: rgba(10,15,28,0.95);
-  --menu-bg: #0A0F1C;                       /* mobile fullscreen menu */
-  --surface-subtle: rgba(255,255,255,0.04); /* faint fills on inputs/bubbles */
-  color-scheme: dark;
 }
-/* ---- Light theme ---- */
-:root[data-theme="light"] {
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F4F6FB;
-  --bg-card: #FFFFFF;
-  --bg-card-hover: #F4F6FB;
-  --text-primary: #0F172A;
-  --text-secondary: #475569;
-  --text-muted: #64748B;
-  --border: rgba(15,23,42,0.10);
-  --border-accent: rgba(245,158,11,0.45);
-  --gradient-dark: linear-gradient(180deg, #FFFFFF 0%, #F4F6FB 100%);
-  --shadow-glow: 0 10px 40px rgba(15,23,42,0.08);
-  --on-accent: #0A0F1C;
-  --nav-bg: rgba(255,255,255,0.82);
-  --nav-bg-scrolled: rgba(255,255,255,0.95);
-  --menu-bg: #FFFFFF;
-  --surface-subtle: rgba(15,23,42,0.04);
-  color-scheme: light;
-}
+/* Theme tokens, light palette and the .theme-toggle button now live in
+   the shared /assets/theme.css (linked just after this <style> block). */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html { scroll-behavior: smooth; font-size: 16px; }
 body { font-family: var(--font-body); background: var(--bg-primary); color: var(--text-primary); line-height: 1.7; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -235,14 +210,6 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .nav-cta { padding: 10px 22px !important; background: var(--gradient-amber) !important; color: var(--on-accent) !important; border-radius: 8px; font-weight: 600 !important; transition: transform 0.2s, box-shadow 0.2s !important; }
 .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(245,158,11,0.3); }
 .nav-send { color: #F59E0B !important; font-weight: 600 !important; }
-.theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; background: transparent; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.theme-toggle:hover { color: var(--accent); border-color: var(--border-accent); background: var(--surface-subtle); }
-.theme-toggle svg { width: 19px; height: 19px; pointer-events: none; }
-.theme-toggle .icon-moon { display: none; }
-.theme-toggle .icon-sun { display: block; }
-:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
-:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
-.nav-tools { display: flex; align-items: center; gap: 12px; }
 .mobile-toggle { display: none; background: none; border: none; color: var(--text-primary); cursor: pointer; padding: 12px; position: relative; z-index: 200; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .mobile-toggle svg { width: 28px; height: 28px; pointer-events: none; display: block; }
 .hero { padding: 160px 0 100px; position: relative; overflow: hidden; }
@@ -586,6 +553,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .footer-legal { color: var(--text-muted); font-size: 0.75rem; line-height: 1.6; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 @media (max-width:480px) { .cookie-banner { left: 12px; right: 12px; bottom: 12px; padding: 16px; } }
 </style>
+<link rel="stylesheet" href="/assets/theme.css">
 </head>
 <body>
 
@@ -988,43 +956,6 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 document.documentElement.classList.remove('no-js');
-// ---- Light / dark theme toggle ----
-(function () {
-  var root = document.documentElement;
-  var toggle = document.getElementById('themeToggle');
-  var metaTheme = document.getElementById('metaThemeColor');
-  var themeColors = { dark: '#0A0F1C', light: '#FFFFFF' };
-  function apply(theme) {
-    root.setAttribute('data-theme', theme);
-    if (metaTheme) metaTheme.setAttribute('content', themeColors[theme] || themeColors.dark);
-    if (toggle) {
-      var next = theme === 'light' ? 'dark' : 'light';
-      var label = 'Switch to ' + next + ' theme';
-      toggle.setAttribute('aria-label', label);
-      toggle.setAttribute('title', label);
-    }
-  }
-  // Sync meta/labels with the theme the no-flash script already set
-  apply(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
-  if (toggle) {
-    toggle.addEventListener('click', function () {
-      var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      apply(next);
-      try { localStorage.setItem('aiqs_theme', next); } catch (e) {}
-    });
-  }
-  // Follow the OS preference until the user makes an explicit choice
-  if (window.matchMedia) {
-    var mq = window.matchMedia('(prefers-color-scheme: light)');
-    var onChange = function (e) {
-      var stored;
-      try { stored = localStorage.getItem('aiqs_theme'); } catch (err) {}
-      if (stored !== 'light' && stored !== 'dark') apply(e.matches ? 'light' : 'dark');
-    };
-    if (mq.addEventListener) mq.addEventListener('change', onChange);
-    else if (mq.addListener) mq.addListener(onChange);
-  }
-})();
 var nav = document.getElementById('nav');
 window.addEventListener('scroll', function() { nav.classList.toggle('scrolled', window.scrollY > 50); });
 var mobileToggle = document.getElementById('mobileToggle');
@@ -1177,5 +1108,6 @@ document.addEventListener('click', function(e) {
     if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; } }
 })();
 </script>
+<script src="/assets/theme.js" defer></script>
 </body>
 </html>
