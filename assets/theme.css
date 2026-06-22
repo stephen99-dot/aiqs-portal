@@ -47,8 +47,7 @@
 }
 
 /* ---- Theme toggle button ---- */
-.nav-tools { display: flex; align-items: center; gap: 12px; }
-.theme-toggle {
+.nav-tools { display: flex; align-items: center; gap: 12px; }.theme-toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; flex-shrink: 0;
   background: transparent; border: 1px solid var(--border);
@@ -62,3 +61,8 @@
 .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+/* ---- Logo: the "AI" wordmark uses currentColor so it stays visible in both
+   themes (it was hard-coded white and vanished on the light background).
+   Scoped to .logo-svg, which only the marketing pages use. ---- */
+.logo-svg { color: var(--text-primary); }

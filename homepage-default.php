@@ -562,7 +562,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   <div class="nav-inner">
     <a href="#" class="nav-logo" aria-label="AI QS Home">
       <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
-        <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+        <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="currentColor">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
         <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
       </svg>
     </a>
@@ -862,7 +862,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       <div class="footer-brand">
         <a href="#" class="nav-logo" aria-label="AI QS Home">
           <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
-            <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+            <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="currentColor">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
             <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
           </svg>
         </a>
