@@ -150,7 +150,38 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
   row(`VAT (${num(m.vatPct)}%)`, fmtMoney(tot.vat));
   row('Total', fmtMoney(tot.total), true);
 
-  y = sy + 14;
+  y = sy + 18;
+
+  // Measurements summary — two columns of grouped element measurements.
+  const measurements = result.measurements || [];
+  if (measurements.length) {
+    ensureRoom(30);
+    doc.rect(40, y, 515, 20).fill(primary);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('MEASUREMENTS SUMMARY', 44, y + 5);
+    y += 28;
+    const colW = 250, gap = 15;
+    const colX = [40, 40 + colW + gap];
+    const colY = [y, y];
+    measurements.forEach((g, gi) => {
+      const c = gi % 2;
+      // Estimate block height; wrap to a new page if neither column has room.
+      const blockH = 18 + g.rows.length * 13 + 6;
+      if (colY[c] + blockH > doc.page.height - 70) { doc.addPage(); colY[0] = 50; colY[1] = 50; }
+      let yy = colY[c];
+      const x = colX[c];
+      doc.rect(x, yy, colW, 15).fill(accent);
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text(g.group, x + 4, yy + 3);
+      yy += 17;
+      for (const r of g.rows) {
+        doc.font('Helvetica').fontSize(9).fillColor('#333333').text(r.label, x + 4, yy, { width: colW - 90 });
+        doc.font('Helvetica-Bold').fillColor('#111111').text(`${r.value} ${r.unit}`, x + colW - 86, yy, { width: 82, align: 'right' });
+        yy += 13;
+      }
+      colY[c] = yy + 8;
+    });
+    y = Math.max(colY[0], colY[1]) + 6;
+  }
+
   ensureRoom(40);
   doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888888')
     .text('Outline estimate generated from a parametric model and indicative rates. For budgeting only — not a fixed-price quotation. Quantities are derived from the modelled geometry; verify against drawings before ordering.', 40, y, { width: 515 });

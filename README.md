@@ -328,6 +328,16 @@ roof rectangles in its response and the renderer draws exactly that.
   rectangle, roof area ÷ footprint ≈ pitch; counts give windows/doors; storeys
   from the project type or a staircase. The UI's "Derive from BOQ" picker loads
   the model and shows the assumptions it made (it's approximate by nature).
+- **Realistic render:** brick walls with *real cut* window/door openings
+  (extruded shapes with holes) + framed casement windows and panelled doors, a
+  solid tiled roof (colour per covering) with eaves overhang, fascia,
+  bargeboards and ridge cap, a DPC band, plus sky, a grassy ground plane, soft
+  shadows and filmic tone-mapping. The canvas is absolute-positioned and resized
+  via `ResizeObserver`.
+- **Measurements summary:** `priceModel()` also returns a PriceAJob-style
+  grouped `measurements` summary (Foundation / Walls / Floors / Roof / Openings).
+  The right panel has an **Estimate | Summary** toggle, and the PDF prints the
+  summary as a two-column block under the costed breakdown.
 - **Dependency:** `three`.
 
 ### Known Phase-2 limits
