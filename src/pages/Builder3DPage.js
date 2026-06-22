@@ -261,6 +261,12 @@ export default function Builder3DPage() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Absolute-position the canvas so it fills the container but never
+    // contributes to layout sizing — otherwise its intrinsic width can blow the
+    // grid out and push the estimate column off-screen.
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.inset = '0';
+    renderer.domElement.style.display = 'block';
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -512,7 +518,7 @@ export default function Builder3DPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 14, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr) 300px', gap: 14, flex: 1, minHeight: 0 }}>
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>Building</div>
@@ -561,7 +567,7 @@ export default function Builder3DPage() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} style={{ background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0 }} />
+        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0 }} />
 
         {/* ── Estimate sidebar ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
