@@ -275,6 +275,28 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
 
 const ROOF_COLOURS = { concrete_tile: 0x8b9094, clay_tile: 0xa1542f, slate: 0x3a4048 };
 
+// A brick chimney stack with capping and pots, rising from a rectangle's ridge.
+function buildChimney(group, r, H, pitchDeg, brickMat, potMat) {
+  const alongX = r.w >= r.d;
+  const longLen = Math.max(r.w, r.d), shortLen = Math.min(r.w, r.d);
+  const ridgeY = H + (shortLen / 2) * Math.tan((pitchDeg * Math.PI) / 180);
+  const u = longLen * 0.3;
+  const cx = r.x + (alongX ? u : 0);
+  const cz = r.z + (alongX ? 0 : u);
+  const top = ridgeY + 1.1, base = H - 0.3, ch = top - base;
+  const stack = new THREE.Mesh(new THREE.BoxGeometry(0.7, ch, 0.7), brickMat);
+  stack.position.set(cx, (base + top) / 2, cz);
+  group.add(stack);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.12, 0.84), potMat);
+  cap.position.set(cx, top + 0.06, cz);
+  group.add(cap);
+  [-0.16, 0.16].forEach((o) => {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.4, 12), potMat);
+    pot.position.set(cx + (alongX ? o : 0), top + 0.3, cz + (alongX ? 0 : o));
+    group.add(pot);
+  });
+}
+
 // Render the whole building from the server-supplied geometry block, so what's
 // drawn is exactly what was priced. brickTex/tileTex are shared canvas textures.
 function buildHouse(geo, brickTex, tileTex) {
@@ -336,6 +358,12 @@ function buildHouse(geo, brickTex, tileTex) {
 
   // Finished roof per rectangle.
   rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, mats.brick, gutterMat));
+
+  // Chimney on the main block of a house.
+  if ((geo.type || 'house') === 'house' && rects[0]) {
+    const potMat = new THREE.MeshStandardMaterial({ color: 0xb5651d, roughness: 0.9 });
+    buildChimney(group, rects[0], H, roofPitch, mats.brick, potMat);
+  }
 
   // Downpipes at the two front corners (largest z), eave to ground.
   const cen = outline.reduce((acc, p) => ({ x: acc.x + p.x / n, z: acc.z + p.z / n }), { x: 0, z: 0 });
@@ -437,6 +465,8 @@ export default function Builder3DPage() {
   const brickRef = useRef(null);
   const tileRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
 
   // A project is a list of building modules (House + Extension + Garage…) plus
   // project-level markup. The controls edit the active module.
@@ -496,6 +526,8 @@ export default function Builder3DPage() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.target.set(0, 2.5, 0);
+    cameraRef.current = camera;
+    controlsRef.current = controls;
 
     // Sky + soft daylight: a hemisphere fill (sky/ground tint) plus a single
     // shadow-casting sun, like an architectural render.
@@ -768,6 +800,33 @@ export default function Builder3DPage() {
     } finally { setBusy(''); }
   };
 
+  // Frame the whole project: centre + zoom the camera on the combined bounding
+  // box of every module. Also composes the PDF snapshot nicely.
+  const fitView = useCallback(() => {
+    const cam = cameraRef.current, ctr = controlsRef.current;
+    const mods = quote?.modules;
+    if (!cam || !ctr || !mods?.length) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 3;
+    mods.forEach((mod) => {
+      const g = mod.geometry; if (!g?.outline) return;
+      const ox = mod.offset?.x || 0, oz = mod.offset?.z || 0;
+      const xs = g.outline.map((p) => p.x), zs = g.outline.map((p) => p.z);
+      minX = Math.min(minX, ox + Math.min(...xs)); maxX = Math.max(maxX, ox + Math.max(...xs));
+      minZ = Math.min(minZ, oz + Math.min(...zs)); maxZ = Math.max(maxZ, oz + Math.max(...zs));
+      const L = Math.max(...xs) - Math.min(...xs), W = Math.max(...zs) - Math.min(...zs);
+      const h = g.wallHeight * g.storeys + (Math.min(L, W) / 2) * Math.tan((g.roofPitch * Math.PI) / 180);
+      maxY = Math.max(maxY, h + (g.type === 'house' ? 1.5 : 0));
+    });
+    if (!isFinite(minX)) return;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, cy = maxY / 2;
+    const radius = Math.max(maxX - minX, maxZ - minZ, maxY) * 0.5 || 6;
+    const dist = radius / Math.tan((cam.fov * Math.PI) / 360) * 1.5 + radius;
+    ctr.target.set(cx, cy, cz);
+    cam.position.set(cx + dist * 0.7, cy + dist * 0.6, cz + dist * 0.9);
+    cam.lookAt(cx, cy, cz);
+    ctr.update();
+  }, [quote]);
+
   const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
@@ -834,6 +893,7 @@ export default function Builder3DPage() {
           {boqSources.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.itemCount} items)</option>)}
         </select>
         <div style={{ flex: 1 }} />
+        <button onClick={fitView} style={btn(t, t.surface, t.text)}>Fit view</button>
         <button onClick={exportPdf} disabled={busy === 'pdf'} style={btn(t, '#10B981', '#fff')}>{busy === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
       </div>
 

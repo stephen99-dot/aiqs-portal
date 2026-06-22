@@ -413,7 +413,7 @@ function priceProject(modules, lookupRate, opts = {}) {
       name: String(mod.name || '').trim() || defaultModuleName(mod.type),
       type: mod.type || 'house',
       offset: { x: round2(num(mod.offsetX)), z: round2(num(mod.offsetZ)) },
-      geometry: r.geometry,
+      geometry: { ...r.geometry, type: mod.type || 'house' },
       groups: r.groups,
       measurements: r.measurements,
       cost: r.totals.cost,
