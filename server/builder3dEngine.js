@@ -342,11 +342,92 @@ function priceModel(rawInputs, lookupRate) {
   };
 }
 
+// ── Reverse-derive a building model from an existing BOQ ────────────────────
+//
+// Given a bill of quantities (line items with qty + unit), infer a plausible
+// rectangular building so the 3D Builder can render "the look of the building".
+// The trick: external wall area ÷ (storey height × storeys) ≈ perimeter, the
+// largest floor slab ≈ footprint, and a rectangle is recovered by solving
+// L+W = perimeter/2, L·W = footprint. Roof area ÷ footprint gives the pitch.
+// Everything is an approximation — the returned `notes` say what was used.
+
+function normUnit(u) {
+  return String(u || '').toLowerCase().replace('²', '2').replace('³', '3').replace(/\s+/g, '').trim();
+}
+
+function deriveParamsFromBoq(items, opts = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const notes = [];
+  const text = (it) => `${it.key || ''} ${it.description || ''} ${it.display_name || ''} ${it.item || ''}`.toLowerCase();
+  const isArea = (it) => normUnit(it.unit) === 'm2';
+  const isCount = (it) => ['nr', 'no', 'ea', 'each', 'number', 'item'].includes(normUnit(it.unit));
+
+  const maxAreaWhere = (re) => list.reduce((mx, it) => (isArea(it) && re.test(text(it)) ? Math.max(mx, num(it.qty)) : mx), 0);
+  const sumCountWhere = (re) => list.reduce((s, it) => (isCount(it) && re.test(text(it)) ? s + num(it.qty) : s), 0);
+
+  const slabArea = maxAreaWhere(/slab|oversite|ground\s*floor|screed|floor\s*construction/);
+  const wallArea = maxAreaWhere(/brick|block|outer\s*leaf|inner\s*leaf|cavity|external\s*wall|render|cladding|facing/);
+  const roofArea = maxAreaWhere(/roof|rafter|truss|sarking|batten|slate|tile/);
+  const windows = Math.round(sumCountWhere(/window|glazing|rooflight|velux|skylight/));
+  let doors = Math.round(sumCountWhere(/door/));
+  const extDoors = Math.round(sumCountWhere(/(external|composite|front|entrance|patio|bi-?fold|french)/));
+  if (extDoors > 0) doors = extDoors;
+
+  // Storeys from the project type text, else a staircase implies at least two.
+  const pt = String(opts.projectType || '').toLowerCase();
+  let storeys = 1;
+  if (/three\s*stor|3\s*stor/.test(pt)) storeys = 3;
+  else if (/two\s*stor|2\s*stor|double\s*stor/.test(pt)) storeys = 2;
+  else if (sumCountWhere(/stair/) >= 1) storeys = 2;
+
+  const h = 2.6; // assumed storey height
+  const floorArea = num(opts.floorArea);
+  let footprint;
+  if (slabArea > 0) { footprint = slabArea; notes.push(`Footprint ${round2(footprint)} m² from the floor slab area`); }
+  else if (floorArea > 0) { footprint = floorArea / storeys; notes.push(`Footprint ${round2(footprint)} m² from GIA ${round2(floorArea)} m² ÷ ${storeys} storey(s)`); }
+  else { footprint = 60; notes.push('Footprint defaulted to 60 m² (no slab or GIA in the BOQ)'); }
+
+  let perimeter;
+  if (wallArea > 0) { perimeter = wallArea / (h * storeys); notes.push(`Perimeter ${round2(perimeter)} m from wall area ${round2(wallArea)} m² ÷ (${h}m × ${storeys})`); }
+  else { perimeter = 4 * Math.sqrt(footprint); notes.push('Perimeter assumed from a square footprint (no wall area found)'); }
+
+  // Recover the rectangle: roots of x² - (P/2)x + A = 0.
+  let L, W;
+  const half = perimeter / 2;
+  const disc = half * half - 4 * footprint;
+  if (disc >= 0) { L = (half + Math.sqrt(disc)) / 2; W = (half - Math.sqrt(disc)) / 2; }
+  else { L = W = Math.sqrt(footprint); notes.push('Wall and floor areas were inconsistent — assumed a square footprint'); }
+  L = clamp(L, 2, 60, 8); W = clamp(W, 2, 60, 6);
+
+  let roofPitch = 35;
+  if (roofArea > footprint && footprint > 0) {
+    roofPitch = clamp(Math.round((Math.acos(Math.min(1, Math.max(0.2, footprint / roofArea))) * 180) / Math.PI), 5, 60, 35);
+    notes.push(`Roof pitch ${roofPitch}° from roof area ${round2(roofArea)} m² vs footprint`);
+  } else {
+    notes.push('Roof pitch 35° (default — no usable roof area)');
+  }
+
+  const params = {
+    shape: 'rect',
+    length: round2(L), width: round2(W),
+    wallHeight: h, storeys, roofPitch, roofType: 'hip',
+    windows: clamp(windows, 0, 60, 6), doors: clamp(doors, 0, 20, 1),
+    wallType: 'cavity', roofCovering: 'concrete_tile',
+    ohpPct: 15, vatPct: 20,
+  };
+  return {
+    params,
+    notes,
+    signals: { slabArea: round2(slabArea), wallArea: round2(wallArea), roofArea: round2(roofArea), windows, doors, storeys, footprint: round2(footprint), perimeter: round2(perimeter) },
+  };
+}
+
 module.exports = {
   normaliseInputs,
   computeQuantities,
   buildRecipe,
   priceModel,
+  deriveParamsFromBoq,
   generateFootprint,
   polyArea,
   polyPerimeter,

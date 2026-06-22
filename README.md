@@ -317,6 +317,17 @@ roof rectangles in its response and the renderer draws exactly that.
   `POST /api/builder3d/pdf` for a branded estimate PDF (`server/builder3dPdf.js`,
   same header/branding as the quote PDF). The page has a name field,
   save / save-as / load / delete and Export PDF.
+- **3D view in the PDF:** the page captures the WebGL canvas (the renderer uses
+  `preserveDrawingBuffer`) and posts it as a PNG `snapshot`; the PDF embeds it as
+  a framed "Indicative 3D model" above the costed breakdown. Export still works
+  if the snapshot is missing.
+- **Connect an existing BOQ:** `GET /api/builder3d/boq-sources` lists takeoffs
+  with line items; `POST /api/builder3d/derive` ({ sourceId } or { items })
+  reverse-derives a rectangular building via `deriveParamsFromBoq()` — external
+  wall area ÷ (height × storeys) ≈ perimeter, largest slab ≈ footprint, solve the
+  rectangle, roof area ÷ footprint ≈ pitch; counts give windows/doors; storeys
+  from the project type or a staircase. The UI's "Derive from BOQ" picker loads
+  the model and shows the assumptions it made (it's approximate by nature).
 - **Dependency:** `three`.
 
 ### Known Phase-2 limits

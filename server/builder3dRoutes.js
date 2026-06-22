@@ -12,7 +12,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, adminMiddleware } = require('./auth');
-const { priceModel } = require('./builder3dEngine');
+const { priceModel, deriveParamsFromBoq } = require('./builder3dEngine');
 const { streamBuilder3dPdf } = require('./builder3dPdf');
 
 const router = express.Router();
@@ -129,10 +129,59 @@ router.post('/pdf', (req, res) => {
     const result = priceModel(params, lookupRate);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
-    streamBuilder3dPdf(res, req.body?.name || 'Outline estimate', result, branding, userInfo);
+    streamBuilder3dPdf(res, req.body?.name || 'Outline estimate', result, branding, userInfo, req.body?.snapshot);
   } catch (err) {
     console.error('[Builder3D] PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+// ── Connect an existing BOQ ──────────────────────────────────────────────────
+
+// GET /boq-sources — list takeoffs (with line items) the operator can derive a
+// building from. Admin tool, so it spans the system's takeoffs, newest first.
+router.get('/boq-sources', (req, res) => {
+  try {
+    const rows = db.prepare(
+      "SELECT id, project_name, project_type, items, created_at FROM quantity_takeoffs WHERE items IS NOT NULL AND items != '[]' ORDER BY datetime(created_at) DESC LIMIT 50"
+    ).all();
+    const sources = rows.map((r) => {
+      let n = 0;
+      try { n = JSON.parse(r.items).length; } catch (e) { /* ignore */ }
+      return { id: r.id, name: r.project_name || 'Untitled takeoff', projectType: r.project_type, itemCount: n, createdAt: r.created_at };
+    }).filter((s) => s.itemCount > 0);
+    res.json({ sources });
+  } catch (err) {
+    // quantity_takeoffs may not exist on a fresh DB — degrade quietly.
+    res.json({ sources: [] });
+  }
+});
+
+// POST /derive — { sourceId } (a takeoff id) or { items, floorArea?, projectType? }
+// -> { params, notes, signals }. Reverse-derives a building from the BOQ.
+router.post('/derive', (req, res) => {
+  try {
+    let items = req.body?.items;
+    let floorArea = req.body?.floorArea;
+    let projectType = req.body?.projectType;
+
+    if (req.body?.sourceId) {
+      const row = db.prepare('SELECT * FROM quantity_takeoffs WHERE id = ?').get(req.body.sourceId);
+      if (!row) return res.status(404).json({ error: 'BOQ source not found.' });
+      try { items = JSON.parse(row.items); } catch (e) { items = []; }
+      projectType = row.project_type;
+      if (row.session_id) {
+        try {
+          const intake = db.prepare('SELECT floor_area_m2 FROM project_intake WHERE session_id = ? ORDER BY datetime(created_at) DESC LIMIT 1').get(row.session_id);
+          if (intake?.floor_area_m2) floorArea = intake.floor_area_m2;
+        } catch (e) { /* project_intake may be absent */ }
+      }
+    }
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'Provide a sourceId or an items array.' });
+    res.json(deriveParamsFromBoq(items, { floorArea, projectType }));
+  } catch (err) {
+    console.error('[Builder3D] derive error:', err);
+    res.status(500).json({ error: 'Could not derive a building from that BOQ.' });
   }
 });
 
