@@ -804,17 +804,26 @@ async function generateClientCopyPro(parsed, opts = {}) {
   if (contingency > 0)   preExVat += preNetOriginal * (contingency / 100);
   const preInclVat = preExVat * (1 + (vat / 100));
 
-  // ── Cover sheet (shared renderer — same look as the QS-side BOQ) ─────────
-  await docTpl.renderCoverSheet(wb, {
-    docKind: 'BILL OF QUANTITIES — CLIENT COPY',
-    projectName,
-    clientName,
-    issuedDate: new Date(),
-    currency,
-    totals: { exVat: preExVat, inclVat: preInclVat, labour: preLabour, materials: preMaterials },
-    itemCount: preItemCount,
-    sectionCount: (parsed.sections || []).length,
-  }, style);
+  // ── Cover sheet ───────────────────────────────────────────────────────────
+  // TEMPORARILY DISABLED. The branded cover (renderCoverSheet) produces a sheet
+  // that real Excel rejects with "We found a problem with some content" and
+  // strips on open — even though the XML is well-formed and passes saxes,
+  // openpyxl and ExcelJS. The data sheet below (with its branded hero header)
+  // opens cleanly, so we ship that to guarantee the file works while the exact
+  // cover defect (only structural difference: multi-row merged cells) is fixed.
+  const INCLUDE_COVER = false;
+  if (INCLUDE_COVER) {
+    await docTpl.renderCoverSheet(wb, {
+      docKind: 'BILL OF QUANTITIES — CLIENT COPY',
+      projectName,
+      clientName,
+      issuedDate: new Date(),
+      currency,
+      totals: { exVat: preExVat, inclVat: preInclVat, labour: preLabour, materials: preMaterials },
+      itemCount: preItemCount,
+      sectionCount: (parsed.sections || []).length,
+    }, style);
+  }
 
   // ── Client Copy detail sheet ─────────────────────────────────────────────
   const ws = wb.addWorksheet('Client Copy', {

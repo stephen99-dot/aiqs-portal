@@ -39,6 +39,20 @@ app.use(cors({ origin: true, credentials: true }));
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhook);
 app.use(express.json({ limit: '15mb' }));
 app.use(cookieParser());
+// Public build/version marker so we can confirm exactly which commit is live in
+// production (Render sets RENDER_GIT_COMMIT/BRANCH automatically). Registered
+// before the /api routers so nothing shadows it. No auth — exposes no secrets.
+const SERVER_STARTED_AT = new Date().toISOString();
+app.get('/api/version', (req, res) => {
+  res.json({
+    commit: process.env.RENDER_GIT_COMMIT || 'unknown',
+    branch: process.env.RENDER_GIT_BRANCH || 'unknown',
+    service: process.env.RENDER_SERVICE_NAME || 'unknown',
+    startedAt: SERVER_STARTED_AT,
+    now: new Date().toISOString(),
+    marker: 'dpi-fix+version-endpoint',
+  });
+});
 app.use('/api', routes);
 app.use('/api', chatRoutes);
 app.use('/api', webhookRoutes);
