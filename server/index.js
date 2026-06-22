@@ -112,6 +112,9 @@ app.use('/api/materials', materialsRoutes);
 // Box users — the router gates itself with authMiddleware + requireEstimator.
 // See BUILD_SCHEDULE_SPEC.md.
 app.use('/api/schedule', require('./scheduleRoutes'));
+// 3D Builder (Phase 1) — parametric building -> priced take-off. Admin-only
+// for now (the router gates itself with authMiddleware + adminMiddleware).
+app.use('/api/builder3d', require('./builder3dRoutes'));
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));

@@ -39,6 +39,7 @@ import InvoiceEditorPage from './pages/InvoiceEditorPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import CalculatorsPage from './pages/CalculatorsPage';
+import Builder3DPage from './pages/Builder3DPage';
 import MaterialsPage from './pages/MaterialsPage';
 import TodayPage from './pages/TodayPage';
 import ToolsPage from './pages/ToolsPage';
@@ -140,6 +141,8 @@ function AppInner() {
           <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/documents/:id" element={<DocumentEditorPage />} />
           <Route path="/calculators" element={<CalculatorsPage />} />
+          {/* 3D Builder — admin-only preview (page self-guards on role). */}
+          <Route path="/builder3d" element={<Builder3DPage />} />
           <Route path="/materials" element={<MaterialsPage />} />
           {/* Old OiB homes — keep bookmarks and in-app links working. */}
           <Route path="/pm" element={<Navigate to="/office" replace />} />
