@@ -965,10 +965,16 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
 
-    // Apply the customer's branding (logo, colours, template) to the output.
-    // The customer is the project owner — so the doc the builder gives to
-    // *their* end-client wears the builder's brand, not ours.
-    const branding = getBrandingForUser(project.user_id);
+    // Branding (logo, colours, template) for the output. Normally the job
+    // owner's brand (so a builder's client copy wears the builder's brand). But
+    // if the owner hasn't set up a logo, fall back to the brand of whoever is
+    // generating the doc — so a logo always appears (e.g. the operator/admin
+    // producing a copy for a customer who hasn't uploaded their own).
+    let branding = getBrandingForUser(project.user_id);
+    if (!branding || !branding.logo_path) {
+      const generatorBranding = getBrandingForUser(req.user.id);
+      if (generatorBranding && generatorBranding.logo_path) branding = generatorBranding;
+    }
 
     const buffer = await generateClientCopyProSafe(parsed, {
       currency: project.currency === 'EUR' ? '€' : '£',
