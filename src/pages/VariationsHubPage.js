@@ -56,7 +56,7 @@ export default function VariationsHubPage() {
       {!loading && projects.length === 0 && !error && (
         <div style={{
           padding: 36, textAlign: 'center', borderRadius: 12,
-          background: 'var(--card-bg)', border: '1px solid var(--border)',
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
         }}>
           <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>No variations yet</h3>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>
@@ -68,7 +68,7 @@ export default function VariationsHubPage() {
       {!loading && projects.length > 0 && (
         <div style={{
           borderRadius: 12, border: '1px solid var(--border)',
-          background: 'var(--card-bg)', overflow: 'hidden',
+          background: 'var(--bg-card)', overflow: 'hidden',
         }}>
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{

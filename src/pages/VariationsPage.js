@@ -158,7 +158,7 @@ export default function VariationsPage() {
         {/* LEFT — VO list */}
         <div>
           {variations.length === 0 && !showForm && (
-            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
               <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
               <p style={{ opacity: 0.6, marginBottom: 16, fontSize: 14 }}>No variations raised yet</p>
               <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowForm(true)}>Raise First Variation</button>
@@ -171,7 +171,7 @@ export default function VariationsPage() {
             return (
               <div key={v.id}
                 onClick={() => { setSelected(v); setShowForm(false); }}
-                style={{ background: isActive ? 'var(--primary-bg)' : 'var(--card-bg)', border: `1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', transition: 'all 0.15s' }}>
+                style={{ background: isActive ? 'var(--primary-bg)' : 'var(--bg-card)', border: `1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', transition: 'all 0.15s' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)' }}>{v.vo_number}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: sc.bg, color: sc.color }}>{sc.label}</span>
@@ -195,7 +195,7 @@ export default function VariationsPage() {
 
           {/* NEW VARIATION FORM */}
           {showForm && (
-            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
               <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Raise New Variation</h2>
               <p style={{ fontSize: 13, opacity: 0.6, marginBottom: 24 }}>Describe the change. Attach revised drawings if available — the AI will analyse the delta and estimate costs.</p>
 
@@ -255,7 +255,7 @@ export default function VariationsPage() {
           {selected && !showForm && (() => {
             const analysis = parseAnalysis(selected);
             return (
-              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
+              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
 
                 {/* VO Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
@@ -268,7 +268,7 @@ export default function VariationsPage() {
                 </div>
 
                 {/* Description */}
-                <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '14px 16px', marginBottom: 20, fontSize: 14, lineHeight: 1.6 }}>
+                <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '14px 16px', marginBottom: 20, fontSize: 14, lineHeight: 1.6 }}>
                   {selected.description}
                 </div>
 
@@ -277,7 +277,7 @@ export default function VariationsPage() {
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, marginBottom: 10 }}>Scope Changes</h3>
                     {analysis.scope_changes.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--bg)' }}>
+                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-primary)' }}>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, flexShrink: 0, background: c.type === 'addition' ? 'rgba(16,185,129,0.15)' : c.type === 'omission' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: c.type === 'addition' ? '#10B981' : c.type === 'omission' ? '#EF4444' : '#F59E0B' }}>
                           {c.type?.toUpperCase()}
                         </span>
@@ -293,14 +293,14 @@ export default function VariationsPage() {
 
                 {/* Financial Summary */}
                 <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20 }}>
-                  <div style={{ background: 'var(--bg)', padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>Financial Summary</div>
+                  <div style={{ background: 'var(--bg-primary)', padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>Financial Summary</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: 'var(--border)' }}>
                     {[
                       { label: 'Additions', value: '+' + fmt(selected.additions, selected.currency), color: '#10B981' },
                       { label: 'Omissions', value: '−' + fmt(selected.omissions, selected.currency), color: '#EF4444' },
                       { label: 'Net Change', value: (selected.net_change >= 0 ? '+' : '−') + fmt(selected.net_change, selected.currency), color: selected.net_change >= 0 ? '#EF4444' : '#10B981' },
                     ].map(item => (
-                      <div key={item.label} style={{ background: 'var(--card-bg)', padding: '14px 16px', textAlign: 'center' }}>
+                      <div key={item.label} style={{ background: 'var(--bg-card)', padding: '14px 16px', textAlign: 'center' }}>
                         <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4, textTransform: 'uppercase' }}>{item.label}</div>
                         <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}</div>
                       </div>
@@ -367,7 +367,7 @@ export default function VariationsPage() {
 
           {/* Empty right panel */}
           {!showForm && !selected && variations.length > 0 && (
-            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 48, textAlign: 'center', opacity: 0.5 }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 48, textAlign: 'center', opacity: 0.5 }}>
               <p>Select a variation to view details</p>
             </div>
           )}
@@ -377,7 +377,7 @@ export default function VariationsPage() {
       {/* Reject Modal */}
       {rejectModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--card-bg)', borderRadius: 12, padding: 28, width: 420, maxWidth: '90vw' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 28, width: 420, maxWidth: '90vw' }}>
             <h3 style={{ marginBottom: 12 }}>Reject Variation</h3>
             <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>Provide a reason for rejection (optional):</p>
             <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Scope not agreed, awaiting revised drawings..." style={{ width: '100%', marginBottom: 16, resize: 'vertical' }} />
