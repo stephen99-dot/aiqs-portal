@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { normaliseInputs, computeQuantities, priceModel } = require('./builder3dEngine');
+const { normaliseInputs, computeQuantities, priceModel, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
 
 // A stub rate library: every code returns £10 labour + £10 materials (£20
 // total) so line totals are easy to predict in assertions.
@@ -67,6 +67,41 @@ test('hip roof shortens the ridge and adds hips + full-perimeter eaves vs gable'
   assert.equal(gable.eavesLength, 20, 'gable eaves only the two long sides');
   // Same pitch -> identical slope area regardless of roof type.
   assert.ok(Math.abs(hip.roofSlopeArea - gable.roofSlopeArea) < 1e-6, 'slope area independent of roof type');
+});
+
+test('rectangle footprint: area, perimeter and single rect are exact', () => {
+  const { outline, rects } = generateFootprint(normaliseInputs({ length: 10, width: 6, shape: 'rect' }));
+  assert.equal(polyArea(outline), 60, 'area = 10*6');
+  assert.equal(polyPerimeter(outline), 32, 'perimeter = 2*(10+6)');
+  assert.equal(rects.length, 1, 'rectangle decomposes to one rect');
+});
+
+test('L-shape: area is the bounding box minus the corner notch', () => {
+  const m = normaliseInputs({ length: 10, width: 8, shape: 'L', wing: 0.5 });
+  const { outline, rects } = generateFootprint(m);
+  // notch = (10*0.5) x (8*0.5) = 5 x 4 = 20 removed from the 80 bbox -> 60.
+  assert.equal(polyArea(outline), 60, 'L area = 80 - 20');
+  assert.equal(rects.length, 2, 'L decomposes to two rects');
+  // Rect areas sum to the polygon area (non-overlapping decomposition).
+  const sum = rects.reduce((s, r) => s + r.w * r.d, 0);
+  assert.ok(Math.abs(sum - 60) < 0.01, 'rect areas sum to footprint');
+});
+
+test('T and U shapes decompose into the right rect counts and match area', () => {
+  for (const [shape, count] of [['T', 2], ['U', 3]]) {
+    const m = normaliseInputs({ length: 12, width: 9, shape, wing: 0.4 });
+    const { outline, rects } = generateFootprint(m);
+    assert.equal(rects.length, count, `${shape} -> ${count} rects`);
+    const sum = rects.reduce((s, r) => s + r.w * r.d, 0);
+    assert.ok(Math.abs(sum - polyArea(outline)) < 0.05, `${shape} rect areas sum to footprint`);
+  }
+});
+
+test('non-rectangular footprint still prices with no missing codes (stub)', () => {
+  const out = priceModel({ length: 10, width: 8, shape: 'L', wing: 0.5 }, flatLookup);
+  assert.ok(out.geometry.outline.length === 6, 'L outline has six corners');
+  assert.equal(out.geometry.rects.length, 2, 'geometry carries the rects for rendering');
+  assert.ok(out.totals.total > 0, 'L-shape prices to a positive total');
 });
 
 test('Services lines scale with floor area and appear as their own group', () => {

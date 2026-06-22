@@ -30,8 +30,16 @@ const ROOF_TYPES = [
   { id: 'gable', label: 'Gable' },
 ];
 
+const SHAPES = [
+  { id: 'rect', label: 'Rectangle' },
+  { id: 'L', label: 'L-shaped' },
+  { id: 'T', label: 'T-shaped' },
+  { id: 'U', label: 'U-shaped' },
+];
+
 const DEFAULTS = {
   length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35, roofType: 'hip',
+  shape: 'rect', wing: 0.45,
   windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
   ohpPct: 15, vatPct: 20,
 };
@@ -89,105 +97,128 @@ function addPoly(group, points, mat) {
   group.add(new THREE.Mesh(geo, mat));
 }
 
-function buildHouse(p, brickTex) {
+// A brick-faced wall box laid along the edge a→b. The brick texture is cloned
+// per wall so it tiles to the wall's own length/height instead of stretching.
+function addWall(group, a, b, H, thickness, brickTex) {
+  const len = Math.hypot(b.x - a.x, b.z - a.z);
+  if (len < 1e-3) return;
+  const tex = brickTex.clone();
+  tex.needsUpdate = true;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(1, len / 2), Math.max(1, H / 2));
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, H, thickness), mat);
+  mesh.position.set((a.x + b.x) / 2, H / 2, (a.z + b.z) / 2);
+  mesh.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x);
+  group.add(mesh);
+}
+
+// Build one rectangle's roof (ridge along its long axis). `r` is centred at
+// {x,z} with size {w,d}. Handles hip and gable; gable ends are filled brick.
+function buildRectRoof(group, r, H, pitchDeg, roofType, timber, roofMat, brickMat) {
+  const isHip = roofType === 'hip';
+  const alongX = r.w >= r.d;
+  const longLen = Math.max(r.w, r.d);
+  const shortLen = Math.min(r.w, r.d);
+  const rise = (shortLen / 2) * Math.tan((pitchDeg * Math.PI) / 180);
+  const ridgeY = H + rise;
+  const ridgeHalf = isHip ? Math.max(longLen / 2 - shortLen / 2, 0) : longLen / 2;
+  const hl = longLen / 2, hs = shortLen / 2;
+  // local (u along long axis, v across) -> world point
+  const P = (u, v, y) => new THREE.Vector3(
+    alongX ? r.x + u : r.x + v,
+    y,
+    alongX ? r.z + v : r.z + u,
+  );
+  const rPos = P(ridgeHalf, 0, ridgeY);
+  const rNeg = P(-ridgeHalf, 0, ridgeY);
+
+  addBeam(group, rNeg, rPos, 0.14, timber); // ridge board
+  // Wall plates round the rectangle.
+  addBeam(group, P(-hl, hs, H), P(hl, hs, H), 0.1, timber);
+  addBeam(group, P(-hl, -hs, H), P(hl, -hs, H), 0.1, timber);
+  addBeam(group, P(hl, -hs, H), P(hl, hs, H), 0.1, timber);
+  addBeam(group, P(-hl, -hs, H), P(-hl, hs, H), 0.1, timber);
+  // Common rafters at ~0.6m centres.
+  const span = ridgeHalf * 2;
+  const bays = Math.max(2, Math.round((span || longLen) / 0.6));
+  for (let i = 0; i <= bays; i++) {
+    const u = -ridgeHalf + (span * i) / bays;
+    addBeam(group, P(u, hs, H), P(u, 0, ridgeY), 0.07, timber);
+    addBeam(group, P(u, -hs, H), P(u, 0, ridgeY), 0.07, timber);
+  }
+  // Main slopes.
+  addPoly(group, [P(-hl, hs, H), P(hl, hs, H), rPos, rNeg], roofMat);
+  addPoly(group, [P(hl, -hs, H), P(-hl, -hs, H), rNeg, rPos], roofMat);
+  if (isHip) {
+    addBeam(group, P(hl, hs, H), rPos, 0.08, timber);
+    addBeam(group, P(hl, -hs, H), rPos, 0.08, timber);
+    addBeam(group, P(-hl, hs, H), rNeg, 0.08, timber);
+    addBeam(group, P(-hl, -hs, H), rNeg, 0.08, timber);
+    addPoly(group, [P(hl, hs, H), P(hl, -hs, H), rPos], roofMat);
+    addPoly(group, [P(-hl, -hs, H), P(-hl, hs, H), rNeg], roofMat);
+  } else {
+    addPoly(group, [P(hl, hs, H), P(hl, -hs, H), rPos], brickMat);
+    addPoly(group, [P(-hl, -hs, H), P(-hl, hs, H), rNeg], brickMat);
+  }
+}
+
+// Place a window/door panel on an outline edge, offset outward (away from the
+// footprint centroid) so it sits proud of the brick.
+function placeOnEdge(group, e, cen, frac, y, w, h, mat) {
+  const px = e.a.x + (e.b.x - e.a.x) * frac;
+  const pz = e.a.z + (e.b.z - e.a.z) * frac;
+  let nx = px - cen.x, nz = pz - cen.z;
+  const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.08), mat);
+  mesh.position.set(px + nx * 0.16, y, pz + nz * 0.16);
+  mesh.rotation.y = -Math.atan2(e.b.z - e.a.z, e.b.x - e.a.x);
+  group.add(mesh);
+}
+
+// Render the whole building from the server-supplied geometry block, so what's
+// drawn is exactly what was priced.
+function buildHouse(geo, brickTex) {
   const group = new THREE.Group();
-  const L = p.length, W = p.width;
-  const H = p.wallHeight * p.storeys;
-  const t = 0.3; // wall thickness
+  const { outline, rects, roofPitch, roofType } = geo;
+  const H = geo.wallHeight * geo.storeys;
+  const t = 0.3;
 
   const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95 });
-  brickTex.repeat.set(L / 2, H / 2);
   const timber = new THREE.MeshStandardMaterial({ color: 0xc9a36a, roughness: 0.8 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x9fc4d6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.75 });
   const doorMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.7 });
-
-  // Four walls as boxes forming a shell.
-  const walls = [
-    { w: L, d: t, x: 0, z: W / 2 - t / 2 },   // front (+Z)
-    { w: L, d: t, x: 0, z: -W / 2 + t / 2 },  // back (-Z)
-    { w: t, d: W, x: L / 2 - t / 2, z: 0 },   // right (+X)
-    { w: t, d: W, x: -L / 2 + t / 2, z: 0 },  // left (-X)
-  ];
-  walls.forEach((s) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(s.w, H, s.d), brickMat);
-    m.position.set(s.x, H / 2, s.z);
-    group.add(m);
-  });
-
-  // Floor slab.
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(L, 0.15, W), new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1 }));
-  slab.position.set(0, -0.075, 0);
-  group.add(slab);
-
-  // Windows along the front + back long walls; doors on the front.
-  const perWall = Math.ceil(p.windows / 2);
-  const placeRow = (count, z, normalSign) => {
-    if (count <= 0) return;
-    const spacing = L / (count + 1);
-    for (let i = 1; i <= count; i++) {
-      const win = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 0.08), glass);
-      win.position.set(-L / 2 + spacing * i, H * 0.55, z + normalSign * (t / 2 + 0.02));
-      group.add(win);
-    }
-  };
-  placeRow(perWall, W / 2 - t / 2, 1);
-  placeRow(p.windows - perWall, -W / 2 + t / 2, -1);
-
-  if (p.doors > 0) {
-    const dspacing = L / (p.doors + 1);
-    for (let i = 1; i <= p.doors; i++) {
-      const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.0, 0.1), doorMat);
-      door.position.set(-L / 2 + dspacing * i, 1.0, W / 2 - t / 2 + 0.03);
-      group.add(door);
-    }
-  }
-
-  // Roof: ridge runs along X (the model long axis), slopes face ±Z. For a hip
-  // the ridge is inset by W/2 at each end; for a gable it runs the full length.
-  const isHip = p.roofType === 'hip';
-  const rise = (W / 2) * Math.tan((p.roofPitch * Math.PI) / 180);
-  const ridgeY = H + rise;
-  const ridgeHalf = isHip ? Math.max(L / 2 - W / 2, 0) : L / 2;
-  const rEndPos = new THREE.Vector3(ridgeHalf, ridgeY, 0);
-  const rEndNeg = new THREE.Vector3(-ridgeHalf, ridgeY, 0);
-  // Translucent covering so the rafter structure reads through it.
   const roofMat = new THREE.MeshStandardMaterial({ color: 0x6b5847, roughness: 0.9, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
 
-  // Ridge board + wall plates all round.
-  addBeam(group, rEndNeg, rEndPos, 0.14, timber);
-  addBeam(group, new THREE.Vector3(-L / 2, H, W / 2), new THREE.Vector3(L / 2, H, W / 2), 0.1, timber);
-  addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(L / 2, H, -W / 2), 0.1, timber);
-  addBeam(group, new THREE.Vector3(L / 2, H, -W / 2), new THREE.Vector3(L / 2, H, W / 2), 0.1, timber);
-  addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), 0.1, timber);
+  // Walls round the outline + floor slabs per rectangle.
+  const n = outline.length;
+  for (let i = 0; i < n; i++) addWall(group, outline[i], outline[(i + 1) % n], H, t, brickTex);
+  rects.forEach((r) => {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.15, r.d), new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1 }));
+    slab.position.set(r.x, -0.075, r.z);
+    group.add(slab);
+  });
 
-  // Common rafters at ~0.6m centres along the main (±Z) slopes.
-  const span = ridgeHalf * 2;
-  const bays = Math.max(2, Math.round((span || L) / 0.6));
-  for (let i = 0; i <= bays; i++) {
-    const x = -ridgeHalf + (span * i) / bays;
-    addBeam(group, new THREE.Vector3(x, H, W / 2), new THREE.Vector3(x, ridgeY, 0), 0.07, timber);
-    addBeam(group, new THREE.Vector3(x, H, -W / 2), new THREE.Vector3(x, ridgeY, 0), 0.07, timber);
-  }
+  // A roof per rectangle.
+  rects.forEach((r) => buildRectRoof(group, r, H, roofPitch, roofType, timber, roofMat, brickMat));
 
-  // Main roof slopes.
-  addPoly(group, [new THREE.Vector3(-L / 2, H, W / 2), new THREE.Vector3(L / 2, H, W / 2), rEndPos, rEndNeg], roofMat);
-  addPoly(group, [new THREE.Vector3(L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, -W / 2), rEndNeg, rEndPos], roofMat);
+  // Openings: edges + centroid for outward offset.
+  const cen = outline.reduce((a, p) => ({ x: a.x + p.x / n, z: a.z + p.z / n }), { x: 0, z: 0 });
+  const edges = outline.map((a, i) => {
+    const b = outline[(i + 1) % n];
+    return { a, b, len: Math.hypot(b.x - a.x, b.z - a.z) };
+  });
+  const perim = edges.reduce((s, e) => s + e.len, 0) || 1;
+  // Doors on the longest edges.
+  [...edges].sort((x, y) => y.len - x.len).slice(0, geo.doors).forEach((e) => {
+    placeOnEdge(group, e, cen, 0.5, 1.0, 0.9, 2.0, doorMat);
+  });
+  // Windows distributed along the outline in proportion to edge length.
+  edges.forEach((e) => {
+    const count = Math.round(geo.windows * (e.len / perim));
+    for (let k = 1; k <= count; k++) placeOnEdge(group, e, cen, k / (count + 1), H * 0.55, 1.1, 1.1, glass);
+  });
 
-  if (isHip) {
-    // Hip rafters from the four corners to the ridge ends + triangular ends.
-    addBeam(group, new THREE.Vector3(L / 2, H, W / 2), rEndPos, 0.08, timber);
-    addBeam(group, new THREE.Vector3(L / 2, H, -W / 2), rEndPos, 0.08, timber);
-    addBeam(group, new THREE.Vector3(-L / 2, H, W / 2), rEndNeg, 0.08, timber);
-    addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), rEndNeg, 0.08, timber);
-    addPoly(group, [new THREE.Vector3(L / 2, H, W / 2), new THREE.Vector3(L / 2, H, -W / 2), rEndPos], roofMat);
-    addPoly(group, [new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), rEndNeg], roofMat);
-  } else {
-    // Gable end walls fill the triangle at each end with brickwork.
-    addPoly(group, [new THREE.Vector3(L / 2, H, W / 2), new THREE.Vector3(L / 2, H, -W / 2), rEndPos], brickMat);
-    addPoly(group, [new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), rEndNeg], brickMat);
-  }
-
-  group.position.y = 0;
   return group;
 }
 
@@ -258,18 +289,19 @@ export default function Builder3DPage() {
     };
   }, [isAdmin]);
 
-  // ── rebuild the house whenever the geometry params change ──
+  // ── rebuild the house from the priced geometry (single source of truth) ──
+  const geometry = quote?.geometry;
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !brickRef.current) return;
+    if (!scene || !brickRef.current || !geometry) return;
     if (houseRef.current) {
       scene.remove(houseRef.current);
-      houseRef.current.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      houseRef.current.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material?.map) o.material.map.dispose(); });
     }
-    const house = buildHouse(params, brickRef.current);
+    const house = buildHouse(geometry, brickRef.current);
     scene.add(house);
     houseRef.current = house;
-  }, [params.length, params.width, params.wallHeight, params.storeys, params.roofPitch, params.roofType, params.windows, params.doors]);
+  }, [geometry]);
 
   // ── debounced pricing call ──
   const price = useCallback(async (p) => {
@@ -285,11 +317,11 @@ export default function Builder3DPage() {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => price(params), 350);
+    const id = setTimeout(() => price(params), 250);
     return () => clearTimeout(id);
   }, [params, price]);
 
-  const STRING_KEYS = ['wallType', 'roofCovering', 'roofType'];
+  const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
     setParams((p) => ({ ...p, [key]: STRING_KEYS.includes(key) ? v : Number(v) }));
@@ -321,7 +353,7 @@ export default function Builder3DPage() {
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
-          Parametric building → live priced take-off against the UK Master Rates library. Phase 1: rectangular footprint, gable roof.
+          Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
         </div>
       </div>
 
@@ -329,8 +361,20 @@ export default function Builder3DPage() {
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>Building</div>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Footprint shape</span>
+            <select value={params.shape} onChange={set('shape')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+              {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
           {numberField('Length (m)', 'length', { min: 2, max: 60, step: 0.5 })}
           {numberField('Width (m)', 'width', { min: 2, max: 60, step: 0.5 })}
+          {params.shape !== 'rect' && (
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wing size ({Math.round(params.wing * 100)}%)</span>
+              <input type="range" min={0.2} max={0.7} step={0.05} value={params.wing} onChange={set('wing')} style={{ width: '100%' }} />
+            </label>
+          )}
           {numberField('Wall height (m)', 'wallHeight', { min: 2, max: 6, step: 0.1 })}
           {numberField('Storeys', 'storeys', { min: 1, max: 4 })}
           {numberField('Roof pitch (°)', 'roofPitch', { min: 5, max: 60 })}

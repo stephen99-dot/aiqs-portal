@@ -51,6 +51,75 @@ const ROOF_COVERINGS = {
   slate: { code: 'RF-004', descLike: 'natural slate', label: 'Natural slate' },
 };
 
+const SHAPES = ['rect', 'L', 'T', 'U'];
+
+// Build the building footprint for the chosen shape. Returns:
+//   outline — the external wall polygon (ordered points in the X-Z plane),
+//             centred on the origin so the 3D model sits nicely on the grid.
+//   rects   — the non-overlapping rectangles the shape decomposes into; each
+//             carries its own roof, and the union is the footprint.
+// L/T/U are derived from the overall L×W bounding box plus a single `wing`
+// fraction controlling the notch / stem size.
+function generateFootprint(m) {
+  const L = m.length, W = m.width, k = m.wing;
+  let outline, rects;
+  if (m.shape === 'L') {
+    const nx = L * k, nz = W * k; // notch cut from the +X/+Z corner
+    outline = [{ x: 0, z: 0 }, { x: L, z: 0 }, { x: L, z: W - nz }, { x: L - nx, z: W - nz }, { x: L - nx, z: W }, { x: 0, z: W }];
+    rects = [{ x: 0, z: 0, w: L, d: W - nz }, { x: 0, z: W - nz, w: L - nx, d: nz }];
+  } else if (m.shape === 'T') {
+    const bd = W * (1 - k), sw = L * k; // bar depth + central stem width
+    outline = [{ x: 0, z: 0 }, { x: L, z: 0 }, { x: L, z: bd }, { x: (L + sw) / 2, z: bd }, { x: (L + sw) / 2, z: W }, { x: (L - sw) / 2, z: W }, { x: (L - sw) / 2, z: bd }, { x: 0, z: bd }];
+    rects = [{ x: 0, z: 0, w: L, d: bd }, { x: (L - sw) / 2, z: bd, w: sw, d: W - bd }];
+  } else if (m.shape === 'U') {
+    const nd = W * k, nw = L * k; // central notch cut from the +Z side
+    outline = [{ x: 0, z: 0 }, { x: L, z: 0 }, { x: L, z: W }, { x: (L + nw) / 2, z: W }, { x: (L + nw) / 2, z: W - nd }, { x: (L - nw) / 2, z: W - nd }, { x: (L - nw) / 2, z: W }, { x: 0, z: W }];
+    rects = [{ x: 0, z: 0, w: L, d: W - nd }, { x: 0, z: W - nd, w: (L - nw) / 2, d: nd }, { x: (L + nw) / 2, z: W - nd, w: (L - nw) / 2, d: nd }];
+  } else {
+    outline = [{ x: 0, z: 0 }, { x: L, z: 0 }, { x: L, z: W }, { x: 0, z: W }];
+    rects = [{ x: 0, z: 0, w: L, d: W }];
+  }
+  const cx = L / 2, cz = W / 2;
+  return {
+    outline: outline.map((p) => ({ x: round2(p.x - cx), z: round2(p.z - cz) })),
+    // Store rectangles by their centre so the renderer can place a box directly.
+    rects: rects.map((r) => ({ x: round2(r.x + r.w / 2 - cx), z: round2(r.z + r.d / 2 - cz), w: round2(r.w), d: round2(r.d) })),
+  };
+}
+
+function polyArea(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    a += pts[i].x * pts[j].z - pts[j].x * pts[i].z;
+  }
+  return Math.abs(a) / 2;
+}
+
+function polyPerimeter(pts) {
+  let p = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    p += Math.hypot(pts[j].x - pts[i].x, pts[j].z - pts[i].z);
+  }
+  return p;
+}
+
+// Roof linear quantities for one rectangle. Ridge runs along the rectangle's
+// long axis; a hip insets the ridge by half the short span at each end and adds
+// four hip runs, and has eaves all round (a gable only on the two slope sides).
+function rectRoof(w, d, pitchRad, isHip) {
+  const long = Math.max(w, d), short = Math.min(w, d);
+  const rise = (short / 2) * Math.tan(pitchRad);
+  const ridge = isHip ? Math.max(long - short, 0) : long;
+  const hipLen = Math.sqrt(2 * (short / 2) * (short / 2) + rise * rise);
+  return {
+    ridge,
+    capping: ridge + (isHip ? 4 * hipLen : 0),
+    eaves: isHip ? 2 * (w + d) : 2 * long,
+  };
+}
+
 /**
  * Normalise + validate the raw inputs from the client into a clean model.
  */
@@ -58,6 +127,7 @@ function normaliseInputs(raw = {}) {
   const wallType = WALL_TYPES[raw.wallType] ? raw.wallType : 'cavity';
   const roofCovering = ROOF_COVERINGS[raw.roofCovering] ? raw.roofCovering : 'concrete_tile';
   const roofType = raw.roofType === 'gable' ? 'gable' : 'hip';
+  const shape = SHAPES.includes(raw.shape) ? raw.shape : 'rect';
   return {
     length: clamp(raw.length, 2, 60, 8),
     width: clamp(raw.width, 2, 60, 6),
@@ -65,6 +135,8 @@ function normaliseInputs(raw = {}) {
     storeys: Math.round(clamp(raw.storeys, 1, 4, 1)),
     roofPitch: clamp(raw.roofPitch, 5, 60, 35),
     roofType,
+    shape,
+    wing: clamp(raw.wing, 0.2, 0.7, 0.45),
     windows: Math.round(clamp(raw.windows, 0, 60, 6)),
     doors: Math.round(clamp(raw.doors, 0, 20, 2)),
     wallType,
@@ -79,9 +151,9 @@ function normaliseInputs(raw = {}) {
  * SI-ish units (m, m², m³, nr) so the pricing step is trivial.
  */
 function computeQuantities(m) {
-  const perimeter = 2 * (m.length + m.width);
-  const footprint = m.length * m.width;
-  const longSide = Math.max(m.length, m.width);
+  const { outline, rects } = generateFootprint(m);
+  const perimeter = polyPerimeter(outline);
+  const footprint = polyArea(outline);
 
   // Walls: gross external face over every storey, less the openings.
   const wallGross = perimeter * m.wallHeight * m.storeys;
@@ -93,22 +165,22 @@ function computeQuantities(m) {
   const trenchVolume = perimeter * 0.6 * 0.8;
   const slabArea = footprint;
 
-  // Roof. With equal pitch on every plane the total slope area = the horizontal
-  // projected area / cos(pitch) for both gable and hip, so footprint/cos(pitch)
-  // holds either way. The ridge runs along the model's length (X); slopes span
-  // the width, so the rise is set by width/2.
+  // Roof. With equal pitch on every plane, the total slope area is the
+  // horizontal projected (footprint) area / cos(pitch) — true for any footprint,
+  // so this stays exact for L/T/U shapes. The linear quantities (structural
+  // ridge, ridge+hip capping, eaves) are summed over the shape's rectangles,
+  // each carrying its own roof. At wing junctions this slightly over-counts
+  // (real roofs form valleys there) — a known Phase-2 approximation.
   const isHip = m.roofType === 'hip';
   const pitchRad = (m.roofPitch * Math.PI) / 180;
   const roofSlopeArea = footprint / Math.cos(pitchRad);
-  const rise = (m.width / 2) * Math.tan(pitchRad);
-  // Hip ridge is shortened by half the width at each end; a hip 3D length runs
-  // from each corner up to the (inset) ridge end.
-  const ridgeLength = isHip ? Math.max(m.length - m.width, 0) : longSide;
-  const hipLength = Math.sqrt(2 * (m.width / 2) * (m.width / 2) + rise * rise);
-  // Linear metres of capping (ridge + hips) priced as ridge tiles.
-  const cappingLength = ridgeLength + (isHip ? 4 * hipLength : 0);
-  // Hip roofs have eaves all the way round; a gable only on the two long sides.
-  const eavesLength = isHip ? perimeter : 2 * longSide;
+  let ridgeLength = 0, cappingLength = 0, eavesLength = 0;
+  for (const r of rects) {
+    const rr = rectRoof(r.w, r.d, pitchRad, isHip);
+    ridgeLength += rr.ridge;
+    cappingLength += rr.capping;
+    eavesLength += rr.eaves;
+  }
 
   // Internal finishes: one plastered face of the external walls plus ceilings.
   const ceilingArea = footprint * m.storeys;
@@ -141,6 +213,8 @@ function computeQuantities(m) {
     bathrooms,
     windows: m.windows,
     doors: m.doors,
+    outline,
+    rects,
   };
 }
 
@@ -251,6 +325,17 @@ function priceModel(rawInputs, lookupRate) {
   return {
     inputs: m,
     quantities: q,
+    // Everything the renderer needs to draw exactly what was priced.
+    geometry: {
+      outline: q.outline,
+      rects: q.rects,
+      wallHeight: m.wallHeight,
+      storeys: m.storeys,
+      roofPitch: m.roofPitch,
+      roofType: m.roofType,
+      windows: m.windows,
+      doors: m.doors,
+    },
     groups,
     missing,
     totals: { cost, labour, materials, profit, subtotal, vat, total },
@@ -262,6 +347,10 @@ module.exports = {
   computeQuantities,
   buildRecipe,
   priceModel,
+  generateFootprint,
+  polyArea,
+  polyPerimeter,
   WALL_TYPES,
   ROOF_COVERINGS,
+  SHAPES,
 };
