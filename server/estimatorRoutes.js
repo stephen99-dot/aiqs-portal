@@ -947,6 +947,7 @@ router.get('/quotes/:id/xlsx', async (req, res) => {
     const filename = (q.quote_number || 'quote') + '.xlsx';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
+    require('./docTemplates').fixXlsxDpi(wb);
     await wb.xlsx.write(res);
     res.end();
   } catch (err) {

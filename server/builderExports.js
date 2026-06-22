@@ -25,7 +25,7 @@ const path = require('path');
 // cell. BOQ descriptions scraped from PDFs occasionally carry Unicode
 // non-characters / lone surrogates that ExcelJS writes verbatim, which makes
 // Excel reject the whole workbook ("We found a problem with some content").
-const { sanitizeXmlText } = require('./docTemplates');
+const { sanitizeXmlText, writeXlsxBuffer } = require('./docTemplates');
 
 // Convert "#RRGGBB" to ExcelJS argb ("FFRRGGBB"). Returns null if invalid.
 function hexToArgb(hex) {
@@ -271,8 +271,11 @@ async function parseBOQ(filePath) {
 
     // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
+        upperLabel.includes('SUMMARY OF TOTALS') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
+        upperLabel.startsWith('NET MEASURED WORKS') ||
+        upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
       stopped = true;
       return;
@@ -694,7 +697,7 @@ async function generateBuilderPack(parsed, opts = {}) {
       '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N';
   }
 
-  const buffer = await wb.xlsx.writeBuffer();
+  const buffer = await writeXlsxBuffer(wb);
   return Buffer.from(buffer);
 }
 
@@ -1016,7 +1019,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
   ws.headerFooter.oddFooter = '&L' + footerLeft + ' — CLIENT COPY&RPage &P of &N';
 
-  const buffer = await wb.xlsx.writeBuffer();
+  const buffer = await writeXlsxBuffer(wb);
   return Buffer.from(buffer);
 }
 

@@ -7,7 +7,7 @@
  * the customer's chosen template (modern / professional / heritage / minimalist).
  */
 const ExcelJS = require('exceljs');
-const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex, sanitizeXmlText } = require('./docTemplates');
+const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex, sanitizeXmlText, writeXlsxBuffer } = require('./docTemplates');
 
 async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const currency = opts.currency || '\u00a3';
@@ -407,7 +407,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   cover.headerFooter.oddFooter = '&L' + (branding.footer_text || branding.company_name || 'The AI QS — theaiqs.co.uk') + '&RPage &P of &N';
 
   // Write buffer
-  var buffer = await wb.xlsx.writeBuffer();
+  var buffer = await writeXlsxBuffer(wb);
   return Buffer.from(buffer);
 }
 

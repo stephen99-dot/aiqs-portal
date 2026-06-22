@@ -8,6 +8,7 @@ const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
 const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
+const { writeXlsxBuffer } = require('./docTemplates');
 const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
 
@@ -692,7 +693,7 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
     newWs.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
     newWs.headerFooter.oddFooter = '&LThe AI QS - theaiqs.co.uk — CLIENT COPY&RPage &P of &N';
 
-    const buffer = await newWb.xlsx.writeBuffer();
+    const buffer = await writeXlsxBuffer(newWb);
     const filename = 'ClientCopy_' + project.title.replace(/[^a-zA-Z0-9]/g, '_') + '_' + Date.now() + '.xlsx';
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -717,6 +718,21 @@ function loadProjectForUser(req) {
     ? db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId)
     : db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
   return project;
+}
+
+// The title for builder/client documents should be the SITE ADDRESS where we
+// have one (from the drawing submission), not the generic project type/title
+// (e.g. "Residential Extension"). Falls back to the project title.
+function documentTitleForProject(project) {
+  try {
+    const row = db.prepare(
+      "SELECT site_address FROM drawing_submissions WHERE project_id = ? AND site_address IS NOT NULL AND TRIM(site_address) != '' ORDER BY created_at DESC LIMIT 1"
+    ).get(project.id);
+    const addr = row && row.site_address ? row.site_address.trim() : '';
+    return addr || project.title;
+  } catch (e) {
+    return project.title;
+  }
 }
 
 // Reshape an edited-sections payload from the client (description / qty / labour /
@@ -913,7 +929,7 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
       currency: project.currency === 'EUR' ? '€' : '£',
       builder_margin: parseFloat(req.body.builder_margin) || 0,
       materials_markup: parseFloat(req.body.materials_markup) || 0,
-      project_name: project.title,
+      project_name: documentTitleForProject(project),
       client_name: user ? user.full_name : 'Client',
     });
 
@@ -966,7 +982,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
       prelims_pct: req.body.prelims_pct,
       day_rate: req.body.day_rate,
       rounding: req.body.rounding,
-      project_name: project.title,
+      project_name: documentTitleForProject(project),
       client_name: user ? user.full_name : 'Client',
       branding,
     });
