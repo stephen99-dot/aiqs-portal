@@ -387,24 +387,43 @@ function deriveParamsFromBoq(items, opts = {}) {
   else if (floorArea > 0) { footprint = floorArea / storeys; notes.push(`Footprint ${round2(footprint)} m² from GIA ${round2(floorArea)} m² ÷ ${storeys} storey(s)`); }
   else { footprint = 60; notes.push('Footprint defaulted to 60 m² (no slab or GIA in the BOQ)'); }
 
-  let perimeter;
-  if (wallArea > 0) { perimeter = wallArea / (h * storeys); notes.push(`Perimeter ${round2(perimeter)} m from wall area ${round2(wallArea)} m² ÷ (${h}m × ${storeys})`); }
-  else { perimeter = 4 * Math.sqrt(footprint); notes.push('Perimeter assumed from a square footprint (no wall area found)'); }
-
-  // Recover the rectangle: roots of x² - (P/2)x + A = 0.
-  let L, W;
-  const half = perimeter / 2;
-  const disc = half * half - 4 * footprint;
-  if (disc >= 0) { L = (half + Math.sqrt(disc)) / 2; W = (half - Math.sqrt(disc)) / 2; }
-  else { L = W = Math.sqrt(footprint); notes.push('Wall and floor areas were inconsistent — assumed a square footprint'); }
+  // Recover length & width. Use the wall-area-derived perimeter only when it
+  // yields a sensible rectangle (real roots, aspect ≤ 4:1); otherwise fall back
+  // to a typical 3:2 footprint so the model still looks like a building rather
+  // than a freak square/sliver when the BOQ's wall quantities are partial.
+  const DEFAULT_ASPECT = 1.5;
+  let L, W, perimeter;
+  let usedWall = false;
+  if (wallArea > 0) {
+    perimeter = wallArea / (h * storeys);
+    const half = perimeter / 2;
+    const disc = half * half - 4 * footprint;
+    if (disc >= 0) {
+      L = (half + Math.sqrt(disc)) / 2;
+      W = (half - Math.sqrt(disc)) / 2;
+      if (W > 0 && L / W <= 4) usedWall = true;
+    }
+  }
+  if (!usedWall) {
+    L = Math.sqrt(footprint * DEFAULT_ASPECT);
+    W = footprint / L;
+    perimeter = 2 * (L + W);
+  }
   L = clamp(L, 2, 60, 8); W = clamp(W, 2, 60, 6);
+  notes.push(usedWall
+    ? `Footprint ${round2(L)}m × ${round2(W)}m recovered from wall area ${round2(wallArea)} m²`
+    : `Footprint sized at a typical ${round2(L)}m × ${round2(W)}m (wall area unavailable or inconsistent)`);
 
+  // Pitch only when roof vs footprint is physically plausible — a pitched roof
+  // is ~1.0–1.8× its plan area for 0–55°. Outside that the roof quantity is
+  // measuring something else, so use a sensible default rather than a spike.
   let roofPitch = 35;
-  if (roofArea > footprint && footprint > 0) {
-    roofPitch = clamp(Math.round((Math.acos(Math.min(1, Math.max(0.2, footprint / roofArea))) * 180) / Math.PI), 5, 60, 35);
-    notes.push(`Roof pitch ${roofPitch}° from roof area ${round2(roofArea)} m² vs footprint`);
+  const roofRatio = footprint > 0 ? roofArea / footprint : 0;
+  if (roofRatio >= 1.02 && roofRatio <= 1.8) {
+    roofPitch = clamp(Math.round((Math.acos(1 / roofRatio) * 180) / Math.PI), 10, 50, 35);
+    notes.push(`Roof pitch ${roofPitch}° from roof area vs footprint`);
   } else {
-    notes.push('Roof pitch 35° (default — no usable roof area)');
+    notes.push('Roof pitch 35° (default — roof area not usable)');
   }
 
   const params = {
