@@ -43,6 +43,13 @@ app.use(cookieParser());
 // production (Render sets RENDER_GIT_COMMIT/BRANCH automatically). Registered
 // before the /api routers so nothing shadows it. No auth — exposes no secrets.
 const SERVER_STARTED_AT = new Date().toISOString();
+let SHARP_OK = null;
+function sharpAvailable() {
+  if (SHARP_OK === null) {
+    try { require('sharp'); SHARP_OK = true; } catch (e) { SHARP_OK = false; }
+  }
+  return SHARP_OK;
+}
 app.get('/api/version', (req, res) => {
   res.json({
     commit: process.env.RENDER_GIT_COMMIT || 'unknown',
@@ -50,7 +57,8 @@ app.get('/api/version', (req, res) => {
     service: process.env.RENDER_SERVICE_NAME || 'unknown',
     startedAt: SERVER_STARTED_AT,
     now: new Date().toISOString(),
-    marker: 'dpi-fix+version-endpoint',
+    sharp: sharpAvailable(),
+    marker: 'logo+sharp-status',
   });
 });
 app.use('/api', routes);

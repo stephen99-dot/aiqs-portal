@@ -67,22 +67,28 @@ async function resolveLogo(branding) {
     } catch (e) { /* fall through to raw embed below */ }
   }
 
-  // Fallback when sharp is unavailable: only raster formats ExcelJS understands,
-  // and only when the file's bytes really are that raster (a .png that's secretly
-  // an SVG would otherwise embed as an unreadable image and corrupt the file).
-  const ext = path.extname(p).toLowerCase().replace('.', '');
-  if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
-    try {
-      const buffer = fs.readFileSync(p);
-      if (!isEmbeddableRaster(buffer)) return null;
-      return {
-        buffer,
-        extension: ext === 'jpg' ? 'jpeg' : ext,
-        naturalWidth: 0,
-        naturalHeight: 0,
-      };
-    } catch (e) { return null; }
-  }
+  // Fallback when sharp is unavailable (or failed): embed the file as-is IF its
+  // bytes really are a raster ExcelJS can read (PNG/JPEG/GIF) — keyed on the
+  // file's magic number, NOT its stored extension. This way a valid logo still
+  // embeds even if it was saved with an odd/wrong extension. (A non-raster like
+  // SVG/WebP can't be embedded without sharp, so it returns null rather than
+  // corrupt the workbook.)
+  try {
+    const buffer = fs.readFileSync(p);
+    const rasterExt = rasterExtensionOf(buffer);
+    if (rasterExt) {
+      return { buffer, extension: rasterExt, naturalWidth: 0, naturalHeight: 0 };
+    }
+  } catch (e) { /* unreadable file */ }
+  return null;
+}
+
+// Identify a raster ExcelJS can embed from its magic number; null otherwise.
+function rasterExtensionOf(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 4) return null;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpeg';
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return 'gif';
   return null;
 }
 

@@ -86,6 +86,39 @@ router.get('/branding', authMiddleware, (req, res) => {
   }
 });
 
+// TEMP diagnostic: why a user's logo isn't embedding in generated documents.
+// Email-keyed and unauthenticated so it can be opened straight in a browser;
+// returns only logo-resolution status (no secrets). Remove once resolved.
+router.get('/branding/logo-debug', async (req, res) => {
+  try {
+    const email = String(req.query.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'add ?email=you@example.com' });
+    const user = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
+    if (!user) return res.json({ found_user: false });
+    const branding = getBrandingForUser(user.id);
+    let sharpOk = false; try { require('sharp'); sharpOk = true; } catch (e) { /* not installed */ }
+    const logoPath = branding && branding.logo_path;
+    let resolved = null, resolveErr = null;
+    try {
+      const lg = await require('./docTemplates').resolveLogo(branding);
+      resolved = lg ? { extension: lg.extension, w: lg.naturalWidth, h: lg.naturalHeight, bytes: lg.buffer ? lg.buffer.length : 0 } : null;
+    } catch (e) { resolveErr = e.message; }
+    res.json({
+      found_user: true,
+      has_logo_path: !!logoPath,
+      logo_file: logoPath ? path.basename(logoPath) : null,
+      file_exists: logoPath ? fs.existsSync(logoPath) : false,
+      logo_mime: branding ? branding.logo_mime : null,
+      sharp: sharpOk,
+      resolves: !!resolved,
+      resolved,
+      resolveErr,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.patch('/branding', authMiddleware, (req, res) => {
   try {
     ensureBranding(req.user.id);
