@@ -253,6 +253,12 @@ export default function BuilderPackPage() {
     (a, r) => ({ labour: a.labour + r.labour, materials: a.materials + r.materials, total: a.total + r.total }),
     { labour: 0, materials: 0, total: 0 }
   );
+  // The net/true cost before the builder's own margin — so the breakdown can
+  // show exactly what (if anything) has been added on top.
+  const baseGrand = sectionTotals.reduce(
+    (a, t) => ({ labour: a.labour + t.labour, materials: a.materials + t.materials, total: a.total + t.total }),
+    { labour: 0, materials: 0, total: 0 }
+  );
 
   // ─── Client tab calculations ─────────────────────────────────────────────
   // Overhead and profit compound exactly as a tender summary applies them
@@ -730,7 +736,8 @@ export default function BuilderPackPage() {
               background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               {tab === 'builder'
-                ? <BuilderPreview rows={builderRows} totals={builderGrand} sym={sym} />
+                ? <BuilderPreview rows={builderRows} totals={builderGrand} base={baseGrand}
+                    builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
@@ -998,9 +1005,37 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, totals, sym }) {
+function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym }) {
+  base = base || { labour: 0, materials: 0, total: 0 };
+  const bm = num(builderMargin), mm = num(materialsMarkup);
+  const builderMarginAmt = base.total * (bm / 100);
+  const materialsMarkupAmt = base.materials * (mm / 100);
+  const totalAdded = builderMarginAmt + materialsMarkupAmt;
+  const bRow = (label, value, opts = {}) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '5px 0',
+      borderTop: opts.strong ? '1px solid var(--border)' : 'none', marginTop: opts.strong ? 4 : 0 }}>
+      <span style={{ fontSize: opts.strong ? 13.5 : 12.5, fontWeight: opts.strong ? 700 : 500, color: opts.muted ? 'var(--text-muted)' : 'var(--text-primary)' }}>{label}</span>
+      <span style={{ fontSize: opts.strong ? 14 : 12.5, fontWeight: opts.strong ? 800 : 600, fontVariantNumeric: 'tabular-nums',
+        color: opts.strong ? '#F59E0B' : (opts.muted ? 'var(--text-muted)' : 'var(--text-primary)') }}>{value}</span>
+    </div>
+  );
   return (
     <>
+      {/* Plain-English breakdown so the builder can see the true cost and
+          exactly what (if anything) has been added on top. */}
+      <div style={{ marginBottom: 18, padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 8 }}>What's in these figures</div>
+        {bRow('True build cost (priced labour + materials)', fmt(sym, base.total, 2))}
+        {bRow(`Your builder margin (${bm}% on all rates)`, (builderMarginAmt > 0 ? '+ ' : '') + fmt(sym, builderMarginAmt, 2), { muted: bm === 0 })}
+        {bRow(`Your materials markup (extra ${mm}% on materials)`, (materialsMarkupAmt > 0 ? '+ ' : '') + fmt(sym, materialsMarkupAmt, 2), { muted: mm === 0 })}
+        {bRow('Builder pack total', fmt(sym, totals.total, 2), { strong: true })}
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
+          {totalAdded <= 0
+            ? 'Nothing has been added on top — the total equals the priced build cost. Move the margin sliders on the left to add your markup, and you’ll see exactly how much it adds here.'
+            : 'You’ve added ' + fmt(sym, totalAdded, 2) + ' on top of the priced build cost. The line figures below are the priced labour + materials; your margin is applied to them.'}
+        </div>
+      </div>
+
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 14px' }}>Trade summary preview</h2>
       <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>

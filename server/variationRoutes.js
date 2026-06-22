@@ -720,6 +720,21 @@ function loadProjectForUser(req) {
   return project;
 }
 
+// The title for builder/client documents should be the SITE ADDRESS where we
+// have one (from the drawing submission), not the generic project type/title
+// (e.g. "Residential Extension"). Falls back to the project title.
+function documentTitleForProject(project) {
+  try {
+    const row = db.prepare(
+      "SELECT site_address FROM drawing_submissions WHERE project_id = ? AND site_address IS NOT NULL AND TRIM(site_address) != '' ORDER BY created_at DESC LIMIT 1"
+    ).get(project.id);
+    const addr = row && row.site_address ? row.site_address.trim() : '';
+    return addr || project.title;
+  } catch (e) {
+    return project.title;
+  }
+}
+
 // Reshape an edited-sections payload from the client (description / qty / labour /
 // materials per item) into the parseBOQ() output. Recomputes per-item totals and
 // per-section subtotals from the edits so server output matches what the user saw
@@ -914,7 +929,7 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
       currency: project.currency === 'EUR' ? '€' : '£',
       builder_margin: parseFloat(req.body.builder_margin) || 0,
       materials_markup: parseFloat(req.body.materials_markup) || 0,
-      project_name: project.title,
+      project_name: documentTitleForProject(project),
       client_name: user ? user.full_name : 'Client',
     });
 
@@ -967,7 +982,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
       prelims_pct: req.body.prelims_pct,
       day_rate: req.body.day_rate,
       rounding: req.body.rounding,
-      project_name: project.title,
+      project_name: documentTitleForProject(project),
       client_name: user ? user.full_name : 'Client',
       branding,
     });
