@@ -304,7 +304,7 @@ export default function DeliverablesPanel({ projectId, project }) {
         {isAdmin && previewOpen && (
           <div style={{
             padding: '12px 14px', borderRadius: 9, marginBottom: 12,
-            background: 'var(--bg)', border: '1px solid var(--border)',
+            background: 'var(--bg-primary)', border: '1px solid var(--border)',
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -439,7 +439,7 @@ export default function DeliverablesPanel({ projectId, project }) {
                 disabled={uploading}
                 style={{
                   padding: '8px 12px', borderRadius: 8,
-                  background: 'var(--card-bg)', color: 'var(--text-primary)',
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
                   border: '1px solid var(--border)', fontSize: 13, outline: 'none',
                 }}
               >
@@ -454,7 +454,7 @@ export default function DeliverablesPanel({ projectId, project }) {
                 style={{
                   flex: 1, minWidth: 200,
                   padding: '8px 12px', borderRadius: 8,
-                  background: 'var(--card-bg)', color: 'var(--text-primary)',
+                  background: 'var(--bg-card)', color: 'var(--text-primary)',
                   border: '1px solid var(--border)', fontSize: 13, outline: 'none',
                 }}
               />
@@ -499,7 +499,7 @@ export default function DeliverablesPanel({ projectId, project }) {
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '6px 10px', borderRadius: 6,
-                    background: 'var(--card-bg)', border: '1px solid var(--border)',
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
                     fontSize: 12,
                   }}>
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
@@ -632,7 +632,7 @@ export default function DeliverablesPanel({ projectId, project }) {
                   <div key={d.id} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '7px 12px', borderRadius: 7,
-                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    background: 'var(--bg-primary)', border: '1px solid var(--border)',
                     fontSize: 11.5, color: 'var(--text-muted)',
                   }}>
                     <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>v{d.version}</span>

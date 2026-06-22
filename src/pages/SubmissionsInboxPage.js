@@ -247,7 +247,7 @@ export default function SubmissionsInboxPage() {
             onSubmit={submitManualJob}
             style={{
               width: '100%', maxWidth: 520,
-              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
               borderRadius: 14, padding: 22,
               boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
             }}
@@ -277,7 +277,7 @@ export default function SubmissionsInboxPage() {
               required
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
                 fontSize: 13.5, outline: 'none',
               }}
             >
@@ -297,7 +297,7 @@ export default function SubmissionsInboxPage() {
               placeholder="e.g. 14 Oak Lane, Leeds"
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
                 fontSize: 13.5, outline: 'none',
               }}
             />
@@ -310,7 +310,7 @@ export default function SubmissionsInboxPage() {
               placeholder="e.g. Extension, New build, Refurbishment"
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
                 fontSize: 13.5, outline: 'none',
               }}
             />
@@ -323,7 +323,7 @@ export default function SubmissionsInboxPage() {
               placeholder="Anything worth recording about this job."
               style={{
                 width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 18,
-                background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border)',
+                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
                 fontSize: 13.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
               }}
             />
@@ -381,7 +381,7 @@ export default function SubmissionsInboxPage() {
 
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 9, background: 'var(--card-bg)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 9, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           {[
             { key: 'inbox', label: 'Inbox', count: unactionedCount },
             { key: 'done',  label: 'Done',  count: submissions.length - unactionedCount },
@@ -409,7 +409,7 @@ export default function SubmissionsInboxPage() {
           style={{
             flex: 1, minWidth: 240,
             padding: '8px 12px', borderRadius: 8,
-            background: 'var(--card-bg)', color: 'var(--text-primary)',
+            background: 'var(--bg-card)', color: 'var(--text-primary)',
             border: '1px solid var(--border)', fontSize: 13, outline: 'none',
           }}
         />
@@ -428,7 +428,7 @@ export default function SubmissionsInboxPage() {
         {/* List */}
         <div style={{
           maxHeight: 'calc(100vh - 220px)', overflowY: 'auto',
-          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-bg)',
+          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)',
         }}>
           {loading && <div style={{ padding: 18, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
           {!loading && filtered.length === 0 && (
@@ -494,7 +494,7 @@ export default function SubmissionsInboxPage() {
         {/* Detail */}
         <div style={{
           padding: 22, minHeight: 360,
-          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card-bg)',
+          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)',
         }}>
           {!selected ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13.5 }}>
@@ -559,7 +559,7 @@ export default function SubmissionsInboxPage() {
               <div style={{
                 display: 'flex', gap: 12, flexWrap: 'wrap',
                 padding: '10px 14px', borderRadius: 8, marginBottom: 18,
-                background: 'var(--bg)', border: '1px solid var(--border)',
+                background: 'var(--bg-primary)', border: '1px solid var(--border)',
                 fontSize: 11.5,
               }}>
                 <span><span style={{ color: 'var(--text-muted)' }}>Submitted</span>{' '}<strong>{new Date(selected.created_at).toLocaleString('en-GB')}</strong></span>
@@ -579,7 +579,7 @@ export default function SubmissionsInboxPage() {
                 </div>
                 <div style={{
                   padding: '14px 16px', borderRadius: 10,
-                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  background: 'var(--bg-primary)', border: '1px solid var(--border)',
                   whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                   fontSize: 13.5, lineHeight: 1.65, color: 'var(--text-primary)',
                   maxHeight: 360, overflowY: 'auto',
@@ -605,7 +605,7 @@ export default function SubmissionsInboxPage() {
                     style={{
                       flex: 1, minWidth: 280,
                       padding: '10px 14px', borderRadius: 9,
-                      background: 'var(--bg)', color: 'var(--text-primary)',
+                      background: 'var(--bg-primary)', color: 'var(--text-primary)',
                       border: '1px solid var(--border)', fontSize: 13,
                       outline: 'none', fontFamily: 'inherit',
                     }}
@@ -631,7 +631,7 @@ export default function SubmissionsInboxPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.5 }}>
-                  Add a Pipedream HTTP step that POSTs <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>{'{ submission_id, drive_link, secret }'}</code> to <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>/api/submissions/webhook/drive-link</code> after upload — the link will appear here automatically. Or paste it manually for now (saves on blur).
+                  Add a Pipedream HTTP step that POSTs <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg-primary)', padding: '1px 4px', borderRadius: 3 }}>{'{ submission_id, drive_link, secret }'}</code> to <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg-primary)', padding: '1px 4px', borderRadius: 3 }}>/api/submissions/webhook/drive-link</code> after upload — the link will appear here automatically. Or paste it manually for now (saves on blur).
                 </div>
               </div>
 
@@ -697,7 +697,7 @@ export default function SubmissionsInboxPage() {
                       const baseStyle = {
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '9px 12px', borderRadius: 7,
-                        background: 'var(--bg)', border: '1px solid var(--border)',
+                        background: 'var(--bg-primary)', border: '1px solid var(--border)',
                         fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
                         color: 'var(--text-primary)', wordBreak: 'break-all',
                         textDecoration: 'none',
@@ -708,7 +708,7 @@ export default function SubmissionsInboxPage() {
                             <a href={selected.drive_link} target="_blank" rel="noopener noreferrer"
                               style={{ ...baseStyle, cursor: 'pointer' }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.06)'; e.currentTarget.style.borderColor = 'rgba(59,130,246,0.35)'; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
                             >
                               <span style={{ flex: 1 }}>{name}</span>
                               <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', fontFamily: 'system-ui' }}>Open in Drive ↗</span>
@@ -740,7 +740,7 @@ export default function SubmissionsInboxPage() {
                   placeholder="Notes on this job — not visible to the customer."
                   style={{
                     width: '100%', padding: '11px 14px', borderRadius: 9,
-                    background: 'var(--bg)', color: 'var(--text-primary)',
+                    background: 'var(--bg-primary)', color: 'var(--text-primary)',
                     border: '1px solid var(--border)', fontSize: 13,
                     outline: 'none', resize: 'vertical', minHeight: 90,
                     fontFamily: 'inherit', lineHeight: 1.55,

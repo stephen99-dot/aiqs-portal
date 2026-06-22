@@ -155,7 +155,7 @@ export default function FindingsEditorPage() {
               disabled={savingField === 'all'}
               style={{
                 padding: '10px 16px', borderRadius: 9, border: '1px solid var(--border)',
-                background: 'var(--card-bg)', color: 'var(--text-primary)',
+                background: 'var(--bg-card)', color: 'var(--text-primary)',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}
             >{savingField === 'all' ? 'Saving…' : 'Save all'}</button>
@@ -326,13 +326,13 @@ function removeAtIndex(setField, findings, key, idx, after) {
 
 const inputStyle = {
   width: '100%', padding: '8px 12px', borderRadius: 8,
-  background: 'var(--bg)', color: 'var(--text-primary)',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
   border: '1px solid var(--border)', fontSize: 13, outline: 'none',
   boxSizing: 'border-box',
 };
 const cardRowStyle = {
   padding: 12, borderRadius: 9, marginBottom: 8,
-  background: 'var(--bg)', border: '1px solid var(--border)',
+  background: 'var(--bg-primary)', border: '1px solid var(--border)',
 };
 const removeBtnStyle = {
   width: 30, flexShrink: 0,
@@ -347,7 +347,7 @@ const addLinkStyle = {
 
 function Card({ title, subtitle, action, children }) {
   return (
-    <div style={{ padding: 18, borderRadius: 12, background: 'var(--card-bg)', border: '1px solid var(--border)', marginBottom: 14 }}>
+    <div style={{ padding: 18, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border)', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
         <div>
           <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{title}</h3>
@@ -376,7 +376,7 @@ function AddButton({ onClick, label }) {
   return (
     <button onClick={onClick} style={{
       padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)',
-      background: 'var(--bg)', color: 'var(--text-primary)',
+      background: 'var(--bg-primary)', color: 'var(--text-primary)',
       fontSize: 12, fontWeight: 600, cursor: 'pointer',
     }}>{label}</button>
   );
@@ -417,7 +417,7 @@ function Stat({ label, value, accent }) {
   return (
     <div style={{
       padding: '10px 12px', borderRadius: 8,
-      background: 'var(--bg)', border: '1px solid var(--border)',
+      background: 'var(--bg-primary)', border: '1px solid var(--border)',
     }}>
       <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
       <div style={{

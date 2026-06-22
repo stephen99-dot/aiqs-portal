@@ -489,7 +489,7 @@ export default function BuilderPackPage() {
       {/* Tabs */}
       <div style={{
         display: 'flex', gap: 4, padding: 4, borderRadius: 10,
-        background: 'var(--card-bg)', border: '1px solid var(--border)',
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
         marginBottom: 18, width: 'fit-content',
       }}>
         {TABS.map((t) => (
@@ -508,7 +508,7 @@ export default function BuilderPackPage() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
           marginBottom: 14, padding: '10px 14px', borderRadius: 10,
-          background: 'var(--card-bg)', border: '1px solid var(--border)',
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
         }}>
           <button
             onClick={saveNow}
@@ -553,7 +553,7 @@ export default function BuilderPackPage() {
           <div style={{
             position: 'sticky', top: 12,
             padding: 18, borderRadius: 12,
-            background: 'var(--card-bg)', border: '1px solid var(--border)',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
             maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
           }}>
             {tab === 'builder' ? (
@@ -590,7 +590,7 @@ export default function BuilderPackPage() {
             {/* Editable items */}
             <div style={{
               padding: 18, borderRadius: 12,
-              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Line items (editable)</h2>
@@ -642,7 +642,7 @@ export default function BuilderPackPage() {
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 760 }}>
                           <thead>
-                            <tr style={{ background: 'var(--bg)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                            <tr style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)', textAlign: 'left' }}>
                               <th style={th(70)}>Ref</th>
                               <th style={th()}>Description</th>
                               <th style={th(70)}>Unit</th>
@@ -701,7 +701,7 @@ export default function BuilderPackPage() {
                             })}
                           </tbody>
                         </table>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-primary)' }}>
                           <button
                             onClick={() => addItem(sIdx)}
                             style={{
@@ -727,7 +727,7 @@ export default function BuilderPackPage() {
             {/* Live preview */}
             <div style={{
               padding: 18, borderRadius: 12,
-              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               {tab === 'builder'
                 ? <BuilderPreview rows={builderRows} totals={builderGrand} sym={sym} />
@@ -761,7 +761,7 @@ const td = () => ({ padding: '4px 8px', verticalAlign: 'top' });
 
 const inputStyle = {
   width: '100%', padding: '7px 10px', borderRadius: 7,
-  background: 'var(--bg)', color: 'var(--text-primary)',
+  background: 'var(--bg-primary)', color: 'var(--text-primary)',
   border: '1px solid var(--border)', fontSize: 12, outline: 'none',
   boxSizing: 'border-box', fontFamily: 'inherit',
 };
@@ -1107,7 +1107,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
 
       <div style={{
         marginTop: 16, borderRadius: 10, border: '1px solid var(--border)',
-        background: 'var(--bg)', padding: '14px 16px',
+        background: 'var(--bg-primary)', padding: '14px 16px',
       }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
           Project summary
