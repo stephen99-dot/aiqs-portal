@@ -271,8 +271,11 @@ async function parseBOQ(filePath) {
 
     // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
+        upperLabel.includes('SUMMARY OF TOTALS') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
+        upperLabel.startsWith('NET MEASURED WORKS') ||
+        upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
       stopped = true;
       return;
