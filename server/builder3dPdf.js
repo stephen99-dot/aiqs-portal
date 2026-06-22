@@ -104,37 +104,44 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
   };
   function ensureRoom(h) { if (y + h > doc.page.height - 90) { doc.addPage(); y = 50; } }
 
+  const ROW_H = 17; // generous row pitch so nothing bunches
+  // Single-line cell helper: never wrap (truncate with ellipsis) so a long label
+  // can't overrun into the next row.
+  const cell = (text, col, yPos, opts = {}) => doc.text(String(text), col.x + (opts.pad || 0), yPos, {
+    width: col.w - (opts.pad || 0), align: col.align || 'left', lineBreak: false, ellipsis: true,
+  });
+
   ensureRoom(20);
   doc.rect(40, y, 515, 18).fill(primary);
   doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
-  doc.text('Element', COLS.desc.x + 4, y + 5, { width: COLS.desc.w - 4 });
-  doc.text('Qty', COLS.qty.x, y + 5, { width: COLS.qty.w, align: 'right' });
-  doc.text('Unit', COLS.unit.x, y + 5, { width: COLS.unit.w });
-  doc.text('Rate', COLS.rate.x, y + 5, { width: COLS.rate.w, align: 'right' });
-  doc.text('Total', COLS.total.x, y + 5, { width: COLS.total.w, align: 'right' });
-  y += 18;
+  cell('Element', COLS.desc, y + 6, { pad: 4 });
+  cell('Qty', COLS.qty, y + 6);
+  cell('Unit', COLS.unit, y + 6);
+  cell('Rate', COLS.rate, y + 6);
+  cell('Total', COLS.total, y + 6);
+  y += 22;
 
   for (const g of result.groups || []) {
-    ensureRoom(20);
+    ensureRoom(ROW_H + 8);
     doc.rect(40, y, 515, 16).fill(accent);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text(g.category, 44, y + 3);
-    y += 16;
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text(g.category, 44, y + 4, { lineBreak: false });
+    y += 20;
     for (const ln of g.items) {
-      ensureRoom(15);
+      ensureRoom(ROW_H);
       doc.font('Helvetica').fontSize(9).fillColor('#111111');
-      doc.text(ln.label, COLS.desc.x + 4, y + 2, { width: COLS.desc.w - 4 });
-      doc.text(String(num(ln.qty)), COLS.qty.x, y + 2, { width: COLS.qty.w, align: 'right' });
-      doc.text(String(ln.unit || ''), COLS.unit.x, y + 2, { width: COLS.unit.w });
-      doc.text(fmtMoney(ln.rate), COLS.rate.x, y + 2, { width: COLS.rate.w, align: 'right' });
-      doc.text(fmtMoney(ln.total), COLS.total.x, y + 2, { width: COLS.total.w, align: 'right' });
-      doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(40, y + 14).lineTo(555, y + 14).stroke();
-      y += 14;
+      cell(ln.label, COLS.desc, y + 3, { pad: 4 });
+      cell(num(ln.qty), COLS.qty, y + 3);
+      cell(ln.unit || '', COLS.unit, y + 3);
+      cell(fmtMoney(ln.rate), COLS.rate, y + 3);
+      cell(fmtMoney(ln.total), COLS.total, y + 3);
+      doc.strokeColor('#eaecef').lineWidth(0.5).moveTo(40, y + ROW_H - 1).lineTo(555, y + ROW_H - 1).stroke();
+      y += ROW_H;
     }
-    ensureRoom(16);
+    ensureRoom(ROW_H + 4);
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#111111');
-    doc.text(g.category + ' subtotal', COLS.desc.x + 4, y + 3, { width: COLS.desc.w + 100 });
-    doc.text(fmtMoney(g.subtotal), COLS.total.x, y + 3, { width: COLS.total.w, align: 'right' });
-    y += 18;
+    doc.text(g.category + ' subtotal', COLS.desc.x + 4, y + 4, { width: 300, lineBreak: false });
+    cell(fmtMoney(g.subtotal), COLS.total, y + 4);
+    y += ROW_H + 6;
   }
 
   // Totals box.
@@ -155,34 +162,33 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
   row(`VAT (${num(m.vatPct)}%)`, fmtMoney(tot.vat));
   row('Total', fmtMoney(tot.total), true);
 
-  y = sy + 18;
+  y = Math.max(sy, y) + 24;
 
   // Measurements summary — two columns of grouped element measurements.
   const measurements = result.measurements || [];
   if (measurements.length) {
-    ensureRoom(30);
+    ensureRoom(34);
     doc.rect(40, y, 515, 20).fill(primary);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('MEASUREMENTS SUMMARY', 44, y + 5);
-    y += 28;
-    const colW = 250, gap = 15;
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11).text('MEASUREMENTS SUMMARY', 44, y + 6, { lineBreak: false });
+    y += 30;
+    const colW = 250, gap = 15, MROW = 15;
     const colX = [40, 40 + colW + gap];
     const colY = [y, y];
     measurements.forEach((g, gi) => {
       const c = gi % 2;
-      // Estimate block height; wrap to a new page if neither column has room.
-      const blockH = 18 + g.rows.length * 13 + 6;
+      const blockH = 18 + g.rows.length * MROW + 10;
       if (colY[c] + blockH > doc.page.height - 70) { doc.addPage(); colY[0] = 50; colY[1] = 50; }
       let yy = colY[c];
       const x = colX[c];
-      doc.rect(x, yy, colW, 15).fill(accent);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text(g.group, x + 4, yy + 3);
-      yy += 17;
+      doc.rect(x, yy, colW, 16).fill(accent);
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text(g.group, x + 4, yy + 4, { lineBreak: false });
+      yy += 20;
       for (const r of g.rows) {
-        doc.font('Helvetica').fontSize(9).fillColor('#333333').text(r.label, x + 4, yy, { width: colW - 90 });
-        doc.font('Helvetica-Bold').fillColor('#111111').text(`${r.value} ${r.unit}`, x + colW - 86, yy, { width: 82, align: 'right' });
-        yy += 13;
+        doc.font('Helvetica').fontSize(9).fillColor('#333333').text(r.label, x + 4, yy, { width: colW - 92, lineBreak: false, ellipsis: true });
+        doc.font('Helvetica-Bold').fillColor('#111111').text(`${r.value} ${r.unit}`, x + colW - 86, yy, { width: 82, align: 'right', lineBreak: false });
+        yy += MROW;
       }
-      colY[c] = yy + 8;
+      colY[c] = yy + 12;
     });
     y = Math.max(colY[0], colY[1]) + 6;
   }

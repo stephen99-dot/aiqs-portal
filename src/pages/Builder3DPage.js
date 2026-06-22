@@ -143,27 +143,31 @@ function placeBox(group, origin, ex, ey, ez, u, v, w, h, d, mat) {
   return mesh;
 }
 
-// A framed casement window (border + mullion/transom + glazing) sitting in a
-// cut opening centred at (u, v) on a wall edge.
-function buildWindow(group, origin, ex, ey, ez, u, v, w, h, frameMat, glassMat) {
+// A framed casement window with a lintel over and a projecting cill under, in a
+// cut opening centred at (u, v) on a wall edge. `mats` carries the materials.
+function buildWindow(group, origin, ex, ey, ez, u, v, w, h, mats) {
   const fw = 0.08, d = 0.16;
-  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v - (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, fw * 0.6, h, d * 0.7, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w, fw * 0.6, d * 0.7, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w - 1.7 * fw, h - 1.7 * fw, 0.04, glassMat);
+  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v - (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, fw * 0.6, h, d * 0.7, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w, fw * 0.6, d * 0.7, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w - 1.7 * fw, h - 1.7 * fw, 0.04, mats.glass);
+  // Lintel over + projecting cill under.
+  placeBox(group, origin, ex, ey, ez, u, v + h / 2 + 0.09, w + 0.24, 0.15, 0.34, mats.lintel);
+  placeBox(group, origin, ex, ey, ez, u, v - h / 2 - 0.04, w + 0.18, 0.07, 0.42, mats.cill);
 }
 
-// A panelled door with frame + handle in a cut opening.
-function buildDoor(group, origin, ex, ey, ez, u, v, w, h, frameMat, doorMat) {
+// A panelled door with frame, handle and a lintel over, in a cut opening.
+function buildDoor(group, origin, ex, ey, ez, u, v, w, h, mats) {
   const fw = 0.1, d = 0.2;
-  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w - 1.4 * fw, h - fw, 0.06, doorMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw * 2.4), v, 0.05, 0.18, 0.12, frameMat);
+  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w - 1.4 * fw, h - fw, 0.06, mats.door);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw * 2.4), v, 0.05, 0.18, 0.12, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + h / 2 + 0.09, w + 0.26, 0.15, 0.34, mats.lintel);
 }
 
 // Horizontal band (e.g. DPC strip) around an outline edge.
@@ -178,7 +182,7 @@ function addBand(group, a, b, y, h, depth, mat) {
 
 // A brick wall along edge a→b with real cut window/door openings (extruded
 // shape with holes), then the glazing/doors dropped into those holes.
-function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, openings) {
+function buildWall(group, a, b, H, t, mats, openings) {
   const dx = b.x - a.x, dz = b.z - a.z;
   const len = Math.hypot(dx, dz);
   if (len < 1e-3) return;
@@ -199,7 +203,7 @@ function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, ope
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
   geo.translate(0, 0, -t / 2);
-  const mesh = new THREE.Mesh(geo, brickMat);
+  const mesh = new THREE.Mesh(geo, mats.brick);
   mesh.matrixAutoUpdate = false;
   mesh.matrix.makeBasis(ex, ey, ez);
   mesh.matrix.setPosition(a.x, 0, a.z);
@@ -207,14 +211,14 @@ function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, ope
 
   const origin = new THREE.Vector3(a.x, 0, a.z);
   for (const op of placed) {
-    if (op.type === 'door') buildDoor(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, frameMat, doorMat);
-    else buildWindow(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, frameMat, glassMat);
+    if (op.type === 'door') buildDoor(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, mats);
+    else buildWindow(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, mats);
   }
 }
 
 // Build one rectangle's finished roof (solid tiles, eaves overhang, fascia,
 // bargeboards and a ridge cap). `r` is centred at {x,z} with size {w,d}.
-function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat) {
+function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat, gutterMat) {
   const isHip = roofType === 'hip';
   const alongX = r.w >= r.d;
   const longLen = Math.max(r.w, r.d);
@@ -252,9 +256,13 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
     addBeam(group, P(-hl, -hsE, eaveY), rNeg, 0.12, fasciaMat);
   }
 
-  // Fascia along the two long eaves + ridge cap.
+  // Fascia along the two long eaves + a gutter just below it + ridge cap.
   addBeam(group, P(-hlE, hsE, eaveY), P(hlE, hsE, eaveY), 0.16, fasciaMat);
   addBeam(group, P(-hlE, -hsE, eaveY), P(hlE, -hsE, eaveY), 0.16, fasciaMat);
+  if (gutterMat) {
+    addBeam(group, P(-hlE, hsE + 0.08, eaveY - 0.16), P(hlE, hsE + 0.08, eaveY - 0.16), 0.1, gutterMat);
+    addBeam(group, P(-hlE, -hsE - 0.08, eaveY - 0.16), P(hlE, -hsE - 0.08, eaveY - 0.16), 0.1, gutterMat);
+  }
   addBeam(group, rNeg, rPos, 0.16, ridgeMat);
   if (isHip) {
     // Hip ridge lines from corners to ridge ends.
@@ -276,14 +284,20 @@ function buildHouse(geo, brickTex, tileTex) {
   const H = storeyH * geo.storeys;
   const t = 0.3;
 
-  const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.92 });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf3f3ef, roughness: 0.55 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9ec7da, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.55 });
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0x274055, roughness: 0.5 });
+  const mats = {
+    brick: new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.92 }),
+    frame: new THREE.MeshStandardMaterial({ color: 0xf3f3ef, roughness: 0.55 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x9ec7da, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.55 }),
+    door: new THREE.MeshStandardMaterial({ color: 0x274055, roughness: 0.5 }),
+    lintel: new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: 0.9 }),
+    cill: new THREE.MeshStandardMaterial({ color: 0xd9d7cc, roughness: 0.85 }),
+  };
   const tileMat = new THREE.MeshStandardMaterial({ map: tileTex, color: ROOF_COLOURS[geo.roofCovering] || ROOF_COLOURS.concrete_tile, roughness: 0.85, side: THREE.DoubleSide });
   const fasciaMat = new THREE.MeshStandardMaterial({ color: 0xeeeee8, roughness: 0.6 });
   const ridgeMat = new THREE.MeshStandardMaterial({ color: 0x4a4f55, roughness: 0.8 });
+  const gutterMat = new THREE.MeshStandardMaterial({ color: 0x33373b, roughness: 0.7 });
   const dpcMat = new THREE.MeshStandardMaterial({ color: 0x3f7d4e, roughness: 0.9 });
+  const footingMat = new THREE.MeshStandardMaterial({ color: 0xb4b4b0, roughness: 1 });
   const slabMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1 });
 
   const n = outline.length;
@@ -307,10 +321,12 @@ function buildHouse(geo, brickTex, tileTex) {
     }
   });
 
-  // Walls with cut openings, DPC band + plinth, slabs.
+  // Walls with cut openings, a projecting concrete footing at the base, then a
+  // green DPC band above it.
   edges.forEach((e) => {
-    buildWall(group, e.a, e.b, H, t, brickMat, frameMat, glassMat, doorMat, e.openings);
-    addBand(group, e.a, e.b, 0.12, 0.08, t + 0.05, dpcMat);
+    buildWall(group, e.a, e.b, H, t, mats, e.openings);
+    addBand(group, e.a, e.b, 0.06, 0.34, t + 0.28, footingMat); // footing, proud of the wall
+    addBand(group, e.a, e.b, 0.26, 0.06, t + 0.06, dpcMat);     // DPC course
   });
   rects.forEach((r) => {
     const slab = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.15, r.d), slabMat);
@@ -319,7 +335,22 @@ function buildHouse(geo, brickTex, tileTex) {
   });
 
   // Finished roof per rectangle.
-  rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, brickMat));
+  rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, mats.brick, gutterMat));
+
+  // Downpipes at the two front corners (largest z), eave to ground.
+  const cen = outline.reduce((acc, p) => ({ x: acc.x + p.x / n, z: acc.z + p.z / n }), { x: 0, z: 0 });
+  [...outline].sort((p, q) => q.z - p.z).slice(0, 2).forEach((c) => {
+    let nx = c.x - cen.x, nz = c.z - cen.z; const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, H, 10), gutterMat);
+    pipe.position.set(c.x + nx * 0.12, H / 2, c.z + nz * 0.12);
+    group.add(pipe);
+  });
+
+  // Foundation annotation label near the front-left base.
+  const xs = outline.map((p) => p.x), zs = outline.map((p) => p.z);
+  const fLabel = makeLabel('Strip foundation 600 × 1000mm');
+  fLabel.position.set(Math.min(...xs) + 0.5, 0.55, Math.max(...zs) + 0.9);
+  group.add(fLabel);
 
   // Shadows on everything.
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -428,6 +459,8 @@ export default function Builder3DPage() {
   const [deriveNotes, setDeriveNotes] = useState([]);
   const [panelTab, setPanelTab] = useState('estimate');
   const [showDims, setShowDims] = useState(true);
+  const [narrow, setNarrow] = useState(false);
+  const pageRef = useRef(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -589,6 +622,15 @@ export default function Builder3DPage() {
     const id = setTimeout(() => price(modules, ohpPct, vatPct), 250);
     return () => clearTimeout(id);
   }, [modules, ohpPct, vatPct, price]);
+
+  // Stack the three columns when the page is too narrow for them side by side.
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 980));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isAdmin]);
 
   // ── saved models ──
   const loadModels = useCallback(async () => {
@@ -752,7 +794,7 @@ export default function Builder3DPage() {
   );
 
   return (
-    <div style={{ padding: 20, color: t.text, height: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}>
+    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
@@ -801,7 +843,7 @@ export default function Builder3DPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr) 300px', gap: 14, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '240px minmax(0, 1fr) 300px', gap: 14, flex: narrow ? undefined : 1, minHeight: 0 }}>
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
           {/* Build modules — House + Extension + Garage… */}
@@ -897,7 +939,7 @@ export default function Builder3DPage() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0 }} />
+        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0, height: narrow ? 440 : undefined }} />
 
         {/* ── Estimate / Summary sidebar ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
