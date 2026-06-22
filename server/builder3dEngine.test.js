@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { normaliseInputs, computeQuantities, priceModel, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
+const { normaliseInputs, computeQuantities, priceModel, deriveParamsFromBoq, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
 
 // A stub rate library: every code returns £10 labour + £10 materials (£20
 // total) so line totals are easy to predict in assertions.
@@ -102,6 +102,39 @@ test('non-rectangular footprint still prices with no missing codes (stub)', () =
   assert.ok(out.geometry.outline.length === 6, 'L outline has six corners');
   assert.equal(out.geometry.rects.length, 2, 'geometry carries the rects for rendering');
   assert.ok(out.totals.total > 0, 'L-shape prices to a positive total');
+});
+
+test('deriveParamsFromBoq recovers a rectangle from wall + slab areas', () => {
+  // A 10×6 single-storey: footprint 60 m², perimeter 32 m, walls 32×2.6 = 83.2 m².
+  const items = [
+    { description: 'Ground floor slab 150mm', unit: 'm²', qty: 60 },
+    { description: 'Facing brick outer leaf', unit: 'm²', qty: 83.2 },
+    { description: 'Concrete interlocking roof tiles', unit: 'm²', qty: 73 },
+    { description: 'UPVC window standard', unit: 'nr', qty: 8 },
+    { description: 'Composite external door', unit: 'nr', qty: 2 },
+  ];
+  const { params, signals } = deriveParamsFromBoq(items, {});
+  assert.equal(signals.footprint, 60, 'footprint from slab');
+  assert.ok(Math.abs(signals.perimeter - 32) < 0.5, 'perimeter ≈ wall area / (2.6 × 1)');
+  // L+W ≈ 16, L·W ≈ 60 -> {10,6}
+  assert.ok(Math.abs(params.length - 10) < 0.6 && Math.abs(params.width - 6) < 0.6, 'recovers ~10×6');
+  assert.equal(params.windows, 8, 'window count summed');
+  assert.equal(params.doors, 2, 'external door count summed');
+  assert.ok(params.roofPitch > 20 && params.roofPitch < 55, 'pitch derived from roof area');
+});
+
+test('deriveParamsFromBoq falls back gracefully on a sparse BOQ', () => {
+  const { params, notes } = deriveParamsFromBoq([{ description: 'Scaffolding', unit: 'item', qty: 1 }], {});
+  assert.ok(params.length >= 2 && params.width >= 2, 'still produces a valid building');
+  assert.ok(notes.some((n) => /default/i.test(n)), 'notes explain the fallback');
+});
+
+test('deriveParamsFromBoq reads storeys from project type and GIA for footprint', () => {
+  const items = [{ description: 'Brick/block external wall', unit: 'm²', qty: 160 }];
+  const { params } = deriveParamsFromBoq(items, { projectType: 'two storey house', floorArea: 120 });
+  assert.equal(params.storeys, 2, 'two-storey detected');
+  // GIA 120 / 2 storeys -> footprint 60
+  assert.ok(params.length * params.width > 40, 'footprint from GIA ÷ storeys');
 });
 
 test('Services lines scale with floor area and appear as their own group', () => {

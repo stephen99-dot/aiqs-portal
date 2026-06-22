@@ -22,9 +22,22 @@ function fmtMoney(n) {
   return '£' + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Decode a data-URL / base64 PNG into a Buffer for pdfkit. Returns null if the
+// input isn't a usable raster.
+function decodeSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'string') return null;
+  const m = snapshot.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+  const b64 = m ? m[2] : snapshot;
+  try {
+    const buf = Buffer.from(b64, 'base64');
+    return buf.length > 100 ? buf : null;
+  } catch (e) { return null; }
+}
+
 // Streams the PDF into `res`. result = priceModel() output; branding =
-// user_branding row (or defaults); userInfo = users row; name = model name.
-function streamBuilder3dPdf(res, name, result, branding, userInfo) {
+// user_branding row (or defaults); userInfo = users row; name = model name;
+// snapshot = optional data-URL PNG of the 3D view to embed.
+function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
   const filename = (name || 'estimate').replace(/[^a-z0-9_-]+/gi, '_') + '.pdf';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
@@ -63,6 +76,19 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo) {
   doc.text(`Footprint ${num(q.footprint)} m²  ·  GIA ${num(q.floorArea)} m²  ·  perimeter ${num(q.perimeter)} m`, 40, 144);
 
   let y = 168;
+
+  // 3D view — embed the snapshot the page captured, framed like a drawing.
+  const img = decodeSnapshot(snapshot);
+  if (img) {
+    const boxX = 40, boxW = 515, boxH = 230;
+    doc.save();
+    doc.rect(boxX, y, boxW, boxH).fill('#eef2f7');
+    try { doc.image(img, boxX + 6, y + 6, { fit: [boxW - 12, boxH - 12], align: 'center', valign: 'center' }); } catch (e) { /* skip bad image */ }
+    doc.restore();
+    doc.rect(boxX, y, boxW, boxH).strokeColor('#cbd5e1').lineWidth(1).stroke();
+    doc.font('Helvetica-Oblique').fontSize(8).fillColor('#64748b').text('Indicative 3D model', boxX + 8, y + boxH - 14);
+    y += boxH + 14;
+  }
 
   const COLS = {
     desc: { x: 40, w: 290 },

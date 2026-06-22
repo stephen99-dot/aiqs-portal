@@ -229,6 +229,7 @@ export default function Builder3DPage() {
   const sceneRef = useRef(null);
   const houseRef = useRef(null);
   const brickRef = useRef(null);
+  const rendererRef = useRef(null);
 
   const [params, setParams] = useState(DEFAULTS);
   const [quote, setQuote] = useState(null);
@@ -239,6 +240,8 @@ export default function Builder3DPage() {
   const [modelId, setModelId] = useState('');
   const [modelName, setModelName] = useState('My building');
   const [busy, setBusy] = useState('');
+  const [boqSources, setBoqSources] = useState([]);
+  const [deriveNotes, setDeriveNotes] = useState([]);
 
   const isAdmin = user?.role === 'admin';
 
@@ -255,10 +258,11 @@ export default function Builder3DPage() {
     const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.1, 500);
     camera.position.set(12, 9, 14);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -335,6 +339,29 @@ export default function Builder3DPage() {
   }, []);
   useEffect(() => { if (isAdmin) loadModels(); }, [isAdmin, loadModels]);
 
+  // ── connect an existing BOQ ──
+  const loadBoqSources = useCallback(async () => {
+    try {
+      const res = await apiFetch('/builder3d/boq-sources');
+      setBoqSources(res.sources || []);
+    } catch (e) { /* non-fatal */ }
+  }, []);
+  useEffect(() => { if (isAdmin) loadBoqSources(); }, [isAdmin, loadBoqSources]);
+
+  const deriveFromBoq = async (sourceId) => {
+    const src = boqSources.find((s) => s.id === sourceId);
+    setBusy('derive'); setError(null); setDeriveNotes([]);
+    try {
+      const out = await apiFetch('/builder3d/derive', { method: 'POST', body: JSON.stringify({ sourceId }) });
+      setParams({ ...DEFAULTS, ...out.params });
+      setModelId('');
+      setModelName((src?.name || 'BOQ building') + ' (from BOQ)');
+      setDeriveNotes(out.notes || []);
+    } catch (e) {
+      setError(e.message || 'Could not derive from BOQ');
+    } finally { setBusy(''); }
+  };
+
   const saveModel = async (asNew) => {
     setBusy('save'); setError(null);
     try {
@@ -373,10 +400,17 @@ export default function Builder3DPage() {
   const exportPdf = async () => {
     setBusy('pdf'); setError(null);
     try {
+      // Grab the current 3D view as a PNG to embed in the PDF. preserveDrawingBuffer
+      // (set on the renderer) keeps the canvas readable here.
+      let snapshot = null;
+      try {
+        const renderer = rendererRef.current;
+        if (renderer) snapshot = renderer.domElement.toDataURL('image/png');
+      } catch (e) { /* canvas not ready — export without the image */ }
       const r = await fetch('/api/builder3d/pdf', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName, params }),
+        body: JSON.stringify({ name: modelName, params, snapshot }),
       });
       if (!r.ok) throw new Error('PDF export failed');
       const blob = await r.blob();
@@ -445,9 +479,25 @@ export default function Builder3DPage() {
           {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
         {modelId && <button onClick={deleteModel} disabled={busy === 'delete'} style={btn(t, t.surface, '#c0392b')}>Delete</button>}
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) deriveFromBoq(e.target.value); }}
+          disabled={busy === 'derive' || boqSources.length === 0}
+          title={boqSources.length === 0 ? 'No BOQs with line items found' : 'Build a model from an existing BOQ'}
+          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 13 }}
+        >
+          <option value="">{busy === 'derive' ? 'Deriving…' : 'Derive from BOQ…'}</option>
+          {boqSources.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.itemCount} items)</option>)}
+        </select>
         <div style={{ flex: 1 }} />
         <button onClick={exportPdf} disabled={busy === 'pdf'} style={btn(t, '#10B981', '#fff')}>{busy === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
       </div>
+
+      {deriveNotes.length > 0 && (
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, fontSize: 12, color: t.textSecondary }}>
+          <strong style={{ color: t.text }}>Derived from BOQ</strong> — approximate. {deriveNotes.join(' · ')}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 14, flex: 1, minHeight: 0 }}>
         {/* ── Controls ── */}
