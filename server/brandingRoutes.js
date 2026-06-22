@@ -25,6 +25,26 @@ const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', '
 const brandingDir = path.join(DATA_DIR, 'branding');
 if (!fs.existsSync(brandingDir)) fs.mkdirSync(brandingDir, { recursive: true });
 
+// Load sharp lazily so the route still works if the native binary is missing.
+let _sharp;
+function getSharp() {
+  if (_sharp === undefined) {
+    try { _sharp = require('sharp'); } catch (e) { _sharp = null; }
+  }
+  return _sharp;
+}
+
+// True only when the bytes really are a raster ExcelJS/Word can embed. An SVG or
+// mislabeled upload that isn't a real raster would corrupt every generated
+// document, so we never store one as a logo.
+function isRaster(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 4) return false;
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return true; // PNG
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return true;                     // JPEG
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return true;  // GIF
+  return false;
+}
+
 const ALLOWED_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 const ALLOWED_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
 
@@ -100,13 +120,51 @@ router.patch('/branding', authMiddleware, (req, res) => {
   }
 });
 
-router.post('/branding/logo', authMiddleware, upload.single('logo'), (req, res) => {
+router.post('/branding/logo', authMiddleware, upload.single('logo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No logo uploaded' });
     ensureBranding(req.user.id);
 
+    // Normalise whatever was uploaded (PNG / JPG / WebP / SVG) into a clean PNG
+    // here, at upload time, so the document generators only ever embed a valid
+    // raster. A logo that isn't a real image — or can't be rasterised — is
+    // rejected now rather than silently corrupting every generated workbook
+    // (the "Excel found a problem with some content" error customers hit).
+    const uploadedPath = req.file.path;
+    const pngName = 'logo_' + req.user.id + '_' + uuidv4().slice(0, 8) + '.png';
+    const pngPath = path.join(brandingDir, pngName);
+
+    let ok = false;
+    const sharpLib = getSharp();
+    if (sharpLib) {
+      try {
+        // density helps vector (SVG) logos rasterise crisply; cap the size so a
+        // huge upload can't bloat every document.
+        await sharpLib(uploadedPath, { density: 300 })
+          .resize({ width: 1000, height: 1000, fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toFile(pngPath);
+        ok = true;
+      } catch (e) { /* fall through to the raw-bytes path */ }
+    }
+    if (!ok) {
+      // No sharp (or it failed): only accept bytes that already are a real
+      // PNG/JPEG, copied through unchanged. Anything else is refused.
+      try {
+        const buf = fs.readFileSync(uploadedPath);
+        if (isRaster(buf)) { fs.writeFileSync(pngPath, buf); ok = true; }
+      } catch (e) { /* ignore */ }
+    }
+    // We only keep the normalised copy.
+    if (uploadedPath !== pngPath) { try { fs.unlinkSync(uploadedPath); } catch (e) { /* ignore */ } }
+
+    if (!ok) {
+      return res.status(400).json({ error: "We couldn't read that image. Please upload a PNG or JPG logo." });
+    }
+
+    // Remove the previous logo file (now that the new one is safely written).
     const prev = db.prepare('SELECT logo_filename FROM user_branding WHERE user_id = ?').get(req.user.id);
-    if (prev && prev.logo_filename) {
+    if (prev && prev.logo_filename && prev.logo_filename !== pngName) {
       const oldPath = path.join(brandingDir, prev.logo_filename);
       if (fs.existsSync(oldPath)) try { fs.unlinkSync(oldPath); } catch (e) { /* ignore */ }
     }
@@ -115,7 +173,7 @@ router.post('/branding/logo', authMiddleware, upload.single('logo'), (req, res) 
       UPDATE user_branding
       SET logo_filename = ?, logo_mime = ?, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = ?
-    `).run(req.file.filename, req.file.mimetype || null, req.user.id);
+    `).run(pngName, 'image/png', req.user.id);
 
     const row = db.prepare('SELECT * FROM user_branding WHERE user_id = ?').get(req.user.id);
     res.json({ ok: true, branding: row, logo_url: '/api/branding/logo/' + req.user.id });
