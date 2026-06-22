@@ -153,7 +153,19 @@ test('Services lines scale with floor area and appear as their own group', () =>
   assert.ok(services && services.items.length > 0, 'a Services group is returned');
   assert.ok(services.items.some((l) => l.code === 'PH-001'), 'heating boiler line present');
   assert.ok(services.items.some((l) => l.code === 'EL-004'), 'socket line present');
-  assert.equal(out.groups.map((g) => g.category).join(','), 'Structure,Roof,Services,Finishes', 'group order matches the estimate layout');
+  assert.equal(out.groups.map((g) => g.category).join(','), 'Preliminaries,Substructure,Superstructure,Floors,Roof,Services,Finishes', 'full foundation-to-roof group order');
+});
+
+test('expanded recipe itemises walls and a full substructure', () => {
+  const out = priceModel({ length: 9, width: 6, storeys: 1, windows: 6, doors: 1 }, flatLookup);
+  const cats = out.groups.map((g) => g.category);
+  assert.ok(cats.includes('Substructure') && cats.includes('Superstructure'), 'has substructure + superstructure');
+  const sub = out.groups.find((g) => g.category === 'Substructure');
+  assert.ok(sub.items.some((l) => l.code === 'GW-003'), 'excavation priced');
+  assert.ok(sub.items.some((l) => l.code === 'BW-024'), 'DPC priced');
+  const sup = out.groups.find((g) => g.category === 'Superstructure');
+  assert.ok(sup.items.some((l) => l.code === 'BW-001') && sup.items.some((l) => l.code === 'BW-016'), 'cavity wall itemised (outer leaf + insulation)');
+  assert.ok(sup.items.some((l) => l.code === 'BW-021'), 'lintels over openings');
 });
 
 test('priceModel skips zero-quantity elements (no doors -> no door line)', () => {

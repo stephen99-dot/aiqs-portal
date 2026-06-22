@@ -224,15 +224,53 @@ function computeQuantities(m) {
  * Grouped into the same buckets the PriceAJob screenshot uses.
  */
 function buildRecipe(m, q) {
+  // Itemised wall build-up depends on the wall type.
+  let wallLines;
+  if (m.wallType === 'facing_brick') {
+    wallLines = [
+      { category: 'Superstructure', label: 'Solid facing brick wall (215mm)', code: 'BW-003', descLike: 'one brick wall (215mm) facing brick', unit: 'm²', qty: q.wallNet },
+    ];
+  } else {
+    const inner = m.wallType === 'cavity_brick'
+      ? { code: 'BW-007', desc: '100mm dense concrete block', label: 'Inner leaf — 100mm dense block' }
+      : { code: 'BW-008', desc: '100mm aerated block (thermalite)', label: 'Inner leaf — 100mm aerated block' };
+    wallLines = [
+      { category: 'Superstructure', label: 'Outer leaf — facing brick (102.5mm)', code: 'BW-001', descLike: 'half brick wall (102.5mm) facing brick', unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: inner.label, code: inner.code, descLike: inner.desc, unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: 'Cavity insulation (full fill)', code: 'BW-016', descLike: 'cavity insulation (full fill', unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: 'Stainless steel wall ties', code: 'BW-017', descLike: 'wall ties', unit: 'm²', qty: q.wallNet },
+    ];
+  }
+
+  const excavation = round2(q.perimeter * 0.6 * 1.0); // 600 wide × ~1m deep trench
+  const upperFloor = Math.max(m.storeys - 1, 0);
+
   return [
-    // ── STRUCTURE ──
-    { category: 'Structure', label: 'Foundations — trench fill', code: 'GW-011', descLike: 'trench fill (concrete c25)', unit: 'm³', qty: q.trenchVolume },
-    { category: 'Structure', label: 'Ground floor slab (100mm)', code: 'GW-016', descLike: 'ground floor slab 100mm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: 'Damp-proof membrane', code: 'GW-020', descLike: 'dpm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: 'Floor insulation (100mm)', code: 'GW-021', descLike: 'rigid insulation (100mm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: WALL_TYPES[m.wallType].label, code: WALL_TYPES[m.wallType].code, descLike: WALL_TYPES[m.wallType].descLike, unit: 'm²', qty: q.wallNet },
-    { category: 'Structure', label: 'Windows (UPVC casement)', code: 'CJ-022', descLike: 'upvc window 1.2-2.0', unit: 'nr', qty: q.windows },
-    { category: 'Structure', label: 'External doors (composite)', code: 'CJ-019', descLike: 'external door (composite)', unit: 'nr', qty: q.doors },
+    // ── PRELIMINARIES ──
+    { category: 'Preliminaries', label: 'Site set-up & welfare', code: 'PR-001', descLike: 'site compound', unit: 'item', qty: 1 },
+
+    // ── SUBSTRUCTURE (annotated foundation, foundation → DPC) ──
+    { category: 'Substructure', label: 'Excavate foundation trenches', code: 'GW-003', descLike: 'trench excavation for foundations (machine)', unit: 'm³', qty: excavation },
+    { category: 'Substructure', label: 'Cart away spoil', code: 'GW-006', descLike: 'cart away excavated material', unit: 'm³', qty: excavation },
+    { category: 'Substructure', label: 'Foundation trench fill (C25)', code: 'GW-011', descLike: 'trench fill (concrete c25)', unit: 'm³', qty: q.trenchVolume },
+    { category: 'Substructure', label: 'Cavity wall below DPC', code: 'BW-014', descLike: 'cavity wall below dpc', unit: 'm²', qty: round2(q.perimeter * 0.4) },
+    { category: 'Substructure', label: 'Damp-proof course', code: 'BW-024', descLike: 'dpc (pitch polymer 225', unit: 'm', qty: q.perimeter },
+    { category: 'Substructure', label: 'Hardcore fill (150mm)', code: 'GW-035', descLike: 'hardcore fill compacted', unit: 'm³', qty: round2(q.footprint * 0.15) },
+    { category: 'Substructure', label: 'Sand blinding', code: 'GW-008', descLike: 'sand blinding', unit: 'm³', qty: round2(q.footprint * 0.05) },
+    { category: 'Substructure', label: 'Damp-proof membrane', code: 'GW-020', descLike: 'dpm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Floor insulation (100mm)', code: 'GW-021', descLike: 'rigid insulation (100mm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Ground floor slab (100mm C25)', code: 'GW-016', descLike: 'ground floor slab 100mm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Slab mesh reinforcement (A142)', code: 'GW-018', descLike: 'mesh reinforcement a142', unit: 'm²', qty: q.slabArea },
+
+    // ── SUPERSTRUCTURE (walls, openings, lintels) ──
+    ...wallLines,
+    { category: 'Superstructure', label: 'Windows (UPVC casement)', code: 'CJ-022', descLike: 'upvc window 1.2-2.0', unit: 'nr', qty: q.windows },
+    { category: 'Superstructure', label: 'External doors (composite)', code: 'CJ-019', descLike: 'external door (composite)', unit: 'nr', qty: q.doors },
+    { category: 'Superstructure', label: 'Steel lintels over openings', code: 'BW-021', descLike: 'steel lintel (catnic', unit: 'nr', qty: q.windows + q.doors },
+
+    // ── UPPER FLOORS (if multi-storey) ──
+    { category: 'Floors', label: 'Floor joists (C24 47×200)', code: 'CJ-001', descLike: 'floor joists (c24 treated) 47x200', unit: 'm', qty: round2(q.footprint * 1.5 * upperFloor) },
+    { category: 'Floors', label: 'Floor decking (22mm T&G)', code: 'CJ-007', descLike: 'chipboard flooring', unit: 'm²', qty: round2(q.footprint * upperFloor) },
 
     // ── ROOF ──
     { category: 'Roof', label: 'Trussed rafters (Fink)', code: 'CJ-006', descLike: 'trussed rafters', unit: 'm²', qty: q.footprint },
@@ -240,6 +278,7 @@ function buildRecipe(m, q) {
     { category: 'Roof', label: 'Roof battens', code: 'CJ-011', descLike: 'roof battens', unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: ROOF_COVERINGS[m.roofCovering].label, code: ROOF_COVERINGS[m.roofCovering].code, descLike: ROOF_COVERINGS[m.roofCovering].descLike, unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: 'Ridge & hip tiles', code: 'RF-011', descLike: 'ridge tiles', unit: 'm', qty: q.cappingLength },
+    { category: 'Roof', label: 'Loft insulation (270mm)', code: 'RF-018', descLike: 'loft insulation', unit: 'm²', qty: q.footprint },
     { category: 'Roof', label: 'Fascia board', code: 'CJ-009', descLike: 'fascia board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Soffit board', code: 'CJ-010', descLike: 'soffit board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Gutter', code: 'RF-013', descLike: 'half round gutter', unit: 'm', qty: q.eavesLength },
@@ -260,6 +299,8 @@ function buildRecipe(m, q) {
 
     // ── FINISHES ──
     { category: 'Finishes', label: 'Plasterboard (walls & ceilings)', code: 'PL-001', descLike: 'plasterboard to walls', unit: 'm²', qty: q.plasterArea },
+    { category: 'Finishes', label: 'Skirting (MDF ogee)', code: 'CJ-025', descLike: 'skirting (mdf', unit: 'm', qty: round2(q.perimeter * 0.9 * m.storeys) },
+    { category: 'Finishes', label: 'Internal doors', code: 'CJ-013', descLike: 'internal door (hollow core)', unit: 'nr', qty: q.rooms },
     { category: 'Finishes', label: 'Emulsion (2 coats + mist)', code: 'DC-001', descLike: 'mist coat + 2 coats emulsion', unit: 'm²', qty: q.plasterArea },
   ];
 }
@@ -304,8 +345,9 @@ function priceModel(rawInputs, lookupRate) {
     });
   }
 
-  // Group, preserving the recipe's category order.
-  const order = ['Structure', 'Roof', 'Services', 'Finishes'];
+  // Group, preserving the recipe's category order (first-seen).
+  const order = [];
+  for (const l of lines) if (!order.includes(l.category)) order.push(l.category);
   const groups = order
     .map((category) => ({
       category,
