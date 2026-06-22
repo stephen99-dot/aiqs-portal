@@ -334,6 +334,9 @@ roof rectangles in its response and the renderer draws exactly that.
   bargeboards and ridge cap, a DPC band, plus sky, a grassy ground plane, soft
   shadows and filmic tone-mapping. The canvas is absolute-positioned and resized
   via `ResizeObserver`.
+- **Dimension lines:** toggleable blue witness/dimension lines with labels for
+  overall length, width and ridge height, drawn in the scene (so they're caught
+  in the PDF snapshot too).
 - **Measurements summary:** `priceModel()` also returns a PriceAJob-style
   grouped `measurements` summary (Foundation / Walls / Floors / Roof / Openings).
   The right panel has an **Estimate | Summary** toggle, and the PDF prints the
