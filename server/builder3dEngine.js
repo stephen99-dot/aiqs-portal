@@ -386,6 +386,102 @@ function priceModel(rawInputs, lookupRate) {
   };
 }
 
+// ── Multi-module projects (House + Extension + Garage…) ─────────────────────
+//
+// A project is a list of building modules, each with its own params plus an
+// {offsetX, offsetZ} placement. Each module is priced independently; the lines
+// are then merged into one consolidated BOQ (same code merged across modules),
+// markup (OH&P, VAT) is applied once at project level, and every module's
+// geometry is returned with its offset so the renderer can place them together.
+
+function defaultModuleName(type) {
+  if (type === 'extension') return 'Extension';
+  if (type === 'garage') return 'Garage';
+  if (type === 'porch') return 'Porch';
+  return 'House';
+}
+
+function priceProject(modules, lookupRate, opts = {}) {
+  const list = Array.isArray(modules) && modules.length ? modules : [{}];
+  const ohpPct = clamp(opts.ohpPct, 0, 60, 15);
+  const vatPct = clamp(opts.vatPct, 0, 25, 20);
+
+  // Price each module at cost (markup applied once below).
+  const priced = list.map((mod, i) => {
+    const r = priceModel({ ...mod, ohpPct: 0, vatPct: 0 }, lookupRate);
+    return {
+      name: String(mod.name || '').trim() || defaultModuleName(mod.type),
+      type: mod.type || 'house',
+      offset: { x: round2(num(mod.offsetX)), z: round2(num(mod.offsetZ)) },
+      geometry: r.geometry,
+      groups: r.groups,
+      measurements: r.measurements,
+      cost: r.totals.cost,
+      missing: r.missing,
+    };
+  });
+
+  // Merge cost lines across modules: by category (first-seen) then by code.
+  const catOrder = [];
+  const catMap = new Map();
+  for (const p of priced) {
+    for (const g of p.groups) {
+      if (!catMap.has(g.category)) { catMap.set(g.category, new Map()); catOrder.push(g.category); }
+      const cm = catMap.get(g.category);
+      for (const it of g.items) {
+        const ex = cm.get(it.code);
+        if (ex) {
+          ex.qty = round2(ex.qty + it.qty);
+          ex.total = round2(ex.total + it.total);
+          ex.labour = round2(ex.labour + it.labour);
+          ex.materials = round2(ex.materials + it.materials);
+        } else {
+          cm.set(it.code, { ...it });
+        }
+      }
+    }
+  }
+  const groups = catOrder.map((c) => {
+    const items = [...catMap.get(c).values()];
+    return { category: c, items, subtotal: round2(items.reduce((s, l) => s + l.total, 0)) };
+  });
+
+  // Merge measurements: additive rows (m, m², m³, nr) sum; non-additive (e.g. °)
+  // keep the first module's value.
+  const mOrder = [];
+  const mMap = new Map();
+  for (const p of priced) {
+    for (const g of p.measurements) {
+      if (!mMap.has(g.group)) { mMap.set(g.group, new Map()); mOrder.push(g.group); }
+      const gm = mMap.get(g.group);
+      for (const r of g.rows) {
+        const ex = gm.get(r.label);
+        if (ex) { if (r.unit !== '°') ex.value = round2(ex.value + r.value); }
+        else gm.set(r.label, { label: r.label, value: r.value, unit: r.unit });
+      }
+    }
+  }
+  const measurements = mOrder.map((g) => ({ group: g, rows: [...mMap.get(g).values()] }));
+
+  const cost = round2(priced.reduce((s, p) => s + p.cost, 0));
+  const allItems = groups.flatMap((g) => g.items);
+  const labour = round2(allItems.reduce((s, l) => s + l.labour, 0));
+  const materials = round2(allItems.reduce((s, l) => s + l.materials, 0));
+  const profit = round2(cost * (ohpPct / 100));
+  const subtotal = round2(cost + profit);
+  const vat = round2(subtotal * (vatPct / 100));
+  const total = round2(subtotal + vat);
+
+  return {
+    modules: priced.map((p) => ({ name: p.name, type: p.type, offset: p.offset, geometry: p.geometry, cost: round2(p.cost) })),
+    groups,
+    measurements,
+    missing: [...new Set(priced.flatMap((p) => p.missing))],
+    inputs: { ohpPct, vatPct },
+    totals: { cost, labour, materials, profit, subtotal, vat, total },
+  };
+}
+
 // ── Reverse-derive a building model from an existing BOQ ────────────────────
 //
 // Given a bill of quantities (line items with qty + unit), infer a plausible
@@ -534,6 +630,7 @@ module.exports = {
   buildRecipe,
   buildMeasurements,
   priceModel,
+  priceProject,
   deriveParamsFromBoq,
   generateFootprint,
   polyArea,

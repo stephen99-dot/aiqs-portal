@@ -337,6 +337,14 @@ roof rectangles in its response and the renderer draws exactly that.
 - **Dimension lines:** toggleable blue witness/dimension lines with labels for
   overall length, width and ridge height, drawn in the scene (so they're caught
   in the PDF snapshot too).
+- **Build modules (House + Extension + Garage…):** a project is a list of
+  parametric modules, each with its own params + an `{offsetX, offsetZ}`
+  placement. `priceProject()` prices each independently, merges the lines into
+  one consolidated BOQ (same code summed across modules), applies markup once,
+  and returns every module's geometry + offset so the renderer places them
+  together. `POST /api/builder3d/price-multi`; `/pdf` accepts `modules` too. The
+  controls have a build-modules panel (select / add / remove, with a per-module
+  subtotal) and the active module is edited below it; markup is project-level.
 - **Live scraped prices:** `server/builder3dLiveRates.js` matches each element
   against the scraped supplier catalogue (`materials-live.json`) and attaches the
   best in-stock product (`line.live`: supplier, price, unit, source URL). Shown

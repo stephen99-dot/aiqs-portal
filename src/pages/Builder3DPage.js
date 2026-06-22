@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { useTheme } from '../context/ThemeContext';
@@ -37,12 +37,24 @@ const SHAPES = [
   { id: 'U', label: 'U-shaped' },
 ];
 
-const DEFAULTS = {
-  length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35, roofType: 'hip',
-  shape: 'rect', wing: 0.45,
-  windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
-  ohpPct: 15, vatPct: 20,
+// Per-module building parameters (markup is project-level, not per module).
+const MODULE_DEFAULTS = {
+  shape: 'rect', length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35,
+  roofType: 'hip', wing: 0.45, windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
 };
+
+const MODULE_TYPES = [
+  { id: 'extension', label: '+ Extension', length: 4, width: 3, storeys: 1, windows: 2, doors: 1, roofType: 'gable' },
+  { id: 'garage', label: '+ Garage', length: 6, width: 6, storeys: 1, windows: 1, doors: 1, roofType: 'gable' },
+  { id: 'porch', label: '+ Porch', length: 2, width: 1.5, storeys: 1, windows: 0, doors: 1, roofType: 'gable' },
+];
+
+let MODULE_SEQ = 0;
+function newModule(type = 'house', overrides = {}) {
+  MODULE_SEQ += 1;
+  const name = type === 'house' ? 'House' : type[0].toUpperCase() + type.slice(1);
+  return { id: 'm' + Date.now().toString(36) + (MODULE_SEQ), name, type, offsetX: 0, offsetZ: 0, ...MODULE_DEFAULTS, ...overrides };
+}
 
 function gbp(n) {
   return '£' + Math.round(n || 0).toLocaleString('en-GB');
@@ -395,7 +407,15 @@ export default function Builder3DPage() {
   const tileRef = useRef(null);
   const rendererRef = useRef(null);
 
-  const [params, setParams] = useState(DEFAULTS);
+  // A project is a list of building modules (House + Extension + Garage…) plus
+  // project-level markup. The controls edit the active module.
+  const firstModule = useMemo(() => newModule('house'), []);
+  const [modules, setModules] = useState([firstModule]);
+  const [activeId, setActiveId] = useState(firstModule.id);
+  const [ohpPct, setOhpPct] = useState(15);
+  const [vatPct, setVatPct] = useState(20);
+  const active = modules.find((m) => m.id === activeId) || modules[0];
+
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -507,26 +527,30 @@ export default function Builder3DPage() {
     };
   }, [isAdmin]);
 
-  // ── rebuild the house from the priced geometry (single source of truth) ──
-  const geometry = quote?.geometry;
+  // ── rebuild all modules from the priced project (single source of truth) ──
+  const projModules = quote?.modules;
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !brickRef.current || !tileRef.current || !geometry) return;
+    if (!scene || !brickRef.current || !tileRef.current || !projModules) return;
     if (houseRef.current) {
       scene.remove(houseRef.current);
-      // Dispose geometries + materials, but NOT the shared brick/tile textures
-      // (they're reused across rebuilds).
       houseRef.current.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
         if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mm) => mm.dispose());
       });
     }
-    const house = buildHouse(geometry, brickRef.current, tileRef.current);
-    scene.add(house);
-    houseRef.current = house;
-  }, [geometry]);
+    const root = new THREE.Group();
+    projModules.forEach((mod) => {
+      if (!mod.geometry) return;
+      const g = buildHouse(mod.geometry, brickRef.current, tileRef.current);
+      g.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
+      root.add(g);
+    });
+    scene.add(root);
+    houseRef.current = root;
+  }, [projModules]);
 
-  // ── dimension annotations (toggleable, rebuilt with the geometry) ──
+  // ── dimension annotations (toggleable, per module) ──
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -535,18 +559,24 @@ export default function Builder3DPage() {
       dimsRef.current.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
       dimsRef.current = null;
     }
-    if (geometry && showDims) {
-      const dims = buildDimensions(geometry);
-      scene.add(dims);
-      dimsRef.current = dims;
+    if (projModules && showDims) {
+      const root = new THREE.Group();
+      projModules.forEach((mod) => {
+        if (!mod.geometry) return;
+        const d = buildDimensions(mod.geometry);
+        d.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
+        root.add(d);
+      });
+      scene.add(root);
+      dimsRef.current = root;
     }
-  }, [geometry, showDims]);
+  }, [projModules, showDims]);
 
-  // ── debounced pricing call ──
-  const price = useCallback(async (p) => {
+  // ── debounced pricing call (prices the whole project) ──
+  const price = useCallback(async (mods, ohp, vat) => {
     setLoading(true); setError(null);
     try {
-      const res = await apiFetch('/builder3d/price', { method: 'POST', body: JSON.stringify(p) });
+      const res = await apiFetch('/builder3d/price-multi', { method: 'POST', body: JSON.stringify({ modules: mods, ohpPct: ohp, vatPct: vat }) });
       setQuote(res);
     } catch (e) {
       setError(e.message || 'Pricing failed');
@@ -556,9 +586,9 @@ export default function Builder3DPage() {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => price(params), 250);
+    const id = setTimeout(() => price(modules, ohpPct, vatPct), 250);
     return () => clearTimeout(id);
-  }, [params, price]);
+  }, [modules, ohpPct, vatPct, price]);
 
   // ── saved models ──
   const loadModels = useCallback(async () => {
@@ -578,12 +608,36 @@ export default function Builder3DPage() {
   }, []);
   useEffect(() => { if (isAdmin) loadBoqSources(); }, [isAdmin, loadBoqSources]);
 
+  // ── module management ──
+  const updateActive = (patch) => setModules((ms) => ms.map((m) => (m.id === activeId ? { ...m, ...patch } : m)));
+  const addModule = (type) => {
+    const tpl = MODULE_TYPES.find((x) => x.id === type) || {};
+    const house = modules[0] || firstModule;
+    const w = tpl.width || 3;
+    const mod = newModule(type, { ...tpl, offsetX: 0, offsetZ: -((house.width || 6) / 2 + w / 2) });
+    delete mod.label;
+    setModules((ms) => [...ms, mod]);
+    setActiveId(mod.id);
+  };
+  const deleteModule = (id) => {
+    setModules((ms) => {
+      if (ms.length <= 1) return ms;
+      const next = ms.filter((m) => m.id !== id);
+      if (id === activeId) setActiveId(next[0].id);
+      return next;
+    });
+  };
+
   const deriveFromBoq = async (sourceId) => {
     const src = boqSources.find((s) => s.id === sourceId);
     setBusy('derive'); setError(null); setDeriveNotes([]);
     try {
       const out = await apiFetch('/builder3d/derive', { method: 'POST', body: JSON.stringify({ sourceId }) });
-      setParams({ ...DEFAULTS, ...out.params });
+      const mod = newModule('house', { ...out.params });
+      setModules([mod]);
+      setActiveId(mod.id);
+      if (out.params.ohpPct != null) setOhpPct(out.params.ohpPct);
+      if (out.params.vatPct != null) setVatPct(out.params.vatPct);
       setModelId('');
       setModelName((src?.name || 'BOQ building') + ' (from BOQ)');
       setDeriveNotes(out.notes || []);
@@ -592,14 +646,16 @@ export default function Builder3DPage() {
     } finally { setBusy(''); }
   };
 
+  const projectPayload = () => ({ name: modelName, params: { version: 2, modules, ohpPct, vatPct } });
+
   const saveModel = async (asNew) => {
     setBusy('save'); setError(null);
     try {
       if (modelId && !asNew) {
-        const res = await apiFetch('/builder3d/models/' + modelId, { method: 'PUT', body: JSON.stringify({ name: modelName, params }) });
+        const res = await apiFetch('/builder3d/models/' + modelId, { method: 'PUT', body: JSON.stringify(projectPayload()) });
         setModelName(res.name);
       } else {
-        const res = await apiFetch('/builder3d/models', { method: 'POST', body: JSON.stringify({ name: modelName, params }) });
+        const res = await apiFetch('/builder3d/models', { method: 'POST', body: JSON.stringify(projectPayload()) });
         setModelId(res.id);
       }
       await loadModels();
@@ -613,7 +669,18 @@ export default function Builder3DPage() {
     if (!found) { setModelId(''); return; }
     setModelId(found.id);
     setModelName(found.name);
-    setParams({ ...DEFAULTS, ...found.params });
+    const p = found.params || {};
+    if (Array.isArray(p.modules) && p.modules.length) {
+      setModules(p.modules);
+      setActiveId(p.modules[0].id || p.modules[0].name);
+      setOhpPct(p.ohpPct ?? 15);
+      setVatPct(p.vatPct ?? 20);
+    } else {
+      // Back-compat: an old single-params save.
+      const mod = newModule('house', { ...MODULE_DEFAULTS, ...p });
+      setModules([mod]); setActiveId(mod.id);
+      setOhpPct(p.ohpPct ?? 15); setVatPct(p.vatPct ?? 20);
+    }
   };
 
   const deleteModel = async () => {
@@ -640,7 +707,7 @@ export default function Builder3DPage() {
       const r = await fetch('/api/builder3d/pdf', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName, params, snapshot }),
+        body: JSON.stringify({ name: modelName, modules, ohpPct, vatPct, snapshot }),
       });
       if (!r.ok) {
         let msg = 'PDF export failed (' + r.status + ')';
@@ -662,7 +729,7 @@ export default function Builder3DPage() {
   const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
-    setParams((p) => ({ ...p, [key]: STRING_KEYS.includes(key) ? v : Number(v) }));
+    updateActive({ [key]: STRING_KEYS.includes(key) ? v : Number(v) });
   };
 
   if (!isAdmin) {
@@ -679,7 +746,7 @@ export default function Builder3DPage() {
   const numberField = (label, key, opts = {}) => (
     <label style={{ display: 'block', marginBottom: 12 }}>
       <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>{label}</span>
-      <input type="number" value={params[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
+      <input type="number" value={active[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
         style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
     </label>
   );
@@ -737,19 +804,49 @@ export default function Builder3DPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr) 300px', gap: 14, flex: 1, minHeight: 0 }}>
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>Building</div>
+          {/* Build modules — House + Extension + Garage… */}
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 8 }}>Build modules</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+            {modules.map((mod) => {
+              const sub = quote?.modules?.find((x) => x.name === mod.name)?.cost;
+              return (
+                <div key={mod.id} onClick={() => setActiveId(mod.id)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, cursor: 'pointer',
+                  padding: '7px 9px', borderRadius: 8, fontSize: 13,
+                  border: '1px solid ' + (mod.id === activeId ? t.accent : t.border),
+                  background: mod.id === activeId ? (t.accent + '22') : t.surface,
+                }}>
+                  <span style={{ fontWeight: 600, color: t.text }}>{mod.name}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {sub != null && <span style={{ fontSize: 11, color: t.textSecondary }}>{gbp(sub)}</span>}
+                    {modules.length > 1 && (
+                      <button onClick={(e) => { e.stopPropagation(); deleteModule(mod.id); }} title="Remove module"
+                        style={{ border: 'none', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 14 }}>
+            {MODULE_TYPES.map((mt) => (
+              <button key={mt.id} onClick={() => addModule(mt.id)} style={{ ...btn(t, t.surface, t.text), padding: '5px 8px', fontSize: 12 }}>{mt.label}</button>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>{active.name}</div>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Footprint shape</span>
-            <select value={params.shape} onChange={set('shape')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.shape} onChange={set('shape')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
           {numberField('Length (m)', 'length', { min: 2, max: 60, step: 0.5 })}
           {numberField('Width (m)', 'width', { min: 2, max: 60, step: 0.5 })}
-          {params.shape !== 'rect' && (
+          {active.shape !== 'rect' && (
             <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wing size ({Math.round(params.wing * 100)}%)</span>
-              <input type="range" min={0.2} max={0.7} step={0.05} value={params.wing} onChange={set('wing')} style={{ width: '100%' }} />
+              <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wing size ({Math.round(active.wing * 100)}%)</span>
+              <input type="range" min={0.2} max={0.7} step={0.05} value={active.wing} onChange={set('wing')} style={{ width: '100%' }} />
             </label>
           )}
           {numberField('Wall height (m)', 'wallHeight', { min: 2, max: 6, step: 0.1 })}
@@ -757,7 +854,7 @@ export default function Builder3DPage() {
           {numberField('Roof pitch (°)', 'roofPitch', { min: 5, max: 60 })}
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Roof type</span>
-            <select value={params.roofType} onChange={set('roofType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.roofType} onChange={set('roofType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {ROOF_TYPES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </label>
@@ -766,20 +863,32 @@ export default function Builder3DPage() {
 
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wall type</span>
-            <select value={params.wallType} onChange={set('wallType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.wallType} onChange={set('wallType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {WALL_TYPES.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </select>
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Roof covering</span>
-            <select value={params.roofCovering} onChange={set('roofCovering')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.roofCovering} onChange={set('roofCovering')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {ROOF_COVERINGS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </label>
+          {active.type !== 'house' && (
+            <>
+              {numberField('Position X (m)', 'offsetX', { step: 0.5 })}
+              {numberField('Position Z (m)', 'offsetZ', { step: 0.5 })}
+            </>
+          )}
 
-          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup</div>
-          {numberField('OH&P (%)', 'ohpPct', { min: 0, max: 60 })}
-          {numberField('VAT (%)', 'vatPct', { min: 0, max: 25 })}
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup (project)</div>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>OH&P (%)</span>
+            <input type="number" value={ohpPct} min={0} max={60} onChange={(e) => setOhpPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+          </label>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>VAT (%)</span>
+            <input type="number" value={vatPct} min={0} max={25} onChange={(e) => setVatPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+          </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>
             <input type="checkbox" checked={showDims} onChange={(e) => setShowDims(e.target.checked)} />
@@ -833,9 +942,9 @@ export default function Builder3DPage() {
               {totals && (
                 <div style={{ marginTop: 'auto', paddingTop: 10, borderTop: '2px solid ' + t.border }}>
                   <Row t={t} label="Trade cost" value={gbp(totals.cost)} />
-                  <Row t={t} label={`OH&P (${params.ohpPct}%)`} value={gbp(totals.profit)} />
+                  <Row t={t} label={`OH&P (${ohpPct}%)`} value={gbp(totals.profit)} />
                   <Row t={t} label="Subtotal" value={gbp(totals.subtotal)} bold />
-                  <Row t={t} label={`VAT (${params.vatPct}%)`} value={gbp(totals.vat)} />
+                  <Row t={t} label={`VAT (${vatPct}%)`} value={gbp(totals.vat)} />
                   <Row t={t} label="Total" value={gbp(totals.total)} big />
                   {quote.missing?.length > 0 && (
                     <div style={{ fontSize: 10.5, color: t.textSecondary, marginTop: 8 }}>

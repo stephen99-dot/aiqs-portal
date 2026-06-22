@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { normaliseInputs, computeQuantities, priceModel, deriveParamsFromBoq, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
+const { normaliseInputs, computeQuantities, priceModel, priceProject, deriveParamsFromBoq, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
 
 // A stub rate library: every code returns £10 labour + £10 materials (£20
 // total) so line totals are easy to predict in assertions.
@@ -135,6 +135,35 @@ test('deriveParamsFromBoq reads storeys from project type and GIA for footprint'
   assert.equal(params.storeys, 2, 'two-storey detected');
   // GIA 120 / 2 storeys -> footprint 60
   assert.ok(params.length * params.width > 40, 'footprint from GIA ÷ storeys');
+});
+
+test('priceProject composes modules: cost sums, lines merge, markup applied once', () => {
+  const house = { length: 9, width: 6, storeys: 2, windows: 8, doors: 1 };
+  const ext = { type: 'extension', length: 4, width: 3, storeys: 1, windows: 2, doors: 1, offsetZ: -4.5 };
+  const one = priceProject([house], flatLookup, { ohpPct: 15, vatPct: 20 });
+  const two = priceProject([house, ext], flatLookup, { ohpPct: 15, vatPct: 20 });
+  assert.ok(two.totals.cost > one.totals.cost, 'adding an extension increases cost');
+  assert.equal(two.modules.length, 2, 'two modules returned');
+  assert.ok(two.modules[1].geometry && two.modules[1].offset.z === -4.5, 'module carries geometry + offset');
+  // Markup applied once at project level.
+  assert.equal(two.totals.profit, Math.round(two.totals.cost * 0.15 * 100) / 100, 'OH&P once on combined cost');
+  assert.equal(two.totals.vat, Math.round(two.totals.subtotal * 0.20 * 100) / 100, 'VAT once on subtotal');
+  // A shared element (slab GW-016) merges into one line with summed qty.
+  const sub = two.groups.find((g) => g.category === 'Substructure');
+  const slab = sub.items.filter((l) => l.code === 'GW-016');
+  assert.equal(slab.length, 1, 'slab merged to a single line across modules');
+});
+
+test('priceProject merges measurements additively but not the roof pitch', () => {
+  const a = { length: 8, width: 6, storeys: 1, roofPitch: 35 };
+  const b = { type: 'extension', length: 4, width: 3, storeys: 1, roofPitch: 35 };
+  const proj = priceProject([a, b], flatLookup, {});
+  const roof = proj.measurements.find((g) => g.group === 'Roof');
+  const pitch = roof.rows.find((r) => r.unit === '°');
+  assert.equal(pitch.value, 35, 'pitch stays 35°, not summed');
+  const floors = proj.measurements.find((g) => g.group === 'Floors');
+  const footprint = floors.rows.find((r) => r.label === 'Footprint');
+  assert.ok(Math.abs(footprint.value - (48 + 12)) < 0.5, 'footprints sum (8×6 + 4×3)');
 });
 
 test('priceModel returns a grouped measurements summary', () => {

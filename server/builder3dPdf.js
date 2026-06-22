@@ -63,17 +63,22 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
     .text('Outline estimate', titleX, 56)
     .text(new Date().toLocaleDateString('en-GB'), titleX, 70);
 
-  // Title + key dimensions.
+  // Title + key dimensions. Works for a single model or a composed project.
   const m = result.inputs || {};
   const q = result.quantities || {};
   doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14).text(name || 'Outline estimate', 40, 110);
   doc.font('Helvetica').fontSize(10).fillColor('#444444');
-  const shapeLabel = { rect: 'Rectangular', L: 'L-shaped', T: 'T-shaped', U: 'U-shaped' }[m.shape] || m.shape;
-  doc.text(
-    `${shapeLabel} • ${m.length}m × ${m.width}m • ${m.storeys} storey(s) • ${m.roofType} roof @ ${m.roofPitch}°`,
-    40, 130,
-  );
-  doc.text(`Footprint ${num(q.footprint)} m²  ·  GIA ${num(q.floorArea)} m²  ·  perimeter ${num(q.perimeter)} m`, 40, 144);
+  if (Array.isArray(result.modules) && result.modules.length) {
+    doc.text(result.modules.map((mm) => mm.name).join(' + '), 40, 130);
+    const floors = (result.measurements || []).find((g) => g.group === 'Floors');
+    const fp = floors?.rows.find((r) => r.label === 'Footprint');
+    const gia = floors?.rows.find((r) => r.label === 'Gross internal area');
+    doc.text(`${result.modules.length} module(s)  ·  footprint ${num(fp?.value)} m²  ·  GIA ${num(gia?.value)} m²`, 40, 144);
+  } else {
+    const shapeLabel = { rect: 'Rectangular', L: 'L-shaped', T: 'T-shaped', U: 'U-shaped' }[m.shape] || m.shape;
+    doc.text(`${shapeLabel} • ${m.length}m × ${m.width}m • ${m.storeys} storey(s) • ${m.roofType} roof @ ${m.roofPitch}°`, 40, 130);
+    doc.text(`Footprint ${num(q.footprint)} m²  ·  GIA ${num(q.floorArea)} m²  ·  perimeter ${num(q.perimeter)} m`, 40, 144);
+  }
 
   let y = 168;
 
