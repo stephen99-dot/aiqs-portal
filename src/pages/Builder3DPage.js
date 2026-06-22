@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, getToken } from '../utils/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3D Builder (Phase 1) — admin-only proof of concept.
@@ -235,6 +235,11 @@ export default function Builder3DPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [models, setModels] = useState([]);
+  const [modelId, setModelId] = useState('');
+  const [modelName, setModelName] = useState('My building');
+  const [busy, setBusy] = useState('');
+
   const isAdmin = user?.role === 'admin';
 
   // ── three.js scene setup (once) ──
@@ -321,6 +326,70 @@ export default function Builder3DPage() {
     return () => clearTimeout(id);
   }, [params, price]);
 
+  // ── saved models ──
+  const loadModels = useCallback(async () => {
+    try {
+      const res = await apiFetch('/builder3d/models');
+      setModels(res.models || []);
+    } catch (e) { /* non-fatal */ }
+  }, []);
+  useEffect(() => { if (isAdmin) loadModels(); }, [isAdmin, loadModels]);
+
+  const saveModel = async (asNew) => {
+    setBusy('save'); setError(null);
+    try {
+      if (modelId && !asNew) {
+        const res = await apiFetch('/builder3d/models/' + modelId, { method: 'PUT', body: JSON.stringify({ name: modelName, params }) });
+        setModelName(res.name);
+      } else {
+        const res = await apiFetch('/builder3d/models', { method: 'POST', body: JSON.stringify({ name: modelName, params }) });
+        setModelId(res.id);
+      }
+      await loadModels();
+    } catch (e) {
+      setError(e.message || 'Save failed');
+    } finally { setBusy(''); }
+  };
+
+  const loadModel = (id) => {
+    const found = models.find((x) => x.id === id);
+    if (!found) { setModelId(''); return; }
+    setModelId(found.id);
+    setModelName(found.name);
+    setParams({ ...DEFAULTS, ...found.params });
+  };
+
+  const deleteModel = async () => {
+    if (!modelId) return;
+    if (!window.confirm('Delete "' + modelName + '"?')) return;
+    setBusy('delete');
+    try {
+      await apiFetch('/builder3d/models/' + modelId, { method: 'DELETE' });
+      setModelId('');
+      await loadModels();
+    } catch (e) { setError(e.message || 'Delete failed'); } finally { setBusy(''); }
+  };
+
+  const exportPdf = async () => {
+    setBusy('pdf'); setError(null);
+    try {
+      const r = await fetch('/api/builder3d/pdf', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName, params }),
+      });
+      if (!r.ok) throw new Error('PDF export failed');
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (modelName || 'estimate').replace(/[^a-z0-9_-]+/gi, '_') + '.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setError(e.message || 'PDF export failed');
+    } finally { setBusy(''); }
+  };
+
   const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
@@ -355,6 +424,29 @@ export default function Builder3DPage() {
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
         </div>
+      </div>
+
+      {/* ── Model toolbar: name, save/load/delete, export ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+        <input
+          value={modelName}
+          onChange={(e) => setModelName(e.target.value)}
+          placeholder="Model name"
+          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 13, minWidth: 180 }}
+        />
+        <button onClick={() => saveModel(false)} disabled={busy === 'save'} style={btn(t, t.accent, '#fff')}>{modelId ? 'Save' : 'Save'}</button>
+        <button onClick={() => saveModel(true)} disabled={busy === 'save'} style={btn(t, t.surface, t.text)}>Save as new</button>
+        <select
+          value={modelId}
+          onChange={(e) => loadModel(e.target.value)}
+          style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 13 }}
+        >
+          <option value="">Load saved model…</option>
+          {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        {modelId && <button onClick={deleteModel} disabled={busy === 'delete'} style={btn(t, t.surface, '#c0392b')}>Delete</button>}
+        <div style={{ flex: 1 }} />
+        <button onClick={exportPdf} disabled={busy === 'pdf'} style={btn(t, '#10B981', '#fff')}>{busy === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: 14, flex: 1, minHeight: 0 }}>
@@ -450,6 +542,13 @@ export default function Builder3DPage() {
       </div>
     </div>
   );
+}
+
+function btn(t, bg, color) {
+  return {
+    padding: '7px 12px', borderRadius: 8, border: '1px solid ' + t.border,
+    background: bg, color, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  };
 }
 
 function Row({ t, label, value, bold, big }) {

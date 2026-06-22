@@ -290,3 +290,39 @@ Two new entries below Invoices: **Documents** and **Calculators**, both gated on
 - Bulk import of historical rates per user (`client_rate_library` is already there
   but isn't yet consulted by the estimator — easy follow-up).
 
+## 3D Builder (admin preview)
+
+A PriceAJob-style parametric estimator at `/builder3d`. Define a building with a
+few inputs and a three.js model renders brick walls + a roof; the server derives
+construction quantities from the geometry and prices them against the seeded
+**UK Master Rates** library (`rates`) into an estimate sidebar
+(Structure → Roof → Services → Finishes, with a cost → OH&P → VAT → total
+rollup). The estimate matches the picture because the **engine is the single
+source of truth for geometry** — `priceModel()` returns the footprint outline +
+roof rectangles in its response and the renderer draws exactly that.
+
+- **Gating:** admin-only for now. The router (`server/builder3dRoutes.js`) uses
+  `authMiddleware + adminMiddleware` and the page self-guards on role. To open it
+  to subscribers, swap `adminMiddleware` for `requireEstimator` and drop
+  `adminOnly` from the sidebar entry in `Layout.js`.
+- **Engine** (`server/builder3dEngine.js`, unit-tested): rectangular / L / T / U
+  footprints (a `wing` fraction sizes the notch/stem), hipped or gable roof. Area
+  and perimeter come from the footprint polygon; roof slope area is
+  `footprint / cos(pitch)`; ridge/hip/eaves linear metres are summed per
+  rectangle (slightly over-counts at wing junctions — a known approximation).
+  Rates resolve by code with a description fallback, so it prices across seed
+  variations. Services are floor-area-scaled allowances.
+- **Saved models + export:** `builder3d_models` table (created idempotently in
+  the router). `GET/POST/PUT/DELETE /api/builder3d/models[/:id]` plus
+  `POST /api/builder3d/pdf` for a branded estimate PDF (`server/builder3dPdf.js`,
+  same header/branding as the quote PDF). The page has a name field,
+  save / save-as / load / delete and Export PDF.
+- **Dependency:** `three`.
+
+### Known Phase-2 limits
+
+- Rectangular wings only (L/T/U); openings are panels on the wall, not cut
+  through the brick; roofs over adjoining wings intersect rather than forming
+  proper valleys (so ridge/eaves metres are indicative). Area-based quantities —
+  the bulk of the cost — stay exact.
+
