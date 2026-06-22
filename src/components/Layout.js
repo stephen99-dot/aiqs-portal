@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
-  UploadIcon, SettingsIcon,
+  UploadIcon, SettingsIcon, CubeIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
@@ -214,6 +214,7 @@ export default function Layout() {
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
     officeNavItem,
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
+    { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
     { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
