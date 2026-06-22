@@ -333,10 +333,12 @@ function priceModel(rawInputs, lookupRate) {
       storeys: m.storeys,
       roofPitch: m.roofPitch,
       roofType: m.roofType,
+      roofCovering: m.roofCovering,
       windows: m.windows,
       doors: m.doors,
     },
     groups,
+    measurements: buildMeasurements(m, q),
     missing,
     totals: { cost, labour, materials, profit, subtotal, vat, total },
   };
@@ -441,10 +443,54 @@ function deriveParamsFromBoq(items, opts = {}) {
   };
 }
 
+// A PriceAJob-style measurements summary grouped by element. Pure presentation
+// over the quantities the take-off already computed.
+function buildMeasurements(m, q) {
+  const wallH = m.wallHeight * m.storeys;
+  const groups = [
+    ['Foundation', [
+      ['Foundation run', q.perimeter, 'm'],
+      ['Foundation width', 0.6, 'm'],
+      ['Trench depth', 0.8, 'm'],
+      ['Concrete volume', q.trenchVolume, 'm³'],
+    ]],
+    ['Walls', [
+      ['Wall perimeter', q.perimeter, 'm'],
+      ['Wall height', wallH, 'm'],
+      ['External wall area (gross)', q.wallGross, 'm²'],
+      ['Openings area', q.openingsArea, 'm²'],
+      ['External wall area (net)', q.wallNet, 'm²'],
+    ]],
+    ['Floors', [
+      ['Footprint', q.footprint, 'm²'],
+      ['Gross internal area', q.floorArea, 'm²'],
+      ['Ground floor slab', q.slabArea, 'm²'],
+      ['Ceiling area', q.ceilingArea, 'm²'],
+    ]],
+    ['Roof', [
+      ['Pitch', m.roofPitch, '°'],
+      ['Roof area', q.roofSlopeArea, 'm²'],
+      ['Ridge & hips', q.cappingLength, 'm'],
+      ['Eaves / fascia / soffit', q.eavesLength, 'm'],
+      ['Gutter', q.eavesLength, 'm'],
+      ['Downpipe', q.downpipeLength, 'm'],
+    ]],
+    ['Openings', [
+      ['Windows', q.windows, 'nr'],
+      ['External doors', q.doors, 'nr'],
+    ]],
+  ];
+  return groups.map(([group, rows]) => ({
+    group,
+    rows: rows.map(([label, value, unit]) => ({ label, value: round2(value), unit })),
+  }));
+}
+
 module.exports = {
   normaliseInputs,
   computeQuantities,
   buildRecipe,
+  buildMeasurements,
   priceModel,
   deriveParamsFromBoq,
   generateFootprint,

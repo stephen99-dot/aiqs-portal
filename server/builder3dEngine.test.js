@@ -137,6 +137,16 @@ test('deriveParamsFromBoq reads storeys from project type and GIA for footprint'
   assert.ok(params.length * params.width > 40, 'footprint from GIA ÷ storeys');
 });
 
+test('priceModel returns a grouped measurements summary', () => {
+  const out = priceModel({ length: 8, width: 6, storeys: 1 }, flatLookup);
+  assert.ok(Array.isArray(out.measurements), 'measurements present');
+  const foundation = out.measurements.find((g) => g.group === 'Foundation');
+  assert.ok(foundation, 'has a Foundation group');
+  assert.ok(foundation.rows.some((r) => r.label === 'Concrete volume' && r.value > 0), 'foundation concrete volume computed');
+  const roof = out.measurements.find((g) => g.group === 'Roof');
+  assert.ok(roof.rows.some((r) => r.label === 'Roof area' && r.value > 0), 'roof area present');
+});
+
 test('Services lines scale with floor area and appear as their own group', () => {
   const out = priceModel({ length: 12, width: 8, storeys: 2, windows: 10, doors: 2 }, flatLookup);
   const services = out.groups.find((g) => g.category === 'Services');
