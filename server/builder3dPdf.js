@@ -184,7 +184,7 @@ function streamBuilder3dPdf(res, name, result, branding, userInfo, snapshot) {
 
   ensureRoom(40);
   doc.font('Helvetica-Oblique').fontSize(8).fillColor('#888888')
-    .text('Outline estimate generated from a parametric model and indicative rates. For budgeting only — not a fixed-price quotation. Quantities are derived from the modelled geometry; verify against drawings before ordering.', 40, y, { width: 515 });
+    .text('Outline estimate generated from a parametric model and indicative trade rates, with material lines benchmarked against live supplier prices where available. For budgeting only — not a fixed-price quotation. Quantities are derived from the modelled geometry; verify against drawings before ordering.', 40, y, { width: 515 });
 
   if (branding.footer_text) {
     doc.font('Helvetica').fontSize(8).fillColor('#666666').text(branding.footer_text, 40, doc.page.height - 60, { width: 515, align: 'center' });

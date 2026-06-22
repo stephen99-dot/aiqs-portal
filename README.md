@@ -337,6 +337,14 @@ roof rectangles in its response and the renderer draws exactly that.
 - **Dimension lines:** toggleable blue witness/dimension lines with labels for
   overall length, width and ridge height, drawn in the scene (so they're caught
   in the PDF snapshot too).
+- **Live scraped prices:** `server/builder3dLiveRates.js` matches each element
+  against the scraped supplier catalogue (`materials-live.json`) and attaches the
+  best in-stock product (`line.live`: supplier, price, unit, source URL). Shown
+  under each estimate line and linked to source. Count-based component lines
+  (windows, doors, boiler, radiators, sanitaryware, insulation boards, sockets…)
+  are flagged `priceable` where the unit matches; area/volume trade rates keep
+  the library rate with the live price shown as a *benchmark* (retail pack prices
+  aren't blindly converted into m²/m³ trade rates).
 - **Measurements summary:** `priceModel()` also returns a PriceAJob-style
   grouped `measurements` summary (Foundation / Walls / Floors / Roof / Openings).
   The right panel has an **Estimate | Summary** toggle, and the PDF prints the

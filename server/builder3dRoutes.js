@@ -14,6 +14,7 @@ const db = require('./database');
 const { authMiddleware, adminMiddleware } = require('./auth');
 const { priceModel, deriveParamsFromBoq } = require('./builder3dEngine');
 const { streamBuilder3dPdf } = require('./builder3dPdf');
+const liveRates = require('./builder3dLiveRates');
 
 const router = express.Router();
 
@@ -75,7 +76,9 @@ function lookupRate(code, descLike) {
 // POST /api/builder3d/price — params -> priced breakdown + geometry.
 router.post('/price', (req, res) => {
   try {
-    res.json(priceModel(req.body || {}, lookupRate));
+    const result = priceModel(req.body || {}, lookupRate);
+    liveRates.enrich(result.groups); // attach live scraped supplier prices
+    res.json(result);
   } catch (err) {
     console.error('[Builder3D] price error:', err);
     res.status(500).json({ error: 'Could not price the model.' });
@@ -127,6 +130,7 @@ router.post('/pdf', (req, res) => {
   try {
     const params = req.body?.params || req.body || {};
     const result = priceModel(params, lookupRate);
+    liveRates.enrich(result.groups);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
     streamBuilder3dPdf(res, req.body?.name || 'Outline estimate', result, branding, userInfo, req.body?.snapshot);

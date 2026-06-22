@@ -818,6 +818,11 @@ export default function Builder3DPage() {
                       <span style={{ flex: 1, paddingRight: 8 }}>
                         {it.label}
                         <span style={{ color: t.textSecondary, display: 'block', fontSize: 11 }}>{it.qty} {it.unit} @ {gbp(it.rate)}</span>
+                        {it.live && (
+                          <a href={it.live.source_url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 10.5, color: '#0a7d28', textDecoration: 'none', marginTop: 1 }}>
+                            ● live {it.live.supplier} £{it.live.price}/{it.live.unit}{it.live.priceable ? '' : ' (benchmark)'}
+                          </a>
+                        )}
                       </span>
                       <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{gbp(it.total)}</span>
                     </div>
