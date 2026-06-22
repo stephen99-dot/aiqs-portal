@@ -281,17 +281,25 @@ export default function Builder3DPage() {
     const animate = () => { controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(animate); };
     animate();
 
-    const onResize = () => {
-      if (!mount.clientWidth) return;
-      camera.aspect = mount.clientWidth / mount.clientHeight;
+    // Keep the renderer matched to the container, not the window. A plain
+    // window 'resize' listener misses grid/flex relayouts (e.g. a banner
+    // appearing), which can leave an oversized canvas that blows the grid out
+    // and pushes the estimate column off-screen. ResizeObserver tracks the
+    // element itself.
+    const resize = () => {
+      const w = mount.clientWidth, h = mount.clientHeight;
+      if (!w || !h) return;
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.setSize(mount.clientWidth, mount.clientHeight);
+      renderer.setSize(w, h, true);
     };
-    window.addEventListener('resize', onResize);
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(mount);
 
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener('resize', onResize);
+      ro.disconnect();
       controls.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
@@ -412,7 +420,11 @@ export default function Builder3DPage() {
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: modelName, params, snapshot }),
       });
-      if (!r.ok) throw new Error('PDF export failed');
+      if (!r.ok) {
+        let msg = 'PDF export failed (' + r.status + ')';
+        try { const j = await r.json(); if (j.error) msg = j.error; } catch (e) { /* non-JSON */ }
+        throw new Error(msg);
+      }
       const blob = await r.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -421,6 +433,7 @@ export default function Builder3DPage() {
       URL.revokeObjectURL(a.href);
     } catch (e) {
       setError(e.message || 'PDF export failed');
+      window.alert('Export failed: ' + (e.message || 'unknown error'));
     } finally { setBusy(''); }
   };
 
@@ -548,7 +561,7 @@ export default function Builder3DPage() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} style={{ background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0 }} />
+        <div ref={mountRef} style={{ background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0 }} />
 
         {/* ── Estimate sidebar ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
