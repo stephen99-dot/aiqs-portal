@@ -314,12 +314,83 @@ function buildHouse(geo, brickTex, tileTex) {
   return group;
 }
 
+// A floating text label (sprite) for dimension annotations.
+function makeLabel(text) {
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 44px sans-serif';
+  const tw = ctx.measureText(text).width;
+  c.width = Math.ceil(tw) + 32;
+  c.height = 64;
+  const cx = c.getContext('2d');
+  cx.font = 'bold 44px sans-serif';
+  cx.fillStyle = 'rgba(255,255,255,0.92)';
+  cx.strokeStyle = '#1d4ed8';
+  cx.lineWidth = 3;
+  const r = 10;
+  cx.beginPath();
+  cx.moveTo(r, 2); cx.arcTo(c.width - 2, 2, c.width - 2, c.height - 2, r);
+  cx.arcTo(c.width - 2, c.height - 2, 2, c.height - 2, r);
+  cx.arcTo(2, c.height - 2, 2, 2, r); cx.arcTo(2, 2, c.width - 2, 2, r);
+  cx.closePath(); cx.fill(); cx.stroke();
+  cx.fillStyle = '#1d4ed8'; cx.textBaseline = 'middle';
+  cx.fillText(text, 16, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sp.scale.set(c.width * 0.006, c.height * 0.006, 1);
+  return sp;
+}
+
+// Dimension annotations (overall length, width and ridge height) drawn as blue
+// witness/dimension lines with labels — the measured lines in the reference.
+function buildDimensions(geo) {
+  const group = new THREE.Group();
+  const { outline } = geo;
+  const xs = outline.map((p) => p.x), zs = outline.map((p) => p.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const L = maxX - minX, W = maxZ - minZ;
+  const H = geo.wallHeight * geo.storeys;
+  const rise = (Math.min(L, W) / 2) * Math.tan((geo.roofPitch * Math.PI) / 180);
+  const ridgeH = H + rise;
+  const d = 1.4; // offset of the dimension line from the building
+  const fmt = (m) => `${m.toFixed(2)} m`;
+  const mat = new THREE.LineBasicMaterial({ color: 0x1d4ed8 });
+  const segs = [];
+  const seg = (a, b) => segs.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+  // Length (along X), in front (+Z).
+  const zf = maxZ + d;
+  seg(V(minX, 0.02, maxZ), V(minX, 0.02, zf));
+  seg(V(maxX, 0.02, maxZ), V(maxX, 0.02, zf));
+  seg(V(minX, 0.02, zf), V(maxX, 0.02, zf));
+  const lLbl = makeLabel(fmt(L)); lLbl.position.set((minX + maxX) / 2, 0.4, zf); group.add(lLbl);
+
+  // Width (along Z), to the side (+X).
+  const xf = maxX + d;
+  seg(V(maxX, 0.02, minZ), V(xf, 0.02, minZ));
+  seg(V(maxX, 0.02, maxZ), V(xf, 0.02, maxZ));
+  seg(V(xf, 0.02, minZ), V(xf, 0.02, maxZ));
+  const wLbl = makeLabel(fmt(W)); wLbl.position.set(xf, 0.4, (minZ + maxZ) / 2); group.add(wLbl);
+
+  // Height (to ridge), vertical at the front-right corner.
+  seg(V(xf, 0, zf), V(xf, ridgeH, zf));
+  const hLbl = makeLabel(fmt(ridgeH)); hLbl.position.set(xf, ridgeH / 2, zf); group.add(hLbl);
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  group.add(new THREE.LineSegments(g, mat));
+  return group;
+}
+
 export default function Builder3DPage() {
   const { t } = useTheme();
   const { user } = useAuth();
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const houseRef = useRef(null);
+  const dimsRef = useRef(null);
   const brickRef = useRef(null);
   const tileRef = useRef(null);
   const rendererRef = useRef(null);
@@ -336,6 +407,7 @@ export default function Builder3DPage() {
   const [boqSources, setBoqSources] = useState([]);
   const [deriveNotes, setDeriveNotes] = useState([]);
   const [panelTab, setPanelTab] = useState('estimate');
+  const [showDims, setShowDims] = useState(true);
 
   const isAdmin = user?.role === 'admin';
 
@@ -453,6 +525,22 @@ export default function Builder3DPage() {
     scene.add(house);
     houseRef.current = house;
   }, [geometry]);
+
+  // ── dimension annotations (toggleable, rebuilt with the geometry) ──
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (dimsRef.current) {
+      scene.remove(dimsRef.current);
+      dimsRef.current.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+      dimsRef.current = null;
+    }
+    if (geometry && showDims) {
+      const dims = buildDimensions(geometry);
+      scene.add(dims);
+      dimsRef.current = dims;
+    }
+  }, [geometry, showDims]);
 
   // ── debounced pricing call ──
   const price = useCallback(async (p) => {
@@ -692,6 +780,11 @@ export default function Builder3DPage() {
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup</div>
           {numberField('OH&P (%)', 'ohpPct', { min: 0, max: 60 })}
           {numberField('VAT (%)', 'vatPct', { min: 0, max: 25 })}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>
+            <input type="checkbox" checked={showDims} onChange={(e) => setShowDims(e.target.checked)} />
+            Show dimensions
+          </label>
         </div>
 
         {/* ── 3D viewport ── */}
