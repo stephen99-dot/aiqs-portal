@@ -847,6 +847,17 @@ async function generateClientCopyPro(parsed, opts = {}) {
     clientName,
     extraMeta: branding.company_name ? 'Issued by ' + branding.company_name : '',
   }, style, 'F');
+
+  // Logo — top-right of the hero band. The cover sheet is disabled, so the
+  // brand mark lives here on the single-sheet client copy. resolveLogo always
+  // returns a validated raster (or null), so this can't corrupt the workbook.
+  try {
+    const logoForHero = await docTpl.resolveLogo(branding);
+    if (logoForHero) {
+      docTpl.embedResolvedLogo(wb, ws, logoForHero, { col: 4.55, row: 0.15 }, { maxWidth: 115, maxHeight: 44 });
+    }
+  } catch (e) { /* logo is optional — never block the document */ }
+
   ws.getRow(r).height = 6;
   r++;
 
