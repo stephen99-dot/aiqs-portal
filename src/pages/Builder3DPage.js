@@ -25,8 +25,13 @@ const ROOF_COVERINGS = [
   { id: 'slate', label: 'Natural slate' },
 ];
 
+const ROOF_TYPES = [
+  { id: 'hip', label: 'Hipped' },
+  { id: 'gable', label: 'Gable' },
+];
+
 const DEFAULTS = {
-  length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35,
+  length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35, roofType: 'hip',
   windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
   ohpPct: 15, vatPct: 20,
 };
@@ -67,6 +72,21 @@ function addBeam(group, p1, p2, thickness, mat) {
   mesh.position.copy(p1).add(p2).multiplyScalar(0.5);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize());
   group.add(mesh);
+}
+
+// Add a flat polygon (triangle or trapezoid) from an ordered list of points,
+// fan-triangulated. Used for the roof slopes and gable end walls.
+function addPoly(group, points, mat) {
+  const geo = new THREE.BufferGeometry();
+  const verts = [];
+  for (let i = 1; i < points.length - 1; i++) {
+    verts.push(points[0].x, points[0].y, points[0].z);
+    verts.push(points[i].x, points[i].y, points[i].z);
+    verts.push(points[i + 1].x, points[i + 1].y, points[i + 1].z);
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  group.add(new THREE.Mesh(geo, mat));
 }
 
 function buildHouse(p, brickTex) {
@@ -122,20 +142,49 @@ function buildHouse(p, brickTex) {
     }
   }
 
-  // Gable roof: ridge runs along X (the model long axis), slopes face ±Z.
+  // Roof: ridge runs along X (the model long axis), slopes face ±Z. For a hip
+  // the ridge is inset by W/2 at each end; for a gable it runs the full length.
+  const isHip = p.roofType === 'hip';
   const rise = (W / 2) * Math.tan((p.roofPitch * Math.PI) / 180);
   const ridgeY = H + rise;
-  // Ridge board.
-  addBeam(group, new THREE.Vector3(-L / 2, ridgeY, 0), new THREE.Vector3(L / 2, ridgeY, 0), 0.14, timber);
-  // Wall plates.
+  const ridgeHalf = isHip ? Math.max(L / 2 - W / 2, 0) : L / 2;
+  const rEndPos = new THREE.Vector3(ridgeHalf, ridgeY, 0);
+  const rEndNeg = new THREE.Vector3(-ridgeHalf, ridgeY, 0);
+  // Translucent covering so the rafter structure reads through it.
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x6b5847, roughness: 0.9, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+
+  // Ridge board + wall plates all round.
+  addBeam(group, rEndNeg, rEndPos, 0.14, timber);
   addBeam(group, new THREE.Vector3(-L / 2, H, W / 2), new THREE.Vector3(L / 2, H, W / 2), 0.1, timber);
   addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(L / 2, H, -W / 2), 0.1, timber);
-  // Rafters at ~0.6m centres, both slopes.
-  const bays = Math.max(2, Math.round(L / 0.6));
+  addBeam(group, new THREE.Vector3(L / 2, H, -W / 2), new THREE.Vector3(L / 2, H, W / 2), 0.1, timber);
+  addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), 0.1, timber);
+
+  // Common rafters at ~0.6m centres along the main (±Z) slopes.
+  const span = ridgeHalf * 2;
+  const bays = Math.max(2, Math.round((span || L) / 0.6));
   for (let i = 0; i <= bays; i++) {
-    const x = -L / 2 + (L * i) / bays;
+    const x = -ridgeHalf + (span * i) / bays;
     addBeam(group, new THREE.Vector3(x, H, W / 2), new THREE.Vector3(x, ridgeY, 0), 0.07, timber);
     addBeam(group, new THREE.Vector3(x, H, -W / 2), new THREE.Vector3(x, ridgeY, 0), 0.07, timber);
+  }
+
+  // Main roof slopes.
+  addPoly(group, [new THREE.Vector3(-L / 2, H, W / 2), new THREE.Vector3(L / 2, H, W / 2), rEndPos, rEndNeg], roofMat);
+  addPoly(group, [new THREE.Vector3(L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, -W / 2), rEndNeg, rEndPos], roofMat);
+
+  if (isHip) {
+    // Hip rafters from the four corners to the ridge ends + triangular ends.
+    addBeam(group, new THREE.Vector3(L / 2, H, W / 2), rEndPos, 0.08, timber);
+    addBeam(group, new THREE.Vector3(L / 2, H, -W / 2), rEndPos, 0.08, timber);
+    addBeam(group, new THREE.Vector3(-L / 2, H, W / 2), rEndNeg, 0.08, timber);
+    addBeam(group, new THREE.Vector3(-L / 2, H, -W / 2), rEndNeg, 0.08, timber);
+    addPoly(group, [new THREE.Vector3(L / 2, H, W / 2), new THREE.Vector3(L / 2, H, -W / 2), rEndPos], roofMat);
+    addPoly(group, [new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), rEndNeg], roofMat);
+  } else {
+    // Gable end walls fill the triangle at each end with brickwork.
+    addPoly(group, [new THREE.Vector3(L / 2, H, W / 2), new THREE.Vector3(L / 2, H, -W / 2), rEndPos], brickMat);
+    addPoly(group, [new THREE.Vector3(-L / 2, H, -W / 2), new THREE.Vector3(-L / 2, H, W / 2), rEndNeg], brickMat);
   }
 
   group.position.y = 0;
@@ -220,7 +269,7 @@ export default function Builder3DPage() {
     const house = buildHouse(params, brickRef.current);
     scene.add(house);
     houseRef.current = house;
-  }, [params.length, params.width, params.wallHeight, params.storeys, params.roofPitch, params.windows, params.doors]);
+  }, [params.length, params.width, params.wallHeight, params.storeys, params.roofPitch, params.roofType, params.windows, params.doors]);
 
   // ── debounced pricing call ──
   const price = useCallback(async (p) => {
@@ -240,9 +289,10 @@ export default function Builder3DPage() {
     return () => clearTimeout(id);
   }, [params, price]);
 
+  const STRING_KEYS = ['wallType', 'roofCovering', 'roofType'];
   const set = (key) => (e) => {
     const v = e.target.value;
-    setParams((p) => ({ ...p, [key]: key === 'wallType' || key === 'roofCovering' ? v : Number(v) }));
+    setParams((p) => ({ ...p, [key]: STRING_KEYS.includes(key) ? v : Number(v) }));
   };
 
   if (!isAdmin) {
@@ -284,6 +334,12 @@ export default function Builder3DPage() {
           {numberField('Wall height (m)', 'wallHeight', { min: 2, max: 6, step: 0.1 })}
           {numberField('Storeys', 'storeys', { min: 1, max: 4 })}
           {numberField('Roof pitch (°)', 'roofPitch', { min: 5, max: 60 })}
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Roof type</span>
+            <select value={params.roofType} onChange={set('roofType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+              {ROOF_TYPES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+          </label>
           {numberField('Windows', 'windows', { min: 0, max: 60 })}
           {numberField('External doors', 'doors', { min: 0, max: 20 })}
 

@@ -21,7 +21,7 @@ test('normaliseInputs clamps wild values and defaults bad enums', () => {
 });
 
 test('computeQuantities derives sane geometry for a 10x6 single storey', () => {
-  const m = normaliseInputs({ length: 10, width: 6, wallHeight: 2.5, storeys: 1, roofPitch: 30, windows: 8, doors: 2 });
+  const m = normaliseInputs({ length: 10, width: 6, wallHeight: 2.5, storeys: 1, roofPitch: 30, windows: 8, doors: 2, roofType: 'gable' });
   const q = computeQuantities(m);
   assert.equal(q.perimeter, 32, 'perimeter = 2*(10+6)');
   assert.equal(q.footprint, 60, 'footprint = 10*6');
@@ -54,6 +54,28 @@ test('priceModel groups lines and reports missing rate codes', () => {
   assert.ok(out.groups.every((g) => g.items.length > 0), 'no empty groups returned');
   const allLines = out.groups.flatMap((g) => g.items);
   assert.ok(allLines.every((l) => l.total >= 0), 'no negative line totals');
+});
+
+test('hip roof shortens the ridge and adds hips + full-perimeter eaves vs gable', () => {
+  const base = { length: 10, width: 6, roofPitch: 35 };
+  const hip = computeQuantities(normaliseInputs({ ...base, roofType: 'hip' }));
+  const gable = computeQuantities(normaliseInputs({ ...base, roofType: 'gable' }));
+  assert.equal(hip.ridgeLength, 4, 'hip structural ridge = length - width = 10 - 6');
+  assert.equal(gable.ridgeLength, 10, 'gable ridge = full length');
+  assert.ok(hip.cappingLength > hip.ridgeLength, 'hip capping adds the four hip runs');
+  assert.equal(hip.eavesLength, 32, 'hip eaves run the full perimeter');
+  assert.equal(gable.eavesLength, 20, 'gable eaves only the two long sides');
+  // Same pitch -> identical slope area regardless of roof type.
+  assert.ok(Math.abs(hip.roofSlopeArea - gable.roofSlopeArea) < 1e-6, 'slope area independent of roof type');
+});
+
+test('Services lines scale with floor area and appear as their own group', () => {
+  const out = priceModel({ length: 12, width: 8, storeys: 2, windows: 10, doors: 2 }, flatLookup);
+  const services = out.groups.find((g) => g.category === 'Services');
+  assert.ok(services && services.items.length > 0, 'a Services group is returned');
+  assert.ok(services.items.some((l) => l.code === 'PH-001'), 'heating boiler line present');
+  assert.ok(services.items.some((l) => l.code === 'EL-004'), 'socket line present');
+  assert.equal(out.groups.map((g) => g.category).join(','), 'Structure,Roof,Services,Finishes', 'group order matches the estimate layout');
 });
 
 test('priceModel skips zero-quantity elements (no doors -> no door line)', () => {

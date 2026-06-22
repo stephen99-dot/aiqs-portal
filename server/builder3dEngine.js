@@ -57,12 +57,14 @@ const ROOF_COVERINGS = {
 function normaliseInputs(raw = {}) {
   const wallType = WALL_TYPES[raw.wallType] ? raw.wallType : 'cavity';
   const roofCovering = ROOF_COVERINGS[raw.roofCovering] ? raw.roofCovering : 'concrete_tile';
+  const roofType = raw.roofType === 'gable' ? 'gable' : 'hip';
   return {
     length: clamp(raw.length, 2, 60, 8),
     width: clamp(raw.width, 2, 60, 6),
     wallHeight: clamp(raw.wallHeight, 2, 6, 2.6),
     storeys: Math.round(clamp(raw.storeys, 1, 4, 1)),
     roofPitch: clamp(raw.roofPitch, 5, 60, 35),
+    roofType,
     windows: Math.round(clamp(raw.windows, 0, 60, 6)),
     doors: Math.round(clamp(raw.doors, 0, 20, 2)),
     wallType,
@@ -91,20 +93,38 @@ function computeQuantities(m) {
   const trenchVolume = perimeter * 0.6 * 0.8;
   const slabArea = footprint;
 
-  // Roof: a gable roof. Each slope is the half-footprint divided by cos(pitch);
-  // both slopes together ≈ footprint / cos(pitch). Trusses are priced on plan.
+  // Roof. With equal pitch on every plane the total slope area = the horizontal
+  // projected area / cos(pitch) for both gable and hip, so footprint/cos(pitch)
+  // holds either way. The ridge runs along the model's length (X); slopes span
+  // the width, so the rise is set by width/2.
+  const isHip = m.roofType === 'hip';
   const pitchRad = (m.roofPitch * Math.PI) / 180;
   const roofSlopeArea = footprint / Math.cos(pitchRad);
-  const ridgeLength = longSide;
-  const eavesLength = 2 * longSide;
+  const rise = (m.width / 2) * Math.tan(pitchRad);
+  // Hip ridge is shortened by half the width at each end; a hip 3D length runs
+  // from each corner up to the (inset) ridge end.
+  const ridgeLength = isHip ? Math.max(m.length - m.width, 0) : longSide;
+  const hipLength = Math.sqrt(2 * (m.width / 2) * (m.width / 2) + rise * rise);
+  // Linear metres of capping (ridge + hips) priced as ridge tiles.
+  const cappingLength = ridgeLength + (isHip ? 4 * hipLength : 0);
+  // Hip roofs have eaves all the way round; a gable only on the two long sides.
+  const eavesLength = isHip ? perimeter : 2 * longSide;
 
   // Internal finishes: one plastered face of the external walls plus ceilings.
   const ceilingArea = footprint * m.storeys;
   const plasterArea = wallNet + ceilingArea;
 
+  // Services scale with usable floor area. A rough room/bathroom count drives
+  // the electrical/heating/sanitary allowances (clearly an allowance, not a
+  // designed layout — Phase 1).
+  const floorArea = footprint * m.storeys;
+  const rooms = Math.max(2, Math.round(floorArea / 14));
+  const bathrooms = Math.max(1, Math.round(rooms / 4));
+
   return {
     perimeter: round2(perimeter),
     footprint: round2(footprint),
+    floorArea: round2(floorArea),
     wallGross: round2(wallGross),
     wallNet: round2(wallNet),
     openingsArea: round2(openingsArea),
@@ -112,10 +132,13 @@ function computeQuantities(m) {
     slabArea: round2(slabArea),
     roofSlopeArea: round2(roofSlopeArea),
     ridgeLength: round2(ridgeLength),
+    cappingLength: round2(cappingLength),
     eavesLength: round2(eavesLength),
     downpipeLength: round2(2 * m.wallHeight * m.storeys),
     ceilingArea: round2(ceilingArea),
     plasterArea: round2(plasterArea),
+    rooms,
+    bathrooms,
     windows: m.windows,
     doors: m.doors,
   };
@@ -142,11 +165,24 @@ function buildRecipe(m, q) {
     { category: 'Roof', label: 'Breathable roofing membrane', code: 'CJ-012', descLike: 'breathable roofing membrane', unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: 'Roof battens', code: 'CJ-011', descLike: 'roof battens', unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: ROOF_COVERINGS[m.roofCovering].label, code: ROOF_COVERINGS[m.roofCovering].code, descLike: ROOF_COVERINGS[m.roofCovering].descLike, unit: 'm²', qty: q.roofSlopeArea },
-    { category: 'Roof', label: 'Ridge tiles', code: 'RF-011', descLike: 'ridge tiles', unit: 'm', qty: q.ridgeLength },
+    { category: 'Roof', label: 'Ridge & hip tiles', code: 'RF-011', descLike: 'ridge tiles', unit: 'm', qty: q.cappingLength },
     { category: 'Roof', label: 'Fascia board', code: 'CJ-009', descLike: 'fascia board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Soffit board', code: 'CJ-010', descLike: 'soffit board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Gutter', code: 'RF-013', descLike: 'half round gutter', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Downpipe', code: 'RF-014', descLike: 'downpipe', unit: 'm', qty: q.downpipeLength },
+
+    // ── SERVICES ── (allowances scaled by derived room / bathroom count)
+    { category: 'Services', label: 'Consumer unit (dual RCD)', code: 'EL-002', descLike: 'consumer unit (dual rcd', unit: 'nr', qty: 1 },
+    { category: 'Services', label: 'Double socket outlets', code: 'EL-004', descLike: 'double socket outlet', unit: 'nr', qty: q.rooms * 4 },
+    { category: 'Services', label: 'LED downlights', code: 'EL-012', descLike: 'downlight (led', unit: 'nr', qty: q.rooms * 3 },
+    { category: 'Services', label: 'Light switches', code: 'EL-015', descLike: 'light switch (1 gang)', unit: 'nr', qty: q.rooms },
+    { category: 'Services', label: 'Smoke detectors (interlinked)', code: 'EL-018', descLike: 'smoke detector', unit: 'nr', qty: m.storeys + 1 },
+    { category: 'Services', label: 'Combi boiler', code: 'PH-001', descLike: 'combi boiler (budget', unit: 'nr', qty: 1 },
+    { category: 'Services', label: 'Radiators', code: 'PH-006', descLike: 'radiator (double panel 600x1000', unit: 'nr', qty: q.rooms },
+    { category: 'Services', label: 'Heating pipework (15mm)', code: 'PH-009', descLike: '15mm copper pipework', unit: 'm', qty: q.rooms * 8 },
+    { category: 'Services', label: 'WC suites', code: 'PH-012', descLike: 'wc close coupled (budget', unit: 'nr', qty: q.bathrooms },
+    { category: 'Services', label: 'Basins', code: 'PH-015', descLike: 'basin pedestal (budget', unit: 'nr', qty: q.bathrooms },
+    { category: 'Services', label: 'Baths', code: 'PH-017', descLike: 'bath (acrylic', unit: 'nr', qty: q.bathrooms },
 
     // ── FINISHES ──
     { category: 'Finishes', label: 'Plasterboard (walls & ceilings)', code: 'PL-001', descLike: 'plasterboard to walls', unit: 'm²', qty: q.plasterArea },
@@ -195,7 +231,7 @@ function priceModel(rawInputs, lookupRate) {
   }
 
   // Group, preserving the recipe's category order.
-  const order = ['Structure', 'Roof', 'Finishes'];
+  const order = ['Structure', 'Roof', 'Services', 'Finishes'];
   const groups = order
     .map((category) => ({
       category,
