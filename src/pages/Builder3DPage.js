@@ -28,6 +28,8 @@ const ROOF_COVERINGS = [
 const ROOF_TYPES = [
   { id: 'hip', label: 'Hipped' },
   { id: 'gable', label: 'Gable' },
+  { id: 'leanto', label: 'Lean-to (mono-pitch)' },
+  { id: 'flat', label: 'Flat' },
 ];
 
 const SHAPES = [
@@ -224,17 +226,46 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
   const longLen = Math.max(r.w, r.d);
   const shortLen = Math.min(r.w, r.d);
   const ov = 0.4; // eaves/verge overhang
-  const rise = (shortLen / 2) * Math.tan((pitchDeg * Math.PI) / 180);
-  const ridgeY = H + rise;
-  const ridgeHalf = isHip ? Math.max(longLen / 2 - shortLen / 2, 0) : longLen / 2;
   const hl = longLen / 2, hs = shortLen / 2;
-  const hsE = hs + ov;                 // eave overhang (always)
-  const hlE = isHip ? hl + ov : hl;    // verge overhang only matters for hips
+  const hsE = hs + ov;
   const P = (u, v, y) => new THREE.Vector3(
     alongX ? r.x + u : r.x + v,
     y,
     alongX ? r.z + v : r.z + u,
   );
+
+  // Flat roof — a deck just above the wall head with fascia + gutter all round.
+  if (roofType === 'flat') {
+    const y = H + 0.15;
+    const hlF = hl + ov;
+    addPoly(group, [P(-hlF, hsE, y), P(hlF, hsE, y), P(hlF, -hsE, y), P(-hlF, -hsE, y)], tileMat);
+    addBeam(group, P(-hlF, hsE, y), P(hlF, hsE, y), 0.16, fasciaMat);
+    addBeam(group, P(-hlF, -hsE, y), P(hlF, -hsE, y), 0.16, fasciaMat);
+    addBeam(group, P(hlF, -hsE, y), P(hlF, hsE, y), 0.16, fasciaMat);
+    addBeam(group, P(-hlF, -hsE, y), P(-hlF, hsE, y), 0.16, fasciaMat);
+    if (gutterMat) addBeam(group, P(-hlF, hsE + 0.08, y - 0.16), P(hlF, hsE + 0.08, y - 0.16), 0.1, gutterMat);
+    return;
+  }
+
+  // Lean-to (mono-pitch) — slopes up from the low (−Z) eave to a high (+Z) eave,
+  // so it tucks neatly against a taller building. No ridge.
+  if (roofType === 'leanto') {
+    const rise = shortLen * Math.tan((pitchDeg * Math.PI) / 180);
+    const yHigh = H + rise, yLow = H - 0.05;
+    const hlF = hl + ov;
+    addPoly(group, [P(-hlF, hsE, yHigh), P(hlF, hsE, yHigh), P(hlF, -hsE, yLow), P(-hlF, -hsE, yLow)], tileMat);
+    addPoly(group, [P(hl, hs, H), P(hl, -hs, H), P(hl, -hs, yLow), P(hl, hs, yHigh)], brickMat); // brick infill ends
+    addPoly(group, [P(-hl, -hs, H), P(-hl, hs, H), P(-hl, hs, yHigh), P(-hl, -hs, yLow)], brickMat);
+    addBeam(group, P(-hlF, -hsE, yLow), P(hlF, -hsE, yLow), 0.16, fasciaMat);
+    addBeam(group, P(-hlF, hsE, yHigh), P(hlF, hsE, yHigh), 0.16, fasciaMat);
+    if (gutterMat) addBeam(group, P(-hlF, -hsE - 0.08, yLow - 0.16), P(hlF, -hsE - 0.08, yLow - 0.16), 0.1, gutterMat);
+    return;
+  }
+
+  const rise = (shortLen / 2) * Math.tan((pitchDeg * Math.PI) / 180);
+  const ridgeY = H + rise;
+  const ridgeHalf = isHip ? Math.max(longLen / 2 - shortLen / 2, 0) : longLen / 2;
+  const hlE = isHip ? hl + ov : hl;    // verge overhang only matters for hips
   const eaveY = H - 0.05;
   const rPos = P(ridgeHalf, 0, ridgeY);
   const rNeg = P(-ridgeHalf, 0, ridgeY);
