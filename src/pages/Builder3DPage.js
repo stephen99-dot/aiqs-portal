@@ -559,6 +559,7 @@ function Builder3DInner() {
   const fitSigRef = useRef('');
   const fitViewRef = useRef(null);
   const userMovedRef = useRef(false);
+  const debugRef = useRef(null);
 
   // A project is a list of building modules (House + Extension + Garage…) plus
   // project-level markup. The controls edit the active module.
@@ -670,6 +671,11 @@ function Builder3DInner() {
         if (!userMovedRef.current && fitViewRef.current) fitViewRef.current();
       }
       try { controls.update(); renderer.render(scene, camera); } catch (e) { /* keep the loop alive */ }
+      if (debugRef.current) {
+        const p = camera.position, tg = controls.target;
+        const hasHouse = !!houseRef.current;
+        debugRef.current.textContent = `cam ${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)} → tgt ${tg.x.toFixed(1)},${tg.y.toFixed(1)},${tg.z.toFixed(1)} | ${mount.clientWidth}×${mount.clientHeight} | house:${hasHouse}`;
+      }
       raf = requestAnimationFrame(animate);
     };
     animate();
@@ -967,7 +973,7 @@ function Builder3DInner() {
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L8 · canvas-fix</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L9 · cam-debug</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
@@ -1111,7 +1117,9 @@ function Builder3DInner() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} className="b3d-vp" style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minWidth: 0 }} />
+        <div ref={mountRef} className="b3d-vp" style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minWidth: 0 }}>
+          <div ref={debugRef} style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 5, fontSize: 10, fontFamily: 'monospace', color: '#111', background: 'rgba(255,255,255,0.8)', padding: '2px 5px', borderRadius: 4, pointerEvents: 'none' }} />
+        </div>
 
         {/* ── Estimate / Summary sidebar ── */}
         <div className="b3d-est" style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' }}>
