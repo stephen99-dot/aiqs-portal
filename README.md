@@ -337,6 +337,12 @@ roof rectangles in its response and the renderer draws exactly that.
 - **Dimension lines:** toggleable blue witness/dimension lines with labels for
   overall length, width and ridge height, drawn in the scene (so they're caught
   in the PDF snapshot too).
+- **Roof types:** hipped, gable, **lean-to (mono-pitch)** and **flat** — the
+  mono-pitch/flat options let an extension/porch/garage sit correctly against the
+  house. Quantities and 3D both branch on the type (flat ≈ footprint area, no
+  ridge; lean-to slopes to a high eave).
+- **Roof windows (Velux):** per-module count, rendered flush on the slope and
+  priced (CJ-024).
 - **Element detail:** lintels over openings + projecting cills under windows,
   gutters along the eaves with downpipes at the front corners, a projecting
   concrete footing at the base (under the DPC band) and a foundation annotation

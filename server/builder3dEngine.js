@@ -108,8 +108,14 @@ function polyPerimeter(pts) {
 // Roof linear quantities for one rectangle. Ridge runs along the rectangle's
 // long axis; a hip insets the ridge by half the short span at each end and adds
 // four hip runs, and has eaves all round (a gable only on the two slope sides).
-function rectRoof(w, d, pitchRad, isHip) {
+function rectRoof(w, d, pitchRad, roofType) {
   const long = Math.max(w, d), short = Math.min(w, d);
+  // Lean-to (mono-pitch) and flat roofs have no ridge/hips; eaves/fascia run all
+  // round. Common on extensions, porches and garages.
+  if (roofType === 'flat' || roofType === 'leanto') {
+    return { ridge: 0, capping: 0, eaves: 2 * (w + d) };
+  }
+  const isHip = roofType === 'hip';
   const rise = (short / 2) * Math.tan(pitchRad);
   const ridge = isHip ? Math.max(long - short, 0) : long;
   const hipLen = Math.sqrt(2 * (short / 2) * (short / 2) + rise * rise);
@@ -126,7 +132,7 @@ function rectRoof(w, d, pitchRad, isHip) {
 function normaliseInputs(raw = {}) {
   const wallType = WALL_TYPES[raw.wallType] ? raw.wallType : 'cavity';
   const roofCovering = ROOF_COVERINGS[raw.roofCovering] ? raw.roofCovering : 'concrete_tile';
-  const roofType = raw.roofType === 'gable' ? 'gable' : 'hip';
+  const roofType = ['hip', 'gable', 'leanto', 'flat'].includes(raw.roofType) ? raw.roofType : 'hip';
   const shape = SHAPES.includes(raw.shape) ? raw.shape : 'rect';
   return {
     length: clamp(raw.length, 2, 60, 8),
@@ -172,12 +178,12 @@ function computeQuantities(m) {
   // ridge, ridge+hip capping, eaves) are summed over the shape's rectangles,
   // each carrying its own roof. At wing junctions this slightly over-counts
   // (real roofs form valleys there) — a known Phase-2 approximation.
-  const isHip = m.roofType === 'hip';
   const pitchRad = (m.roofPitch * Math.PI) / 180;
-  const roofSlopeArea = footprint / Math.cos(pitchRad);
+  // Flat ≈ footprint; lean-to/hip/gable scale by 1/cos(pitch).
+  const roofSlopeArea = m.roofType === 'flat' ? footprint : footprint / Math.cos(pitchRad);
   let ridgeLength = 0, cappingLength = 0, eavesLength = 0;
   for (const r of rects) {
-    const rr = rectRoof(r.w, r.d, pitchRad, isHip);
+    const rr = rectRoof(r.w, r.d, pitchRad, m.roofType);
     ridgeLength += rr.ridge;
     cappingLength += rr.capping;
     eavesLength += rr.eaves;
