@@ -99,6 +99,7 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
+  const [msgCredits, setMsgCredits] = useState(user.message_credits || 0);
   const [msgAllowance, setMsgAllowance] = useState(user.monthly_quota || user.quota || 0);
   const [docAllowance, setDocAllowance] = useState(user.monthly_boq_quota || user.boq_quota || 0);
   const [freeCredits, setFreeCredits] = useState(user.free_credits || 0);
@@ -174,6 +175,19 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     setFreeCredits(free); setBonusDocs(bonus);
     onUpdate({ ...user, free_credits: free, bonus_docs: bonus, boq_remaining: res.boq_balance });
     showSuccess('BOQ balance saved — ' + res.boq_balance + ' spendable');
+  });
+
+  // Set the spendable message balance — a persistent top-up (no monthly reset).
+  // Decrements one per message the user sends; tops up when raised here.
+  const saveMessageCredits = () => doAction('msgcredits', async () => {
+    const credits = Math.max(0, parseInt(msgCredits) || 0);
+    const res = await apiFetch('/admin/users/' + user.id + '/credits', {
+      method: 'PUT',
+      body: JSON.stringify({ bonus_messages: user.bonus_messages || 0, bonus_docs: user.bonus_docs || 0, message_credits: credits }),
+    });
+    setMsgCredits(credits);
+    onUpdate({ ...user, message_credits: res.message_credits, messages_used: user.messages_used || 0 });
+    showSuccess('Message balance saved — ' + res.message_credits + ' remaining');
   });
 
   // Zero every bucket (free + bonus + monthly allowance) so the spendable
@@ -268,24 +282,22 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     finally { setLoading(''); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
-  const msgsUsed = user.messages_used || user.used || 0;
-  const msgsTotal = parseInt(msgAllowance) || user.monthly_quota || user.quota || 0;
+  // Message balance — a persistent top-up (no monthly reset). `remaining` is the
+  // live balance; lifetime used drives the bar denominator.
+  const msgRemaining = user.role === 'admin' ? Infinity : (user.message_credits != null ? user.message_credits : 0);
+  const msgsUsed = user.messages_used || 0;
+  const msgsTotal = msgsUsed + (Number.isFinite(msgRemaining) ? msgRemaining : 0);
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
-  // Used this month, for the monthly-allowance figures in the breakdown below.
-  const boqUsed = user.boq_used || user.docs_used || 0;
 
-  // The TRUE spendable BOQ balance the user can actually spend right now —
-  // free_credits + bonus_docs + monthly allowance remaining. Prefer the
-  // authoritative figure the server computed via getBoqBalance (user.boq_remaining)
-  // so the headline always matches what the user sees; the breakdown below uses
-  // the same saved buckets so it sums to that figure.
-  const monthlyRemaining = Math.max(0, (user.monthly_boq_quota || 0) - boqUsed);
+  // The spendable BOQ balance the user can actually spend right now —
+  // free_credits + bonus_docs. Prefer the authoritative figure the server
+  // computed via getBoqBalance (user.boq_remaining).
   const spendableBalance = user.role === 'admin'
     ? Infinity
     : (user.boq_remaining != null
         ? user.boq_remaining
-        : (user.free_credits || 0) + (user.bonus_docs || 0) + monthlyRemaining);
+        : (user.free_credits || 0) + (user.bonus_docs || 0));
 
   return (
     <>
@@ -323,8 +335,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </span>
             </div>
             <div style={{ fontSize: 11.5, color: muted, marginBottom: 14 }}>
-              {(user.free_credits || 0) + (user.bonus_docs || 0)} credit{((user.free_credits || 0) + (user.bonus_docs || 0)) === 1 ? '' : 's'} that never expire
-              {monthlyRemaining > 0 ? ' + ' + monthlyRemaining + " from this month's plan" : ''}
+              {(user.free_credits || 0) + (user.bonus_docs || 0)} BOQ credit{((user.free_credits || 0) + (user.bonus_docs || 0)) === 1 ? '' : 's'} — never expire, top up here or via a portal purchase
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
@@ -343,34 +354,40 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </button>
             </div>
             <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
-              Most accounts run on credits. "Zero" sets credits, bonus and the monthly allowance all to 0.
+              Set the spendable balance directly. It ticks down as BOQs are generated and up when topped up or purchased. "Zero" empties it.
             </div>
           </div>
         )}
 
-        {/* Messages this month — allowance is editable inline so it's always to hand. */}
-        <div style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Messages This Month</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: msgsTotal > 0 && msgPct >= 90 ? '#EF4444' : text }}>{msgsUsed} / {msgsTotal > 0 ? msgsTotal : '—'}</span>
+        {/* Message balance — a persistent top-up that ticks down per message. */}
+        {user.role !== 'admin' && (
+        <div style={{ padding: '16px 18px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Available Messages</span>
+            <span style={{ fontSize: 26, fontWeight: 800, color: (user.message_credits || 0) <= 0 ? '#EF4444' : '#10B981', lineHeight: 1 }}>
+              {user.message_credits || 0}
+            </span>
           </div>
-          {msgsTotal > 0 ? (
-            <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden' }}>
+          {msgsTotal > 0 && (
+            <div style={{ height: 6, borderRadius: 4, background: isDark ? '#1C2A44' : '#E2E8F0', overflow: 'hidden', marginBottom: 12 }}>
               <div style={{ width: msgPct + '%', height: '100%', borderRadius: 4, background: msgBarColor, transition: 'width 0.3s' }} />
             </div>
-          ) : (
-            <div style={{ fontSize: 11, color: muted }}>No allowance set</div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <span style={{ fontSize: 12, color: muted }}>Allowance</span>
-            <input type="number" min={0} max={9999} value={msgAllowance} onChange={e => setMsgAllowance(e.target.value)}
-              style={{ ...sInp, width: 80, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
-            <span style={{ fontSize: 11, color: muted }}>/mo</span>
-            <button onClick={saveAllowances} disabled={!!loading} style={btn('#2563EB')}>
-              {loading === 'allowances' ? 'Saving…' : 'Save messages'}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <div style={lbl}>Message balance</div>
+              <input type="number" min={0} max={99999} value={msgCredits} onChange={e => setMsgCredits(e.target.value)}
+                style={{ ...sInp, width: 120, fontSize: 14, fontWeight: 700 }} />
+            </div>
+            <button onClick={saveMessageCredits} disabled={loading === 'msgcredits'} style={btn('#2563EB')}>
+              {loading === 'msgcredits' ? 'Saving…' : 'Save messages'}
             </button>
           </div>
+          <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
+            Persistent balance — one is spent per chatbot message. New accounts start at 0.
+          </div>
         </div>
+        )}
 
         {/* Subscription allowances — only relevant for the few on monthly plans. */}
         <button onClick={() => setShowAdvanced(v => !v)}
@@ -887,8 +904,9 @@ export default function UserManagementPage({ theme }) {
               </tr></thead>
               <tbody>
                 {filtered.map((user, i) => {
-                  const msgsUsed = user.messages_used || user.used || 0;
-                  const msgsTotal = (user.monthly_quota != null ? user.monthly_quota : null) ?? user.quota ?? (user.plan==='premium'?200:user.plan==='professional'?100:user.plan==='starter'?1:0);
+                  const msgsUsed = user.messages_used || 0;
+                  const msgRemaining = user.role === 'admin' ? Infinity : (user.message_credits || 0);
+                  const msgsTotal = msgsUsed + (Number.isFinite(msgRemaining) ? msgRemaining : 0);
                   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
                   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
                   return (
@@ -918,18 +936,20 @@ export default function UserManagementPage({ theme }) {
                         </td>
                         {/* Message usage bar in table */}
                         <td style={{padding:'12px 16px',minWidth:120}}>
-                          {msgsTotal > 0 ? (
-                            <div>
-                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                                <span style={{fontSize:10,color:muted}}>{msgsUsed} / {msgsTotal}</span>
-                                {user.bonus_messages > 0 && <span style={{fontSize:10,color:'#A78BFA'}}>+{user.bonus_messages}</span>}
-                              </div>
-                              <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
-                                <div style={{width:msgPct+'%',height:'100%',borderRadius:3,background:msgBarColor}} />
-                              </div>
-                            </div>
+                          {user.role === 'admin' ? (
+                            <span style={{fontSize:11,color:muted}}>Unlimited</span>
                           ) : (
-                            <span style={{fontSize:11,color:muted}}>{msgsUsed} sent</span>
+                            <div>
+                              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                                <span style={{fontSize:11,fontWeight:700,color:(user.message_credits||0)<=0?'#EF4444':(isDark?'#E8EDF5':'#0F172A')}}>{user.message_credits||0} left</span>
+                                <span style={{fontSize:10,color:muted}}>{msgsUsed} used</span>
+                              </div>
+                              {msgsTotal > 0 && (
+                                <div style={{height:5,borderRadius:3,background:isDark?'#1C2A44':'#E2E8F0',overflow:'hidden',width:100}}>
+                                  <div style={{width:msgPct+'%',height:'100%',borderRadius:3,background:msgBarColor}} />
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
                         {/* BOQ credits — single spendable balance left */}
@@ -937,14 +957,12 @@ export default function UserManagementPage({ theme }) {
                           {(()=>{
                             if (user.role === 'admin') return <span style={{fontSize:11,color:muted}}>Unlimited</span>;
                             const docsUsed = user.docs_used || 0;
-                            // Usage against the monthly Documents/BOQs allowance.
-                            const granted = user.monthly_boq_quota || user.boq_quota || 0;
-                            // True spendable balance (free + bonus + monthly left),
-                            // not just the monthly bucket — matches what the user sees.
-                            const monthlyLeft = Math.max(0, granted - docsUsed);
+                            // Spendable BOQ balance (free + bonus) — the number that
+                            // ticks down on use and up on top-up/purchase.
                             const remaining = user.boq_remaining != null
                               ? user.boq_remaining
-                              : (user.free_credits || 0) + (user.bonus_docs || 0) + monthlyLeft;
+                              : (user.free_credits || 0) + (user.bonus_docs || 0);
+                            const granted = docsUsed + remaining;
                             const pct = granted > 0 ? Math.min(100, (docsUsed / granted) * 100) : 0;
                             const barColor = pct >= 90 ? '#EF4444' : pct >= 70 ? '#F59E0B' : '#10B981';
                             return (
