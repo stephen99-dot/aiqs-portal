@@ -12,8 +12,9 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, adminMiddleware } = require('./auth');
-const { priceModel, deriveParamsFromBoq } = require('./builder3dEngine');
+const { priceModel, priceProject, deriveParamsFromBoq } = require('./builder3dEngine');
 const { streamBuilder3dPdf } = require('./builder3dPdf');
+const liveRates = require('./builder3dLiveRates');
 
 const router = express.Router();
 
@@ -73,9 +74,24 @@ function lookupRate(code, descLike) {
 }
 
 // POST /api/builder3d/price — params -> priced breakdown + geometry.
+// POST /api/builder3d/price-multi — { modules, ohpPct, vatPct } -> a composed
+// project (House + Extension + Garage…): merged BOQ + per-module geometry.
+router.post('/price-multi', (req, res) => {
+  try {
+    const result = priceProject(req.body?.modules || [], lookupRate, { ohpPct: req.body?.ohpPct, vatPct: req.body?.vatPct });
+    liveRates.enrich(result.groups);
+    res.json(result);
+  } catch (err) {
+    console.error('[Builder3D] price-multi error:', err);
+    res.status(500).json({ error: 'Could not price the project.' });
+  }
+});
+
 router.post('/price', (req, res) => {
   try {
-    res.json(priceModel(req.body || {}, lookupRate));
+    const result = priceModel(req.body || {}, lookupRate);
+    liveRates.enrich(result.groups); // attach live scraped supplier prices
+    res.json(result);
   } catch (err) {
     console.error('[Builder3D] price error:', err);
     res.status(500).json({ error: 'Could not price the model.' });
@@ -125,8 +141,11 @@ router.delete('/models/:id', (req, res) => {
 // models too; the page posts whatever is on screen).
 router.post('/pdf', (req, res) => {
   try {
-    const params = req.body?.params || req.body || {};
-    const result = priceModel(params, lookupRate);
+    // Accept a multi-module project or a single model.
+    const result = Array.isArray(req.body?.modules) && req.body.modules.length
+      ? priceProject(req.body.modules, lookupRate, { ohpPct: req.body?.ohpPct, vatPct: req.body?.vatPct })
+      : priceModel(req.body?.params || req.body || {}, lookupRate);
+    liveRates.enrich(result.groups);
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
     streamBuilder3dPdf(res, req.body?.name || 'Outline estimate', result, branding, userInfo, req.body?.snapshot);

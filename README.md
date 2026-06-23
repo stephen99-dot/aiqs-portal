@@ -337,6 +337,30 @@ roof rectangles in its response and the renderer draws exactly that.
 - **Dimension lines:** toggleable blue witness/dimension lines with labels for
   overall length, width and ridge height, drawn in the scene (so they're caught
   in the PDF snapshot too).
+- **Element detail:** lintels over openings + projecting cills under windows,
+  gutters along the eaves with downpipes at the front corners, a projecting
+  concrete footing at the base (under the DPC band) and a foundation annotation
+  label.
+- **Responsive layout:** the page stacks the controls / 3D / estimate into one
+  column below ~980px (ResizeObserver on the page) so it fits a single screen;
+  the PDF table uses non-wrapping cells + a generous row pitch so nothing
+  bunches.
+- **Build modules (House + Extension + Garage…):** a project is a list of
+  parametric modules, each with its own params + an `{offsetX, offsetZ}`
+  placement. `priceProject()` prices each independently, merges the lines into
+  one consolidated BOQ (same code summed across modules), applies markup once,
+  and returns every module's geometry + offset so the renderer places them
+  together. `POST /api/builder3d/price-multi`; `/pdf` accepts `modules` too. The
+  controls have a build-modules panel (select / add / remove, with a per-module
+  subtotal) and the active module is edited below it; markup is project-level.
+- **Live scraped prices:** `server/builder3dLiveRates.js` matches each element
+  against the scraped supplier catalogue (`materials-live.json`) and attaches the
+  best in-stock product (`line.live`: supplier, price, unit, source URL). Shown
+  under each estimate line and linked to source. Count-based component lines
+  (windows, doors, boiler, radiators, sanitaryware, insulation boards, sockets…)
+  are flagged `priceable` where the unit matches; area/volume trade rates keep
+  the library rate with the live price shown as a *benchmark* (retail pack prices
+  aren't blindly converted into m²/m³ trade rates).
 - **Measurements summary:** `priceModel()` also returns a PriceAJob-style
   grouped `measurements` summary (Foundation / Walls / Floors / Roof / Openings).
   The right panel has an **Estimate | Summary** toggle, and the PDF prints the

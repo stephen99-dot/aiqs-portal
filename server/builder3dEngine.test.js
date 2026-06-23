@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { normaliseInputs, computeQuantities, priceModel, deriveParamsFromBoq, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
+const { normaliseInputs, computeQuantities, priceModel, priceProject, deriveParamsFromBoq, generateFootprint, polyArea, polyPerimeter } = require('./builder3dEngine');
 
 // A stub rate library: every code returns £10 labour + £10 materials (£20
 // total) so line totals are easy to predict in assertions.
@@ -137,6 +137,35 @@ test('deriveParamsFromBoq reads storeys from project type and GIA for footprint'
   assert.ok(params.length * params.width > 40, 'footprint from GIA ÷ storeys');
 });
 
+test('priceProject composes modules: cost sums, lines merge, markup applied once', () => {
+  const house = { length: 9, width: 6, storeys: 2, windows: 8, doors: 1 };
+  const ext = { type: 'extension', length: 4, width: 3, storeys: 1, windows: 2, doors: 1, offsetZ: -4.5 };
+  const one = priceProject([house], flatLookup, { ohpPct: 15, vatPct: 20 });
+  const two = priceProject([house, ext], flatLookup, { ohpPct: 15, vatPct: 20 });
+  assert.ok(two.totals.cost > one.totals.cost, 'adding an extension increases cost');
+  assert.equal(two.modules.length, 2, 'two modules returned');
+  assert.ok(two.modules[1].geometry && two.modules[1].offset.z === -4.5, 'module carries geometry + offset');
+  // Markup applied once at project level.
+  assert.equal(two.totals.profit, Math.round(two.totals.cost * 0.15 * 100) / 100, 'OH&P once on combined cost');
+  assert.equal(two.totals.vat, Math.round(two.totals.subtotal * 0.20 * 100) / 100, 'VAT once on subtotal');
+  // A shared element (slab GW-016) merges into one line with summed qty.
+  const sub = two.groups.find((g) => g.category === 'Substructure');
+  const slab = sub.items.filter((l) => l.code === 'GW-016');
+  assert.equal(slab.length, 1, 'slab merged to a single line across modules');
+});
+
+test('priceProject merges measurements additively but not the roof pitch', () => {
+  const a = { length: 8, width: 6, storeys: 1, roofPitch: 35 };
+  const b = { type: 'extension', length: 4, width: 3, storeys: 1, roofPitch: 35 };
+  const proj = priceProject([a, b], flatLookup, {});
+  const roof = proj.measurements.find((g) => g.group === 'Roof');
+  const pitch = roof.rows.find((r) => r.unit === '°');
+  assert.equal(pitch.value, 35, 'pitch stays 35°, not summed');
+  const floors = proj.measurements.find((g) => g.group === 'Floors');
+  const footprint = floors.rows.find((r) => r.label === 'Footprint');
+  assert.ok(Math.abs(footprint.value - (48 + 12)) < 0.5, 'footprints sum (8×6 + 4×3)');
+});
+
 test('priceModel returns a grouped measurements summary', () => {
   const out = priceModel({ length: 8, width: 6, storeys: 1 }, flatLookup);
   assert.ok(Array.isArray(out.measurements), 'measurements present');
@@ -153,7 +182,19 @@ test('Services lines scale with floor area and appear as their own group', () =>
   assert.ok(services && services.items.length > 0, 'a Services group is returned');
   assert.ok(services.items.some((l) => l.code === 'PH-001'), 'heating boiler line present');
   assert.ok(services.items.some((l) => l.code === 'EL-004'), 'socket line present');
-  assert.equal(out.groups.map((g) => g.category).join(','), 'Structure,Roof,Services,Finishes', 'group order matches the estimate layout');
+  assert.equal(out.groups.map((g) => g.category).join(','), 'Preliminaries,Substructure,Superstructure,Floors,Roof,Services,Finishes', 'full foundation-to-roof group order');
+});
+
+test('expanded recipe itemises walls and a full substructure', () => {
+  const out = priceModel({ length: 9, width: 6, storeys: 1, windows: 6, doors: 1 }, flatLookup);
+  const cats = out.groups.map((g) => g.category);
+  assert.ok(cats.includes('Substructure') && cats.includes('Superstructure'), 'has substructure + superstructure');
+  const sub = out.groups.find((g) => g.category === 'Substructure');
+  assert.ok(sub.items.some((l) => l.code === 'GW-003'), 'excavation priced');
+  assert.ok(sub.items.some((l) => l.code === 'BW-024'), 'DPC priced');
+  const sup = out.groups.find((g) => g.category === 'Superstructure');
+  assert.ok(sup.items.some((l) => l.code === 'BW-001') && sup.items.some((l) => l.code === 'BW-016'), 'cavity wall itemised (outer leaf + insulation)');
+  assert.ok(sup.items.some((l) => l.code === 'BW-021'), 'lintels over openings');
 });
 
 test('priceModel skips zero-quantity elements (no doors -> no door line)', () => {

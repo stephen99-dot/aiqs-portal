@@ -224,15 +224,53 @@ function computeQuantities(m) {
  * Grouped into the same buckets the PriceAJob screenshot uses.
  */
 function buildRecipe(m, q) {
+  // Itemised wall build-up depends on the wall type.
+  let wallLines;
+  if (m.wallType === 'facing_brick') {
+    wallLines = [
+      { category: 'Superstructure', label: 'Solid facing brick wall (215mm)', code: 'BW-003', descLike: 'one brick wall (215mm) facing brick', unit: 'm²', qty: q.wallNet },
+    ];
+  } else {
+    const inner = m.wallType === 'cavity_brick'
+      ? { code: 'BW-007', desc: '100mm dense concrete block', label: 'Inner leaf — 100mm dense block' }
+      : { code: 'BW-008', desc: '100mm aerated block (thermalite)', label: 'Inner leaf — 100mm aerated block' };
+    wallLines = [
+      { category: 'Superstructure', label: 'Outer leaf — facing brick (102.5mm)', code: 'BW-001', descLike: 'half brick wall (102.5mm) facing brick', unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: inner.label, code: inner.code, descLike: inner.desc, unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: 'Cavity insulation (full fill)', code: 'BW-016', descLike: 'cavity insulation (full fill', unit: 'm²', qty: q.wallNet },
+      { category: 'Superstructure', label: 'Stainless steel wall ties', code: 'BW-017', descLike: 'wall ties', unit: 'm²', qty: q.wallNet },
+    ];
+  }
+
+  const excavation = round2(q.perimeter * 0.6 * 1.0); // 600 wide × ~1m deep trench
+  const upperFloor = Math.max(m.storeys - 1, 0);
+
   return [
-    // ── STRUCTURE ──
-    { category: 'Structure', label: 'Foundations — trench fill', code: 'GW-011', descLike: 'trench fill (concrete c25)', unit: 'm³', qty: q.trenchVolume },
-    { category: 'Structure', label: 'Ground floor slab (100mm)', code: 'GW-016', descLike: 'ground floor slab 100mm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: 'Damp-proof membrane', code: 'GW-020', descLike: 'dpm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: 'Floor insulation (100mm)', code: 'GW-021', descLike: 'rigid insulation (100mm', unit: 'm²', qty: q.slabArea },
-    { category: 'Structure', label: WALL_TYPES[m.wallType].label, code: WALL_TYPES[m.wallType].code, descLike: WALL_TYPES[m.wallType].descLike, unit: 'm²', qty: q.wallNet },
-    { category: 'Structure', label: 'Windows (UPVC casement)', code: 'CJ-022', descLike: 'upvc window 1.2-2.0', unit: 'nr', qty: q.windows },
-    { category: 'Structure', label: 'External doors (composite)', code: 'CJ-019', descLike: 'external door (composite)', unit: 'nr', qty: q.doors },
+    // ── PRELIMINARIES ──
+    { category: 'Preliminaries', label: 'Site set-up & welfare', code: 'PR-001', descLike: 'site compound', unit: 'item', qty: 1 },
+
+    // ── SUBSTRUCTURE (annotated foundation, foundation → DPC) ──
+    { category: 'Substructure', label: 'Excavate foundation trenches', code: 'GW-003', descLike: 'trench excavation for foundations (machine)', unit: 'm³', qty: excavation },
+    { category: 'Substructure', label: 'Cart away spoil', code: 'GW-006', descLike: 'cart away excavated material', unit: 'm³', qty: excavation },
+    { category: 'Substructure', label: 'Foundation trench fill (C25)', code: 'GW-011', descLike: 'trench fill (concrete c25)', unit: 'm³', qty: q.trenchVolume },
+    { category: 'Substructure', label: 'Cavity wall below DPC', code: 'BW-014', descLike: 'cavity wall below dpc', unit: 'm²', qty: round2(q.perimeter * 0.4) },
+    { category: 'Substructure', label: 'Damp-proof course', code: 'BW-024', descLike: 'dpc (pitch polymer 225', unit: 'm', qty: q.perimeter },
+    { category: 'Substructure', label: 'Hardcore fill (150mm)', code: 'GW-035', descLike: 'hardcore fill compacted', unit: 'm³', qty: round2(q.footprint * 0.15) },
+    { category: 'Substructure', label: 'Sand blinding', code: 'GW-008', descLike: 'sand blinding', unit: 'm³', qty: round2(q.footprint * 0.05) },
+    { category: 'Substructure', label: 'Damp-proof membrane', code: 'GW-020', descLike: 'dpm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Floor insulation (100mm)', code: 'GW-021', descLike: 'rigid insulation (100mm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Ground floor slab (100mm C25)', code: 'GW-016', descLike: 'ground floor slab 100mm', unit: 'm²', qty: q.slabArea },
+    { category: 'Substructure', label: 'Slab mesh reinforcement (A142)', code: 'GW-018', descLike: 'mesh reinforcement a142', unit: 'm²', qty: q.slabArea },
+
+    // ── SUPERSTRUCTURE (walls, openings, lintels) ──
+    ...wallLines,
+    { category: 'Superstructure', label: 'Windows (UPVC casement)', code: 'CJ-022', descLike: 'upvc window 1.2-2.0', unit: 'nr', qty: q.windows },
+    { category: 'Superstructure', label: 'External doors (composite)', code: 'CJ-019', descLike: 'external door (composite)', unit: 'nr', qty: q.doors },
+    { category: 'Superstructure', label: 'Steel lintels over openings', code: 'BW-021', descLike: 'steel lintel (catnic', unit: 'nr', qty: q.windows + q.doors },
+
+    // ── UPPER FLOORS (if multi-storey) ──
+    { category: 'Floors', label: 'Floor joists (C24 47×200)', code: 'CJ-001', descLike: 'floor joists (c24 treated) 47x200', unit: 'm', qty: round2(q.footprint * 1.5 * upperFloor) },
+    { category: 'Floors', label: 'Floor decking (22mm T&G)', code: 'CJ-007', descLike: 'chipboard flooring', unit: 'm²', qty: round2(q.footprint * upperFloor) },
 
     // ── ROOF ──
     { category: 'Roof', label: 'Trussed rafters (Fink)', code: 'CJ-006', descLike: 'trussed rafters', unit: 'm²', qty: q.footprint },
@@ -240,6 +278,7 @@ function buildRecipe(m, q) {
     { category: 'Roof', label: 'Roof battens', code: 'CJ-011', descLike: 'roof battens', unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: ROOF_COVERINGS[m.roofCovering].label, code: ROOF_COVERINGS[m.roofCovering].code, descLike: ROOF_COVERINGS[m.roofCovering].descLike, unit: 'm²', qty: q.roofSlopeArea },
     { category: 'Roof', label: 'Ridge & hip tiles', code: 'RF-011', descLike: 'ridge tiles', unit: 'm', qty: q.cappingLength },
+    { category: 'Roof', label: 'Loft insulation (270mm)', code: 'RF-018', descLike: 'loft insulation', unit: 'm²', qty: q.footprint },
     { category: 'Roof', label: 'Fascia board', code: 'CJ-009', descLike: 'fascia board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Soffit board', code: 'CJ-010', descLike: 'soffit board', unit: 'm', qty: q.eavesLength },
     { category: 'Roof', label: 'Gutter', code: 'RF-013', descLike: 'half round gutter', unit: 'm', qty: q.eavesLength },
@@ -260,6 +299,8 @@ function buildRecipe(m, q) {
 
     // ── FINISHES ──
     { category: 'Finishes', label: 'Plasterboard (walls & ceilings)', code: 'PL-001', descLike: 'plasterboard to walls', unit: 'm²', qty: q.plasterArea },
+    { category: 'Finishes', label: 'Skirting (MDF ogee)', code: 'CJ-025', descLike: 'skirting (mdf', unit: 'm', qty: round2(q.perimeter * 0.9 * m.storeys) },
+    { category: 'Finishes', label: 'Internal doors', code: 'CJ-013', descLike: 'internal door (hollow core)', unit: 'nr', qty: q.rooms },
     { category: 'Finishes', label: 'Emulsion (2 coats + mist)', code: 'DC-001', descLike: 'mist coat + 2 coats emulsion', unit: 'm²', qty: q.plasterArea },
   ];
 }
@@ -304,8 +345,9 @@ function priceModel(rawInputs, lookupRate) {
     });
   }
 
-  // Group, preserving the recipe's category order.
-  const order = ['Structure', 'Roof', 'Services', 'Finishes'];
+  // Group, preserving the recipe's category order (first-seen).
+  const order = [];
+  for (const l of lines) if (!order.includes(l.category)) order.push(l.category);
   const groups = order
     .map((category) => ({
       category,
@@ -340,6 +382,102 @@ function priceModel(rawInputs, lookupRate) {
     groups,
     measurements: buildMeasurements(m, q),
     missing,
+    totals: { cost, labour, materials, profit, subtotal, vat, total },
+  };
+}
+
+// ── Multi-module projects (House + Extension + Garage…) ─────────────────────
+//
+// A project is a list of building modules, each with its own params plus an
+// {offsetX, offsetZ} placement. Each module is priced independently; the lines
+// are then merged into one consolidated BOQ (same code merged across modules),
+// markup (OH&P, VAT) is applied once at project level, and every module's
+// geometry is returned with its offset so the renderer can place them together.
+
+function defaultModuleName(type) {
+  if (type === 'extension') return 'Extension';
+  if (type === 'garage') return 'Garage';
+  if (type === 'porch') return 'Porch';
+  return 'House';
+}
+
+function priceProject(modules, lookupRate, opts = {}) {
+  const list = Array.isArray(modules) && modules.length ? modules : [{}];
+  const ohpPct = clamp(opts.ohpPct, 0, 60, 15);
+  const vatPct = clamp(opts.vatPct, 0, 25, 20);
+
+  // Price each module at cost (markup applied once below).
+  const priced = list.map((mod, i) => {
+    const r = priceModel({ ...mod, ohpPct: 0, vatPct: 0 }, lookupRate);
+    return {
+      name: String(mod.name || '').trim() || defaultModuleName(mod.type),
+      type: mod.type || 'house',
+      offset: { x: round2(num(mod.offsetX)), z: round2(num(mod.offsetZ)) },
+      geometry: { ...r.geometry, type: mod.type || 'house' },
+      groups: r.groups,
+      measurements: r.measurements,
+      cost: r.totals.cost,
+      missing: r.missing,
+    };
+  });
+
+  // Merge cost lines across modules: by category (first-seen) then by code.
+  const catOrder = [];
+  const catMap = new Map();
+  for (const p of priced) {
+    for (const g of p.groups) {
+      if (!catMap.has(g.category)) { catMap.set(g.category, new Map()); catOrder.push(g.category); }
+      const cm = catMap.get(g.category);
+      for (const it of g.items) {
+        const ex = cm.get(it.code);
+        if (ex) {
+          ex.qty = round2(ex.qty + it.qty);
+          ex.total = round2(ex.total + it.total);
+          ex.labour = round2(ex.labour + it.labour);
+          ex.materials = round2(ex.materials + it.materials);
+        } else {
+          cm.set(it.code, { ...it });
+        }
+      }
+    }
+  }
+  const groups = catOrder.map((c) => {
+    const items = [...catMap.get(c).values()];
+    return { category: c, items, subtotal: round2(items.reduce((s, l) => s + l.total, 0)) };
+  });
+
+  // Merge measurements: additive rows (m, m², m³, nr) sum; non-additive (e.g. °)
+  // keep the first module's value.
+  const mOrder = [];
+  const mMap = new Map();
+  for (const p of priced) {
+    for (const g of p.measurements) {
+      if (!mMap.has(g.group)) { mMap.set(g.group, new Map()); mOrder.push(g.group); }
+      const gm = mMap.get(g.group);
+      for (const r of g.rows) {
+        const ex = gm.get(r.label);
+        if (ex) { if (r.unit !== '°') ex.value = round2(ex.value + r.value); }
+        else gm.set(r.label, { label: r.label, value: r.value, unit: r.unit });
+      }
+    }
+  }
+  const measurements = mOrder.map((g) => ({ group: g, rows: [...mMap.get(g).values()] }));
+
+  const cost = round2(priced.reduce((s, p) => s + p.cost, 0));
+  const allItems = groups.flatMap((g) => g.items);
+  const labour = round2(allItems.reduce((s, l) => s + l.labour, 0));
+  const materials = round2(allItems.reduce((s, l) => s + l.materials, 0));
+  const profit = round2(cost * (ohpPct / 100));
+  const subtotal = round2(cost + profit);
+  const vat = round2(subtotal * (vatPct / 100));
+  const total = round2(subtotal + vat);
+
+  return {
+    modules: priced.map((p) => ({ name: p.name, type: p.type, offset: p.offset, geometry: p.geometry, cost: round2(p.cost) })),
+    groups,
+    measurements,
+    missing: [...new Set(priced.flatMap((p) => p.missing))],
+    inputs: { ohpPct, vatPct },
     totals: { cost, labour, materials, profit, subtotal, vat, total },
   };
 }
@@ -492,6 +630,7 @@ module.exports = {
   buildRecipe,
   buildMeasurements,
   priceModel,
+  priceProject,
   deriveParamsFromBoq,
   generateFootprint,
   polyArea,

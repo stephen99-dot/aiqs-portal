@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { useTheme } from '../context/ThemeContext';
@@ -37,12 +37,24 @@ const SHAPES = [
   { id: 'U', label: 'U-shaped' },
 ];
 
-const DEFAULTS = {
-  length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35, roofType: 'hip',
-  shape: 'rect', wing: 0.45,
-  windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
-  ohpPct: 15, vatPct: 20,
+// Per-module building parameters (markup is project-level, not per module).
+const MODULE_DEFAULTS = {
+  shape: 'rect', length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35,
+  roofType: 'hip', wing: 0.45, windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
 };
+
+const MODULE_TYPES = [
+  { id: 'extension', label: '+ Extension', length: 4, width: 3, storeys: 1, windows: 2, doors: 1, roofType: 'gable' },
+  { id: 'garage', label: '+ Garage', length: 6, width: 6, storeys: 1, windows: 1, doors: 1, roofType: 'gable' },
+  { id: 'porch', label: '+ Porch', length: 2, width: 1.5, storeys: 1, windows: 0, doors: 1, roofType: 'gable' },
+];
+
+let MODULE_SEQ = 0;
+function newModule(type = 'house', overrides = {}) {
+  MODULE_SEQ += 1;
+  const name = type === 'house' ? 'House' : type[0].toUpperCase() + type.slice(1);
+  return { id: 'm' + Date.now().toString(36) + (MODULE_SEQ), name, type, offsetX: 0, offsetZ: 0, ...MODULE_DEFAULTS, ...overrides };
+}
 
 function gbp(n) {
   return '£' + Math.round(n || 0).toLocaleString('en-GB');
@@ -131,27 +143,31 @@ function placeBox(group, origin, ex, ey, ez, u, v, w, h, d, mat) {
   return mesh;
 }
 
-// A framed casement window (border + mullion/transom + glazing) sitting in a
-// cut opening centred at (u, v) on a wall edge.
-function buildWindow(group, origin, ex, ey, ez, u, v, w, h, frameMat, glassMat) {
+// A framed casement window with a lintel over and a projecting cill under, in a
+// cut opening centred at (u, v) on a wall edge. `mats` carries the materials.
+function buildWindow(group, origin, ex, ey, ez, u, v, w, h, mats) {
   const fw = 0.08, d = 0.16;
-  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v - (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, fw * 0.6, h, d * 0.7, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w, fw * 0.6, d * 0.7, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w - 1.7 * fw, h - 1.7 * fw, 0.04, glassMat);
+  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v - (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, fw * 0.6, h, d * 0.7, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w, fw * 0.6, d * 0.7, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w - 1.7 * fw, h - 1.7 * fw, 0.04, mats.glass);
+  // Lintel over + projecting cill under.
+  placeBox(group, origin, ex, ey, ez, u, v + h / 2 + 0.09, w + 0.24, 0.15, 0.34, mats.lintel);
+  placeBox(group, origin, ex, ey, ez, u, v - h / 2 - 0.04, w + 0.18, 0.07, 0.42, mats.cill);
 }
 
-// A panelled door with frame + handle in a cut opening.
-function buildDoor(group, origin, ex, ey, ez, u, v, w, h, frameMat, doorMat) {
+// A panelled door with frame, handle and a lintel over, in a cut opening.
+function buildDoor(group, origin, ex, ey, ez, u, v, w, h, mats) {
   const fw = 0.1, d = 0.2;
-  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, frameMat);
-  placeBox(group, origin, ex, ey, ez, u, v, w - 1.4 * fw, h - fw, 0.06, doorMat);
-  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw * 2.4), v, 0.05, 0.18, 0.12, frameMat);
+  placeBox(group, origin, ex, ey, ez, u - (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw / 2), v, fw, h, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + (h / 2 - fw / 2), w, fw, d, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v, w - 1.4 * fw, h - fw, 0.06, mats.door);
+  placeBox(group, origin, ex, ey, ez, u + (w / 2 - fw * 2.4), v, 0.05, 0.18, 0.12, mats.frame);
+  placeBox(group, origin, ex, ey, ez, u, v + h / 2 + 0.09, w + 0.26, 0.15, 0.34, mats.lintel);
 }
 
 // Horizontal band (e.g. DPC strip) around an outline edge.
@@ -166,7 +182,7 @@ function addBand(group, a, b, y, h, depth, mat) {
 
 // A brick wall along edge a→b with real cut window/door openings (extruded
 // shape with holes), then the glazing/doors dropped into those holes.
-function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, openings) {
+function buildWall(group, a, b, H, t, mats, openings) {
   const dx = b.x - a.x, dz = b.z - a.z;
   const len = Math.hypot(dx, dz);
   if (len < 1e-3) return;
@@ -187,7 +203,7 @@ function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, ope
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
   geo.translate(0, 0, -t / 2);
-  const mesh = new THREE.Mesh(geo, brickMat);
+  const mesh = new THREE.Mesh(geo, mats.brick);
   mesh.matrixAutoUpdate = false;
   mesh.matrix.makeBasis(ex, ey, ez);
   mesh.matrix.setPosition(a.x, 0, a.z);
@@ -195,14 +211,14 @@ function buildWall(group, a, b, H, t, brickMat, frameMat, glassMat, doorMat, ope
 
   const origin = new THREE.Vector3(a.x, 0, a.z);
   for (const op of placed) {
-    if (op.type === 'door') buildDoor(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, frameMat, doorMat);
-    else buildWindow(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, frameMat, glassMat);
+    if (op.type === 'door') buildDoor(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, mats);
+    else buildWindow(group, origin, ex, ey, ez, op.u, op.v, op.w, op.h, mats);
   }
 }
 
 // Build one rectangle's finished roof (solid tiles, eaves overhang, fascia,
 // bargeboards and a ridge cap). `r` is centred at {x,z} with size {w,d}.
-function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat) {
+function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat, gutterMat) {
   const isHip = roofType === 'hip';
   const alongX = r.w >= r.d;
   const longLen = Math.max(r.w, r.d);
@@ -240,9 +256,13 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
     addBeam(group, P(-hl, -hsE, eaveY), rNeg, 0.12, fasciaMat);
   }
 
-  // Fascia along the two long eaves + ridge cap.
+  // Fascia along the two long eaves + a gutter just below it + ridge cap.
   addBeam(group, P(-hlE, hsE, eaveY), P(hlE, hsE, eaveY), 0.16, fasciaMat);
   addBeam(group, P(-hlE, -hsE, eaveY), P(hlE, -hsE, eaveY), 0.16, fasciaMat);
+  if (gutterMat) {
+    addBeam(group, P(-hlE, hsE + 0.08, eaveY - 0.16), P(hlE, hsE + 0.08, eaveY - 0.16), 0.1, gutterMat);
+    addBeam(group, P(-hlE, -hsE - 0.08, eaveY - 0.16), P(hlE, -hsE - 0.08, eaveY - 0.16), 0.1, gutterMat);
+  }
   addBeam(group, rNeg, rPos, 0.16, ridgeMat);
   if (isHip) {
     // Hip ridge lines from corners to ridge ends.
@@ -255,6 +275,28 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
 
 const ROOF_COLOURS = { concrete_tile: 0x8b9094, clay_tile: 0xa1542f, slate: 0x3a4048 };
 
+// A brick chimney stack with capping and pots, rising from a rectangle's ridge.
+function buildChimney(group, r, H, pitchDeg, brickMat, potMat) {
+  const alongX = r.w >= r.d;
+  const longLen = Math.max(r.w, r.d), shortLen = Math.min(r.w, r.d);
+  const ridgeY = H + (shortLen / 2) * Math.tan((pitchDeg * Math.PI) / 180);
+  const u = longLen * 0.3;
+  const cx = r.x + (alongX ? u : 0);
+  const cz = r.z + (alongX ? 0 : u);
+  const top = ridgeY + 1.1, base = H - 0.3, ch = top - base;
+  const stack = new THREE.Mesh(new THREE.BoxGeometry(0.7, ch, 0.7), brickMat);
+  stack.position.set(cx, (base + top) / 2, cz);
+  group.add(stack);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.12, 0.84), potMat);
+  cap.position.set(cx, top + 0.06, cz);
+  group.add(cap);
+  [-0.16, 0.16].forEach((o) => {
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.4, 12), potMat);
+    pot.position.set(cx + (alongX ? o : 0), top + 0.3, cz + (alongX ? 0 : o));
+    group.add(pot);
+  });
+}
+
 // Render the whole building from the server-supplied geometry block, so what's
 // drawn is exactly what was priced. brickTex/tileTex are shared canvas textures.
 function buildHouse(geo, brickTex, tileTex) {
@@ -264,14 +306,20 @@ function buildHouse(geo, brickTex, tileTex) {
   const H = storeyH * geo.storeys;
   const t = 0.3;
 
-  const brickMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.92 });
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xf3f3ef, roughness: 0.55 });
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9ec7da, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.55 });
-  const doorMat = new THREE.MeshStandardMaterial({ color: 0x274055, roughness: 0.5 });
+  const mats = {
+    brick: new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.92 }),
+    frame: new THREE.MeshStandardMaterial({ color: 0xf3f3ef, roughness: 0.55 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x9ec7da, roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.55 }),
+    door: new THREE.MeshStandardMaterial({ color: 0x274055, roughness: 0.5 }),
+    lintel: new THREE.MeshStandardMaterial({ color: 0xb9bcc0, roughness: 0.9 }),
+    cill: new THREE.MeshStandardMaterial({ color: 0xd9d7cc, roughness: 0.85 }),
+  };
   const tileMat = new THREE.MeshStandardMaterial({ map: tileTex, color: ROOF_COLOURS[geo.roofCovering] || ROOF_COLOURS.concrete_tile, roughness: 0.85, side: THREE.DoubleSide });
   const fasciaMat = new THREE.MeshStandardMaterial({ color: 0xeeeee8, roughness: 0.6 });
   const ridgeMat = new THREE.MeshStandardMaterial({ color: 0x4a4f55, roughness: 0.8 });
+  const gutterMat = new THREE.MeshStandardMaterial({ color: 0x33373b, roughness: 0.7 });
   const dpcMat = new THREE.MeshStandardMaterial({ color: 0x3f7d4e, roughness: 0.9 });
+  const footingMat = new THREE.MeshStandardMaterial({ color: 0xb4b4b0, roughness: 1 });
   const slabMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1 });
 
   const n = outline.length;
@@ -295,10 +343,12 @@ function buildHouse(geo, brickTex, tileTex) {
     }
   });
 
-  // Walls with cut openings, DPC band + plinth, slabs.
+  // Walls with cut openings, a projecting concrete footing at the base, then a
+  // green DPC band above it.
   edges.forEach((e) => {
-    buildWall(group, e.a, e.b, H, t, brickMat, frameMat, glassMat, doorMat, e.openings);
-    addBand(group, e.a, e.b, 0.12, 0.08, t + 0.05, dpcMat);
+    buildWall(group, e.a, e.b, H, t, mats, e.openings);
+    addBand(group, e.a, e.b, 0.06, 0.34, t + 0.28, footingMat); // footing, proud of the wall
+    addBand(group, e.a, e.b, 0.26, 0.06, t + 0.06, dpcMat);     // DPC course
   });
   rects.forEach((r) => {
     const slab = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.15, r.d), slabMat);
@@ -307,7 +357,28 @@ function buildHouse(geo, brickTex, tileTex) {
   });
 
   // Finished roof per rectangle.
-  rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, brickMat));
+  rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, mats.brick, gutterMat));
+
+  // Chimney on the main block of a house.
+  if ((geo.type || 'house') === 'house' && rects[0]) {
+    const potMat = new THREE.MeshStandardMaterial({ color: 0xb5651d, roughness: 0.9 });
+    buildChimney(group, rects[0], H, roofPitch, mats.brick, potMat);
+  }
+
+  // Downpipes at the two front corners (largest z), eave to ground.
+  const cen = outline.reduce((acc, p) => ({ x: acc.x + p.x / n, z: acc.z + p.z / n }), { x: 0, z: 0 });
+  [...outline].sort((p, q) => q.z - p.z).slice(0, 2).forEach((c) => {
+    let nx = c.x - cen.x, nz = c.z - cen.z; const nl = Math.hypot(nx, nz) || 1; nx /= nl; nz /= nl;
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, H, 10), gutterMat);
+    pipe.position.set(c.x + nx * 0.12, H / 2, c.z + nz * 0.12);
+    group.add(pipe);
+  });
+
+  // Foundation annotation label near the front-left base.
+  const xs = outline.map((p) => p.x), zs = outline.map((p) => p.z);
+  const fLabel = makeLabel('Strip foundation 600 × 1000mm');
+  fLabel.position.set(Math.min(...xs) + 0.5, 0.55, Math.max(...zs) + 0.9);
+  group.add(fLabel);
 
   // Shadows on everything.
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -394,8 +465,18 @@ export default function Builder3DPage() {
   const brickRef = useRef(null);
   const tileRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
 
-  const [params, setParams] = useState(DEFAULTS);
+  // A project is a list of building modules (House + Extension + Garage…) plus
+  // project-level markup. The controls edit the active module.
+  const firstModule = useMemo(() => newModule('house'), []);
+  const [modules, setModules] = useState([firstModule]);
+  const [activeId, setActiveId] = useState(firstModule.id);
+  const [ohpPct, setOhpPct] = useState(15);
+  const [vatPct, setVatPct] = useState(20);
+  const active = modules.find((m) => m.id === activeId) || modules[0];
+
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -408,6 +489,8 @@ export default function Builder3DPage() {
   const [deriveNotes, setDeriveNotes] = useState([]);
   const [panelTab, setPanelTab] = useState('estimate');
   const [showDims, setShowDims] = useState(true);
+  const [narrow, setNarrow] = useState(false);
+  const pageRef = useRef(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -443,6 +526,8 @@ export default function Builder3DPage() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.target.set(0, 2.5, 0);
+    cameraRef.current = camera;
+    controlsRef.current = controls;
 
     // Sky + soft daylight: a hemisphere fill (sky/ground tint) plus a single
     // shadow-casting sun, like an architectural render.
@@ -507,26 +592,30 @@ export default function Builder3DPage() {
     };
   }, [isAdmin]);
 
-  // ── rebuild the house from the priced geometry (single source of truth) ──
-  const geometry = quote?.geometry;
+  // ── rebuild all modules from the priced project (single source of truth) ──
+  const projModules = quote?.modules;
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !brickRef.current || !tileRef.current || !geometry) return;
+    if (!scene || !brickRef.current || !tileRef.current || !projModules) return;
     if (houseRef.current) {
       scene.remove(houseRef.current);
-      // Dispose geometries + materials, but NOT the shared brick/tile textures
-      // (they're reused across rebuilds).
       houseRef.current.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
         if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mm) => mm.dispose());
       });
     }
-    const house = buildHouse(geometry, brickRef.current, tileRef.current);
-    scene.add(house);
-    houseRef.current = house;
-  }, [geometry]);
+    const root = new THREE.Group();
+    projModules.forEach((mod) => {
+      if (!mod.geometry) return;
+      const g = buildHouse(mod.geometry, brickRef.current, tileRef.current);
+      g.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
+      root.add(g);
+    });
+    scene.add(root);
+    houseRef.current = root;
+  }, [projModules]);
 
-  // ── dimension annotations (toggleable, rebuilt with the geometry) ──
+  // ── dimension annotations (toggleable, per module) ──
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
@@ -535,18 +624,24 @@ export default function Builder3DPage() {
       dimsRef.current.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
       dimsRef.current = null;
     }
-    if (geometry && showDims) {
-      const dims = buildDimensions(geometry);
-      scene.add(dims);
-      dimsRef.current = dims;
+    if (projModules && showDims) {
+      const root = new THREE.Group();
+      projModules.forEach((mod) => {
+        if (!mod.geometry) return;
+        const d = buildDimensions(mod.geometry);
+        d.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
+        root.add(d);
+      });
+      scene.add(root);
+      dimsRef.current = root;
     }
-  }, [geometry, showDims]);
+  }, [projModules, showDims]);
 
-  // ── debounced pricing call ──
-  const price = useCallback(async (p) => {
+  // ── debounced pricing call (prices the whole project) ──
+  const price = useCallback(async (mods, ohp, vat) => {
     setLoading(true); setError(null);
     try {
-      const res = await apiFetch('/builder3d/price', { method: 'POST', body: JSON.stringify(p) });
+      const res = await apiFetch('/builder3d/price-multi', { method: 'POST', body: JSON.stringify({ modules: mods, ohpPct: ohp, vatPct: vat }) });
       setQuote(res);
     } catch (e) {
       setError(e.message || 'Pricing failed');
@@ -556,9 +651,18 @@ export default function Builder3DPage() {
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => price(params), 250);
+    const id = setTimeout(() => price(modules, ohpPct, vatPct), 250);
     return () => clearTimeout(id);
-  }, [params, price]);
+  }, [modules, ohpPct, vatPct, price]);
+
+  // Stack the three columns when the page is too narrow for them side by side.
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 980));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isAdmin]);
 
   // ── saved models ──
   const loadModels = useCallback(async () => {
@@ -578,12 +682,36 @@ export default function Builder3DPage() {
   }, []);
   useEffect(() => { if (isAdmin) loadBoqSources(); }, [isAdmin, loadBoqSources]);
 
+  // ── module management ──
+  const updateActive = (patch) => setModules((ms) => ms.map((m) => (m.id === activeId ? { ...m, ...patch } : m)));
+  const addModule = (type) => {
+    const tpl = MODULE_TYPES.find((x) => x.id === type) || {};
+    const house = modules[0] || firstModule;
+    const w = tpl.width || 3;
+    const mod = newModule(type, { ...tpl, offsetX: 0, offsetZ: -((house.width || 6) / 2 + w / 2) });
+    delete mod.label;
+    setModules((ms) => [...ms, mod]);
+    setActiveId(mod.id);
+  };
+  const deleteModule = (id) => {
+    setModules((ms) => {
+      if (ms.length <= 1) return ms;
+      const next = ms.filter((m) => m.id !== id);
+      if (id === activeId) setActiveId(next[0].id);
+      return next;
+    });
+  };
+
   const deriveFromBoq = async (sourceId) => {
     const src = boqSources.find((s) => s.id === sourceId);
     setBusy('derive'); setError(null); setDeriveNotes([]);
     try {
       const out = await apiFetch('/builder3d/derive', { method: 'POST', body: JSON.stringify({ sourceId }) });
-      setParams({ ...DEFAULTS, ...out.params });
+      const mod = newModule('house', { ...out.params });
+      setModules([mod]);
+      setActiveId(mod.id);
+      if (out.params.ohpPct != null) setOhpPct(out.params.ohpPct);
+      if (out.params.vatPct != null) setVatPct(out.params.vatPct);
       setModelId('');
       setModelName((src?.name || 'BOQ building') + ' (from BOQ)');
       setDeriveNotes(out.notes || []);
@@ -592,14 +720,16 @@ export default function Builder3DPage() {
     } finally { setBusy(''); }
   };
 
+  const projectPayload = () => ({ name: modelName, params: { version: 2, modules, ohpPct, vatPct } });
+
   const saveModel = async (asNew) => {
     setBusy('save'); setError(null);
     try {
       if (modelId && !asNew) {
-        const res = await apiFetch('/builder3d/models/' + modelId, { method: 'PUT', body: JSON.stringify({ name: modelName, params }) });
+        const res = await apiFetch('/builder3d/models/' + modelId, { method: 'PUT', body: JSON.stringify(projectPayload()) });
         setModelName(res.name);
       } else {
-        const res = await apiFetch('/builder3d/models', { method: 'POST', body: JSON.stringify({ name: modelName, params }) });
+        const res = await apiFetch('/builder3d/models', { method: 'POST', body: JSON.stringify(projectPayload()) });
         setModelId(res.id);
       }
       await loadModels();
@@ -613,7 +743,18 @@ export default function Builder3DPage() {
     if (!found) { setModelId(''); return; }
     setModelId(found.id);
     setModelName(found.name);
-    setParams({ ...DEFAULTS, ...found.params });
+    const p = found.params || {};
+    if (Array.isArray(p.modules) && p.modules.length) {
+      setModules(p.modules);
+      setActiveId(p.modules[0].id || p.modules[0].name);
+      setOhpPct(p.ohpPct ?? 15);
+      setVatPct(p.vatPct ?? 20);
+    } else {
+      // Back-compat: an old single-params save.
+      const mod = newModule('house', { ...MODULE_DEFAULTS, ...p });
+      setModules([mod]); setActiveId(mod.id);
+      setOhpPct(p.ohpPct ?? 15); setVatPct(p.vatPct ?? 20);
+    }
   };
 
   const deleteModel = async () => {
@@ -640,7 +781,7 @@ export default function Builder3DPage() {
       const r = await fetch('/api/builder3d/pdf', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName, params, snapshot }),
+        body: JSON.stringify({ name: modelName, modules, ohpPct, vatPct, snapshot }),
       });
       if (!r.ok) {
         let msg = 'PDF export failed (' + r.status + ')';
@@ -659,10 +800,37 @@ export default function Builder3DPage() {
     } finally { setBusy(''); }
   };
 
+  // Frame the whole project: centre + zoom the camera on the combined bounding
+  // box of every module. Also composes the PDF snapshot nicely.
+  const fitView = useCallback(() => {
+    const cam = cameraRef.current, ctr = controlsRef.current;
+    const mods = quote?.modules;
+    if (!cam || !ctr || !mods?.length) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 3;
+    mods.forEach((mod) => {
+      const g = mod.geometry; if (!g?.outline) return;
+      const ox = mod.offset?.x || 0, oz = mod.offset?.z || 0;
+      const xs = g.outline.map((p) => p.x), zs = g.outline.map((p) => p.z);
+      minX = Math.min(minX, ox + Math.min(...xs)); maxX = Math.max(maxX, ox + Math.max(...xs));
+      minZ = Math.min(minZ, oz + Math.min(...zs)); maxZ = Math.max(maxZ, oz + Math.max(...zs));
+      const L = Math.max(...xs) - Math.min(...xs), W = Math.max(...zs) - Math.min(...zs);
+      const h = g.wallHeight * g.storeys + (Math.min(L, W) / 2) * Math.tan((g.roofPitch * Math.PI) / 180);
+      maxY = Math.max(maxY, h + (g.type === 'house' ? 1.5 : 0));
+    });
+    if (!isFinite(minX)) return;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, cy = maxY / 2;
+    const radius = Math.max(maxX - minX, maxZ - minZ, maxY) * 0.5 || 6;
+    const dist = radius / Math.tan((cam.fov * Math.PI) / 360) * 1.5 + radius;
+    ctr.target.set(cx, cy, cz);
+    cam.position.set(cx + dist * 0.7, cy + dist * 0.6, cz + dist * 0.9);
+    cam.lookAt(cx, cy, cz);
+    ctr.update();
+  }, [quote]);
+
   const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
-    setParams((p) => ({ ...p, [key]: STRING_KEYS.includes(key) ? v : Number(v) }));
+    updateActive({ [key]: STRING_KEYS.includes(key) ? v : Number(v) });
   };
 
   if (!isAdmin) {
@@ -679,13 +847,13 @@ export default function Builder3DPage() {
   const numberField = (label, key, opts = {}) => (
     <label style={{ display: 'block', marginBottom: 12 }}>
       <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>{label}</span>
-      <input type="number" value={params[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
+      <input type="number" value={active[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
         style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
     </label>
   );
 
   return (
-    <div style={{ padding: 20, color: t.text, height: 'calc(100vh - 40px)', display: 'flex', flexDirection: 'column' }}>
+    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
@@ -725,6 +893,7 @@ export default function Builder3DPage() {
           {boqSources.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.itemCount} items)</option>)}
         </select>
         <div style={{ flex: 1 }} />
+        <button onClick={fitView} style={btn(t, t.surface, t.text)}>Fit view</button>
         <button onClick={exportPdf} disabled={busy === 'pdf'} style={btn(t, '#10B981', '#fff')}>{busy === 'pdf' ? 'Exporting…' : 'Export PDF'}</button>
       </div>
 
@@ -734,22 +903,52 @@ export default function Builder3DPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '240px minmax(0, 1fr) 300px', gap: 14, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '240px minmax(0, 1fr) 300px', gap: 14, flex: narrow ? undefined : 1, minHeight: 0 }}>
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>Building</div>
+          {/* Build modules — House + Extension + Garage… */}
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 8 }}>Build modules</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+            {modules.map((mod) => {
+              const sub = quote?.modules?.find((x) => x.name === mod.name)?.cost;
+              return (
+                <div key={mod.id} onClick={() => setActiveId(mod.id)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, cursor: 'pointer',
+                  padding: '7px 9px', borderRadius: 8, fontSize: 13,
+                  border: '1px solid ' + (mod.id === activeId ? t.accent : t.border),
+                  background: mod.id === activeId ? (t.accent + '22') : t.surface,
+                }}>
+                  <span style={{ fontWeight: 600, color: t.text }}>{mod.name}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {sub != null && <span style={{ fontSize: 11, color: t.textSecondary }}>{gbp(sub)}</span>}
+                    {modules.length > 1 && (
+                      <button onClick={(e) => { e.stopPropagation(); deleteModule(mod.id); }} title="Remove module"
+                        style={{ border: 'none', background: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 14 }}>
+            {MODULE_TYPES.map((mt) => (
+              <button key={mt.id} onClick={() => addModule(mt.id)} style={{ ...btn(t, t.surface, t.text), padding: '5px 8px', fontSize: 12 }}>{mt.label}</button>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 12 }}>{active.name}</div>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Footprint shape</span>
-            <select value={params.shape} onChange={set('shape')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.shape} onChange={set('shape')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </label>
           {numberField('Length (m)', 'length', { min: 2, max: 60, step: 0.5 })}
           {numberField('Width (m)', 'width', { min: 2, max: 60, step: 0.5 })}
-          {params.shape !== 'rect' && (
+          {active.shape !== 'rect' && (
             <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wing size ({Math.round(params.wing * 100)}%)</span>
-              <input type="range" min={0.2} max={0.7} step={0.05} value={params.wing} onChange={set('wing')} style={{ width: '100%' }} />
+              <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wing size ({Math.round(active.wing * 100)}%)</span>
+              <input type="range" min={0.2} max={0.7} step={0.05} value={active.wing} onChange={set('wing')} style={{ width: '100%' }} />
             </label>
           )}
           {numberField('Wall height (m)', 'wallHeight', { min: 2, max: 6, step: 0.1 })}
@@ -757,7 +956,7 @@ export default function Builder3DPage() {
           {numberField('Roof pitch (°)', 'roofPitch', { min: 5, max: 60 })}
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Roof type</span>
-            <select value={params.roofType} onChange={set('roofType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.roofType} onChange={set('roofType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {ROOF_TYPES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </label>
@@ -766,20 +965,32 @@ export default function Builder3DPage() {
 
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wall type</span>
-            <select value={params.wallType} onChange={set('wallType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.wallType} onChange={set('wallType')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {WALL_TYPES.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
             </select>
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Roof covering</span>
-            <select value={params.roofCovering} onChange={set('roofCovering')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
+            <select value={active.roofCovering} onChange={set('roofCovering')} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text }}>
               {ROOF_COVERINGS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </label>
+          {active.type !== 'house' && (
+            <>
+              {numberField('Position X (m)', 'offsetX', { step: 0.5 })}
+              {numberField('Position Z (m)', 'offsetZ', { step: 0.5 })}
+            </>
+          )}
 
-          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup</div>
-          {numberField('OH&P (%)', 'ohpPct', { min: 0, max: 60 })}
-          {numberField('VAT (%)', 'vatPct', { min: 0, max: 25 })}
+          <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup (project)</div>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>OH&P (%)</span>
+            <input type="number" value={ohpPct} min={0} max={60} onChange={(e) => setOhpPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+          </label>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>VAT (%)</span>
+            <input type="number" value={vatPct} min={0} max={25} onChange={(e) => setVatPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+          </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>
             <input type="checkbox" checked={showDims} onChange={(e) => setShowDims(e.target.checked)} />
@@ -788,7 +999,7 @@ export default function Builder3DPage() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0 }} />
+        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0, height: narrow ? 440 : undefined }} />
 
         {/* ── Estimate / Summary sidebar ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -818,6 +1029,11 @@ export default function Builder3DPage() {
                       <span style={{ flex: 1, paddingRight: 8 }}>
                         {it.label}
                         <span style={{ color: t.textSecondary, display: 'block', fontSize: 11 }}>{it.qty} {it.unit} @ {gbp(it.rate)}</span>
+                        {it.live && (
+                          <a href={it.live.source_url} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 10.5, color: '#0a7d28', textDecoration: 'none', marginTop: 1 }}>
+                            ● live {it.live.supplier} £{it.live.price}/{it.live.unit}{it.live.priceable ? '' : ' (benchmark)'}
+                          </a>
+                        )}
                       </span>
                       <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{gbp(it.total)}</span>
                     </div>
@@ -828,9 +1044,9 @@ export default function Builder3DPage() {
               {totals && (
                 <div style={{ marginTop: 'auto', paddingTop: 10, borderTop: '2px solid ' + t.border }}>
                   <Row t={t} label="Trade cost" value={gbp(totals.cost)} />
-                  <Row t={t} label={`OH&P (${params.ohpPct}%)`} value={gbp(totals.profit)} />
+                  <Row t={t} label={`OH&P (${ohpPct}%)`} value={gbp(totals.profit)} />
                   <Row t={t} label="Subtotal" value={gbp(totals.subtotal)} bold />
-                  <Row t={t} label={`VAT (${params.vatPct}%)`} value={gbp(totals.vat)} />
+                  <Row t={t} label={`VAT (${vatPct}%)`} value={gbp(totals.vat)} />
                   <Row t={t} label="Total" value={gbp(totals.total)} big />
                   {quote.missing?.length > 0 && (
                     <div style={{ fontSize: 10.5, color: t.textSecondary, marginTop: 8 }}>
