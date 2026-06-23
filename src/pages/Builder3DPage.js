@@ -957,15 +957,14 @@ function Builder3DInner() {
   return (
     <div ref={pageRef} className="b3d-root" style={{ padding: 20, color: t.text, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       <style>{`
-        .b3d-root { height: calc(100vh - 40px); }
-        .b3d-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; flex: 1; min-height: 0; }
-        .b3d-controls { flex: 0 1 240px; min-height: 0; overflow-y: auto; }
-        .b3d-vp { flex: 1 1 380px; min-width: 300px; min-height: 0; }
-        .b3d-est { flex: 1 1 300px; min-height: 0; overflow-y: auto; }
+        .b3d-root { height: auto; }
+        .b3d-grid { display: flex; flex-wrap: nowrap; gap: 14px; align-items: flex-start; }
+        .b3d-controls { flex: 0 0 240px; height: calc(100vh - 220px); overflow-y: auto; }
+        .b3d-vp { flex: 1 1 auto; min-width: 280px; height: calc(100vh - 220px); }
+        .b3d-est { flex: 0 0 320px; height: calc(100vh - 220px); overflow-y: auto; }
         @media (max-width: 1180px) {
-          .b3d-root { height: auto; min-height: 100vh; }
-          .b3d-grid { flex: none; }
-          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; overflow: visible; }
+          .b3d-grid { flex-wrap: wrap; }
+          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; height: auto; }
           .b3d-controls, .b3d-est { max-height: none; }
           .b3d-vp { height: 460px; }
         }
@@ -973,7 +972,7 @@ function Builder3DInner() {
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L9 · cam-debug</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L10 · height-fix</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
