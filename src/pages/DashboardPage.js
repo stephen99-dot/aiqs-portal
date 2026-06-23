@@ -455,7 +455,7 @@ export default function DashboardPage() {
       await apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
       setProjects(prev => prev.filter(p => p.id !== projectId));
     } catch (err) {
-      alert('Failed to delete project. Please try again.');
+      alert(err?.message ? `Couldn't delete project: ${err.message}` : 'Failed to delete project. Please try again.');
     } finally {
       setDeletingId(null);
     }
