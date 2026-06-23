@@ -747,8 +747,10 @@ export default function Builder3DPage() {
     const fov = (cam.fov * Math.PI) / 180;
     const fitH = radius / Math.tan(fov / 2);
     const fitW = radius / (Math.tan(fov / 2) * Math.max(cam.aspect, 0.0001));
-    const dist = 1.25 * Math.max(fitH, fitW) + radius;
-    const dir = new THREE.Vector3(0.85, 0.6, 1).normalize();
+    const dist = 1.1 * Math.max(fitH, fitW);
+    // Low, mostly front-on 3/4 view (street-level), so walls/openings read —
+    // not a steep top-down that's all roof.
+    const dir = new THREE.Vector3(0.5, 0.3, 1).normalize();
     cam.position.copy(center).addScaledVector(dir, dist);
     cam.near = Math.max(0.1, dist - radius * 6);
     cam.far = dist + radius * 12;
@@ -758,13 +760,14 @@ export default function Builder3DPage() {
   }, []);
   fitViewRef.current = fitView;
 
-  // Stack the three columns when the page is too narrow for them side by side.
+  // Stack the three columns into one when the window is too narrow for them
+  // side by side. Measured off window.innerWidth — NOT a page element, whose
+  // width gets inflated by the very overflow we're trying to prevent.
   useEffect(() => {
-    const el = pageRef.current;
-    if (!el) return undefined;
-    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 980));
-    ro.observe(el);
-    return () => ro.disconnect();
+    const check = () => setNarrow(window.innerWidth < 1180);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, [isAdmin]);
 
   // ── saved models ──
@@ -930,7 +933,7 @@ export default function Builder3DPage() {
   );
 
   return (
-    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column' }}>
+    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
