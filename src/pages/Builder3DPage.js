@@ -961,13 +961,15 @@ function Builder3DInner() {
       <style>{`
         .b3d-root { height: calc(100vh - 40px); }
         .b3d-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; flex: 1; min-height: 0; }
-        .b3d-controls { flex: 0 1 240px; overflow-y: auto; }
-        .b3d-vp { flex: 1 1 380px; min-width: 300px; min-height: 520px; }
-        .b3d-est { flex: 1 1 300px; overflow-y: auto; min-width: 280px; }
+        .b3d-controls { flex: 0 1 240px; min-height: 0; overflow-y: auto; }
+        .b3d-vp { flex: 1 1 380px; min-width: 300px; min-height: 0; }
+        .b3d-est { flex: 1 1 300px; min-height: 0; overflow-y: auto; }
         @media (max-width: 1180px) {
           .b3d-root { height: auto; min-height: 100vh; }
-          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; }
-          .b3d-vp { height: 440px; }
+          .b3d-grid { flex: none; }
+          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; overflow: visible; }
+          .b3d-controls, .b3d-est { max-height: none; }
+          .b3d-vp { height: 460px; }
         }
       `}</style>
       <div style={{ marginBottom: 12 }}>
