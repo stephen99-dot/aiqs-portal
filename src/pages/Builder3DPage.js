@@ -760,13 +760,14 @@ export default function Builder3DPage() {
   }, []);
   fitViewRef.current = fitView;
 
-  // Stack the three columns when the page is too narrow for them side by side.
+  // Stack the three columns into one when the window is too narrow for them
+  // side by side. Measured off window.innerWidth — NOT a page element, whose
+  // width gets inflated by the very overflow we're trying to prevent.
   useEffect(() => {
-    const el = pageRef.current;
-    if (!el) return undefined;
-    const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 980));
-    ro.observe(el);
-    return () => ro.disconnect();
+    const check = () => setNarrow(window.innerWidth < 1180);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, [isAdmin]);
 
   // ── saved models ──
@@ -932,7 +933,7 @@ export default function Builder3DPage() {
   );
 
   return (
-    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column' }}>
+    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
