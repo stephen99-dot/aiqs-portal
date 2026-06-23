@@ -218,7 +218,7 @@ function buildWall(group, a, b, H, t, mats, openings) {
 
 // Build one rectangle's finished roof (solid tiles, eaves overhang, fascia,
 // bargeboards and a ridge cap). `r` is centred at {x,z} with size {w,d}.
-function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat, gutterMat) {
+function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat, ridgeMat, brickMat, gutterMat, rooflights, glassMat, frameMat) {
   const isHip = roofType === 'hip';
   const alongX = r.w >= r.d;
   const longLen = Math.max(r.w, r.d);
@@ -270,6 +270,34 @@ function buildRectRoofSolid(group, r, H, pitchDeg, roofType, tileMat, fasciaMat,
     addBeam(group, P(hlE, -hsE, eaveY), rPos, 0.12, ridgeMat);
     addBeam(group, P(-hlE, hsE, eaveY), rNeg, 0.12, ridgeMat);
     addBeam(group, P(-hlE, -hsE, eaveY), rNeg, 0.12, ridgeMat);
+  }
+
+  // Roof windows (Velux), flush on the front (+Z) slope.
+  if (rooflights > 0 && glassMat) {
+    const ridgeP = P(0, 0, ridgeY), eaveP = P(0, hsE, eaveY), along0 = P(0, 0, ridgeY), along1 = P(1, 0, ridgeY);
+    const aAlong = new THREE.Vector3().subVectors(along1, along0).normalize();
+    const aDown = new THREE.Vector3().subVectors(eaveP, ridgeP).normalize();
+    const normal = new THREE.Vector3().crossVectors(aAlong, aDown).normalize();
+    if (normal.z < 0) normal.negate();
+    const slopeMid = 0.45; // fraction from ridge toward eave
+    const usable = Math.max(ridgeHalf * 2, 1);
+    const count = Math.min(rooflights, Math.max(1, Math.floor(usable / 1.6)));
+    for (let i = 1; i <= count; i++) {
+      const u = -ridgeHalf + (usable * i) / (count + 1);
+      const v = hsE * slopeMid;
+      const yy = ridgeY + (eaveY - ridgeY) * slopeMid;
+      const base = P(u, v, yy);
+      const mk = (w, h, d, mat, off) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        m.matrixAutoUpdate = false;
+        m.matrix.makeBasis(aAlong, aDown, normal);
+        const pos = base.clone().addScaledVector(normal, off);
+        m.matrix.setPosition(pos.x, pos.y, pos.z);
+        group.add(m);
+      };
+      mk(1.0, 1.2, 0.08, frameMat || glassMat, 0.02);
+      mk(0.82, 1.0, 0.06, glassMat, 0.06);
+    }
   }
 }
 
@@ -356,8 +384,8 @@ function buildHouse(geo, brickTex, tileTex) {
     group.add(slab);
   });
 
-  // Finished roof per rectangle.
-  rects.forEach((r) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, mats.brick, gutterMat));
+  // Finished roof per rectangle (roof windows only on the main block).
+  rects.forEach((r, idx) => buildRectRoofSolid(group, r, H, roofPitch, roofType, tileMat, fasciaMat, ridgeMat, mats.brick, gutterMat, idx === 0 ? (geo.rooflights || 0) : 0, mats.glass, mats.frame));
 
   // Chimney on the main block of a house.
   if ((geo.type || 'house') === 'house' && rects[0]) {
@@ -374,11 +402,13 @@ function buildHouse(geo, brickTex, tileTex) {
     group.add(pipe);
   });
 
-  // Foundation annotation label near the front-left base.
-  const xs = outline.map((p) => p.x), zs = outline.map((p) => p.z);
-  const fLabel = makeLabel('Strip foundation 600 × 1000mm');
-  fLabel.position.set(Math.min(...xs) + 0.5, 0.55, Math.max(...zs) + 0.9);
-  group.add(fLabel);
+  // One foundation annotation label (house only, to avoid clutter).
+  if ((geo.type || 'house') === 'house') {
+    const xs = outline.map((p) => p.x), zs = outline.map((p) => p.z);
+    const fLabel = makeLabel('Strip foundation 600 × 1000mm');
+    fLabel.position.set((Math.min(...xs) + Math.max(...xs)) / 2, 0.45, Math.max(...zs) + 1.1);
+    group.add(fLabel);
+  }
 
   // Shadows on everything.
   group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -654,6 +684,20 @@ export default function Builder3DPage() {
     const id = setTimeout(() => price(modules, ohpPct, vatPct), 250);
     return () => clearTimeout(id);
   }, [modules, ohpPct, vatPct, price]);
+
+  // Auto-frame the model on first load and whenever the set of modules changes
+  // (added/removed) — not on every param tweak, so it won't fight manual orbit.
+  const fitSigRef = useRef('');
+  useEffect(() => {
+    if (!quote?.modules) return;
+    const sig = modules.map((m) => m.id).join(',');
+    if (sig !== fitSigRef.current) {
+      fitSigRef.current = sig;
+      const id = setTimeout(() => fitView(), 80);
+      return () => clearTimeout(id);
+    }
+    return undefined;
+  }, [quote, modules, fitView]);
 
   // Stack the three columns when the page is too narrow for them side by side.
   useEffect(() => {
@@ -962,6 +1006,7 @@ export default function Builder3DPage() {
           </label>
           {numberField('Windows', 'windows', { min: 0, max: 60 })}
           {numberField('External doors', 'doors', { min: 0, max: 20 })}
+          {numberField('Roof windows (Velux)', 'rooflights', { min: 0, max: 20 })}
 
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>Wall type</span>
