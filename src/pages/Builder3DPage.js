@@ -975,6 +975,7 @@ function Builder3DInner() {
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L7 · scroll-fit</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
