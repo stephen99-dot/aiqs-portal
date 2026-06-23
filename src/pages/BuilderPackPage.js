@@ -646,12 +646,12 @@ export default function BuilderPackPage() {
 
                     {open && (
                       <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 760 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 900, tableLayout: 'fixed' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                              <th style={th(70)}>Ref</th>
-                              <th style={th()}>Description</th>
-                              <th style={th(70)}>Unit</th>
+                              <th style={th(64)}>Ref</th>
+                              <th style={{ ...th(), minWidth: 320, width: 'auto' }}>Description</th>
+                              <th style={th(84)}>Unit</th>
                               <th style={{ ...th(70), textAlign: 'right' }}>Qty</th>
                               <th style={{ ...th(100), textAlign: 'right' }}>Labour</th>
                               <th style={{ ...th(100), textAlign: 'right' }}>Materials</th>
