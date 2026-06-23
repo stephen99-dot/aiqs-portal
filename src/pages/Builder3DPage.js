@@ -581,7 +581,6 @@ function Builder3DInner() {
   const [deriveNotes, setDeriveNotes] = useState([]);
   const [panelTab, setPanelTab] = useState('estimate');
   const [showDims, setShowDims] = useState(true);
-  const [narrow, setNarrow] = useState(false);
   const pageRef = useRef(null);
 
   const isAdmin = user?.role === 'admin';
@@ -795,16 +794,6 @@ function Builder3DInner() {
   }, []);
   fitViewRef.current = fitView;
 
-  // Stack the three columns into one when the window is too narrow for them
-  // side by side. Measured off window.innerWidth — NOT a page element, whose
-  // width gets inflated by the very overflow we're trying to prevent.
-  useEffect(() => {
-    const check = () => setNarrow(window.innerWidth < 1180);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, [isAdmin]);
-
   // ── saved models ──
   const loadModels = useCallback(async () => {
     try {
@@ -968,7 +957,17 @@ function Builder3DInner() {
   );
 
   return (
-    <div ref={pageRef} style={{ padding: 20, color: t.text, height: narrow ? 'auto' : 'calc(100vh - 40px)', minHeight: narrow ? '100vh' : undefined, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
+    <div ref={pageRef} className="b3d-root" style={{ padding: 20, color: t.text, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
+      <style>{`
+        .b3d-root { height: calc(100vh - 40px); }
+        .b3d-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px; gap: 14px; flex: 1; min-height: 0; }
+        .b3d-vp { min-height: 0; }
+        @media (max-width: 1180px) {
+          .b3d-root { height: auto; min-height: 100vh; }
+          .b3d-grid { grid-template-columns: 1fr; flex: none; }
+          .b3d-vp { height: 440px; }
+        }
+      `}</style>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
@@ -1018,7 +1017,7 @@ function Builder3DInner() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '240px minmax(0, 1fr) 300px', gap: 14, flex: narrow ? undefined : 1, minHeight: 0 }}>
+      <div className="b3d-grid">
         {/* ── Controls ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
           {/* Build modules — House + Extension + Garage… */}
@@ -1115,7 +1114,7 @@ function Builder3DInner() {
         </div>
 
         {/* ── 3D viewport ── */}
-        <div ref={mountRef} style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minHeight: 0, minWidth: 0, height: narrow ? 440 : undefined }} />
+        <div ref={mountRef} className="b3d-vp" style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minWidth: 0 }} />
 
         {/* ── Estimate / Summary sidebar ── */}
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
