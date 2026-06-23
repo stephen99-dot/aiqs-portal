@@ -516,7 +516,35 @@ function buildDimensions(geo) {
   return group;
 }
 
-export default function Builder3DPage() {
+// Error boundary so a runtime error shows a message instead of a blank page
+// that "loads then disappears" — and tells us what actually threw.
+class Builder3DErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { console.error('[Builder3D] crash:', err, info); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 24, color: '#b00020', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+          <strong>3D Builder hit an error.</strong>{'\n'}
+          {String((this.state.err && this.state.err.message) || this.state.err)}
+          {'\n\n'}Please screenshot this and send it over.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function Builder3DPage(props) {
+  return (
+    <Builder3DErrorBoundary>
+      <Builder3DInner {...props} />
+    </Builder3DErrorBoundary>
+  );
+}
+
+function Builder3DInner() {
   const { t } = useTheme();
   const { user } = useAuth();
   const mountRef = useRef(null);
@@ -629,7 +657,10 @@ export default function Builder3DPage() {
     tileRef.current = makeTileTexture();
 
     let raf;
-    const animate = () => { controls.update(); renderer.render(scene, camera); raf = requestAnimationFrame(animate); };
+    const animate = () => {
+      try { controls.update(); renderer.render(scene, camera); } catch (e) { /* keep the loop alive */ }
+      raf = requestAnimationFrame(animate);
+    };
     animate();
 
     // Keep the renderer matched to the container, not the window. A plain
@@ -675,9 +706,11 @@ export default function Builder3DPage() {
     const root = new THREE.Group();
     projModules.forEach((mod) => {
       if (!mod.geometry) return;
-      const g = buildHouse(mod.geometry, brickRef.current, tileRef.current);
-      g.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
-      root.add(g);
+      try {
+        const g = buildHouse(mod.geometry, brickRef.current, tileRef.current);
+        g.position.set(mod.offset?.x || 0, 0, mod.offset?.z || 0);
+        root.add(g);
+      } catch (e) { console.error('[Builder3D] module build failed:', e); }
     });
     scene.add(root);
     houseRef.current = root;
@@ -736,6 +769,7 @@ export default function Builder3DPage() {
   // Frame the camera on the model's actual bounding box (measured from the built
   // meshes, so it's always centred regardless of footprint/offsets).
   const fitView = useCallback(() => {
+   try {
     const cam = cameraRef.current, ctr = controlsRef.current, house = houseRef.current;
     if (!cam || !ctr || !house) return;
     house.updateWorldMatrix(true, true); // walls use matrixAutoUpdate=false
@@ -757,6 +791,7 @@ export default function Builder3DPage() {
     cam.updateProjectionMatrix();
     ctr.target.copy(center);
     ctr.update();
+   } catch (e) { /* never let framing crash the view */ }
   }, []);
   fitViewRef.current = fitView;
 
