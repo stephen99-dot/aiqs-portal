@@ -1185,9 +1185,22 @@ router.delete('/projects/:id', authMiddleware, (req, res) => {
       ? db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)
       : db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    db.prepare('DELETE FROM files WHERE project_id = ?').run(projectId);
-    db.prepare('DELETE FROM project_data WHERE project_id = ?').run(projectId);
-    db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    // Remove every child row before the project itself. A delivered "job" has
+    // deliverables and may have variations hanging off it; leaving those behind
+    // orphans data and, with foreign keys enforced, makes the final DELETE throw
+    // (the "Failed to delete" the user hit). One transaction so a failure
+    // half-way leaves the project intact rather than partially gutted.
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM project_deliverables WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM variations WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM files WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM project_data WHERE project_id = ?').run(projectId);
+      // A delivered submission points back at this project; unlink it so the row
+      // doesn't dangle against a project that no longer exists.
+      db.prepare('UPDATE drawing_submissions SET project_id = NULL WHERE project_id = ?').run(projectId);
+      db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+    });
+    tx();
     res.json({ success: true });
   } catch (e) { console.error('[Projects] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete project' }); }
 });
