@@ -528,6 +528,8 @@ export default function Builder3DPage() {
   const rendererRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
+  const fitSigRef = useRef('');
+  const fitViewRef = useRef(null);
 
   // A project is a list of building modules (House + Extension + Garage…) plus
   // project-level markup. The controls edit the active module.
@@ -674,6 +676,15 @@ export default function Builder3DPage() {
     });
     scene.add(root);
     houseRef.current = root;
+
+    // Auto-frame on first build and whenever the number of modules changes
+    // (not on every param tweak, so it won't fight a manual orbit). Two rAFs so
+    // the renderer/canvas has settled to its real size first.
+    const sig = String(projModules.length);
+    if (sig !== fitSigRef.current) {
+      fitSigRef.current = sig;
+      requestAnimationFrame(() => requestAnimationFrame(() => fitViewRef.current && fitViewRef.current()));
+    }
   }, [projModules]);
 
   // ── dimension annotations (toggleable, per module) ──
@@ -716,46 +727,30 @@ export default function Builder3DPage() {
     return () => clearTimeout(id);
   }, [modules, ohpPct, vatPct, price]);
 
-  // Frame the whole project: centre + zoom the camera on the combined bounding
-  // box of every module. Also composes the PDF snapshot nicely.
+  // Frame the camera on the model's actual bounding box (measured from the built
+  // meshes, so it's always centred regardless of footprint/offsets).
   const fitView = useCallback(() => {
-    const cam = cameraRef.current, ctr = controlsRef.current;
-    const mods = quote?.modules;
-    if (!cam || !ctr || !mods?.length) return;
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 3;
-    mods.forEach((mod) => {
-      const g = mod.geometry; if (!g?.outline) return;
-      const ox = mod.offset?.x || 0, oz = mod.offset?.z || 0;
-      const xs = g.outline.map((p) => p.x), zs = g.outline.map((p) => p.z);
-      minX = Math.min(minX, ox + Math.min(...xs)); maxX = Math.max(maxX, ox + Math.max(...xs));
-      minZ = Math.min(minZ, oz + Math.min(...zs)); maxZ = Math.max(maxZ, oz + Math.max(...zs));
-      const L = Math.max(...xs) - Math.min(...xs), W = Math.max(...zs) - Math.min(...zs);
-      const h = g.wallHeight * g.storeys + (Math.min(L, W) / 2) * Math.tan((g.roofPitch * Math.PI) / 180);
-      maxY = Math.max(maxY, h + (g.type === 'house' ? 1.5 : 0));
-    });
-    if (!isFinite(minX)) return;
-    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, cy = maxY / 2;
-    const radius = Math.max(maxX - minX, maxZ - minZ, maxY) * 0.5 || 6;
-    const dist = radius / Math.tan((cam.fov * Math.PI) / 360) * 1.5 + radius;
-    ctr.target.set(cx, cy, cz);
-    cam.position.set(cx + dist * 0.7, cy + dist * 0.6, cz + dist * 0.9);
-    cam.lookAt(cx, cy, cz);
+    const cam = cameraRef.current, ctr = controlsRef.current, house = houseRef.current;
+    if (!cam || !ctr || !house) return;
+    house.updateWorldMatrix(true, true); // walls use matrixAutoUpdate=false
+    const box = new THREE.Box3().setFromObject(house);
+    if (box.isEmpty()) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const radius = 0.5 * Math.max(size.x, size.y, size.z) || 6;
+    const fov = (cam.fov * Math.PI) / 180;
+    const fitH = radius / Math.tan(fov / 2);
+    const fitW = radius / (Math.tan(fov / 2) * Math.max(cam.aspect, 0.0001));
+    const dist = 1.25 * Math.max(fitH, fitW) + radius;
+    const dir = new THREE.Vector3(0.85, 0.6, 1).normalize();
+    cam.position.copy(center).addScaledVector(dir, dist);
+    cam.near = Math.max(0.1, dist - radius * 6);
+    cam.far = dist + radius * 12;
+    cam.updateProjectionMatrix();
+    ctr.target.copy(center);
     ctr.update();
-  }, [quote]);
-
-  // Auto-frame the model on first load and whenever the set of modules changes
-  // (added/removed) — not on every param tweak, so it won't fight manual orbit.
-  const fitSigRef = useRef('');
-  useEffect(() => {
-    if (!quote?.modules) return;
-    const sig = modules.map((m) => m.id).join(',');
-    if (sig !== fitSigRef.current) {
-      fitSigRef.current = sig;
-      const id = setTimeout(() => fitView(), 80);
-      return () => clearTimeout(id);
-    }
-    return undefined;
-  }, [quote, modules, fitView]);
+  }, []);
+  fitViewRef.current = fitView;
 
   // Stack the three columns when the page is too narrow for them side by side.
   useEffect(() => {
