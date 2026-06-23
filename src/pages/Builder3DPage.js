@@ -747,8 +747,10 @@ export default function Builder3DPage() {
     const fov = (cam.fov * Math.PI) / 180;
     const fitH = radius / Math.tan(fov / 2);
     const fitW = radius / (Math.tan(fov / 2) * Math.max(cam.aspect, 0.0001));
-    const dist = 1.25 * Math.max(fitH, fitW) + radius;
-    const dir = new THREE.Vector3(0.85, 0.6, 1).normalize();
+    const dist = 1.1 * Math.max(fitH, fitW);
+    // Low, mostly front-on 3/4 view (street-level), so walls/openings read —
+    // not a steep top-down that's all roof.
+    const dir = new THREE.Vector3(0.5, 0.3, 1).normalize();
     cam.position.copy(center).addScaledVector(dir, dist);
     cam.near = Math.max(0.1, dist - radius * 6);
     cam.far = dist + radius * 12;
