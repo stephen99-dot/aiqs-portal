@@ -960,11 +960,13 @@ function Builder3DInner() {
     <div ref={pageRef} className="b3d-root" style={{ padding: 20, color: t.text, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       <style>{`
         .b3d-root { height: calc(100vh - 40px); }
-        .b3d-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr) 300px; gap: 14px; flex: 1; min-height: 0; }
-        .b3d-vp { min-height: 0; }
+        .b3d-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; flex: 1; min-height: 0; }
+        .b3d-controls { flex: 0 1 240px; overflow-y: auto; }
+        .b3d-vp { flex: 1 1 380px; min-width: 300px; min-height: 520px; }
+        .b3d-est { flex: 1 1 300px; overflow-y: auto; min-width: 280px; }
         @media (max-width: 1180px) {
           .b3d-root { height: auto; min-height: 100vh; }
-          .b3d-grid { grid-template-columns: 1fr; flex: none; }
+          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; }
           .b3d-vp { height: 440px; }
         }
       `}</style>
@@ -1019,7 +1021,7 @@ function Builder3DInner() {
 
       <div className="b3d-grid">
         {/* ── Controls ── */}
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto' }}>
+        <div className="b3d-controls" style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
           {/* Build modules — House + Extension + Garage… */}
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 8 }}>Build modules</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
@@ -1117,7 +1119,7 @@ function Builder3DInner() {
         <div ref={mountRef} className="b3d-vp" style={{ position: 'relative', background: '#eef2f7', borderRadius: 12, border: '1px solid ' + t.border, overflow: 'hidden', minWidth: 0 }} />
 
         {/* ── Estimate / Summary sidebar ── */}
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div className="b3d-est" style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 6 }}>
               {['estimate', 'summary'].map((tab) => (
