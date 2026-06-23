@@ -656,34 +656,26 @@ function Builder3DInner() {
     tileRef.current = makeTileTexture();
 
     let raf;
+    // Per-frame size sync: keep the drawing buffer matched to the mount's real
+    // size (updateStyle:false so the CSS-filled absolute canvas isn't fought).
+    // This is immune to any layout/resize timing issues.
+    let lastW = 0, lastH = 0;
     const animate = () => {
+      const w = mount.clientWidth, h = mount.clientHeight;
+      if (w && h && (w !== lastW || h !== lastH)) {
+        lastW = w; lastH = h;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+        if (!userMovedRef.current && fitViewRef.current) fitViewRef.current();
+      }
       try { controls.update(); renderer.render(scene, camera); } catch (e) { /* keep the loop alive */ }
       raf = requestAnimationFrame(animate);
     };
     animate();
 
-    // Keep the renderer matched to the container, not the window. A plain
-    // window 'resize' listener misses grid/flex relayouts (e.g. a banner
-    // appearing), which can leave an oversized canvas that blows the grid out
-    // and pushes the estimate column off-screen. ResizeObserver tracks the
-    // element itself.
-    const resize = () => {
-      const w = mount.clientWidth, h = mount.clientHeight;
-      if (!w || !h) return;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h, true);
-      // Re-centre as the layout settles (multiple resize events fire on load),
-      // but never once the user has taken control of the camera.
-      if (!userMovedRef.current && fitViewRef.current) fitViewRef.current();
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(mount);
-
     return () => {
       cancelAnimationFrame(raf);
-      ro.disconnect();
       controls.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
@@ -975,7 +967,7 @@ function Builder3DInner() {
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L7 · scroll-fit</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L8 · canvas-fix</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
