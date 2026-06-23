@@ -530,6 +530,7 @@ export default function Builder3DPage() {
   const controlsRef = useRef(null);
   const fitSigRef = useRef('');
   const fitViewRef = useRef(null);
+  const userMovedRef = useRef(false);
 
   // A project is a list of building modules (House + Extension + Garage…) plus
   // project-level markup. The controls edit the active module.
@@ -589,6 +590,7 @@ export default function Builder3DPage() {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.target.set(0, 2.5, 0);
+    controls.addEventListener('start', () => { userMovedRef.current = true; });
     cameraRef.current = camera;
     controlsRef.current = controls;
 
@@ -641,6 +643,9 @@ export default function Builder3DPage() {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, true);
+      // Re-centre as the layout settles (multiple resize events fire on load),
+      // but never once the user has taken control of the camera.
+      if (!userMovedRef.current && fitViewRef.current) fitViewRef.current();
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -683,6 +688,7 @@ export default function Builder3DPage() {
     const sig = String(projModules.length);
     if (sig !== fitSigRef.current) {
       fitSigRef.current = sig;
+      userMovedRef.current = false; // re-centre on first build / module add/remove
       requestAnimationFrame(() => requestAnimationFrame(() => fitViewRef.current && fitViewRef.current()));
     }
   }, [projModules]);
