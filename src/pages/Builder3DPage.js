@@ -716,6 +716,33 @@ export default function Builder3DPage() {
     return () => clearTimeout(id);
   }, [modules, ohpPct, vatPct, price]);
 
+  // Frame the whole project: centre + zoom the camera on the combined bounding
+  // box of every module. Also composes the PDF snapshot nicely.
+  const fitView = useCallback(() => {
+    const cam = cameraRef.current, ctr = controlsRef.current;
+    const mods = quote?.modules;
+    if (!cam || !ctr || !mods?.length) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 3;
+    mods.forEach((mod) => {
+      const g = mod.geometry; if (!g?.outline) return;
+      const ox = mod.offset?.x || 0, oz = mod.offset?.z || 0;
+      const xs = g.outline.map((p) => p.x), zs = g.outline.map((p) => p.z);
+      minX = Math.min(minX, ox + Math.min(...xs)); maxX = Math.max(maxX, ox + Math.max(...xs));
+      minZ = Math.min(minZ, oz + Math.min(...zs)); maxZ = Math.max(maxZ, oz + Math.max(...zs));
+      const L = Math.max(...xs) - Math.min(...xs), W = Math.max(...zs) - Math.min(...zs);
+      const h = g.wallHeight * g.storeys + (Math.min(L, W) / 2) * Math.tan((g.roofPitch * Math.PI) / 180);
+      maxY = Math.max(maxY, h + (g.type === 'house' ? 1.5 : 0));
+    });
+    if (!isFinite(minX)) return;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, cy = maxY / 2;
+    const radius = Math.max(maxX - minX, maxZ - minZ, maxY) * 0.5 || 6;
+    const dist = radius / Math.tan((cam.fov * Math.PI) / 360) * 1.5 + radius;
+    ctr.target.set(cx, cy, cz);
+    cam.position.set(cx + dist * 0.7, cy + dist * 0.6, cz + dist * 0.9);
+    cam.lookAt(cx, cy, cz);
+    ctr.update();
+  }, [quote]);
+
   // Auto-frame the model on first load and whenever the set of modules changes
   // (added/removed) — not on every param tweak, so it won't fight manual orbit.
   const fitSigRef = useRef('');
@@ -876,32 +903,6 @@ export default function Builder3DPage() {
   };
 
   // Frame the whole project: centre + zoom the camera on the combined bounding
-  // box of every module. Also composes the PDF snapshot nicely.
-  const fitView = useCallback(() => {
-    const cam = cameraRef.current, ctr = controlsRef.current;
-    const mods = quote?.modules;
-    if (!cam || !ctr || !mods?.length) return;
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxY = 3;
-    mods.forEach((mod) => {
-      const g = mod.geometry; if (!g?.outline) return;
-      const ox = mod.offset?.x || 0, oz = mod.offset?.z || 0;
-      const xs = g.outline.map((p) => p.x), zs = g.outline.map((p) => p.z);
-      minX = Math.min(minX, ox + Math.min(...xs)); maxX = Math.max(maxX, ox + Math.max(...xs));
-      minZ = Math.min(minZ, oz + Math.min(...zs)); maxZ = Math.max(maxZ, oz + Math.max(...zs));
-      const L = Math.max(...xs) - Math.min(...xs), W = Math.max(...zs) - Math.min(...zs);
-      const h = g.wallHeight * g.storeys + (Math.min(L, W) / 2) * Math.tan((g.roofPitch * Math.PI) / 180);
-      maxY = Math.max(maxY, h + (g.type === 'house' ? 1.5 : 0));
-    });
-    if (!isFinite(minX)) return;
-    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, cy = maxY / 2;
-    const radius = Math.max(maxX - minX, maxZ - minZ, maxY) * 0.5 || 6;
-    const dist = radius / Math.tan((cam.fov * Math.PI) / 360) * 1.5 + radius;
-    ctr.target.set(cx, cy, cz);
-    cam.position.set(cx + dist * 0.7, cy + dist * 0.6, cz + dist * 0.9);
-    cam.lookAt(cx, cy, cz);
-    ctr.update();
-  }, [quote]);
-
   const STRING_KEYS = ['wallType', 'roofCovering', 'roofType', 'shape'];
   const set = (key) => (e) => {
     const v = e.target.value;
