@@ -28,6 +28,10 @@ const MODELS = {
   FAST: 'claude-haiku-4-5-20251001',
   STANDARD: 'claude-sonnet-4-6',
   FRONTIER: 'claude-fable-5',
+  // Accurate takeoff/agent model — Opus-tier reasoning at ~half Fable's cost.
+  // Used by the BOQ takeoff paths (agentRunner, agenticTakeoff) so an automated
+  // job matches the quality of running it by hand in the Claude front-end.
+  OPUS: 'claude-opus-4-8',
 };
 
 // ── Pricing, USD per token ──────────────────────────────────────────────────
@@ -77,7 +81,7 @@ const MAX_TOKENS = {
   VALIDATION: 6000,  // Stage 1b — corrections array
   FINDINGS: 4000,    // narrative report JSON
   SCALE_READER: 2000,// per-drawing measurement JSON
-  AGENT: 12000,      // one agent turn (narration + tool calls)
+  AGENT: 24000,      // one agent (Atlas) turn — raised for Opus 4.8 adaptive thinking + large batched BOQ items (streams, so no timeout risk)
 };
 
 function computeCost(model, u) {
@@ -181,9 +185,16 @@ function buildBody({ model, system, messages, maxTokens, thinking, tools, toolCh
   if (tools && tools.length) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
 
+  // Opus 4.6/4.7/4.8 reject budget_tokens AND sampling params (400). They use
+  // adaptive thinking — which, unlike Fable, is OFF unless explicitly requested —
+  // so a truthy `thinking` from the caller maps to { type: 'adaptive' }.
+  const isAdaptiveOpus = /opus-4-(6|7|8)/.test(model);
   if (isFrontier) {
-    // Fable: adaptive thinking only — never send a thinking block (400s).
+    // Fable: thinking is always on — never send a thinking block (400s).
     // Control depth via effort; sampling params are not accepted.
+    if (effort) body.output_config = { effort };
+  } else if (isAdaptiveOpus) {
+    if (thinking) body.thinking = { type: 'adaptive' };
     if (effort) body.output_config = { effort };
   } else {
     if (thinking) body.thinking = thinking;
