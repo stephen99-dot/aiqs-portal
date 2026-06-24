@@ -2176,11 +2176,25 @@ ${summary}`);
     const wantsDocumentsRaw = /\bgenerate\b|generate\s*(the\s*)?(document|boq|report|excel|file|findings)|create\s*(the\s*)?(boq|report|document|excel)|download\s*(the\s*)?(boq|report|document|excel|file)|produce\s*(the\s*)?(boq|report|document)|make\s*(me\s*)?(the\s*)?(boq|report|document)|give\s*me\s*(the\s*)?(document|boq|report|file|excel)|\.xlsx|\.docx|findings\s*report/i.test(message || '');
     // Detect if text-only chat describes a construction project worth pricing
     // This triggers the deterministic pricing pipeline even without file uploads
-    const describesPricingProject = !hasFiles && !wantsDocumentsRaw && /\b(extension|loft\s*conv|storey|refurb|renovation|conversion|new\s*build|garage|kitchen\s*ext|rear\s*ext|side\s*ext|wrap.?around|dormer|basement|annex|granny\s*flat|garden\s*room|orangery|conservatory|strip\s*out|rewire|repoint|damp\s*proof|heritage|listed\s*build|period\s*property|victorian|edwardian|georgian|whole\s*house|internal\s*&?\s*external|complete\s*refurb|gut\s*renovat|full\s*renovat)\b/i.test(allConvText)
+    const describesPricingProject = !hasFiles && /\b(extension|loft\s*conv|storey|refurb|renovation|conversion|new\s*build|garage|kitchen\s*ext|rear\s*ext|side\s*ext|wrap.?around|dormer|basement|annex|granny\s*flat|garden\s*room|orangery|conservatory|strip\s*out|rewire|repoint|damp\s*proof|heritage|listed\s*build|period\s*property|victorian|edwardian|georgian|whole\s*house|internal\s*&?\s*external|complete\s*refurb|gut\s*renovat|full\s*renovat)\b/i.test(allConvText)
       && /\b(\d+\s*m[2²]|\d+\s*sq|\d+m\s*x\s*\d+m|\d+\s*metre|\d+\s*meter|\d+\s*foot|\d+\s*ft|bedroom|bathroom|kitchen|open\s*plan|room|floor|storey|story)\b/i.test(allConvText);
-    const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocumentsRaw; // files uploaded OR text describes a project = extract phase
     const sessionId = req.body.session_id || null;
     let wantsDocuments = wantsDocumentsRaw;
+    // A single message can BOTH describe a job to price AND ask for the documents
+    // ("price this up … give me a BOQ + findings report"). If documents are
+    // requested but this session has no measured take-off yet, MEASURE first
+    // instead of dead-ending on "I can't find the locked quantities".
+    let sessionHasTakeoff = false;
+    if (sessionId && benchmarkStore) {
+      try {
+        const _t = benchmarkStore.getTakeoffBySession(db, sessionId);
+        sessionHasTakeoff = !!(_t && _t.items && _t.items.length > 0);
+      } catch (e) {}
+    }
+    if (wantsDocuments && !sessionHasTakeoff && (hasFiles || describesPricingProject)) {
+      wantsDocuments = false; // nothing measured yet — extract first, then they can generate
+    }
+    const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocuments; // files OR a described project = extract phase
     let downloadFiles = null;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
@@ -3252,34 +3266,15 @@ CRITICAL RULES:
         if (benchmarkStore) benchmarkStore.updateTakeoff(db, lockedTakeoff.id, { status: 'confirmed' });
 
       } else {
-        // ⚠️ NO LOCKED TAKEOFF — block generation, tell user clearly
-        // Never silently generate from conversation context — that causes wrong projects
+        // ⚠️ NO LOCKED TAKEOFF for THIS session — measure first.
+        // Do NOT reference take-offs from other sessions: that surfaces an
+        // unrelated job and confuses the user. Prompt to measure THIS one —
+        // works for text-only estimates as well as drawings.
         console.log('[Stage 3] No locked takeoff for session:', sessionId, '— blocking');
         wantsDocuments = false;
+        reply = `I don't have a measured take-off for this job yet, so there's nothing to turn into documents.
 
-        // Check if user has any recent takeoff at all (maybe session mismatch)
-        let latestTakeoff = null;
-        if (benchmarkStore) {
-          try {
-            latestTakeoff = db.prepare(
-              'SELECT id, project_name, created_at FROM quantity_takeoffs WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
-            ).get(userId);
-          } catch(e) {}
-        }
-
-        if (latestTakeoff) {
-          reply = `I can't find the locked quantities for this session.
-
-Your most recent quantity takeoff was for **${latestTakeoff.project_name}** (ref: ${latestTakeoff.id}).
-
-To generate documents, please either:
-• Upload your drawings again in this chat to re-run the quantity takeoff, or
-• Start a new chat and upload the drawings fresh`;
-        } else {
-          reply = `To generate documents I need to run a quantity takeoff first.
-
-Please upload your drawings (PDF, images, or ZIP) and I'll extract all measurements. Once quantities are locked you can say "generate documents" and the total will be deterministic.`;
-        }
+Describe the scope of works (or upload drawings) and I'll measure and price it first. Once the quantities are ready, say "generate documents" and I'll produce the Excel BOQ and Word Findings Report.`;
       }
 
       if (pricedResult && pricedResult.sections && pricedResult.sections.length > 0) {
