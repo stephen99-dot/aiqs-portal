@@ -20,6 +20,27 @@ slab quantity). Delete it once you have real jobs.
 Exit codes: `0` all good · `1` at least one job regressed (CI fails) · `2` no
 fixtures directory.
 
+## Parity report (pipeline vs hand-run)
+
+`parity.js` answers a different question from the regression gate: **how closely
+does the automated pipeline reproduce a job done by hand in the Claude front
+end?** It uses the same comparison engine (`diff.compareJob`) but reports a
+median/worst value delta and an aggregate verdict instead of passing or failing —
+the artifact to show when someone asks "is the automation as accurate as doing it
+manually?".
+
+```bash
+node server/evals/parity.js                       # human-readable report
+node server/evals/parity.js --threshold 5 --json  # machine-readable
+```
+
+Per fixture: `expected.json` = the hand-run / human-blessed takeoff, `actual.json`
+= the items the upgraded pipeline produced for the *same* drawings. To populate it:
+run the job through the portal (now on Opus 4.8), export the locked takeoff items
+as `actual.json`, and save your hand-run numbers as `expected.json`. `parity.js`
+never fails the build — use `runEval.js` for the CI gate.
+
+
 ## Fixture layout
 
 ```

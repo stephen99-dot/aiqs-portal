@@ -194,7 +194,10 @@ function buildBody({ model, system, messages, maxTokens, thinking, tools, toolCh
     // Control depth via effort; sampling params are not accepted.
     if (effort) body.output_config = { effort };
   } else if (isAdaptiveOpus) {
-    if (thinking) body.thinking = { type: 'adaptive' };
+    // display:'summarized' is required — Opus 4.7/4.8 default to 'omitted', which
+    // streams empty thinking blocks and blanks the live "thinking" UI (AgentPanel
+    // and the chat ThinkingBlock). Summarized matches what the Claude front end shows.
+    if (thinking) body.thinking = { type: 'adaptive', display: 'summarized' };
     if (effort) body.output_config = { effort };
   } else {
     if (thinking) body.thinking = thinking;
