@@ -54,9 +54,8 @@ async function buildDrawingGroundTruth(tmpDir, extractedNames) {
 const { TOOL_DEFINITIONS, executeTool, updateRun, appendMessage, setActivity, emit } = agent;
 const { callModel, MODELS, MAX_TOKENS: WRAP_TOKENS } = require('./anthropicClient');
 
-const MODEL = MODELS.STANDARD;
+const MODEL = MODELS.OPUS;
 const MAX_ITERATIONS = 60;
-const THINKING_BUDGET = 8000;
 const MAX_TOKENS = WRAP_TOKENS.AGENT;
 
 // At these iterations we inject a budget-pressure note alongside the tool
@@ -149,7 +148,11 @@ async function callClaudeStreaming({ apiKey, system, messages, tools, runId, ite
     messages,
     tools,
     maxTokens: MAX_TOKENS,
-    thinking: { type: 'enabled', budget_tokens: THINKING_BUDGET },
+    // Opus 4.8: adaptive thinking (no fixed budget) + high effort, so the agent
+    // reasons through measurements between tool calls like a senior QS would —
+    // matching what you get running the job by hand in the Claude front-end.
+    thinking: { type: 'adaptive' },
+    effort: 'high',
     stream: true,
     // Phase 2 caching: the system prompt is a constant and the message history
     // (drawings + rendered page images in tool_results) grows every iteration but

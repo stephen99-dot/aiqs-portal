@@ -92,8 +92,8 @@ async function runAgenticTakeoff({
   zipData = null,
   floorAreaM2 = null,
   projectType = '',
-  model = MODELS.FRONTIER,
-  effort = 'medium',
+  model = MODELS.OPUS,
+  effort = 'high',
   userId,
   onProgress = () => {},
 }) {
@@ -103,7 +103,12 @@ async function runAgenticTakeoff({
   const common = {
     model, system: extractPrompt, userId,
     cacheSystem: true, cacheMessages: true,
-    ...(model === MODELS.FRONTIER ? { effort } : { thinking: { type: 'enabled', budget_tokens: 4000 } }),
+    // Fable controls depth via effort alone; Opus 4.6-4.8 and Sonnet 4.6 take
+    // adaptive thinking + effort (anthropicClient.buildBody maps each per-model).
+    // Only pre-4.6 models fall back to a fixed thinking budget.
+    ...(/fable|opus-4-(6|7|8)|sonnet-4-6/.test(model)
+      ? { thinking: { type: 'adaptive' }, effort }
+      : { thinking: { type: 'enabled', budget_tokens: 4000 } }),
   };
 
   const call = (extraUser, tool, action, maxTokens) => callModel({
