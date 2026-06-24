@@ -1461,6 +1461,14 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     } else if (BASE_RATES[item.key]) {
       const bk = BASE_RATES[item.key];
       const itemFam = unitFamily(item.unit), keyFam = unitFamily(bk.unit);
+      const _desc = String(item.description || '').toLowerCase();
+      // Same-unit wrong-key: the whole-system "extend central heating to a new
+      // extension" allowance (heating_extension, £4,200/Item) applied to a single
+      // radiator move/relocation. Both units say Item, so the family guard below
+      // can't see it — price it as a radiator instead.
+      const heatingMisuse = item.key === 'heating_extension'
+        && /radiator/.test(_desc) && /relocat|reposition|\bmove\b|shift|existing/.test(_desc)
+        && !/new\s*extension|throughout|whole|entire/.test(_desc);
       if (itemFam && keyFam && itemFam !== 'item' && keyFam !== 'item' && itemFam !== keyFam) {
         // Wrong-key collision: the library rate is per bk.unit but this line is per
         // item.unit (e.g. a built cavity wall keyed to `cavity_wall_ties_ss`, which
@@ -1469,6 +1477,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
         const cs = currency === 'EUR' ? '€' : '£';
         warnings.push(`Key '${item.key}' prices per ${bk.unit} but the line is per ${item.unit} — likely the wrong rate key. Ignored the library rate, used ${rateSource} ${cs}${Math.round(rate * 100) / 100}/${item.unit}.`);
+      } else if (heatingMisuse) {
+        rate = (item.assumed_rate || estimateFallbackRate(item)) * locFactor;
+        rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
+        const cs = currency === 'EUR' ? '€' : '£';
+        warnings.push(`Key 'heating_extension' (extend whole central heating to a new extension) was applied to a single-radiator move — wrong rate. Re-estimated at ${rateSource} ${cs}${Math.round(rate * 100) / 100}/${item.unit}.`);
       } else {
         rate = bk.rate * locFactor;
         rateSource = 'base_library';
