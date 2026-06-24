@@ -119,15 +119,15 @@ function CodeBlock({ code, lang, mono, color, borderColor, mutedColor, onOpenArt
 }
 
 function Markdown({ content, color, mutedColor, borderColor, mono, onOpenArtifact }) {
-  const base = { color, fontSize: 'inherit', lineHeight: 1.65 };
+  const base = { color, fontSize: 'inherit', lineHeight: 1.7 };
   const components = useMemo(() => ({
-    p:  ({node, ...p}) => <p {...p} style={{ margin: '0 0 10px', ...base }} />,
-    h1: ({node, ...p}) => <h1 {...p} style={{ fontSize: 17, fontWeight: 700, margin: '14px 0 8px', ...base }} />,
-    h2: ({node, ...p}) => <h2 {...p} style={{ fontSize: 15.5, fontWeight: 700, margin: '14px 0 6px', ...base }} />,
-    h3: ({node, ...p}) => <h3 {...p} style={{ fontSize: 14, fontWeight: 700, margin: '12px 0 4px', ...base }} />,
-    ul: ({node, ...p}) => <ul {...p} style={{ margin: '0 0 10px', paddingLeft: 20, ...base }} />,
-    ol: ({node, ...p}) => <ol {...p} style={{ margin: '0 0 10px', paddingLeft: 20, ...base }} />,
-    li: ({node, ...p}) => <li {...p} style={{ margin: '2px 0', ...base }} />,
+    p:  ({node, ...p}) => <p {...p} style={{ margin: '0 0 12px', ...base }} />,
+    h1: ({node, ...p}) => <h1 {...p} style={{ fontSize: 18, fontWeight: 700, margin: '20px 0 8px', ...base }} />,
+    h2: ({node, ...p}) => <h2 {...p} style={{ fontSize: 16, fontWeight: 700, margin: '18px 0 6px', ...base }} />,
+    h3: ({node, ...p}) => <h3 {...p} style={{ fontSize: 14.5, fontWeight: 700, margin: '14px 0 4px', ...base }} />,
+    ul: ({node, ...p}) => <ul {...p} style={{ margin: '0 0 12px', paddingLeft: 22, ...base }} />,
+    ol: ({node, ...p}) => <ol {...p} style={{ margin: '0 0 12px', paddingLeft: 22, ...base }} />,
+    li: ({node, ...p}) => <li {...p} style={{ margin: '4px 0', ...base }} />,
     strong: ({node, ...p}) => <strong {...p} style={{ fontWeight: 700, color }} />,
     em: ({node, ...p}) => <em {...p} style={{ fontStyle: 'italic' }} />,
     a:  ({node, ...p}) => <a {...p} style={{ color: '#60A5FA', textDecoration: 'underline', textUnderlineOffset: 2 }} target="_blank" rel="noopener noreferrer" />,
@@ -425,6 +425,7 @@ export default function ChatPage() {
 
   // ── Copy feedback + smart auto-scroll ──────────────────────────────
   const [copiedIdx, setCopiedIdx] = useState(null);
+  const [showJump, setShowJump] = useState(false);
   const userScrolledUp = useRef(false);
   const msgsRef = useRef(null);
 
@@ -464,6 +465,7 @@ export default function ChatPage() {
     const onScroll = () => {
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       userScrolledUp.current = distFromBottom > 120;
+      setShowJump(distFromBottom > 200);
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
@@ -953,7 +955,7 @@ export default function ChatPage() {
           </div>
         )}
         <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexDirection:isUser?'row-reverse':'row' }}>
-          <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
+          <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:'transparent', color:isUser?readableOn(c.accent):c.textMuted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
             {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
           <div style={{
@@ -1445,7 +1447,7 @@ export default function ChatPage() {
             {sending && !streamingText && <Thinking/>}
             {sending && streamingText && (
               <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
-                <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}><RulerIcon size={15} /></div>
+                <div style={{ width:34, height:34, borderRadius:10, background:'transparent', color:c.textMuted, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}><RulerIcon size={15} /></div>
                 <div style={{ maxWidth:'100%', padding:'1px 0', background:'transparent', color:c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
                   <Markdown
                     content={streamingText}
@@ -1542,7 +1544,15 @@ export default function ChatPage() {
           )}
 
           {/* Input */}
-          <div style={{ padding: mobile?'8px 10px 12px':'10px 20px 14px', background:c.chat, borderTop:`1px solid ${c.chatBorder}`, flexShrink:0 }}>
+          <div style={{ padding: mobile?'8px 10px 12px':'10px 20px 14px', background:c.chat, borderTop:`1px solid ${c.chatBorder}`, flexShrink:0, position:'relative' }}>
+            {/* Jump to latest — appears when scrolled up mid-thread (claude.ai behaviour) */}
+            {showJump && (
+              <button onClick={() => { userScrolledUp.current = false; setShowJump(false); bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }}
+                title="Jump to latest"
+                style={{ position:'absolute', top:-46, left:'50%', transform:'translateX(-50%)', width:34, height:34, borderRadius:'50%', background:c.inputBg, border:`1px solid ${c.inputBorder}`, color:c.textMuted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 10px rgba(0,0,0,0.18)', zIndex:5 }}>
+                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+              </button>
+            )}
             <form onSubmit={handleSend} style={{ display:'flex', alignItems:'flex-end', gap:8, background:c.inputBg, border:`1px solid ${c.inputBorder}`, borderRadius:14, padding:'7px 8px 7px 12px' }}>
               <button type="button" onClick={() => fileRef.current.click()}
                 style={{ background:'none', border:'none', color:c.textMuted, cursor:'pointer', padding:'6px', borderRadius:8, display:'flex', alignItems:'center', flexShrink:0 }} title="Upload files">
