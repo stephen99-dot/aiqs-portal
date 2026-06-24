@@ -12,6 +12,7 @@ const { callModel, MODELS, MAX_TOKENS, computeCost } = require('./anthropicClien
 const { runAgenticTakeoff, shouldUseAgenticTakeoff } = require('./agenticTakeoff');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
+const messageCredits = require('./messageCredits');
 
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
@@ -1729,27 +1730,12 @@ async function chatHandler(req, res) {
       return sendError(403, { error: 'Your account has been suspended. Contact support.', suspended: true, reason: req.user.suspended_reason || null });
     }
 
-    const PLAN_LIMITS = {
-      starter:      { messages: 10,  label: 'Starter' },
-      professional: { messages: 100, label: 'Professional' },
-      premium:      { messages: 200, label: 'Premium' },
-      admin:        { messages: -1,  label: 'Admin' },
-    };
-
     if (req.user.role !== 'admin') {
-      const plan = req.user.plan || 'starter';
-      const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.starter;
-      const bonusMsgs = req.user.bonus_messages || 0;
-      // Use admin-set monthly_quota if present, otherwise fall back to plan default
-      const baseLimit = (req.user.monthly_quota != null && req.user.monthly_quota >= 0) ? req.user.monthly_quota : limits.messages;
-      const effectiveLimit = baseLimit + bonusMsgs;
-      if (effectiveLimit <= 0) {
-        return sendError(429, { error: `You have no message credits. Contact your admin to update your plan.`, limit_type: 'messages', used: 0, limit: 0, plan });
-      }
-      const cycleStart = getBillingCycleStart(req.user);
-      const used = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, cycleStart);
-      if (used.c >= effectiveLimit) {
-        return sendError(429, { error: `You've used all ${effectiveLimit} messages this month on the ${limits.label} plan. Upgrade to Professional for 100 messages/month, or contact us to add more credits.`, limit_type: 'messages', used: used.c, limit: effectiveLimit, plan });
+      // Message credits are a simple, admin-set, persistent balance (no monthly
+      // reset). Each message spends one; we gate when the balance hits zero.
+      const msgBalance = messageCredits.getMessageBalance(userId);
+      if (msgBalance.total <= 0) {
+        return sendError(429, { error: `You have no message credits left. Contact us to top up your account.`, limit_type: 'messages', used: msgBalance.used, limit: msgBalance.used, plan: req.user.plan || 'starter' });
       }
     }
 
@@ -2153,6 +2139,8 @@ ${summary}`);
       db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cache_creation_input_tokens, cache_read_input_tokens, model_tier, cost_estimate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
         'ul_' + uuidv4().slice(0, 8), userId, 'chat_message', (message || '').substring(0, 200), modelUsed, tokensIn, tokensOut, cacheWrite, cacheRead, modelTier, costEstimate
       );
+      // Spend one message credit for this message (admins are unlimited).
+      try { messageCredits.consumeMessageCredit(userId); } catch (ce) { console.error('[MsgCredit] consume error:', ce.message); }
     } catch(ue) { console.error('[Usage] Log error:', ue.message); }
 
     // Log to activity feed so admins can see what users are doing.
@@ -3726,14 +3714,16 @@ Please upload your drawings (PDF, images, or ZIP) and I'll extract all measureme
     let quotaInfo = null;
     if (req.user.role !== 'admin') {
       const qPlan = req.user.plan || 'starter';
-      const qMonth = getBillingCycleStart(req.user);
-      const qMsgs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(userId, qMonth).c;
-      const qDocs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(userId, qMonth).c;
-      const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(userId, qMonth).c;
-      const defaultMsgLimit = qPlan === 'starter' ? 10 : qPlan === 'professional' ? 100 : 200;
-      const qMsgLimit = (req.user.monthly_quota != null && req.user.monthly_quota >= 0) ? req.user.monthly_quota : defaultMsgLimit;
-      const defaultDocLimit = qPlan === 'starter' ? 0 : qPlan === 'professional' ? 10 : 20;
-      const qDocLimit = (req.user.monthly_boq_quota != null && req.user.monthly_boq_quota >= 0) ? req.user.monthly_boq_quota : defaultDocLimit;
+      // Both balances are persistent admin-set top-ups (no monthly reset).
+      // remaining = current balance; used = lifetime; limit = used + remaining
+      // so the bar reads e.g. 2 / 5 and grows when topped up.
+      const msgBal = messageCredits.getMessageBalance(userId);
+      const boqBal = boqCredits.getBoqBalance(userId);
+      const qMsgs = msgBal.used;
+      const qDocs = boqBal.used;
+      const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
+      const qMsgLimit = qMsgs + msgBal.total;
+      const qDocLimit = qDocs + boqBal.total;
       quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 

@@ -12,6 +12,7 @@ const { logActivity } = require('./activityRoutes');
 const { startPipelineRun } = require('./pipelineRoutes');
 const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
+const { getMessageBalance } = require('./messageCredits');
 const { claimPendingCredits } = require('./pendingCredits');
 
 const router = express.Router();
@@ -482,7 +483,7 @@ router.post('/auth/register', async (req, res) => {
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
-    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 10, 0, 0)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits, message_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0, 0, 0, 0)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
     seedDefaultRates(id);
 
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -631,7 +632,7 @@ router.get('/auth/google/callback', async (req, res) => {
       // New user — create account
       const id = uuidv4();
       const role = email === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
-      db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota, monthly_boq_quota, free_credits) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 10, 0, 0)")
+      db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota, monthly_boq_quota, free_credits, message_credits) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 0, 0, 0, 0)")
         .run(id, email, fullName, googleId, avatar, role);
       seedDefaultRates(id);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -772,16 +773,14 @@ router.get('/usage', authMiddleware, (req, res) => {
   const cycleStart = getBillingCycleStart(user);
   const monthProjects = db.prepare('SELECT id, title, project_type, status, created_at FROM projects WHERE user_id = ? AND created_at >= ? ORDER BY created_at DESC').all(req.user.id, cycleStart);
 
-  // Message usage this billing cycle
-  let messagesUsed = 0;
-  try {
-    const row = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='chat_message' AND created_at>=?").get(req.user.id, cycleStart);
-    messagesUsed = row?.c || 0;
-  } catch(e) {}
+  // Message credits — a persistent admin-set balance (no monthly reset).
+  // `messagesRemaining` is the live balance; `used` is lifetime; `limit` is
+  // used + remaining so the dashboard bar reads e.g. 3 / 100.
+  const msgBalance = getMessageBalance(req.user.id);
+  const messagesRemaining = msgBalance.isAdmin ? 999 : msgBalance.total;
+  const messagesUsed = msgBalance.isAdmin ? 0 : msgBalance.used;
+  const messagesLimit = msgBalance.isAdmin ? 999 : (messagesUsed + messagesRemaining);
   const plan = user.plan || 'starter';
-  const defaultMsgLimit = plan === 'starter' ? 10 : plan === 'professional' ? 100 : 200;
-  const messagesLimit = (user.monthly_quota != null && user.monthly_quota >= 0) ? user.monthly_quota : defaultMsgLimit;
-  const messagesRemaining = Math.max(0, messagesLimit - messagesUsed);
 
   // BOQ credits — the single spendable balance shared by the chatbot and the
   // Submit-Drawings page. `boqLimit` is the effective granted total (used +
@@ -816,39 +815,32 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
   const users = db.prepare("SELECT * FROM users WHERE role != 'system' ORDER BY created_at DESC").all();
   res.json({ users: users.map(u => {
     const planInfo = getUserPlanInfo(u);
-    const userCycleStart = getBillingCycleStart(u);
-    // Count BOQ docs generated this billing cycle (exclude revisions) PLUS
-    // Submit Drawings submissions, which also consume a BOQ credit.
-    let docsUsed = 0;
-    try {
-      const docsGen = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_generated' AND created_at>=?").get(u.id, userCycleStart);
-      const docsRev = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND created_at>=?").get(u.id, userCycleStart);
-      let dlSubs = 0;
-      try {
-        dlSubs = db.prepare("SELECT COUNT(*) AS c FROM drawing_submissions WHERE user_id = ? AND created_at >= ? AND (pipedream_status IS NULL OR pipedream_status != 'manual')").get(u.id, userCycleStart).c || 0;
-      } catch(e) {}
-      docsUsed = Math.max(0, (docsGen?.c || 0) - (docsRev?.c || 0)) + dlSubs;
-    } catch(e) {}
     const plan = u.plan || 'starter';
-    const defaultDocLimit = plan === 'premium' ? 20 : plan === 'professional' ? 10 : 0;
-    const docsLimit = (u.monthly_boq_quota != null && u.monthly_boq_quota >= 0) ? u.monthly_boq_quota : defaultDocLimit;
-    // The single spendable BOQ balance this user has left right now (granted +
-    // purchased + monthly allowance remaining). This is what the Users area
-    // shows and what ticks down when they submit a job or generate a BOQ.
-    const boqBalance = u.role === 'admin' ? Infinity : getBoqBalance(u.id).total;
+    // BOQ + message balances are persistent admin-set top-ups (no monthly
+    // reset). `used` is lifetime; `*_limit` is used + remaining so the Users
+    // area bars read e.g. 2 / 5. `boq_remaining` / `message_credits` are the
+    // live spendable balances that tick down on use and up on top-up/purchase.
+    const boqBal = u.role === 'admin' ? { total: Infinity, used: 0 } : getBoqBalance(u.id);
+    const msgBal = u.role === 'admin' ? { total: Infinity, used: 0 } : getMessageBalance(u.id);
+    const docsUsed = boqBal.used;
+    const docsLimit = boqBal.total === Infinity ? null : docsUsed + boqBal.total;
+    const msgsUsed = msgBal.used;
+    const msgsLimit = msgBal.total === Infinity ? null : msgsUsed + msgBal.total;
     return {
       id: u.id, email: u.email, full_name: u.full_name, fullName: u.full_name,
       company: u.company, phone: u.phone, role: u.role,
       plan: plan, planLabel: planInfo.planLabel,
       quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining,
-      messages_used: planInfo.used, monthly_quota: u.monthly_quota || 0,
+      messages_used: msgsUsed, messages_limit: msgsLimit,
+      message_credits: u.role === 'admin' ? null : (u.message_credits || 0),
+      monthly_quota: u.monthly_quota || 0,
       atLimit: planInfo.atLimit,
       suspended: u.suspended || 0, suspended_reason: u.suspended_reason,
       bonus_messages: u.bonus_messages || 0, bonus_docs: u.bonus_docs || 0,
       monthly_boq_quota: u.monthly_boq_quota || 0,
       free_credits: u.free_credits || 0,
       docs_used: docsUsed, docs_limit: docsLimit,
-      boq_remaining: boqBalance === Infinity ? null : boqBalance,
+      boq_remaining: boqBal.total === Infinity ? null : boqBal.total,
       has_estimator: u.has_estimator ? 1 : 0,
       created_at: u.created_at, project_count: 0,
     };
@@ -865,7 +857,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     // Generate a random temporary password — user will set their own via magic link
     const tempPassword = crypto.randomBytes(24).toString('hex');
     const passwordHash = await bcrypt.hash(tempPassword, 12);
-    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 10, 0, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0, 0, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     seedDefaultRates(id);
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     logActivity({ event_type: 'signup', title: fullName + ' added by admin', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });
@@ -1145,9 +1137,18 @@ router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, re
       db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(bonus_messages, bonus_docs, req.params.id);
     }
+    // Message balance — only touched when explicitly sent, so callers that omit
+    // it don't wipe a user's messages. Lets an admin set the spendable count.
+    const hasMsgCredits = req.body.message_credits !== undefined && req.body.message_credits !== null && req.body.message_credits !== '';
+    const message_credits = Math.max(0, parseInt(req.body.message_credits) || 0);
+    if (hasMsgCredits) {
+      db.prepare('UPDATE users SET message_credits = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(message_credits, req.params.id);
+    }
     const balance = getBoqBalance(req.params.id);
-    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_messages + ' bonus messages, ' + bonus_docs + ' bonus docs' + (hasFree ? ', ' + free_credits + ' free credits' : '') + ' → ' + balance.total + ' BOQ balance', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ success: true, bonus_messages, bonus_docs, free_credits: hasFree ? free_credits : (user.free_credits || 0), boq_balance: balance.total, breakdown: balance });
+    const msgBalance = getMessageBalance(req.params.id);
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_docs + ' bonus docs' + (hasFree ? ', ' + free_credits + ' free credits' : '') + ' → ' + balance.total + ' BOQ balance' + (hasMsgCredits ? ', ' + message_credits + ' message credits' : ''), user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true, bonus_messages, bonus_docs, free_credits: hasFree ? free_credits : (user.free_credits || 0), boq_balance: balance.total, message_credits: msgBalance.total, breakdown: balance });
   } catch (err) {
     console.error('Set credits error:', err);
     res.status(500).json({ error: 'Failed to update credits' });

@@ -21,7 +21,7 @@ db.exec(`
     phone TEXT,
     role TEXT DEFAULT 'client',
     plan TEXT DEFAULT 'starter',
-    monthly_quota INTEGER DEFAULT 2,
+    monthly_quota INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -844,6 +844,10 @@ const migrations = [
   { column: 'onboarding_completed_at', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_completed_at DATETIME" },
   { column: 'onboarding_skipped', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_skipped INTEGER DEFAULT 0" },
   { column: 'free_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN free_credits INTEGER DEFAULT 0" },
+  // Spendable chatbot-message balance — a persistent top-up number (does not
+  // reset monthly). Admin-set; decremented one per message sent. New accounts
+  // start at 0. Mirrors the BOQ balance (free_credits + bonus_docs).
+  { column: 'message_credits', table: 'users', sql: "ALTER TABLE users ADD COLUMN message_credits INTEGER DEFAULT 0" },
   { column: 'total_projects', table: 'users', sql: "ALTER TABLE users ADD COLUMN total_projects INTEGER DEFAULT 0" },
   // BOQ/Findings files on the project. Historically added lazily by chat.js on
   // first BOQ generation — but the deliverables upload and Builder Pack /

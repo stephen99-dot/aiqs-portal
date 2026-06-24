@@ -1315,7 +1315,7 @@ export default function ChatPage() {
             const low = !atLimit && (limit - used) <= 5;
             const pillColor = atLimit ? '#EF4444' : low ? '#F59E0B' : c.textMuted;
             return (
-              <div title={`${used} of ${limit} messages used this month`} style={{
+              <div title={`${used} of ${limit} messages used`} style={{
                 display:'flex', alignItems:'center', gap:6, padding:'4px 10px', borderRadius:8, flexShrink:0,
                 background: atLimit ? 'rgba(239,68,68,0.08)' : low ? 'rgba(245,158,11,0.06)' : 'transparent',
                 border: `1px solid ${atLimit ? 'rgba(239,68,68,0.2)' : low ? 'rgba(245,158,11,0.15)' : c.topBorder}`,

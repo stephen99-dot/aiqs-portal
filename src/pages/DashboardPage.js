@@ -24,7 +24,7 @@ function UsageBar({ usage, t, user }) {
   if (!usage) return null;
   // Pull BOQ-specific fields from /usage. Fall back to legacy quota/used/remaining
   // (which were really project counts) only if the new fields aren't present yet.
-  const { plan, planLabel, isPayg, monthName } = usage;
+  const { plan, planLabel, isPayg } = usage;
   const quota = usage.boqLimit != null ? usage.boqLimit : usage.quota;
   const used = usage.boqUsed != null ? usage.boqUsed : usage.used;
   const remaining = usage.boqRemaining != null ? usage.boqRemaining : usage.remaining;
@@ -49,7 +49,7 @@ function UsageBar({ usage, t, user }) {
             <ZapIcon size={12} color={t.warning} /> Pay As You Go
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            {used} BOQ{used !== 1 ? 's' : ''} this month · £150 per BOQ
+            <strong style={{ color: t.text }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · £150 per BOQ
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -106,7 +106,7 @@ function UsageBar({ usage, t, user }) {
             <PlanIcon size={12} color={planIconColor} /> {planLabel}
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used{monthName ? ` (${monthName})` : ' this month'}
+            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used
           </span>
         </div>
         <span style={{
@@ -129,9 +129,9 @@ function UsageBar({ usage, t, user }) {
         }}>
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 2 }}>
-              You've used all {quota} BOQs this month
+              You've used all your BOQ credits
             </div>
-            <div style={{ fontSize: 11.5, color: t.textMuted }}>Upgrade your plan or buy an extra BOQ to continue</div>
+            <div style={{ fontSize: 11.5, color: t.textMuted }}>Buy more BOQs to continue</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {plan === 'professional' && (
@@ -166,7 +166,7 @@ function UsageBar({ usage, t, user }) {
           marginTop: 10, fontSize: 12, color: '#F59E0B',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
         }}>
-          <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left this month</span>
+          <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
           {plan === 'professional' && (
             <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
               fontSize: 11.5, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
@@ -183,7 +183,7 @@ function UsageBar({ usage, t, user }) {
 
 function MessageUsageBar({ usage, t }) {
   if (!usage || usage.messagesLimit == null) return null;
-  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel, monthName } = usage;
+  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel } = usage;
   if (messagesLimit <= 0) return null;
 
   const pct = messagesLimit > 0 ? Math.min(100, (messagesUsed / messagesLimit) * 100) : 0;
@@ -208,7 +208,7 @@ function MessageUsageBar({ usage, t }) {
             <ChatIcon size={12} color={planIconColor} /> Messages
           </span>
           <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used{monthName ? ` (${monthName})` : ' this month'}
+            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used
           </span>
         </div>
         <span style={{
@@ -227,12 +227,12 @@ function MessageUsageBar({ usage, t }) {
           marginTop: 10, fontSize: 12.5, color: '#EF4444',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          You've used all {messagesLimit} messages this month — upgrade your plan for more.
+          You've used all {messagesLimit} messages — contact us to top up your balance.
         </div>
       )}
       {!messagesAtLimit && messagesRemaining <= 5 && messagesRemaining > 0 && (
         <div style={{ marginTop: 10, fontSize: 12, color: '#F59E0B' }}>
-          Only {messagesRemaining} message{messagesRemaining !== 1 ? 's' : ''} left this month
+          Only {messagesRemaining} message{messagesRemaining !== 1 ? 's' : ''} left
         </div>
       )}
     </div>
