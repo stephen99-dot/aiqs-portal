@@ -2405,9 +2405,8 @@ ${summary}`);
           },
         };
         const extractCall = (msgs) => callModel({
-          model: MODELS.STANDARD,
+          model: MODELS.OPUS,
           maxTokens: MAX_TOKENS.EXTRACTION,
-          temperature: 0,
           system: extractPrompt,
           messages: msgs,
           tools: [extractTool],
@@ -2430,7 +2429,7 @@ ${summary}`);
               zipData: req.zipData,
               floorAreaM2: req.zipData?.summary?.total_floor_area_m2 || null,
               projectType: projectTypeGuess,
-              model: MODELS.FRONTIER,
+              model: MODELS.OPUS,
               userId,
               onProgress: (p) => { if (req.sseEmit) req.sseEmit({ type: 'progress', stage: p.stage, detail: p.detail }); },
             });
@@ -2701,9 +2700,8 @@ CRITICAL RULES:
               ];
 
               const validationResult = await callModel({
-                model: MODELS.STANDARD,
+                model: MODELS.OPUS,
                 maxTokens: MAX_TOKENS.VALIDATION,
-                temperature: 0,
                 system: validationPrompt,
                 messages: [{ role: 'user', content: validationContent }],
                 tools: [{

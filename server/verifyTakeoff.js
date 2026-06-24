@@ -7,7 +7,7 @@
 // than firing a false positive. Failures carry severity 'error' (must fix) or
 // 'warn' (flag); ok === true means no 'error' failures.
 
-const { getBaseRate, BASE_RATES } = require('./deterministicPricer');
+const { getBaseRate, BASE_RATES, unitFamily } = require('./deterministicPricer');
 
 const ALLOWED_UNITS = new Set(['m', 'm2', 'm²', 'm3', 'm³', 'nr', 'no', 'item', 'sum', 'ls', 'kg', 't', 'hr', 'day', 'week', '%']);
 
@@ -89,6 +89,15 @@ function verifyTakeoff(input = {}) {
     if (!(qty > 0)) add('error', 'BAD_QTY', `Item ${i} "${it.description || it.key}" has non-positive qty (${it.qty}).`, { index: i });
     const known = it.key && getBaseRate(it.key);
     if (!known && !normDesc(it.description)) add('warn', 'NO_RATE_BASIS', `Item ${i} has neither a known rate key nor a description to price from.`, { index: i });
+    // Wrong-key unit collision: a known key whose unit family differs from the line's
+    // (e.g. an m² wall keyed to a per-Nr ties rate). Almost always the wrong key, or
+    // an element that should be split into per-unit keys — make the model fix it.
+    if (known) {
+      const itemFam = unitFamily(it.unit), keyFam = unitFamily(known.unit);
+      if (itemFam && keyFam && itemFam !== 'item' && keyFam !== 'item' && itemFam !== keyFam) {
+        add('error', 'UNIT_KEY_MISMATCH', `Item ${i} "${it.description || it.key}" is measured per ${it.unit} but its rate key '${it.key}' prices per ${known.unit} — pick the right key, or split the element into per-${it.unit} keys.`, { index: i, key: it.key, itemUnit: it.unit, keyUnit: known.unit });
+      }
+    }
   });
 
   // 2) Schedule reconciliation: window/door counts in items vs the parsed schedule.
