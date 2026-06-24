@@ -1282,6 +1282,22 @@ function detectProjectType(items) {
  * @param {Object} options - { contingency_pct, ohp_pct, vat_rate, currency, project_type }
  * @returns {Object} - Complete priced BOQ structure
  */
+// Coarse dimensional family of a unit, used to catch wrong-key collisions where a
+// library rate priced per Nr/item is applied to an m²/m/m³ line (e.g. a built
+// cavity wall keyed to `cavity_wall_ties_ss`, which is priced per Nr). Returns
+// 'area' | 'vol' | 'len' | 'count' | 'mass' | 'time' | 'item' | '' (unknown).
+function unitFamily(u) {
+  const x = String(u || '').trim().toLowerCase().replace(/²/g, '2').replace(/³/g, '3').replace(/\./g, '');
+  if (x === 'm2') return 'area';
+  if (x === 'm3') return 'vol';
+  if (x === 'm' || x === 'lm') return 'len';
+  if (x === 'nr' || x === 'no' || x === 'each' || x === 'ea') return 'count';
+  if (x === 'kg' || x === 't') return 'mass';
+  if (x === 'hr' || x === 'day' || x === 'wk' || x === 'week') return 'time';
+  if (x === 'item' || x === 'sum' || x === 'ls') return 'item';
+  return '';
+}
+
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
   // Input guard: drop ghost/malformed items before pricing so a stray entry
   // (e.g. one with no key and description "undefined", or a non-numeric qty)
@@ -1443,8 +1459,20 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         }
       }
     } else if (BASE_RATES[item.key]) {
-      rate = BASE_RATES[item.key].rate * locFactor;
-      rateSource = 'base_library';
+      const bk = BASE_RATES[item.key];
+      const itemFam = unitFamily(item.unit), keyFam = unitFamily(bk.unit);
+      if (itemFam && keyFam && itemFam !== 'item' && keyFam !== 'item' && itemFam !== keyFam) {
+        // Wrong-key collision: the library rate is per bk.unit but this line is per
+        // item.unit (e.g. a built cavity wall keyed to `cavity_wall_ties_ss`, which
+        // is priced per Nr). Don't apply that rate — estimate from the line's unit.
+        rate = (item.assumed_rate || estimateFallbackRate(item)) * locFactor;
+        rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
+        const cs = currency === 'EUR' ? '€' : '£';
+        warnings.push(`Key '${item.key}' prices per ${bk.unit} but the line is per ${item.unit} — likely the wrong rate key. Ignored the library rate, used ${rateSource} ${cs}${Math.round(rate * 100) / 100}/${item.unit}.`);
+      } else {
+        rate = bk.rate * locFactor;
+        rateSource = 'base_library';
+      }
     } else {
       // Unknown key — use AI assumed rate, or estimate from unit type
       rate = item.assumed_rate || estimateFallbackRate(item) ;
@@ -1763,4 +1791,4 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily };
