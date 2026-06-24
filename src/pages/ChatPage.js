@@ -940,6 +940,7 @@ export default function ChatPage() {
 
   function Message({ msg, idx }) {
     const isUser = msg.role === 'user';
+    const isErr = !isUser && msg.error;
     return (
       <>
         {!isUser && (msg.thinking || msg.pipelineLog) && (
@@ -955,7 +956,15 @@ export default function ChatPage() {
           <div style={{ width:34, height:34, borderRadius:10, background:isUser?c.accent:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}>
             {isUser ? <UserIcon size={15} /> : <RulerIcon size={15} />}
           </div>
-          <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius: isUser ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: isUser ? c.userBubble : c.aiBubble, color: isUser ? readableOn(c.userBubble) : msg.error ? c.error : c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+          <div style={{
+            maxWidth: isUser ? (mobile ? '85%' : '80%') : '100%',
+            padding: isUser ? '11px 15px' : (isErr ? '10px 14px' : '1px 0'),
+            borderRadius: isUser ? '16px 4px 16px 16px' : (isErr ? 10 : 0),
+            background: isUser ? c.userBubble : (isErr ? (dark ? 'rgba(239,68,68,0.08)' : 'rgba(239,68,68,0.06)') : 'transparent'),
+            border: isErr ? '1px solid rgba(239,68,68,0.25)' : 'none',
+            color: isUser ? readableOn(c.userBubble) : (msg.error ? c.error : c.text),
+            fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word',
+          }}>
 
             {/* User file chips */}
             {isUser && msg.files?.length > 0 && (
@@ -1340,7 +1349,11 @@ export default function ChatPage() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, background:c.chat }} onDragOver={e=>e.preventDefault()} onDrop={onDrop}>
 
           {/* Messages */}
-          <div ref={msgsRef} className="msgs" style={{ flex:1, overflowY:'auto', padding: mobile?'16px 12px':'24px 28px', display:'flex', flexDirection:'column', gap:18 }}>
+          <div ref={msgsRef} className="msgs" style={{ flex:1, overflowY:'auto', padding: mobile?'16px 12px':'24px 28px', display:'flex', flexDirection:'column', alignItems:'center' }}>
+            {/* Centred readable column — claude.ai-style fixed measure so the
+                thread doesn't sprawl on wide monitors. 860 keeps the editable
+                BOQ table comfortable; dial toward 768 for a tighter text measure. */}
+            <div style={{ width:'100%', maxWidth:860, flex:1, display:'flex', flexDirection:'column', gap:18, minHeight:0 }}>
 
             {messages.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', padding:'0 16px' }}>
@@ -1433,7 +1446,7 @@ export default function ChatPage() {
             {sending && streamingText && (
               <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
                 <div style={{ width:34, height:34, borderRadius:10, background:c.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, flexShrink:0 }}><RulerIcon size={15} /></div>
-                <div style={{ maxWidth: mobile ? '85%' : '72%', padding:'11px 15px', borderRadius:'4px 16px 16px 16px', background:c.aiBubble, color:c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
+                <div style={{ maxWidth:'100%', padding:'1px 0', background:'transparent', color:c.text, fontSize: mobile ? 13 : 14, lineHeight:1.65, wordBreak:'break-word' }}>
                   <Markdown
                     content={streamingText}
                     color={c.text}
@@ -1508,6 +1521,7 @@ export default function ChatPage() {
             )}
 
             <div ref={bottomRef}/>
+            </div>
           </div>
 
           {/* File chips */}
