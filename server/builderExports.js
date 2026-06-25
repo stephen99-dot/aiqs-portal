@@ -130,6 +130,36 @@ function cellNumber(cell) {
   return 0;
 }
 
+// Short codes that legitimately live in the "Unit" column. Used to tell a real
+// unit ("m2", "nr", "item") apart from a line description that has been shifted
+// into the unit column by a mis-aligned source BOQ.
+const UNIT_TOKENS = new Set([
+  'm', 'm2', 'm²', 'm3', 'm³', 'mm', 'lm', 'linm',
+  'nr', 'no', 'no.', 'ea', 'each', 'item', 'items', 'set', 'sets',
+  'pair', 'sum', 'ls', 'l/s', 'kg', 't', 'tonne', 'tonnes',
+  'hr', 'hrs', 'day', 'days', 'wk', 'week', 'weeks', '%', 'visit',
+  'pc', 'pcs', 'roll', 'sheet', 'coat', 'bag', 'load', 'unit',
+]);
+const BARE_NUMBER = /^\d+(?:\.\d+)?$/;
+
+function looksLikeUnit(s) {
+  const t = String(s || '').trim().toLowerCase();
+  if (!t) return false;
+  if (UNIT_TOKENS.has(t)) return true;
+  // Short, single-token, no spaces — treat as a (possibly bespoke) unit code.
+  return t.length <= 4 && !/\s/.test(t);
+}
+
+// True when a string reads like a line-item description rather than a unit: it
+// contains letters and is either multi-word or comfortably longer than a unit
+// code, and isn't itself a known unit token.
+function looksLikeDescriptionText(s) {
+  const t = String(s || '').trim();
+  if (!t || looksLikeUnit(t)) return false;
+  if (!/[A-Za-z]/.test(t)) return false;
+  return /\s/.test(t) || t.length > 12;
+}
+
 /**
  * Detect whether a row looks like a section / trade header. Real-world BOQs
  * use any of:
@@ -316,9 +346,23 @@ async function parseBOQ(filePath) {
     const labour = cellNumber(row.getCell(6));
     const materials = cellNumber(row.getCell(7));
     const total = cellNumber(row.getCell(8));
-    const description = b;
-    const unit = cellText(row.getCell(3)).trim();
-    const itemRef = a;
+    let description = b;
+    let unit = cellText(row.getCell(3)).trim();
+    let itemRef = a;
+
+    // Repair a one-column data shift seen in some delivered BOQs: the line
+    // description lands in the Unit column while the Description column holds a
+    // bare item number (or is blank). Detect it unambiguously — the "unit" cell
+    // reads like prose and the "description" cell is empty or just a number —
+    // and move the text back into Description (promoting a stray number into the
+    // item ref). A correctly-aligned row (real prose in Description, a unit code
+    // like "m2"/"nr" in Unit) never matches, so this is safe for well-formed
+    // files and self-heals already-stored BOQs on the next read/export.
+    if (looksLikeDescriptionText(unit) && (!description || BARE_NUMBER.test(description))) {
+      if (!itemRef && BARE_NUMBER.test(description)) itemRef = description;
+      description = unit;
+      unit = '';
+    }
 
     if (description && (qty > 0 || rate > 0 || labour > 0 || materials > 0 || total > 0)) {
       if (!current) {
