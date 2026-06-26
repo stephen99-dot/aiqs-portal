@@ -82,6 +82,9 @@ export default function BuilderPackPage() {
   const [dayRateOn, setDayRateOn] = useState(false);
   const [dayRate, setDayRate] = useState({ label: 'Project management', days: 0, rate_per_day: 0 });
   const [rounding, setRounding] = useState(0);
+  // Provisional sums carried by the source tender (a lump block, exclusive of
+  // OH&P). Added flat to the bottom line so the client copy matches the tender.
+  const [provisionalSum, setProvisionalSum] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +127,8 @@ export default function BuilderPackPage() {
         }
         if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
-        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
+        if (ss.provisional_sum != null) setProvisionalSum(ss.provisional_sum);
+        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null || ss.provisional_sum != null);
         // Restore any previously-saved working state on top of the freshly-parsed
         // BOQ, so the user picks up exactly where they left off. originalSections
         // stays the pristine BOQ so "Reset" still returns to the delivered figures.
@@ -144,6 +148,7 @@ export default function BuilderPackPage() {
           if (saved.day_rate_on != null) setDayRateOn(saved.day_rate_on);
           if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
           if (saved.rounding != null) setRounding(saved.rounding);
+          if (saved.provisional_sum != null) setProvisionalSum(saved.provisional_sum);
         }
         if (br && br.branding) {
           setBranding(br.branding);
@@ -299,6 +304,10 @@ export default function BuilderPackPage() {
     });
     runningTotal += v;
   }
+  if (provisionalSum > 0) {
+    summaryLines.push({ label: 'Provisional sums (excl. OH&P)', value: provisionalSum, key: 'provisional' });
+    runningTotal += provisionalSum;
+  }
   if (contingency > 0) {
     const v = originalNet * (contingency / 100);
     summaryLines.push({ label: `Contingency (${contingency}% of net)`, value: v, key: 'contingency' });
@@ -353,6 +362,7 @@ export default function BuilderPackPage() {
           per_trade_ohp: perTradeOhp,
           prelims_amount: prelimsMode === 'flat' ? prelimsAmount : 0,
           prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
+          provisional_sum: provisionalSum,
           day_rate: dayRateOn ? dayRate : null,
           rounding,
           edited_sections: editsForBody(),
@@ -404,8 +414,9 @@ export default function BuilderPackPage() {
     day_rate_on: dayRateOn,
     day_rate: dayRate,
     rounding,
+    provisional_sum: provisionalSum,
   }), [sections, builderMargin, materialsMarkup, defaultOhp, profit, contingency, vat,
-       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding]);
+       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding, provisionalSum]);
 
   const workingStateRef = useRef(workingState);
   workingStateRef.current = workingState;
@@ -582,6 +593,7 @@ export default function BuilderPackPage() {
                 prelimsPct={prelimsPct} setPrelimsPct={setPrelimsPct}
                 dayRateOn={dayRateOn} setDayRateOn={setDayRateOn}
                 dayRate={dayRate} setDayRate={setDayRate}
+                provisionalSum={provisionalSum} setProvisionalSum={setProvisionalSum}
                 perTradeOhp={perTradeOhp} setPerTradeOhp={setPerTradeOhp}
                 sections={sections} sym={sym}
                 onDownload={downloadClientCopy} downloading={downloading}
@@ -831,6 +843,7 @@ function ClientControls({
   rounding, setRounding, prelimsMode, setPrelimsMode,
   prelimsAmount, setPrelimsAmount, prelimsPct, setPrelimsPct,
   dayRateOn, setDayRateOn, dayRate, setDayRate,
+  provisionalSum, setProvisionalSum,
   perTradeOhp, setPerTradeOhp, sections, sym,
   onDownload, downloading, disabled, isDirty, onReset, sourceSeeded,
 }) {
@@ -881,6 +894,15 @@ function ClientControls({
             onChange={(e) => setPrelimsPct(parseFloat(e.target.value) || 0)}
             placeholder="e.g. 5" style={inputStyle} />
         )}
+      </Field>
+
+      <Field label="Provisional sums">
+        <input type="number" min="0" step="50" value={provisionalSum}
+          onChange={(e) => setProvisionalSum(parseFloat(e.target.value) || 0)}
+          placeholder="e.g. 200250" style={inputStyle} />
+        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+          Lump sum carried from the tender, added flat (no OH&P) — VAT still applies.
+        </div>
       </Field>
 
       <Field label={
