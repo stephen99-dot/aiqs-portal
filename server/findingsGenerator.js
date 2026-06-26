@@ -1,4 +1,4 @@
-const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, ShadingType, PageNumber, NumberFormat } = require('docx');
+const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, ShadingType, PageNumber, NumberFormat } = require('docx');
 
 async function generateFindingsReport(findings, clientName, projectName, branding) {
   const ref = findings.reference || ('AI-QS-' + Date.now().toString(36).toUpperCase().slice(-6));
@@ -18,6 +18,24 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
   const footerLine = b.footer_text || 'theaiqs.co.uk';
 
   const children = [];
+
+  // Customer logo at the very top, centred — optional, never blocks the report.
+  try {
+    const logo = await require('./docTemplates').resolveLogo(b);
+    if (logo && logo.buffer) {
+      const maxW = 150, maxH = 56;
+      let w = maxW, h = maxH;
+      if (logo.naturalWidth && logo.naturalHeight) {
+        const scale = Math.min(maxW / logo.naturalWidth, maxH / logo.naturalHeight);
+        w = Math.max(1, Math.round(logo.naturalWidth * scale));
+        h = Math.max(1, Math.round(logo.naturalHeight * scale));
+      }
+      children.push(new Paragraph({
+        children: [new ImageRun({ data: logo.buffer, transformation: { width: w, height: h } })],
+        alignment: AlignmentType.CENTER, spacing: { after: 200 }
+      }));
+    }
+  } catch (e) { /* logo is optional */ }
 
   // Title
   children.push(new Paragraph({

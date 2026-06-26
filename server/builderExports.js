@@ -558,6 +558,7 @@ async function parseBOQ(filePath) {
  *   materials_markup:number     extra % on materials only (default 0)
  *   project_name:    string
  *   client_name:     string
+ *   branding:        user_branding row (logo_path, colours) — logo embedded top-right
  */
 async function generateBuilderPack(parsed, opts = {}) {
   const currency = opts.currency || '£';
@@ -572,6 +573,12 @@ async function generateBuilderPack(parsed, opts = {}) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'The AI QS — Builder Pack (TESTING)';
   wb.created = new Date();
+
+  // Resolve the customer's logo once (rasterised PNG) so it can be embedded on
+  // every tab's title block. Optional — never blocks the document if absent.
+  const docTpl = require('./docTemplates');
+  let brandLogo = null;
+  try { brandLogo = await docTpl.resolveLogo(opts.branding || {}); } catch (e) { brandLogo = null; }
 
   const NAVY = 'FF1B2A4A';
   const SECTION_BG = 'FFD6E4F0';
@@ -609,6 +616,16 @@ async function generateBuilderPack(parsed, opts = {}) {
       (materialsMarkup ? '  |  Materials markup: +' + materialsMarkup + '%' : '');
     i.font = { name: 'Arial', size: 10, color: { argb: '64748B' } };
     ws.getRow(3).height = 18;
+
+    // Customer logo, floated top-right over the title rows (images don't occupy
+    // cells, so the merged title is undisturbed).
+    if (brandLogo) {
+      const lastIdx = lastCol.toUpperCase().charCodeAt(0) - 65; // 0-based column
+      try {
+        docTpl.embedResolvedLogo(wb, ws, brandLogo,
+          { col: Math.max(0, lastIdx - 1.4), row: 1.15 }, { maxWidth: 120, maxHeight: 38 });
+      } catch (e) { /* logo is optional */ }
+    }
   }
 
   // ─── Tab 1: Trade Summary ─────────────────────────────────────────────────

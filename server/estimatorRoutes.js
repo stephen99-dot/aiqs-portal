@@ -944,6 +944,23 @@ router.get('/quotes/:id/xlsx', async (req, res) => {
       if (idx > 1) cell.numFmt = '#,##0.00';
     });
 
+    // Branded title band + customer logo at the top (inserted above the grid so
+    // the keyed data rows are untouched). Optional — never blocks the export.
+    try {
+      const docTpl = require('./docTemplates');
+      const logoPath = branding.logo_filename ? path.join(brandingDir, branding.logo_filename) : null;
+      const logo = await docTpl.resolveLogo({ logo_path: logoPath });
+      ws.spliceRows(1, 0, [], []); // two blank rows above the header
+      ws.mergeCells('A1:H1');
+      const title = ws.getCell('A1');
+      title.value = (branding.company_name || 'Quote') + (q.quote_number ? '  —  ' + q.quote_number : '');
+      title.font = { bold: true, size: 14, color: { argb: primaryArgb } };
+      title.alignment = { vertical: 'middle' };
+      ws.getRow(1).height = 28;
+      ws.getRow(2).height = 6;
+      if (logo) docTpl.embedResolvedLogo(wb, ws, logo, { col: 6.2, row: 0.12 }, { maxWidth: 120, maxHeight: 40 });
+    } catch (e) { /* logo/title are optional */ }
+
     const filename = (q.quote_number || 'quote') + '.xlsx';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');

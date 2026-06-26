@@ -749,7 +749,8 @@ export default function BuilderPackPage() {
             }}>
               {tab === 'builder'
                 ? <BuilderPreview rows={builderRows} totals={builderGrand} base={baseGrand}
-                    builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym} />
+                    builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
+                    branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
@@ -1027,9 +1028,12 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym }) {
+function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
   base = base || { labour: 0, materials: 0, total: 0 };
   const bm = num(builderMargin), mm = num(materialsMarkup);
+  const primary = (branding && branding.primary_colour) || '#1B2A4A';
+  const accent  = (branding && branding.accent_colour)  || '#F59E0B';
+  const company = branding && branding.company_name;
   const builderMarginAmt = base.total * (bm / 100);
   const materialsMarkupAmt = base.materials * (mm / 100);
   const totalAdded = builderMarginAmt + materialsMarkupAmt;
@@ -1043,6 +1047,33 @@ function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sy
   );
   return (
     <>
+      {/* Branded header band — the builder's own logo and colours, so the pack
+          they download carries their brand. */}
+      <div style={{
+        borderRadius: 10, overflow: 'hidden', marginBottom: 16,
+        background: primary, color: '#fff', borderBottom: '4px solid ' + accent,
+        padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 8, flexShrink: 0,
+          background: '#fff', border: '1px solid rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+        }}>
+          {logoUrl
+            ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            : <span style={{ fontSize: 9, color: '#888' }}>No logo</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Builder Pack
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.2, marginTop: 2, color: '#fff' }}>
+            {projectName || 'Project'}
+          </div>
+          {company && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{company}</div>}
+        </div>
+      </div>
+
       {/* Plain-English breakdown so the builder can see the true cost and
           exactly what (if anything) has been added on top. */}
       <div style={{ marginBottom: 18, padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
