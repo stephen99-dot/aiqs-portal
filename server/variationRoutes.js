@@ -750,7 +750,11 @@ function rebuildFromEdits(editedSections) {
           const qty = parseFloat(it.qty) || 0;
           const labour = parseFloat(it.labour) || 0;
           const materials = parseFloat(it.materials) || 0;
-          const total = labour + materials;
+          // A split line's total is labour + materials; a composite (single-rate)
+          // line has no split, so honour the total/rate it carries instead of
+          // collapsing to zero.
+          const lm = labour + materials;
+          const total = lm > 0 ? lm : (parseFloat(it.total) || 0);
           const rate = qty > 0 ? total / qty : (parseFloat(it.rate) || 0);
           return {
             itemRef: it.itemRef || '',

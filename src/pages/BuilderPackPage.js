@@ -48,6 +48,13 @@ function unitRates(it) {
     unitMaterials: it.unitMaterials != null ? it.unitMaterials : (q > 0 ? num(it.materials) / q : num(it.materials)),
   };
 }
+// The money value of a line. A split BOQ carries it as labour + materials; a
+// composite (single-rate) BOQ carries it only in `total`, with no split — fall
+// back to that so composite lines don't read as £0 everywhere.
+function lineTotal(it) {
+  const lm = num(it.labour) + num(it.materials);
+  return lm > 0 ? lm : num(it.total);
+}
 
 export default function BuilderPackPage() {
   const { id } = useParams();
@@ -186,15 +193,29 @@ export default function BuilderPackPage() {
         merged.unitMaterials = unitMaterials;
         merged.labour = round2(unitLabour * q);
         merged.materials = round2(unitMaterials * q);
+        // Keep `total` in step. A composite line (no split) carries its value in
+        // `total` alone, so rescale it at its own unit rate; a split line's total
+        // is simply labour + materials.
+        const curLm = num(cur.labour) + num(cur.materials);
+        if (curLm > 0) {
+          merged.total = round2(merged.labour + merged.materials);
+        } else {
+          const oldQ = num(cur.qty);
+          const unitTotal = oldQ > 0 ? num(cur.total) / oldQ : num(cur.total);
+          merged.total = round2(unitTotal * q);
+        }
       }
-      // Editing a money column directly redefines that line's unit rate.
+      // Editing a money column directly redefines that line's unit rate, and the
+      // line total follows the split.
       if ('labour' in patch) {
         const q = num(merged.qty);
         merged.unitLabour = q > 0 ? num(patch.labour) / q : num(patch.labour);
+        merged.total = round2(num(merged.labour) + num(merged.materials));
       }
       if ('materials' in patch) {
         const q = num(merged.qty);
         merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
+        merged.total = round2(num(merged.labour) + num(merged.materials));
       }
       sec.items[iIdx] = merged;
       next[sIdx] = sec;
@@ -232,12 +253,18 @@ export default function BuilderPackPage() {
   // Per-section subtotals (live)
   const sectionTotals = useMemo(
     () => sections.map((s) => s.items.reduce(
-      (acc, it) => ({
-        labour: acc.labour + num(it.labour),
-        materials: acc.materials + num(it.materials),
-        total: acc.total + num(it.labour) + num(it.materials),
-      }),
-      { labour: 0, materials: 0, total: 0 }
+      (acc, it) => {
+        const ls = num(it.labour), ms = num(it.materials);
+        // Composite lines (no labour/materials split) contribute their `total`.
+        const comp = (ls + ms) > 0 ? 0 : num(it.total);
+        return {
+          labour: acc.labour + ls,
+          materials: acc.materials + ms,
+          composite: acc.composite + comp,
+          total: acc.total + ls + ms + comp,
+        };
+      },
+      { labour: 0, materials: 0, composite: 0, total: 0 }
     )),
     [sections]
   );
@@ -250,7 +277,9 @@ export default function BuilderPackPage() {
       number: s.number, title: s.title, item_count: s.items.length,
       labour: sectionTotals[i].labour * labourMult,
       materials: sectionTotals[i].materials * matMult,
-      total: sectionTotals[i].labour * labourMult + sectionTotals[i].materials * matMult,
+      // Composite lines take the blanket builder margin (no materials markup,
+      // since there's no identified materials portion to mark up).
+      total: sectionTotals[i].labour * labourMult + sectionTotals[i].materials * matMult + sectionTotals[i].composite * labourMult,
     })),
     [sections, sectionTotals, labourMult, matMult]
   );
@@ -324,6 +353,9 @@ export default function BuilderPackPage() {
       items: s.items.map((it) => ({
         itemRef: it.itemRef, description: it.description, unit: it.unit,
         qty: num(it.qty), labour: num(it.labour), materials: num(it.materials),
+        // Send the line total + rate too, so composite (unsplit) BOQs — whose
+        // value lives only in `total` — survive the rebuild instead of zeroing.
+        total: lineTotal(it), rate: num(it.rate),
       })),
     }));
   }
@@ -673,7 +705,7 @@ export default function BuilderPackPage() {
                           </thead>
                           <tbody>
                             {s.items.map((it, iIdx) => {
-                              const total = num(it.labour) + num(it.materials);
+                              const total = lineTotal(it);
                               return (
                                 <tr key={iIdx} style={{ borderTop: '1px solid var(--border)' }}>
                                   <td style={td()}>
