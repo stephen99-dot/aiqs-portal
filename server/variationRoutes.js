@@ -932,9 +932,14 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
     // Brand the pack with the job owner's logo, falling back to the generator's
     // own brand if the owner hasn't uploaded one (mirrors the client-copy route).
     let branding = getBrandingForUser(project.user_id);
-    if (!branding || !branding.logo_path) {
+    // Use the owner's brand, but borrow the generating user's logo when the
+    // owner's logo is unset OR its file is missing on disk — so a real logo
+    // still appears (e.g. a project created under a different account from the
+    // one holding the brand assets, or a stale logo_filename whose file is gone).
+    const usableLogo = (b) => !!(b && b.logo_path && fs.existsSync(b.logo_path));
+    if (!usableLogo(branding)) {
       const generatorBranding = getBrandingForUser(req.user.id);
-      if (generatorBranding && generatorBranding.logo_path) branding = generatorBranding;
+      if (usableLogo(generatorBranding)) branding = generatorBranding;
     }
     const buffer = await generateBuilderPack(parsed, {
       currency: project.currency === 'EUR' ? '€' : '£',
@@ -983,9 +988,14 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     // generating the doc — so a logo always appears (e.g. the operator/admin
     // producing a copy for a customer who hasn't uploaded their own).
     let branding = getBrandingForUser(project.user_id);
-    if (!branding || !branding.logo_path) {
+    // Use the owner's brand, but borrow the generating user's logo when the
+    // owner's logo is unset OR its file is missing on disk — so a real logo
+    // still appears (e.g. a project created under a different account from the
+    // one holding the brand assets, or a stale logo_filename whose file is gone).
+    const usableLogo = (b) => !!(b && b.logo_path && fs.existsSync(b.logo_path));
+    if (!usableLogo(branding)) {
       const generatorBranding = getBrandingForUser(req.user.id);
-      if (generatorBranding && generatorBranding.logo_path) branding = generatorBranding;
+      if (usableLogo(generatorBranding)) branding = generatorBranding;
     }
 
     const buffer = await generateClientCopyProSafe(parsed, {
