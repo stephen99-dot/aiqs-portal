@@ -168,22 +168,65 @@ const DEFAULT_COLS = { item: 1, description: 2, unit: 3, qty: 4, rate: 5, labour
 // matter which column it starts in or which optional columns it carries. Some
 // generators indent the whole table by a column (data starting at B, not A);
 // without this every field would be read one column too far left.
-function buildColMap(headerRow) {
+//
+// `groupRow` is the (optional) banner row directly above the column labels. Some
+// BOQs split labour/materials with a merged "LABOUR" / "MATERIAL" banner spanning
+// a pair of generic "Rate £ / Amount £" sub-columns, instead of naming the
+// columns "Labour"/"Materials" outright. Without reading the banner, those value
+// columns are invisible (labour & materials read as 0) and the labour "Amount"
+// column gets mistaken for the line Total. When present, the banner is used to
+// locate the labour/materials value columns and to keep them out of the Total.
+function buildColMap(headerRow, groupRow) {
   const labels = {};
   for (let c = 1; c <= 14; c++) labels[c] = cellText(headerRow.getCell(c)).toLowerCase().trim();
+  const groups = {};
+  if (groupRow) for (let c = 1; c <= 14; c++) groups[c] = cellText(groupRow.getCell(c)).toLowerCase().trim();
   const find = (pred) => {
     for (let c = 1; c <= 14; c++) { if (labels[c] && pred(labels[c])) return c; }
     return null;
   };
+
+  // Columns sitting under a merged banner share that banner's text (exceljs fills
+  // every cell of a merge with the master value). Collect each group's span, then
+  // pick its value column: the extended "Amount"/"Total" if present (a line value
+  // ready to use), otherwise the rightmost column in the group.
+  const groupCols = (pred) => {
+    const out = [];
+    for (let c = 1; c <= 14; c++) { if (groups[c] && pred(groups[c])) out.push(c); }
+    return out;
+  };
+  const valueInGroup = (gcols) =>
+    (!gcols.length ? null
+      : (gcols.find((c) => labels[c].startsWith('amount') || labels[c].startsWith('total')) || gcols[gcols.length - 1]));
+  const labourGroup = groupCols((t) => t.startsWith('labour') || t.startsWith('labor'));
+  const materialGroup = groupCols((t) => t.startsWith('material'));
+
+  // Prefer columns named outright; fall back to the banner-grouped value column.
+  let labour = find((t) => t.startsWith('labour') || t.startsWith('labor'));
+  let materials = find((t) => t.startsWith('material'));
+  if (labour == null) labour = valueInGroup(labourGroup);
+  if (materials == null) materials = valueInGroup(materialGroup);
+
+  // The line Total is a "total"/"amount" column that is NOT part of a labour or
+  // material group — those amounts are the split, not the combined line total.
+  const grouped = new Set([...labourGroup, ...materialGroup]);
+  let total;
+  if (grouped.size) {
+    const findOut = (pred) => { for (let c = 1; c <= 14; c++) { if (!grouped.has(c) && labels[c] && pred(labels[c])) return c; } return null; };
+    total = findOut((t) => t.startsWith('total')) || findOut((t) => t.startsWith('amount'));
+  } else {
+    total = find((t) => t.startsWith('total') || t.startsWith('amount'));
+  }
+
   return {
     item:        find((t) => t === 'item' || t === 'ref' || t === 'item ref' || t === 'no' || t === 'no.' || t === '#' || t === 's/n'),
     description: find((t) => t.startsWith('description') || t === 'desc' || t.startsWith('item / desc')),
     unit:        find((t) => t === 'unit' || t === 'units' || t === 'uom'),
     qty:         find((t) => t === 'qty' || t.startsWith('quantity')),
     rate:        find((t) => t.startsWith('rate')),
-    labour:      find((t) => t.startsWith('labour') || t.startsWith('labor')),
-    materials:   find((t) => t.startsWith('material')),
-    total:       find((t) => t.startsWith('total') || t.startsWith('amount')),
+    labour,
+    materials,
+    total,
   };
 }
 
@@ -264,7 +307,10 @@ async function parseBOQ(filePath) {
     const joined = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((c) => cellText(row.getCell(c)).toLowerCase()).join(' | ');
     if (joined.includes('description') && (joined.includes('qty') || joined.includes('quantity'))) {
       headerRow = rowNumber;
-      const detected = buildColMap(row);
+      // Pass the row directly above as the (optional) group banner — some BOQs
+      // split labour/materials with a merged "LABOUR"/"MATERIAL" banner there.
+      const groupRow = rowNumber > 1 ? ws.getRow(rowNumber - 1) : null;
+      const detected = buildColMap(row, groupRow);
       // Adopt the detected map only when it locates the description column; a
       // null field then means that column is genuinely absent (e.g. a client
       // summary with no Labour/Materials), and is read as 0 rather than borrowed
@@ -282,7 +328,7 @@ async function parseBOQ(filePath) {
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
-  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null };
+  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber <= headerRow) return;
@@ -302,8 +348,29 @@ async function parseBOQ(filePath) {
     const hasUnitOrQty = !mirrored && (!!unitText || numAt(row, cols.qty) > 0);
     if (!hasUnitOrQty && numAt(row, cols.total) > 0) {
       let m;
+      // The percentage may be embedded in the label ("… @ 10%") OR — in tender
+      // BOQs whose labels read just "Overhead %" / "Profit %" / "VAT %" — sit in
+      // the Rate column with the label naming what it is. Read either: a strict
+      // "<keyword> … N%" first (preserves existing behaviour exactly), else fall
+      // back to the rate cell. Percent-formatted cells store a fraction
+      // (0.155 → 15.5%), as does any bare value ≤ 1; otherwise it's already a %.
+      const pctFromRateCell = () => {
+        const cell = cols.rate ? row.getCell(cols.rate) : null;
+        let v = cellNumber(cell);
+        if (!v) return null;
+        const fmt = (cell && cell.numFmt) || '';
+        if (fmt.includes('%') || v <= 1) v = v * 100;
+        return Math.round(v * 1000) / 1000;
+      };
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
+        const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
+        if (sc) sourceSummary.ohp_sections = [parseFloat(sc[1]), parseFloat(sc[2])];
+        return;
+      }
+      if (/^OVERHEADS\s*(?:&|AND)\s*PROFIT/.test(upperLabel)) {
+        const p = pctFromRateCell();
+        if (p != null) sourceSummary.ohp_pct = p;
         const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
         if (sc) sourceSummary.ohp_sections = [parseFloat(sc[1]), parseFloat(sc[2])];
         return;
@@ -315,16 +382,43 @@ async function parseBOQ(filePath) {
         sourceSummary.overhead_pct = parseFloat(m[1]);
         return;
       }
+      if (/^OVERHEAD\b(?!S?\s*(?:&|AND)\s*PROFIT)/.test(upperLabel)) {
+        const p = pctFromRateCell();
+        if (p != null) sourceSummary.overhead_pct = p;
+        return;
+      }
       if ((m = upperLabel.match(/^PROFIT\b\D*?([\d.]+)\s*%/))) {
         sourceSummary.profit_pct = parseFloat(m[1]);
+        return;
+      }
+      if (/^PROFIT\b/.test(upperLabel)) {
+        const p = pctFromRateCell();
+        if (p != null) sourceSummary.profit_pct = p;
         return;
       }
       if ((m = upperLabel.match(/^CONTINGENCY\D*?([\d.]+)\s*%/))) {
         sourceSummary.contingency_pct = parseFloat(m[1]);
         return;
       }
+      if (/^CONTINGENCY\b/.test(upperLabel)) {
+        const p = pctFromRateCell();
+        if (p != null) sourceSummary.contingency_pct = p;
+        return;
+      }
       if ((m = upperLabel.match(/^VAT\s*@?\s*([\d.]+)\s*%/))) {
         sourceSummary.vat_pct = parseFloat(m[1]);
+        return;
+      }
+      if (/^VAT\b/.test(upperLabel)) {
+        const p = pctFromRateCell();
+        if (p != null) sourceSummary.vat_pct = p;
+        return;
+      }
+      // Provisional sums are a lump block carried after the measured works,
+      // exclusive of OH&P. Capture their total so the client copy can add it
+      // back as a flat sum — without it the bottom line is short by that amount.
+      if (/^TOTAL\s+PROVISIONAL\s+SUMS?\b/.test(upperLabel) || /^PROVISIONAL\s+SUMS?\s+TOTAL\b/.test(upperLabel)) {
+        sourceSummary.provisional_sum = numAt(row, cols.total);
         return;
       }
     }
@@ -464,6 +558,7 @@ async function parseBOQ(filePath) {
  *   materials_markup:number     extra % on materials only (default 0)
  *   project_name:    string
  *   client_name:     string
+ *   branding:        user_branding row (logo_path, colours) — logo embedded top-right
  */
 async function generateBuilderPack(parsed, opts = {}) {
   const currency = opts.currency || '£';
@@ -478,6 +573,12 @@ async function generateBuilderPack(parsed, opts = {}) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'The AI QS — Builder Pack (TESTING)';
   wb.created = new Date();
+
+  // Resolve the customer's logo once (rasterised PNG) so it can be embedded on
+  // every tab's title block. Optional — never blocks the document if absent.
+  const docTpl = require('./docTemplates');
+  let brandLogo = null;
+  try { brandLogo = await docTpl.resolveLogo(opts.branding || {}); } catch (e) { brandLogo = null; }
 
   const NAVY = 'FF1B2A4A';
   const SECTION_BG = 'FFD6E4F0';
@@ -515,6 +616,16 @@ async function generateBuilderPack(parsed, opts = {}) {
       (materialsMarkup ? '  |  Materials markup: +' + materialsMarkup + '%' : '');
     i.font = { name: 'Arial', size: 10, color: { argb: '64748B' } };
     ws.getRow(3).height = 18;
+
+    // Customer logo, floated top-right over the title rows (images don't occupy
+    // cells, so the merged title is undisturbed).
+    if (brandLogo) {
+      const lastIdx = lastCol.toUpperCase().charCodeAt(0) - 65; // 0-based column
+      try {
+        docTpl.embedResolvedLogo(wb, ws, brandLogo,
+          { col: Math.max(0, lastIdx - 1.4), row: 1.15 }, { maxWidth: 120, maxHeight: 38 });
+      } catch (e) { /* logo is optional */ }
+    }
   }
 
   // ─── Tab 1: Trade Summary ─────────────────────────────────────────────────
@@ -797,6 +908,8 @@ async function generateBuilderPack(parsed, opts = {}) {
  *   per_trade_ohp:   { [tradeNumber: string]: number }   override OH&P per section
  *   prelims_amount:  number  (£ flat — appears as a separate summary line)
  *   prelims_pct:     number  (% of net — alternative to flat amount)
+ *   provisional_sum: number  (£ flat lump carried from the tender, exclusive of
+ *                             OH&P — appears as its own summary line; VAT applies)
  *   day_rate:        { label: string, days: number, rate_per_day: number }
  *   rounding:        0 | 1 | 10 | 100  (round each item total to nearest)
  *   project_name, client_name
@@ -815,6 +928,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const perTradeOhp = opts.per_trade_ohp || {};
   const prelimsAmount = parseFloat(opts.prelims_amount) || 0;
   const prelimsPct = parseFloat(opts.prelims_pct) || 0;
+  // Provisional sums: a flat lump carried from the tender, exclusive of OH&P.
+  const provisionalSum = parseFloat(opts.provisional_sum) || 0;
   const rounding = [0, 1, 10, 100].includes(parseInt(opts.rounding, 10)) ? parseInt(opts.rounding, 10) : 0;
   const dayRate = opts.day_rate && opts.day_rate.days > 0 && opts.day_rate.rate_per_day > 0
     ? { label: opts.day_rate.label || 'Day-rate / management', days: parseFloat(opts.day_rate.days), rate_per_day: parseFloat(opts.day_rate.rate_per_day) }
@@ -881,6 +996,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   let preExVat = preNet;
   if (prelimsAmount > 0) preExVat += prelimsAmount;
   if (prelimsPct > 0)    preExVat += preNetOriginal * (prelimsPct / 100);
+  if (provisionalSum > 0) preExVat += provisionalSum;
   if (dayRate)           preExVat += dayRate.days * dayRate.rate_per_day;
   if (contingency > 0)   preExVat += preNetOriginal * (contingency / 100);
   const preInclVat = preExVat * (1 + (vat / 100));
@@ -1086,6 +1202,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
     const v = originalNet * (prelimsPct / 100);
     addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', v);
     runningTotal += v;
+  }
+  if (provisionalSum > 0) {
+    addSummaryLine('Provisional sums (excl. OH&P)', provisionalSum);
+    runningTotal += provisionalSum;
   }
   if (dayRate) {
     const v = dayRate.days * dayRate.rate_per_day;

@@ -82,6 +82,9 @@ export default function BuilderPackPage() {
   const [dayRateOn, setDayRateOn] = useState(false);
   const [dayRate, setDayRate] = useState({ label: 'Project management', days: 0, rate_per_day: 0 });
   const [rounding, setRounding] = useState(0);
+  // Provisional sums carried by the source tender (a lump block, exclusive of
+  // OH&P). Added flat to the bottom line so the client copy matches the tender.
+  const [provisionalSum, setProvisionalSum] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +127,8 @@ export default function BuilderPackPage() {
         }
         if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
-        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null);
+        if (ss.provisional_sum != null) setProvisionalSum(ss.provisional_sum);
+        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null || ss.provisional_sum != null);
         // Restore any previously-saved working state on top of the freshly-parsed
         // BOQ, so the user picks up exactly where they left off. originalSections
         // stays the pristine BOQ so "Reset" still returns to the delivered figures.
@@ -144,6 +148,7 @@ export default function BuilderPackPage() {
           if (saved.day_rate_on != null) setDayRateOn(saved.day_rate_on);
           if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
           if (saved.rounding != null) setRounding(saved.rounding);
+          if (saved.provisional_sum != null) setProvisionalSum(saved.provisional_sum);
         }
         if (br && br.branding) {
           setBranding(br.branding);
@@ -299,6 +304,10 @@ export default function BuilderPackPage() {
     });
     runningTotal += v;
   }
+  if (provisionalSum > 0) {
+    summaryLines.push({ label: 'Provisional sums (excl. OH&P)', value: provisionalSum, key: 'provisional' });
+    runningTotal += provisionalSum;
+  }
   if (contingency > 0) {
     const v = originalNet * (contingency / 100);
     summaryLines.push({ label: `Contingency (${contingency}% of net)`, value: v, key: 'contingency' });
@@ -353,6 +362,7 @@ export default function BuilderPackPage() {
           per_trade_ohp: perTradeOhp,
           prelims_amount: prelimsMode === 'flat' ? prelimsAmount : 0,
           prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
+          provisional_sum: provisionalSum,
           day_rate: dayRateOn ? dayRate : null,
           rounding,
           edited_sections: editsForBody(),
@@ -404,8 +414,9 @@ export default function BuilderPackPage() {
     day_rate_on: dayRateOn,
     day_rate: dayRate,
     rounding,
+    provisional_sum: provisionalSum,
   }), [sections, builderMargin, materialsMarkup, defaultOhp, profit, contingency, vat,
-       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding]);
+       perTradeOhp, prelimsMode, prelimsAmount, prelimsPct, dayRateOn, dayRate, rounding, provisionalSum]);
 
   const workingStateRef = useRef(workingState);
   workingStateRef.current = workingState;
@@ -582,6 +593,7 @@ export default function BuilderPackPage() {
                 prelimsPct={prelimsPct} setPrelimsPct={setPrelimsPct}
                 dayRateOn={dayRateOn} setDayRateOn={setDayRateOn}
                 dayRate={dayRate} setDayRate={setDayRate}
+                provisionalSum={provisionalSum} setProvisionalSum={setProvisionalSum}
                 perTradeOhp={perTradeOhp} setPerTradeOhp={setPerTradeOhp}
                 sections={sections} sym={sym}
                 onDownload={downloadClientCopy} downloading={downloading}
@@ -737,7 +749,8 @@ export default function BuilderPackPage() {
             }}>
               {tab === 'builder'
                 ? <BuilderPreview rows={builderRows} totals={builderGrand} base={baseGrand}
-                    builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym} />
+                    builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
+                    branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
@@ -831,6 +844,7 @@ function ClientControls({
   rounding, setRounding, prelimsMode, setPrelimsMode,
   prelimsAmount, setPrelimsAmount, prelimsPct, setPrelimsPct,
   dayRateOn, setDayRateOn, dayRate, setDayRate,
+  provisionalSum, setProvisionalSum,
   perTradeOhp, setPerTradeOhp, sections, sym,
   onDownload, downloading, disabled, isDirty, onReset, sourceSeeded,
 }) {
@@ -881,6 +895,15 @@ function ClientControls({
             onChange={(e) => setPrelimsPct(parseFloat(e.target.value) || 0)}
             placeholder="e.g. 5" style={inputStyle} />
         )}
+      </Field>
+
+      <Field label="Provisional sums">
+        <input type="number" min="0" step="50" value={provisionalSum}
+          onChange={(e) => setProvisionalSum(parseFloat(e.target.value) || 0)}
+          placeholder="e.g. 200250" style={inputStyle} />
+        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+          Lump sum carried from the tender, added flat (no OH&P) — VAT still applies.
+        </div>
       </Field>
 
       <Field label={
@@ -1005,9 +1028,12 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym }) {
+function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
   base = base || { labour: 0, materials: 0, total: 0 };
   const bm = num(builderMargin), mm = num(materialsMarkup);
+  const primary = (branding && branding.primary_colour) || '#1B2A4A';
+  const accent  = (branding && branding.accent_colour)  || '#F59E0B';
+  const company = branding && branding.company_name;
   const builderMarginAmt = base.total * (bm / 100);
   const materialsMarkupAmt = base.materials * (mm / 100);
   const totalAdded = builderMarginAmt + materialsMarkupAmt;
@@ -1021,6 +1047,33 @@ function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sy
   );
   return (
     <>
+      {/* Branded header band — the builder's own logo and colours, so the pack
+          they download carries their brand. */}
+      <div style={{
+        borderRadius: 10, overflow: 'hidden', marginBottom: 16,
+        background: primary, color: '#fff', borderBottom: '4px solid ' + accent,
+        padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 8, flexShrink: 0,
+          background: '#fff', border: '1px solid rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+        }}>
+          {logoUrl
+            ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            : <span style={{ fontSize: 9, color: '#888' }}>No logo</span>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Builder Pack
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.2, marginTop: 2, color: '#fff' }}>
+            {projectName || 'Project'}
+          </div>
+          {company && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{company}</div>}
+        </div>
+      </div>
+
       {/* Plain-English breakdown so the builder can see the true cost and
           exactly what (if anything) has been added on top. */}
       <div style={{ marginBottom: 18, padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)' }}>

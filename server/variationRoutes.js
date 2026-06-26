@@ -925,12 +925,20 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
 
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
+    // Brand the pack with the job owner's logo, falling back to the generator's
+    // own brand if the owner hasn't uploaded one (mirrors the client-copy route).
+    let branding = getBrandingForUser(project.user_id);
+    if (!branding || !branding.logo_path) {
+      const generatorBranding = getBrandingForUser(req.user.id);
+      if (generatorBranding && generatorBranding.logo_path) branding = generatorBranding;
+    }
     const buffer = await generateBuilderPack(parsed, {
       currency: project.currency === 'EUR' ? '€' : '£',
       builder_margin: parseFloat(req.body.builder_margin) || 0,
       materials_markup: parseFloat(req.body.materials_markup) || 0,
       project_name: documentTitleForProject(project),
       client_name: user ? user.full_name : 'Client',
+      branding,
     });
 
     const safeTitle = project.title.replace(/[^a-zA-Z0-9]/g, '_');
@@ -986,6 +994,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
       per_trade_ohp: req.body.per_trade_ohp || {},
       prelims_amount: req.body.prelims_amount,
       prelims_pct: req.body.prelims_pct,
+      provisional_sum: req.body.provisional_sum,
       day_rate: req.body.day_rate,
       rounding: req.body.rounding,
       project_name: documentTitleForProject(project),
