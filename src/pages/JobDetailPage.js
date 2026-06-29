@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
+import ShareLinkModal from '../components/ShareLinkModal';
 import { jobStage, stageColours } from '../utils/jobStages';
 import { PhoneIcon } from '../components/Icons';
 import JobPhotos from '../components/JobPhotos';
@@ -63,6 +64,7 @@ function Inner() {
   const [newStage, setNewStage] = useState({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
   const [invoiceSheet, setInvoiceSheet] = useState(null); // quote being turned into an invoice
   const [pctChoice, setPctChoice] = useState(25);
+  const [share, setShare] = useState(null); // { url } when sharing a quote link with the client
   const [documents, setDocuments] = useState([]);
   const [docTemplates, setDocTemplates] = useState([]);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
@@ -243,6 +245,29 @@ function Inner() {
       const r = await apiFetch('/invoices', { method: 'POST', body: JSON.stringify({ job_id: id, client_name: job.client_name }) });
       nav('/invoices/' + r.id);
     } catch (e) { setError(e.message); }
+  };
+
+  // Send (or re-share) a quote: returns a public link the client opens on
+  // their phone to view and accept it. Once sent it flips to "sent".
+  const sendQuote = async (quoteId) => {
+    try {
+      const r = await apiFetch('/estimator/quotes/' + quoteId + '/send', { method: 'POST' });
+      setShare({ url: window.location.origin + r.path });
+      refresh();
+    } catch (e) { setError(e.message); }
+  };
+
+  const downloadQuotePdf = (quoteId) => {
+    fetch('/api/estimator/quotes/' + quoteId + '/pdf', { headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() } })
+      .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
+      .then(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'quote.pdf';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(e => setError(e.message));
   };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
@@ -427,11 +452,20 @@ function Inner() {
                   <span style={{ background: tone.bg, color: tone.fg, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{q.status === 'accepted' ? 'Accepted' : q.status}</span>
                 </div>
               </div>
-              {accepted && (
-                <button onClick={() => { setInvoiceSheet(q); setPctChoice(25); }} style={{ ...primaryBtn, background: t.success, marginTop: 10 }}>
-                  Turn into invoice
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <button onClick={() => nav('/estimator/quote/' + q.id)} style={ghostBtn}>Edit quote</button>
+                {!accepted && q.status !== 'lost' && (
+                  <button onClick={() => sendQuote(q.id)} style={{ ...primaryBtn }}>
+                    {q.public_token ? 'Share the link' : 'Send to client'}
+                  </button>
+                )}
+                <button onClick={() => downloadQuotePdf(q.id)} style={ghostBtn}>PDF</button>
+                {accepted && (
+                  <button onClick={() => { setInvoiceSheet(q); setPctChoice(25); }} style={{ ...primaryBtn, background: t.success }}>
+                    Turn into invoice
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
@@ -769,6 +803,16 @@ function Inner() {
           </div>
         );
       })()}
+
+      {share && (
+        <ShareLinkModal
+          t={t}
+          url={share.url}
+          title="Send the quote to your client"
+          message="Here’s your quote — you can view and accept it here:"
+          onClose={() => setShare(null)}
+        />
+      )}
 
     </div>
   );
