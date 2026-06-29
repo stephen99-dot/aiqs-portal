@@ -209,6 +209,16 @@ export default function BuilderPackPage() {
         merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
         merged.total = round2(num(merged.labour) + num(merged.materials));
       }
+      // Editing the line total directly (composite BOQs with no labour/materials
+      // split) redefines the line's value and its implied unit rate. The line
+      // stays composite — no split is introduced.
+      if ('total' in patch) {
+        const q = num(merged.qty);
+        merged.total = round2(num(patch.total));
+        merged.rate = q > 0 ? round2(merged.total / q) : merged.total;
+        merged.labour = 0; merged.materials = 0;
+        merged.unitLabour = 0; merged.unitMaterials = 0;
+      }
       sec.items[iIdx] = merged;
       next[sIdx] = sec;
       return next;
@@ -258,6 +268,14 @@ export default function BuilderPackPage() {
       },
       { labour: 0, materials: 0, composite: 0, total: 0 }
     )),
+    [sections]
+  );
+
+  // Composite BOQs (e.g. a tender priced "labour+materials" per line) carry no
+  // split, so the Labour/Materials columns are all zero — pure visual noise.
+  // Detect a real split anywhere and only then show those two columns.
+  const hasSplit = useMemo(
+    () => sections.some((s) => s.items.some((it) => num(it.labour) > 0 || num(it.materials) > 0)),
     [sections]
   );
 
@@ -646,7 +664,9 @@ export default function BuilderPackPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Line items (editable)</h2>
                 <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                  Edit qty, labour or materials — the line total and nett recompute automatically. Changing qty rescales the line at its rate.
+                  {hasSplit
+                    ? 'Edit qty, labour or materials — the line total and nett recompute automatically. Changing qty rescales the line at its rate.'
+                    : 'Edit qty or the line total — the bill recomputes automatically. This BOQ is priced on a composite basis (one rate per line), so labour/materials aren’t shown separately.'}
                 </span>
               </div>
 
@@ -698,8 +718,8 @@ export default function BuilderPackPage() {
                               <th style={{ ...th(), minWidth: 320, width: 'auto' }}>Description</th>
                               <th style={th(84)}>Unit</th>
                               <th style={{ ...th(70), textAlign: 'right' }}>Qty</th>
-                              <th style={{ ...th(100), textAlign: 'right' }}>Labour</th>
-                              <th style={{ ...th(100), textAlign: 'right' }}>Materials</th>
+                              {hasSplit && <th style={{ ...th(100), textAlign: 'right' }}>Labour</th>}
+                              {hasSplit && <th style={{ ...th(100), textAlign: 'right' }}>Materials</th>}
                               <th style={{ ...th(100), textAlign: 'right' }}>Total</th>
                               <th style={th(36)}></th>
                             </tr>
@@ -727,19 +747,31 @@ export default function BuilderPackPage() {
                                       onChange={(e) => updateItem(sIdx, iIdx, { qty: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right' }} />
                                   </td>
+                                  {hasSplit && (
                                   <td style={td()}>
                                     <input type="number" step="0.01" value={it.labour}
                                       onChange={(e) => updateItem(sIdx, iIdx, { labour: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right', color: '#3B82F6' }} />
                                   </td>
+                                  )}
+                                  {hasSplit && (
                                   <td style={td()}>
                                     <input type="number" step="0.01" value={it.materials}
                                       onChange={(e) => updateItem(sIdx, iIdx, { materials: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right', color: '#A855F7' }} />
                                   </td>
+                                  )}
+                                  {hasSplit ? (
                                   <td style={{ ...td(), textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>
                                     {fmt(sym, total, 2)}
                                   </td>
+                                  ) : (
+                                  <td style={td()}>
+                                    <input type="number" step="0.01" value={it.total}
+                                      onChange={(e) => updateItem(sIdx, iIdx, { total: e.target.value })}
+                                      style={{ ...inputCell, textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }} />
+                                  </td>
+                                  )}
                                   <td style={td()}>
                                     <button
                                       onClick={() => removeItem(sIdx, iIdx)}
@@ -764,8 +796,8 @@ export default function BuilderPackPage() {
                           >+ Add item</button>
                           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
                             Subtotal: <strong style={{ color: 'var(--text-primary)' }}>{fmt(sym, t.total, 2)}</strong>
-                            {' '}<span style={{ color: '#3B82F6' }}>· L {fmt(sym, t.labour)}</span>
-                            {' '}<span style={{ color: '#A855F7' }}>· M {fmt(sym, t.materials)}</span>
+                            {hasSplit && <span style={{ color: '#3B82F6' }}>{' '}· L {fmt(sym, t.labour)}</span>}
+                            {hasSplit && <span style={{ color: '#A855F7' }}>{' '}· M {fmt(sym, t.materials)}</span>}
                           </span>
                         </div>
                       </div>
