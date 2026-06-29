@@ -962,13 +962,27 @@ function Builder3DInner() {
       <style>{`
         .b3d-root { height: auto; }
         .b3d-grid { display: flex; flex-wrap: nowrap; gap: 14px; align-items: flex-start; }
-        .b3d-controls { flex: 0 0 240px; height: calc(100vh - 220px); overflow-y: auto; }
-        .b3d-vp { flex: 1 1 auto; min-width: 280px; height: calc(100vh - 220px); }
-        .b3d-est { flex: 0 0 320px; height: calc(100vh - 220px); overflow-y: auto; }
-        @media (max-width: 1180px) {
+        /* min-width:0 lets the columns shrink so a narrow window can never push
+           the estimate panel off the right edge (where overflow:hidden clips it
+           out of view). Widths are flex-basis hints, not hard floors. */
+        .b3d-controls { flex: 0 1 230px; min-width: 0; height: calc(100vh - 220px); overflow-y: auto; }
+        .b3d-vp { flex: 1 1 auto; min-width: 0; height: calc(100vh - 220px); }
+        .b3d-est { flex: 0 1 310px; min-width: 0; height: calc(100vh - 220px); overflow-y: auto; }
+
+        /* Laptops / narrower desktops. The app's 240px nav eats into the usable
+           width, so a true three-column row only fits on wide screens. Below
+           that, keep the controls + 3D view side by side but drop the estimate
+           to its own full-width row underneath — always visible on one screen
+           with a short scroll, never clipped off to the right. */
+        @media (max-width: 1300px) {
           .b3d-grid { flex-wrap: wrap; }
-          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; height: auto; }
-          .b3d-controls, .b3d-est { max-height: none; }
+          .b3d-controls { flex: 0 0 230px; height: calc(100vh - 240px); min-height: 380px; }
+          .b3d-vp { flex: 1 1 300px; height: calc(100vh - 240px); min-height: 380px; }
+          .b3d-est { flex: 1 1 100%; height: auto; max-height: none; }
+        }
+        /* Tablets / phones: single-column stack. */
+        @media (max-width: 820px) {
+          .b3d-controls, .b3d-vp { flex: 1 1 100%; height: auto; min-height: 0; }
           .b3d-vp { height: 460px; }
         }
       `}</style>
