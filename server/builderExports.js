@@ -491,9 +491,12 @@ async function parseBOQ(filePath) {
       return;
     }
 
-    // Sub-total row — typed as "SUB-TOTAL" or "Subtotal" in either col A or col B
-    if (upperA.startsWith('SUB-TOTAL') || upperA.startsWith('SUBTOTAL') ||
-        upperB.startsWith('SUB-TOTAL') || upperB.startsWith('SUBTOTAL')) {
+    // Sub-total row — the word "subtotal" anywhere in either label, so both a
+    // leading "Sub-total — Preliminaries" and a trailing "Section 1 subtotal"
+    // are caught. Without the trailing form the subtotal row was read as a
+    // priced line, doubling the section total.
+    const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
+    if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB)) {
       if (current) {
         current.subtotal = {
           labour: numAt(row, cols.labour),
