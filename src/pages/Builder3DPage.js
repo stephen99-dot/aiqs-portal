@@ -42,7 +42,7 @@ const SHAPES = [
 // Per-module building parameters (markup is project-level, not per module).
 const MODULE_DEFAULTS = {
   shape: 'rect', length: 9, width: 6, wallHeight: 2.6, storeys: 1, roofPitch: 35,
-  roofType: 'hip', wing: 0.45, windows: 7, doors: 2, wallType: 'cavity', roofCovering: 'concrete_tile',
+  roofType: 'hip', wing: 0.45, windows: 7, doors: 2, rooflights: 0, wallType: 'cavity', roofCovering: 'concrete_tile',
 };
 
 const MODULE_TYPES = [
@@ -816,8 +816,11 @@ function Builder3DInner() {
     const tpl = MODULE_TYPES.find((x) => x.id === type) || {};
     const house = modules[0] || firstModule;
     const w = tpl.width || 3;
-    const mod = newModule(type, { ...tpl, offsetX: 0, offsetZ: -((house.width || 6) / 2 + w / 2) });
-    delete mod.label;
+    // Drop the template's own `id`/`label` so they don't clobber the unique
+    // module id newModule() generates — otherwise two modules of the same type
+    // collide (duplicate React keys, shared selection, double-delete).
+    const { id: _tplId, label: _tplLabel, ...tplParams } = tpl;
+    const mod = newModule(type, { ...tplParams, offsetX: 0, offsetZ: -((house.width || 6) / 2 + w / 2) });
     setModules((ms) => [...ms, mod]);
     setActiveId(mod.id);
   };
@@ -1025,8 +1028,10 @@ function Builder3DInner() {
           {/* Build modules — House + Extension + Garage… */}
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, marginBottom: 8 }}>Build modules</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-            {modules.map((mod) => {
-              const sub = quote?.modules?.find((x) => x.name === mod.name)?.cost;
+            {modules.map((mod, idx) => {
+              // Match the priced module by position — names collide (every
+              // Extension is "Extension"), and price-multi preserves order.
+              const sub = quote?.modules?.[idx]?.cost;
               return (
                 <div key={mod.id} onClick={() => setActiveId(mod.id)} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, cursor: 'pointer',
