@@ -961,35 +961,31 @@ function Builder3DInner() {
     <div ref={pageRef} className="b3d-root" style={{ padding: 20, color: t.text, display: 'flex', flexDirection: 'column', maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
       <style>{`
         .b3d-root { height: auto; }
-        .b3d-grid { display: flex; flex-wrap: nowrap; gap: 14px; align-items: flex-start; }
-        /* min-width:0 lets the columns shrink so a narrow window can never push
-           the estimate panel off the right edge (where overflow:hidden clips it
-           out of view). Widths are flex-basis hints, not hard floors. */
-        .b3d-controls { flex: 0 1 230px; min-width: 0; height: calc(100vh - 220px); overflow-y: auto; }
-        .b3d-vp { flex: 1 1 auto; min-width: 0; height: calc(100vh - 220px); }
-        .b3d-est { flex: 0 1 310px; min-width: 0; height: calc(100vh - 220px); overflow-y: auto; }
-
-        /* Laptops / narrower desktops. The app's 240px nav eats into the usable
-           width, so a true three-column row only fits on wide screens. Below
-           that, keep the controls + 3D view side by side but drop the estimate
-           to its own full-width row underneath — always visible on one screen
-           with a short scroll, never clipped off to the right. */
-        @media (max-width: 1300px) {
-          .b3d-grid { flex-wrap: wrap; }
-          .b3d-controls { flex: 0 0 230px; height: calc(100vh - 240px); min-height: 380px; }
-          .b3d-vp { flex: 1 1 300px; height: calc(100vh - 240px); min-height: 380px; }
-          .b3d-est { flex: 1 1 100%; height: auto; max-height: none; }
-        }
-        /* Tablets / phones: single-column stack. */
-        @media (max-width: 820px) {
-          .b3d-controls, .b3d-vp { flex: 1 1 100%; height: auto; min-height: 0; }
-          .b3d-vp { height: 460px; }
+        /* max-width keeps the three columns clustered on one screen even if the
+           browser is maximised across two monitors (so the 3D view can't grow
+           unbounded and shove the estimate onto the second screen). */
+        .b3d-grid { display: flex; flex-wrap: nowrap; gap: 12px; align-items: flex-start; max-width: 1600px; }
+        /* All three columns SHRINK (flex-shrink:1, min-width:0). Flexbox then
+           always fits them inside the available width, so the estimate panel can
+           never be pushed past the right edge where overflow-x:hidden would clip
+           it out of view. The widths below are preferred sizes, not hard floors;
+           the 3D view (huge flex-grow) soaks up any spare space. */
+        .b3d-controls { flex: 1 1 210px; min-width: 0; max-width: 240px; height: calc(100vh - 220px); overflow-y: auto; }
+        .b3d-vp { flex: 100 1 0%; min-width: 0; height: calc(100vh - 220px); }
+        .b3d-est { flex: 1 1 280px; min-width: 0; max-width: 330px; height: calc(100vh - 220px); overflow-y: auto; }
+        /* Small laptops / tablets / phones: the three columns can't stay legible
+           side by side, so stack them — estimate full width below the 3D view,
+           reachable with a normal page scroll. */
+        @media (max-width: 900px) {
+          .b3d-grid { flex-wrap: wrap; max-width: none; }
+          .b3d-controls, .b3d-vp, .b3d-est { flex: 1 1 100%; max-width: none; height: auto; }
+          .b3d-vp { height: 440px; }
         }
       `}</style>
       <div style={{ marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
           3D Builder <span style={{ fontSize: 12, fontWeight: 600, background: t.accent, color: '#fff', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>Admin preview</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L10 · height-fix</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: '#0a7d28', padding: '2px 8px', borderRadius: 999, marginLeft: 8 }}>build L11 · single-screen-fit</span>
         </h1>
         <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 4 }}>
           Parametric building → live priced take-off against the UK Master Rates library. Rectangular / L / T / U footprints, hipped or gable roof.
