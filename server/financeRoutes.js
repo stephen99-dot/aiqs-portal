@@ -524,7 +524,8 @@ router.post('/jobs/from-project', async (req, res) => {
     const ohpPct = ss.ohp_pct != null ? ss.ohp_pct : 0;
     const lines = [];
     for (const s of parsed.sections) {
-      const mult = 1 + (inOhpScope(s.number) ? ohpPct : 0) / 100;
+      // Provisional sums are carried exclusive of OH&P — never uplift them.
+      const mult = 1 + ((s.provisional ? 0 : (inOhpScope(s.number) ? ohpPct : 0))) / 100;
       for (const it of s.items) {
         // Zero-value lines ("included elsewhere") stay on the quote — they're
         // scope the client should see, they just don't add to the total.

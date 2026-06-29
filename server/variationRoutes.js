@@ -776,6 +776,9 @@ function rebuildFromEdits(editedSections) {
         title: String(s.title || 'Section ' + (idx + 1)),
         items,
         subtotal,
+        // Preserve the provisional-sums marker through an edit/re-export so the
+        // block stays exclusive of OH&P and isn't double-counted.
+        provisional: !!s.provisional,
       };
     })
     .filter((s) => s.items.length > 0);
@@ -839,6 +842,7 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       sections: parsed.sections.map((s) => ({
         number: s.number,
         title: s.title,
+        provisional: !!s.provisional, // carried verbatim, exclusive of OH&P
         item_count: s.items.length,
         subtotal: s.subtotal,
         items: s.items, // full editable line items

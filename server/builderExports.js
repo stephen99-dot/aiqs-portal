@@ -325,6 +325,12 @@ async function parseBOQ(filePath) {
   const sections = [];
   let current = null;
   let stopped = false;
+  // A tender prints its Provisional Sums *after* the "NET MEASURED WORKS" line
+  // (which trips `stopped`). These flags let us keep capturing that block — as
+  // its own section, carried into the client copy line by line, exclusive of
+  // OH&P — instead of dropping it with everything else below the stop marker.
+  let inProvSums = false;
+  let provSection = null;
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
@@ -414,13 +420,56 @@ async function parseBOQ(filePath) {
         if (p != null) sourceSummary.vat_pct = p;
         return;
       }
-      // Provisional sums are a lump block carried after the measured works,
-      // exclusive of OH&P. Capture their total so the client copy can add it
-      // back as a flat sum — without it the bottom line is short by that amount.
+      // End of the provisional-sums block. If we captured the lines themselves
+      // (see the block handler below), push them as a section and DON'T also
+      // record a lump — that would double-count. Only fall back to the flat lump
+      // when no individual lines were detected.
       if (/^TOTAL\s+PROVISIONAL\s+SUMS?\b/.test(upperLabel) || /^PROVISIONAL\s+SUMS?\s+TOTAL\b/.test(upperLabel)) {
-        sourceSummary.provisional_sum = numAt(row, cols.total);
+        if (inProvSums && provSection && provSection.items.length) {
+          sections.push(provSection);
+        } else {
+          sourceSummary.provisional_sum = numAt(row, cols.total);
+        }
+        inProvSums = false;
+        provSection = null;
         return;
       }
+    }
+
+    // ── Provisional sums block ──────────────────────────────────────────────
+    // Captured here, BEFORE the `stopped` guard, because a tender prints this
+    // block after "NET MEASURED WORKS". The block opens on its "PROVISIONAL
+    // SUMS" header and closes on its own total (handled in the summary block
+    // above) or the net-total / VAT lines below. Each row is a label + a money
+    // amount with no qty/unit (e.g. "J  Glazing & roof lanterns  60000").
+    const provTotalCell = numAt(row, cols.total);
+    if (!inProvSums &&
+        /\bPROVISIONAL\s+SUMS?\b/.test(upperLabel) && !/\bTOTAL\b/.test(upperLabel) &&
+        provTotalCell <= 0 && !hasUnitOrQty) {
+      inProvSums = true;
+      provSection = { number: 'PS', title: 'Provisional Sums', items: [], subtotal: { labour: 0, materials: 0, total: 0 }, provisional: true };
+      return;
+    }
+    if (inProvSums) {
+      // Close on the net-total / tender / VAT lines (the block's own total is
+      // handled in the summary block above).
+      if (upperLabel.startsWith('NET TOTAL') || upperLabel.startsWith('TOTAL EXCL') ||
+          upperLabel.startsWith('TOTAL EXCLUDING') || upperLabel.includes('TENDER') ||
+          /^VAT\b/.test(upperLabel) || upperLabel.includes('INCL VAT') ||
+          upperLabel.includes('INCL. VAT')) {
+        if (provSection && provSection.items.length) sections.push(provSection);
+        inProvSums = false;
+        provSection = null;
+        return;
+      }
+      // A provisional line: description + money amount, no qty/unit. Skip rows
+      // that carry neither (spacers, sub-headers).
+      const provDesc = b || a;
+      if (provDesc && provTotalCell > 0) {
+        const provRef = (a && a !== provDesc) ? a : '';
+        provSection.items.push({ itemRef: provRef, description: provDesc, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
+      }
+      return;
     }
 
     if (stopped) return;
@@ -981,8 +1030,17 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // We need totals to pass to the cover renderer up-front. Compute the full
   // ex-VAT figure (construction net + prelims + day-rate + contingency) so the
   // headline on the cover matches the bottom of the BOQ.
-  let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0;
+  // Provisional sums carried as their own section (line by line) are exclusive
+  // of OH&P and must not attract the rate uplift, contingency or prelims %. When
+  // present they supersede any flat provisional lump so the block isn't counted
+  // twice.
+  const hasProvSection = (parsed.sections || []).some((s) => s.provisional);
+  let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0, preProvisional = 0;
   for (const s of (parsed.sections || [])) {
+    if (s.provisional) {
+      for (const it of (s.items || [])) { preProvisional += (parseFloat(it.total) || 0); preItemCount++; }
+      continue;
+    }
     const factor = upliftFactorForSection(s.number);
     for (const it of (s.items || [])) {
       preLabour += (parseFloat(it.labour) || 0);
@@ -993,10 +1051,11 @@ async function generateClientCopyPro(parsed, opts = {}) {
       preItemCount++;
     }
   }
+  const totalProvisional = preProvisional + (hasProvSection ? 0 : provisionalSum);
   let preExVat = preNet;
   if (prelimsAmount > 0) preExVat += prelimsAmount;
   if (prelimsPct > 0)    preExVat += preNetOriginal * (prelimsPct / 100);
-  if (provisionalSum > 0) preExVat += provisionalSum;
+  if (totalProvisional > 0) preExVat += totalProvisional;
   if (dayRate)           preExVat += dayRate.days * dayRate.rate_per_day;
   if (contingency > 0)   preExVat += preNetOriginal * (contingency / 100);
   const preInclVat = preExVat * (1 + (vat / 100));
@@ -1088,14 +1147,17 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const sectionTotals = []; // post-uplift per section
   let originalNet = 0;      // pre-uplift construction net (contingency base)
   parsed.sections.forEach((s, idx) => {
-    const sectionFactor = upliftFactorForSection(s.number);
-    const sectionCombinedPct = combinedPctForSection(s.number);
+    // Provisional sums are carried verbatim, exclusive of OH&P — never uplifted.
+    const sectionFactor = s.provisional ? 1 : upliftFactorForSection(s.number);
+    const sectionCombinedPct = s.provisional ? 0 : combinedPctForSection(s.number);
 
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
-    sec.getCell(1).value = '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase() +
-      (Math.abs(sectionCombinedPct - baseCombinedPct) > 0.001 ? '   (uplift ' + sectionCombinedPct + '%)' : '');
+    sec.getCell(1).value = s.provisional
+      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + '   (excl. OH&P)'
+      : '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase() +
+        (Math.abs(sectionCombinedPct - baseCombinedPct) > 0.001 ? '   (uplift ' + sectionCombinedPct + '%)' : '');
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
       sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.sectionFill } };
@@ -1111,7 +1173,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     let sectionTotal = 0;
     for (const it of s.items) {
       const baseLineTotal = (it.labour || 0) + (it.materials || 0) || (it.total || 0);
-      originalNet += baseLineTotal;
+      if (!s.provisional) originalNet += baseLineTotal;
       const upliftedTotal = roundMoney(baseLineTotal * sectionFactor);
       sectionTotal += upliftedTotal;
       const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionFactor;
@@ -1162,7 +1224,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
   });
 
   // ── Summary block ──────────────────────────────────────────────────────
-  const netConstruction = sectionTotals.reduce((a, x) => a + x.total, 0);
+  // Net construction excludes provisional sections — those are shown on their
+  // own summary line (exclusive of OH&P), matching the source tender.
+  const netConstruction = sectionTotals.filter((x) => !x.section.provisional).reduce((a, x) => a + x.total, 0);
+  const provisionalFromSections = sectionTotals.filter((x) => x.section.provisional).reduce((a, x) => a + x.total, 0);
 
   const sumHdr = ws.getRow(r);
   ws.mergeCells('A' + r + ':F' + r);
@@ -1190,7 +1255,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
     return row;
   }
 
-  addSummaryLine('Net construction cost (incl. trade OH&P)', netConstruction);
+  // When OH&P is stripped (the faithful client-copy case) the rates are the
+  // tendered net, so don't claim they include OH&P.
+  const ohpApplied = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
+  addSummaryLine(ohpApplied ? 'Net construction cost (incl. trade OH&P)' : 'Net construction cost', netConstruction);
 
   let runningTotal = netConstruction;
 
@@ -1203,9 +1271,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
     addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', v);
     runningTotal += v;
   }
-  if (provisionalSum > 0) {
-    addSummaryLine('Provisional sums (excl. OH&P)', provisionalSum);
-    runningTotal += provisionalSum;
+  const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
+  if (provisionalDisplay > 0) {
+    addSummaryLine('Provisional sums (excl. OH&P)', provisionalDisplay);
+    runningTotal += provisionalDisplay;
   }
   if (dayRate) {
     const v = dayRate.days * dayRate.rate_per_day;
@@ -1230,10 +1299,12 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // Footer note
   r++;
   const note = ws.getRow(r);
-  note.getCell(2).value =
-    'This document is prepared for client use. Rates are final and inclusive of overheads and profit'
-    + (vat > 0 ? ', with VAT as shown' : '')
-    + '. No contractor margin is shown separately.';
+  note.getCell(2).value = ohpApplied
+    ? 'This document is prepared for client use. Rates are final and inclusive of overheads and profit'
+      + (vat > 0 ? ', with VAT as shown' : '')
+      + '. No contractor margin is shown separately.'
+    : 'This document is prepared for client use. Rates are as tendered, exclusive of overheads, profit and contingency (to be agreed separately)'
+      + (vat > 0 ? '. VAT is shown where applicable' : '') + '.';
   note.getCell(2).font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF888888' } };
 
   ws.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];

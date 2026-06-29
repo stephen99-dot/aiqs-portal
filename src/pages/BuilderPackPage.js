@@ -107,6 +107,7 @@ export default function BuilderPackPage() {
         const seeded = (bd.sections || []).map((s) => ({
           number: s.number,
           title: s.title,
+          provisional: !!s.provisional,
           items: (s.items || []).map((it) => {
             const { unitLabour, unitMaterials } = unitRates(it);
             return { ...it, unitLabour, unitMaterials };
@@ -115,27 +116,18 @@ export default function BuilderPackPage() {
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
-        // Seed the client copy controls from the source BOQ's own summary so
-        // the default export matches its bottom line exactly.
+        // Client Copy policy: reproduce the uploaded BOQ exactly, line by line,
+        // but STRIP overhead/profit/contingency so the client sets their own.
+        // OH&P and contingency are deliberately left at 0 (not seeded from the
+        // source) — the rates render verbatim and the client can type in their
+        // own OH&P/contingency afterwards. VAT is kept as the source carried it.
         const ss = bd.source_summary || {};
-        // Overhead seeds from a split tender summary if present, otherwise from
-        // a single combined OH&P line. Profit seeds only from a split summary.
-        if (ss.overhead_pct != null) setDefaultOhp(ss.overhead_pct);
-        else if (ss.ohp_pct != null) setDefaultOhp(ss.ohp_pct);
-        if (ss.profit_pct != null) setProfit(ss.profit_pct);
-        if (ss.ohp_pct != null && Array.isArray(ss.ohp_sections) && ss.ohp_sections.length === 2) {
-          const [from, to] = ss.ohp_sections;
-          const overrides = {};
-          for (const s of seeded) {
-            const n = parseFloat(s.number);
-            if (Number.isFinite(n) && (n < from || n > to)) overrides[s.number] = 0;
-          }
-          if (Object.keys(overrides).length) setPerTradeOhp(overrides);
-        }
-        if (ss.contingency_pct != null) setContingency(ss.contingency_pct);
         if (ss.vat_pct != null) setVat(ss.vat_pct);
-        if (ss.provisional_sum != null) setProvisionalSum(ss.provisional_sum);
-        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null || ss.provisional_sum != null);
+        // Provisional sums now arrive as their own itemised section (see seeded);
+        // only fall back to the flat lump for older BOQs that weren't itemised.
+        const hasProvSection = seeded.some((s) => s.provisional);
+        if (ss.provisional_sum != null && !hasProvSection) setProvisionalSum(ss.provisional_sum);
+        setSourceSeeded(ss.ohp_pct != null || ss.overhead_pct != null || ss.profit_pct != null || ss.contingency_pct != null || ss.vat_pct != null || ss.provisional_sum != null || hasProvSection);
         // Restore any previously-saved working state on top of the freshly-parsed
         // BOQ, so the user picks up exactly where they left off. originalSections
         // stays the pristine BOQ so "Reset" still returns to the delivered figures.
@@ -300,22 +292,28 @@ export default function BuilderPackPage() {
   const baseUplift = (1 + defaultOhp / 100) * (1 + profit / 100);
   const clientRows = useMemo(
     () => sections.map((s, i) => {
-      const factor = Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
-        ? 1 + num(perTradeOhp[s.number]) / 100
-        : baseUplift;
+      // Provisional sections are carried verbatim, exclusive of OH&P (factor 1).
+      const factor = s.provisional
+        ? 1
+        : (Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
+            ? 1 + num(perTradeOhp[s.number]) / 100
+            : baseUplift);
       const base = sectionTotals[i].total;
       const subtotal = roundMoney(rounding, base * factor);
-      return { number: s.number, title: s.title, item_count: s.items.length, uplift: factor, base, subtotal };
+      return { number: s.number, title: s.title, provisional: !!s.provisional, item_count: s.items.length, uplift: factor, base, subtotal };
     }),
     [sections, sectionTotals, perTradeOhp, baseUplift, rounding]
   );
-  const netConstruction = clientRows.reduce((a, r) => a + r.subtotal, 0);
-  // Contingency / prelims-% are charged on the construction net (pre-uplift),
-  // matching how the delivered tender computes them.
-  const originalNet = sectionTotals.reduce((a, t) => a + t.total, 0);
+  // Net construction excludes provisional sections — they get their own line.
+  const netConstruction = clientRows.filter((r) => !r.provisional).reduce((a, r) => a + r.subtotal, 0);
+  const provisionalFromSections = clientRows.filter((r) => r.provisional).reduce((a, r) => a + r.subtotal, 0);
+  // Contingency / prelims-% are charged on the construction net (pre-uplift,
+  // excluding provisional sums), matching how the delivered tender computes them.
+  const originalNet = sections.reduce((a, s, i) => a + (s.provisional ? 0 : sectionTotals[i].total), 0);
 
+  const ohpApplied = baseUplift > 1.0001 || Object.keys(perTradeOhp).length > 0;
   let runningTotal = netConstruction;
-  const summaryLines = [{ label: 'Net construction (incl. overhead & profit)', value: netConstruction, key: 'net' }];
+  const summaryLines = [{ label: ohpApplied ? 'Net construction (incl. overhead & profit)' : 'Net construction', value: netConstruction, key: 'net' }];
   if (prelimsMode === 'flat' && prelimsAmount > 0) {
     summaryLines.push({ label: 'Preliminaries (flat)', value: prelimsAmount, key: 'prel-flat' });
     runningTotal += prelimsAmount;
@@ -333,9 +331,12 @@ export default function BuilderPackPage() {
     });
     runningTotal += v;
   }
-  if (provisionalSum > 0) {
-    summaryLines.push({ label: 'Provisional sums (excl. OH&P)', value: provisionalSum, key: 'provisional' });
-    runningTotal += provisionalSum;
+  // Provisional sums = itemised provisional sections + any legacy flat lump
+  // (only one of the two is ever non-zero, so they never double up).
+  const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : provisionalSum);
+  if (provisionalTotal > 0) {
+    summaryLines.push({ label: 'Provisional sums (excl. OH&P)', value: provisionalTotal, key: 'provisional' });
+    runningTotal += provisionalTotal;
   }
   if (contingency > 0) {
     const v = originalNet * (contingency / 100);
@@ -349,7 +350,7 @@ export default function BuilderPackPage() {
   // ─── Downloads ───────────────────────────────────────────────────────────
   function editsForBody() {
     return sections.map((s) => ({
-      number: s.number, title: s.title,
+      number: s.number, title: s.title, provisional: !!s.provisional,
       items: s.items.map((it) => ({
         itemRef: it.itemRef, description: it.description, unit: it.unit,
         qty: num(it.qty), labour: num(it.labour), materials: num(it.materials),
