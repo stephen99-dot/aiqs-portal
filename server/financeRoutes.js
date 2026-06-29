@@ -611,7 +611,7 @@ router.get('/jobs/:id', (req, res) => {
       "SELECT kind, COALESCE(SUM(total),0) as total FROM job_costs WHERE job_id = ? GROUP BY kind"
     ).all(job.id);
     const quotes = db.prepare(
-      'SELECT id, quote_number, project_name, grand_total, status, created_at FROM quotes WHERE job_id = ? ORDER BY created_at DESC'
+      'SELECT id, quote_number, project_name, grand_total, status, created_at, public_token FROM quotes WHERE job_id = ? ORDER BY created_at DESC'
     ).all(job.id);
     res.json({ job, budget, costsAgg, quotes });
   } catch (err) {
