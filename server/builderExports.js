@@ -331,6 +331,13 @@ async function parseBOQ(filePath) {
   // OH&P — instead of dropping it with everything else below the stop marker.
   let inProvSums = false;
   let provSection = null;
+  // boqGenerator prints a "PRIME COST & PROVISIONAL SUMS (shown for reference)"
+  // recap of figures already inside the priced lines. It must NOT be parsed as
+  // an authoritative Provisional Sums section — doing so both double-counts the
+  // lines and shows only the keyword-matched subset. Once we cross into that
+  // recap, skip every remaining row. A genuine tender's "PROVISIONAL SUMS"
+  // section header carries none of these reference markers, so it still parses.
+  let inReferenceRecap = false;
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
@@ -349,6 +356,17 @@ async function parseBOQ(filePath) {
     // just a label and a value. Merged label rows mirror their text into every
     // column, so a unit cell that just repeats the label doesn't count.
     const upperLabel = (upperA || upperB);
+
+    // Reference recap detector — distinctive boqGenerator wording, not present
+    // on a real tender PS block. Everything from here down is reference-only.
+    if (!inReferenceRecap &&
+        (/PRIME COST & PROVISIONAL SUMS/.test(upperLabel) ||
+         /SHOWN FOR REFERENCE/.test(upperLabel) ||
+         /INCLUDED IN THE RATES ABOVE/.test(upperLabel))) {
+      inReferenceRecap = true;
+    }
+    if (inReferenceRecap) return;
+
     const unitText = textAt(row, cols.unit);
     const mirrored = !!unitText && unitText === (a || b);
     const hasUnitOrQty = !mirrored && (!!unitText || numAt(row, cols.qty) > 0);
@@ -455,9 +473,9 @@ async function parseBOQ(filePath) {
       // amount (e.g. "PS.1 | Air-conditioning | 31754", "A | Asbestos removal |
       // 1000"). Capture only that shape. Anything else — a cost-summary value
       // line ("Net works sub-total", "Preliminaries, overheads & profit"), the
-      // next block header ("COST SUMMARY"), a spacer — ENDS the block. Closing
-      // here (rather than greedily eating down to the VAT line) is what stops the
-      // cost summary being swallowed as fake provisional items.
+      // next block header ("COST SUMMARY"), a spacer, OR a "SUB-TOTAL — SECTION"
+      // row (which boqGenerator prints with an empty item cell) — ENDS the block
+      // and falls through to the stop / subtotal / summary detection below.
       if (a && b && provTotalCell > 0) {
         provSection.items.push({ itemRef: a, description: b, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
         return;
