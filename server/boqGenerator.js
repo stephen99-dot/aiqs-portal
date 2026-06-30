@@ -56,11 +56,21 @@ function classifySums(sections, opts = {}) {
   const pc = [];
   const prov = [];
   for (const section of sections || []) {
+    const secTitle = String(section.title || section.name || '').toLowerCase();
+    const inProvSection = /provisional\s+sums?/.test(secTitle);
     for (const item of (section.items || [])) {
       const text = String(item.description || '').toLowerCase();
       const unit = String(item.unit || '').toLowerCase().trim();
       const total = Number(item.total) || ((Number(item.labour) || 0) + (Number(item.materials) || 0));
-      const isProvisional = /provisional sum|prov\.?\s*sum/.test(text) || /^p\.?\s*sum$/.test(unit) || unit === 'prov';
+      // Recognise provisional sums however they're expressed: an explicit
+      // "Provisional Sums" section, the words "provisional sum" / P.Sum unit, OR
+      // an allowance worded "subject to <a later design/report/scope/survey/
+      // quotation/instruction>" — the natural phrasing for work that can't be
+      // measured until something later is fixed.
+      const isProvisional = inProvSection
+        || /provisional sum|prov\.?\s*sum/.test(text)
+        || /^p\.?\s*sum$/.test(unit) || unit === 'prov'
+        || /\bsubject to\b[^.]*\b(design|report|survey|scope|quotation|quote|specialist|instruction|measurement|tender|approval)\b/.test(text);
       const isPC = /prime cost|\bpc £|\bp\.c\.|\(pc\b/.test(text);
       if (isProvisional) prov.push({ ref: item.item || '', description: shortLabel(item.description), total });
       else if (isPC) pc.push({ ref: item.item || '', description: shortLabel(item.description), total });

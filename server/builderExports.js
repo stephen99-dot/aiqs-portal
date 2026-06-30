@@ -331,6 +331,13 @@ async function parseBOQ(filePath) {
   // OH&P — instead of dropping it with everything else below the stop marker.
   let inProvSums = false;
   let provSection = null;
+  // boqGenerator prints a "PRIME COST & PROVISIONAL SUMS (shown for reference)"
+  // recap of figures already inside the priced lines. It must NOT be parsed as
+  // an authoritative Provisional Sums section — doing so both double-counts the
+  // lines and shows only the keyword-matched subset. Once we cross into that
+  // recap, skip every remaining row. A genuine tender's "PROVISIONAL SUMS"
+  // section header carries none of these reference markers, so it still parses.
+  let inReferenceRecap = false;
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
@@ -349,6 +356,17 @@ async function parseBOQ(filePath) {
     // just a label and a value. Merged label rows mirror their text into every
     // column, so a unit cell that just repeats the label doesn't count.
     const upperLabel = (upperA || upperB);
+
+    // Reference recap detector — distinctive boqGenerator wording, not present
+    // on a real tender PS block. Everything from here down is reference-only.
+    if (!inReferenceRecap &&
+        (/PRIME COST & PROVISIONAL SUMS/.test(upperLabel) ||
+         /SHOWN FOR REFERENCE/.test(upperLabel) ||
+         /INCLUDED IN THE RATES ABOVE/.test(upperLabel))) {
+      inReferenceRecap = true;
+    }
+    if (inReferenceRecap) return;
+
     const unitText = textAt(row, cols.unit);
     const mirrored = !!unitText && unitText === (a || b);
     const hasUnitOrQty = !mirrored && (!!unitText || numAt(row, cols.qty) > 0);
@@ -451,19 +469,32 @@ async function parseBOQ(filePath) {
       return;
     }
     if (inProvSums) {
-      // Close on the net-total / tender / VAT lines (the block's own total is
-      // handled in the summary block above).
+      // Close on the net-total / tender / VAT lines AND on the summary block /
+      // grand total markers that boqGenerator prints right after a dedicated
+      // "Provisional Sums" section (PROJECT SUMMARY, NET/TOTAL CONSTRUCTION COST,
+      // GRAND TOTAL). The block's own "TOTAL PROVISIONAL SUMS" line is handled in
+      // the summary block above.
       if (upperLabel.startsWith('NET TOTAL') || upperLabel.startsWith('TOTAL EXCL') ||
           upperLabel.startsWith('TOTAL EXCLUDING') || upperLabel.includes('TENDER') ||
           /^VAT\b/.test(upperLabel) || upperLabel.includes('INCL VAT') ||
-          upperLabel.includes('INCL. VAT')) {
+          upperLabel.includes('INCL. VAT') ||
+          upperLabel.includes('PROJECT SUMMARY') || upperLabel.includes('GRAND TOTAL') ||
+          upperLabel.includes('NET CONSTRUCTION') || upperLabel.includes('TOTAL CONSTRUCTION') ||
+          upperLabel.includes('SUMMARY OF TOTALS') || upperLabel.includes('COLLECTION & SUMMARY')) {
         if (provSection && provSection.items.length) sections.push(provSection);
         inProvSums = false;
         provSection = null;
         return;
       }
-      // A provisional line: description + money amount, no qty/unit. Skip rows
-      // that carry neither (spacers, sub-headers).
+      // Skip the section's own sub-total / carry-down rows — those repeat the
+      // block total and would otherwise be read as an extra provisional line,
+      // doubling the section.
+      if (/\bSUB[\s-]?TOTALS?\b/.test(upperLabel) || upperLabel.includes('TO COLLECTION') ||
+          /^TOTAL\s+PROVISIONAL\s+SUMS?\b/.test(upperLabel)) {
+        return;
+      }
+      // A provisional line: description + money amount. Skip rows that carry
+      // neither (spacers, sub-headers).
       const provDesc = b || a;
       if (provDesc && provTotalCell > 0) {
         const provRef = (a && a !== provDesc) ? a : '';

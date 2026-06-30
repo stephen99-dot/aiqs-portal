@@ -388,6 +388,14 @@ ESSENTIAL ITEMS — DO NOT MISS:
 6. COST TARGET: Preliminaries £5,000-£8,000. Services £7,000-£8,000. General items £5,000-£6,000. Each room £2,000-£12,000 depending on scope. Total for multi-room: £30,000-£80,000
 7. If your total construction cost (before contingency/OH&P/VAT) is under £25,000 for a multi-room water damage reinstatement, you are DEFINITELY missing scope. Go back and add items
 
+PROVISIONAL SUMS — DEDICATED SECTION, BE COMPREHENSIVE:
+Create ONE dedicated section literally titled "Provisional Sums" (make it the LAST section) and put EVERY provisional allowance in it. For each one use key "provisional_sum", set "section" to "Provisional Sums", unit "Item", and follow the provisional_sum convention above (qty = the £ allowance value, rate = 1) — e.g. a £32,000 air-conditioning allowance is {"key":"provisional_sum","section":"Provisional Sums","unit":"Item","qty":32000,"rate":1,"description":"Air-conditioning installation throughout — subject to mechanical design"}. A provisional sum is any element you CANNOT measure precisely now because it depends on a later design, report, survey, scope confirmation or specialist quotation. Be thorough — scan the brief for ALL of these, do not stop at one:
+- Specialist M&E priced on later design — air-conditioning / comfort cooling, lift, sprinklers/AOV, BMS, standby power ("Air-conditioning installation throughout — subject to mechanical design").
+- Building-fabric repairs pending a specialist report — façade / stonework / masonry repairs ("Building façade repair — subject to stonemason's report"), structural movement, roof/parapet, damp/timber treatment.
+- Areas with undefined fit-out scope — a store/plant/ancillary room whose works aren't yet scoped ("Yellow Storage Room — refurbishment/fit-out, subject to scope of works").
+- Utility/statutory connections and diversions priced by others; asbestos removal; drainage found on opening up.
+Each line MUST name its basis ("subject to …"). Carry provisional sums at face value — they are exclusive of OH&P. If the brief names a specific area, system or repair whose extent isn't fixed, it belongs here — a missing provisional sum is missing scope.
+
 AVAILABLE ITEM KEYS (use these exact strings in the "key" field):
 
 === NEW BUILD / EXTENSION KEYS ===
