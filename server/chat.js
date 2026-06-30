@@ -3295,6 +3295,13 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             ohp_pct: pricedResult.summary.ohp_pct,
             vat_rate: pricedResult.summary.vat_rate,
             currency: pricedResult.summary.currency === 'EUR' ? '€' : '£',
+            // Feed the header block the job context we already hold so the bill
+            // reads like a real tender front sheet instead of showing "—". The
+            // renderer also auto-recaps PC / Provisional sums from these lines.
+            location: lockedTakeoff ? lockedTakeoff.location : undefined,
+            project_type: lockedTakeoff ? lockedTakeoff.project_type : undefined,
+            spec_level: lockedTakeoff ? lockedTakeoff.spec_level : undefined,
+            floor_area_m2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
             branding: _branding,
           });
           if (buf && buf.length > 100) {

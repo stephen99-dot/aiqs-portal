@@ -964,8 +964,9 @@ router.get('/quotes/:id/xlsx', async (req, res) => {
     const filename = (q.quote_number || 'quote') + '.xlsx';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
-    require('./docTemplates').fixXlsxDpi(wb);
-    await wb.xlsx.write(res);
+    // Stream through the canonical helper so the DPI fix is always applied
+    // (prevents the "We found a problem with some content" corruption).
+    await require('./docTemplates').writeXlsxStream(wb, res);
     res.end();
   } catch (err) {
     console.error('[Estimator] XLSX error:', err);

@@ -652,11 +652,22 @@ async function writeXlsxBuffer(wb) {
   return wb.xlsx.writeBuffer();
 }
 
+// Streaming counterpart to writeXlsxBuffer for routes that pipe the workbook
+// straight to an HTTP response (where there's no buffer to fix afterwards).
+// Always apply the DPI fix first — same reason as writeXlsxBuffer — so a
+// streamed export can't reintroduce the "We found a problem with some content"
+// corruption. Use this instead of a bare wb.xlsx.write(stream).
+async function writeXlsxStream(wb, stream) {
+  fixXlsxDpi(wb);
+  return wb.xlsx.write(stream);
+}
+
 module.exports = {
   styleFor,
   renderCoverSheet,
   renderHeroBlock,
   writeXlsxBuffer,
+  writeXlsxStream,
   fixXlsxDpi,
   hexToArgb,
   tintHex,
