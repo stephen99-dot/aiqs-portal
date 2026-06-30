@@ -469,38 +469,22 @@ async function parseBOQ(filePath) {
       return;
     }
     if (inProvSums) {
-      // Close on the net-total / tender / VAT lines AND on the summary block /
-      // grand total markers that boqGenerator prints right after a dedicated
-      // "Provisional Sums" section (PROJECT SUMMARY, NET/TOTAL CONSTRUCTION COST,
-      // GRAND TOTAL). The block's own "TOTAL PROVISIONAL SUMS" line is handled in
-      // the summary block above.
-      if (upperLabel.startsWith('NET TOTAL') || upperLabel.startsWith('TOTAL EXCL') ||
-          upperLabel.startsWith('TOTAL EXCLUDING') || upperLabel.includes('TENDER') ||
-          /^VAT\b/.test(upperLabel) || upperLabel.includes('INCL VAT') ||
-          upperLabel.includes('INCL. VAT') ||
-          upperLabel.includes('PROJECT SUMMARY') || upperLabel.includes('GRAND TOTAL') ||
-          upperLabel.includes('NET CONSTRUCTION') || upperLabel.includes('TOTAL CONSTRUCTION') ||
-          upperLabel.includes('SUMMARY OF TOTALS') || upperLabel.includes('COLLECTION & SUMMARY')) {
-        if (provSection && provSection.items.length) sections.push(provSection);
-        inProvSums = false;
-        provSection = null;
+      // A genuine provisional line has its OWN ref AND description AND a positive
+      // amount (e.g. "PS.1 | Air-conditioning | 31754", "A | Asbestos removal |
+      // 1000"). Capture only that shape. Anything else — a cost-summary value
+      // line ("Net works sub-total", "Preliminaries, overheads & profit"), the
+      // next block header ("COST SUMMARY"), a spacer, OR a "SUB-TOTAL — SECTION"
+      // row (which boqGenerator prints with an empty item cell) — ENDS the block
+      // and falls through to the stop / subtotal / summary detection below.
+      if (a && b && provTotalCell > 0) {
+        provSection.items.push({ itemRef: a, description: b, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
         return;
       }
-      // Skip the section's own sub-total / carry-down rows — those repeat the
-      // block total and would otherwise be read as an extra provisional line,
-      // doubling the section.
-      if (/\bSUB[\s-]?TOTALS?\b/.test(upperLabel) || upperLabel.includes('TO COLLECTION') ||
-          /^TOTAL\s+PROVISIONAL\s+SUMS?\b/.test(upperLabel)) {
-        return;
-      }
-      // A provisional line: description + money amount. Skip rows that carry
-      // neither (spacers, sub-headers).
-      const provDesc = b || a;
-      if (provDesc && provTotalCell > 0) {
-        const provRef = (a && a !== provDesc) ? a : '';
-        provSection.items.push({ itemRef: provRef, description: provDesc, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
-      }
-      return;
+      if (provSection && provSection.items.length) sections.push(provSection);
+      inProvSums = false;
+      provSection = null;
+      // Fall through (no return) so this row is handled by the stop / subtotal /
+      // summary detection below.
     }
 
     if (stopped) return;
@@ -513,9 +497,11 @@ async function parseBOQ(filePath) {
     // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
         upperLabel.includes('SUMMARY OF TOTALS') ||
+        upperLabel.includes('COST SUMMARY') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
         upperLabel.startsWith('NET MEASURED WORKS') ||
+        upperLabel.startsWith('NET CONSTRUCTION COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
       stopped = true;
