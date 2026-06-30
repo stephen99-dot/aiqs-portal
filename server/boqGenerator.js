@@ -9,6 +9,66 @@
 const ExcelJS = require('exceljs');
 const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex, sanitizeXmlText, writeXlsxBuffer } = require('./docTemplates');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enrichment helpers (additive, backward-compatible). These let the bill read
+// more like a chartered-QS document — contract metadata in the header, per-
+// section narrative notes, and a Prime Cost / Provisional Sums recap — WITHOUT
+// changing any priced number (so the recalc gate still reconciles to the penny).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Accept opts.meta as either an object ({ Employer: '…' }) or an array of
+// [label, value] / { label, value } pairs, and return a clean [label, value][]
+// with empties dropped. Used to extend the project header block.
+function normalizeMeta(meta) {
+  if (!meta) return [];
+  let pairs = [];
+  if (Array.isArray(meta)) {
+    pairs = meta.map((m) => (Array.isArray(m) ? [m[0], m[1]] : [m && m.label, m && m.value]));
+  } else if (typeof meta === 'object') {
+    pairs = Object.keys(meta).map((k) => [k, meta[k]]);
+  }
+  return pairs
+    .map(([label, value]) => [String(label || '').trim(), value == null ? '' : String(value).trim()])
+    .filter(([label, value]) => label && value && value !== '—');
+}
+
+// Trim a line-item description down to a short recap label: drop the appended
+// "(working…)" note and clamp the length.
+function shortLabel(desc, max = 70) {
+  let s = String(desc || '').split('\n')[0].trim();
+  if (s.length > max) s = s.slice(0, max - 1).trimEnd() + '…';
+  return s;
+}
+
+// Classify Prime Cost (PC) and Provisional Sum line items so they can be
+// recapped. Callers may pass explicit opts.pcSums / opts.provisionalSums
+// (arrays of { ref, description, total }); otherwise we auto-derive from the
+// line items by their unit + description wording. These are ALREADY inside the
+// section subtotals — the recap is informational and never re-added to a total.
+function classifySums(sections, opts = {}) {
+  const provided = (arr) => Array.isArray(arr) && arr.length
+    ? arr.map((e) => ({ ref: e.ref || e.item || '', description: shortLabel(e.description || e.label || ''), total: Number(e.total) || 0 }))
+    : null;
+  const pcGiven = provided(opts.pcSums);
+  const provGiven = provided(opts.provisionalSums);
+  if (pcGiven || provGiven) return { pc: pcGiven || [], prov: provGiven || [] };
+
+  const pc = [];
+  const prov = [];
+  for (const section of sections || []) {
+    for (const item of (section.items || [])) {
+      const text = String(item.description || '').toLowerCase();
+      const unit = String(item.unit || '').toLowerCase().trim();
+      const total = Number(item.total) || ((Number(item.labour) || 0) + (Number(item.materials) || 0));
+      const isProvisional = /provisional sum|prov\.?\s*sum/.test(text) || /^p\.?\s*sum$/.test(unit) || unit === 'prov';
+      const isPC = /prime cost|\bpc £|\bp\.c\.|\(pc\b/.test(text);
+      if (isProvisional) prov.push({ ref: item.item || '', description: shortLabel(item.description), total });
+      else if (isPC) pc.push({ ref: item.item || '', description: shortLabel(item.description), total });
+    }
+  }
+  return { pc, prov };
+}
+
 async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const currency = opts.currency || '\u00a3';
   // Default ZERO markup: rates are all-in competitive prices, so the summary
@@ -132,10 +192,18 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     ['Project', projectName || '—'],
     ['Client', clientName || '—'],
     ['Project type', [opts.project_type, opts.spec_level ? '· ' + opts.spec_level + ' spec' : '', opts.floor_area_m2 ? '· ' + Math.round(opts.floor_area_m2) + ' m² GIA' : ''].filter(Boolean).join(' ') || '—'],
+  ];
+  // Optional contract metadata (Employer, Contract Administrator, Contract form,
+  // Loss adjuster, Type of loss, Location …) — slotted in just below the job
+  // identity so the bill reads like a real tender front sheet when the caller
+  // has the detail, and is silently skipped when it doesn't.
+  if (opts.location) metaRows.push(['Location', opts.location]);
+  for (const [label, value] of normalizeMeta(opts.meta)) metaRows.push([label, value]);
+  metaRows.push(
     ['Prepared by', preparedBy],
     ['Date', issueDate],
     ['Basis', basisParts.join(', ')],
-  ];
+  );
   for (var mr = 0; mr < metaRows.length; mr++) {
     var metaRow = ws.getRow(row);
     metaRow.getCell(1).value = metaRows[mr][0] + ':';
@@ -203,6 +271,19 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     }
     secRow.height = 26;
     row++;
+
+    // Optional section narrative note (scope, assumptions, caveats) — renders as
+    // a wrapped italic band under the section header when supplied. Carries no
+    // qty/rate/total, so the recalc gate ignores it.
+    if (section.note) {
+      var noteRow = ws.getRow(row);
+      ws.mergeCells('A' + row + ':I' + row);
+      noteRow.getCell(1).value = sanitizeXmlText(String(section.note));
+      noteRow.getCell(1).font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF64748B' } };
+      noteRow.getCell(1).alignment = { horizontal: 'left', vertical: 'top', wrapText: true, indent: 1 };
+      noteRow.height = Math.min(60, 16 + Math.floor(String(section.note).length / 110) * 12);
+      row++;
+    }
 
     var firstItemRow = row;
     var items = section.items || [];
@@ -384,6 +465,66 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     inclRow.getCell(ic).border = allBorders;
   }
   row++;
+
+  // === PRIME COST & PROVISIONAL SUMS RECAP ===
+  // A chartered bill lists its PC and Provisional sums together so the reader
+  // can see the allowances at a glance. These figures are ALREADY contained in
+  // the priced lines above — this is a reference recap, not an addition, so it
+  // never touches the construction total (and the recalc gate, which only counts
+  // rows carrying qty+rate+unit, ignores every row written here).
+  var sums = classifySums(sections, opts);
+  if (sums.pc.length > 0 || sums.prov.length > 0) {
+    row++;
+    var recapHeader = ws.getRow(row);
+    ws.mergeCells('A' + row + ':I' + row);
+    recapHeader.getCell(1).value = 'PRIME COST & PROVISIONAL SUMS  (included in the rates above — shown for reference)';
+    recapHeader.getCell(1).font = { name: headingFont, size: 10.5, bold: true, color: { argb: PRIMARY } };
+    recapHeader.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+    recapHeader.getCell(1).border = allBorders;
+    recapHeader.height = 22;
+    row++;
+
+    function renderSumGroup(title, entries) {
+      if (!entries || entries.length === 0) return;
+      var grpRow = ws.getRow(row);
+      grpRow.getCell(2).value = title;
+      grpRow.getCell(2).font = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
+      row++;
+      var groupStart = row;
+      for (var e = 0; e < entries.length; e++) {
+        var entry = entries[e];
+        var er = ws.getRow(row);
+        er.getCell(1).value = sanitizeXmlText(String(entry.ref || ''));
+        er.getCell(1).font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
+        er.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.mergeCells('B' + row + ':G' + row);
+        er.getCell(2).value = sanitizeXmlText(String(entry.description || ''));
+        er.getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF334155' } };
+        er.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        // Total in col 8 only — col 3/4/5 deliberately left empty so the recalc
+        // gate does not treat this as a priced line.
+        er.getCell(8).value = Math.round((Number(entry.total) || 0) * 100) / 100;
+        er.getCell(8).numFmt = currFmt;
+        er.getCell(8).font = { name: bodyFont, size: 9, color: { argb: 'FF334155' } };
+        er.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+        er.height = 16;
+        row++;
+      }
+      // Group subtotal (informational)
+      var stRow = ws.getRow(row);
+      stRow.getCell(2).value = title + ' — total (at face)';
+      stRow.getCell(2).font = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
+      stRow.getCell(8).value = { formula: 'SUM(H' + groupStart + ':H' + (row - 1) + ')' };
+      stRow.getCell(8).numFmt = currFmt;
+      stRow.getCell(8).font = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
+      stRow.getCell(8).border = { top: { style: 'thin', color: { argb: BORDER_COL } } };
+      stRow.height = 16;
+      row++;
+    }
+
+    renderSumGroup('Prime Cost (PC) sums', sums.pc);
+    renderSumGroup('Provisional sums', sums.prov);
+  }
 
   // Legend
   row++;

@@ -242,6 +242,16 @@ const BASE_RATES = {
   'emulsion_walls_2coat':              { rate: 6.5,  unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Two coats emulsion paint to prepared walls' },
   'emulsion_ceiling':                  { rate: 7,    unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Two coats emulsion paint to ceiling' },
   'gloss_woodwork':                    { rate: 12,   unit: 'm²',  labour: 0.85, materials: 0.15, description: 'Gloss paint to woodwork undercoat and gloss' },
+  // Surface-by-surface decoration (chartered-bill granularity: walls/ceilings
+  // use the emulsion keys above; these split the joinery so each surface bills
+  // on its natural unit instead of a single woodwork m² catch-all). Mutually
+  // exclusive with gloss_woodwork — see the decoration conflict rules.
+  'decorate_skirting':                 { rate: 4,    unit: 'm',   labour: 0.88, materials: 0.12, description: 'Decorate skirting — prepare, fill, undercoat & 2 top coats' },
+  'decorate_architrave':               { rate: 3.5,  unit: 'm',   labour: 0.88, materials: 0.12, description: 'Decorate architraves & door frames — prepare, undercoat & 2 top coats' },
+  'decorate_door':                     { rate: 60,   unit: 'Nr',  labour: 0.85, materials: 0.15, description: 'Decorate door both sides — knot, stop, prime, fill, 2 undercoats & 2 top coats' },
+  'decorate_window_timber':            { rate: 48,   unit: 'Nr',  labour: 0.85, materials: 0.15, description: 'Decorate timber window frame & board — prepare & eggshell finish' },
+  'decorate_staircase':                { rate: 480,  unit: 'Item',labour: 0.85, materials: 0.15, description: 'Decorate staircase — strings, treads, risers, newels, spindles, hand & base rails' },
+  'decorate_joinery_sundry':           { rate: 150,  unit: 'Item',labour: 0.85, materials: 0.15, description: 'Decorate sundry joinery — picture/dado rails, internal cupboards, panelling where present' },
   'external_masonry_paint':            { rate: 9,    unit: 'm²',  labour: 0.80, materials: 0.20, description: 'External masonry paint two coats Sandtex or equal' },
   'wallpaper_strip_repaper':           { rate: 18,   unit: 'm²',  labour: 0.75, materials: 0.25, description: 'Strip existing wallpaper and repaper lining paper and finish' },
   // Floor finishes (additional refurb types)
@@ -1168,7 +1178,14 @@ function detectDuplicatesAndOverlaps(items) {
     { group: ['bathroom_fitout_mid', 'bathroom_fitout_high'], conflicts_with_desc: ['sanitaryware', 'bath ', 'basin', 'wc ', 'toilet', 'shower valve', 'bathroom tap'], conflicts_with_keys: [], label: 'bathroom fit-out' },
     { group: ['shower_room_fitout'], conflicts_with_desc: ['shower valve', 'shower screen', 'shower tray'], conflicts_with_keys: [], label: 'shower room fit-out' },
     { group: ['wc_cloakroom_fitout'], conflicts_with_desc: ['cloakroom basin', 'cloakroom wc'], conflicts_with_keys: [], label: 'WC/cloakroom fit-out' },
-    { group: ['internal_decorations'], conflicts_with_desc: [], conflicts_with_keys: ['mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'], label: 'decoration' },
+    // The lump decoration item supersedes every finer decoration key (walls,
+    // ceilings AND the surface-split joinery keys), so a bill never carries both
+    // the lump and the itemised version. Note: the removal engine protects keys
+    // that are a `group` anchor anywhere, so the split keys deliberately are NOT
+    // group anchors in any rule — that keeps them removable here. gloss_woodwork
+    // vs the splits (the model emitting both) is steered by the prompt, which
+    // says to use the surface splits INSTEAD of gloss_woodwork.
+    { group: ['internal_decorations'], conflicts_with_desc: [], conflicts_with_keys: ['mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork', 'decorate_skirting', 'decorate_architrave', 'decorate_door', 'decorate_window_timber', 'decorate_staircase', 'decorate_joinery_sundry'], label: 'decoration' },
     { group: ['full_electrical_rewire'], conflicts_with_desc: [], conflicts_with_keys: ['first_fix_electrical', 'second_fix_electrical', 'electrical_rewire_room'], label: 'electrical' },
   ];
 
@@ -1804,4 +1821,4 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps };
