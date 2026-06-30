@@ -427,6 +427,7 @@ Damp/timber: damp_proofing_tanking (per m²), timber_treatment_spray (per m²), 
 Heating: gas_boiler_combi (per Nr), gas_boiler_system (per Nr), oil_boiler (per Nr), hot_water_cylinder (per Nr), radiator_single_panel (per Nr), radiator_double_panel (per Nr), radiator_column_cast (per Nr), heating_pipework_first_fix (per m), heating_controls_upgrade (per Item), gas_supply_meter (per Item), air_source_heat_pump (per Nr), ufh_manifold_kitchen (per Item)
 Electrical: full_electrical_rewire (per m² floor area), electrical_rewire_room (per Nr), fire_alarm_system (per Item), intruder_alarm (per Item), tv_data_cabling (per Nr), external_lighting (per Nr), consumer_unit_upgrade, first_fix_electrical, second_fix_electrical, extract_fans, ev_charge_point_ducting, electrical_testing_certificate
 Decoration: mist_coat (per m²), emulsion_walls_2coat (per m²), emulsion_ceiling (per m²), gloss_woodwork (per m²), external_masonry_paint (per m²), wallpaper_strip_repaper (per m²), internal_decorations (per m² lump)
+Decoration — surface-by-surface (PREFERRED for refurb/reinstatement; gives a chartered-bill breakdown — use INSTEAD of gloss_woodwork, never alongside it): walls→emulsion_walls_2coat (+ mist_coat to new plaster), ceilings→emulsion_ceiling, decorate_skirting (per m), decorate_architrave (per m), decorate_door (per Nr, both sides), decorate_window_timber (per Nr), decorate_staircase (per Item), decorate_joinery_sundry (per Item). Split decoration this way for a quality reinstatement bill rather than one lump.
 Insulation (refurb): loft_insulation_topup (per m²), internal_wall_insulation (per m²), external_wall_insulation (per m²), floor_insulation_suspended (per m²)
 Asbestos: asbestos_survey (per Item), asbestos_removal (per Item)
 
@@ -2573,7 +2574,7 @@ ${summary}`);
             const fitoutKeys = new Set();
             if (excludeKitchen) ['kitchen_fitout_mid', 'kitchen_fitout_high', 'kitchen_fitout_budget'].forEach(k => fitoutKeys.add(k));
             if (excludeBathroom) ['bathroom_fitout_mid', 'bathroom_fitout_high', 'ensuite_sanitary_plumbing', 'shower_room_fitout', 'wc_cloakroom_fitout'].forEach(k => fitoutKeys.add(k));
-            if (excludeDecoration) ['internal_decorations', 'mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork'].forEach(k => fitoutKeys.add(k));
+            if (excludeDecoration) ['internal_decorations', 'mist_coat', 'emulsion_walls_2coat', 'emulsion_ceiling', 'gloss_woodwork', 'decorate_skirting', 'decorate_architrave', 'decorate_door', 'decorate_window_timber', 'decorate_staircase', 'decorate_joinery_sundry'].forEach(k => fitoutKeys.add(k));
             if (excludeFloorFinish) ['lvt_flooring_karndean', 'floor_tile_600x600', 'ceramic_wall_tiles_ensuite', 'carpet_underlay'].forEach(k => fitoutKeys.add(k));
 
             const before = parsed.items.length;
