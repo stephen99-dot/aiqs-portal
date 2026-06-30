@@ -451,25 +451,22 @@ async function parseBOQ(filePath) {
       return;
     }
     if (inProvSums) {
-      // Close on the net-total / tender / VAT lines (the block's own total is
-      // handled in the summary block above).
-      if (upperLabel.startsWith('NET TOTAL') || upperLabel.startsWith('TOTAL EXCL') ||
-          upperLabel.startsWith('TOTAL EXCLUDING') || upperLabel.includes('TENDER') ||
-          /^VAT\b/.test(upperLabel) || upperLabel.includes('INCL VAT') ||
-          upperLabel.includes('INCL. VAT')) {
-        if (provSection && provSection.items.length) sections.push(provSection);
-        inProvSums = false;
-        provSection = null;
+      // A genuine provisional line has its OWN ref AND description AND a positive
+      // amount (e.g. "PS.1 | Air-conditioning | 31754", "A | Asbestos removal |
+      // 1000"). Capture only that shape. Anything else — a cost-summary value
+      // line ("Net works sub-total", "Preliminaries, overheads & profit"), the
+      // next block header ("COST SUMMARY"), a spacer — ENDS the block. Closing
+      // here (rather than greedily eating down to the VAT line) is what stops the
+      // cost summary being swallowed as fake provisional items.
+      if (a && b && provTotalCell > 0) {
+        provSection.items.push({ itemRef: a, description: b, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
         return;
       }
-      // A provisional line: description + money amount, no qty/unit. Skip rows
-      // that carry neither (spacers, sub-headers).
-      const provDesc = b || a;
-      if (provDesc && provTotalCell > 0) {
-        const provRef = (a && a !== provDesc) ? a : '';
-        provSection.items.push({ itemRef: provRef, description: provDesc, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
-      }
-      return;
+      if (provSection && provSection.items.length) sections.push(provSection);
+      inProvSums = false;
+      provSection = null;
+      // Fall through (no return) so this row is handled by the stop / subtotal /
+      // summary detection below.
     }
 
     if (stopped) return;
@@ -482,9 +479,11 @@ async function parseBOQ(filePath) {
     // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
         upperLabel.includes('SUMMARY OF TOTALS') ||
+        upperLabel.includes('COST SUMMARY') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
         upperLabel.startsWith('NET MEASURED WORKS') ||
+        upperLabel.startsWith('NET CONSTRUCTION COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
       stopped = true;
