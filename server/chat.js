@@ -25,6 +25,7 @@ try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Ch
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
 let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { console.log('[Chat] pdfGeometry not found — drawing text extraction disabled'); }
+let extractBoqMeta; try { extractBoqMeta = require('./extractBoqMeta'); } catch (e) { console.log('[Chat] extractBoqMeta not found — BOQ header metadata disabled'); }
 let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
 
 // Live web search — gives the chat the same "search the web" ability as the
@@ -355,6 +356,8 @@ For ANY refurbishment, renovation, or damage repair project affecting multiple r
 - Internal door (ease/adjust or replace)
 - Decoration (all surfaces)
 Example sections: "4. Hall", "5. Living Room", "6. Kitchen", "7. Bathroom"
+
+SECTION NAMING IS MANDATORY AND ROOM-BASED. For a multi-room refurb/reinstatement, sections 1-3 are "1. Preliminaries", "2. Service Installation", "3. General Items" and EVERY section from 4 onwards MUST be named after a ROOM/LOCATION (e.g. "4. Hall & Stairs", "5. Kitchen / Dining", "6. TV Room"). Put ALL of a room's trades (strip-out, floor, walls, ceiling, skirting, doors, decoration) INSIDE that room's section. DO NOT create trade-based sections such as "Demolition", "Internal Finishes", "Joinery" or "Decoration" for a room-by-room job — that flattens the bill and is WRONG. Set each item's "section" field to its room section accordingly.
 
 A refurbishment with 4+ rooms should have 40-70+ line items minimum. If you are producing fewer than 30 items for a multi-room refurb, you are MISSING scope.
 
@@ -3290,6 +3293,16 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         try {
           let _branding = null;
           try { _branding = require('./brandingRoutes').getBrandingForUser(req.user && req.user.id); } catch (e) { /* optional */ }
+          // Best-effort contract metadata for the header (Employer, Contract
+          // Administrator, Loss Adjuster, Type of loss…) read straight from the
+          // brief. Deterministic + labelled-only, so it's silent when absent.
+          let _meta = [];
+          try {
+            if (extractBoqMeta) {
+              const briefText = [message || '', ...(Array.isArray(messages) ? messages.map(m => (typeof m.content === 'string' ? m.content : '')) : [])].join('\n');
+              _meta = extractBoqMeta.extractContractMeta(briefText);
+            }
+          } catch (e) { /* metadata is optional — never block the BOQ */ }
           const buf = await boqGen.generateBOQExcel(boqSections, projectName, clientName, {
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
@@ -3302,6 +3315,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             project_type: lockedTakeoff ? lockedTakeoff.project_type : undefined,
             spec_level: lockedTakeoff ? lockedTakeoff.spec_level : undefined,
             floor_area_m2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+            meta: _meta,
             branding: _branding,
           });
           if (buf && buf.length > 100) {
