@@ -52,6 +52,10 @@ function Inner() {
   const [exporting, setExporting] = useState(false);
   const [exp, setExp] = useState({ what: 'invoices', format: 'xero' });
   const [expMsg, setExpMsg] = useState('');
+  // Native Xero connection
+  const [xero, setXero] = useState(null);      // { configured, connected, tenant_name }
+  const [xeroBusy, setXeroBusy] = useState(false);
+  const [xeroMsg, setXeroMsg] = useState('');
   // "Your numbers" editor
   const [ohItems, setOhItems] = useState([]);
   const [ohDays, setOhDays] = useState(20);
@@ -130,6 +134,52 @@ function Inner() {
       const r = await apiFetch('/invoices/_export/email', { method: 'POST', body: JSON.stringify(exp) });
       setExpMsg('Sent to ' + r.sent_to + '.');
     } catch (e) { setExpMsg(e.message); }
+  };
+
+  // ── Native Xero ──────────────────────────────────────────────────────────────
+  const loadXero = useCallback(async () => {
+    try { setXero(await apiFetch('/xero/status')); } catch (e) { /* leave null — hides the panel */ }
+  }, []);
+  useEffect(() => { loadXero(); }, [loadXero]);
+
+  // Coming back from Xero's approval screen (?xero=connected|denied|…).
+  useEffect(() => {
+    const r = searchParams.get('xero');
+    if (!r) return;
+    setExporting(true);
+    if (r === 'connected') { setXeroMsg('Connected to Xero — you can send invoices straight across now.'); loadXero(); }
+    else if (r === 'denied') setXeroMsg('Xero connection was cancelled.');
+    else setXeroMsg("Couldn't finish connecting to Xero — please try again.");
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [searchParams, loadXero]);
+
+  const connectXero = async () => {
+    setXeroMsg(''); setXeroBusy(true);
+    try {
+      const r = await apiFetch('/xero/connect', { method: 'POST', body: JSON.stringify({ return_to: '/money?tab=in' }) });
+      window.location.href = r.url;   // off to Xero to approve
+    } catch (e) { setXeroMsg(e.message); setXeroBusy(false); }
+  };
+
+  const disconnectXero = async () => {
+    setXeroMsg(''); setXeroBusy(true);
+    try { await apiFetch('/xero/disconnect', { method: 'POST' }); setXeroMsg('Disconnected from Xero.'); await loadXero(); }
+    catch (e) { setXeroMsg(e.message); }
+    finally { setXeroBusy(false); }
+  };
+
+  const pushToXero = async () => {
+    setXeroMsg(''); setXeroBusy(true);
+    try {
+      const r = await apiFetch('/xero/push', { method: 'POST' });
+      if (r.pushed === 0 && r.failed === 0) setXeroMsg('Nothing new to send — every sent invoice is already in Xero.');
+      else {
+        let m = r.pushed + (r.pushed === 1 ? ' invoice' : ' invoices') + ' sent to Xero.';
+        if (r.failed) m += ' ' + r.failed + " couldn't be sent — check they have a customer name and lines.";
+        setXeroMsg(m);
+      }
+    } catch (e) { setXeroMsg(e.message); }
+    finally { setXeroBusy(false); }
   };
 
   // ── Due in ─────────────────────────────────────────────────────────────────
@@ -265,6 +315,39 @@ function Inner() {
 
           {exporting && (
             <div style={card}>
+              {/* Native Xero — one-button connection that pushes invoices straight in */}
+              {xero?.configured && (
+                <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: '1px solid ' + t.border }}>
+                  {xero.connected ? (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 2 }}>
+                        Connected to Xero{xero.tenant_name ? ' · ' + xero.tenant_name : ''} ✓
+                      </div>
+                      <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
+                        Send your sent &amp; paid invoices straight into Xero as approved sales invoices — VAT, reduced rate and CIS reverse charge mapped to your own tax rates. Already-sent invoices are skipped, so it's safe to tap again.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={pushToXero} disabled={xeroBusy} style={{ ...primaryBtn, opacity: xeroBusy ? 0.6 : 1 }}>
+                          {xeroBusy ? 'Working…' : 'Send invoices to Xero'}
+                        </button>
+                        <button onClick={disconnectXero} disabled={xeroBusy} style={ghostBtn}>Disconnect</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 2 }}>Connect Xero — no more importing files</div>
+                      <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
+                        Link your Xero account once and send invoices across at the tap of a button. Or carry on with the spreadsheet below.
+                      </div>
+                      <button onClick={connectXero} disabled={xeroBusy} style={{
+                        minHeight: 44, padding: '0 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                        background: '#13B5EA', color: '#fff', fontSize: 14, fontWeight: 700, opacity: xeroBusy ? 0.6 : 1,
+                      }}>{xeroBusy ? 'Opening Xero…' : 'Connect with Xero'}</button>
+                    </>
+                  )}
+                  {xeroMsg && <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 10 }}>{xeroMsg}</div>}
+                </div>
+              )}
               <div style={{ color: t.textSecondary, fontSize: 13, marginBottom: 10 }}>
                 A spreadsheet your accountant can pull straight into their software. Download it, or email it to them in one tap.
               </div>

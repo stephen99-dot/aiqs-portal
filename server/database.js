@@ -951,6 +951,18 @@ const migrations = [
   // colour scheme, included/excluded lines) the user makes on the Builder Pack
   // screen, stored as JSON so they survive leaving and re-opening the screen.
   { column: 'builder_pack_state', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN builder_pack_state TEXT" },
+  // Native Xero connection — OAuth2 tokens for the builder's own Xero org, so
+  // invoices push straight in (alongside the CSV export). Access tokens live
+  // 30 min; the refresh token rotates on every refresh (see xeroClient.js).
+  { column: 'xero_access_token',  table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_access_token TEXT" },
+  { column: 'xero_refresh_token', table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_refresh_token TEXT" },
+  { column: 'xero_token_expiry',  table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_token_expiry INTEGER" },
+  { column: 'xero_tenant_id',     table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_tenant_id TEXT" },
+  { column: 'xero_tenant_name',   table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_tenant_name TEXT" },
+  { column: 'xero_connected_at',  table: 'oib_settings', sql: "ALTER TABLE oib_settings ADD COLUMN xero_connected_at DATETIME" },
+  // Idempotency for the push: the Xero InvoiceID we created, so we never send
+  // the same invoice twice.
+  { column: 'xero_invoice_id',    table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN xero_invoice_id TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {
