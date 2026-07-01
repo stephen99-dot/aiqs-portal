@@ -34,6 +34,13 @@ const dedupeRates = require('./dedupeRates');
 // extra infrastructure is needed. Disable by setting ENABLE_WEB_SEARCH=0.
 const WEB_SEARCH_ENABLED = process.env.ENABLE_WEB_SEARCH !== '0';
 
+// Max trained rates injected into a system prompt. Bounds the prompt so a large
+// library can't overflow the model's context window on its own. ~1200 rate lines
+// is roughly 20-30k tokens, well within budget. The full library is still used for
+// deterministic BOQ pricing (read straight from the DB), so this caps only the
+// model's conversational reference, not pricing coverage. Override via env if needed.
+const RATE_PROMPT_CAP = parseInt(process.env.RATE_PROMPT_CAP || '1200', 10);
+
 const router = express.Router();
 
 // Playbook OH&P/contingency for pricer calls. Defaults are ZERO — BOQ rates
@@ -196,21 +203,51 @@ function extractInsightsFromMessage(userId, message) {
 // DYNAMIC SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════════════
 
-function buildSystemPrompt(userId, forDocGen, benchmarkSection) {
+function buildSystemPrompt(userId, forDocGen, benchmarkSection, opts) {
   let clientRateSection = '';
   let clientInsightsSection = '';
-  try {
-    const rates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence FROM client_rate_library WHERE user_id = ? AND is_active = 1 ORDER BY category, confidence DESC`).all(userId);
+  // The trained rate library is only worth loading when the turn is actually about
+  // pricing — a general chat ("hello", "what's a good spec for…") doesn't need it,
+  // and dumping thousands of rates on every message is what overflowed the context
+  // window. Doc-generation/extraction paths always price, so they always include it;
+  // plain chat includes it only when the caller signals pricing intent.
+  const includeRates = forDocGen ? true : !!(opts && opts.pricingContext);
+  if (includeRates) try {
+    const allRates = db.prepare(`SELECT category, item_key, display_name, value, unit, confidence, times_confirmed, times_applied FROM client_rate_library WHERE user_id = ? AND is_active = 1`).all(userId);
+    // Hard cap how many rates go into the prompt. A large trained library (thousands
+    // of rows) would otherwise blow past the model's context window on its own —
+    // every rate is a prompt line. We keep the highest-confidence, most-reinforced
+    // rates for the model's conversational reference; the FULL library is still
+    // applied when generating BOQs (the deterministic pricer reads it straight from
+    // the DB), so nothing is lost from actual pricing.
+    let rates = allRates;
+    let rateCapNote = '';
+    if (allRates.length > RATE_PROMPT_CAP) {
+      rates = allRates.slice().sort((a, b) =>
+        (b.confidence - a.confidence)
+        || ((b.times_confirmed || 0) - (a.times_confirmed || 0))
+        || ((b.times_applied || 0) - (a.times_applied || 0))
+      ).slice(0, RATE_PROMPT_CAP);
+      rateCapNote = `\nNOTE: showing your ${RATE_PROMPT_CAP} highest-confidence rates of ${allRates.length} trained. The full library is applied when generating BOQs, so nothing is lost from pricing.\n`;
+    }
     if (rates.length > 0) {
+      // Group by category, highest confidence first within each.
+      rates.sort((a, b) => (a.category < b.category ? -1 : a.category > b.category ? 1 : 0) || (b.confidence - a.confidence));
       const grouped = {};
       for (const r of rates) {
         if (!grouped[r.category]) grouped[r.category] = [];
         const conf = r.confidence >= 0.85 ? 'VERIFIED' : r.confidence >= 0.7 ? 'EMERGING' : 'NEW';
         grouped[r.category].push(`  - ${r.display_name}: ${r.value} ${r.unit} [${conf}]`);
       }
-      clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
+      clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n${rateCapNote}\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
     }
   } catch (err) { console.error('[Chat] Rate load error:', err.message); }
+  // Non-pricing chat: don't dump the library, just let the model know it exists so it
+  // never claims the client has no trained rates.
+  if (!includeRates) try {
+    const cnt = db.prepare('SELECT COUNT(*) AS c FROM client_rate_library WHERE user_id = ? AND is_active = 1').get(userId).c;
+    if (cnt > 0) clientRateSection = `\n=== CLIENT TRAINED RATES ===\nThe client has ${cnt} trained rates on file. They are applied automatically when pricing or generating a BOQ, so you don't need them for general conversation. If the user asks for a price or estimate, work from their trained rates.\n===\n`;
+  } catch (err) { /* best-effort pointer */ }
   try {
     const insights = db.prepare(`SELECT category, insight, times_reinforced FROM client_insights WHERE user_id = ? ORDER BY times_reinforced DESC, updated_at DESC LIMIT 30`).all(userId);
     if (insights.length > 0) {
@@ -1631,12 +1668,15 @@ const MODEL_CONTEXT_TOKENS = 200000;
 
 // Rough char→token heuristic. Prose is ~4 chars/token, but dense, symbol- and
 // number-heavy text like a rate library ("- Brick Outer Leaf 100mm: 63 £/m2
-// [VERIFIED]") tokenises closer to ~2.5. We divide by 3 as a conservative middle
-// ground so the guard triggers on heavy prompts rather than waving them through.
-// The real safety net is the reactive re-trim in the send loop, which calibrates
-// against the API's own token count — so the exact divisor here isn't critical.
+// [VERIFIED]") tokenises closer to ~2.5. We use 3 as a conservative middle ground
+// so the guard triggers on heavy prompts rather than waving them through. The real
+// safety net is the reactive re-trim in the send loop, which calibrates against the
+// API's own token count — so the exact divisor here isn't critical. IMPORTANT: the
+// truncation sites below multiply by this same constant, so keep them in lockstep —
+// a mismatch (e.g. estimate ÷3 but truncate ×4) keeps 33% too much and never fits.
+const CHARS_PER_TOKEN = 3;
 function estimateTokens(text) {
-  return text ? Math.ceil(text.length / 3) : 0;
+  return text ? Math.ceil(text.length / CHARS_PER_TOKEN) : 0;
 }
 function estimateBlockTokens(block) {
   if (typeof block === 'string') return estimateTokens(block);
@@ -1690,7 +1730,7 @@ function fitChatPrompt({ stableSystemBase, perTurnTail, messages, reserveTokens 
     if (allowedBaseTok <= 0) {
       base = note;
     } else if (allowedBaseTok < baseTok) {
-      const keepChars = allowedBaseTok * 4;
+      const keepChars = allowedBaseTok * CHARS_PER_TOKEN;
       base = keepChars > note.length ? base.slice(0, keepChars - note.length) + note : note;
     }
     baseTok = estimateTokens(base);
@@ -1709,7 +1749,7 @@ function fitChatPrompt({ stableSystemBase, perTurnTail, messages, reserveTokens 
     const clampText = (t) => {
       const tok = estimateTokens(t);
       if (tok <= remaining) { remaining -= tok; return t; }
-      const keepChars = Math.max(0, remaining * 4 - 40);
+      const keepChars = Math.max(0, remaining * CHARS_PER_TOKEN - 40);
       remaining = 0;
       return t.slice(0, keepChars) + '\n\n[Message truncated to fit context window.]';
     };
@@ -2022,7 +2062,23 @@ ${summary}`);
 
     messages.push({ role: 'user', content: currentContent });
 
-    let systemPrompt = buildSystemPrompt(userId, false);
+    // Decide whether this turn needs the trained rate library. Only pricing-oriented
+    // turns do — a general chat shouldn't drag thousands of rates into the prompt.
+    // Lean towards including (the library is capped and safe): files → pricing;
+    // pricing words in this message or the recent thread → pricing; an existing
+    // takeoff in the session → we're mid-pricing.
+    const pricingRe = /pric|cost|quote|quotation|estimat|\brates?\b|budget|how much|\bboq\b|bill of quant|tender|valuation|generate|per\s*(m2|m²|sqm|metre|meter)|[£€$]\s*\d|expensive|cheap|allowance|conting|oh&p|\bohp\b|mark-?up|\bmargin\b|\bspend\b/i;
+    const recentThreadText = messages.slice(-4)
+      .map(m => typeof m.content === 'string' ? m.content
+        : Array.isArray(m.content) ? m.content.map(b => (b && b.type === 'text') ? b.text : '').join(' ') : '')
+      .join(' ');
+    let pricingContext = fileNames.length > 0 || pricingRe.test(message || '') || pricingRe.test(recentThreadText);
+    if (!pricingContext) {
+      try { pricingContext = !!(benchmarkStore && benchmarkStore.getTakeoffBySession(db, req.body.session_id || null)); }
+      catch (e) { /* best-effort */ }
+    }
+
+    let systemPrompt = buildSystemPrompt(userId, false, null, { pricingContext });
     // Capture the stable base (identity + rules + rate library + client insights)
     // before any per-turn injections are appended below. All the `systemPrompt +=`
     // sites only APPEND, so systemPrompt always starts with this exact string —
