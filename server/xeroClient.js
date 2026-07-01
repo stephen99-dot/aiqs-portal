@@ -28,12 +28,18 @@ const CLIENT_SECRET = process.env.XERO_CLIENT_SECRET;
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://aiqs-portal.onrender.com';
 const REDIRECT_URI = process.env.XERO_REDIRECT_URI || `${PORTAL_BASE_URL}/api/xero/callback`;
 
-// openid/profile/email → identify the org; accounting.* → read tax rates and
-// write invoices/contacts; offline_access → get a refresh token so the link
-// keeps working after the first 30 minutes.
+// Xero's NEW granular scopes (the old broad `accounting.transactions` was split
+// up). Apps registered after 2 March 2026 only have the granular scopes, so
+// requesting `accounting.transactions` fails with `invalid_scope`:
+//   app.connections           → read /connections to find the org (tenant)
+//   accounting.invoices       → create sales invoices (was accounting.transactions)
+//   accounting.contacts       → create/find the customer contact on the invoice
+//   accounting.settings.read  → read the org's tax rates (VAT/CIS mapping)
+//   offline_access            → refresh token so the link survives past 30 min
 const SCOPES = [
   'openid', 'profile', 'email',
-  'accounting.transactions', 'accounting.contacts', 'accounting.settings',
+  'app.connections',
+  'accounting.invoices', 'accounting.contacts', 'accounting.settings.read',
   'offline_access',
 ].join(' ');
 
