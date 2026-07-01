@@ -92,14 +92,21 @@ function status(userId) {
 // ─── OAuth ────────────────────────────────────────────────────────────────────
 
 function authorizeUrl(state) {
-  const params = new URLSearchParams({
+  // Build the query by hand with encodeURIComponent: it encodes the spaces
+  // between scopes as %20. URLSearchParams uses '+' instead, which Xero's
+  // identity server rejects with `invalid_scope` (Google tolerates '+', Xero
+  // does not).
+  const params = {
     response_type: 'code',
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     scope: SCOPES,
     state,
-  });
-  return `${AUTHORIZE_URL}?${params}`;
+  };
+  const qs = Object.entries(params)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  return `${AUTHORIZE_URL}?${qs}`;
 }
 
 function basicAuthHeader() {
