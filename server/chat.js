@@ -1629,10 +1629,14 @@ function sseEvent(res, evt) {
 // figures and this turn's drawing ground-truth.
 const MODEL_CONTEXT_TOKENS = 200000;
 
-// Rough char→token heuristic (~4 chars/token for English/JSON). Deliberately errs
-// high so we stay safely under the real tokenizer's count.
+// Rough char→token heuristic. Prose is ~4 chars/token, but dense, symbol- and
+// number-heavy text like a rate library ("- Brick Outer Leaf 100mm: 63 £/m2
+// [VERIFIED]") tokenises closer to ~2.5. We divide by 3 as a conservative middle
+// ground so the guard triggers on heavy prompts rather than waving them through.
+// The real safety net is the reactive re-trim in the send loop, which calibrates
+// against the API's own token count — so the exact divisor here isn't critical.
 function estimateTokens(text) {
-  return text ? Math.ceil(text.length / 4) : 0;
+  return text ? Math.ceil(text.length / 3) : 0;
 }
 function estimateBlockTokens(block) {
   if (typeof block === 'string') return estimateTokens(block);
@@ -2205,30 +2209,33 @@ ${summary}`);
       + ((primaryThinking && primaryThinking.budget_tokens) || 0)
       + (useTools ? 2000 : 0)
       + 8000;
-    const fitted = fitChatPrompt({
-      stableSystemBase, perTurnTail: rawPerTurnTail, messages, reserveTokens,
-    });
-    if (fitted.trimmedTurns || fitted.truncatedBase || fitted.truncatedMessage) {
-      console.log(`[API] Prompt-size guard trimmed prompt: ${fitted.trimmedTurns} old turn(s) dropped`
-        + (fitted.truncatedBase ? ', system base truncated' : '')
-        + (fitted.truncatedMessage ? ', current message truncated' : ''));
-    }
-    const fittedBase = fitted.stableSystemBase;
-    const perTurnTail = fitted.perTurnTail;
     // Only the API request uses the trimmed history — the full `messages` array is
     // left intact for downstream logic (location detection, takeoff extraction).
-    const fittedMessages = fitted.messages;
+    const originalPieces = { stableSystemBase, perTurnTail: rawPerTurnTail, messages };
+    let fitState = fitChatPrompt({ ...originalPieces, reserveTokens });
+    const logTrim = (f, why) => {
+      if (f.trimmedTurns || f.truncatedBase || f.truncatedMessage) {
+        console.log(`[API] Prompt-size guard${why ? ' (' + why + ')' : ''}: ${f.trimmedTurns} old turn(s) dropped`
+          + (f.truncatedBase ? ', system base truncated' : '')
+          + (f.truncatedMessage ? ', current message truncated' : ''));
+      }
+    };
+    logTrim(fitState);
 
-    const cachedSystem = perTurnTail
+    // Our estimate of the tokens a given fit will send — used to calibrate against
+    // the API's real count when a prompt still comes back too long.
+    const estOf = (f) => estimateTokens(f.stableSystemBase) + estimateTokens(f.perTurnTail)
+      + f.messages.reduce((s, m) => s + estimateMessageTokens(m), 0);
+    const buildCachedSystem = (f) => f.perTurnTail
       ? [
-          { type: 'text', text: fittedBase, cache_control: { type: 'ephemeral' } },
-          { type: 'text', text: perTurnTail },
+          { type: 'text', text: f.stableSystemBase, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: f.perTurnTail },
         ]
-      : [{ type: 'text', text: fittedBase, cache_control: { type: 'ephemeral' } }];
+      : [{ type: 'text', text: f.stableSystemBase, cache_control: { type: 'ephemeral' } }];
     const buildBody = (model, thinking) => ({
       model, max_tokens: MAX_TOKENS.CHAT,
       ...(thinking ? { thinking } : {}),
-      system: cachedSystem, messages: fittedMessages,
+      system: buildCachedSystem(fitState), messages: fitState.messages,
       ...(useTools && webTools ? { tools: webTools } : {}),
     });
 
@@ -2237,19 +2244,45 @@ ${summary}`);
     // claude.ai feel) rather than waiting for the full response. The server
     // still aggregates `reply` + `thinking` for the post-processing pipeline.
     let streamResult, usedFallback = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
       streamResult = await streamAnthropicMessage(apiHeaders, buildBody(primaryModel, primaryThinking), req.sseEmit);
       if (streamResult.ok) break;
       const errType = streamResult.error?.error?.type || streamResult.error?.type;
       const errMsg = streamResult.error?.error?.message || streamResult.error?.message || '';
       console.error(`[API] Attempt ${attempt} failed: status=${streamResult.status} type=${errType} msg=${errMsg}`);
+
+      // Prompt still too long — the char-based estimate undercounted this content's
+      // real token density. The API's error carries the true count ("N tokens > M
+      // maximum"); calibrate a scale factor from it and re-trim from the original
+      // pieces to a proportionally smaller target, then retry. This converges
+      // regardless of how densely the text tokenises.
+      if (/prompt is too long/i.test(errMsg)) {
+        const mm = errMsg.match(/([0-9]+)\s*tokens?\s*>\s*([0-9]+)/i);
+        if (mm) {
+          const actual = parseInt(mm[1], 10);
+          const maxCtx = parseInt(mm[2], 10);
+          const estNow = Math.max(1, estOf(fitState));
+          const scale = Math.max(1, actual / estNow);
+          const targetEst = Math.max(2000, Math.floor((maxCtx - reserveTokens) / scale));
+          const refit = fitChatPrompt({ ...originalPieces, reserveTokens: MODEL_CONTEXT_TOKENS - targetEst });
+          console.log(`[API] prompt too long (${actual}>${maxCtx}); scale=${scale.toFixed(2)} → re-trimming to ~${targetEst} est-tokens`);
+          logTrim(refit, 'recalibrated');
+          // Only retry if we actually shrank the prompt, else we'd loop uselessly.
+          if (estOf(refit) < estOf(fitState) && attempt < 4) {
+            fitState = refit;
+            continue;
+          }
+        }
+        return sendError(500, { error: 'This conversation is too long to process. Please start a new chat.' });
+      }
+
       // If web search isn't enabled on this account, drop it and retry rather than failing the chat.
       if (useTools && streamResult.status !== 529 && /tool|web_search/i.test(errMsg)) {
         console.log('[API] Web search tool rejected — retrying without it');
         useTools = false;
         continue;
       }
-      if ((streamResult.status === 529 || errType === 'overloaded_error') && attempt < 3) {
+      if ((streamResult.status === 529 || errType === 'overloaded_error') && attempt < 4) {
         await new Promise(r => setTimeout(r, attempt * 3000));
       } else if (streamResult.status !== 529) {
         return sendError(500, { error: 'AI service error -- please try again' });
