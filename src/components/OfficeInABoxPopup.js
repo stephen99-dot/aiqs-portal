@@ -86,8 +86,16 @@ export default function OfficeInABoxPopup() {
   }
 
   function onLater() {
+    if (thanks) return;
     persist('not_now');
     record('not_now');
+    setVisible(false);
+  }
+
+  // Light-dismiss (backdrop tap / X): just hide for this session — never
+  // downgrade a recorded response and never permanently suppress on a stray tap.
+  function dismiss() {
+    if (thanks) return;
     setVisible(false);
   }
 
@@ -107,7 +115,7 @@ export default function OfficeInABoxPopup() {
 
   return (
     <div
-      onClick={onLater}
+      onClick={dismiss}
       style={{
         position: 'fixed', inset: 0, zIndex: 10000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -149,11 +157,11 @@ export default function OfficeInABoxPopup() {
       >
         {/* Close */}
         <button
-          onClick={onLater}
+          onClick={dismiss}
           aria-label="Dismiss"
           style={{
             position: 'absolute', top: 12, right: 12, zIndex: 2,
-            width: 30, height: 30, borderRadius: '50%',
+            width: 40, height: 40, borderRadius: '50%',
             background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
             border: 'none', cursor: 'pointer', lineHeight: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -269,14 +277,14 @@ export default function OfficeInABoxPopup() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 16 }}>
                 <button onClick={onTellMore} style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 700, color: AMBER_DIM,
+                  fontSize: 13, fontWeight: 700, color: AMBER_DIM, padding: '10px 8px',
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                 }}>
                   See everything it does <ArrowRightIcon size={13} color={AMBER_DIM} />
                 </button>
                 <button onClick={onLater} style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 500, color: t.textMuted,
+                  fontSize: 13, fontWeight: 500, color: t.textMuted, padding: '10px 8px',
                 }}>
                   Maybe later
                 </button>

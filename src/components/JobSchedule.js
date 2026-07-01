@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiFetch, getToken } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
+import AsyncButton from './AsyncButton';
 
 // Compact markdown so the assistant's bold/lists render nicely in a small bubble
 // instead of showing raw ** and 1. markers.
@@ -41,6 +43,7 @@ const STATUS_OPTS = [
 ];
 
 export default function JobSchedule({ t, jobId, quotes }) {
+  const isMobile = useIsMobile();
   const [plan, setPlan] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [win, setWin] = useState({ start: null, end: null });
@@ -54,6 +57,8 @@ export default function JobSchedule({ t, jobId, quotes }) {
   const [chat, setChat] = useState([]); // [{ role, content }]
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [savingTaskId, setSavingTaskId] = useState(null);
 
   const hasQuote = (quotes || []).length > 0;
 
@@ -126,18 +131,22 @@ export default function JobSchedule({ t, jobId, quotes }) {
 
   // reflow=true means the change moved dates on the server — reload to get them.
   const patchTask = async (taskId, patch, reflow) => {
+    setSavingTaskId(taskId);
     try {
       await apiFetch('/schedule/tasks/' + taskId, { method: 'PATCH', body: JSON.stringify(patch) });
       if (reflow) await loadDetail(plan.id);
       else setTasks(prev => prev.map(x => x.id === taskId ? { ...x, ...patch } : x));
     } catch (e) { setError(e.message); }
+    finally { setSavingTaskId(null); }
   };
 
   const deleteTask = async (taskId) => {
+    setSavingTaskId(taskId);
     try {
       await apiFetch('/schedule/tasks/' + taskId, { method: 'DELETE' });
       await loadDetail(plan.id);
     } catch (e) { setError(e.message); }
+    finally { setSavingTaskId(null); }
   };
 
   const addTask = async () => {
@@ -173,18 +182,23 @@ export default function JobSchedule({ t, jobId, quotes }) {
     } finally { setSending(false); }
   };
 
-  const exportPdf = () => {
-    if (!plan) return;
-    fetch('/api/schedule/plans/' + plan.id + '/export', { headers: { Authorization: 'Bearer ' + getToken() } })
-      .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
-      .then(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = (plan.title || 'build-programme').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.pdf';
-        a.click();
-        URL.revokeObjectURL(a.href);
-      })
-      .catch(e => setError(e.message));
+  const exportPdf = async () => {
+    if (!plan || downloading) return;
+    setDownloading(true); setError('');
+    try {
+      const r = await fetch('/api/schedule/plans/' + plan.id + '/export', { headers: { Authorization: 'Bearer ' + getToken() } });
+      if (!r.ok) throw new Error('Download failed');
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (plan.title || 'build-programme').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   // ── styles ──
@@ -272,7 +286,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={exportPdf} style={ghostBtn}>Export PDF</button>
+          <button onClick={exportPdf} disabled={downloading} style={{ ...ghostBtn, opacity: downloading ? 0.6 : 1 }}>{downloading ? 'Preparing…' : 'Export PDF'}</button>
           <button onClick={regenerate} disabled={busy} style={ghostBtn}>{busy ? '…' : 'Regenerate'}</button>
           <button onClick={deletePlan} style={{ ...ghostBtn, color: t.danger, borderColor: t.danger + '55' }}>Delete</button>
         </div>
@@ -306,13 +320,15 @@ export default function JobSchedule({ t, jobId, quotes }) {
       {/* Timeline */}
       <div style={{ overflowX: 'auto' }}>
         {tasks.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.4fr) 2fr auto', gap: 10, alignItems: 'flex-end', paddingBottom: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr auto' : 'minmax(160px, 1.4fr) 2fr auto', gap: 10, alignItems: 'flex-end', paddingBottom: 6 }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3 }}>Task &amp; duration</div>
-            <div style={{ position: 'relative', height: 14 }}>
-              {months.map((m, i) => (
-                <span key={i} style={{ position: 'absolute', left: m.pct + '%', fontSize: 10, color: t.textMuted, whiteSpace: 'nowrap' }}>{m.label}</span>
-              ))}
-            </div>
+            {!isMobile && (
+              <div style={{ position: 'relative', height: 14 }}>
+                {months.map((m, i) => (
+                  <span key={i} style={{ position: 'absolute', left: m.pct + '%', fontSize: 10, color: t.textMuted, whiteSpace: 'nowrap' }}>{m.label}</span>
+                ))}
+              </div>
+            )}
             <div style={{ fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, textAlign: 'right' }}>Status</div>
           </div>
         )}
@@ -322,6 +338,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
           const showPhase = (task.phase || '') !== (lastPhase || '');
           lastPhase = task.phase || '';
           const bar = barFor(task);
+          const saving = savingTaskId === task.id;
           return (
             <React.Fragment key={task.id}>
               {showPhase && task.phase && (
@@ -329,7 +346,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
                   {task.phase}
                 </div>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.4fr) 2fr auto', gap: 10, alignItems: 'center', padding: '7px 0', borderTop: '1px solid ' + t.border }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr auto' : 'minmax(160px, 1.4fr) 2fr auto', gap: 10, alignItems: 'center', padding: '7px 0', borderTop: '1px solid ' + t.border, opacity: saving ? 0.55 : 1, transition: 'opacity 0.15s' }}>
                 {/* Name + duration */}
                 <div style={{ minWidth: 0 }}>
                   <input
@@ -353,27 +370,29 @@ export default function JobSchedule({ t, jobId, quotes }) {
                 </div>
 
                 {/* Bar */}
-                <div style={{ position: 'relative', height: 26, background: t.bg, borderRadius: 6, border: '1px solid ' + t.border, overflow: 'hidden' }}>
-                  {months.map((m, i) => (m.pct > 0 && m.pct < 100) && (
-                    <div key={'g' + i} style={{ position: 'absolute', top: 0, bottom: 0, left: m.pct + '%', width: 1, background: t.border, opacity: 0.6 }} />
-                  ))}
-                  {bar && (
-                    <div title={shortDate(task.planned_start) + ' – ' + shortDate(task.planned_end)} style={{
-                      position: 'absolute', top: 4, bottom: 4, ...bar, minWidth: 8,
-                      background: barColour(task.status), borderRadius: 4, opacity: 0.92,
-                    }} />
-                  )}
-                  {todayPct != null && (
-                    <div title="Today" style={{ position: 'absolute', top: 0, bottom: 0, left: todayPct + '%', width: 2, background: t.danger, opacity: 0.6 }} />
-                  )}
-                </div>
+                {!isMobile && (
+                  <div style={{ position: 'relative', height: 26, background: t.bg, borderRadius: 6, border: '1px solid ' + t.border, overflow: 'hidden' }}>
+                    {months.map((m, i) => (m.pct > 0 && m.pct < 100) && (
+                      <div key={'g' + i} style={{ position: 'absolute', top: 0, bottom: 0, left: m.pct + '%', width: 1, background: t.border, opacity: 0.6 }} />
+                    ))}
+                    {bar && (
+                      <div title={shortDate(task.planned_start) + ' – ' + shortDate(task.planned_end)} style={{
+                        position: 'absolute', top: 4, bottom: 4, ...bar, minWidth: 8,
+                        background: barColour(task.status), borderRadius: 4, opacity: 0.92,
+                      }} />
+                    )}
+                    {todayPct != null && (
+                      <div title="Today" style={{ position: 'absolute', top: 0, bottom: 0, left: todayPct + '%', width: 2, background: t.danger, opacity: 0.6 }} />
+                    )}
+                  </div>
+                )}
 
                 {/* Status + % + delete */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <select value={task.status} onChange={e => patchTask(task.id, { status: e.target.value }, false)} style={{ ...input, minHeight: 34, padding: '4px 6px', fontSize: 12.5 }}>
+                  <select value={task.status} disabled={saving} onChange={e => patchTask(task.id, { status: e.target.value }, false)} style={{ ...input, minHeight: 34, padding: '4px 6px', fontSize: 12.5 }}>
                     {STATUS_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                   </select>
-                  <button onClick={() => deleteTask(task.id)} title="Delete task" style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 16, minWidth: 30, minHeight: 30 }}>×</button>
+                  <button onClick={() => deleteTask(task.id)} disabled={saving} title="Delete task" style={{ background: 'transparent', border: 'none', color: t.danger, cursor: saving ? 'default' : 'pointer', fontSize: 16, minWidth: 30, minHeight: 30 }}>×</button>
                 </div>
               </div>
             </React.Fragment>
@@ -382,11 +401,11 @@ export default function JobSchedule({ t, jobId, quotes }) {
       </div>
 
       {/* Add a task */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px,1fr) minmax(100px,0.8fr) 70px auto', gap: 8, marginTop: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(120px,1fr) minmax(100px,0.8fr) 70px auto', gap: 8, marginTop: 14 }}>
         <input value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} placeholder="New task" style={input} />
         <input value={newTask.phase} onChange={e => setNewTask({ ...newTask, phase: e.target.value })} placeholder="Phase (optional)" style={input} />
-        <input type="number" min="1" value={newTask.duration_days} onChange={e => setNewTask({ ...newTask, duration_days: e.target.value })} placeholder="days" style={input} />
-        <button onClick={addTask} style={primaryBtn}>+ Add</button>
+        <input type="number" min="1" value={newTask.duration_days} onChange={e => setNewTask({ ...newTask, duration_days: e.target.value.replace(/[^0-9]/g, '') })} placeholder="days" style={input} />
+        <AsyncButton onClick={addTask} busyLabel="Adding…" style={primaryBtn}>+ Add</AsyncButton>
       </div>
       <div style={{ color: t.textMuted, fontSize: 11.5, marginTop: 8 }}>
         New tasks run after the current programme. Edit durations and the dates re-flow automatically.

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import AsyncButton from '../components/AsyncButton';
 import HelpTip from '../components/HelpTip';
 import { jobStage, stageColours, stageFigure } from '../utils/jobStages';
 import { FolderIcon, TrashIcon } from '../components/Icons';
@@ -168,9 +169,9 @@ function Inner() {
               }} />
               <input style={input} type="tel" placeholder="Customer phone (so you can call from here)" value={newJob.client_phone} onChange={e => setNewJob({ ...newJob, client_phone: e.target.value })} />
               <input style={input} placeholder="Address (optional)" value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} />
-              <button onClick={create} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              <AsyncButton onClick={create} busyLabel="Creating…" style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
                 Create the job
-              </button>
+              </AsyncButton>
             </>
           ) : (
             <>

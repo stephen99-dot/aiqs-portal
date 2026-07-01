@@ -110,7 +110,7 @@ function computeTotals(lines, opts) {
   for (const ln of lines) {
     const lt = num(ln.qty) * num(ln.rate);
     ln.line_total = round2(lt);
-    net += lt;
+    net += ln.line_total;
   }
 
   const fin = computeFinancials(net, { ohp_pct: ohpPct, contingency_pct: contPct, vat_pct: vatPct });
@@ -631,7 +631,7 @@ router.get('/quotes/:id', (req, res) => {
 // PATCH /api/estimator/quotes/:id  — update header + percentages + status
 router.patch('/quotes/:id', (req, res) => {
   try {
-    const q = db.prepare('SELECT id, locked FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
     if (rejectIfQuoteLocked(q, res)) return;
     const b = req.body || {};
@@ -640,6 +640,21 @@ router.patch('/quotes/:id', (req, res) => {
     const vals = [];
     for (const k of allowed) {
       if (k in b) { sets.push(k + ' = ?'); vals.push(b[k]); }
+    }
+    // When any percentage changes, recompute the stored money amounts against the
+    // current net so percentages and amounts can never diverge (the frontend and
+    // exports read the stored amounts directly).
+    if (('ohp_pct' in b) || ('contingency_pct' in b) || ('vat_pct' in b)) {
+      const fin = computeFinancials(num(q.net_total), {
+        ohp_pct: 'ohp_pct' in b ? num(b.ohp_pct) : num(q.ohp_pct),
+        contingency_pct: 'contingency_pct' in b ? num(b.contingency_pct) : num(q.contingency_pct),
+        vat_pct: 'vat_pct' in b ? num(b.vat_pct) : num(q.vat_pct),
+      });
+      sets.push('ohp_amount = ?'); vals.push(fin.ohp_amount);
+      sets.push('contingency_amount = ?'); vals.push(fin.contingency_amount);
+      sets.push('vat_amount = ?'); vals.push(fin.vat_amount);
+      sets.push('grand_total = ?'); vals.push(fin.grand_total);
+      sets.push('margin_pct = ?'); vals.push(fin.margin_pct);
     }
     if (sets.length > 0) {
       sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -720,13 +735,13 @@ router.post('/quotes/:id/duplicate', (req, res) => {
     const newNumber = genQuoteNumber();
     const txn = db.transaction(() => {
       db.prepare(
-        'INSERT INTO quotes (id, user_id, client_name, project_name, project_type, currency, input_text, '
+        'INSERT INTO quotes (id, user_id, client_name, client_email, client_id, project_name, project_type, currency, input_text, '
         + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
         + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         newId, req.user.id,
-        q.client_name, (q.project_name || 'Quote') + ' (copy)', q.project_type,
+        q.client_name, q.client_email, q.client_id, (q.project_name || 'Quote') + ' (copy)', q.project_type,
         q.currency, q.input_text,
         q.net_total, q.ohp_pct, q.ohp_amount,
         q.contingency_pct, q.contingency_amount,
@@ -780,9 +795,12 @@ router.post('/quotes/:id/send', async (req, res) => {
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
     if (q.status === 'accepted') return res.status(400).json({ error: 'This quote has already been accepted.' });
     const token = q.public_token || newShareToken();
-    const clientEmail = (req.body && req.body.client_email != null)
-      ? String(req.body.client_email).trim().slice(0, 200) || null
-      : q.client_email;
+    // Only overwrite a previously saved email when a non-empty value is supplied;
+    // a blank/whitespace field must not wipe the stored address.
+    const incomingEmail = (req.body && req.body.client_email != null)
+      ? String(req.body.client_email).trim().slice(0, 200)
+      : '';
+    const clientEmail = incomingEmail || q.client_email;
     db.prepare(
       "UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, "
       + 'public_token = ?, client_email = ?, sent_at = COALESCE(sent_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?'

@@ -14,6 +14,7 @@ export default function JobPhotos({ t, jobId, attachTo }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [viewer, setViewer] = useState(null);    // photo being viewed full-size
+  const [attaching, setAttaching] = useState(null); // photo id whose attach PATCH is in flight
 
   const authHeaders = useCallback(() => ({
     Authorization: 'Bearer ' + getToken(),
@@ -49,6 +50,7 @@ export default function JobPhotos({ t, jobId, attachTo }) {
   }, [photos]);
 
   const addPhotos = async (fileList) => {
+    if (uploading) return;
     const files = Array.from(fileList || []).filter(f => f && /^image\//.test(f.type || ''));
     if (files.length === 0) return;
     setUploading(true); setError('');
@@ -73,7 +75,9 @@ export default function JobPhotos({ t, jobId, attachTo }) {
     : false;
 
   const toggleAttach = async (p) => {
+    if (attaching) return;
     const key = attachTo.kind === 'variation' ? 'variation_id' : 'quote_id';
+    setAttaching(p.id);
     try {
       await apiFetch('/job-photos/' + p.id, {
         method: 'PATCH',
@@ -81,6 +85,7 @@ export default function JobPhotos({ t, jobId, attachTo }) {
       });
       await load();
     } catch (e) { setError(e.message); }
+    finally { setAttaching(null); }
   };
 
   const remove = async (p) => {
@@ -105,11 +110,12 @@ export default function JobPhotos({ t, jobId, attachTo }) {
           border: '2px dashed ' + t.border, color: t.textSecondary,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           fontSize: 12, fontWeight: 600, textAlign: 'center', gap: 4,
+          pointerEvents: uploading ? 'none' : 'auto', opacity: uploading ? 0.6 : 1,
         }}>
           <span style={{ fontSize: 22 }}>📷</span>
           {uploading ? 'Saving…' : 'Take a photo'}
           <input
-            type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+            type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={uploading}
             onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}
           />
         </label>
@@ -118,11 +124,12 @@ export default function JobPhotos({ t, jobId, attachTo }) {
           border: '2px dashed ' + t.border, color: t.textSecondary,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           fontSize: 12, fontWeight: 600, textAlign: 'center', gap: 4,
+          pointerEvents: uploading ? 'none' : 'auto', opacity: uploading ? 0.6 : 1,
         }}>
           <span style={{ fontSize: 22 }}>🖼️</span>
           {uploading ? 'Saving…' : 'Add photos'}
           <input
-            type="file" accept="image/*" multiple style={{ display: 'none' }}
+            type="file" accept="image/*" multiple style={{ display: 'none' }} disabled={uploading}
             onChange={e => { addPhotos(e.target.files); e.target.value = ''; }}
           />
         </label>
@@ -131,11 +138,13 @@ export default function JobPhotos({ t, jobId, attachTo }) {
           <button
             key={p.id}
             onClick={() => attachTo ? toggleAttach(p) : setViewer(p)}
+            disabled={attachTo && attaching === p.id}
             style={{
               flexShrink: 0, width: 96, height: 96, borderRadius: 12, padding: 0,
               cursor: 'pointer', position: 'relative', overflow: 'hidden',
               border: attachTo && isAttached(p) ? '3px solid ' + t.success : '1px solid ' + t.border,
               background: t.surface,
+              opacity: attachTo && attaching === p.id ? 0.6 : 1,
             }}
           >
             {thumbs[p.id]
@@ -164,11 +173,13 @@ export default function JobPhotos({ t, jobId, attachTo }) {
           position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 1000,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16,
         }}>
-          <img
-            src={thumbs[viewer.id]} alt={viewer.caption || 'Site photo'}
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 12, objectFit: 'contain' }}
-          />
+          {thumbs[viewer.id]
+            ? <img
+                src={thumbs[viewer.id]} alt={viewer.caption || 'Site photo'}
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 12, objectFit: 'contain' }}
+              />
+            : <span onClick={e => e.stopPropagation()} style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Loading…</span>}
           <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 10, marginTop: 14 }}>
             <button onClick={() => remove(viewer)} style={{
               minHeight: 48, padding: '0 20px', borderRadius: 12, border: 'none',

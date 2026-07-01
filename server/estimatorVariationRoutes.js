@@ -51,11 +51,15 @@ function num(v, fb = 0) {
 function round2(n) { return Math.round(n * 100) / 100; }
 
 function nextVoNumber(jobId) {
-  // Per-job sequential VO-001, VO-002...
+  // Per-job sequential VO-001, VO-002... Use the max existing numeric suffix + 1
+  // (not COUNT(*)) so it stays correct after deletes; call it INSIDE the same
+  // db.transaction() as the insert so the read + insert are atomic and two racing
+  // creates can't mint the same VO number.
   const row = db.prepare(
-    "SELECT COUNT(*) as c FROM estimator_variations WHERE job_id = ?"
+    "SELECT MAX(CAST(SUBSTR(vo_number, 4) AS INTEGER)) AS mx "
+    + "FROM estimator_variations WHERE job_id = ? AND vo_number LIKE 'VO-%'"
   ).get(jobId);
-  const n = (row?.c || 0) + 1;
+  const n = (row?.mx || 0) + 1;
   return 'VO-' + String(n).padStart(3, '0');
 }
 
@@ -88,7 +92,7 @@ function computeTotals(lines, opts) {
     const rate = num(ln.rate);
     const lt = qty * rate;
     ln.line_total = round2(lt);
-    net += lt;
+    net += ln.line_total;
   }
   const ohp = net * (ohpPct / 100);
   const beforeVat = net + ohp;
@@ -233,9 +237,10 @@ ownerRouter.post('/', (req, res) => {
     const totals = computeTotals(lines, { ohp_pct: b.ohp_pct, vat_pct: b.vat_pct });
 
     const id = uuidv4();
-    const voNumber = nextVoNumber(job.id);
 
+    let voNumber;
     const txn = db.transaction(() => {
+      voNumber = nextVoNumber(job.id);
       db.prepare(
         'INSERT INTO estimator_variations (id, user_id, job_id, vo_number, title, reason, notes, currency, '
         + 'net_total, ohp_pct, ohp_amount, vat_pct, vat_amount, grand_total, status, locked) '
@@ -297,8 +302,22 @@ ownerRouter.patch('/:id', (req, res) => {
     const allowed = ['title', 'reason', 'notes', 'currency', 'ohp_pct', 'vat_pct'];
     const sets = [];
     const vals = [];
+    const CURRENCIES = ['GBP', 'EUR'];
     for (const k of allowed) {
-      if (k in b) { sets.push(k + ' = ?'); vals.push(b[k]); }
+      if (!(k in b)) continue;
+      let val = b[k];
+      if (k === 'ohp_pct' || k === 'vat_pct') {
+        // Coerce to a number and clamp to a sane percentage range so garbage
+        // strings/negatives/absurd values can't land in the numeric columns.
+        val = Math.min(100, Math.max(0, round2(num(b[k]))));
+        // Reflect the sanitised value back onto the working copy so the recompute
+        // block below uses the clamped percentage, not the raw body value.
+        b[k] = val;
+      } else if (k === 'currency') {
+        val = CURRENCIES.includes(String(b[k]).toUpperCase()) ? String(b[k]).toUpperCase() : 'GBP';
+      }
+      sets.push(k + ' = ?');
+      vals.push(val);
     }
     if (sets.length > 0) {
       sets.push('updated_at = CURRENT_TIMESTAMP');
@@ -370,8 +389,9 @@ ownerRouter.post('/:id/duplicate', (req, res) => {
     if (!v) return res.status(404).json({ error: 'Variation not found.' });
     const lines = getVariationLines(v.id);
     const newId = uuidv4();
-    const newVo = nextVoNumber(v.job_id);
+    let newVo;
     const txn = db.transaction(() => {
+      newVo = nextVoNumber(v.job_id);
       db.prepare(
         'INSERT INTO estimator_variations (id, user_id, job_id, vo_number, title, reason, notes, currency, '
         + 'net_total, ohp_pct, ohp_amount, vat_pct, vat_amount, grand_total, status, locked) '
@@ -406,6 +426,16 @@ ownerRouter.delete('/:id', (req, res) => {
     if (!v) return res.status(404).json({ error: 'Variation not found.' });
     if (v.locked || v.status === 'approved') {
       return res.status(423).json({ error: 'Approved variations are locked and cannot be deleted.', code: 'VARIATION_LOCKED' });
+    }
+    // A 'sent' variation has a live /v/<token> approval link out with the client.
+    // Deleting it silently 404s the link they're actively using, so require an
+    // explicit confirm flag before destroying it.
+    const confirmed = req.body?.confirm === true || req.query?.confirm === 'true';
+    if (v.status === 'sent' && !confirmed) {
+      return res.status(409).json({
+        error: 'This change has been sent to the client and its approval link is live. Deleting it will break that link. Re-send confirm=true to delete anyway, or decline it first.',
+        code: 'VARIATION_SENT',
+      });
     }
     const txn = db.transaction(() => {
       db.prepare('DELETE FROM estimator_variation_lines WHERE variation_id = ?').run(v.id);
@@ -758,7 +788,11 @@ publicRouter.post('/:token/approve', (req, res) => {
     if (!name) return res.status(400).json({ error: 'Please enter your name.' });
     if (!signature) return res.status(400).json({ error: 'Please type your name as a signature.' });
 
-    const ip = (req.headers['x-forwarded-for'] || '').toString().split(',')[0].trim() || req.ip || req.connection?.remoteAddress || null;
+    // Use Express's req.ip (derived from the socket peer, honouring the app's
+    // 'trust proxy' setting) rather than the raw X-Forwarded-For header, which is
+    // client-controlled and forgeable on this public endpoint. For an approval
+    // audit trail the IP must not be attacker-supplied.
+    const ip = (req.ip || req.connection?.remoteAddress || '').toString().slice(0, 100) || null;
     const ua = (req.headers['user-agent'] || '').toString().slice(0, 500) || null;
 
     db.prepare(

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
 
 /**
  * Variations hub — top-level entry that lists every project with at least
@@ -9,6 +10,7 @@ import { apiFetch } from '../utils/api';
  * with no way to scan across the portfolio.
  */
 export default function VariationsHubPage() {
+  const isMobile = useIsMobile();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -70,7 +72,8 @@ export default function VariationsHubPage() {
           borderRadius: 12, border: '1px solid var(--border)',
           background: 'var(--bg-card)', overflow: 'hidden',
         }}>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ overflowX: isMobile ? 'visible' : 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {!isMobile && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 130px 100px 100px 130px 70px',
@@ -87,7 +90,51 @@ export default function VariationsHubPage() {
             <div style={{ textAlign: 'right' }}>Net change</div>
             <div></div>
           </div>
+          )}
           {projects.map((p) => (
+            isMobile ? (
+            <Link
+              key={p.project_id}
+              to={`/project/${p.project_id}/variations`}
+              style={{
+                display: 'block',
+                padding: '14px 16px',
+                borderTop: '1px solid var(--border)',
+                fontSize: 13, color: 'inherit', textDecoration: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.project_title}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {p.project_type}
+                    {p.last_change_at ? ' · last update ' + new Date(p.last_change_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                  </div>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 16 }}>→</div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                Owner: {p.owner_name || p.owner_email || '—'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 6, alignItems: 'baseline' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Total: <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.variation_count}</span>
+                  {p.draft_count > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B' }}> · {p.draft_count} draft</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Approved: <span style={{ fontWeight: 700, color: '#10B981' }}>{p.approved_count || 0}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Net change: <span style={{
+                    fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
+                    color: (p.total_net_change || 0) >= 0 ? '#10B981' : '#EF4444',
+                  }}>{fmt(p)}</span>
+                </div>
+              </div>
+            </Link>
+            ) : (
             <Link
               key={p.project_id}
               to={`/project/${p.project_id}/variations`}
@@ -127,6 +174,7 @@ export default function VariationsHubPage() {
               </div>
               <div style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: 16 }}>→</div>
             </Link>
+            )
           ))}
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
+import { apiFetch, getToken, getEstimatorKey, clearToken } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import { FileTextIcon, ScaleIcon, ClipboardIcon, PoundIcon, AlertTriangleIcon } from '../components/Icons';
 import HelpTip from '../components/HelpTip';
@@ -34,6 +34,8 @@ function Inner() {
   const [draftJobId, setDraftJobId] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [draftType, setDraftType] = useState('letter');
+  const [creating, setCreating] = useState(null);
+  const [pdfBusy, setPdfBusy] = useState(null);
 
   const refresh = useCallback(async () => {
     setError('');
@@ -52,12 +54,14 @@ function Inner() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const create = async (templateId) => {
+    if (creating) return;
+    setCreating(templateId); setError('');
     try {
       const body = { template_id: templateId };
       if (pickJobId) body.job_id = pickJobId;
       const r = await apiFetch('/documents', { method: 'POST', body: JSON.stringify(body) });
       nav('/documents/' + r.id);
-    } catch (e) { setError(e.message); }
+    } catch (e) { setError(e.message); setCreating(null); }
   };
 
   const draftLetter = async () => {
@@ -80,17 +84,29 @@ function Inner() {
     finally { setDrafting(false); }
   };
 
-  const downloadPdf = (id) => {
+  const downloadPdf = (id, title) => {
+    if (pdfBusy) return;
+    setPdfBusy(id);
     fetch('/api/documents/' + id + '/pdf', {
       headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() },
-    }).then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
+    }).then(r => {
+      if (r.status === 401) {
+        // Match apiFetch's 401 handling: clear the expired session and send to login.
+        clearToken();
+        window.location.href = '/login';
+        throw new Error('Session expired — please sign in again');
+      }
+      if (!r.ok) throw new Error('Download failed');
+      return r.blob();
+    })
       .then(blob => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'document.pdf';
+        a.download = (title || 'document').replace(/[^a-z0-9]+/gi, '-') + '.pdf';
         a.click();
         URL.revokeObjectURL(a.href);
-      }).catch(e => alert(e.message));
+      }).catch(e => alert(e.message))
+      .finally(() => setPdfBusy(null));
   };
 
   const remove = async (id, title) => {
@@ -163,12 +179,13 @@ function Inner() {
             {templates.map(tpl => {
               const Ico = TEMPLATE_ICONS[tpl.id] || FileTextIcon;
               return (
-              <button key={tpl.id} onClick={() => create(tpl.id)} style={{
+              <button key={tpl.id} onClick={() => create(tpl.id)} disabled={!!creating} style={{
                 background: t.surface, border: '1px solid ' + t.border, borderRadius: 12,
-                padding: 16, textAlign: 'left', cursor: 'pointer', color: t.text,
+                padding: 16, textAlign: 'left', cursor: creating ? 'progress' : 'pointer', color: t.text,
+                opacity: creating && creating !== tpl.id ? 0.5 : 1,
               }}>
                 <div style={{ marginBottom: 8 }}>{Ico && <Ico size={28} />}</div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{tpl.label}</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{creating === tpl.id ? 'Creating…' : tpl.label}</div>
                 <div style={{ color: t.textSecondary, fontSize: 12, marginTop: 4 }}>{tpl.description}</div>
               </button>
               );
@@ -195,7 +212,7 @@ function Inner() {
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 <button onClick={() => nav('/documents/' + d.id)} style={{ ...btnGhost(t), minHeight: 40 }}>Open</button>
-                <button onClick={() => downloadPdf(d.id)} style={{ ...btnGhost(t), minHeight: 40 }}>PDF</button>
+                <button onClick={() => downloadPdf(d.id, d.title)} disabled={pdfBusy === d.id} style={{ ...btnGhost(t), minHeight: 40, cursor: pdfBusy === d.id ? 'progress' : 'pointer', opacity: pdfBusy === d.id ? 0.65 : 1 }}>{pdfBusy === d.id ? 'Preparing…' : 'PDF'}</button>
                 <button onClick={() => remove(d.id, d.title)} style={{ ...btnGhost(t), minHeight: 40, color: t.danger }}>Delete</button>
               </div>
             </div>

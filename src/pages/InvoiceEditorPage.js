@@ -6,6 +6,7 @@ import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
 import HelpTip from '../components/HelpTip';
 import useIsMobile from '../utils/useIsMobile';
+import AsyncButton from '../components/AsyncButton';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function fmt(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -57,6 +58,20 @@ function Inner() {
   const [chase, setChase] = useState(null);
   const [chaseSending, setChaseSending] = useState(false);
   const [chaseDone, setChaseDone] = useState('');
+  const [stripeCopied, setStripeCopied] = useState(false);
+
+  // Copy to clipboard with a guard for non-HTTPS / unsupported browsers, so a
+  // builder tapping Copy always gets feedback instead of a silent failure.
+  const copyStripeLink = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error('unsupported');
+      await navigator.clipboard.writeText(stripeLink);
+      setStripeCopied(true);
+      setTimeout(() => setStripeCopied(false), 2000);
+    } catch (e) {
+      setError('Could not copy the link — press and hold it to copy by hand.');
+    }
+  };
 
   const load = useCallback(async () => {
     setError('');
@@ -297,15 +312,15 @@ function Inner() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {!readOnly && <button onClick={save} disabled={saving || !dirty} style={btnPrimary(t, saving || !dirty)}>{saving ? 'Saving…' : (dirty ? 'Save changes' : 'Saved')}</button>}
           {invoice.status === 'draft' && !readOnly && <button data-tour="invoice-send" onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send the invoice'}</button>}
-          {invoice.status === 'sent' && !readOnly && <button onClick={shareLink} style={btnSecondary(t)}>Share link</button>}
+          {invoice.status === 'sent' && !readOnly && <AsyncButton onClick={shareLink} busyLabel="Sharing…" style={btnSecondary(t)}>Share link</AsyncButton>}
           {invoice.status === 'sent' && !readOnly && (
             <button onClick={openChase} style={{ ...btnPrimary(t), background: invoice.overdue ? t.danger : t.accent }}>Chase this payment</button>
           )}
-          {(invoice.status === 'sent' || invoice.status === 'draft') && !readOnly && <button onClick={markPaid} style={{ ...btnPrimary(t), background: t.success }}>Mark as paid</button>}
+          {(invoice.status === 'sent' || invoice.status === 'draft') && !readOnly && <AsyncButton onClick={markPaid} busyLabel="Saving…" style={{ ...btnPrimary(t), background: t.success }}>Mark as paid</AsyncButton>}
           <button onClick={downloadPdf} style={btnSecondary(t)}>PDF</button>
-          <button onClick={duplicate} style={btnSecondary(t)}>Duplicate</button>
-          {invoice.status !== 'void' && invoice.status !== 'paid' && <button onClick={voidIt} style={btnSecondary(t)}>Void</button>}
-          {invoice.status !== 'paid' && <button onClick={remove} style={{ ...btnSecondary(t), color: t.danger }}>Delete</button>}
+          <AsyncButton onClick={duplicate} busyLabel="Creating…" style={btnSecondary(t)}>Duplicate</AsyncButton>
+          {invoice.status !== 'void' && invoice.status !== 'paid' && <AsyncButton onClick={voidIt} busyLabel="Saving…" style={btnSecondary(t)}>Void</AsyncButton>}
+          {invoice.status !== 'paid' && <AsyncButton onClick={remove} busyLabel="Deleting…" style={{ ...btnSecondary(t), color: t.danger }}>Delete</AsyncButton>}
         </div>
       </div>
 
@@ -344,10 +359,10 @@ function Inner() {
             {stripeLink ? (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <a href={stripeLink} target="_blank" rel="noopener noreferrer" style={{ color: t.accent, fontSize: 12 }}>Open link ↗</a>
-                <button onClick={() => navigator.clipboard.writeText(stripeLink)} style={btnSecondary(t)}>Copy</button>
+                <button onClick={copyStripeLink} style={btnSecondary(t)}>{stripeCopied ? 'Copied' : 'Copy'}</button>
               </div>
             ) : stripeStatus && stripeStatus.connected && stripeStatus.charges_enabled ? (
-              <button onClick={genStripeLink} style={btnSecondary(t)}>Create payment link</button>
+              <AsyncButton onClick={genStripeLink} busyLabel="Creating…" style={btnSecondary(t)}>Create payment link</AsyncButton>
             ) : stripeStatus && stripeStatus.configured === false ? (
               <span style={{ color: t.textMuted, fontSize: 12 }}>Card payments aren't enabled on this server yet.</span>
             ) : (
@@ -360,7 +375,7 @@ function Inner() {
       )}
 
       {/* Header form */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Bill to</div>
           <label style={lbl(t)}>Client name</label>
@@ -372,7 +387,7 @@ function Inner() {
         </div>
         <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Invoice details</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
             <div>
               <label style={lbl(t)}>Issue date</label>
               <input type="date" value={issueDate} disabled={readOnly} onChange={e => { setIssueDate(e.target.value); onHeaderChange(); }} style={fld(t)} />
@@ -498,16 +513,16 @@ function Inner() {
           )}
         </div>
         ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
             <thead>
               <tr style={{ background: t.surface, fontSize: 12, color: t.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 <th style={{ ...th, width: cisApplies ? '40%' : '50%' }}>Description</th>
-                {cisApplies && <th style={{ ...th, width: 110 }}>Labour or materials?</th>}
-                <th style={{ ...th, width: 70, textAlign: 'right' }}>Qty</th>
-                <th style={{ ...th, width: 70 }}>Unit</th>
-                <th style={{ ...th, width: 110, textAlign: 'right' }}>Rate</th>
-                <th style={{ ...th, width: 110, textAlign: 'right' }}>Total</th>
+                {cisApplies && <th style={{ ...th, width: 100 }}>Labour or materials?</th>}
+                <th style={{ ...th, width: 60, textAlign: 'right' }}>Qty</th>
+                <th style={{ ...th, width: 60 }}>Unit</th>
+                <th style={{ ...th, width: 90, textAlign: 'right' }}>Rate</th>
+                <th style={{ ...th, width: 90, textAlign: 'right' }}>Total</th>
                 {!readOnly && <th style={{ ...th, width: 40 }}></th>}
               </tr>
             </thead>
@@ -649,7 +664,7 @@ function Inner() {
       )}
 
       {/* Summary + notes */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 360px', gap: 16 }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <label style={lbl(t)}>Payment terms / notes</label>
           <textarea value={notes} disabled={readOnly} onChange={e => { setNotes(e.target.value); onHeaderChange(); }} rows={5} placeholder="e.g. Bank: ... Sort code: ... Account: ...   Late payment interest applies per Late Payment of Commercial Debts Act." style={ta(t)} />

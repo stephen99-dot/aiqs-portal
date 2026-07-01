@@ -769,9 +769,9 @@ router.post('/jobs/:id/costs', (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found.' });
     const b = req.body || {};
     const kind = ['material', 'labour', 'other'].includes(b.kind) ? b.kind : 'material';
-    const qty = num(b.qty);
-    const unitCost = num(b.unit_cost);
-    const total = b.total != null ? num(b.total) : round2(qty * unitCost);
+    const qty = Math.max(0, num(b.qty));
+    const unitCost = Math.max(0, num(b.unit_cost));
+    const total = b.total != null ? round2(Math.max(0, num(b.total))) : round2(qty * unitCost);
     const id = uuidv4();
     db.prepare(
       'INSERT INTO job_costs (id, job_id, user_id, kind, description, qty, unit, unit_cost, total, vendor, occurred_on, notes) '
@@ -832,7 +832,7 @@ router.get('/dashboard', (req, res) => {
       SELECT
         COALESCE(SUM(b.planned_revenue), 0) AS planned_revenue,
         COALESCE(SUM(b.planned_labour + b.planned_materials + b.planned_overheads + b.planned_other), 0) AS planned_cost,
-        COALESCE((SELECT SUM(c.total) FROM job_costs c WHERE c.user_id = ?), 0) AS actual_cost
+        COALESCE((SELECT SUM(c.total) FROM job_costs c WHERE c.job_id IN (SELECT job_id FROM job_budgets WHERE user_id = ?)), 0) AS actual_cost
       FROM job_budgets b
       WHERE b.user_id = ?
     `).get(userId, userId);

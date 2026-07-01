@@ -233,8 +233,8 @@ router.post('/', (req, res) => {
         'draft', clientId
       );
       const ins = db.prepare(
-        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, sort_order) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO invoice_lines (id, invoice_id, section, item, description, unit, qty, rate, line_total, is_labour, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       let order = 0;
       for (const ln of lines) {
@@ -246,6 +246,7 @@ router.post('/', (req, res) => {
           (ln.unit || 'item').toString().slice(0, 20),
           num(ln.qty), num(ln.rate),
           num(ln.line_total) || round2(num(ln.qty) * num(ln.rate)),
+          ln.is_labour ? 1 : 0,
           ln.sort_order != null ? num(ln.sort_order) : order++
         );
       }
@@ -291,7 +292,7 @@ router.patch('/:id', (req, res) => {
     const vals = [];
     for (const k of allowed) {
       if (k in b) {
-        if (k === 'status' && !['draft', 'sent', 'paid', 'void'].includes(b[k])) continue;
+        if (k === 'status' && !['draft', 'sent'].includes(b[k])) continue;
         sets.push(k + ' = ?');
         vals.push(b[k] == null ? null : b[k]);
       }
@@ -501,9 +502,12 @@ router.post('/:id/mark-paid', (req, res) => {
   try {
     const inv = getInvoice(req.params.id, req.user.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
+    if (inv.status === 'void') return res.status(400).json({ error: 'Void invoices cannot be marked paid — reissue instead.' });
+    if (inv.status === 'paid') return res.json({ id: inv.id, status: 'paid', paid_amount: num(inv.paid_amount), paid_at: inv.paid_at });
     const b = req.body || {};
-    const paidAmount = b.paid_amount != null ? num(b.paid_amount) : num(inv.grand_total);
-    const paidAtIso = b.paid_at || new Date().toISOString();
+    const paidAmount = Math.max(0, round2(b.paid_amount != null ? num(b.paid_amount) : num(inv.grand_total)));
+    const paidAtDate = b.paid_at ? new Date(b.paid_at) : new Date();
+    const paidAtIso = Number.isNaN(paidAtDate.getTime()) ? new Date().toISOString() : paidAtDate.toISOString();
     db.prepare(
       "UPDATE invoices SET status='paid', paid_amount=?, paid_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"
     ).run(paidAmount, paidAtIso, inv.id);

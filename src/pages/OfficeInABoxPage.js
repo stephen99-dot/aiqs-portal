@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   ZapIcon, RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon,
   FileTextIcon, LayersIcon, CheckCircleIcon, ArrowRightIcon, ClockIcon,
+  XeroMark,
 } from '../components/Icons';
 import OfficeBoxArt from '../components/OfficeBoxArt';
 import { OFFICE_PAYMENT_LINK, withUserRef } from '../utils/stripeLinks';
@@ -17,7 +18,8 @@ const AMBER_DIM = '#D97706';
 const FEATURES = [
   { Icon: RulerIcon,      title: 'Speak a job, get a quote', blurb: "Describe the job like you'd tell your mate — out loud if you like. A priced, branded quote comes back in seconds, built on your own rates." },
   { Icon: CreditCardIcon, title: 'Get paid without chasing', blurb: 'Clients accept quotes and pay invoices on their phone. Polite reminders go out by themselves — due date, a week late, two weeks late.' },
-  { Icon: TrendingUpIcon, title: 'CIS & VAT done right',     blurb: 'CIS deductions split labour from materials automatically, reverse-charge invoices carry the exact HMRC wording, and your accountant gets Xero/QuickBooks files in one tap.' },
+  { Icon: TrendingUpIcon, title: 'CIS & VAT done right',     blurb: 'CIS deductions split labour from materials automatically, reverse-charge invoices carry the exact HMRC wording, and your accountant gets a clean export whenever they need it.' },
+  { Icon: XeroMark, brand: 'xero', title: 'Connect Xero in one tap', blurb: "Link your Xero once and send invoices straight across — no files to import. VAT, reduced rate and CIS reverse charge map to your own Xero tax rates automatically." },
   { Icon: BuildingIcon,   title: 'Every job in one place',   blurb: 'The quote, invoices, payments, changes, photos and paperwork for each job on one screen — with one-tap call and WhatsApp for the customer.' },
   { Icon: FileTextIcon,   title: 'Paperwork that writes itself', blurb: 'Contracts, terms and letters stamped with your logo. Need an awkward letter? Say what for, read the draft, send it.' },
   { Icon: LayersIcon,     title: 'Photos & site tools',      blurb: "Snap the rot before it's covered up and pin the photo to the change you price. Trade calculators and live materials prices included." },
@@ -27,6 +29,7 @@ const BENEFITS = [
   'Send a quote by WhatsApp — your client accepts it on their phone',
   'Automatic payment reminders and one-tap chasers, politely persistent',
   'CIS, reverse-charge VAT and retention handled on every invoice',
+  'Connect Xero and send invoices straight in — no files to import',
   'Branded to your company on every quote, invoice and letter',
 ];
 
@@ -181,7 +184,7 @@ export default function OfficeInABoxPage() {
           </div>
 
           <div className="oiab-hero-art">
-            <OfficeBoxArt size={260} style={{ display: 'block', margin: '0 auto' }} />
+            <OfficeBoxArt size={260} style={{ display: 'block', margin: '0 auto', width: '100%', maxWidth: 260, height: 'auto' }} />
           </div>
         </div>
       </div>
@@ -198,16 +201,20 @@ export default function OfficeInABoxPage() {
         }}>
           {FEATURES.map(f => (
             <div key={f.title} className="oiab-feat" style={{
-              background: cardBg, border: `1px solid ${t.border}`, borderRadius: 16,
+              background: cardBg, border: `1px solid ${f.brand === 'xero' ? 'rgba(19,181,234,0.5)' : t.border}`, borderRadius: 16,
               padding: 17,
             }}>
               <div style={{
                 width: 40, height: 40, borderRadius: 11, marginBottom: 11,
-                background: `linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.12))`,
-                border: `1px solid ${amberBorder}`,
+                background: f.brand === 'xero'
+                  ? (isDark ? 'rgba(19,181,234,0.12)' : 'rgba(19,181,234,0.08)')
+                  : `linear-gradient(135deg, rgba(245,158,11,0.18), rgba(217,119,6,0.12))`,
+                border: `1px solid ${f.brand === 'xero' ? 'rgba(19,181,234,0.35)' : amberBorder}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <f.Icon size={19} color={AMBER} />
+                {f.brand === 'xero'
+                  ? <XeroMark size={26} />
+                  : <f.Icon size={19} color={AMBER} />}
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 5 }}>{f.title}</div>
               <div style={{ fontSize: 12.5, lineHeight: 1.5, color: t.textSecondary }}>{f.blurb}</div>

@@ -15,15 +15,20 @@ export default function EstimatorGate({ children }) {
   const { t } = useTheme();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [phase, setPhase] = useState('checking'); // checking | ready | not_enabled
+  const [phase, setPhase] = useState('checking'); // checking | ready | not_enabled | error
+  const [redirecting, setRedirecting] = useState(false);
 
   const verify = useCallback(async () => {
+    setPhase('checking');
     try {
       await apiFetch('/estimator/stats');
       setPhase('ready');
       return;
     } catch (e) {
-      if (!(e.data && e.data.code === 'ESTIMATOR_DISABLED')) { setPhase('ready'); return; }
+      // Only the explicit disabled code means "not on this account". Any other
+      // failure (network drop, auth expiry, 500, parse error) must NOT unlock a
+      // paid feature — surface a retry instead of falling through to 'ready'.
+      if (!(e.data && e.data.code === 'ESTIMATOR_DISABLED')) { setPhase('error'); return; }
     }
     // Disabled — but they may have just paid. Verify with Stripe before blocking.
     try {
@@ -36,6 +41,8 @@ export default function EstimatorGate({ children }) {
   useEffect(() => { verify(); }, [verify]);
 
   function startTrial() {
+    if (redirecting) return;
+    setRedirecting(true);
     window.location.href = withUserRef(OFFICE_PAYMENT_LINK, user);
   }
 
@@ -43,6 +50,27 @@ export default function EstimatorGate({ children }) {
 
   if (phase === 'checking') {
     return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
+  }
+
+  if (phase === 'error') {
+    return (
+      <Wrap t={t}>
+        <h2 style={{ margin: 0, color: t.text }}>Couldn't load</h2>
+        <p style={{ color: t.textSecondary, fontSize: 14.5, lineHeight: 1.55, marginTop: 12, marginBottom: 20 }}>
+          We couldn't reach the server. Check your connection and try again.
+        </p>
+        <button
+          onClick={verify}
+          style={{
+            width: '100%', minHeight: 48, borderRadius: 10, border: 'none',
+            background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#0A0F1C',
+            fontSize: 15, fontWeight: 800, cursor: 'pointer',
+          }}
+        >
+          Retry
+        </button>
+      </Wrap>
+    );
   }
 
   // not_enabled — Office in a Box isn't on this account yet.
@@ -62,13 +90,15 @@ export default function EstimatorGate({ children }) {
       </p>
       <button
         onClick={startTrial}
+        disabled={redirecting}
         style={{
           width: '100%', minHeight: 48, borderRadius: 10, border: 'none',
           background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#0A0F1C',
-          fontSize: 15, fontWeight: 800, cursor: 'pointer',
+          fontSize: 15, fontWeight: 800, cursor: redirecting ? 'default' : 'pointer',
+          opacity: redirecting ? 0.7 : 1,
         }}
       >
-        Start 7-day free trial
+        {redirecting ? 'Opening checkout…' : 'Start 7-day free trial'}
       </button>
       <button
         onClick={() => navigate('/office-in-a-box')}

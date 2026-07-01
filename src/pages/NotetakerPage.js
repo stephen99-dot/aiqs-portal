@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import useIsMobile from '../utils/useIsMobile';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const MicIcon = ({ size = 18, color = 'currentColor' }) => (
@@ -135,6 +136,7 @@ const USE_CASES = {
 
 export default function NotetakerPage() {
   const { t, mode } = useTheme();
+  const isMobile = useIsMobile();
   const [activeImg, setActiveImg] = useState(0);
   const [imgError, setImgError] = useState({});
   const [activeTab, setActiveTab] = useState('site');
@@ -215,11 +217,11 @@ export default function NotetakerPage() {
           backgroundSize: '40px 40px',
         }} />
 
-        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '60px 28px 64px', position: 'relative' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: isMobile ? '60px 18px 64px' : '60px 28px 64px', position: 'relative' }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 340px',
-            gap: 56, alignItems: 'center',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 340px',
+            gap: isMobile ? 32 : 56, alignItems: 'center',
           }}>
             {/* Left copy */}
             <div>
@@ -299,7 +301,7 @@ export default function NotetakerPage() {
             {/* Right — product images */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
               <div style={{
-                width: 300, height: 340, borderRadius: 16,
+                width: '100%', maxWidth: 300, height: 340, borderRadius: 16,
                 background: isDark ? '#0F1929' : '#FFFFFF',
                 border: `1px solid ${c.border}`, overflow: 'hidden',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -325,7 +327,10 @@ export default function NotetakerPage() {
               {/* Thumbnail selector */}
               <div style={{ display: 'flex', gap: 8 }}>
                 {PRODUCT_IMAGES.map((src, i) => (
-                  <button key={i} onClick={() => setActiveImg(i)} style={{
+                  <button key={i} onClick={() => setActiveImg(i)}
+                    aria-label={`View image ${i + 1}`}
+                    aria-pressed={activeImg === i}
+                    style={{
                     width: 56, height: 56, borderRadius: 10, overflow: 'hidden',
                     border: `2px solid ${activeImg === i ? c.accent : c.border}`,
                     background: isDark ? '#0F1929' : '#FFFFFF', cursor: 'pointer', padding: 3,
@@ -333,7 +338,7 @@ export default function NotetakerPage() {
                   }}>
                     {!imgError[i] ? (
                       <img
-                        src={src} alt=""
+                        src={src} alt={`AI QS Notetaker view ${i + 1}`}
                         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                         onError={() => setImgError(prev => ({ ...prev, [i]: true }))}
                       />
@@ -466,7 +471,7 @@ export default function NotetakerPage() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0, position: 'relative' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 0, position: 'relative' }}>
             {/* Connecting line */}
             <div style={{
               position: 'absolute', top: 40, left: '20%', right: '20%', height: 2,
@@ -542,7 +547,7 @@ export default function NotetakerPage() {
               background: 'linear-gradient(90deg, #F59E0B, #D97706)',
             }} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 40, alignItems: 'start' }}>
               <div>
                 <h3 style={{ fontSize: 20, fontWeight: 800, color: c.text, margin: '0 0 12px', letterSpacing: '-0.02em' }}>
                   {activeCase.title}
@@ -767,9 +772,6 @@ export default function NotetakerPage() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
-        }
-        @media (max-width: 768px) {
-          .notetaker-hero-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>

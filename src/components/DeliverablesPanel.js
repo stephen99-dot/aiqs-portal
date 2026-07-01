@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken } from '../utils/api';
 import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
+import useIsMobile from '../utils/useIsMobile';
 
 /**
  * Deliverables panel — the return leg of the workflow.
@@ -46,6 +47,7 @@ function fmtSize(b) {
 export default function DeliverablesPanel({ projectId, project }) {
   const { user } = useAuth();
   const isAdmin = user && user.role === 'admin';
+  const isMobile = useIsMobile();
 
   const [latest, setLatest] = useState([]);
   const [history, setHistory] = useState([]);
@@ -68,6 +70,7 @@ export default function DeliverablesPanel({ projectId, project }) {
   const [uploading, setUploading] = useState(false);
   const [uploadOk, setUploadOk] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,7 +165,10 @@ export default function DeliverablesPanel({ projectId, project }) {
     }
   }
 
-  async function downloadFile(filename) {
+  async function downloadFile(id, filename) {
+    if (downloadingId) return;
+    setDownloadingId(id);
+    setError('');
     try {
       const token = getToken();
       const resp = await fetch(`/api/downloads/${filename}`, {
@@ -180,6 +186,8 @@ export default function DeliverablesPanel({ projectId, project }) {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       setError(err.message || 'Download failed');
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -237,29 +245,37 @@ export default function DeliverablesPanel({ projectId, project }) {
               }}>
                 Files appear in their portal instantly
               </span>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexDirection: isMobile ? 'column' : 'row', alignSelf: isMobile ? 'stretch' : 'auto', width: isMobile ? '100%' : 'auto' }}>
                 <button
                   type="button"
                   onClick={loadCustomerPreview}
                   title="See exactly what's in this customer's dashboard"
                   style={{
-                    fontSize: 10.5, color: '#3B82F6',
+                    fontSize: isMobile ? 13 : 10.5, color: '#3B82F6',
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    padding: 0, textDecoration: 'underline', fontWeight: 600,
+                    padding: isMobile ? '8px 10px' : 0, minHeight: isMobile ? 40 : 'auto',
+                    width: isMobile ? '100%' : 'auto',
+                    textDecoration: 'underline', fontWeight: 600,
                   }}
                 >View as customer</button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const url = window.location.origin + '/project/' + projectId;
-                    try { navigator.clipboard.writeText(url); } catch (_) {}
-                    setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');
+                    } catch (_) {
+                      setUploadOk('Copy failed — customer URL is ' + url);
+                    }
                   }}
                   title={'Customer sees this at /project/' + projectId}
                   style={{
-                    fontSize: 10.5, color: 'var(--text-muted)',
+                    fontSize: isMobile ? 13 : 10.5, color: 'var(--text-muted)',
                     background: 'transparent', border: 'none', cursor: 'pointer',
-                    padding: 0, textDecoration: 'underline',
+                    padding: isMobile ? '8px 10px' : 0, minHeight: isMobile ? 40 : 'auto',
+                    width: isMobile ? '100%' : 'auto',
+                    textDecoration: 'underline',
                   }}
                 >Copy URL</button>
               </div>
@@ -590,13 +606,16 @@ export default function DeliverablesPanel({ projectId, project }) {
                   )}
                 </div>
                 <button
-                  onClick={() => downloadFile(d.filename)}
+                  onClick={() => downloadFile(d.id, d.filename)}
+                  disabled={downloadingId === d.id}
                   style={{
                     padding: '7px 12px', borderRadius: 7, border: 'none',
                     background: 'rgba(16,185,129,0.18)', color: '#10B981',
-                    fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                    fontWeight: 700, fontSize: 12,
+                    cursor: downloadingId === d.id ? 'not-allowed' : 'pointer',
+                    opacity: downloadingId === d.id ? 0.55 : 1,
                   }}
-                >Download</button>
+                >{downloadingId === d.id ? 'Downloading…' : 'Download'}</button>
                 {isAdmin && (
                   <button
                     onClick={() => deleteDeliverable(d.id)}
@@ -644,9 +663,10 @@ export default function DeliverablesPanel({ projectId, project }) {
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', opacity: 0.7 }}>{d.original_name}</span>
                     <span>{new Date(d.created_at).toLocaleDateString('en-GB')}</span>
                     <button
-                      onClick={() => downloadFile(d.filename)}
-                      style={{ background: 'none', border: 'none', color: '#3B82F6', cursor: 'pointer', fontSize: 11.5, fontWeight: 600 }}
-                    >Download</button>
+                      onClick={() => downloadFile(d.id, d.filename)}
+                      disabled={downloadingId === d.id}
+                      style={{ background: 'none', border: 'none', color: '#3B82F6', cursor: downloadingId === d.id ? 'not-allowed' : 'pointer', fontSize: 11.5, fontWeight: 600, opacity: downloadingId === d.id ? 0.55 : 1 }}
+                    >{downloadingId === d.id ? 'Downloading…' : 'Download'}</button>
                   </div>
                 ))}
               </div>

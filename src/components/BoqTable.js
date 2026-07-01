@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
+import useIsMobile from '../utils/useIsMobile';
+import AsyncButton from './AsyncButton';
 
 // Plain-English labels for provenance badges on rates and quantities.
 // These map to the rate_source / qty_source values emitted by server/deterministicPricer.js
@@ -57,12 +59,14 @@ function fmtQty(n) {
 export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate, compact = false }) {
   const { mode, t } = useTheme();
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile();
   const [loading, setLoading]   = useState(true);
   const [data, setData]         = useState(null);
   const [editingKey, setEditingKey] = useState(null);
   const [editingVal, setEditingVal] = useState('');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const [expanded, setExpanded] = useState({});
 
   const load = useCallback(async () => {
@@ -90,6 +94,10 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
 
   async function saveEdit(itemKey) {
     if (!data || !takeoffId) return;
+    // Guard against re-entry: pressing Enter clears editingKey and unmounts the
+    // still-focused input, firing onBlur -> saveEdit a second time. Bail if we're
+    // already saving or this cell is no longer the one being edited.
+    if (saving || editingKey !== itemKey) return;
     const num = parseFloat(editingVal);
     if (!Number.isFinite(num) || num < 0) { setEditingKey(null); return; }
 
@@ -97,6 +105,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
     const next = (data.items_raw || []).map(it => it.key === itemKey ? { ...it, qty: num, qty_source: 'user_edited' } : it);
 
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await apiFetch('/takeoff/' + takeoffId, {
         method: 'PUT',
@@ -108,11 +117,12 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
         priced: res.priced || prev.priced,
       }));
       if (onChange) onChange(res);
+      setEditingKey(null);
     } catch (e) {
-      alert(e.message || 'Failed to save edit');
+      // Keep the cell in edit mode with the typed value so the user can retry.
+      setSaveError(e.message || 'Failed to save edit');
     } finally {
       setSaving(false);
-      setEditingKey(null);
     }
   }
 
@@ -173,7 +183,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
       </div>
 
       {/* Sections */}
-      <div style={{ maxHeight: compact ? 360 : 600, overflowY: 'auto' }}>
+      <div style={{ maxHeight: compact ? 360 : 600, overflowY: 'auto', overflowX: 'auto' }}>
         {sections.map((sec, si) => {
           const isOpen = expanded[sec.name];
           return (
@@ -201,7 +211,8 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
               </div>
 
               {isOpen && (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ width: '100%', minWidth: isMobile ? 420 : undefined, borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
                       <th style={{ textAlign: 'left',  padding: '6px 10px', color: c.textSub, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Item</th>
@@ -234,6 +245,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                             }}
                             onClick={() => {
                               if (isEditing) return;
+                              setSaveError(null);
                               setEditingKey(item.key);
                               setEditingVal(String(item.qty));
                             }}
@@ -249,7 +261,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                                 onBlur={() => saveEdit(item.key)}
                                 onKeyDown={e => {
                                   if (e.key === 'Enter') saveEdit(item.key);
-                                  else if (e.key === 'Escape') setEditingKey(null);
+                                  else if (e.key === 'Escape') { setSaveError(null); setEditingKey(null); }
                                 }}
                                 style={{
                                   width: 72, textAlign: 'right',
@@ -283,11 +295,18 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           );
         })}
       </div>
+
+      {saveError && (
+        <div style={{ padding: '8px 14px', fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', borderTop: '1px solid rgba(239,68,68,0.2)' }}>
+          {saveError} · edit the quantity and press Enter to retry.
+        </div>
+      )}
 
       {/* Summary */}
       <div style={{ padding: '12px 14px', background: c.totalBg, borderTop: '1px solid ' + c.border, fontSize: 12 }}>
@@ -388,8 +407,9 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                   Draft · edit any quantity above first
                 </span>
               )}
-              <button
-                onClick={() => {
+              <AsyncButton
+                busyLabel="Generating…"
+                onClick={async () => {
                   if (isDraft) {
                     const ok = window.confirm(
                       'This will LOCK your quantities and generate the BOQ & findings report.\n\n'
@@ -398,7 +418,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                     );
                     if (!ok) return;
                   }
-                  onRegenerate();
+                  await onRegenerate();
                 }}
                 style={{
                   padding: '7px 14px', borderRadius: 7,
@@ -409,7 +429,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                 }}
               >
                 {isDraft ? 'Lock & generate documents' : 'Regenerate documents'}
-              </button>
+              </AsyncButton>
             </div>
           );
         })()}

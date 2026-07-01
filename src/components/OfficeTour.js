@@ -223,14 +223,31 @@ function Confetti() {
   return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, zIndex: 10006, pointerEvents: 'none' }} />;
 }
 
-function getTooltipStyle(rect, placement, win) {
+function getTooltipStyle(rect, placement, win, cardH) {
   const w = Math.min(380, win.width - 32);
   const m = 16;
+  // Estimated card height (measured via ref when available) — used to keep the
+  // whole card, including the Back/Next controls, inside the viewport on phones.
+  const h = cardH || 320;
+  const narrow = win.width < 640;
   if (placement === 'center' || !rect) {
     return { position: 'fixed', top: '50%', left: '50%', width: w, transform: 'translate(-50%, -50%)' };
   }
+  // On narrow phones there's no room beside a ~288px card, so side placements
+  // would land on top of their own target — fall back to bottom/top instead.
+  let effective = placement;
+  if (narrow && (effective === 'left' || effective === 'right')) {
+    const below = win.height - rect.bottom;
+    effective = below >= rect.top ? 'bottom' : 'top';
+  }
+  // Flip vertical placement when the card wouldn't fit the chosen side.
+  if (effective === 'bottom' && rect.bottom + m + h > win.height && rect.top - m - h >= 16) {
+    effective = 'top';
+  } else if (effective === 'top' && rect.top - m - h < 16 && rect.bottom + m + h <= win.height) {
+    effective = 'bottom';
+  }
   let top, left, transform = 'none';
-  switch (placement) {
+  switch (effective) {
     case 'bottom': top = rect.bottom + m; left = rect.left + rect.width / 2 - w / 2; break;
     case 'top':    top = rect.top - m;    left = rect.left + rect.width / 2 - w / 2; transform = 'translateY(-100%)'; break;
     case 'right':  top = rect.top + rect.height / 2; left = rect.right + m; transform = 'translateY(-50%)'; break;
@@ -238,7 +255,12 @@ function getTooltipStyle(rect, placement, win) {
     default:       top = rect.bottom + m; left = rect.left;
   }
   left = Math.max(16, Math.min(left, win.width - w - 16));
-  top = Math.max(16, Math.min(top, win.height - 40));
+  // Clamp the card's real (post-transform) top edge so the whole card, controls
+  // included, stays on screen — the 'top' placement draws upward by its height.
+  const visibleTop = transform === 'translateY(-100%)' ? top - h
+    : transform === 'translateY(-50%)' ? top - h / 2 : top;
+  const clampedVisibleTop = Math.max(16, Math.min(visibleTop, win.height - h - 16));
+  top += clampedVisibleTop - visibleTop;
   return { position: 'fixed', top, left, width: w, transform };
 }
 
@@ -251,6 +273,8 @@ export default function OfficeTour({ userId, autoStart }) {
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState(null);
   const [win, setWin] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [cardH, setCardH] = useState(0);
+  const cardRef = useRef(null);
 
   const step = STEPS[index];
   const isDark = mode === 'dark';
@@ -368,6 +392,13 @@ export default function OfficeTour({ userId, autoStart }) {
     return () => { cancelled = true; if (el) el.removeEventListener('click', handler); };
   }, [active, index, location.pathname, step]);
 
+  // Measure the real card height so getTooltipStyle can keep the whole card
+  // (controls included) on screen — re-measured whenever the content changes.
+  useEffect(() => {
+    if (!active) return;
+    if (cardRef.current) setCardH(cardRef.current.offsetHeight);
+  }, [active, index, rect, win, step]);
+
   // Keep the spotlight glued to its target while scrolling / resizing.
   useEffect(() => {
     if (!active) return;
@@ -461,8 +492,8 @@ export default function OfficeTour({ userId, autoStart }) {
       )}
 
       {/* Tooltip card */}
-      <div style={{
-        ...getTooltipStyle(rect, step.placement, win),
+      <div ref={cardRef} style={{
+        ...getTooltipStyle(rect, step.placement, win, cardH),
         zIndex: 10003, pointerEvents: 'auto',
         animation: step.placement === 'center' ? 'oTourPop 0.32s ease forwards' : 'oTourSlide 0.3s cubic-bezier(0.22,1,0.36,1) forwards',
       }}>
