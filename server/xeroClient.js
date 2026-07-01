@@ -31,14 +31,15 @@ const REDIRECT_URI = process.env.XERO_REDIRECT_URI || `${PORTAL_BASE_URL}/api/xe
 // Xero's NEW granular scopes (the old broad `accounting.transactions` was split
 // up). Apps registered after 2 March 2026 only have the granular scopes, so
 // requesting `accounting.transactions` fails with `invalid_scope`:
-//   app.connections           → read /connections to find the org (tenant)
 //   accounting.invoices       → create sales invoices (was accounting.transactions)
 //   accounting.contacts       → create/find the customer contact on the invoice
 //   accounting.settings.read  → read the org's tax rates (VAT/CIS mapping)
 //   offline_access            → refresh token so the link survives past 30 min
+// The /connections lookup (to find the org/tenant) needs no scope of its own —
+// it works with any valid token, so `app.connections` is NOT requested here
+// (Xero rejects it in this login flow with "requested wrong scopes").
 const SCOPES = [
   'openid', 'profile', 'email',
-  'app.connections',
   'accounting.invoices', 'accounting.contacts', 'accounting.settings.read',
   'offline_access',
 ].join(' ');
