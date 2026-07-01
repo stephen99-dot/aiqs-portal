@@ -139,3 +139,16 @@ export const PickaxeIcon = (p) => <Icon {...p}><path d="M11 13L3 21M5.5 7.5C9 5 
 export const FryingPanIcon = (p) => <Icon {...p}><circle cx="10" cy="13" r="7"/><path d="M17 13h6"/></Icon>;
 export const BurstIcon = (p) => <Icon {...p}><path d="M12 2l2.4 5.2L20 6l-2.8 5L22 13l-5.6 1L17 20l-5-3-5 3 .6-6L2 13l4.8-2L4 6l5.6 1.2z"/></Icon>;
 export const ShopIcon = (p) => <Icon {...p}><path d="M3 9l1.5-5h15L21 9M4 9v11a1 1 0 001 1h14a1 1 0 001-1V9M3 9h18M9 21v-6h6v6"/></Icon>;
+
+// ─── Brand marks ────────────────────────────────────────────────────────────
+// Xero logo: a blue disc with a white "x". Rendered from its own <svg> (not the
+// thin-line Icon wrapper) so it keeps Xero's brand blue and filled shape.
+export const XeroMark = ({ size = 24, style, ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" style={{ flexShrink: 0, ...style }} {...props}>
+    <circle cx="24" cy="24" r="24" fill="#13B5EA" />
+    <g stroke="#fff" strokeWidth="3.6" strokeLinecap="round">
+      <path d="M17 17.5 L31 30.5" />
+      <path d="M31 17.5 L17 30.5" />
+    </g>
+  </svg>
+);
