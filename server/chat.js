@@ -1616,6 +1616,109 @@ function sseEvent(res, evt) {
   res.write(`data: ${JSON.stringify(evt)}\n\n`);
 }
 
+// ── Prompt-size guard ───────────────────────────────────────────────────────
+// Claude models cap total context at 200k tokens; a prompt over that is rejected
+// with a hard 400 ("prompt is too long"), not truncated. The chat prompt grows
+// unbounded from three sides — a heavy user's trained rate library baked into the
+// cached system base, accumulated conversation history, and per-turn injections —
+// so we defensively trim to fit BEFORE every call. Sacrifice order, least-harmful
+// first: (1) drop the oldest history turns, always keeping the current user
+// message; (2) as a last resort truncate the cached system base (the rate library
+// lives here), never the volatile per-turn tail which carries the locked takeoff
+// figures and this turn's drawing ground-truth.
+const MODEL_CONTEXT_TOKENS = 200000;
+
+// Rough char→token heuristic (~4 chars/token for English/JSON). Deliberately errs
+// high so we stay safely under the real tokenizer's count.
+function estimateTokens(text) {
+  return text ? Math.ceil(text.length / 4) : 0;
+}
+function estimateBlockTokens(block) {
+  if (typeof block === 'string') return estimateTokens(block);
+  if (!block || typeof block !== 'object') return 0;
+  if (block.type === 'text') return estimateTokens(block.text);
+  if (block.type === 'image' || block.type === 'document') {
+    const data = block.source && block.source.data;
+    // base64 payload → ~0.75 real bytes/char; image/doc token cost is model-side,
+    // so estimate high rather than risk undercounting a drawing carried in history.
+    return data ? Math.ceil(data.length / 2.5) : 1600;
+  }
+  return estimateTokens(JSON.stringify(block));
+}
+function estimateMessageTokens(m) {
+  if (!m) return 0;
+  // +8 for role/framing overhead per message.
+  if (typeof m.content === 'string') return estimateTokens(m.content) + 8;
+  if (Array.isArray(m.content)) return m.content.reduce((s, b) => s + estimateBlockTokens(b), 0) + 8;
+  return 0;
+}
+
+// Trim (stableSystemBase + perTurnTail + messages) to fit under the context window
+// less `reserveTokens` (headroom for the model's own output + a safety margin).
+// Returns the possibly-shrunk pieces plus a report of what was dropped.
+function fitChatPrompt({ stableSystemBase, perTurnTail, messages, reserveTokens }) {
+  const budget = MODEL_CONTEXT_TOKENS - reserveTokens;
+  let base = stableSystemBase || '';
+  const tail = perTurnTail || '';
+  const msgs = (messages || []).slice();
+  const msgTok = msgs.map(estimateMessageTokens);
+
+  let baseTok = estimateTokens(base);
+  const tailTok = estimateTokens(tail);
+  const total = () => baseTok + tailTok + msgTok.reduce((a, b) => a + b, 0);
+
+  let trimmedTurns = 0;
+  // (1) Drop oldest turns until we fit — but always keep the final (current) turn.
+  while (total() > budget && msgs.length > 1) {
+    msgs.shift();
+    msgTok.shift();
+    trimmedTurns++;
+  }
+
+  let truncatedBase = false;
+  // (2) Still over with just the current turn kept? Truncate the cached system
+  // base (rate library / insights). Preserve the per-turn tail untouched.
+  if (total() > budget) {
+    const lastTok = msgTok.reduce((a, b) => a + b, 0);
+    const allowedBaseTok = budget - tailTok - lastTok;
+    const note = '\n\n[Some trained-rate context was omitted to fit the model context window.]\n';
+    if (allowedBaseTok <= 0) {
+      base = note;
+    } else if (allowedBaseTok < baseTok) {
+      const keepChars = allowedBaseTok * 4;
+      base = keepChars > note.length ? base.slice(0, keepChars - note.length) + note : note;
+    }
+    baseTok = estimateTokens(base);
+    truncatedBase = true;
+  }
+
+  let truncatedMessage = false;
+  // (3) Extreme last resort: the single current turn alone blows the budget (e.g.
+  // a giant pasted spec). Truncate its text blocks so the request still goes out.
+  if (total() > budget && msgs.length === 1) {
+    // Leave slack for the per-message framing overhead and the appended truncation
+    // suffix so the final estimate stays strictly under budget.
+    const allowed = Math.max(0, budget - baseTok - tailTok - 64);
+    let remaining = allowed;
+    const m = msgs[0];
+    const clampText = (t) => {
+      const tok = estimateTokens(t);
+      if (tok <= remaining) { remaining -= tok; return t; }
+      const keepChars = Math.max(0, remaining * 4 - 40);
+      remaining = 0;
+      return t.slice(0, keepChars) + '\n\n[Message truncated to fit context window.]';
+    };
+    if (typeof m.content === 'string') {
+      msgs[0] = { ...m, content: clampText(m.content) };
+    } else if (Array.isArray(m.content)) {
+      msgs[0] = { ...m, content: m.content.map((b) => (b && b.type === 'text') ? { ...b, text: clampText(b.text || '') } : b) };
+    }
+    truncatedMessage = true;
+  }
+
+  return { stableSystemBase: base, perTurnTail: tail, messages: msgs, trimmedTurns, truncatedBase, truncatedMessage };
+}
+
 // Call Anthropic's Messages API in streaming mode and forward text deltas to
 // the client in real-time via sseEmit. Aggregates the full reply + thinking
 // server-side so the rest of the pipeline (tag parsing, takeoff extraction,
@@ -2091,17 +2194,40 @@ ${summary}`);
     // the large rate-library/insights base is read from cache on this user's
     // subsequent turns. The base is byte-identical across turns; the tail (memory,
     // intake, drawing ground-truth, takeoff figures) sits after the breakpoint.
-    const perTurnTail = systemPrompt.slice(stableSystemBase.length);
+    const rawPerTurnTail = systemPrompt.slice(stableSystemBase.length);
+
+    // Guard the assembled prompt against Claude's 200k context limit so a heavy
+    // rate library + long history never fails the turn with a hard 400. Reserve
+    // headroom for the model's own output (max_tokens), any thinking budget, and
+    // a margin for tools/tokenizer slack our char-based estimate can't see.
+    const reserveTokens = MAX_TOKENS.CHAT
+      + ((primaryThinking && primaryThinking.budget_tokens) || 0)
+      + (useTools ? 2000 : 0)
+      + 8000;
+    const fitted = fitChatPrompt({
+      stableSystemBase, perTurnTail: rawPerTurnTail, messages, reserveTokens,
+    });
+    if (fitted.trimmedTurns || fitted.truncatedBase || fitted.truncatedMessage) {
+      console.log(`[API] Prompt-size guard trimmed prompt: ${fitted.trimmedTurns} old turn(s) dropped`
+        + (fitted.truncatedBase ? ', system base truncated' : '')
+        + (fitted.truncatedMessage ? ', current message truncated' : ''));
+    }
+    const fittedBase = fitted.stableSystemBase;
+    const perTurnTail = fitted.perTurnTail;
+    // Only the API request uses the trimmed history — the full `messages` array is
+    // left intact for downstream logic (location detection, takeoff extraction).
+    const fittedMessages = fitted.messages;
+
     const cachedSystem = perTurnTail
       ? [
-          { type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: fittedBase, cache_control: { type: 'ephemeral' } },
           { type: 'text', text: perTurnTail },
         ]
-      : [{ type: 'text', text: stableSystemBase, cache_control: { type: 'ephemeral' } }];
+      : [{ type: 'text', text: fittedBase, cache_control: { type: 'ephemeral' } }];
     const buildBody = (model, thinking) => ({
       model, max_tokens: MAX_TOKENS.CHAT,
       ...(thinking ? { thinking } : {}),
-      system: cachedSystem, messages,
+      system: cachedSystem, messages: fittedMessages,
       ...(useTools && webTools ? { tools: webTools } : {}),
     });
 
