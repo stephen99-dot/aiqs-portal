@@ -35,6 +35,42 @@ router.post('/my-rates/add', authMiddleware, (req, res) => {
   } catch(e) { console.error('[Rates] Add:', e); res.status(500).json({ error: 'Failed to add rate' }); }
 });
 
+// Dedupe the caller's own rate library. Near-duplicates accumulate because rates
+// are auto-captured from the model's free-text names (each phrasing → a new row).
+// GET  = dry-run report (default, changes nothing) — shows conservative vs moderate.
+// POST = apply. Pass ?aggressive=1 to also merge same-concept rows with differing
+// values (keeping the highest-confidence value); otherwise only identical-value rows
+// are merged. Retired rows are soft-deleted (is_active=0), so it's reversible.
+const dedupeRates = require('./dedupeRates');
+
+router.get('/my-rates/dedupe', authMiddleware, (req, res) => {
+  try {
+    const report = dedupeRates.analyze(db, req.user.id);
+    // Trim the group detail so the payload stays small but reviewable.
+    res.json({
+      dryRun: true,
+      ...report.summary,
+      conservativeSample: report.conservative.slice(0, 30).map((g) => ({
+        keep: g.survivor.display_name, value: g.survivor.value, unit: g.survivor.unit,
+        retiring: g.retire.map((r) => r.display_name),
+      })),
+      moderateSample: report.moderate.slice(0, 30).map((g) => ({
+        keep: g.survivor.display_name,
+        differingValues: g.values.map((v) => `${v.display_name}: ${v.value} ${v.unit}`),
+      })),
+    });
+  } catch (e) { console.error('[DedupeRates] analyze:', e); res.status(500).json({ error: 'Dedupe analysis failed' }); }
+});
+
+router.post('/my-rates/dedupe', authMiddleware, (req, res) => {
+  try {
+    const aggressive = req.query.aggressive === '1' || req.body.aggressive === true;
+    const result = dedupeRates.apply(db, req.user.id, { aggressive });
+    console.log(`[DedupeRates] user=${req.user.email} aggressive=${aggressive} merged=${result.groupsMerged} retired=${result.rowsRetired} ${result.activeBefore}->${result.activeAfter}`);
+    res.json(result);
+  } catch (e) { console.error('[DedupeRates] apply:', e); res.status(500).json({ error: 'Dedupe failed' }); }
+});
+
 // Delete a rate (soft delete)
 router.delete('/my-rates/:rateId', authMiddleware, (req, res) => {
   try {

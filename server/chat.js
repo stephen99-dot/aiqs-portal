@@ -27,6 +27,7 @@ let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.l
 let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { console.log('[Chat] pdfGeometry not found — drawing text extraction disabled'); }
 let extractBoqMeta; try { extractBoqMeta = require('./extractBoqMeta'); } catch (e) { console.log('[Chat] extractBoqMeta not found — BOQ header metadata disabled'); }
 let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
+const dedupeRates = require('./dedupeRates');
 
 // Live web search — gives the chat the same "search the web" ability as the
 // claude.ai front end. Runs as Anthropic's server-side web_search tool, so no
@@ -3780,7 +3781,20 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           const rName = parts[1].trim(); const rVal = parseFloat(parts[2].trim().replace(/[^0-9.\-]/g, '')); const rUnit = parts[3].trim();
           if (rName && !isNaN(rVal) && rVal > 0 && rUnit) {
             const itemKey = rName.toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 100);
-            const exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
+            let exists = db.prepare('SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1').get(userId, cat, itemKey);
+            // Prevent near-duplicate build-up: if there's no exact-key hit, look for an
+            // existing rate with the same name signature + unit (any category) and
+            // update THAT instead of inserting a fresh row under a slightly different
+            // name. This is what let the library balloon to thousands of dupes.
+            if (!exists) {
+              const sig = dedupeRates.nameSignature(rName);
+              const uSig = dedupeRates.unitSignature(rUnit);
+              if (sig) {
+                const candidates = db.prepare('SELECT id, display_name, unit FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
+                const match = candidates.find((c) => dedupeRates.nameSignature(c.display_name) === sig && dedupeRates.unitSignature(c.unit) === uSig);
+                if (match) exists = { id: match.id };
+              }
+            }
             if (!exists) { db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit); }
             else { db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id); }
           }
