@@ -101,6 +101,8 @@ app.use('/api/job-photos', require('./jobPhotoRoutes').router);
 // Wave 3: Invoices & payment schedules.
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
+// Native Xero connection — one-button OAuth2, pushes invoices straight in.
+app.use('/api/xero', require('./xeroRoutes'));
 // Wave 5: Documents & Compliance — fillable templates -> branded PDF.
 app.use('/api/documents', documentsRoutes);
 // AI Project Manager — deterministic alerts engine (Part A) + LLM-grounded Q&A (Part B).

@@ -17,6 +17,8 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
 - `PORT` — `5000`
 - `VOYAGE_API_KEY` — optional; enables semantic memory retrieval (falls back to FTS keyword search if unset).
 - `ENABLE_WEB_SEARCH` — optional; the chat uses Anthropic's live `web_search` tool by default. Set to `0` to disable it (e.g. to avoid per-search billing).
+- `XERO_CLIENT_ID` / `XERO_CLIENT_SECRET` — optional; enable the native "Connect with Xero" button on the Money page (see **Native Xero connection** below). Unset = the button is hidden and only the CSV export shows.
+- `XERO_REDIRECT_URI` — optional; defaults to `${PORTAL_BASE_URL}/api/xero/callback`. Must match the redirect URI registered on the Xero app exactly.
 
 ### Drawing reading & quote accuracy
 The take-off pipeline reads the numbers printed on the drawings rather than only eyeballing the image:
@@ -230,6 +232,43 @@ The `/finance` dashboard now surfaces **Outstanding** (sum of sent-not-paid),
 ### Sidebar
 
 A new **Invoices** entry below Finance, gated on `hasEstimator` like the rest.
+
+## Native Xero connection
+
+Alongside the CSV export (`server/accountingExport.js`), builders can connect
+their own Xero organisation with one button and push invoices straight in over
+the Xero API — no file to import. It reuses the same OAuth2 pattern as the Google
+sign-in flow.
+
+- **Server:** `server/xeroClient.js` (OAuth2, token storage/refresh, tax mapping,
+  invoice push) and `server/xeroRoutes.js` (mounted at `/api/xero`).
+  - `POST /api/xero/connect` → returns the Xero authorize URL. The builder's
+    identity is carried in a signed `state` JWT so the public callback can trust
+    it (the callback has no Bearer token — it's a browser redirect from Xero).
+  - `GET  /api/xero/callback` → swaps the code for tokens, records which org
+    (tenant) was shared, redirects back to `/money?xero=connected`.
+  - `GET  /api/xero/status` → `{ configured, connected, tenant_name }`.
+  - `POST /api/xero/push` (or `/push/:invoiceId`) → creates `AUTHORISED` sales
+    invoices for every `sent`/`paid` invoice not yet in Xero. Idempotent: the
+    created Xero `InvoiceID` is stored on `invoices.xero_invoice_id`, so tapping
+    again never duplicates.
+  - `POST /api/xero/disconnect` → clears the stored tokens.
+- **Tokens** live per-builder in `oib_settings` (`xero_access_token`,
+  `xero_refresh_token`, `xero_token_expiry`, `xero_tenant_id`,
+  `xero_tenant_name`, `xero_connected_at`). Access tokens last 30 min and the
+  refresh token **rotates on every refresh** — both are re-saved each time.
+- **VAT / CIS:** tax types are never hard-coded. On push we read the connected
+  org's own `TaxRates` and match by rate (20% / 5% / zero-rated) or by name for
+  the CIS domestic reverse charge, then fall back to the account's default tax
+  rate if the org has no matching rate. This keeps VAT correct across orgs where
+  custom rates are numbered `TAX001`, `TAX002`…
+- **Setup:** register a Xero app (free) → set `XERO_CLIENT_ID` /
+  `XERO_CLIENT_SECRET`, add `${PORTAL_BASE_URL}/api/xero/callback` as the app's
+  redirect URI. With the env vars unset the button is hidden and only the CSV
+  export shows.
+- **Scope of v1:** pushes sales invoices (builder → Xero). Payment
+  reconciliation and contact matching against existing Xero contacts are natural
+  follow-ups. The payments CSV still covers reconciliation in the meantime.
 
 ## Documents & Calculators (Wave 5)
 
