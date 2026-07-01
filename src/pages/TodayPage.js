@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
+import AsyncButton from '../components/AsyncButton';
 import { CheckCircleIcon, FileTextIcon, PoundIcon, ImageIcon, WrenchIcon } from '../components/Icons';
 import HelpTip from '../components/HelpTip';
 
@@ -77,7 +78,9 @@ function Inner() {
       try {
         const r = await apiFetch('/estimator/quotes/' + a.quote_id + '/share-url');
         setNudge({ url: window.location.origin + r.path });
-      } catch (e) { alert(e.message); }
+      } catch (e) {
+        setError("Couldn't open the share link — try again.");
+      }
       return;
     }
     if (a.link) nav(a.link);
@@ -87,14 +90,19 @@ function Inner() {
     const text = (q || question).trim();
     if (!text || asking) return;
     setQuestion('');
+    // Prior turns only — the current question travels in `question` below, so
+    // sending it in `history` too would duplicate it. Snapshot `thread` here
+    // rather than relying on the post-setState value.
+    const history = thread.slice(-6);
     setThread(prev => [...prev, { role: 'user', content: text }]);
     setAsking(true);
     try {
       const r = await apiFetch('/pm/ask', {
         method: 'POST',
-        body: JSON.stringify({ question: text, history: thread.slice(-6) }),
+        body: JSON.stringify({ question: text, history }),
       });
-      setThread(prev => [...prev, { role: 'assistant', content: r.answer }]);
+      const answer = r?.answer || "I couldn't find an answer to that — try rephrasing.";
+      setThread(prev => [...prev, { role: 'assistant', content: answer }]);
     } catch (e) {
       setThread(prev => [...prev, { role: 'assistant', content: e.message || 'That didn\'t work — try again.' }]);
     } finally {
@@ -258,15 +266,16 @@ function Inner() {
                 {card.situation || card.body}
               </div>
               {(card.action || card.link) && (
-                <button
+                <AsyncButton
                   onClick={() => handleAction(card)}
+                  busyLabel="Opening…"
                   style={{
                     marginTop: 10, minHeight: 44, padding: '0 18px',
                     background: 'transparent', color: t.accent,
                     border: '1.5px solid ' + t.accent, borderRadius: 10,
                     fontSize: 14, fontWeight: 700, cursor: 'pointer',
                   }}
-                >{card.action?.label || 'Have a look'}</button>
+                >{card.action?.label || 'Have a look'}</AsyncButton>
               )}
             </div>
           ))}

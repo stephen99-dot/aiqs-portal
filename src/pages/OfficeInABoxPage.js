@@ -184,7 +184,7 @@ export default function OfficeInABoxPage() {
           </div>
 
           <div className="oiab-hero-art">
-            <OfficeBoxArt size={260} style={{ display: 'block', margin: '0 auto' }} />
+            <OfficeBoxArt size={260} style={{ display: 'block', margin: '0 auto', width: '100%', maxWidth: 260, height: 'auto' }} />
           </div>
         </div>
       </div>

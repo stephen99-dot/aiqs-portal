@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import AsyncButton from '../components/AsyncButton';
+import useIsMobile from '../utils/useIsMobile';
 
 export default function DocumentEditorPage() {
   return <EstimatorGate><Inner /></EstimatorGate>;
@@ -10,6 +12,7 @@ export default function DocumentEditorPage() {
 
 function Inner() {
   const { t } = useTheme();
+  const isMobile = useIsMobile();
   const { id } = useParams();
   const nav = useNavigate();
 
@@ -24,6 +27,7 @@ function Inner() {
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState(null);
   const [dirty, setDirty] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -31,6 +35,8 @@ function Inner() {
         apiFetch('/documents/' + id),
         apiFetch('/finance/jobs'),
       ]);
+      if (!r.document) throw new Error('Document not found');
+      if (!r.template) throw new Error('Template not found');
       setDoc(r.document);
       setTpl(r.template);
       setFields(r.document.fields || {});
@@ -41,6 +47,18 @@ function Inner() {
     finally { setLoading(false); }
   }, [id]);
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  const goBack = () => {
+    if (dirty && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+    nav('/documents');
+  };
 
   const update = (key, value) => { setFields(prev => ({ ...prev, [key]: value })); setDirty(true); };
 
@@ -58,17 +76,27 @@ function Inner() {
   };
 
   const downloadPdf = async () => {
-    if (dirty) await save();
-    fetch('/api/documents/' + id + '/pdf', {
-      headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() },
-    }).then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
-      .then(blob => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = (title || tpl?.label || 'document') + '.pdf';
-        a.click();
-        URL.revokeObjectURL(a.href);
-      }).catch(e => alert(e.message));
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      if (dirty) await save();
+      const estKey = getEstimatorKey();
+      const headers = { Authorization: 'Bearer ' + getToken() };
+      if (estKey) headers['x-estimator-key'] = estKey;
+      const res = await fetch('/api/documents/' + id + '/pdf', { headers });
+      if (res.status === 401) { nav('/login'); return; }
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (title || tpl?.label || 'document') + '.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const duplicate = async () => {
@@ -92,19 +120,19 @@ function Inner() {
 
   return (
     <div style={{ padding: 24, color: t.text, maxWidth: 880, margin: '0 auto' }}>
-      <button onClick={() => nav('/documents')} style={btnLink(t)}>← Documents</button>
+      <button onClick={goBack} style={btnLink(t)}>← Documents</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
-          <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true); }} placeholder={tpl.label} style={{ margin: '6px 0 4px 0', fontSize: 22, fontWeight: 700, color: t.text, background: 'transparent', border: 'none', outline: 'none', minWidth: 360 }} />
+          <input value={title} onChange={e => { setTitle(e.target.value); setDirty(true); }} placeholder={tpl.label} style={{ margin: '6px 0 4px 0', fontSize: 22, fontWeight: 700, color: t.text, background: 'transparent', border: 'none', outline: 'none', minWidth: 0, width: '100%', maxWidth: isMobile ? '100%' : 360, boxSizing: 'border-box' }} />
           <div style={{ color: t.textSecondary, fontSize: 13 }}>
             {tpl.label} {savedAt && <span style={{ color: t.success, marginLeft: 8 }}>Saved {savedAt.toLocaleTimeString('en-GB')}</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={save} disabled={saving || !dirty} style={btnPrimary(t, saving || !dirty)}>{saving ? 'Saving…' : (dirty ? 'Save changes' : 'Saved')}</button>
-          <button onClick={downloadPdf} style={btnSecondary(t)}>Download PDF</button>
-          <button onClick={duplicate} style={btnSecondary(t)}>Duplicate</button>
-          <button onClick={remove} style={{ ...btnSecondary(t), color: t.danger }}>Delete</button>
+          <AsyncButton onClick={downloadPdf} busyLabel="Preparing…" style={btnSecondary(t)}>Download PDF</AsyncButton>
+          <AsyncButton onClick={duplicate} busyLabel="Duplicating…" style={btnSecondary(t)}>Duplicate</AsyncButton>
+          <AsyncButton onClick={remove} busyLabel="Deleting…" style={{ ...btnSecondary(t), color: t.danger }}>Delete</AsyncButton>
         </div>
       </div>
 

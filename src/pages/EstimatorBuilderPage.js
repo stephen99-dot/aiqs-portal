@@ -390,6 +390,8 @@ function EstimatorBuilderPageInner() {
     setLines(prev => prev.map((ln, i) => i === idx ? { ...ln, ...patch } : ln));
   };
   const deleteLine = (idx) => {
+    const ln = lines[idx];
+    if (ln && num(ln.rate) > 0 && !window.confirm('Remove this line? It has a rate of ' + fmtMoney(num(ln.qty) * num(ln.rate), currency) + '.')) return;
     setLines(prev => prev.filter((_, i) => i !== idx));
   };
   const addLine = (section) => {
@@ -442,6 +444,7 @@ function EstimatorBuilderPageInner() {
         setSavedAt(new Date());
         // Move to the saved URL so reload works.
         nav('/estimator/quote/' + r.id, { replace: true });
+        return true;
       } else {
         await apiFetch('/estimator/quotes/' + quoteId, {
           method: 'PATCH',
@@ -468,9 +471,11 @@ function EstimatorBuilderPageInner() {
           try { await apiFetch('/finance/jobs/' + jobId + '/link-quote', { method: 'POST', body: JSON.stringify({ quote_id: quoteId }) }); } catch (e) {}
         }
         setSavedAt(new Date());
+        return true;
       }
     } catch (e) {
       setError(e.message || 'Failed to save');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -483,7 +488,8 @@ function EstimatorBuilderPageInner() {
     setSendingQuote(true);
     setError('');
     try {
-      await save();
+      const ok = await save();
+      if (!ok) return;
       const r = await apiFetch('/estimator/quotes/' + quoteId + '/send', {
         method: 'POST',
         body: JSON.stringify({ client_email: clientEmail || null }),
@@ -639,6 +645,7 @@ function EstimatorBuilderPageInner() {
           <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: 16, marginBottom: 12 }}>
             <MeasurementEditor
               t={t}
+              isMobile={isMobile}
               projectType={projectType} setProjectType={setProjectType}
               currency={currency} setCurrency={setCurrency}
               elements={elements} setElements={setElements}
@@ -807,7 +814,7 @@ function EstimatorBuilderPageInner() {
             <select value={status} onChange={e => setStatus(e.target.value)} style={input(t)} disabled={locked}>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
-              {status === 'accepted' && <option value="accepted">Accepted by client</option>}
+              <option value="accepted">Accepted by client</option>
               <option value="won">Won</option>
               <option value="lost">Lost</option>
             </select>
@@ -1020,7 +1027,7 @@ function EstimatorBuilderPageInner() {
       </div>
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, marginBottom: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 360px', gap: 16, marginBottom: 16, alignItems: 'start' }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 12, padding: 20 }}>
           <label style={lbl(t)}>Notes / terms</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5} style={txtarea(t)} placeholder="Payment terms, exclusions, etc. (appears on the PDF)" />
@@ -1117,7 +1124,7 @@ function PctField({ t, label, value, onChange }) {
   );
 }
 
-function MeasurementEditor({ t, projectType, setProjectType, currency, setCurrency, elements, setElements, notes, setNotes }) {
+function MeasurementEditor({ t, isMobile, projectType, setProjectType, currency, setCurrency, elements, setElements, notes, setNotes }) {
   const updateEl = (id, patch) => setElements(prev => prev.map(el => el.id === id ? { ...el, ...patch } : el));
   const updateDim = (id, k, v) => setElements(prev => prev.map(el => el.id === id ? { ...el, dims: { ...el.dims, [k]: v } } : el));
   const removeEl = (id) => setElements(prev => prev.filter(el => el.id !== id));
@@ -1148,7 +1155,7 @@ function MeasurementEditor({ t, projectType, setProjectType, currency, setCurren
           const qty = elementQty(el);
           return (
             <div key={el.id} style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px', gap: 8, alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '160px 1fr 80px', gap: 8, alignItems: 'end' }}>
                 <div>
                   <label style={lbl(t)}>Type</label>
                   <select
@@ -1170,7 +1177,7 @@ function MeasurementEditor({ t, projectType, setProjectType, currency, setCurren
                   borderRadius: 8, padding: '8px 10px', cursor: 'pointer',
                 }}>Remove</button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr)) 140px', gap: 8, marginTop: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 }}>
                 {def.fields.map(f => (
                   <div key={f.key}>
                     <label style={lbl(t)}>{f.label}</label>

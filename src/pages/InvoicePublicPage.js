@@ -124,7 +124,7 @@ export default function InvoicePublicPage() {
           {showLines && (data.lines || []).map((ln, i) => (
             <div key={i} style={{ padding: '10px 18px 10px 34px', borderTop: '1px dashed ' + c.border, fontSize: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                <div>{ln.item || ln.description}</div>
+                <div style={{ minWidth: 0, wordBreak: 'break-word' }}>{ln.item || ln.description}</div>
                 <div style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(ln.line_total, cc)}</div>
               </div>
               {ln.item && ln.description && <div style={{ color: c.textMuted, fontSize: 13, marginTop: 2 }}>{ln.description}</div>}
@@ -148,7 +148,7 @@ export default function InvoicePublicPage() {
           </div>
         )}
 
-        <a href={base + '/pdf'} style={{
+        <a href={base + '/pdf'} target="_blank" rel="noopener" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 48,
           borderRadius: 10, border: '1px solid ' + c.border, background: c.card, color: c.text,
           fontSize: 15, fontWeight: 600, textDecoration: 'none', marginBottom: 16,

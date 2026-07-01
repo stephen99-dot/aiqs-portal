@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckIcon, XCircleIcon } from '../components/Icons';
+import useIsMobile from '../utils/useIsMobile';
 
 // Public-facing approval page. No auth, no estimator gate. Anyone with the
 // shareable /v/<token> URL can view + approve/decline. The server captures
@@ -36,6 +37,8 @@ function colours(brand) {
 
 export default function VariationApprovalPage() {
   const { token } = useParams();
+  const isMobile = useIsMobile();
+  const errorRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -61,6 +64,14 @@ export default function VariationApprovalPage() {
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Bring validation/submit errors into view — on a phone the message sits
+  // above the form, off-screen from where the builder is typing.
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [error]);
 
   const approve = async (e) => {
     if (e) e.preventDefault();
@@ -124,7 +135,7 @@ export default function VariationApprovalPage() {
     <div style={{ minHeight: '100vh', background: c.bg, padding: '24px 16px', color: c.text, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ maxWidth: 820, margin: '0 auto' }}>
         {/* Header band */}
-        <div style={{ background: c.primary, borderRadius: '12px 12px 0 0', padding: '24px 28px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ background: c.primary, borderRadius: '12px 12px 0 0', padding: isMobile ? '20px 16px' : '24px 28px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
           {logoUrl && <img src={logoUrl} alt="" style={{ maxHeight: 56, maxWidth: 140, background: '#fff', padding: 4, borderRadius: 6 }} onError={(e) => { e.target.style.display = 'none'; }} />}
           <div style={{ color: '#fff' }}>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{company.name || 'Contractor'}</div>
@@ -172,7 +183,7 @@ export default function VariationApprovalPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.lines.map((ln, i) => (
+                {(data.lines || []).map((ln, i) => (
                   <tr key={i} style={{ borderTop: '1px solid ' + c.border }}>
                     <td style={{ padding: '10px' }}>
                       {ln.item && <div style={{ fontWeight: 600 }}>{ln.item}</div>}
@@ -184,6 +195,11 @@ export default function VariationApprovalPage() {
                     <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{fmt(ln.line_total, cc)}</td>
                   </tr>
                 ))}
+                {(!data.lines || data.lines.length === 0) && (
+                  <tr style={{ borderTop: '1px solid ' + c.border }}>
+                    <td colSpan={5} style={{ padding: '10px', color: c.textSecondary, textAlign: 'center' }}>No line items.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -207,7 +223,7 @@ export default function VariationApprovalPage() {
           )}
 
           {/* Action area */}
-          {error && <div style={{ marginTop: 16, padding: 10, background: c.dangerBg, color: c.danger, borderRadius: 8 }}>{error}</div>}
+          {error && <div ref={errorRef} style={{ marginTop: 16, padding: 10, background: c.dangerBg, color: c.danger, borderRadius: 8 }}>{error}</div>}
 
           {!decided && !showDecline && (
             <form onSubmit={approve} style={{ marginTop: 24, padding: 20, background: c.bg, borderRadius: 8, border: '1px solid ' + c.border }}>
@@ -215,10 +231,10 @@ export default function VariationApprovalPage() {
               <div style={{ color: c.textSecondary, fontSize: 12, marginTop: 4, marginBottom: 12 }}>
                 By approving, you confirm the change above and agree it forms part of the contract. We record your name, the time, and your IP address as the audit record.
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={{ display: 'block', color: c.textSecondary, fontSize: 12, marginBottom: 4 }}>Your name *</label>
-                  <input value={name} onChange={e => setName(e.target.value)} required style={fld(c)} />
+                  <input value={name} onChange={e => { setName(e.target.value); if (error) setError(''); }} required style={fld(c)} />
                 </div>
                 <div>
                   <label style={{ display: 'block', color: c.textSecondary, fontSize: 12, marginBottom: 4 }}>Email (optional)</label>
@@ -226,7 +242,7 @@ export default function VariationApprovalPage() {
                 </div>
               </div>
               <label style={{ display: 'block', color: c.textSecondary, fontSize: 12, marginTop: 12, marginBottom: 4 }}>Type your name as signature *</label>
-              <input value={signature} onChange={e => setSignature(e.target.value)} required style={{ ...fld(c), fontFamily: 'Brush Script MT, cursive', fontSize: 18, fontStyle: 'italic' }} />
+              <input value={signature} onChange={e => { setSignature(e.target.value); if (error) setError(''); }} required style={{ ...fld(c), fontFamily: 'Brush Script MT, cursive', fontSize: 18, fontStyle: 'italic' }} />
               <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
                 <button type="submit" disabled={submitting} style={{ background: c.success, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, cursor: submitting ? 'wait' : 'pointer' }}>{submitting ? 'Recording…' : 'Approve change'}</button>
                 <button type="button" onClick={() => setShowDecline(true)} style={{ background: 'transparent', color: c.danger, border: '1px solid ' + c.danger, borderRadius: 8, padding: '10px 14px', fontWeight: 600, cursor: 'pointer' }}>Decline</button>

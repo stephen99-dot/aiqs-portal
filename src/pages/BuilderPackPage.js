@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
 
 /**
  * Builder Pack page — full-width workspace for turning a priced BOQ into the
@@ -38,6 +39,13 @@ function num(v) {
 function round2(v) {
   return Math.round((v || 0) * 100) / 100;
 }
+// Stable per-row id so React keys survive add/remove without misattributing
+// focus/caret to the wrong line (crypto.randomUUID with a fallback).
+let _uidSeq = 0;
+function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'it_' + Date.now().toString(36) + '_' + (_uidSeq++);
+}
 // The per-unit labour/materials rate implied by a parsed line (labour & materials
 // are LINE totals). Used so that changing Qty rescales the line at a fixed rate —
 // the accurate BOQ behaviour (line total = qty × rate).
@@ -58,6 +66,7 @@ function lineTotal(it) {
 
 export default function BuilderPackPage() {
   const { id } = useParams();
+  const isMobile = useIsMobile();
   const [project, setProject] = useState(null);
   const [sections, setSections] = useState([]);   // editable copy of breakdown.sections
   const [originalSections, setOriginalSections] = useState([]); // for "reset"
@@ -110,7 +119,7 @@ export default function BuilderPackPage() {
           provisional: !!s.provisional,
           items: (s.items || []).map((it) => {
             const { unitLabour, unitMaterials } = unitRates(it);
-            return { ...it, unitLabour, unitMaterials };
+            return { ...it, _id: it._id || uid(), unitLabour, unitMaterials };
           }),
         }));
         setSections(seeded);
@@ -133,7 +142,12 @@ export default function BuilderPackPage() {
         // stays the pristine BOQ so "Reset" still returns to the delivered figures.
         const saved = bd.saved_state;
         if (saved && typeof saved === 'object') {
-          if (Array.isArray(saved.sections) && saved.sections.length) setSections(saved.sections);
+          if (Array.isArray(saved.sections) && saved.sections.length) {
+            setSections(saved.sections.map((s) => ({
+              ...s,
+              items: (s.items || []).map((it) => ({ ...it, _id: it._id || uid() })),
+            })));
+          }
           if (saved.builder_margin != null) setBuilderMargin(saved.builder_margin);
           if (saved.materials_markup != null) setMaterialsMarkup(saved.materials_markup);
           if (saved.default_ohp != null) setDefaultOhp(saved.default_ohp);
@@ -243,7 +257,7 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      sec.items.push({ itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0, unitLabour: 0, unitMaterials: 0 });
+      sec.items.push({ _id: uid(), itemRef: '', description: 'New item', unit: 'no', qty: 1, rate: 0, labour: 0, materials: 0, total: 0, unitLabour: 0, unitMaterials: 0 });
       next[sIdx] = sec;
       return next;
     });
@@ -616,10 +630,10 @@ export default function BuilderPackPage() {
       )}
 
       {!loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 360px) 1fr', gap: 18, alignItems: 'flex-start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(320px, 360px) 1fr', gap: 18, alignItems: 'flex-start' }}>
           {/* Sticky control sidebar */}
           <div style={{
-            position: 'sticky', top: 12,
+            position: isMobile ? 'static' : 'sticky', top: 12,
             padding: 18, borderRadius: 12,
             background: 'var(--bg-card)', border: '1px solid var(--border)',
             maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
@@ -710,8 +724,8 @@ export default function BuilderPackPage() {
                     </div>
 
                     {open && (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 900, tableLayout: 'fixed' }}>
+                      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: isMobile ? 560 : 900, tableLayout: 'fixed' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)', textAlign: 'left' }}>
                               <th style={th(64)}>Ref</th>
@@ -728,7 +742,7 @@ export default function BuilderPackPage() {
                             {s.items.map((it, iIdx) => {
                               const total = lineTotal(it);
                               return (
-                                <tr key={iIdx} style={{ borderTop: '1px solid var(--border)' }}>
+                                <tr key={it._id || iIdx} style={{ borderTop: '1px solid var(--border)' }}>
                                   <td style={td()}>
                                     <input value={it.itemRef || ''} onChange={(e) => updateItem(sIdx, iIdx, { itemRef: e.target.value })}
                                       style={{ ...inputCell, fontFamily: 'JetBrains Mono, monospace' }} />
@@ -1243,6 +1257,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
       </div>
 
       <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <div style={{ ...previewHeaderStyle, gridTemplateColumns: '32px 1fr 80px 110px', background: primary, color: '#fff' }}>
           <div>#</div><div>Trade</div>
           <div style={{ textAlign: 'right' }}>OH&P</div>
@@ -1256,6 +1271,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
             <div style={{ ...moneyCell(), fontWeight: 600 }}>{fmt(sym, s.subtotal)}</div>
           </div>
         ))}
+        </div>
       </div>
 
       <div style={{

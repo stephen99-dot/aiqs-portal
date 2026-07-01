@@ -50,8 +50,22 @@ function getPhoto(id, userId) {
   return db.prepare('SELECT * FROM job_photos WHERE id = ? AND user_id = ?').get(id, userId);
 }
 
+// Wrap multer so upload errors (e.g. oversized file) come back as JSON, not an HTML 500.
+function uploadPhoto(req, res, next) {
+  upload.single('photo')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'That photo is too big — please try again.' });
+      }
+      console.error('[JobPhotos] upload error:', err);
+      return res.status(400).json({ error: 'Failed to save the photo.' });
+    }
+    next();
+  });
+}
+
 // POST /api/job-photos
-router.post('/', upload.single('photo'), (req, res) => {
+router.post('/', uploadPhoto, (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No photo received — try again.' });
     const jobId = (req.body && req.body.job_id) || '';
@@ -107,7 +121,13 @@ router.get('/:id/file', (req, res) => {
     if (!fs.existsSync(filePath)) return res.status(404).end();
     res.setHeader('Content-Type', photo.mime || 'image/jpeg');
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', (streamErr) => {
+      console.error('[JobPhotos] file stream error:', streamErr);
+      if (!res.headersSent) res.status(404).end();
+      else res.destroy();
+    });
+    stream.pipe(res);
   } catch (err) {
     console.error('[JobPhotos] file error:', err);
     if (!res.headersSent) res.status(500).end();

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon, XIcon } from '../components/Icons';
+import useIsMobile from '../utils/useIsMobile';
+import AsyncButton from '../components/AsyncButton';
 
 const STATUS_COLOURS = {
   draft:    { bg: 'rgba(245,158,11,0.12)', color: '#F59E0B', label: 'Draft' },
@@ -16,6 +18,7 @@ function fmt(val, currency = 'GBP') {
 
 export default function VariationsPage() {
   const { id: projectId } = useParams();
+  const isMobile = useIsMobile();
   const [project, setProject]       = useState(null);
   const [variations, setVariations] = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -24,6 +27,7 @@ export default function VariationsPage() {
   const [selected, setSelected]     = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const [generatingBoq, setGeneratingBoq] = useState(false);
   const [form, setForm] = useState({ title: '', description: '' });
   const [files, setFiles]   = useState([]);
@@ -101,7 +105,9 @@ export default function VariationsPage() {
     }
   }
 
-  async function handleReject() {    if (!rejectModal) return;
+  async function handleReject() {
+    if (!rejectModal) return;
+    setRejecting(true);
     try {
       const data = await apiFetch(`/variations/${rejectModal}/reject`, {
         method: 'PATCH',
@@ -111,7 +117,11 @@ export default function VariationsPage() {
       if (selected?.id === rejectModal) setSelected(data.variation);
       setRejectModal(null);
       setRejectReason('');
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRejecting(false);
+    }
   }
 
   async function handleDownload(filename) {
@@ -153,7 +163,7 @@ export default function VariationsPage() {
 
       {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, color: '#EF4444', fontSize: 14 }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 20, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap: 20, alignItems: 'start' }}>
 
         {/* LEFT — VO list */}
         <div>
@@ -325,10 +335,11 @@ export default function VariationsPage() {
                   )}
                   {selected.status === 'draft' && (
                     <>
-                      <button className="btn-primary" style={{ fontSize: 13, background: '#10B981', borderColor: '#10B981' }}
-                        onClick={() => handleApprove(selected.id)}>
+                      <AsyncButton className="btn-primary" style={{ fontSize: 13, background: '#10B981', borderColor: '#10B981' }}
+                        busyLabel="Approving…"
+                        onClick={() => { if (window.confirm('Approve this variation? This cannot be undone from here.')) return handleApprove(selected.id); }}>
                         <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approve Variation
-                      </button>
+                      </AsyncButton>
                       <button className="btn-secondary" style={{ fontSize: 13, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}
                         onClick={() => { setRejectModal(selected.id); setRejectReason(''); }}>
                         <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Reject
@@ -382,8 +393,8 @@ export default function VariationsPage() {
             <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>Provide a reason for rejection (optional):</p>
             <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Scope not agreed, awaiting revised drawings..." style={{ width: '100%', marginBottom: 16, resize: 'vertical' }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-secondary" style={{ color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', flex: 1 }} onClick={handleReject}>Confirm Rejection</button>
-              <button className="btn-secondary" onClick={() => setRejectModal(null)}>Cancel</button>
+              <button className="btn-secondary" style={{ color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', flex: 1 }} onClick={handleReject} disabled={rejecting}>{rejecting ? 'Rejecting…' : 'Confirm Rejection'}</button>
+              <button className="btn-secondary" onClick={() => setRejectModal(null)} disabled={rejecting}>Cancel</button>
             </div>
           </div>
         </div>

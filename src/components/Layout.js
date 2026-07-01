@@ -164,7 +164,10 @@ export default function Layout() {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  const handleLogout = () => { logout(); navigate('/login'); };
+  const handleLogout = () => {
+    if (!window.confirm('Sign out of AI QS?')) return;
+    logout(); navigate('/login');
+  };
 
   const hasEstimator = !!user?.hasEstimator || isAdmin;
 
@@ -473,7 +476,7 @@ export default function Layout() {
                     onClick={() => setTheme(th.key)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 7,
-                      padding: '6px 9px', borderRadius: 8, cursor: 'pointer', width: '100%',
+                      padding: '10px 9px', minHeight: 40, borderRadius: 8, cursor: 'pointer', width: '100%',
                       background: active ? t.surfaceHover : 'transparent',
                       border: `1px solid ${active ? t.accent : t.border}`,
                       color: t.text, fontSize: 12, fontWeight: active ? 700 : 500,
@@ -543,7 +546,7 @@ export default function Layout() {
 
       {/* Office in a Box upsell — only for non-subscribers, and not on the page
           itself, and only once the What's New popup has been dismissed */}
-      {whatsNewSeen && (isAdmin || !user?.hasEstimator) && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
+      {whatsNewSeen && !hasEstimator && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
 
       {/* Feedback survey — every non-admin user, once. Waits for What's New,
           and for non-subscribers also for the Office popup, so they never stack. */}

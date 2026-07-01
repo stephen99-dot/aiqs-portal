@@ -320,7 +320,17 @@ async function pushInvoices(userId, invoiceId) {
   if (pending.length === 0) return { pushed: 0, failed: 0, results: [] };
 
   const { accessToken, tenantId } = await getValidToken(userId);
-  const revenueRates = await loadRevenueTaxRates(accessToken, tenantId).catch(() => []);
+  // Never post VAT-bearing invoices with tax rates silently unknown: if we can't
+  // load the org's rates, a 20% invoice would fall back to the account default
+  // (possibly No VAT / wrong rate) yet still report success. Abort loudly instead.
+  let revenueRates;
+  try {
+    revenueRates = await loadRevenueTaxRates(accessToken, tenantId);
+  } catch (err) {
+    const e = new Error("Couldn't read your Xero tax rates, so we stopped to avoid pushing invoices with the wrong VAT. Please try again.");
+    e.code = 'TAX_RATES_UNAVAILABLE';
+    throw e;
+  }
 
   const results = [];
   let pushed = 0, failed = 0;
@@ -330,8 +340,16 @@ async function pushInvoices(userId, invoiceId) {
       const resp = await xeroPost(accessToken, tenantId, '/Invoices', { Invoices: [payload] });
       const created = resp && resp.Invoices && resp.Invoices[0];
       const xeroId = created && created.InvoiceID;
-      if (xeroId) {
-        db.prepare('UPDATE invoices SET xero_invoice_id = ? WHERE id = ?').run(xeroId, inv.id);
+      // A 200 with no InvoiceID means we can't record that this invoice was
+      // pushed — so it would be selected and re-sent next run, creating a
+      // duplicate AUTHORISED invoice in Xero. Treat it as a failure instead of
+      // reporting a success we can't back up.
+      if (!xeroId) {
+        throw new Error("Xero accepted the request but didn't return an invoice ID — not marking as sent to avoid a duplicate. Please try again.");
+      }
+      const info = db.prepare("UPDATE invoices SET xero_invoice_id = ? WHERE id = ? AND user_id = ?").run(xeroId, inv.id, userId);
+      if (info.changes === 0) {
+        throw new Error("Pushed to Xero but couldn't record it locally — not marking as sent to avoid a duplicate. Please try again.");
       }
       pushed++;
       results.push({ id: inv.id, invoice_number: inv.invoice_number, ok: true, xero_id: xeroId });

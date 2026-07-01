@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
+import AsyncButton from '../components/AsyncButton';
 
 // CLIENTS — the builder's customer book. Records build themselves: every job,
 // quote or invoice that names a customer creates/updates one. Each card rolls
@@ -28,6 +29,8 @@ function Inner() {
   const [openId, setOpenId] = useState(null);
   const [detail, setDetail] = useState(null); // { client, jobs, quotes, invoices }
   const [editing, setEditing] = useState(null); // editable copy of detail.client
+  const [editError, setEditError] = useState(''); // inline error within the open card
+  const [saved, setSaved] = useState(false); // brief 'Saved' confirmation near Save details
 
   const refresh = useCallback(async () => {
     setError('');
@@ -39,6 +42,7 @@ function Inner() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const openClient = async (id) => {
+    setEditError(''); setSaved(false);
     if (openId === id) { setOpenId(null); setDetail(null); setEditing(null); return; }
     setOpenId(id); setDetail(null); setEditing(null);
     try {
@@ -52,20 +56,23 @@ function Inner() {
     if (!draft.name.trim()) { setError('Give the client a name.'); return; }
     try {
       await apiFetch('/finance/clients', { method: 'POST', body: JSON.stringify(draft) });
+      await refresh();
       setDraft({ name: '', email: '', phone: '', address: '' });
       setAdding(false);
-      refresh();
     } catch (e) { setError(e.message); }
   };
 
   const saveEdit = async () => {
+    setEditError(''); setSaved(false);
     try {
       await apiFetch('/finance/clients/' + editing.id, {
         method: 'PATCH',
         body: JSON.stringify({ name: editing.name, email: editing.email, phone: editing.phone, address: editing.address, notes: editing.notes }),
       });
-      refresh();
-    } catch (e) { setError(e.message); }
+      await refresh();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) { setEditError(e.message); }
   };
 
   const removeClient = async (id) => {
@@ -123,9 +130,9 @@ function Inner() {
           <input style={input} type="email" placeholder="Email (optional)" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
           <input style={input} type="tel" placeholder="Phone (optional)" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} />
           <input style={input} placeholder="Address (optional)" value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} />
-          <button onClick={addClient} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          <AsyncButton onClick={addClient} busyLabel="Saving…" style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
             Save client
-          </button>
+          </AsyncButton>
         </div>
       )}
 
@@ -150,7 +157,7 @@ function Inner() {
           }}>
             <div onClick={() => openClient(c.id)} style={{ cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{c.name}</div>
+                <div style={{ fontWeight: 700, fontSize: 16, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
                 {owes && <div style={{ color: t.danger, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>owes {fmt0(c.owed_total)}</div>}
               </div>
               <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
@@ -231,8 +238,10 @@ function Inner() {
                     <input style={input} type="tel" placeholder="Phone" value={editing.phone || ''} onChange={e => setEditing({ ...editing, phone: e.target.value })} />
                     <input style={input} placeholder="Address" value={editing.address || ''} onChange={e => setEditing({ ...editing, address: e.target.value })} />
                     <textarea style={{ ...input, minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }} placeholder="Notes — gate codes, preferences, anything worth remembering" value={editing.notes || ''} onChange={e => setEditing({ ...editing, notes: e.target.value })} />
+                    {editError && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 10, fontSize: 13 }}>{editError}</div>}
+                    {saved && <div style={{ color: t.success, fontSize: 13, fontWeight: 700 }}>Saved ✓</div>}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={saveEdit} style={{ flex: 1, minHeight: 44, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Save details</button>
+                      <AsyncButton onClick={saveEdit} busyLabel="Saving…" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Save details</AsyncButton>
                       <button onClick={() => removeClient(c.id)} style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: 'transparent', border: '1px solid ' + (t.danger || '#EF4444') + '66', color: t.danger || '#EF4444', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
                     </div>
                   </div>

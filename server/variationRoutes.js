@@ -338,7 +338,19 @@ Respond ONLY with this JSON structure:
             additions: { type: 'number' },
             omissions: { type: 'number' },
             net_change: { type: 'number' },
-            scope_changes: { type: 'array', items: { type: 'string' } },
+            scope_changes: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string' },
+                  item: { type: 'string' },
+                  detail: { type: 'string' },
+                  cost: { type: 'number' },
+                  unit: { type: 'string' },
+                },
+              },
+            },
             assumptions: { type: 'array', items: { type: 'string' } },
             confidence: { type: 'string' },
             notes: { type: 'string' },
@@ -359,6 +371,13 @@ Respond ONLY with this JSON structure:
       console.error('[Variations] no tool output');
       analysis = { additions: 0, omissions: 0, net_change: 0, scope_changes: [], assumptions: [], notes: 'Analysis could not be parsed.' };
     }
+
+    // Coerce additions & omissions to non-negative numbers, and recompute
+    // net_change server-side as (additions − omissions) rather than trusting the
+    // model — this figure drives the signed VO's contract-sum adjustment.
+    analysis.additions = Math.max(0, parseFloat(analysis.additions) || 0);
+    analysis.omissions = Math.max(0, parseFloat(analysis.omissions) || 0);
+    analysis.net_change = Math.round((analysis.additions - analysis.omissions) * 100) / 100;
 
     const voNumber = getNextVONumber(projectId);
     const id = uuidv4();
@@ -458,9 +477,44 @@ router.patch('/variations/:id/reject', authMiddleware, (req, res) => {
 // GET /api/variations/download/:filename
 router.get('/variations/download/:filename', authMiddleware, (req, res) => {
   try {
-    const filePath = path.join(outputsDir, req.params.filename);
+    const filename = req.params.filename;
+
+    // Reject any path separators / traversal segments before touching the FS.
+    if (!filename || filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    // Confirm the resolved path stays inside outputsDir.
+    const filePath = path.join(outputsDir, filename);
+    const resolved = path.resolve(filePath);
+    if (resolved !== path.resolve(outputsDir, filename) || !resolved.startsWith(path.resolve(outputsDir) + path.sep)) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    // Verify the file belongs to a project the requesting user owns (admins may
+    // access any). Filenames live on the variation (VO doc / revised BOQ) or the
+    // project (source BOQ).
+    const isAdmin = req.user.role === 'admin';
+    const owns = isAdmin
+      ? db.prepare(`
+          SELECT 1 FROM variations
+          WHERE vo_doc_filename = ? OR revised_boq_filename = ?
+          UNION SELECT 1 FROM projects WHERE boq_filename = ?
+          LIMIT 1
+        `).get(filename, filename, filename)
+      : db.prepare(`
+          SELECT 1
+          FROM variations v JOIN projects p ON p.id = v.project_id
+          WHERE p.user_id = ? AND (v.vo_doc_filename = ? OR v.revised_boq_filename = ?)
+          UNION
+          SELECT 1 FROM projects WHERE user_id = ? AND boq_filename = ?
+          LIMIT 1
+        `).get(req.user.id, filename, filename, req.user.id, filename);
+
+    if (!owns) return res.status(404).json({ error: 'File not found' });
+
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-    res.download(filePath, req.params.filename);
+    res.download(filePath, filename);
   } catch (err) {
     res.status(500).json({ error: 'Download failed' });
   }
@@ -489,6 +543,7 @@ router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, 
       var analysis = {};
       try { analysis = JSON.parse(v.raw_analysis); } catch (e) {}
 
+      var net = parseFloat(v.net_change) || 0;
       var items = [];
       var itemLetter = 'A';
 
@@ -496,36 +551,54 @@ router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, 
       var changes = analysis.scope_changes || [];
       changes.forEach(function(change) {
         var cost = parseFloat(change.cost) || 0;
-        var labour = Math.round(cost * 0.55 * 100) / 100;
-        var materials = Math.round(cost * 0.45 * 100) / 100;
+        var signed = change.type === 'omission' ? -Math.abs(cost) : cost;
+        var labour = Math.round(signed * 0.55 * 100) / 100;
+        var materials = Math.round((signed - labour) * 100) / 100;
         items.push({
           item: itemLetter,
           description: (change.type === 'omission' ? '[OMISSION] ' : '') + change.item + (change.detail ? ' — ' + change.detail : ''),
           unit: change.unit || 'item',
           qty: 1,
-          rate: cost,
-          labour: change.type === 'omission' ? -labour : labour,
-          materials: change.type === 'omission' ? -materials : materials,
-          total: change.type === 'omission' ? -cost : cost,
+          rate: signed,
+          labour: labour,
+          materials: materials,
+          total: signed,
           rate_source: 'generic'
         });
         itemLetter = String.fromCharCode(itemLetter.charCodeAt(0) + 1);
       });
 
-      // If no scope_changes, create a single summary item
+      // Reconcile the line items to this variation's net_change so the sheet
+      // totals equal the headline variations_total. If the scope_change costs
+      // don't sum to net_change (or there were none), add a balancing line.
+      var itemsTotal = Math.round(items.reduce(function(s, it) { return s + (it.total || 0); }, 0) * 100) / 100;
+      var residual = Math.round((net - itemsTotal) * 100) / 100;
       if (items.length === 0) {
-        var net = parseFloat(v.net_change) || 0;
-        var labour = Math.round(Math.abs(net) * 0.55 * 100) / 100;
-        var materials = Math.round(Math.abs(net) * 0.45 * 100) / 100;
+        var labour0 = Math.round(net * 0.55 * 100) / 100;
+        var materials0 = Math.round((net - labour0) * 100) / 100;
         items.push({
           item: 'A',
           description: v.description,
           unit: 'item',
           qty: 1,
-          rate: Math.abs(net),
-          labour: net >= 0 ? labour : -labour,
-          materials: net >= 0 ? materials : -materials,
+          rate: net,
+          labour: labour0,
+          materials: materials0,
           total: net,
+          rate_source: 'generic'
+        });
+      } else if (residual !== 0) {
+        var labourR = Math.round(residual * 0.55 * 100) / 100;
+        var materialsR = Math.round((residual - labourR) * 100) / 100;
+        items.push({
+          item: itemLetter,
+          description: (residual < 0 ? '[OMISSION] ' : '') + 'Adjustment to reconcile with net change',
+          unit: 'item',
+          qty: 1,
+          rate: residual,
+          labour: labourR,
+          materials: materialsR,
+          total: residual,
           rate_source: 'generic'
         });
       }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { CheckCircleIcon } from '../components/Icons';
@@ -33,6 +33,7 @@ export default function OfficeDemoPage() {
   const { t } = useTheme();
   const nav = useNavigate();
   const [note, setNote] = useState('');
+  const noteRef = useRef(null);
 
   const fmt = (n) => '£' + n.toLocaleString('en-GB');
   const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 16, marginBottom: 12 };
@@ -45,7 +46,12 @@ export default function OfficeDemoPage() {
     warning: { bg: t.warningBg, fg: t.warning },
   };
 
-  const demoTap = (what) => setNote('In your account, that would ' + what + ' — here it\'s just the example.');
+  const demoTap = (what) => {
+    setNote('In your account, that would ' + what + ' — here it\'s just the example.');
+    requestAnimationFrame(() => {
+      if (noteRef.current) noteRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   return (
     <div style={{ padding: '16px 16px 110px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
@@ -58,7 +64,7 @@ export default function OfficeDemoPage() {
       </div>
 
       {note && (
-        <div style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 10, padding: '10px 12px', marginBottom: 12, color: t.textSecondary, fontSize: 13 }}>
+        <div ref={noteRef} style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 10, padding: '10px 12px', marginBottom: 12, color: t.textSecondary, fontSize: 13 }}>
           {note}
         </div>
       )}

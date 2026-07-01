@@ -107,6 +107,8 @@ export default function QuoteAcceptancePage() {
       if (!r.ok) throw new Error(body.error || 'Failed.');
       setQSent(true);
       setAskOpen(false);
+      setQName('');
+      setQMessage('');
     } catch (e2) { setError(e2.message); }
     finally { setSubmitting(false); }
   };
@@ -157,7 +159,7 @@ export default function QuoteAcceptancePage() {
         {company.has_logo && (
           <img src={base + '/logo'} alt="" style={{ height: 40, maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6, padding: 2 }} />
         )}
-        <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>{company.name || 'Quotation'}</div>
+        <div style={{ color: '#fff', fontWeight: 700, fontSize: 17, minWidth: 0, overflowWrap: 'anywhere' }}>{company.name || 'Quotation'}</div>
       </div>
 
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '16px 16px 0' }}>
@@ -216,7 +218,7 @@ export default function QuoteAcceptancePage() {
                 {open && sec.lines.map((ln, i) => (
                   <div key={i} style={{ padding: '10px 18px 10px 34px', borderTop: '1px dashed ' + c.border, fontSize: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ color: c.text }}>{ln.item || ln.description}</div>
+                      <div style={{ color: c.text, minWidth: 0, overflowWrap: 'anywhere' }}>{ln.item || ln.description}</div>
                       <div style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(ln.line_total, cc)}</div>
                     </div>
                     {ln.item && ln.description && <div style={{ color: c.textMuted, fontSize: 13, marginTop: 2 }}>{ln.description}</div>}
@@ -254,7 +256,7 @@ export default function QuoteAcceptancePage() {
             fontSize: 15, fontWeight: 600, textDecoration: 'none',
           }}>Download this quote (PDF)</a>
           {!accepted && (
-            <button onClick={() => { setAskOpen(o => !o); setError(''); }} style={{
+            <button onClick={() => { setAskOpen(o => !o); setError(''); setQSent(false); }} style={{
               minHeight: 48, borderRadius: 10, border: '1px solid ' + c.border, background: c.card,
               color: c.text, fontSize: 15, fontWeight: 600, cursor: 'pointer',
             }}>Ask a question</button>

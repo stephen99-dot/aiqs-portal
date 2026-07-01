@@ -113,7 +113,13 @@ router.patch('/:id', (req, res) => {
       if (k in b) {
         if (k === 'status' && !['paid', 'unpaid'].includes(b[k])) continue;
         sets.push(k + ' = ?');
-        vals.push(b[k]);
+        if (k === 'percent_of_contract') {
+          vals.push(b[k] != null ? num(b[k]) : null);
+        } else if (k === 'amount' || k === 'sort_order') {
+          vals.push(num(b[k]));
+        } else {
+          vals.push(b[k]);
+        }
       }
     }
     if (sets.length > 0) {

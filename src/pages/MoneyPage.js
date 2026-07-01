@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
+import AsyncButton from '../components/AsyncButton';
 
 // MONEY — one place for everything money: what's coming in (invoices),
 // what's due in (payment stages + retention), and your numbers (what the
@@ -115,7 +116,7 @@ function Inner() {
   };
 
   const downloadExport = () => {
-    fetch('/api/invoices/_export/csv?what=' + exp.what + '&format=' + exp.format, {
+    return fetch('/api/invoices/_export/csv?what=' + exp.what + '&format=' + exp.format, {
       headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() },
     }).then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
       .then(blob => {
@@ -163,7 +164,7 @@ function Inner() {
 
   const disconnectXero = async () => {
     setXeroMsg(''); setXeroBusy(true);
-    try { await apiFetch('/xero/disconnect', { method: 'POST' }); setXeroMsg('Disconnected from Xero.'); await loadXero(); }
+    try { await apiFetch('/xero/disconnect', { method: 'POST' }); setXeroMsg('Disconnected from Xero.'); await loadXero(); await refresh(); }
     catch (e) { setXeroMsg(e.message); }
     finally { setXeroBusy(false); }
   };
@@ -178,6 +179,7 @@ function Inner() {
         if (r.failed) m += ' ' + r.failed + " couldn't be sent — check they have a customer name and lines.";
         setXeroMsg(m);
       }
+      await refresh();
     } catch (e) { setXeroMsg(e.message); }
     finally { setXeroBusy(false); }
   };
@@ -309,7 +311,7 @@ function Inner() {
               {!newInv.job_id && (
                 <input style={input} placeholder="Who's it for? (customer name)" value={newInv.client_name} onChange={e => setNewInv({ ...newInv, client_name: e.target.value })} />
               )}
-              <button data-tour="money-create-invoice" onClick={create} style={primaryBtn}>Create the invoice</button>
+              <AsyncButton data-tour="money-create-invoice" onClick={create} busyLabel="Creating…" style={primaryBtn}>Create the invoice</AsyncButton>
             </div>
           )}
 
@@ -360,8 +362,8 @@ function Inner() {
                   <option value="xero">Xero</option>
                   <option value="quickbooks">QuickBooks</option>
                 </select>
-                <button onClick={downloadExport} style={primaryBtn}>Download the file</button>
-                <button onClick={emailExport} style={ghostBtn}>Email your accountant</button>
+                <AsyncButton onClick={downloadExport} busyLabel="Preparing…" style={primaryBtn}>Download the file</AsyncButton>
+                <AsyncButton onClick={emailExport} busyLabel="Sending…" style={ghostBtn}>Email your accountant</AsyncButton>
               </div>
               {expMsg && <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 10 }}>{expMsg}</div>}
             </div>
@@ -449,7 +451,7 @@ function Inner() {
                       {st.invoice_id ? (
                         <button onClick={() => nav('/invoices/' + st.invoice_id)} style={ghostBtn}>See the invoice</button>
                       ) : (
-                        <button onClick={() => invoiceStage(st)} style={primaryBtn}>Invoice it</button>
+                        <AsyncButton onClick={() => invoiceStage(st)} busyLabel="Creating…" style={primaryBtn}>Invoice it</AsyncButton>
                       )}
                       {st.job_id && <button onClick={() => nav('/jobs/' + st.job_id)} style={ghostBtn}>See the job</button>}
                     </div>

@@ -9,6 +9,7 @@ import { jobStage, stageColours } from '../utils/jobStages';
 import { PhoneIcon } from '../components/Icons';
 import JobPhotos from '../components/JobPhotos';
 import JobSchedule from '../components/JobSchedule';
+import AsyncButton from '../components/AsyncButton';
 
 // THE JOB PAGE — one screen with everything about one job, sectioned
 // vertically: money strip, quotes, invoices & payments, changes, documents,
@@ -455,9 +456,9 @@ function Inner() {
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 <button onClick={() => nav('/estimator/quote/' + q.id)} style={ghostBtn}>Edit quote</button>
                 {!accepted && q.status !== 'lost' && (
-                  <button onClick={() => sendQuote(q.id)} style={{ ...primaryBtn }}>
+                  <AsyncButton onClick={() => sendQuote(q.id)} busyLabel="Sending…" style={{ ...primaryBtn }}>
                     {q.public_token ? 'Share the link' : 'Send to client'}
-                  </button>
+                  </AsyncButton>
                 )}
                 <button onClick={() => downloadQuotePdf(q.id)} style={ghostBtn}>PDF</button>
                 {accepted && (
@@ -475,7 +476,7 @@ function Inner() {
       <div ref={sections.invoices} style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <div style={sectionTitle}>Invoices & payments</div>
-          <button onClick={newInvoice} style={primaryBtn}>+ New invoice</button>
+          <AsyncButton onClick={newInvoice} busyLabel="Creating…" style={primaryBtn}>+ New invoice</AsyncButton>
         </div>
         {invoices.length === 0 ? (
           <div style={{ color: t.textMuted, fontSize: 14, padding: '10px 0' }}>
@@ -533,9 +534,9 @@ function Inner() {
                 {st.status === 'paid' ? (
                   <span style={{ background: t.successBg, color: t.success, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>Paid</span>
                 ) : (
-                  <button onClick={async () => {
-                    try { await apiFetch('/payment-schedules/' + st.id + '/mark-paid', { method: 'POST', body: JSON.stringify({}) }); refresh(); } catch (e) { setError(e.message); }
-                  }} style={{ ...ghostBtn, minHeight: 36, fontSize: 12 }}>Mark as paid</button>
+                  <AsyncButton onClick={async () => {
+                    try { await apiFetch('/payment-schedules/' + st.id + '/mark-paid', { method: 'POST', body: JSON.stringify({}) }); await refresh(); } catch (e) { setError(e.message); }
+                  }} busyLabel="Saving…" style={{ ...ghostBtn, minHeight: 36, fontSize: 12 }}>Mark as paid</AsyncButton>
                 )}
                 <button onClick={async () => {
                   if (!window.confirm('Delete this stage?')) return;
@@ -548,7 +549,7 @@ function Inner() {
             <input value={newStage.stage_label} onChange={e => setNewStage({ ...newStage, stage_label: e.target.value })} placeholder="e.g. Deposit" style={input} />
             <input type="number" step="any" value={newStage.amount} onChange={e => setNewStage({ ...newStage, amount: e.target.value })} placeholder="£" style={input} />
             <input type="date" value={newStage.due_date} onChange={e => setNewStage({ ...newStage, due_date: e.target.value })} style={input} />
-            <button onClick={async () => {
+            <AsyncButton onClick={async () => {
               if (!newStage.stage_label && !newStage.amount) return;
               try {
                 await apiFetch('/payment-schedules', { method: 'POST', body: JSON.stringify({
@@ -556,9 +557,9 @@ function Inner() {
                   due_date: newStage.due_date || null, due_trigger: newStage.due_trigger || null,
                 }) });
                 setNewStage({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
-                refresh();
+                await refresh();
               } catch (e) { setError(e.message); }
-            }} style={primaryBtn}>+ Add stage</button>
+            }} busyLabel="Saving…" style={primaryBtn}>+ Add stage</AsyncButton>
           </div>
         </div>
 
@@ -648,7 +649,7 @@ function Inner() {
         {docPickerOpen && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
             {docTemplates.map(tpl => (
-              <button key={tpl.id} onClick={async () => {
+              <AsyncButton key={tpl.id} onClick={async () => {
                 try {
                   const r = await apiFetch('/documents', { method: 'POST', body: JSON.stringify({ template_id: tpl.id, job_id: id }) });
                   nav('/documents/' + r.id);
@@ -656,7 +657,7 @@ function Inner() {
               }} style={{ background: t.surface, border: '1px solid ' + t.border, borderRadius: 10, padding: 12, textAlign: 'left', cursor: 'pointer', color: t.text, minHeight: 44 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{tpl.label}</div>
                 <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>{tpl.description}</div>
-              </button>
+              </AsyncButton>
             ))}
           </div>
         )}
@@ -710,9 +711,9 @@ function Inner() {
             <PlanField t={t} label="Other" value={budget.planned_other} onChange={v => { setBudget({ ...budget, planned_other: v }); setBudgetTouched(true); }} />
             <PlanField t={t} label="Your markup %" value={budget.planned_margin_pct} onChange={v => { setBudget({ ...budget, planned_margin_pct: v }); setBudgetTouched(true); }} suffix="%" />
             <PlanField t={t} label="Price to the client" value={budget.planned_revenue} onChange={v => { setBudget({ ...budget, planned_revenue: v }); setBudgetTouched(true); }} placeholder="Worked out from costs + markup if left blank" />
-            <button onClick={saveBudget} disabled={!budgetTouched} style={{ ...primaryBtn, marginTop: 8, opacity: budgetTouched ? 1 : 0.5 }}>
-              {budgetTouched ? 'Save the plan' : (savedAt ? 'Saved' : 'Saved')}
-            </button>
+            <AsyncButton onClick={saveBudget} busyLabel="Saving…" disabled={!budgetTouched} style={{ ...primaryBtn, marginTop: 8, opacity: budgetTouched ? 1 : 0.5 }}>
+              {budgetTouched ? 'Save the plan' : (savedAt ? 'Saved ✓' : 'Set the plan')}
+            </AsyncButton>
           </div>
         </details>
 
@@ -767,14 +768,14 @@ function Inner() {
                 The quote came to {fmt0(invoiceSheet.grand_total)} ({fmt0(exVat)} before VAT).
               </div>
 
-              <button onClick={() => createFromQuote(invoiceSheet, 100)} style={{ ...primaryBtn, width: '100%', minHeight: 52, marginBottom: 10 }}>
+              <AsyncButton onClick={() => createFromQuote(invoiceSheet, 100)} busyLabel="Creating…" style={{ ...primaryBtn, width: '100%', minHeight: 52, marginBottom: 10 }}>
                 The full amount — {fmt0(invoiceSheet.grand_total)}
-              </button>
+              </AsyncButton>
 
               {unpaidStages.map(st => (
-                <button key={st.id} onClick={() => createFromStage(st)} style={{ ...ghostBtn, width: '100%', minHeight: 52, marginBottom: 10, textAlign: 'left', paddingLeft: 16 }}>
+                <AsyncButton key={st.id} onClick={() => createFromStage(st)} busyLabel="Creating…" style={{ ...ghostBtn, width: '100%', minHeight: 52, marginBottom: 10, textAlign: 'left', paddingLeft: 16 }}>
                   {(st.stage_label || 'Stage')} from your payment plan — {fmt0(st.amount)}
-                </button>
+                </AsyncButton>
               ))}
 
               <div style={{ border: '1px solid ' + t.border, borderRadius: 12, padding: 14 }}>
@@ -792,10 +793,10 @@ function Inner() {
                     onChange={e => setPctChoice(Math.min(99, Math.max(1, num(e.target.value, 25))))}
                     style={{ width: 70, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.bg, color: t.text, textAlign: 'center', fontSize: 16, outline: 'none' }} />
                 </div>
-                <button onClick={() => createFromQuote(invoiceSheet, pctChoice, pctChoice === 25 ? 'Deposit' : null)}
-                  style={{ ...primaryBtn, width: '100%', minHeight: 48 }}>
+                <AsyncButton onClick={() => createFromQuote(invoiceSheet, pctChoice, pctChoice === 25 ? 'Deposit' : null)}
+                  busyLabel="Creating…" style={{ ...primaryBtn, width: '100%', minHeight: 48 }}>
                   Invoice {pctChoice}% — {fmt0(exVat * pctChoice / 100)} + VAT
-                </button>
+                </AsyncButton>
               </div>
 
               <button onClick={() => setInvoiceSheet(null)} style={{ width: '100%', minHeight: 44, marginTop: 10, background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
@@ -830,7 +831,7 @@ function MoneyFig({ t, label, value, tone }) {
 
 function PlanField({ t, label, value, onChange, suffix, placeholder }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(110px, 150px)', gap: 8, alignItems: 'center', marginBottom: 8 }}>
       <label style={{ color: t.textSecondary, fontSize: 13.5 }}>{label}</label>
       <div style={{ position: 'relative' }}>
         <input

@@ -52,7 +52,10 @@ function Inner() {
   const [emailedTo, setEmailedTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendEmail, setSendEmail] = useState('');
 
   // Load
   useEffect(() => {
@@ -140,20 +143,25 @@ function Inner() {
     finally { setSaving(false); }
   };
 
-  const send = async () => {
+  const send = () => {
     if (!variationId) { setError('Save first.'); return; }
     // A2: optional email delivery — blank just mints the shareable link.
-    const email = window.prompt("Client's email to send it to (leave blank to share the link by WhatsApp/text instead):", '');
-    if (email === null) return; // cancelled
+    setSendEmail('');
+    setSendOpen(true);
+  };
+
+  const doSend = async (email) => {
+    if (!variationId) { setError('Save first.'); return; }
     setSending(true); setError('');
     try {
       const r = await apiFetch('/change-orders/' + variationId + '/send', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim() || null }),
+        body: JSON.stringify({ email: (email || '').trim() || null }),
       });
       setStatus('sent');
       setApprovalToken(r.approval_token);
       if (r.emailed_to) setEmailedTo(r.emailed_to);
+      setSendOpen(false);
     } catch (e) { setError(e.message); }
     finally { setSending(false); }
   };
@@ -176,7 +184,8 @@ function Inner() {
   };
 
   const downloadPdf = () => {
-    if (!variationId) return;
+    if (!variationId || downloading) return;
+    setDownloading(true); setError('');
     fetch('/api/change-orders/' + variationId + '/pdf', {
       headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() },
     }).then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
@@ -187,7 +196,8 @@ function Inner() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch(e => alert(e.message));
+      .catch(e => setError(e.message))
+      .finally(() => setDownloading(false));
   };
 
   const copyLink = () => {
@@ -224,7 +234,7 @@ function Inner() {
           {variationId && status === 'draft' && !readOnly && (
             <button onClick={send} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send to client'}</button>
           )}
-          {variationId && <button onClick={downloadPdf} style={btnSecondary(t)}>PDF</button>}
+          {variationId && <button onClick={downloadPdf} disabled={downloading} style={{ ...btnSecondary(t), opacity: downloading ? 0.6 : 1, cursor: downloading ? 'wait' : 'pointer' }}>{downloading ? 'Preparing PDF…' : 'PDF'}</button>}
           {variationId && <button onClick={duplicate} style={btnSecondary(t)}>Duplicate</button>}
           {variationId && !readOnly && <button onClick={remove} style={{ ...btnSecondary(t), color: t.danger }}>Delete</button>}
         </div>
@@ -452,7 +462,7 @@ function Inner() {
       </div>
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 360px', gap: 16 }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <label style={lbl(t)}>Notes</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} rows={4} placeholder="Internal notes or terms (appears on the PDF)" style={ta(t)} />
@@ -484,6 +494,37 @@ function Inner() {
               cursor: 'pointer', opacity: sending ? 0.6 : 1,
             }}>{sending ? 'Sending…' : 'Send to the client'}</button>
           )}
+        </div>
+      )}
+
+      {/* A2 — send modal: email delivery is optional, blank just mints the link */}
+      {sendOpen && (
+        <div
+          onClick={() => { if (!sending) setSendOpen(false); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20, width: '100%', maxWidth: 420, boxSizing: 'border-box' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Send to client</div>
+            <div style={{ fontSize: 13, color: t.textSecondary, marginBottom: 12 }}>
+              Enter the client's email to send it, or skip to just share the link by WhatsApp/text.
+            </div>
+            <label style={lbl(t)}>Client's email</label>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={sendEmail}
+              onChange={e => setSendEmail(e.target.value)}
+              placeholder="name@example.com"
+              disabled={sending}
+              style={fld(t)}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button onClick={() => { if (!sending) setSendOpen(false); }} disabled={sending} style={btnSecondary(t)}>Cancel</button>
+              <button onClick={() => doSend('')} disabled={sending} style={btnSecondary(t)}>Just share the link</button>
+              <button onClick={() => doSend(sendEmail)} disabled={sending} style={btnPrimary(t, sending)}>{sending ? 'Sending…' : 'Send email'}</button>
+            </div>
+          </div>
         </div>
       )}
 

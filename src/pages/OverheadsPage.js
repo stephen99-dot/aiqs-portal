@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
 
@@ -31,6 +32,7 @@ export default function OverheadsPage() {
 
 function Inner() {
   const { t } = useTheme();
+  const isMobile = useIsMobile();
   const nav = useNavigate();
   const [month, setMonth] = useState('');
   const [lines, setLines] = useState([]);
@@ -77,9 +79,9 @@ function Inner() {
     return { total, breakDay, breakHr };
   }, [lines, workingDays, workingHours]);
 
-  const addLine = () => setLines(prev => [...prev, { name: '', amount: '', id: Math.random().toString(36).slice(2) }]);
-  const removeLine = (id) => setLines(prev => prev.filter(l => l.id !== id));
-  const updateLine = (id, patch) => setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  const addLine = () => { setSavedAt(null); setLines(prev => [...prev, { name: '', amount: '', id: Math.random().toString(36).slice(2) }]); };
+  const removeLine = (id) => { setSavedAt(null); setLines(prev => prev.filter(l => l.id !== id)); };
+  const updateLine = (id, patch) => { setSavedAt(null); setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l)); };
 
   const save = async () => {
     setSaving(true);
@@ -117,12 +119,12 @@ function Inner() {
       {savedAt && <div style={{ color: t.success, fontSize: 12, marginBottom: 12 }}>Saved at {savedAt.toLocaleTimeString('en-GB')}</div>}
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 320px', gap: 16, alignItems: 'start' }}>
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>What the business costs each month</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {lines.map(l => (
-              <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 40px', gap: 8, alignItems: 'center' }}>
+              <div key={l.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr minmax(90px, 1fr) 40px' : '1fr 140px 40px', gap: 8, alignItems: 'center' }}>
                 <input
                   value={l.name}
                   onChange={e => updateLine(l.id, { name: e.target.value })}
@@ -136,24 +138,24 @@ function Inner() {
                   placeholder="£/month"
                   style={{ ...fld(t), textAlign: 'right' }}
                 />
-                <button onClick={() => removeLine(l.id)} title="Remove" style={{ background: 'transparent', color: t.danger, border: 'none', cursor: 'pointer', fontSize: 18 }}>×</button>
+                <button onClick={() => removeLine(l.id)} title="Remove" style={{ background: 'transparent', color: t.danger, border: 'none', cursor: 'pointer', fontSize: 18, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>×</button>
               </div>
             ))}
           </div>
           <button onClick={addLine} style={{ marginTop: 10, background: 'transparent', color: t.accent, border: '1px dashed ' + t.border, borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>+ Add line</button>
 
           <label style={lbl(t, 16)}>Notes</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Anything that's changed this month — new tools, seasonal costs, etc." style={ta(t)} />
+          <textarea value={notes} onChange={e => { setSavedAt(null); setNotes(e.target.value); }} rows={3} placeholder="Anything that's changed this month — new tools, seasonal costs, etc." style={ta(t)} />
         </div>
 
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Days you can work</div>
           <label style={lbl(t)}>Working days / month</label>
-          <input type="number" step="any" value={workingDays} onChange={e => setWorkingDays(e.target.value)} style={fld(t)} />
+          <input type="number" step="any" value={workingDays} onChange={e => { setSavedAt(null); setWorkingDays(e.target.value); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Hours / day</label>
-          <input type="number" step="any" value={workingHours} onChange={e => setWorkingHours(e.target.value)} style={fld(t)} />
+          <input type="number" step="any" value={workingHours} onChange={e => { setSavedAt(null); setWorkingHours(e.target.value); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Target margin %</label>
-          <input type="number" step="any" value={targetMargin} onChange={e => setTargetMargin(e.target.value)} placeholder="e.g. 15" style={fld(t)} />
+          <input type="number" step="any" value={targetMargin} onChange={e => { setSavedAt(null); setTargetMargin(e.target.value); }} placeholder="e.g. 15" style={fld(t)} />
 
           <div style={{ borderTop: '1px solid ' + t.border, marginTop: 16, paddingTop: 14 }}>
             <BigStat t={t} label="Total monthly overhead" value={fmt(totals.total)} />
@@ -166,6 +168,7 @@ function Inner() {
       {history.length > 0 && (
         <div style={{ marginTop: 24, background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Past months</div>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ color: t.textSecondary }}>
@@ -188,6 +191,7 @@ function Inner() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -444,10 +444,26 @@ router.patch('/:id', (req, res) => {
       sets.push('job_id = ?'); vals.push(b.job_id || null);
     }
     if ('fields' in b) {
-      // Merge with existing so partial updates work.
+      // Merge with existing so partial updates work. Guard b.fields to a plain
+      // object (a string/number/array would corrupt the blob), coerce each value
+      // to the template's field type, and cap string sizes so a single PATCH
+      // can't store an unbounded blob.
       let prev = {};
       try { prev = JSON.parse(row.fields || '{}'); } catch (e) {}
-      const next = { ...prev, ...b.fields };
+      const patch = (b.fields && typeof b.fields === 'object' && !Array.isArray(b.fields)) ? b.fields : {};
+      const tpl = TEMPLATE_INDEX[row.template_id];
+      const fieldByKey = tpl ? Object.fromEntries(tpl.fields.map(fd => [fd.key, fd])) : {};
+      const next = { ...prev };
+      for (const [k, val] of Object.entries(patch)) {
+        const fd = fieldByKey[k];
+        if (fd) {
+          const cv = coerceField(fd, val);
+          if (cv !== undefined) next[k] = cv;
+        } else {
+          // Unknown key: store defensively, capping any string value.
+          next[k] = (typeof val === 'string') ? val.slice(0, 8000) : val;
+        }
+      }
       sets.push('fields = ?'); vals.push(JSON.stringify(next));
     }
     if (sets.length > 0) {
@@ -501,20 +517,30 @@ router.get('/:id/pdf', (req, res) => {
 
     const branding = getBranding(req.user.id);
     const user = getUserDisplay(req.user.id);
-    const job = row.job_id ? db.prepare('SELECT * FROM estimator_jobs WHERE id = ?').get(row.job_id) : null;
+    const job = row.job_id ? db.prepare('SELECT * FROM estimator_jobs WHERE id = ? AND user_id = ?').get(row.job_id, req.user.id) : null;
 
     const fnameBase = (row.title || tpl.id).replace(/[^a-z0-9\-_]/gi, '_').slice(0, 80);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + fnameBase + '.pdf"');
 
+    // Build the PDF into a buffer first so a render failure (bad field value,
+    // bad branding colour) is caught BEFORE any headers/bytes go out — otherwise
+    // the builder gets a truncated, undiagnosable download on a paid feature.
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    doc.pipe(res);
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('error', (e) => { throw e; });
 
     const ctx = { row, tpl, fields, branding, user, job };
     paintHeader(doc, ctx);
     tpl.render(doc, ctx);
     paintFooter(doc, ctx);
 
+    doc.on('end', () => {
+      const pdf = Buffer.concat(chunks);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="' + fnameBase + '.pdf"');
+      res.setHeader('Content-Length', pdf.length);
+      res.send(pdf);
+    });
     doc.end();
   } catch (err) {
     console.error('[Documents] PDF error:', err);
