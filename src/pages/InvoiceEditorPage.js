@@ -216,7 +216,7 @@ function Inner() {
         a.download = (invoice.invoice_number || 'invoice') + '.pdf';
         a.click();
         URL.revokeObjectURL(a.href);
-      }).catch(e => alert(e.message));
+      }).catch(e => setError(e.message));
   };
 
   const toggleReminders = async (on) => {
@@ -266,7 +266,7 @@ function Inner() {
       setStripeLink(r.url);
     } catch (e) {
       if (e.data && e.data.code === 'STRIPE_NOT_CONFIGURED') {
-        alert('Stripe is not configured on the server. Ask the admin to set STRIPE_SECRET_KEY.');
+        setError('Stripe is not configured on the server. Ask the admin to set STRIPE_SECRET_KEY.');
       } else {
         setError(e.message);
       }

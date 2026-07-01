@@ -105,7 +105,7 @@ function Inner() {
         a.download = (title || 'document').replace(/[^a-z0-9]+/gi, '-') + '.pdf';
         a.click();
         URL.revokeObjectURL(a.href);
-      }).catch(e => alert(e.message))
+      }).catch(e => setError(e.message))
       .finally(() => setPdfBusy(null));
   };
 

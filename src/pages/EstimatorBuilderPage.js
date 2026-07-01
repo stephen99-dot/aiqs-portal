@@ -484,7 +484,7 @@ function EstimatorBuilderPageInner() {
   // Save the latest edits, then mint/reuse the public /q/<token> link and show
   // the share sheet (copy / WhatsApp / native share).
   const sendQuote = async () => {
-    if (!quoteId) { alert('Save the quote first.'); return; }
+    if (!quoteId) { setError('Save the quote first.'); return; }
     setSendingQuote(true);
     setError('');
     try {
@@ -504,7 +504,7 @@ function EstimatorBuilderPageInner() {
   };
 
   const download = (kind) => {
-    if (!quoteId) { alert('Save the quote first.'); return; }
+    if (!quoteId) { setError('Save the quote first.'); return; }
     const url = '/api/estimator/quotes/' + quoteId + '/' + kind;
     fetch(url, { headers: { Authorization: 'Bearer ' + getToken(), 'x-estimator-key': getEstimatorKey() } })
       .then(r => { if (!r.ok) throw new Error('Download failed'); return r.blob(); })
@@ -515,7 +515,7 @@ function EstimatorBuilderPageInner() {
         a.click();
         URL.revokeObjectURL(a.href);
       })
-      .catch(e => alert(e.message));
+      .catch(e => setError(e.message));
   };
 
   if (!user?.hasEstimator && user?.role !== 'admin') {

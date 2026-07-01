@@ -127,7 +127,7 @@ export default function VariationsPage() {
   async function handleDownload(filename) {
     const token = getToken();
     const res = await fetch(`/api/variations/download/${filename}`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (!res.ok) { alert('Download failed'); return; }
+    if (!res.ok) { setError('Download failed'); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = filename;

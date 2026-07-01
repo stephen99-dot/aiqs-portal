@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -40,11 +40,16 @@ export default function OfficeInABoxPage() {
   const isDark = mode === 'dark';
 
   const hasAddon = !!user?.hasEstimator || user?.role === 'admin';
+  // Give the tap an immediate acknowledgement before the (possibly slow, on a
+  // van connection) redirect to Stripe fires, so it never looks un-pressed.
+  const [redirecting, setRedirecting] = useState(false);
 
   // Send the user to Stripe for the £100/month subscription. The link is
   // stamped with their account id so the webhook flips on access the moment
   // they pay and lands them back on the success page.
   function startCheckout() {
+    if (redirecting) return;
+    setRedirecting(true);
     window.location.href = withUserRef(OFFICE_PAYMENT_LINK, user);
   }
 
@@ -155,14 +160,16 @@ export default function OfficeInABoxPage() {
                 <button
                   className="oiab-cta"
                   onClick={startCheckout}
+                  disabled={redirecting}
                   style={{
                     padding: '14px 26px', borderRadius: 13, border: 'none',
                     background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
                     color: '#0A0F1C', fontSize: 16, fontWeight: 800, letterSpacing: '-0.01em',
-                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 9,
+                    cursor: redirecting ? 'progress' : 'pointer', opacity: redirecting ? 0.75 : 1,
+                    display: 'inline-flex', alignItems: 'center', gap: 9,
                   }}
                 >
-                  Start 7-day free trial <ArrowRightIcon size={18} color="#0A0F1C" />
+                  {redirecting ? 'Opening secure checkout…' : <>Start 7-day free trial <ArrowRightIcon size={18} color="#0A0F1C" /></>}
                 </button>
               )}
               {!hasAddon && (
@@ -275,14 +282,16 @@ export default function OfficeInABoxPage() {
               <button
                 className="oiab-cta"
                 onClick={startCheckout}
+                disabled={redirecting}
                 style={{
                   width: '100%', padding: '14px 18px', borderRadius: 12, border: 'none',
                   background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
-                  color: '#0A0F1C', fontSize: 15.5, fontWeight: 800, cursor: 'pointer',
+                  color: '#0A0F1C', fontSize: 15.5, fontWeight: 800,
+                  cursor: redirecting ? 'progress' : 'pointer', opacity: redirecting ? 0.75 : 1,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                Start 7-day free trial <ArrowRightIcon size={17} color="#0A0F1C" />
+                {redirecting ? 'Opening secure checkout…' : <>Start 7-day free trial <ArrowRightIcon size={17} color="#0A0F1C" /></>}
               </button>
               <div style={{ fontSize: 11.5, color: t.textMuted, textAlign: 'center', marginTop: 10, lineHeight: 1.4 }}>
                 7 days free, then £100/month. No charge today — cancel anytime before your trial ends.
