@@ -1,0 +1,68 @@
+/* ============================================================
+   AI QS — shared light/dark theme system
+   Linked by every page (after the page's own <style>).
+   Pairs with /assets/theme.js and the no-flash inline snippet
+   in each page's <head>.
+   ============================================================ */
+
+/* New semantic tokens (dark defaults). The base palette tokens
+   (--bg-primary, --bg, --text, etc.) are defined per page. */
+:root {
+  --on-accent: #0A0F1C;                       /* text/icons sitting on the amber accent */
+  --nav-bg: rgba(10,15,28,0.8);
+  --nav-bg-scrolled: rgba(10,15,28,0.95);
+  --menu-bg: #0A0F1C;                          /* mobile fullscreen menu */
+  --surface-subtle: rgba(255,255,255,0.04);   /* faint fills on inputs / chat bubbles */
+  color-scheme: dark;
+}
+
+/* ---- Light theme: overrides for BOTH token schemes used on the site ----
+   (marketing/legal pages use --bg-primary*, the blog uses --bg/--surface*).
+   Setting tokens a given page doesn't use is harmless, so one block covers all. */
+:root[data-theme="light"] {
+  /* marketing / legal scheme */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F4F6FB;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F4F6FB;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --border: rgba(15,23,42,0.10);
+  --border-accent: rgba(245,158,11,0.45);
+  --gradient-dark: linear-gradient(180deg, #FFFFFF 0%, #F4F6FB 100%);
+  --shadow-glow: 0 10px 40px rgba(15,23,42,0.08);
+  --on-accent: #0A0F1C;
+  --nav-bg: rgba(255,255,255,0.82);
+  --nav-bg-scrolled: rgba(255,255,255,0.95);
+  --menu-bg: #FFFFFF;
+  --surface-subtle: rgba(15,23,42,0.04);
+  /* blog scheme */
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface2: #F4F6FB;
+  --text: #0F172A;
+  --amber-dim: rgba(245,158,11,0.10);
+  color-scheme: light;
+}
+
+/* ---- Theme toggle button ---- */
+.nav-tools { display: flex; align-items: center; gap: 12px; }.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text-secondary); cursor: pointer;
+  transition: color .2s, border-color .2s, background .2s;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.theme-toggle:hover { color: #F59E0B; border-color: rgba(245,158,11,0.45); background: var(--surface-subtle); }
+.theme-toggle svg { width: 19px; height: 19px; pointer-events: none; }
+.theme-toggle .icon-moon { display: none; }
+.theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+/* ---- Logo: the "AI" wordmark uses currentColor so it stays visible in both
+   themes (it was hard-coded white and vanished on the light background).
+   Scoped to .logo-svg, which only the marketing pages use. ---- */
+.logo-svg { color: var(--text-primary); }
