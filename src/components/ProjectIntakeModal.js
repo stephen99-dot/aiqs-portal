@@ -91,18 +91,16 @@ export default function ProjectIntakeModal({ open, fileNames = [], onSubmit, onS
   return (
     <div
       onClick={onClose}
+      className="modal-overlay"
       style={{
-        position: 'fixed', inset: 0, zIndex: 500,
         background: c.overlay, backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="modal-card"
         style={{
-          width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto',
-          background: c.card, border: `1px solid ${c.border}`, borderRadius: 14,
+          background: c.card, border: `1px solid ${c.border}`,
           padding: '22px 24px',
         }}
       >
@@ -153,7 +151,7 @@ export default function ProjectIntakeModal({ open, fileNames = [], onSubmit, onS
                 Floor area (m²)
               </label>
               <input
-                type="number" min="0" step="0.1"
+                type="number" inputMode="decimal" min="0" step="0.1"
                 value={data.floor_area_m2}
                 onChange={e => set('floor_area_m2', e.target.value)}
                 placeholder="e.g. 32"

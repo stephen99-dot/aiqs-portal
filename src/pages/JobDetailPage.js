@@ -547,7 +547,7 @@ function Inner() {
           ))}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginTop: 8 }}>
             <input value={newStage.stage_label} onChange={e => setNewStage({ ...newStage, stage_label: e.target.value })} placeholder="e.g. Deposit" style={input} />
-            <input type="number" step="any" value={newStage.amount} onChange={e => setNewStage({ ...newStage, amount: e.target.value })} placeholder="£" style={input} />
+            <input type="number" inputMode="decimal" step="any" value={newStage.amount} onChange={e => setNewStage({ ...newStage, amount: e.target.value })} placeholder="£" style={input} />
             <input type="date" value={newStage.due_date} onChange={e => setNewStage({ ...newStage, due_date: e.target.value })} style={input} />
             <AsyncButton onClick={async () => {
               if (!newStage.stage_label && !newStage.amount) return;
@@ -567,7 +567,7 @@ function Inner() {
         <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid ' + t.border }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: t.textSecondary, marginBottom: 6 }}>Retention</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input type="number" step="0.5" min="0" max="50" defaultValue={Number(job.retention_pct) || 0}
+            <input type="number" inputMode="decimal" step="0.5" min="0" max="50" defaultValue={Number(job.retention_pct) || 0}
               onBlur={e => updateJob({ retention_pct: e.target.value })} style={{ ...input, width: 90 }} aria-label="Retention percent" />
             <span style={{ color: t.textSecondary, fontSize: 13 }}>% held back, due back on</span>
             <input type="date" defaultValue={job.retention_release_date || ''}
@@ -727,7 +727,7 @@ function Inner() {
             <option value="other">Other</option>
           </select>
           <input value={newCost.description} onChange={e => setNewCost({ ...newCost, description: e.target.value })} style={input} placeholder="What was it? e.g. Bricks (1000)" />
-          <input type="number" step="any" value={newCost.unit_cost} onChange={e => setNewCost({ ...newCost, unit_cost: e.target.value, qty: newCost.qty || 1 })} style={input} placeholder="Cost £" />
+          <input type="number" inputMode="decimal" step="any" value={newCost.unit_cost} onChange={e => setNewCost({ ...newCost, unit_cost: e.target.value, qty: newCost.qty || 1 })} style={input} placeholder="Cost £" />
           <button onClick={addCost} style={primaryBtn}>+ Log it</button>
         </div>
         {costError && <div style={{ color: t.danger, fontSize: 12, marginBottom: 8 }}>{costError}</div>}
@@ -757,11 +757,11 @@ function Inner() {
             position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
           }}>
-            <div onClick={e => e.stopPropagation()} style={{
-              background: t.card, color: t.text, width: '100%', maxWidth: 520,
+            <div onClick={e => e.stopPropagation()} className="modal-card" style={{
+              background: t.card, color: t.text,
               borderRadius: '16px 16px 0 0', padding: '20px 20px calc(24px + env(safe-area-inset-bottom))',
               border: '1px solid ' + t.border, borderBottom: 'none', boxSizing: 'border-box',
-              maxHeight: '85vh', overflowY: 'auto',
+              maxHeight: '85vh',
             }}>
               <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>How much do you want to invoice?</div>
               <div style={{ color: t.textSecondary, fontSize: 13.5, marginBottom: 16 }}>
@@ -789,7 +789,7 @@ function Inner() {
                       border: '1px solid ' + (pctChoice === p ? t.accent : t.border),
                     }}>{p}%</button>
                   ))}
-                  <input type="number" min="1" max="99" value={pctChoice}
+                  <input type="number" inputMode="decimal" min="1" max="99" value={pctChoice}
                     onChange={e => setPctChoice(Math.min(99, Math.max(1, num(e.target.value, 25))))}
                     style={{ width: 70, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.bg, color: t.text, textAlign: 'center', fontSize: 16, outline: 'none' }} />
                 </div>
@@ -835,7 +835,7 @@ function PlanField({ t, label, value, onChange, suffix, placeholder }) {
       <label style={{ color: t.textSecondary, fontSize: 13.5 }}>{label}</label>
       <div style={{ position: 'relative' }}>
         <input
-          type="number" step="any"
+          type="number" inputMode="decimal" step="any"
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}

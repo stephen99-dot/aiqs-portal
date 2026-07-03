@@ -398,15 +398,15 @@ function Inner() {
             </div>
             <div>
               <label style={lbl(t)}>Payment terms (days)</label>
-              <input type="number" step="1" value={paymentTerms} disabled={readOnly} onChange={e => { setPaymentTerms(e.target.value); onHeaderChange(); }} style={fld(t)} />
+              <input type="number" inputMode="decimal" step="1" value={paymentTerms} disabled={readOnly} onChange={e => { setPaymentTerms(e.target.value); onHeaderChange(); }} style={fld(t)} />
             </div>
             <div>
               <label style={lbl(t)}>VAT %</label>
-              <input type="number" step="any" value={vatPct} disabled={readOnly} onChange={e => { setVatPct(e.target.value); onHeaderChange(); }} style={fld(t)} />
+              <input type="number" inputMode="decimal" step="any" value={vatPct} disabled={readOnly} onChange={e => { setVatPct(e.target.value); onHeaderChange(); }} style={fld(t)} />
             </div>
             <div>
               <label style={lbl(t)}>Discount £</label>
-              <input type="number" step="any" value={discount} disabled={readOnly} onChange={e => { setDiscount(e.target.value); onHeaderChange(); }} style={fld(t)} />
+              <input type="number" inputMode="decimal" step="any" value={discount} disabled={readOnly} onChange={e => { setDiscount(e.target.value); onHeaderChange(); }} style={fld(t)} />
             </div>
           </div>
         </div>
@@ -484,7 +484,7 @@ function Inner() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
                     <div>
                       <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
-                      <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
+                      <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
                         style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
                     </div>
                     <div>
@@ -494,7 +494,7 @@ function Inner() {
                     </div>
                     <div>
                       <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £</div>
-                      <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value })}
+                      <input type="number" inputMode="decimal" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value })}
                         style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
                     </div>
                   </div>
@@ -555,13 +555,13 @@ function Inner() {
                       </td>
                     )}
                     <td style={{ ...tdCell, textAlign: 'right' }}>
-                      {readOnly ? num(ln.qty) : <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />}
+                      {readOnly ? num(ln.qty) : <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />}
                     </td>
                     <td style={tdCell}>
                       {readOnly ? (ln.unit || '') : <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })} style={inputInline(t)} />}
                     </td>
                     <td style={{ ...tdCell, textAlign: 'right' }}>
-                      {readOnly ? fmt(ln.rate) : <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value })} style={inputNum(t)} />}
+                      {readOnly ? fmt(ln.rate) : <input type="number" inputMode="decimal" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value })} style={inputNum(t)} />}
                     </td>
                     <td style={{ ...tdCell, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt(lineTotal)}</td>
                     {!readOnly && <td style={{ ...tdCell, textAlign: 'center' }}><button onClick={() => deleteLine(idx)} style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 16 }}>×</button></td>}
@@ -593,13 +593,10 @@ function Inner() {
 
       {/* A3: chase modal — the builder always sees the message before it goes */}
       {chase && (
-        <div onClick={() => !chaseSending && setChase(null)} style={{
-          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-        }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: t.card, color: t.text, width: '100%', maxWidth: 560, borderRadius: 14,
-            border: '1px solid ' + t.border, padding: 20, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box',
+        <div onClick={() => !chaseSending && setChase(null)} className="modal-overlay">
+          <div onClick={e => e.stopPropagation()} className="modal-card" style={{
+            background: t.card, color: t.text,
+            border: '1px solid ' + t.border, padding: 20, boxSizing: 'border-box',
           }}>
             <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Chase this payment</div>
             {chase.loading ? (

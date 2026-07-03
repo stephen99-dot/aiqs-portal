@@ -593,17 +593,14 @@ export default function SubmitDrawingsPage() {
       {/* Blocking submission overlay — keeps the user on the page during the upload
           so they can't accidentally click back, and gives them lots of feedback. */}
       {submitting && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
+        <div className="modal-overlay" style={{
+          zIndex: 9999,
           background: 'rgba(10,15,28,0.55)',
           backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20,
         }}>
-          <div style={{
+          <div className="modal-card" style={{
             background: t.card, border: '1px solid ' + t.border,
-            borderRadius: 16, padding: '28px 28px 22px',
-            width: '100%', maxWidth: 460,
+            padding: '28px 28px 22px',
             boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
             textAlign: 'center',
           }}>
@@ -647,18 +644,15 @@ export default function SubmitDrawingsPage() {
       {/* Sticky 'buy 5 BOQs' offer — shown automatically on no credits, dismissible
           but always reachable via the floating button at bottom-right. */}
       {showTopUpModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
+        <div className="modal-overlay" style={{
+          zIndex: 9998,
           background: 'rgba(10,15,28,0.55)',
           backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20,
         }}>
-          <div style={{
+          <div className="modal-card" style={{
             position: 'relative',
             background: t.card, border: '1px solid ' + t.border,
             borderRadius: 18, padding: '32px 30px 26px',
-            width: '100%', maxWidth: 480,
             boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
           }}>
             <button

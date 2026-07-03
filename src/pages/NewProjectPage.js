@@ -41,16 +41,12 @@ function LimitReachedModal({ usage, t, onClose }) {
   const isProfessional = usage.plan === 'professional';
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
+    <div className="modal-overlay" style={{
       background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24,
     }} onClick={onClose}>
-      <div style={{
+      <div className="modal-card" style={{
         background: t.card, border: `1px solid ${t.border}`,
-        borderRadius: 16, padding: '32px 28px',
-        maxWidth: 500, width: '100%',
+        padding: '32px 28px',
         boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
       }} onClick={e => e.stopPropagation()}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
