@@ -496,7 +496,7 @@ export default function ChatPage() {
 
   // ── Theme colours ──────────────────────────────────────────────────
   // Chat palette derived from the active theme tokens, so the whole chat
-  // re-skins with the selected theme (AI QS / ChatGPT / Claude / Copilot).
+  // follows the AI QS light/dark mode.
   // Status colours (draft/locked/warn) stay semantic so meaning is preserved.
   const c = {
     page: t.bg, side: t.sidebar, sideBorder: t.sidebarBorder, sideHeader: t.sidebar,

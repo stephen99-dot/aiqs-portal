@@ -13,27 +13,6 @@ import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
 
-// Representative swatch colour for each selectable theme.
-const THEME_SWATCH = {
-  aiqs: '#F59E0B',
-  chatgpt: '#10A37F',
-  claude: '#C96442',
-  copilot: 'linear-gradient(135deg,#2AA5F4,#2AD4A8,#8B5CF6)',
-};
-
-// ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
-function MicIcon({ size = 16, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
-    </svg>
-  );
-}
-
 // Office in a Box — expandable parent containing the add-on workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
 function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobileOpen, location }) {
@@ -143,7 +122,7 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { t, mode, theme, themes, toggle, setTheme } = useTheme();
+  const { t, mode, toggle } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -243,9 +222,8 @@ export default function Layout() {
     return () => window.removeEventListener('aiqs:open-office-nav', open);
   }, []);
 
-  // Sidebar uses the theme's sidebar token (keeps the AI QS dark navy by
-  // default, but re-skins for ChatGPT / Claude / Copilot themes).
-  const sidebarBg = (theme === 'aiqs' && mode === 'dark')
+  // Sidebar keeps the AI QS dark navy gradient in dark mode; flat surface in light.
+  const sidebarBg = mode === 'dark'
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
     : t.sidebar;
 
@@ -463,39 +441,7 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Theme picker — pick the overall look. Each theme is shown with its
-              name (a labelled chip) so it's clear without hovering. */}
-          <div style={{ padding: '4px 12px 8px' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: t.textMuted, marginBottom: 7, letterSpacing: '0.02em' }}>Theme</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {themes.map(th => {
-                const active = theme === th.key;
-                return (
-                  <button
-                    key={th.key}
-                    onClick={() => setTheme(th.key)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 7,
-                      padding: '10px 9px', minHeight: 40, borderRadius: 8, cursor: 'pointer', width: '100%',
-                      background: active ? t.surfaceHover : 'transparent',
-                      border: `1px solid ${active ? t.accent : t.border}`,
-                      color: t.text, fontSize: 12, fontWeight: active ? 700 : 500,
-                      fontFamily: 'inherit', textAlign: 'left',
-                    }}
-                  >
-                    <span style={{
-                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                      background: THEME_SWATCH[th.key] || t.accent,
-                      border: `1px solid ${t.border}`,
-                    }} />
-                    {th.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Theme toggle */}
+          {/* Light/dark toggle */}
           <button onClick={toggle} style={{
             display: 'flex', alignItems: 'center', gap: 10,
             width: '100%', padding: '8px 12px', borderRadius: 8,

@@ -102,7 +102,6 @@ else is a panel inside one of those pages.
 ### Behind a "More" menu (rarely needed; flat sidebar lists 3-4 items)
 
 - Variations hub
-- Notetaker
 - Admin: users, activity log
 - Settings, billing, sign out
 
