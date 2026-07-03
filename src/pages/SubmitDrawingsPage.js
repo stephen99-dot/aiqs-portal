@@ -3,6 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
+import useIsMobile from '../utils/useIsMobile';
 
 const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
 const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
@@ -48,6 +49,7 @@ function fmtSize(b) {
 export default function SubmitDrawingsPage() {
   const { t } = useTheme();
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
@@ -80,6 +82,23 @@ export default function SubmitDrawingsPage() {
   }
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
+  }
+  // Fresh <input> appended to body per open — the pattern that proved reliable
+  // across browsers (no React refs, no styled inputs).
+  function openFilePicker() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.multiple = true;
+    inp.style.position = 'fixed';
+    inp.style.left = '0';
+    inp.style.top = '0';
+    inp.onchange = (e) => {
+      const fl = e.target.files;
+      if (fl && fl.length) addFiles(fl);
+      setTimeout(() => inp.remove(), 0);
+    };
+    document.body.appendChild(inp);
+    inp.click();
   }
 
   useEffect(() => {
@@ -318,43 +337,32 @@ export default function SubmitDrawingsPage() {
             background: t.surface, border: '1px solid ' + t.border,
             marginBottom: 8,
           }}>
-            <PaperclipIcon size={18} color="#F59E0B" />
+            {!isMobile && <PaperclipIcon size={18} color="#F59E0B" />}
             <button
               type="button"
-              onClick={() => {
-                const inp = document.createElement('input');
-                inp.type = 'file';
-                inp.multiple = true;
-                inp.style.position = 'fixed';
-                inp.style.left = '0';
-                inp.style.top = '0';
-                inp.onchange = (e) => {
-                  const fl = e.target.files;
-                  if (fl && fl.length) addFiles(fl);
-                  setTimeout(() => inp.remove(), 0);
-                };
-                document.body.appendChild(inp);
-                inp.click();
-              }}
+              onClick={openFilePicker}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                 padding: '10px 22px', borderRadius: 9,
+                width: isMobile ? '100%' : undefined, minHeight: isMobile ? 48 : undefined,
                 background: 'linear-gradient(135deg, #F59E0B, #D97706)',
                 color: '#0A0F1C',
-                fontWeight: 700, fontSize: 13.5,
+                fontWeight: 700, fontSize: isMobile ? 15 : 13.5,
                 border: 'none', cursor: 'pointer',
                 boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
               }}
             >
-              Choose files
+              <UploadIcon size={16} color="#0A0F1C" /> Choose files
             </button>
-            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: 'auto' }}>
+            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: isMobile ? 0 : 'auto' }}>
               PDF, DWG, images, Word, Excel
             </span>
           </div>
 
-          {/* Drag-and-drop area — separate sibling, no nested input */}
+          {/* Drag-and-drop area — separate sibling, no nested input.
+              On touch devices a tap opens the picker too. */}
           <div
+            onClick={openFilePicker}
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -363,6 +371,7 @@ export default function SubmitDrawingsPage() {
               addFiles(e.dataTransfer.files);
             }}
             style={{
+              cursor: 'pointer',
               borderRadius: 12,
               border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
               background: dragOver ? 'rgba(245,158,11,0.08)' : 'transparent',

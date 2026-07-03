@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { X, Send, Phone, FileText, HelpCircle, Clock, ChevronRight, Zap, Upload } from 'lucide-react';
 import { HandIcon } from './Icons';
+import useIsMobile from '../utils/useIsMobile';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // WHATSAPP WIDGET — src/components/WhatsAppWidget.js
@@ -43,6 +45,8 @@ function openWhatsApp(message = '') {
 }
 
 export default function WhatsAppWidget({ theme, userName }) {
+  const isMobile = useIsMobile(640);
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
   const [showPulse, setShowPulse] = useState(true);
@@ -115,18 +119,25 @@ export default function WhatsAppWidget({ theme, userName }) {
     }
   };
 
+  // On phones the chat composer owns the bottom of the screen — the bubble
+  // would cover the send button.
+  if (isMobile && location.pathname === '/chat') return null;
+
   return (
     <div
       ref={widgetRef}
       style={{
-        position: 'fixed', bottom: bottomPos, right: 24, zIndex: 9998,
+        position: 'fixed',
+        // Floor above the phone bottom nav (and page action bars) on mobile.
+        bottom: isMobile ? `max(${Math.max(bottomPos, 84)}px, calc(84px + env(safe-area-inset-bottom)))` : bottomPos,
+        right: isMobile ? 16 : 24, zIndex: 9998,
       }}
     >
       {/* ─── Chat Panel ──────────────────────────────────────────────── */}
       {isOpen && (
         <div style={{
           position: 'absolute', bottom: 68, right: 0,
-          width: 360, maxHeight: 520,
+          width: 'min(360px, calc(100vw - 32px))', maxHeight: 520,
           background: isDark ? '#131B2E' : '#FFFFFF',
           border: `1px solid ${isDark ? '#1C2A44' : '#E2E8F0'}`,
           borderRadius: 20,
