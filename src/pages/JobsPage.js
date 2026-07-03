@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
 import HelpTip from '../components/HelpTip';
 import { jobStage, stageColours, stageFigure } from '../utils/jobStages';
 import { FolderIcon, TrashIcon } from '../components/Icons';
@@ -132,14 +133,8 @@ function Inner() {
 
       {/* Big actions */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
-        <button onClick={() => { setCreating(v => !v); setError(''); }} style={{
-          minHeight: 52, borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
-          fontSize: 15, fontWeight: 700, cursor: 'pointer',
-        }}>{creating ? 'Cancel' : '+ New job'}</button>
-        <button onClick={() => nav('/estimator/new')} style={{
-          minHeight: 52, borderRadius: 12, border: '1px solid ' + t.border, background: t.card,
-          color: t.text, fontSize: 15, fontWeight: 700, cursor: 'pointer',
-        }}>+ New quote</button>
+        <button className="btn-primary" onClick={() => { setCreating(v => !v); setError(''); }} style={{ minHeight: 52, fontSize: 15 }}>{creating ? 'Cancel' : '+ New job'}</button>
+        <button className="btn-secondary" onClick={() => nav('/estimator/new')} style={{ minHeight: 52, fontSize: 15 }}>+ New quote</button>
       </div>
 
       {/* New job form — describe it, or start from a BOQ already in the portal */}
@@ -169,7 +164,7 @@ function Inner() {
               }} />
               <input style={input} type="tel" placeholder="Customer phone (so you can call from here)" value={newJob.client_phone} onChange={e => setNewJob({ ...newJob, client_phone: e.target.value })} />
               <input style={input} placeholder="Address (optional)" value={newJob.location} onChange={e => setNewJob({ ...newJob, location: e.target.value })} />
-              <AsyncButton onClick={create} busyLabel="Creating…" style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              <AsyncButton className="btn-primary" onClick={create} busyLabel="Creating…" style={{ minHeight: 48, fontSize: 15 }}>
                 Create the job
               </AsyncButton>
             </>
@@ -205,7 +200,7 @@ function Inner() {
                   }} />
                   <input style={input} type="email" placeholder="Customer email (to send the quote)" value={boqJob.client_email} onChange={e => setBoqJob({ ...boqJob, client_email: e.target.value })} />
                   <input style={input} type="tel" placeholder="Customer phone (optional)" value={boqJob.client_phone} onChange={e => setBoqJob({ ...boqJob, client_phone: e.target.value })} />
-                  <button onClick={createFromBoq} disabled={boqCreating} style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: boqCreating ? 0.7 : 1 }}>
+                  <button className="btn-primary" onClick={createFromBoq} disabled={boqCreating} style={{ minHeight: 48, fontSize: 15 }}>
                     {boqCreating ? 'Setting up the job…' : 'Create job + draft quote'}
                   </button>
                 </>
@@ -226,20 +221,15 @@ function Inner() {
       )}
 
       {loading ? (
-        <div style={{ color: t.textSecondary, padding: 40, textAlign: 'center' }}>Loading…</div>
+        <EmptyState loading loadingText="Loading your jobs…" />
       ) : visible.length === 0 ? (
-        <div style={{ background: t.card, border: '1px dashed ' + t.border, borderRadius: 12, padding: 36, textAlign: 'center' }}>
-          <div style={{ marginBottom: 8, color: t.textSecondary }}><FolderIcon size={28} /></div>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>{search ? 'No jobs match that' : 'No jobs yet'}</div>
-          <div style={{ color: t.textSecondary, fontSize: 14, marginBottom: 14 }}>
-            {search ? 'Try a different name.' : 'A job keeps everything in one place — the quote, the invoices, the changes, the paperwork.'}
-          </div>
-          {!search && (
-            <button onClick={() => setCreating(true)} style={{ minHeight: 48, padding: '0 22px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-              Start your first job
-            </button>
-          )}
-        </div>
+        <EmptyState
+          icon={<FolderIcon size={24} />}
+          title={search ? 'No jobs match that' : 'No jobs yet'}
+          message={search ? 'Try a different name.' : 'A job keeps everything in one place — the quote, the invoices, the changes, the paperwork.'}
+          ctaLabel={search ? undefined : 'Start your first job'}
+          onCta={search ? undefined : () => setCreating(true)}
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {visible.map(j => {

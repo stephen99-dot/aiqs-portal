@@ -7,6 +7,7 @@ import ShareLinkModal from '../components/ShareLinkModal';
 import HelpTip from '../components/HelpTip';
 import useIsMobile from '../utils/useIsMobile';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function fmt(n) { const v = Number(n) || 0; return '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -292,7 +293,7 @@ function Inner() {
     } catch (e) { setError(e.message); setConnecting(false); }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
+  if (loading) return <EmptyState loading loadingText="Loading the invoice…" />;
   if (!invoice) return <div style={{ padding: 40, color: t.danger }}>{error || 'Invoice not found.'}</div>;
 
   return (
@@ -359,14 +360,14 @@ function Inner() {
             {stripeLink ? (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <a href={stripeLink} target="_blank" rel="noopener noreferrer" style={{ color: t.accent, fontSize: 12 }}>Open link ↗</a>
-                <button onClick={copyStripeLink} style={btnSecondary(t)}>{stripeCopied ? 'Copied' : 'Copy'}</button>
+                <button className="btn-secondary" onClick={copyStripeLink}>{stripeCopied ? 'Copied' : 'Copy'}</button>
               </div>
             ) : stripeStatus && stripeStatus.connected && stripeStatus.charges_enabled ? (
-              <AsyncButton onClick={genStripeLink} busyLabel="Creating…" style={btnSecondary(t)}>Create payment link</AsyncButton>
+              <AsyncButton className="btn-secondary" onClick={genStripeLink} busyLabel="Creating…">Create payment link</AsyncButton>
             ) : stripeStatus && stripeStatus.configured === false ? (
               <span style={{ color: t.textMuted, fontSize: 12 }}>Card payments aren't enabled on this server yet.</span>
             ) : (
-              <button onClick={startStripeConnect} disabled={connecting || !stripeStatus} style={btnSecondary(t)}>
+              <button className="btn-secondary" onClick={startStripeConnect} disabled={connecting || !stripeStatus}>
                 {connecting ? 'Opening Stripe…' : stripeStatus && stripeStatus.connected ? 'Finish Stripe setup' : 'Connect your Stripe account'}
               </button>
             )}
@@ -509,7 +510,7 @@ function Inner() {
             );
           })}
           {!readOnly && (
-            <button onClick={addLine} style={{ ...btnGhost(t), minHeight: 44, width: '100%' }}>+ Add line</button>
+            <button className="btn-secondary" onClick={addLine} style={{ minHeight: 44, width: '100%' }}>+ Add line</button>
           )}
         </div>
         ) : (
@@ -571,7 +572,7 @@ function Inner() {
               {!readOnly && (
                 <tr>
                   <td colSpan={cisApplies ? 7 : 6} style={{ padding: 12, borderTop: '1px solid ' + t.border }}>
-                    <button onClick={addLine} style={btnGhost(t)}>+ Add line</button>
+                    <button className="btn-secondary" onClick={addLine}>+ Add line</button>
                   </td>
                 </tr>
               )}
@@ -612,7 +613,7 @@ function Inner() {
                 <textarea value={chase.body} onChange={e => setChase({ ...chase, body: e.target.value })} rows={9} style={ta(t)} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
                   {chase.canEmail ? (
-                    <button onClick={sendChase} disabled={chaseSending} style={{ ...btnPrimary(t, chaseSending), minHeight: 44 }}>
+                    <button className="btn-primary" onClick={sendChase} disabled={chaseSending} style={{ minHeight: 44 }}>
                       {chaseSending ? 'Sending…' : 'Send it to ' + chase.clientEmail + ' (invoice attached)'}
                     </button>
                   ) : (
@@ -621,10 +622,11 @@ function Inner() {
                     </div>
                   )}
                   <button
+                    className="btn-secondary"
                     onClick={() => navigator.clipboard.writeText(chase.body).then(() => setChaseDone('Message copied — paste it into WhatsApp or a text.')).then(() => setChase(null)).catch(() => {})}
-                    style={{ ...btnSecondary(t), minHeight: 44 }}
+                    style={{ minHeight: 44 }}
                   >Copy the message</button>
-                  <button onClick={() => setChase(null)} disabled={chaseSending} style={{ background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 13, cursor: 'pointer', minHeight: 36 }}>Cancel</button>
+                  <button className="btn-ghost" onClick={() => setChase(null)} disabled={chaseSending}>Cancel</button>
                 </div>
               </>
             )}
@@ -722,6 +724,5 @@ function ta(t)  { return { width: '100%', boxSizing: 'border-box', background: t
 function inputInline(t, bold) { return { width: '100%', background: 'transparent', border: '1px solid transparent', color: t.text, borderRadius: 4, padding: '4px 6px', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontWeight: bold ? 600 : 400 }; }
 function inputNum(t)    { return { width: '100%', background: 'transparent', border: '1px solid ' + t.border, color: t.text, borderRadius: 4, padding: '4px 6px', fontSize: 13, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }; }
 function btnLink(t)     { return { background: 'transparent', color: t.textSecondary, border: 'none', padding: 0, fontSize: 13, cursor: 'pointer' }; }
-function btnGhost(t) { return { background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }; }
 function btnPrimary(t, disabled) { return { background: disabled ? t.surface : t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: disabled ? 'wait' : 'pointer', opacity: disabled ? 0.7 : 1 }; }
 function btnSecondary(t) { return { background: 'transparent', color: t.text, border: '1px solid ' + t.border, borderRadius: 8, padding: '8px 14px', fontSize: 14, cursor: 'pointer' }; }

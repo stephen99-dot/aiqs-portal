@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey, clearToken } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
+import EmptyState from '../components/EmptyState';
 import { FileTextIcon, ScaleIcon, ClipboardIcon, PoundIcon, AlertTriangleIcon } from '../components/Icons';
 import HelpTip from '../components/HelpTip';
 
@@ -117,7 +118,7 @@ function Inner() {
     } catch (e) { setError(e.message); }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
+  if (loading) return <EmptyState loading loadingText="Loading your documents…" />;
 
   return (
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 760, margin: '0 auto' }}>
@@ -128,7 +129,7 @@ function Inner() {
             Fillable, branded templates — contracts, T&Cs, scope of work, payment terms, RAMS.
           </div>
         </div>
-        <button onClick={() => setPicking(v => !v)} style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, cursor: 'pointer' }}>
+        <button className="btn-primary" onClick={() => setPicking(v => !v)}>
           {picking ? 'Cancel' : '+ New document'}
         </button>
       </div>
@@ -157,11 +158,7 @@ function Inner() {
             <option value="">Not about a particular job</option>
             {jobs.map(j => <option key={j.id} value={j.id}>{[j.client_name, j.name].filter(Boolean).join(' — ')}</option>)}
           </select>
-          <button onClick={draftLetter} disabled={drafting || !draftText.trim()} style={{
-            minHeight: 44, padding: '0 18px', borderRadius: 10, border: 'none',
-            background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700,
-            cursor: 'pointer', opacity: (drafting || !draftText.trim()) ? 0.5 : 1,
-          }}>{drafting ? 'Writing it…' : 'Generate with AI'}</button>
+          <button className="btn-primary" onClick={draftLetter} disabled={drafting || !draftText.trim()} style={{ minHeight: 44 }}>{drafting ? 'Writing it…' : 'Generate with AI'}</button>
         </div>
       </div>
 
@@ -195,9 +192,13 @@ function Inner() {
       )}
 
       {documents.length === 0 ? (
-        <div style={{ background: t.card, border: '1px dashed ' + t.border, borderRadius: 12, padding: 40, textAlign: 'center', color: t.textSecondary }}>
-          No documents yet. Click "+ New document" to start.
-        </div>
+        <EmptyState
+          icon={<FileTextIcon size={24} />}
+          title="No documents yet"
+          message="Contracts, T&Cs, scope of work, payment terms, RAMS and letters — branded and ready to send."
+          ctaLabel="New document"
+          onCta={() => setPicking(true)}
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {documents.map(d => (

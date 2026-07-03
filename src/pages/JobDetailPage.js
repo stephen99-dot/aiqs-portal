@@ -10,6 +10,7 @@ import { PhoneIcon } from '../components/Icons';
 import JobPhotos from '../components/JobPhotos';
 import JobSchedule from '../components/JobSchedule';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
 
 // THE JOB PAGE — one screen with everything about one job, sectioned
 // vertically: money strip, quotes, invoices & payments, changes, documents,
@@ -271,7 +272,7 @@ function Inner() {
       .catch(e => setError(e.message));
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
+  if (loading) return <EmptyState loading loadingText="Loading the job…" />;
   if (!job) return <div style={{ padding: 40, color: t.danger }}>Job not found.</div>;
 
   const stage = jobStage({ ...job,
@@ -382,10 +383,10 @@ function Inner() {
                   if (list.length) setBoqProjectId(list[0].id);
                 } catch { setPortalProjects([]); }
               }
-            }} style={{ ...primaryBtn, background: 'transparent', color: t.text, border: '1px solid ' + t.border }}>
+            }} className="btn-secondary">
               From portal BOQ
             </button>
-            <button onClick={() => nav('/estimator/new?job=' + id)} style={primaryBtn}>+ New quote</button>
+            <button className="btn-primary" onClick={() => nav('/estimator/new?job=' + id)}>+ New quote</button>
           </div>
         </div>
         {boqPickerOpen && (
@@ -420,7 +421,7 @@ function Inner() {
                     refresh();
                   } catch (e) { setError(e.message); }
                   setBoqImporting(false);
-                }} style={{ ...primaryBtn, opacity: boqImporting ? 0.7 : 1 }}>
+                }} className="btn-primary">
                   {boqImporting ? 'Importing…' : 'Create draft quote'}
                 </button>
               </div>
@@ -476,7 +477,7 @@ function Inner() {
       <div ref={sections.invoices} style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <div style={sectionTitle}>Invoices & payments</div>
-          <AsyncButton onClick={newInvoice} busyLabel="Creating…" style={primaryBtn}>+ New invoice</AsyncButton>
+          <AsyncButton className="btn-primary" onClick={newInvoice} busyLabel="Creating…">+ New invoice</AsyncButton>
         </div>
         {invoices.length === 0 ? (
           <div style={{ color: t.textMuted, fontSize: 14, padding: '10px 0' }}>
@@ -559,7 +560,7 @@ function Inner() {
                 setNewStage({ stage_label: '', amount: '', due_date: '', due_trigger: '' });
                 await refresh();
               } catch (e) { setError(e.message); }
-            }} busyLabel="Saving…" style={primaryBtn}>+ Add stage</AsyncButton>
+            }} busyLabel="Saving…" className="btn-primary">+ Add stage</AsyncButton>
           </div>
         </div>
 
@@ -592,7 +593,7 @@ function Inner() {
               </div>
             )}
           </div>
-          <button onClick={() => nav('/change-orders/new?job=' + id)} style={primaryBtn}>+ New change</button>
+          <button className="btn-primary" onClick={() => nav('/change-orders/new?job=' + id)}>+ New change</button>
         </div>
         {variations.length === 0 ? (
           <div style={{ color: t.textMuted, fontSize: 14, padding: '10px 0' }}>
@@ -644,7 +645,7 @@ function Inner() {
       <div ref={sections.documents} style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <div style={sectionTitle}>Documents</div>
-          <button onClick={() => setDocPickerOpen(v => !v)} style={primaryBtn}>{docPickerOpen ? 'Cancel' : '+ New document'}</button>
+          <button className="btn-primary" onClick={() => setDocPickerOpen(v => !v)}>{docPickerOpen ? 'Cancel' : '+ New document'}</button>
         </div>
         {docPickerOpen && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 12 }}>
@@ -711,7 +712,7 @@ function Inner() {
             <PlanField t={t} label="Other" value={budget.planned_other} onChange={v => { setBudget({ ...budget, planned_other: v }); setBudgetTouched(true); }} />
             <PlanField t={t} label="Your markup %" value={budget.planned_margin_pct} onChange={v => { setBudget({ ...budget, planned_margin_pct: v }); setBudgetTouched(true); }} suffix="%" />
             <PlanField t={t} label="Price to the client" value={budget.planned_revenue} onChange={v => { setBudget({ ...budget, planned_revenue: v }); setBudgetTouched(true); }} placeholder="Worked out from costs + markup if left blank" />
-            <AsyncButton onClick={saveBudget} busyLabel="Saving…" disabled={!budgetTouched} style={{ ...primaryBtn, marginTop: 8, opacity: budgetTouched ? 1 : 0.5 }}>
+            <AsyncButton className="btn-primary" onClick={saveBudget} busyLabel="Saving…" disabled={!budgetTouched} style={{ marginTop: 8 }}>
               {budgetTouched ? 'Save the plan' : (savedAt ? 'Saved ✓' : 'Set the plan')}
             </AsyncButton>
           </div>
@@ -728,7 +729,7 @@ function Inner() {
           </select>
           <input value={newCost.description} onChange={e => setNewCost({ ...newCost, description: e.target.value })} style={input} placeholder="What was it? e.g. Bricks (1000)" />
           <input type="number" inputMode="decimal" step="any" value={newCost.unit_cost} onChange={e => setNewCost({ ...newCost, unit_cost: e.target.value, qty: newCost.qty || 1 })} style={input} placeholder="Cost £" />
-          <button onClick={addCost} style={primaryBtn}>+ Log it</button>
+          <button className="btn-primary" onClick={addCost}>+ Log it</button>
         </div>
         {costError && <div style={{ color: t.danger, fontSize: 12, marginBottom: 8 }}>{costError}</div>}
         {costs.length === 0 ? (
@@ -768,7 +769,7 @@ function Inner() {
                 The quote came to {fmt0(invoiceSheet.grand_total)} ({fmt0(exVat)} before VAT).
               </div>
 
-              <AsyncButton onClick={() => createFromQuote(invoiceSheet, 100)} busyLabel="Creating…" style={{ ...primaryBtn, width: '100%', minHeight: 52, marginBottom: 10 }}>
+              <AsyncButton className="btn-primary" onClick={() => createFromQuote(invoiceSheet, 100)} busyLabel="Creating…" style={{ width: '100%', minHeight: 52, marginBottom: 10 }}>
                 The full amount — {fmt0(invoiceSheet.grand_total)}
               </AsyncButton>
 
@@ -793,13 +794,13 @@ function Inner() {
                     onChange={e => setPctChoice(Math.min(99, Math.max(1, num(e.target.value, 25))))}
                     style={{ width: 70, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.bg, color: t.text, textAlign: 'center', fontSize: 16, outline: 'none' }} />
                 </div>
-                <AsyncButton onClick={() => createFromQuote(invoiceSheet, pctChoice, pctChoice === 25 ? 'Deposit' : null)}
-                  busyLabel="Creating…" style={{ ...primaryBtn, width: '100%', minHeight: 48 }}>
+                <AsyncButton className="btn-primary" onClick={() => createFromQuote(invoiceSheet, pctChoice, pctChoice === 25 ? 'Deposit' : null)}
+                  busyLabel="Creating…" style={{ width: '100%', minHeight: 48 }}>
                   Invoice {pctChoice}% — {fmt0(exVat * pctChoice / 100)} + VAT
                 </AsyncButton>
               </div>
 
-              <button onClick={() => setInvoiceSheet(null)} style={{ width: '100%', minHeight: 44, marginTop: 10, background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+              <button className="btn-ghost" onClick={() => setInvoiceSheet(null)} style={{ width: '100%', minHeight: 44, marginTop: 10 }}>Cancel</button>
             </div>
           </div>
         );

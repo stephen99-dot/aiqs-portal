@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
+import EmptyState from '../components/EmptyState';
 import { FileTextIcon } from '../components/Icons';
 import HelpTip from '../components/HelpTip';
 
@@ -130,31 +131,24 @@ function EstimatorPageInner() {
           <h1 style={{ margin: 0, fontSize: 26, color: t.text }}>All quotes <HelpTip t={t} title="All quotes" text={"Every quote you've made, newest first.\n\nDay to day you'll mostly work from the job page — this list catches anything not tied to a job yet.\n\n'Send the quote' gives you a link your client opens on their phone, where they can accept it with a typed signature."} /></h1>
         </div>
         <button
+          className="btn-primary"
           onClick={() => nav('/estimator/new')}
-          style={{
-            background: t.accent, color: '#fff', border: 'none', borderRadius: 10,
-            minHeight: 48, padding: '0 18px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
-          }}
+          style={{ minHeight: 48, fontSize: 15 }}
         >+ New quote</button>
       </div>
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 16 }}>{error}</div>}
 
       {loading ? (
-        <div style={{ color: t.textSecondary, padding: 40, textAlign: 'center' }}>Loading…</div>
+        <EmptyState loading loadingText="Loading your quotes…" />
       ) : quotes.length === 0 ? (
-        <div style={{
-          background: t.card, border: '1px dashed ' + t.border, borderRadius: 12,
-          padding: 36, textAlign: 'center', color: t.textSecondary,
-        }}>
-          <div style={{ marginBottom: 8 }}><FileTextIcon size={28} /></div>
-          <div style={{ color: t.text, fontWeight: 700, marginBottom: 6 }}>No quotes yet</div>
-          <div style={{ marginBottom: 16 }}>Describe the job and we'll draft a priced quote in seconds.</div>
-          <button
-            onClick={() => nav('/estimator/new')}
-            style={{ background: t.accent, color: '#fff', border: 'none', borderRadius: 10, minHeight: 48, padding: '0 22px', fontWeight: 700, cursor: 'pointer' }}
-          >Make your first quote</button>
-        </div>
+        <EmptyState
+          icon={<FileTextIcon size={24} />}
+          title="No quotes yet"
+          message="Describe the job and we'll draft a priced quote in seconds."
+          ctaLabel="Make your first quote"
+          ctaTo="/estimator/new"
+        />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {quotes.map(q => {

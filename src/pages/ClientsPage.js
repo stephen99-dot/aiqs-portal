@@ -5,6 +5,8 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
+import { ClientsIcon } from '../components/Icons';
 
 // CLIENTS — the builder's customer book. Records build themselves: every job,
 // quote or invoice that names a customer creates/updates one. Each card rolls
@@ -119,9 +121,8 @@ function Inner() {
 
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 14 }}>{error}</div>}
 
-      <button onClick={() => { setAdding(v => !v); setError(''); }} style={{
-        minHeight: 52, width: '100%', borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
-        fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 14,
+      <button className="btn-primary" onClick={() => { setAdding(v => !v); setError(''); }} style={{
+        minHeight: 52, width: '100%', fontSize: 15, marginBottom: 14,
       }}>{adding ? 'Cancel' : '+ New client'}</button>
 
       {adding && (
@@ -130,7 +131,7 @@ function Inner() {
           <input style={input} type="email" placeholder="Email (optional)" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
           <input style={input} type="tel" placeholder="Phone (optional)" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} />
           <input style={input} placeholder="Address (optional)" value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} />
-          <AsyncButton onClick={addClient} busyLabel="Saving…" style={{ minHeight: 48, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+          <AsyncButton className="btn-primary" onClick={addClient} busyLabel="Saving…" style={{ minHeight: 48, fontSize: 15 }}>
             Save client
           </AsyncButton>
         </div>
@@ -141,11 +142,15 @@ function Inner() {
       )}
 
       {clients === null ? (
-        <div style={{ color: t.textSecondary, padding: '20px 0' }}>Loading…</div>
+        <EmptyState loading loadingText="Loading your clients…" />
       ) : visible.length === 0 ? (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '22px 18px', color: t.textMuted, fontSize: 14, lineHeight: 1.6 }}>
-          No clients yet. They'll appear here automatically as you create jobs, quotes and invoices — or add one now.
-        </div>
+        <EmptyState
+          icon={<ClientsIcon size={24} />}
+          title={search ? 'No clients match that' : 'No clients yet'}
+          message={search ? 'Try a different name, email or phone.' : "They'll appear here automatically as you create jobs, quotes and invoices — or add one now."}
+          ctaLabel={search ? undefined : 'Add your first client'}
+          onCta={search ? undefined : () => setAdding(true)}
+        />
       ) : visible.map(c => {
         const owes = num(c.owed_total) > 0;
         const isOpen = openId === c.id;
@@ -241,7 +246,7 @@ function Inner() {
                     {editError && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 10, fontSize: 13 }}>{editError}</div>}
                     {saved && <div style={{ color: t.success, fontSize: 13, fontWeight: 700 }}>Saved ✓</div>}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <AsyncButton onClick={saveEdit} busyLabel="Saving…" style={{ flex: 1, minHeight: 44, borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Save details</AsyncButton>
+                      <AsyncButton className="btn-primary" onClick={saveEdit} busyLabel="Saving…" style={{ flex: 1, minHeight: 44 }}>Save details</AsyncButton>
                       <button onClick={() => removeClient(c.id)} style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: 'transparent', border: '1px solid ' + (t.danger || '#EF4444') + '66', color: t.danger || '#EF4444', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
                     </div>
                   </div>

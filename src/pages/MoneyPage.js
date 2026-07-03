@@ -5,6 +5,8 @@ import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import HelpTip from '../components/HelpTip';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
+import { PoundIcon } from '../components/Icons';
 
 // MONEY — one place for everything money: what's coming in (invoices),
 // what's due in (payment stages + retention), and your numbers (what the
@@ -262,7 +264,7 @@ function Inner() {
     border: 'none', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', padding: '0 8px',
   });
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
+  if (loading) return <EmptyState loading loadingText="Loading your money…" />;
 
   return (
     <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
@@ -284,8 +286,8 @@ function Inner() {
       {segment === 'in' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-            <button data-tour="money-new-invoice" onClick={() => { setCreating(v => !v); setError(''); }} style={{ ...primaryBtn, flex: 1 }}>{creating ? 'Cancel' : '+ New invoice'}</button>
-            <button onClick={() => { setExporting(v => !v); setExpMsg(''); }} style={ghostBtn}>Send to your accountant</button>
+            <button className="btn-primary" data-tour="money-new-invoice" onClick={() => { setCreating(v => !v); setError(''); }} style={{ flex: 1 }}>{creating ? 'Cancel' : '+ New invoice'}</button>
+            <button className="btn-secondary" onClick={() => { setExporting(v => !v); setExpMsg(''); }}>Send to your accountant</button>
           </div>
 
           {creating && (
@@ -311,7 +313,7 @@ function Inner() {
               {!newInv.job_id && (
                 <input style={input} placeholder="Who's it for? (customer name)" value={newInv.client_name} onChange={e => setNewInv({ ...newInv, client_name: e.target.value })} />
               )}
-              <AsyncButton data-tour="money-create-invoice" onClick={create} busyLabel="Creating…" style={primaryBtn}>Create the invoice</AsyncButton>
+              <AsyncButton className="btn-primary" data-tour="money-create-invoice" onClick={create} busyLabel="Creating…">Create the invoice</AsyncButton>
             </div>
           )}
 
@@ -329,10 +331,10 @@ function Inner() {
                         Send your sent &amp; paid invoices straight into Xero as approved sales invoices — VAT, reduced rate and CIS reverse charge mapped to your own tax rates. Already-sent invoices are skipped, so it's safe to tap again.
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button onClick={pushToXero} disabled={xeroBusy} style={{ ...primaryBtn, opacity: xeroBusy ? 0.6 : 1 }}>
+                        <button className="btn-primary" onClick={pushToXero} disabled={xeroBusy}>
                           {xeroBusy ? 'Working…' : 'Send invoices to Xero'}
                         </button>
-                        <button onClick={disconnectXero} disabled={xeroBusy} style={ghostBtn}>Disconnect</button>
+                        <button className="btn-secondary" onClick={disconnectXero} disabled={xeroBusy}>Disconnect</button>
                       </div>
                     </>
                   ) : (
@@ -362,8 +364,8 @@ function Inner() {
                   <option value="xero">Xero</option>
                   <option value="quickbooks">QuickBooks</option>
                 </select>
-                <AsyncButton onClick={downloadExport} busyLabel="Preparing…" style={primaryBtn}>Download the file</AsyncButton>
-                <AsyncButton onClick={emailExport} busyLabel="Sending…" style={ghostBtn}>Email your accountant</AsyncButton>
+                <AsyncButton className="btn-primary" onClick={downloadExport} busyLabel="Preparing…">Download the file</AsyncButton>
+                <AsyncButton className="btn-secondary" onClick={emailExport} busyLabel="Sending…">Email your accountant</AsyncButton>
               </div>
               {expMsg && <div style={{ color: t.textSecondary, fontSize: 13, marginTop: 10 }}>{expMsg}</div>}
             </div>
@@ -382,13 +384,13 @@ function Inner() {
           </div>
 
           {filteredInvoices.length === 0 ? (
-            <div style={{ ...card, boxShadow: 'none', borderStyle: 'dashed', textAlign: 'center', padding: 32 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>{filter ? 'Nothing here' : 'No invoices yet'}</div>
-              <div style={{ color: t.textSecondary, fontSize: 14, marginBottom: filter ? 0 : 14 }}>
-                {filter ? 'Try a different filter.' : 'Turn a finished quote into an invoice in one tap — open the job and press the green button.'}
-              </div>
-              {!filter && <button onClick={() => nav('/jobs')} style={primaryBtn}>Go to your jobs</button>}
-            </div>
+            <EmptyState
+              icon={<PoundIcon size={24} />}
+              title={filter ? 'Nothing here' : 'No invoices yet'}
+              message={filter ? 'Try a different filter.' : 'Turn a finished quote into an invoice in one tap — or start one from scratch.'}
+              ctaLabel={filter ? undefined : 'Create your first invoice'}
+              onCta={filter ? undefined : () => setCreating(true)}
+            />
           ) : filteredInvoices.map(inv => {
             const tone = inv.overdue ? { bg: t.dangerBg, fg: t.danger, label: 'Overdue' }
               : inv.status === 'paid' ? { bg: t.successBg, fg: t.success, label: 'Paid' }
@@ -514,7 +516,7 @@ function Inner() {
                   style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 18, minWidth: 36 }}>×</button>
               </div>
             ))}
-            <button onClick={() => setOhItems([...ohItems, { name: '', amount: '' }])} style={{ ...ghostBtn, marginBottom: 12 }}>+ Add a cost</button>
+            <button className="btn-secondary" onClick={() => setOhItems([...ohItems, { name: '', amount: '' }])} style={{ marginBottom: 12 }}>+ Add a cost</button>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               <div>
@@ -526,7 +528,7 @@ function Inner() {
                 <input style={input} type="number" inputMode="decimal" min="1" max="16" value={ohHours} onChange={e => { setOhHours(e.target.value); setOhTouched(true); }} />
               </div>
             </div>
-            <button onClick={saveOverheads} disabled={!ohTouched || ohSaving} style={{ ...primaryBtn, opacity: ohTouched ? 1 : 0.5, width: '100%' }}>
+            <button className="btn-primary" onClick={saveOverheads} disabled={!ohTouched || ohSaving} style={{ width: '100%' }}>
               {ohSaving ? 'Saving…' : (ohTouched ? 'Save your numbers' : 'Saved')}
             </button>
           </div>

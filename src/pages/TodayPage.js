@@ -6,6 +6,7 @@ import { apiFetch } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AsyncButton from '../components/AsyncButton';
+import EmptyState from '../components/EmptyState';
 import { CheckCircleIcon, FileTextIcon, PoundIcon, ImageIcon, WrenchIcon } from '../components/Icons';
 import HelpTip from '../components/HelpTip';
 
@@ -242,7 +243,7 @@ function Inner() {
       <div data-tour="oiab-attention">
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Needs your attention</div>
       {cards === null ? (
-        <div style={{ color: t.textSecondary, padding: '20px 0' }}>Loading…</div>
+        <EmptyState loading loadingText="Checking your jobs, quotes and invoices…" />
       ) : cards.length === 0 ? (
         <div style={{
           background: t.successBg, border: '1px solid ' + t.success + '44',
