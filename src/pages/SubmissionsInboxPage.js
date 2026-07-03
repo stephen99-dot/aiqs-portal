@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
+import EmptyState from '../components/EmptyState';
 import StateBadge from '../components/StateBadge';
 import { adminCta } from '../utils/lifecycle';
 import { CheckIcon, AlertTriangleIcon } from '../components/Icons';
@@ -331,17 +332,10 @@ export default function SubmissionsInboxPage() {
             />
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowAddJob(false)} disabled={creatingJob}
-                style={{ padding: '10px 16px', borderRadius: 9, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+              <button type="button" onClick={() => setShowAddJob(false)} disabled={creatingJob} className="btn-secondary">
                 Cancel
               </button>
-              <button type="submit" disabled={creatingJob}
-                style={{
-                  padding: '10px 18px', borderRadius: 9, border: 'none',
-                  background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                  color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
-                  cursor: creatingJob ? 'wait' : 'pointer',
-                }}>
+              <button type="submit" disabled={creatingJob} className="btn-primary">
                 {creatingJob ? 'Creating…' : 'Create job'}
               </button>
             </div>
@@ -369,13 +363,8 @@ export default function SubmissionsInboxPage() {
         </div>
         <button
           onClick={openAddJob}
-          style={{
-            flexShrink: 0,
-            padding: '10px 16px', borderRadius: 9, border: 'none',
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            color: '#0A0F1C', fontWeight: 700, fontSize: 13.5, cursor: 'pointer',
-            boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
-          }}
+          className="btn-primary"
+          style={{ flexShrink: 0 }}
         >
           + Add job manually
         </button>
@@ -432,11 +421,9 @@ export default function SubmissionsInboxPage() {
           maxHeight: 'calc(100vh - 220px)', overflowY: 'auto',
           borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)',
         }}>
-          {loading && <div style={{ padding: 18, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
+          {loading && <EmptyState loading loadingText="Loading submissions…" />}
           {!loading && filtered.length === 0 && (
-            <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-              No submissions match.
-            </div>
+            <EmptyState message="No submissions match." />
           )}
           {filtered.map((s) => {
             const active = s.id === selectedId;
@@ -677,13 +664,7 @@ export default function SubmissionsInboxPage() {
                     <button
                       onClick={createJobFromSubmission}
                       disabled={creatingProject}
-                      style={{
-                        padding: '10px 18px', borderRadius: 9, border: 'none',
-                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                        color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
-                        cursor: creatingProject ? 'wait' : 'pointer',
-                        boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
-                      }}
+                      className="btn-primary"
                     >
                       {creatingProject ? 'Creating job…' : 'Create job & start upload'}
                     </button>

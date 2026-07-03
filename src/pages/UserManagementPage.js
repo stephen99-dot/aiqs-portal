@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap } from 'lucide-react';
 import { KeyIcon } from '../components/Icons';
+import EmptyState from '../components/EmptyState';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -46,7 +47,7 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
             <div key={k}><label style={lbl}>{l}{r&&<span style={{color:'#EF4444'}}> *</span>}</label><input type={t||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} required={r} placeholder={p} style={inp} /></div>
           ))}
           <div style={{display:'flex',gap:10,marginTop:6}}>
-            <button type="button" onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+            <button type="button" onClick={onClose} className="btn-secondary" style={{flex:1}}>Cancel</button>
             <button type="submit" disabled={loading} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer',opacity:loading?0.7:1}}>{loading?'Creating & Sending Invite...':'Create & Send Invite'}</button>
           </div>
         </form>
@@ -86,10 +87,10 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
             style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:14,outline:'none',boxSizing:'border-box'}} />
         </div>
         <div style={{display:'flex',gap:10}}>
-          <button onClick={handleReset} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#F59E0B',color:'#0F172A',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.6:1}}>
+          <button onClick={handleReset} disabled={saving} className="btn-primary" style={{flex:1}}>
             {saving ? 'Resetting...' : 'Reset Password'}
           </button>
-          <button onClick={onClose} style={{padding:'11px 18px',borderRadius:10,border:'1px solid '+border,background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>
       </div>
     </div>
@@ -632,15 +633,7 @@ function SystemDefaultRatesCard({ isDark }) {
         <button
           onClick={() => fileRef.current && fileRef.current.click()}
           disabled={uploading}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '9px 16px', borderRadius: 9,
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            color: '#0A0F1C', border: 'none',
-            fontWeight: 700, fontSize: 12.5,
-            cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.6 : 1,
-          }}
+          className="btn-primary"
         >
           <Upload size={13} /> {uploading ? 'Uploading…' : (info && info.count > 0 ? 'Replace defaults' : 'Upload defaults')}
         </button>
@@ -893,8 +886,8 @@ export default function UserManagementPage({ theme }) {
           </div>
         </div>
         {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'12px 16px',marginBottom:16,color:'#EF4444',fontSize:13}}>{error}</div>}
-        {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
-         filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
+        {loading ? <EmptyState loading loadingText="Loading users…" /> :
+         filtered.length === 0 ? <EmptyState message={search ? 'No users match your search.' : 'No users yet.'} /> : (
           <div style={cardStyle}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
@@ -1016,7 +1009,7 @@ export default function UserManagementPage({ theme }) {
             <h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3>
             <p style={{margin:'0 0 20px',fontSize:13,color:'#EF4444'}}>Deletes all data. Cannot be undone.</p>
             <div style={{display:'flex',gap:10}}>
-              <button onClick={() => setDeleteTarget(null)} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+              <button onClick={() => setDeleteTarget(null)} className="btn-secondary" style={{flex:1}}>Cancel</button>
               <button onClick={() => handleDelete(deleteTarget.id)} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#EF4444',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer'}}>Delete</button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken } from '../utils/api';
 import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
+import EmptyState from './EmptyState';
 import useIsMobile from '../utils/useIsMobile';
 
 /**
@@ -559,13 +560,13 @@ export default function DeliverablesPanel({ projectId, project }) {
         )}
 
         {/* List */}
-        {loading && <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>Loading…</div>}
+        {loading && <EmptyState loading loadingText="Loading documents…" />}
         {!loading && latest.length === 0 && (
-          <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
-            {isAdmin
+          <EmptyState
+            message={isAdmin
               ? 'No files sent to this customer yet. Use the uploader above to send their priced documents.'
               : "Your QS hasn't uploaded any documents for this project yet."}
-          </div>
+          />
         )}
 
         {orderedGroups.map((k) => (

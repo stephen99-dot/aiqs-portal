@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 import OnboardingTour from '../components/OnboardingTour';
+import EmptyState from '../components/EmptyState';
 import StateBadge from '../components/StateBadge';
 import { customerCta } from '../utils/lifecycle';
 import useIsMobile from '../utils/useIsMobile';
@@ -322,10 +323,7 @@ function GettingStarted({ projects, t }) {
           <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, marginBottom: 1 }}>Getting Started</div>
           <div style={{ fontSize: 11.5, color: t.textMuted }}>{completedCount} of {steps.length} complete</div>
         </div>
-        <button onClick={() => { setDismissed(true); try { localStorage.setItem('aiqs_checklist_dismissed', 'true'); } catch {} }} style={{
-          background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-          textDecoration: 'underline', textUnderlineOffset: 3,
-        }}>Dismiss</button>
+        <button onClick={() => { setDismissed(true); try { localStorage.setItem('aiqs_checklist_dismissed', 'true'); } catch {} }} className="btn-ghost">Dismiss</button>
       </div>
       <div style={{ width: '100%', height: 3, borderRadius: 3, background: t.surfaceHover, overflow: 'hidden', marginBottom: 14 }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'linear-gradient(135deg, #F59E0B, #D97706)', transition: 'width 0.5s ease' }} />
@@ -355,13 +353,7 @@ function GettingStarted({ projects, t }) {
         ))}
       </div>
       {projects.length === 0 && (
-        <Link to="/chat" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          marginTop: 12, padding: '9px 18px', borderRadius: 8,
-          background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-          color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
-          boxShadow: '0 2px 10px rgba(245,158,11,0.18)',
-        }}>
+        <Link to="/chat" className="btn-primary full-width" style={{ marginTop: 12 }}>
           Start Your First Project <ArrowRightIcon size={13} color="#0A0F1C" />
         </Link>
       )}
@@ -514,18 +506,10 @@ export default function DashboardPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={dismissOnboardingBanner} style={{
-                background: 'none', border: 'none', color: t.textMuted, fontSize: 12, cursor: 'pointer',
-                padding: '8px 12px', borderRadius: 8, fontFamily: 'inherit',
-              }}>
+              <button onClick={dismissOnboardingBanner} className="btn-ghost">
                 Not now
               </button>
-              <Link to="/onboarding" style={{
-                padding: '9px 18px', borderRadius: 8,
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                color: '#0A0F1C', textDecoration: 'none',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>
+              <Link to="/onboarding" className="btn-primary" style={{ whiteSpace: 'nowrap' }}>
                 Start onboarding
               </Link>
             </div>
@@ -560,10 +544,7 @@ export default function DashboardPage() {
             <button onClick={() => {
               setShowWhatsNew(false);
               try { localStorage.setItem(`aiqs_whats_new_v5_${user?.id || 'default'}`, 'true'); } catch {}
-            }} style={{
-              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
-            }}>Dismiss</button>
+            }} className="btn-ghost" style={{ whiteSpace: 'nowrap' }}>Dismiss</button>
           </div>
         </div>
       )}
@@ -589,10 +570,7 @@ export default function DashboardPage() {
                 <div style={{ fontSize: 13.5, color: t.text, lineHeight: 1.5 }}>{msg.message}</div>
               </div>
             </div>
-            <button onClick={() => dismissMessage(msg.id)} style={{
-              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
-            }}>Dismiss</button>
+            <button onClick={() => dismissMessage(msg.id)} className="btn-ghost" style={{ whiteSpace: 'nowrap' }}>Dismiss</button>
           </div>
         </div>
       ))}
@@ -633,25 +611,15 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="empty-state">
-            <div className="loading-spinner" />
-            <p>Loading your projects...</p>
-          </div>
+          <EmptyState loading loadingText="Loading your projects..." />
         ) : projectList.length === 0 ? (
-          <div className="empty-state">
-            <div style={{
-              width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
-              background: 'rgba(245,158,11,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <FolderIcon size={24} color="#F59E0B" />
-            </div>
-            <h3>No projects yet</h3>
-            <p>Submit your drawings and our QS team will deliver your BOQ and Findings Report right here — typically within 24 hours.</p>
-            <Link to="/submit-drawings" className="btn-primary" style={{ marginTop: 16 }}>
-              Submit Your Drawings
-            </Link>
-          </div>
+          <EmptyState
+            icon={<FolderIcon size={24} />}
+            title="No projects yet"
+            message="Submit your drawings and our QS team will deliver your BOQ and Findings Report right here — typically within 24 hours."
+            ctaLabel="Submit Your Drawings"
+            ctaTo="/submit-drawings"
+          />
         ) : (
           <div className="projects-list">
             {projectList.map(project => {

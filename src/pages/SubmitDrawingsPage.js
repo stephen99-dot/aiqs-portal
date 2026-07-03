@@ -341,15 +341,11 @@ export default function SubmitDrawingsPage() {
             <button
               type="button"
               onClick={openFilePicker}
+              className="btn-primary"
               style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                padding: '10px 22px', borderRadius: 9,
-                width: isMobile ? '100%' : undefined, minHeight: isMobile ? 48 : undefined,
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                color: '#0A0F1C',
-                fontWeight: 700, fontSize: isMobile ? 15 : 13.5,
-                border: 'none', cursor: 'pointer',
-                boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+                width: isMobile ? '100%' : undefined,
+                minHeight: isMobile ? 48 : undefined,
+                fontSize: isMobile ? 15 : undefined,
               }}
             >
               <UploadIcon size={16} color="#0A0F1C" /> Choose files
@@ -559,17 +555,8 @@ export default function SubmitDrawingsPage() {
         <button
           type="submit"
           disabled={!canSubmit || noCredits}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            width: '100%', padding: '14px 28px', borderRadius: 10,
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            color: '#0A0F1C',
-            fontWeight: 700, fontSize: 15, border: 'none',
-            cursor: (!canSubmit || noCredits) ? 'not-allowed' : 'pointer',
-            opacity: (!canSubmit || noCredits) ? 0.5 : 1,
-            boxShadow: '0 2px 16px rgba(245,158,11,0.2)',
-            transition: 'transform 0.15s',
-          }}
+          className="btn-primary full-width"
+          style={{ padding: '14px 28px', fontSize: 15 }}
         >
           {submitting ? (
             <>

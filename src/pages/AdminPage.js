@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import EmptyState from '../components/EmptyState';
 import { ClientsIcon, FileTextIcon, PoundIcon, ZapIcon, KeyIcon, CheckCircleIcon, XCircleIcon, XIcon, EditIcon, MailIcon, TrashIcon, AlertTriangleIcon, BookIcon, InboxIcon, UploadIcon, SearchIcon, CheckIcon, UserIcon, ClipboardIcon, CreditCardIcon, PaperclipIcon, BarChartIcon, InfoIcon, RefreshIcon } from '../components/Icons';
 
 const PLAN_OPTIONS = [
@@ -192,7 +193,7 @@ function ClientsTab({ t }) {
 
   const inputStyle = { padding: '9px 12px', borderRadius: 8, fontSize: 13, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, outline: 'none', width: '100%' };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>Loading clients...</div>;
+  if (loading) return <EmptyState loading loadingText="Loading clients..." />;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -219,13 +220,14 @@ function ClientsTab({ t }) {
               <button
                 onClick={confirmResetPassword}
                 disabled={resetting}
-                style={{ flex: 1, padding: '9px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: t.accent || '#F59E0B', color: '#0F172A', border: 'none', cursor: 'pointer', opacity: resetting ? 0.6 : 1 }}
+                className="btn-primary"
+                style={{ flex: 1 }}
               >
                 {resetting ? 'Saving...' : 'Reset Password'}
               </button>
               <button
                 onClick={() => { setShowResetModal(false); setResetTarget(null); }}
-                style={{ padding: '9px 16px', borderRadius: 8, fontSize: 13, background: 'transparent', color: t.textMuted, border: '1px solid ' + t.border, cursor: 'pointer' }}
+                className="btn-secondary"
               >
                 Cancel
               </button>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import EmptyState from '../components/EmptyState';
 import { BuildingIcon, BoltIcon, ClipboardIcon, PickaxeIcon, BrickIcon, PlankIcon, HomeIcon, BucketIcon, CubeIcon, ZapIcon, WrenchIcon, ThermometerIcon, PaletteIcon, FryingPanIcon, DropletIcon, BurstIcon, PackageIcon, BrainIcon, FileTextIcon, XIcon, CheckCircleIcon, XCircleIcon, RulerIcon, LightbulbIcon } from '../components/Icons';
 
 const CATEGORY_OPTIONS = [
@@ -152,7 +153,7 @@ export default function MyRatesPage() {
   };
   const inputStyle = { padding:'8px 12px', background:c.inputBg, border:'1px solid '+c.inputBorder, borderRadius:'8px', color:c.text, fontSize:'13px', outline:'none', width:'100%' };
 
-  if (loading) return <div style={{padding:'40px',textAlign:'center',color:c.textSec}}><div style={{marginBottom:'12px'}}><BrainIcon size={32} /></div>Loading your rate library...</div>;
+  if (loading) return <EmptyState loading loadingText="Loading your rate library..." />;
 
   return (
     <div style={{padding:'24px',maxWidth:'1000px',margin:'0 auto'}}>
@@ -235,14 +236,14 @@ export default function MyRatesPage() {
 
       {/* Empty state */}
       {rates.length === 0 && !showAddForm && (
-        <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',padding:'48px 24px',textAlign:'center'}}>
-          <div style={{marginBottom:'16px'}}><RulerIcon size={48} /></div>
-          <h3 style={{color:c.text,fontSize:'16px',fontWeight:600,margin:'0 0 8px'}}>No rates yet</h3>
-          <p style={{color:c.textSec,fontSize:'13px',maxWidth:'420px',margin:'0 auto 20px'}}>Add rates manually, import from Excel, or correct rates in chat.</p>
-          <div style={{display:'flex',gap:'10px',justifyContent:'center'}}>
-            <button onClick={()=>setShowAddForm(true)} style={{padding:'10px 20px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>+ Add Your First Rate</button>
-            <button onClick={()=>fileInputRef.current?.click()} style={{padding:'10px 20px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><FileTextIcon size={14} /> Import from Excel</button>
-          </div>
+        <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px'}}>
+          <EmptyState
+            icon={<RulerIcon size={24} />}
+            title="No rates yet"
+            message="Add rates manually, import from Excel, or correct rates in chat."
+            ctaLabel="+ Add Your First Rate"
+            onCta={()=>setShowAddForm(true)}
+          />
         </div>
       )}
 

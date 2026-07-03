@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
-import { CheckIcon, XIcon } from '../components/Icons';
+import { CheckIcon, XIcon, ClipboardIcon } from '../components/Icons';
+import EmptyState from '../components/EmptyState';
 import useIsMobile from '../utils/useIsMobile';
 import AsyncButton from '../components/AsyncButton';
 
@@ -139,7 +140,7 @@ export default function VariationsPage() {
   }
 
   if (loading) return (
-    <div className="page"><div className="empty-state"><div className="loading-spinner" /><p>Loading variations...</p></div></div>
+    <div className="page"><EmptyState loading loadingText="Loading variations..." /></div>
   );
 
   const s = selected ? STATUS_COLOURS[selected.status] || STATUS_COLOURS.draft : null;
@@ -168,10 +169,14 @@ export default function VariationsPage() {
         {/* LEFT — VO list */}
         <div>
           {variations.length === 0 && !showForm && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
-              <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
-              <p style={{ opacity: 0.6, marginBottom: 16, fontSize: 14 }}>No variations raised yet</p>
-              <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowForm(true)}>Raise First Variation</button>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12 }}>
+              <EmptyState
+                icon={<ClipboardIcon size={24} />}
+                title="No variations yet"
+                message="Raise a variation to track contract changes — the AI analyses the delta and estimates costs."
+                ctaLabel="Raise First Variation"
+                onCta={() => setShowForm(true)}
+              />
             </div>
           )}
 
