@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { ArrowRightIcon, ArrowLeftIcon, XIcon, ZapIcon, HelpCircleIcon } from './Icons';
+import useIsMobile from '../utils/useIsMobile';
 
 // A live, hands-on walkthrough of Office in a Box, built for a tradesperson who
 // has never used software like this. It drives the real app — navigating
@@ -268,6 +269,7 @@ export default function OfficeTour({ userId, autoStart }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, mode } = useTheme();
+  const isMobile = useIsMobile(768);
 
   const [active, setActive] = useState(false);
   const [index, setIndex] = useState(0);
@@ -305,15 +307,16 @@ export default function OfficeTour({ userId, autoStart }) {
   useEffect(() => { nextRef.current = next; });
 
   // Auto-run once for subscribers who have never seen the current version.
+  // Never auto-fires on a phone — the "Show me around" launcher stays available.
   useEffect(() => {
-    if (!autoStart || active) return;
+    if (!autoStart || active || isMobile) return;
     let seen = -1;
     try { seen = parseInt(localStorage.getItem(key(userId)) || '-1', 10); } catch {}
     if (seen >= OFFICE_TOUR_VERSION) return;
     if (!isOfficeRoute(location.pathname)) return;
     const id = setTimeout(start, 900);
     return () => clearTimeout(id);
-  }, [autoStart, active, userId, location.pathname, start]);
+  }, [autoStart, active, userId, location.pathname, start, isMobile]);
 
   // Re-measure the current target without scrolling — keeps the spotlight glued
   // to its element while the page scrolls or resizes.

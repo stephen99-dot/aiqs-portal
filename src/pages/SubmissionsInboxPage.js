@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
+import StateBadge from '../components/StateBadge';
+import { adminCta } from '../utils/lifecycle';
 import { CheckIcon, AlertTriangleIcon } from '../components/Icons';
 
 /**
@@ -476,8 +478,16 @@ export default function SubmissionsInboxPage() {
                     {new Date(s.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {subtitleParts.join(' · ')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, minWidth: 0 }}>
+                  {/* Same five lifecycle states as the customer sees. Unlinked
+                      submissions are by definition a new brief. */}
+                  <StateBadge status={s.project_status || 'submitted'} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B', flexShrink: 0 }}>
+                    {adminCta(s.project_status || 'submitted').done ? '' : adminCta(s.project_status || 'submitted').label + ' →'}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {subtitleParts.join(' · ')}
+                  </span>
                 </div>
                 <div style={{
                   fontSize: 12, color: 'var(--text-primary)', opacity: 0.8,

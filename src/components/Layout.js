@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
-  UploadIcon, SettingsIcon, CubeIcon,
+  UploadIcon, SettingsIcon,
   InboxIcon, FolderIcon, PoundIcon, HomeIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
@@ -151,74 +151,74 @@ export default function Layout() {
 
   const hasEstimator = !!user?.hasEstimator || isAdmin;
 
-  // The "Office in a Box" add-on navigates the way a builder thinks: Today
-  // (what needs doing), Jobs (everything about one job), Money (in and out).
-  // Calculators + materials prices live behind Tools — reference, not workflow.
-  const officeInABoxChildren = [
-    { path: '/office', label: 'Today' },
-    { path: '/jobs', label: 'Jobs' },
-    { path: '/clients', label: 'Clients' },
-    { path: '/money', label: 'Money' },
-    { path: '/documents', label: 'Documents' },
-    { path: '/tools', label: 'Tools' },
-  ];
-  // Pages reached from inside the group (quote editor, invoice editor, job
-  // page, documents, tools) keep the group highlighted and open.
-  const officeRoutePrefixes = [
-    '/office', '/jobs', '/clients', '/money', '/tools',
-    '/estimator', '/invoices', '/finance', '/change-orders',
-    '/documents', '/calculators', '/materials', '/pm',
-  ];
-  const isOfficeRouteActive = officeRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
-
-  // Subscribers (and admins) get the working tool group. Everyone else sees a
-  // single "Office in a Box" entry that opens the Coming Soon / upsell page.
-  const officeNavItem = hasEstimator
-    ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
-    : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'New' };
-
-  // Personalisation pages live behind one Settings group so the main nav
-  // stays at five entries: the submit → track → deliver loop plus the add-on.
+  // ── Sidebar: at most 6 primary destinations per persona; everything else
+  // lives under one collapsible "More" section (PORTAL_SPEC.md nav rule). ──
   const settingsChildren = [
     { path: '/my-rates', label: 'My Rates' },
     { path: '/ai-memory', label: 'AI Memory' },
     { path: '/branding', label: 'Branding & Logo' },
   ];
-  const settingsRoutePrefixes = ['/my-rates', '/ai-memory', '/branding', '/onboarding'];
-  const isSettingsRouteActive = settingsRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
-  const navItems = [
-    // Submit Drawings leads: the QS-team route is the primary path while the
-    // chatbot is in its testing phase.
-    { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
-    { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
-    // No standalone Variations entry: OiB users raise them from the job page,
-    // everyone else from the project page (/project/:id/variations).
-    { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
-    officeNavItem,
-    { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
-    { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
-    { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
-    { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
-    { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
+  let primaryItems, moreChildren;
+  if (isAdmin) {
+    primaryItems = [
+      { path: '/admin/submissions', label: 'Submissions Inbox', Icon: InboxIcon },
+      { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+      { path: '/admin/users', label: 'Users', Icon: ClientsIcon },
+      { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+      { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon },
+      { path: '/clients', label: 'Clients', Icon: ClientsIcon },
+    ];
+    moreChildren = [
+      { path: '/submit-drawings', label: 'Submit Drawings' },
+      { path: '/office', label: 'Office: Today' },
+      { path: '/jobs', label: 'Office: Jobs' },
+      { path: '/money', label: 'Office: Money' },
+      { path: '/documents', label: 'Documents' },
+      { path: '/tools', label: 'Tools' },
+      { path: '/builder3d', label: '3D Builder' },
+      ...settingsChildren,
+    ];
+  } else if (hasEstimator) {
+    primaryItems = [
+      { path: '/office', label: 'Today', Icon: HomeIcon },
+      { path: '/jobs', label: 'Jobs', Icon: FolderIcon },
+      { path: '/dashboard', label: 'My QS Jobs', Icon: NewProjectIcon },
+      { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
+      { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+    ];
+    moreChildren = [
+      { path: '/clients', label: 'Clients' },
+      { path: '/money', label: 'Money' },
+      { path: '/documents', label: 'Documents' },
+      { path: '/tools', label: 'Tools' },
+      ...settingsChildren,
+    ];
+  } else {
+    primaryItems = [
+      { path: '/dashboard', label: 'My Jobs', Icon: NewProjectIcon },
+      { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
+      { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+      { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'New' },
+    ];
+    moreChildren = settingsChildren;
+  }
+
+  const isMoreRouteActive = moreChildren.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'));
+  const visibleNavItems = [
+    ...primaryItems,
+    // tour: 'settings' keeps the onboarding tour's settings step anchored.
+    { group: 'more', label: 'More', Icon: SettingsIcon, children: moreChildren, tour: 'settings' },
   ];
 
-  const visibleNavItems = navItems.filter(item => {
-    if (item.adminOnly && !isAdmin) return false;
-    if (item.estimatorOnly && !hasEstimator) return false;
-    return true;
-  });
-
-  // Expanded state for each group. Persists across renders within a session.
-  const [officeExpanded, setOfficeExpanded] = useState(isOfficeRouteActive);
-  const [settingsExpanded, setSettingsExpanded] = useState(isSettingsRouteActive);
+  // Expanded state for the More group. Persists across renders in a session.
+  const [moreExpanded, setMoreExpanded] = useState(isMoreRouteActive);
   // Auto-open when navigating to one of the children.
-  useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
-  useEffect(() => { if (isSettingsRouteActive) setSettingsExpanded(true); }, [isSettingsRouteActive]);
+  useEffect(() => { if (isMoreRouteActive) setMoreExpanded(true); }, [isMoreRouteActive]);
   // The Office tour fires this when it needs a sidebar menu item to be reachable
   // (expanded on desktop, and the drawer open on mobile).
   useEffect(() => {
-    const open = () => { setOfficeExpanded(true); setMobileOpen(true); };
+    const open = () => { setMoreExpanded(true); setMobileOpen(true); };
     window.addEventListener('aiqs:open-office-nav', open);
     return () => window.removeEventListener('aiqs:open-office-nav', open);
   }, []);
@@ -360,16 +360,15 @@ export default function Layout() {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => {
               if (item.group) {
-                const isOffice = item.group === 'office';
                 return (
                   <OfficeGroup
                     key={item.group}
                     item={item}
                     t={t}
                     mode={mode}
-                    expanded={isOffice ? officeExpanded : settingsExpanded}
-                    onToggle={() => (isOffice ? setOfficeExpanded(v => !v) : setSettingsExpanded(v => !v))}
-                    isAnyActive={isOffice ? isOfficeRouteActive : isSettingsRouteActive}
+                    expanded={moreExpanded}
+                    onToggle={() => setMoreExpanded(v => !v)}
+                    isAnyActive={isMoreRouteActive}
                     setMobileOpen={setMobileOpen}
                     location={location}
                   />
@@ -379,8 +378,8 @@ export default function Layout() {
                 <NavLink
                   key={item.path}
                   to={item.path}
-                  end={item.path === '/dashboard'}
-                  data-tour={item.path === '/submit-drawings' ? 'submit-drawings' : item.path === '/chat' ? 'chat-nav' : undefined}
+                  end={item.path === '/dashboard' || item.path === '/admin'}
+                  data-tour={item.path === '/submit-drawings' ? 'submit-drawings' : item.path === '/chat' ? 'chat-nav' : item.path === '/jobs' ? 'nav-jobs' : undefined}
                   style={{ textDecoration: 'none' }}
                   onClick={(e) => {
                     if (window.__aiqs_chat_sending) {

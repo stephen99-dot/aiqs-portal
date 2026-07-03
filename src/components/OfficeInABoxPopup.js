@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
 import {
   XIcon, ArrowRightIcon, CheckCircleIcon,
   RulerIcon, BuildingIcon, TrendingUpIcon, CreditCardIcon, FileTextIcon,
@@ -29,12 +30,15 @@ export default function OfficeInABoxPopup() {
   const { t, mode } = useTheme();
   const navigate = useNavigate();
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile(768);
 
   const [visible, setVisible] = useState(false);
   const [thanks, setThanks] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // Upsells wait for a desktop session — never mid-task on a phone.
+    if (isMobile) return;
     let seen;
     try { seen = localStorage.getItem(STORAGE_KEY); } catch (e) {}
     if (seen) return;
@@ -53,7 +57,7 @@ export default function OfficeInABoxPopup() {
       .catch(() => { timer = setTimeout(() => { if (alive) setVisible(true); }, 1800); });
 
     return () => { alive = false; if (timer) clearTimeout(timer); };
-  }, []);
+  }, [isMobile]);
 
   // Lock body scroll while the modal is open.
   useEffect(() => {

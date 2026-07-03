@@ -49,7 +49,7 @@ export default function RegisterPage() {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       await register(form);
-      navigate('/dashboard');
+      navigate('/'); // HomeRedirect routes by persona
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }

@@ -54,7 +54,9 @@ export default function LoginPage() {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       const result = await login(email, password);
-      navigate(result && result.forcePasswordChange ? '/change-password' : '/dashboard');
+      // '/' hits the catch-all HomeRedirect, which routes by persona:
+      // admin → inbox, OiB subscriber → Today, customer → jobs home.
+      navigate(result && result.forcePasswordChange ? '/change-password' : '/');
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }

@@ -57,10 +57,18 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Post-login home per persona (the spec's "auto-take to next step" rule):
+// admins land on the submissions inbox, Office in a Box subscribers on Today,
+// customers on their jobs home.
+function homeFor(user) {
+  if (user?.role === 'admin') return '/admin/submissions';
+  return user?.hasEstimator ? '/office' : '/dashboard';
+}
+
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (user) return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
+  if (user) return <Navigate to={homeFor(user)} replace />;
   return children;
 }
 
@@ -73,13 +81,12 @@ function OiBRoute({ children }) {
   return children;
 }
 
-// Office in a Box subscribers land on Today (/office); everyone else on the
-// BOQ-pipeline dashboard. Used for the catch-all and post-login redirect.
+// Used for the catch-all and post-login redirect.
 function HomeRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
+  return <Navigate to={homeFor(user)} replace />;
 }
 
 // Old bookmark redirects that need to carry the :id through.

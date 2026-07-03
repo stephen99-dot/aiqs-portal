@@ -318,11 +318,13 @@ router.get('/admin/all', (req, res) => {
       SELECT s.id, s.submission_id, s.project_type, s.site_address, s.message, s.file_count, s.file_names,
              s.pipedream_status, s.credits_remaining_after, s.created_at,
              s.actioned_at, s.actioned_by, s.admin_notes, s.project_id, s.drive_link,
+             p.status AS project_status,
              u.id AS user_id,
              u.full_name AS user_name, u.email AS user_email,
              u.company AS user_company, u.phone AS user_phone
       FROM drawing_submissions s
       JOIN users u ON u.id = s.user_id
+      LEFT JOIN projects p ON p.id = s.project_id
       ORDER BY s.created_at DESC
       LIMIT 500
     `).all();

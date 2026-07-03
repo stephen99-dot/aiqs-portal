@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import DeliverablesPanel from '../components/DeliverablesPanel';
+import StateBadge from '../components/StateBadge';
+import { LIFECYCLE, LIFECYCLE_STEPS, lifecycleOf } from '../utils/lifecycle';
 import { ClipboardIcon } from '../components/Icons';
 
 // SVG icons for document types
@@ -21,15 +23,8 @@ const WordIcon = ({ size = 28 }) => (
   </svg>
 );
 
-const STATUS_MAP = {
-  submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', desc: 'Your project has been received. We\'ll begin review shortly.' },
-  in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', desc: 'We\'re reviewing your drawings and project brief.' },
-  in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)', desc: 'Your BOQ is being prepared. We\'ll notify you when it\'s ready.' },
-  completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)', desc: 'Your BOQ pack is complete and ready for download.' },
-  delivered: { label: 'Delivered', color: '#10B981', bg: 'rgba(16,185,129,0.15)', desc: 'Your BOQ pack has been delivered.' },
-};
-
-const STEPS = ['submitted', 'in_review', 'in_progress', 'completed', 'delivered'];
+// The progress tracker walks the five spec lifecycle states — the same five
+// (labels and colours included) as the dashboard rows and the admin inbox.
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
@@ -101,9 +96,11 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const status = STATUS_MAP[project.status] || STATUS_MAP.submitted;
-  const currentStep = STEPS.indexOf(project.status);
+  const state = lifecycleOf(project.status);
+  const currentStep = LIFECYCLE_STEPS.indexOf(state.key);
   const hasDocuments = project.boq_filename || project.findings_filename;
+  // Deliverables are the first thing a customer sees on a delivered job.
+  const deliveredFirst = state.key === 'DELIVERED' || state.key === 'CLOSED';
 
   return (
     <div className="page">
@@ -127,25 +124,27 @@ export default function ProjectDetailPage() {
               <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
             </Link>
           )}
-          <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
-            {status.label}
-          </span>
+          <StateBadge status={project.status} large />
         </div>
       </div>
 
+      {/* Sections use flex order so a DELIVERED/CLOSED job leads with its
+          deliverables — the first thing the customer came for. */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+
       {/* Progress tracker */}
-      <div className="section-card">
+      <div className="section-card" style={{ order: deliveredFirst ? 2 : 0 }}>
         <div className="section-card-header">
           <h2>Progress</h2>
         </div>
         <div className="card-body">
           <div className="progress-track">
-            {STEPS.map((step, i) => {
-              const s = STATUS_MAP[step];
+            {LIFECYCLE_STEPS.map((stepKey, i) => {
+              const s = LIFECYCLE[stepKey];
               const isActive = i <= currentStep;
               const isCurrent = i === currentStep;
               return (
-                <div key={step} className={`progress-step ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''}`}>
+                <div key={stepKey} className={`progress-step ${isActive ? 'active' : ''} ${isCurrent ? 'current' : ''}`}>
                   <div className="step-dot">
                     {isActive && i < currentStep ? (
                       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path d="M5 13l4 4L19 7"/></svg>
@@ -158,13 +157,13 @@ export default function ProjectDetailPage() {
               );
             })}
           </div>
-          <p className="progress-desc">{status.desc}</p>
+          <p className="progress-desc">{state.customerDesc}</p>
         </div>
       </div>
 
       {/* Project description */}
       {project.description && (
-        <div className="section-card">
+        <div className="section-card" style={{ order: deliveredFirst ? 3 : 1 }}>
           <div className="section-card-header">
             <h2>Project Brief</h2>
           </div>
@@ -175,10 +174,12 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Deliverables — files the QS sends back into the customer's portal */}
-      <DeliverablesPanel projectId={id} project={project} />
+      <div style={{ order: deliveredFirst ? 0 : 2 }}>
+        <DeliverablesPanel projectId={id} project={project} />
+      </div>
 
       {/* Documents */}
-      <div className="section-card">
+      <div className="section-card" style={{ order: deliveredFirst ? 1 : 3 }}>
         <div className="section-card-header">
           <h2>Documents</h2>
         </div>
@@ -369,6 +370,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
+      </div>
     </div>
   );
 }

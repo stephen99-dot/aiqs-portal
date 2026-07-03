@@ -4,7 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
-import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
+import OnboardingTour from '../components/OnboardingTour';
+import StateBadge from '../components/StateBadge';
+import { customerCta } from '../utils/lifecycle';
+import useIsMobile from '../utils/useIsMobile';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
@@ -381,18 +384,10 @@ function StatCard({ icon: Icon, iconColor, iconBg, value, label, t, accent }) {
   );
 }
 
-const STATUS_MAP = {
-  submitted:        { label: 'Submitted',        color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-  completed:        { label: 'Completed',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  delivered:        { label: 'Delivered',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  in_progress:      { label: 'In Progress',      color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
-  awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-  in_review:        { label: 'In Review',        color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-};
-
 export default function DashboardPage() {
   const { user } = useAuth();
   const { t } = useTheme();
+  const isMobile = useIsMobile(768);
   const [projects, setProjects] = useState([]);
   const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -469,19 +464,18 @@ export default function DashboardPage() {
       const whatsNewKey = `aiqs_whats_new_v5_${user?.id || 'default'}`;
       try {
         const seen = localStorage.getItem(tourKey);
-        // The stored value is the TOUR_VERSION the user last completed.
-        // Bumping TOUR_VERSION re-shows the tour so existing users see new
-        // features (intake, editable BOQ, AI Memory, Variations).
-        const seenVersion = seen ? parseInt(seen, 10) : 0;
-        if (seenVersion < TOUR_VERSION) {
+        // The tour auto-fires ONCE per user — for genuinely new users, on a
+        // desktop-sized screen. TOUR_VERSION bumps no longer re-run the whole
+        // tour for existing users; feature news goes in the inline What's New
+        // banner instead (dismissible, not a popup).
+        if (!seen && !isMobile) {
           setShowTour(true);
         } else if (!localStorage.getItem(whatsNewKey)) {
-          // Existing user who hasn't seen the latest updates — show What's New banner
           setShowWhatsNew(true);
         }
       } catch {}
     }
-  }, [loading, user?.id]);
+  }, [loading, user?.id, isMobile]);
 
   const needsOnboarding = onboardingStatus
     && !onboardingStatus.completed_at
@@ -661,7 +655,7 @@ export default function DashboardPage() {
         ) : (
           <div className="projects-list">
             {projectList.map(project => {
-              const st = STATUS_MAP[project.status] || STATUS_MAP.submitted;
+              const cta = customerCta(project.status);
               return (
                 <div
                   key={project.id}
@@ -690,25 +684,20 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {project.deliverableCount > 0 && (
-                        <span title="Files from your QS are ready to download" style={{
-                          padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700,
-                          color: '#10B981', background: 'rgba(16,185,129,0.12)',
-                          border: '1px solid rgba(16,185,129,0.3)', whiteSpace: 'nowrap',
-                        }}>
-                          {project.deliverableCount} doc{project.deliverableCount === 1 ? '' : 's'} ready
-                        </span>
-                      )}
-                      <span style={{
-                        padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                        color: st.color, background: st.bg, whiteSpace: 'nowrap',
-                      }}>
-                        {st.label}
-                      </span>
-                      <span className="project-date" style={{ whiteSpace: 'nowrap' }}>
+                      <StateBadge status={project.status} />
+                      <span className="project-date hide-mobile" style={{ whiteSpace: 'nowrap' }}>
                         {new Date(project.created_at).toLocaleDateString('en-GB', {
                           day: 'numeric', month: 'short', year: 'numeric',
                         })}
+                      </span>
+                      {/* The one next action for this job's state */}
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '8px 14px', borderRadius: 8, whiteSpace: 'nowrap',
+                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                        color: '#0A0F1C', fontSize: 12, fontWeight: 700,
+                      }}>
+                        {cta.label} <ArrowRightIcon size={12} color="#0A0F1C" />
                       </span>
                     </div>
                   </Link>

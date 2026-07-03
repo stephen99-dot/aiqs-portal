@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import useIsMobile from '../utils/useIsMobile';
 import {
   XIcon, ArrowRightIcon, SparklesIcon,
   BrainIcon, ClockIcon, SearchIcon, EditIcon, FileTextIcon,
@@ -25,18 +27,27 @@ const UPDATES = [
 
 export default function WhatsNewPopup({ onClose }) {
   const { t, mode } = useTheme();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile(768);
   const isDark = mode === 'dark';
 
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    let seen;
-    try { seen = localStorage.getItem(RELEASE_KEY); } catch (e) {}
-    if (seen) { if (onClose) onClose(); return; }
+    let seen, newUser = false;
+    try {
+      seen = localStorage.getItem(RELEASE_KEY);
+      // Brand-new users get onboarding, not release notes — mark the release
+      // seen so it never fires for them.
+      newUser = !!user?.id && !localStorage.getItem(`aiqs_tour_complete_${user.id}`);
+      if (!seen && newUser) { localStorage.setItem(RELEASE_KEY, '1'); seen = '1'; }
+    } catch (e) {}
+    // Never interrupt a phone mid-task — release notes can wait for desktop.
+    if (seen || isMobile) { if (onClose) onClose(); return; }
     const timer = setTimeout(() => setVisible(true), 900);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, isMobile, user?.id]);
 
   // Lock body scroll while open.
   useEffect(() => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import useIsMobile from '../utils/useIsMobile';
 import { XIcon } from './Icons';
 
 // In-portal feedback survey, shown once per SURVEY_KEY to every signed-in
@@ -14,7 +15,7 @@ import { XIcon } from './Icons';
 const SURVEY_KEY = 'portal_2026_06';
 const SNOOZE_KEY = 'aiqs_survey_snooze_' + SURVEY_KEY;
 const DONE_KEY = 'aiqs_survey_done_' + SURVEY_KEY;
-const SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 const AMBER = '#F59E0B';
 
 function Star({ filled, onClick, onHover, onLeave }) {
@@ -33,6 +34,7 @@ function Star({ filled, onClick, onHover, onLeave }) {
 export default function SurveyPopup() {
   const { t, mode } = useTheme();
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile(768);
   const [visible, setVisible] = useState(false);
   const [stars, setStars] = useState(0);
   const [hoverStars, setHoverStars] = useState(0);
@@ -43,6 +45,8 @@ export default function SurveyPopup() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Never on phones — a builder on site is mid-task, not reviewing software.
+    if (isMobile) return;
     try {
       if (localStorage.getItem(DONE_KEY)) return;
       const snooze = parseInt(localStorage.getItem(SNOOZE_KEY) || '0', 10);
@@ -61,7 +65,7 @@ export default function SurveyPopup() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!visible) return;
