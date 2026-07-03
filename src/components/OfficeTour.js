@@ -437,7 +437,9 @@ export default function OfficeTour({ userId, autoStart }) {
         onClick={start}
         aria-label="Show me around Office in a Box"
         style={{
-          position: 'fixed', left: 16, bottom: 'calc(16px + env(safe-area-inset-bottom))',
+          position: 'fixed', left: 16,
+          // Clears the phone bottom nav (visible under 640px).
+          bottom: isMobile ? 'calc(84px + env(safe-area-inset-bottom))' : 'calc(16px + env(safe-area-inset-bottom))',
           zIndex: 1200, display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 14px', borderRadius: 999, cursor: 'pointer',
           background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DIM})`,
