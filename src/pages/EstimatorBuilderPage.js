@@ -896,7 +896,7 @@ function EstimatorBuilderPageInner() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button onClick={() => updateLine(idx, { qty: Math.max(0, Math.round((num(ln.qty) - 1) * 100) / 100) })}
                             style={{ width: 40, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>−</button>
-                          <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16, textAlign: 'center' }} />
+                          <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={{ ...inputNum(t), minHeight: 44, fontSize: 16, textAlign: 'center' }} />
                           <button onClick={() => updateLine(idx, { qty: Math.round((num(ln.qty) + 1) * 100) / 100 })}
                             style={{ width: 40, minHeight: 44, borderRadius: 10, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 18, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>+</button>
                         </div>
@@ -907,7 +907,7 @@ function EstimatorBuilderPageInner() {
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £{ln.est_rate ? ' (AI guess)' : ''}</div>
-                        <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
+                        <input type="number" inputMode="decimal" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
                           style={{ ...inputNum(t), minHeight: 44, fontSize: 16, color: ln.est_rate ? t.warning : t.text, borderColor: ln.est_rate ? t.warning + '55' : t.border }} />
                       </div>
                     </div>
@@ -986,14 +986,14 @@ function EstimatorBuilderPageInner() {
                         )}
                       </td>
                       <td style={{ ...tdCell, textAlign: 'right' }}>
-                        <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />
+                        <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />
                       </td>
                       <td style={tdCell}>
                         <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })} style={inputInline(t)} />
                       </td>
                       <td style={{ ...tdCell, textAlign: 'right' }}>
                         <input
-                          type="number" step="any"
+                          type="number" inputMode="decimal" step="any"
                           value={ln.rate}
                           onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
                           style={{ ...inputNum(t), color: ln.est_rate ? t.warning : t.text, borderColor: ln.est_rate ? t.warning + '55' : t.border }}
@@ -1115,7 +1115,7 @@ function PctField({ t, label, value, onChange }) {
     <div>
       <label style={lbl(t)}>{label}</label>
       <input
-        type="number" step="any"
+        type="number" inputMode="decimal" step="any"
         value={value}
         onChange={e => onChange(e.target.value)}
         style={input(t)}

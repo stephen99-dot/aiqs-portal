@@ -242,7 +242,7 @@ function ThresholdField({ t, label, value, onChange }) {
     <div>
       <label style={{ display: 'block', color: t.textSecondary, fontSize: 12, marginBottom: 4 }}>{label}</label>
       <input
-        type="number" min="0" step="any"
+        type="number" inputMode="decimal" min="0" step="any"
         value={value ?? ''}
         onChange={e => onChange(e.target.value)}
         style={{

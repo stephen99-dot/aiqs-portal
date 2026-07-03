@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, streamChat } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
+import useIsMobile from '../utils/useIsMobile';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
 import AgentPanel from '../components/AgentPanel';
@@ -36,12 +37,6 @@ const STAGES = [
   { key: 'calc',   text: 'Calculating costs...',       stage: 'price' },
   { key: 'lock',   text: 'Locking quantities...',      stage: 'done' },
 ];
-
-function useIsMobile() {
-  const [v, set] = useState(() => window.innerWidth <= 768);
-  useEffect(() => { const h = () => set(window.innerWidth <= 768); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
-  return v;
-}
 
 // Markdown renderer with QS-appropriate typography. Overrides default HTML
 // components so spacing/styling matches the chat bubble look rather than
@@ -262,7 +257,7 @@ export default function ChatPage() {
   const { mode, t } = useTheme();
   const { user } = useAuth();
   const dark = mode === 'dark';
-  const mobile = useIsMobile();
+  const mobile = useIsMobile(768);
 
   // ── Core state ─────────────────────────────────────────────────────
   const [messages, setMessages]       = useState([]);
@@ -496,7 +491,7 @@ export default function ChatPage() {
 
   // ── Theme colours ──────────────────────────────────────────────────
   // Chat palette derived from the active theme tokens, so the whole chat
-  // re-skins with the selected theme (AI QS / ChatGPT / Claude / Copilot).
+  // follows the AI QS light/dark mode.
   // Status colours (draft/locked/warn) stay semantic so meaning is preserved.
   const c = {
     page: t.bg, side: t.sidebar, sideBorder: t.sidebarBorder, sideHeader: t.sidebar,
@@ -1245,7 +1240,7 @@ export default function ChatPage() {
     )}
 
 
-    <div style={{ height:'calc(100vh - 48px)', display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
+    <div className="chat-shell" style={{ display:'flex', overflow:'hidden', background:c.page, position:'relative' }}>
       <style>{`
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes dot{0%,80%,100%{opacity:0.3;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}

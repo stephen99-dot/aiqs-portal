@@ -2,8 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext();
 
-// ── AI QS palettes (the existing look — preserved verbatim so the default
-// theme is a zero-regression baseline). New themes are layered on top. ──
+// ── AI QS palettes — the portal's two themes: light (default) and dark. ──
 const aiqsDark = {
   name: 'dark',
   '--bg-primary': '#141C2E', '--bg-secondary': '#1A2438', '--bg-card': '#1E2A40',
@@ -46,99 +45,34 @@ const aiqsLight = {
   gradientAccent: 'linear-gradient(135deg, #F59E0B, #D97706)',
 };
 
-// Build a complete palette for a new theme by overlaying a small colour spec on
-// top of the AI QS base (guarantees every token key the app reads still exists).
-function overlay(base, s) {
-  const grad = s.gradient || `linear-gradient(135deg, ${s.accent}, ${s.accentHover || s.accent})`;
-  return {
-    ...base,
-    name: s.name,
-    bg: s.bg, bgAlt: s.bgAlt || s.bg, surface: s.surface, surfaceHover: s.surfaceHover || s.card,
-    card: s.card, cardHover: s.cardHover || s.surface, border: s.border, borderLight: s.borderLight || s.border,
-    text: s.text, textSecondary: s.textSec, textMuted: s.textMuted, textDim: s.textDim || s.textMuted,
-    accent: s.accent, accentHover: s.accentHover || s.accent, accentLight: s.accentLight || s.accent,
-    accentGlow: s.accentGlow || 'rgba(0,0,0,0.06)', accentText: s.accentText,
-    inputBg: s.inputBg || s.surface, userBubble: s.userBubble, userText: s.userText || s.text,
-    sidebar: s.sidebar, sidebarBorder: s.border, gradientAccent: grad,
-    success: s.success || base.success, successBg: s.successBg || base.successBg,
-    warning: s.accent, warningBg: base.warningBg, danger: s.danger || base.danger, dangerBg: base.dangerBg,
-    shadow: s.isDark ? '0 4px 24px rgba(0,0,0,0.35)' : '0 4px 24px rgba(0,0,0,0.07)',
-    shadowSm: s.isDark ? '0 2px 8px rgba(0,0,0,0.25)' : '0 2px 8px rgba(0,0,0,0.05)',
-    // CSS variables consumed by styles.css
-    '--bg-primary': s.bg, '--bg-secondary': s.surface, '--bg-card': s.card, '--bg-card-hover': s.cardHover || s.surface,
-    '--bg-input': s.inputBg || s.surface, '--accent': s.accent, '--accent-bright': s.accentLight || s.accent, '--accent-dim': s.accentHover || s.accent,
-    '--text-primary': s.text, '--text-secondary': s.textSec, '--text-muted': s.textMuted,
-    '--border': s.border, '--border-accent': s.accentGlow || s.border, '--border-input': s.borderLight || s.border,
-    '--danger': s.danger || base.danger, '--success': s.success || base.success,
-    '--gradient-amber': grad, '--shadow-glow': 'none',
-  };
-}
-
-const SPECS = {
-  chatgpt: {
-    label: 'ChatGPT',
-    dark:  { name:'dark', isDark:true, bg:'#212121', surface:'#171717', card:'#2A2A2A', cardHover:'#2F2F2F', border:'#2F2F2F', borderLight:'#3A3A3A', text:'#ECECEC', textSec:'#B4B4B4', textMuted:'#8E8E8E', inputBg:'#2A2A2A', accent:'#FFFFFF', accentHover:'#D9D9D9', accentLight:'#19C37D', accentText:'#0D0D0D', userBubble:'#303030', userText:'#ECECEC', sidebar:'#171717', gradient:'linear-gradient(135deg,#FFFFFF,#E6E6E6)' },
-    light: { name:'light', isDark:false, bg:'#FFFFFF', surface:'#F9F9F9', card:'#FFFFFF', cardHover:'#F4F4F4', border:'#E6E6E6', borderLight:'#D9D9D9', text:'#0D0D0D', textSec:'#4D4D4D', textMuted:'#9A9A9A', inputBg:'#FFFFFF', accent:'#0D0D0D', accentHover:'#000000', accentLight:'#10A37F', accentText:'#FFFFFF', userBubble:'#F4F4F4', userText:'#0D0D0D', sidebar:'#F9F9F9', gradient:'linear-gradient(135deg,#0D0D0D,#000000)' },
-  },
-  claude: {
-    label: 'Claude',
-    dark:  { name:'dark', isDark:true, bg:'#262624', surface:'#1F1E1D', card:'#2F2E2B', cardHover:'#34322E', border:'#3A3935', borderLight:'#45433E', text:'#ECEAE3', textSec:'#B7B4AB', textMuted:'#8F8C83', inputBg:'#2C2B28', accent:'#C96442', accentHover:'#B5573A', accentLight:'#D7855F', accentText:'#FFFFFF', userBubble:'#34322E', userText:'#ECEAE3', sidebar:'#1F1E1D', gradient:'linear-gradient(135deg,#C96442,#B5573A)' },
-    light: { name:'light', isDark:false, bg:'#FAF9F5', surface:'#F0EEE6', card:'#FFFFFF', cardHover:'#F7F5EF', border:'#E4E1D8', borderLight:'#D9D5C9', text:'#211F1B', textSec:'#56544E', textMuted:'#76746C', inputBg:'#FFFFFF', accent:'#C96442', accentHover:'#B5573A', accentLight:'#D7855F', accentText:'#FFFFFF', userBubble:'#F1EFE8', userText:'#211F1B', sidebar:'#EFEDE5', gradient:'linear-gradient(135deg,#C96442,#B5573A)' },
-  },
-  copilot: {
-    label: 'Copilot',
-    dark:  { name:'dark', isDark:true, bg:'#1B1A19', surface:'#242322', card:'#222B36', cardHover:'#2A2B2E', border:'#34322F', borderLight:'#403E3A', text:'#F3F2F1', textSec:'#C8C6C4', textMuted:'#9A9794', inputBg:'#242322', accent:'#4DA8E0', accentHover:'#2AA5F4', accentLight:'#2AD4A8', accentText:'#0B1620', userBubble:'#243447', userText:'#F3F2F1', sidebar:'#242322', gradient:'linear-gradient(135deg,#2AA5F4,#2AD4A8,#8B5CF6)' },
-    light: { name:'light', isDark:false, bg:'#FFFFFF', surface:'#F3F6FB', card:'#FFFFFF', cardHover:'#F5F9FE', border:'#E1E7F0', borderLight:'#D2DBE8', text:'#1B1A19', textSec:'#444341', textMuted:'#616160', inputBg:'#FFFFFF', accent:'#0F6CBD', accentHover:'#0C5A9E', accentLight:'#2AA5F4', accentText:'#FFFFFF', userBubble:'#EAF1FB', userText:'#1B1A19', sidebar:'#F3F6FB', gradient:'linear-gradient(135deg,#2AA5F4,#2AD4A8,#8B5CF6)' },
-  },
-};
-
-// Assemble the full theme registry: aiqs (verbatim) + the three new brands.
-const THEMES = {
-  aiqs:    { label: 'AI QS', dark: aiqsDark, light: aiqsLight },
-  chatgpt: { label: SPECS.chatgpt.label, dark: overlay(aiqsDark, SPECS.chatgpt.dark), light: overlay(aiqsLight, SPECS.chatgpt.light) },
-  claude:  { label: SPECS.claude.label,  dark: overlay(aiqsDark, SPECS.claude.dark),  light: overlay(aiqsLight, SPECS.claude.light) },
-  copilot: { label: SPECS.copilot.label, dark: overlay(aiqsDark, SPECS.copilot.dark), light: overlay(aiqsLight, SPECS.copilot.light) },
-};
-
-export const THEME_LIST = Object.keys(THEMES).map(key => ({ key, label: THEMES[key].label }));
-
-function resolve(theme, mode) {
-  const fam = THEMES[theme] || THEMES.aiqs;
-  return fam[mode] || fam.dark;
-}
-
 export function ThemeProvider({ children }) {
-  // One-time migration onto the refreshed light look (v2): everyone lands on the
-  // clean light theme once, then their own toggle choice is respected from there.
-  const [theme, setThemeState] = useState(() => {
-    try {
-      if (localStorage.getItem('aiqs-ui-v') !== '2') return 'aiqs';
-      return localStorage.getItem('aiqs-brand') || 'aiqs';
-    } catch { return 'aiqs'; }
-  });
   const [mode, setMode] = useState(() => {
     try {
+      // One-time migration onto the refreshed light look (v2): everyone lands on
+      // the clean light theme once, then their own toggle choice is respected.
       if (localStorage.getItem('aiqs-ui-v') !== '2') { localStorage.setItem('aiqs-ui-v', '2'); return 'light'; }
-      return localStorage.getItem('aiqs-theme') || 'light';
+      // Users who had a removed novelty skin keep their light/dark preference —
+      // mode was always stored separately from the retired brand key.
+      localStorage.removeItem('aiqs-brand');
+      return localStorage.getItem('aiqs-theme') === 'dark' ? 'dark' : 'light';
     } catch { return 'light'; }
   });
 
+  const t = mode === 'dark' ? aiqsDark : aiqsLight;
+
   useEffect(() => {
-    try { localStorage.setItem('aiqs-theme', mode); localStorage.setItem('aiqs-brand', theme); } catch {}
-    const palette = resolve(theme, mode);
+    try { localStorage.setItem('aiqs-theme', mode); } catch {}
     const root = document.documentElement;
-    Object.keys(palette).forEach(key => { if (key.startsWith('--')) root.style.setProperty(key, palette[key]); });
-    document.body.style.background = palette['--bg-primary'];
-    document.body.style.color = palette['--text-primary'];
+    Object.keys(t).forEach(key => { if (key.startsWith('--')) root.style.setProperty(key, t[key]); });
+    document.body.style.background = t['--bg-primary'];
+    document.body.style.color = t['--text-primary'];
     document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
-  }, [mode, theme]);
+  }, [mode, t]);
 
   const toggle = () => setMode(m => (m === 'dark' ? 'light' : 'dark'));
-  const setTheme = (name) => { if (THEMES[name]) setThemeState(name); };
-  const t = resolve(theme, mode);
 
   return (
-    <ThemeContext.Provider value={{ t, mode, theme, themes: THEME_LIST, toggle, setMode, setTheme }}>
+    <ThemeContext.Provider value={{ t, mode, isDark: mode === 'dark', toggle }}>
       {children}
     </ThemeContext.Provider>
   );

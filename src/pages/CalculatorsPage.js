@@ -433,7 +433,7 @@ function Field({ t, label, value, onChange, suffix, hint }) {
         transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
       }}>
         <input
-          type="number" step="any"
+          type="number" inputMode="decimal" step="any"
           value={value}
           onChange={e => onChange(e.target.value)}
           onFocus={e => { e.target.parentElement.style.borderColor = t.accent; e.target.parentElement.style.boxShadow = '0 0 0 3px ' + t.accent + '22'; }}

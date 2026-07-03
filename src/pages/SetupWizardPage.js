@@ -212,7 +212,7 @@ function Inner() {
               <div style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{name}</div>
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: t.textMuted }}>£</span>
-                <input type="number" step="5" value={rate}
+                <input type="number" inputMode="decimal" step="5" value={rate}
                   onChange={e => setDayRates({ ...dayRates, [name]: e.target.value })}
                   style={{ ...input, width: 120, paddingLeft: 26, minHeight: 48, fontSize: 16 }} />
               </div>

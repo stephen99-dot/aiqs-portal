@@ -737,11 +737,11 @@ function ItemRow({ it, zebra, c, isDark, warning, editable, editing, onEdit, onC
         <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} style={{ width: '100%', padding: 7, borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', marginBottom: 6 }} placeholder="Description with measurement working" />
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.muted }}>
-            Qty: <input type="number" step="any" value={qty} onChange={e => setQty(Number(e.target.value))} style={{ width: 90, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
+            Qty: <input type="number" inputMode="decimal" step="any" value={qty} onChange={e => setQty(Number(e.target.value))} style={{ width: 90, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
             <span>{it.unit}</span>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.muted }}>
-            Rate override: <input type="number" step="any" value={rate} onChange={e => setRate(e.target.value)} placeholder="auto" style={{ width: 100, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
+            Rate override: <input type="number" inputMode="decimal" step="any" value={rate} onChange={e => setRate(e.target.value)} placeholder="auto" style={{ width: 100, padding: '4px 6px', borderRadius: 5, border: '1px solid ' + c.border, background: c.card, color: c.text, fontSize: 12.5, fontFamily: 'inherit' }} />
           </label>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <button onClick={onCancel} style={{ padding: '5px 12px', borderRadius: 5, background: 'transparent', border: '1px solid ' + c.border, color: c.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>

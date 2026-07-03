@@ -454,7 +454,7 @@ function PriceRowActions({ t, entry, materialUnit, onChanged }) {
   if (editing) {
     return (
       <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-        <input type="number" step="any" value={price} onChange={e => setPrice(e.target.value)} style={{ width: 70, background: t.inputBg, border: '1px solid ' + t.border, color: t.text, borderRadius: 4, padding: '3px 5px', fontSize: 12 }} />
+        <input type="number" inputMode="decimal" step="any" value={price} onChange={e => setPrice(e.target.value)} style={{ width: 70, background: t.inputBg, border: '1px solid ' + t.border, color: t.text, borderRadius: 4, padding: '3px 5px', fontSize: 12 }} />
         <button onClick={save} disabled={busy} style={miniBtn(t, t.accent)}><CheckIcon size={12} /></button>
         <button onClick={() => setEditing(false)} style={miniBtn(t, t.textMuted)}><XIcon size={12} /></button>
       </span>
@@ -511,7 +511,7 @@ function AddPriceForm({ t, material, suppliers, onCancel, onAdded, onSupplierAdd
           <input value={newSupplier} onChange={e => setNewSupplier(e.target.value)} placeholder="e.g. MKM" style={inp(t)} />
         </label>
         <label style={lbl(t)}>Price (£)
-          <input type="number" step="any" value={price} onChange={e => setPrice(e.target.value)} style={inp(t)} />
+          <input type="number" inputMode="decimal" step="any" value={price} onChange={e => setPrice(e.target.value)} style={inp(t)} />
         </label>
         <label style={lbl(t)}>Unit
           <input value={unit} onChange={e => setUnit(e.target.value)} placeholder={material.default_unit || 'each'} style={inp(t)} />
@@ -811,7 +811,7 @@ function BulkScrapeModal({ t, onClose, onDone }) {
 function Modal({ t, title, onClose, children, wide }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 40, overflowY: 'auto' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 22, width: wide ? 640 : 460, maxWidth: '100%', color: t.text }}>
+      <div onClick={e => e.stopPropagation()} className="modal-card" style={{ background: t.card, border: '1px solid ' + t.border, padding: 22, width: wide ? 640 : 460, maxWidth: '100%', color: t.text }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: t.textMuted, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>×</button>

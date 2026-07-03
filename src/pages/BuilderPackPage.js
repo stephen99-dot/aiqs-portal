@@ -757,20 +757,20 @@ export default function BuilderPackPage() {
                                       style={{ ...inputCell, textAlign: 'center' }} />
                                   </td>
                                   <td style={td()}>
-                                    <input type="number" step="0.01" value={it.qty}
+                                    <input type="number" inputMode="decimal" step="0.01" value={it.qty}
                                       onChange={(e) => updateItem(sIdx, iIdx, { qty: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right' }} />
                                   </td>
                                   {hasSplit && (
                                   <td style={td()}>
-                                    <input type="number" step="0.01" value={it.labour}
+                                    <input type="number" inputMode="decimal" step="0.01" value={it.labour}
                                       onChange={(e) => updateItem(sIdx, iIdx, { labour: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right', color: '#3B82F6' }} />
                                   </td>
                                   )}
                                   {hasSplit && (
                                   <td style={td()}>
-                                    <input type="number" step="0.01" value={it.materials}
+                                    <input type="number" inputMode="decimal" step="0.01" value={it.materials}
                                       onChange={(e) => updateItem(sIdx, iIdx, { materials: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right', color: '#A855F7' }} />
                                   </td>
@@ -781,7 +781,7 @@ export default function BuilderPackPage() {
                                   </td>
                                   ) : (
                                   <td style={td()}>
-                                    <input type="number" step="0.01" value={it.total}
+                                    <input type="number" inputMode="decimal" step="0.01" value={it.total}
                                       onChange={(e) => updateItem(sIdx, iIdx, { total: e.target.value })}
                                       style={{ ...inputCell, textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }} />
                                   </td>
@@ -965,19 +965,19 @@ function ClientControls({
           ))}
         </div>
         {prelimsMode === 'flat' && (
-          <input type="number" min="0" step="50" value={prelimsAmount}
+          <input type="number" inputMode="decimal" min="0" step="50" value={prelimsAmount}
             onChange={(e) => setPrelimsAmount(parseFloat(e.target.value) || 0)}
             placeholder="e.g. 2500" style={inputStyle} />
         )}
         {prelimsMode === 'pct' && (
-          <input type="number" min="0" max="20" step="0.5" value={prelimsPct}
+          <input type="number" inputMode="decimal" min="0" max="20" step="0.5" value={prelimsPct}
             onChange={(e) => setPrelimsPct(parseFloat(e.target.value) || 0)}
             placeholder="e.g. 5" style={inputStyle} />
         )}
       </Field>
 
       <Field label="Provisional sums">
-        <input type="number" min="0" step="50" value={provisionalSum}
+        <input type="number" inputMode="decimal" min="0" step="50" value={provisionalSum}
           onChange={(e) => setProvisionalSum(parseFloat(e.target.value) || 0)}
           placeholder="e.g. 200250" style={inputStyle} />
         <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -997,10 +997,10 @@ function ClientControls({
               onChange={(e) => setDayRate((d) => ({ ...d, label: e.target.value }))}
               placeholder="Label (e.g. Site management)" style={inputStyle} />
             <div style={{ display: 'flex', gap: 6 }}>
-              <input type="number" min="0" step="0.5" value={dayRate.days}
+              <input type="number" inputMode="decimal" min="0" step="0.5" value={dayRate.days}
                 onChange={(e) => setDayRate((d) => ({ ...d, days: parseFloat(e.target.value) || 0 }))}
                 placeholder="Days" style={{ ...inputStyle, flex: 1 }} />
-              <input type="number" min="0" step="25" value={dayRate.rate_per_day}
+              <input type="number" inputMode="decimal" min="0" step="25" value={dayRate.rate_per_day}
                 onChange={(e) => setDayRate((d) => ({ ...d, rate_per_day: parseFloat(e.target.value) || 0 }))}
                 placeholder={`${sym}/day`} style={{ ...inputStyle, flex: 1 }} />
             </div>
@@ -1025,7 +1025,7 @@ function ClientControls({
                 <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {s.number}. {s.title}
                 </span>
-                <input type="number" min="0" max="80" step="0.5"
+                <input type="number" inputMode="decimal" min="0" max="80" step="0.5"
                   value={has ? perTradeOhp[s.number] : ''}
                   placeholder={(Math.round(((1 + defaultOhp / 100) * (1 + profit / 100) - 1) * 1e4) / 100) + '%'}
                   onChange={(e) => {

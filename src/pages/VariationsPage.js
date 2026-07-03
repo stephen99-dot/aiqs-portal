@@ -387,8 +387,8 @@ export default function VariationsPage() {
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 28, width: 420, maxWidth: '90vw' }}>
+        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="modal-card" style={{ background: 'var(--bg-card)', padding: 28, width: 420, maxWidth: '90vw' }}>
             <h3 style={{ marginBottom: 12 }}>Reject Variation</h3>
             <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>Provide a reason for rejection (optional):</p>
             <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Scope not agreed, awaiting revised drawings..." style={{ width: '100%', marginBottom: 16, resize: 'vertical' }} />

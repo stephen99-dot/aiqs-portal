@@ -306,11 +306,11 @@ function Inner() {
           </div>
           <div>
             <label style={lbl(t)}>Your markup %</label>
-            <input type="number" step="any" value={ohpPct} onChange={e => setOhpPct(e.target.value)} disabled={readOnly} style={fld(t)} />
+            <input type="number" inputMode="decimal" step="any" value={ohpPct} onChange={e => setOhpPct(e.target.value)} disabled={readOnly} style={fld(t)} />
           </div>
           <div>
             <label style={lbl(t)}>VAT %</label>
-            <input type="number" step="any" value={vatPct} onChange={e => setVatPct(e.target.value)} disabled={readOnly} style={fld(t)} />
+            <input type="number" inputMode="decimal" step="any" value={vatPct} onChange={e => setVatPct(e.target.value)} disabled={readOnly} style={fld(t)} />
           </div>
         </div>
         <label style={{ ...lbl(t), marginTop: 12 }}>Reason for change</label>
@@ -352,7 +352,7 @@ function Inner() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
                       <div>
                         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Qty</div>
-                        <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
+                        <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })}
                           style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
                       </div>
                       <div>
@@ -362,7 +362,7 @@ function Inner() {
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 2 }}>Rate £</div>
-                        <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
+                        <input type="number" inputMode="decimal" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })}
                           style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, padding: '10px', background: t.bg, border: '1px solid ' + t.border, color: t.text, borderRadius: 10, fontSize: 16, outline: 'none' }} />
                       </div>
                     </div>
@@ -426,7 +426,7 @@ function Inner() {
                       )}
                     </td>
                     <td style={{ ...tdCell, textAlign: 'right' }}>
-                      {readOnly ? num(ln.qty) : <input type="number" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />}
+                      {readOnly ? num(ln.qty) : <input type="number" inputMode="decimal" step="any" value={ln.qty} onChange={e => updateLine(idx, { qty: e.target.value })} style={inputNum(t)} />}
                     </td>
                     <td style={tdCell}>
                       {readOnly ? (ln.unit || '') : <input value={ln.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })} style={inputInline(t)} />}
@@ -434,7 +434,7 @@ function Inner() {
                     <td style={{ ...tdCell, textAlign: 'right' }}>
                       {readOnly ? fmt(ln.rate) : (
                         <>
-                          <input type="number" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })} style={{ ...inputNum(t), color: ln.est_rate ? t.warning : t.text }} />
+                          <input type="number" inputMode="decimal" step="any" value={ln.rate} onChange={e => updateLine(idx, { rate: e.target.value, est_rate: false })} style={{ ...inputNum(t), color: ln.est_rate ? t.warning : t.text }} />
                           {ln.est_rate && <div style={{ fontSize: 10, color: t.warning, marginTop: 2 }}>est</div>}
                         </>
                       )}

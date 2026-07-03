@@ -213,7 +213,7 @@ export default function MyRatesPage() {
               </div>
               <div>
                 <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Value</label>
-                <input type="number" placeholder="e.g. 52" value={addForm.value} onChange={e=>setAddForm(f=>({...f,value:e.target.value}))} style={inputStyle} />
+                <input type="number" inputMode="decimal" placeholder="e.g. 52" value={addForm.value} onChange={e=>setAddForm(f=>({...f,value:e.target.value}))} style={inputStyle} />
               </div>
               <div>
                 <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Unit</label>
@@ -280,7 +280,7 @@ export default function MyRatesPage() {
                       </div>
                       <div style={{textAlign:'right'}}>
                         {isEditing ? (
-                          <input type="number" value={editValue} onChange={e=>setEditValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleSave(rate);if(e.key==='Escape')setEditingId(null);}} autoFocus style={{width:'80px',padding:'4px 8px',textAlign:'right',background:c.inputBg,border:'1px solid '+c.accent,borderRadius:'6px',color:c.text,fontSize:'13px',outline:'none'}} />
+                          <input type="number" inputMode="decimal" value={editValue} onChange={e=>setEditValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleSave(rate);if(e.key==='Escape')setEditingId(null);}} autoFocus style={{width:'80px',padding:'4px 8px',textAlign:'right',background:c.inputBg,border:'1px solid '+c.accent,borderRadius:'6px',color:c.text,fontSize:'13px',outline:'none'}} />
                         ) : (
                           <span style={{fontSize:'13px',fontWeight:600,color:c.text,fontFamily:'monospace'}}>{typeof rate.value==='number'?rate.value.toLocaleString('en-GB'):rate.value}</span>
                         )}

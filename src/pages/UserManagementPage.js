@@ -33,8 +33,8 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
   const inp = { width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:isDark?'#0D1320':'#F8FAFC',color:isDark?'#E8EDF5':'#0F172A',fontSize:14,outline:'none',boxSizing:'border-box' };
   const lbl = { display:'block',fontSize:11,fontWeight:600,color:isDark?'#94A3B8':'#64748B',marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em' };
   return (
-    <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:460,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>
+    <div className="modal-overlay" style={{background:'rgba(0,0,0,0.6)'}}>
+      <div className="modal-card" style={{background:isDark?'#131B2E':'#FFF',padding:28,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
           <h2 style={{margin:0,fontSize:18,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}><UserPlus size={20} style={{color:'#2563EB',verticalAlign:'middle',marginRight:8}} />Add User</h2>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:isDark?'#5A6E87':'#94A3B8'}}><X size={18} /></button>
@@ -71,8 +71,8 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
     } catch (err) { alert('Failed: ' + err.message); } finally { setSaving(false); }
   };
   return (
-    <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+border}}>
+    <div className="modal-overlay" style={{background:'rgba(0,0,0,0.6)'}}>
+      <div className="modal-card" style={{background:isDark?'#131B2E':'#FFF',padding:28,maxWidth:400,border:'1px solid '+border}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
           <h3 style={{margin:0,fontSize:16,fontWeight:700,color:text}}><KeyIcon size={16} style={{ verticalAlign: 'middle' }} /> Reset Password</h3>
           <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
@@ -340,11 +340,11 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
                 <div style={lbl}>Credits (purchased / granted)</div>
-                <input type="number" min="0" value={freeCredits} onChange={e => setFreeCredits(e.target.value)} style={{ ...sInp, width: 120 }} />
+                <input type="number" inputMode="decimal" min="0" value={freeCredits} onChange={e => setFreeCredits(e.target.value)} style={{ ...sInp, width: 120 }} />
               </div>
               <div>
                 <div style={lbl}>Bonus</div>
-                <input type="number" min="0" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={{ ...sInp, width: 90 }} />
+                <input type="number" inputMode="decimal" min="0" value={bonusDocs} onChange={e => setBonusDocs(e.target.value)} style={{ ...sInp, width: 90 }} />
               </div>
               <button onClick={saveBoqBalance} disabled={loading === 'boqbal'} style={btn('#2563EB')}>
                 {loading === 'boqbal' ? 'Saving…' : 'Save credits'}
@@ -376,7 +376,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
             <div>
               <div style={lbl}>Message balance</div>
-              <input type="number" min={0} max={99999} value={msgCredits} onChange={e => setMsgCredits(e.target.value)}
+              <input type="number" inputMode="decimal" min={0} max={99999} value={msgCredits} onChange={e => setMsgCredits(e.target.value)}
                 style={{ ...sInp, width: 120, fontSize: 14, fontWeight: 700 }} />
             </div>
             <button onClick={saveMessageCredits} disabled={loading === 'msgcredits'} style={btn('#2563EB')}>
@@ -428,7 +428,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               ].map(({ label, val, set }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, color: muted, width: 110, flexShrink: 0 }}>{label}</span>
-                  <input type="number" min={0} max={9999} value={val} onChange={e => set(e.target.value)}
+                  <input type="number" inputMode="decimal" min={0} max={9999} value={val} onChange={e => set(e.target.value)}
                     style={{ ...sInp, width: 70, fontSize: 14, fontWeight: 700, textAlign: 'center' }} />
                 </div>
               ))}
@@ -1011,8 +1011,8 @@ export default function UserManagementPage({ theme }) {
 
       <AddUserModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onUserAdded={u => { setUsers(prev => [u, ...prev]); }} isDark={isDark} />
       {deleteTarget && (
-        <div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div style={{background:isDark?'#131B2E':'#FFF',borderRadius:16,padding:28,width:'100%',maxWidth:400,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}>
+        <div className="modal-overlay" style={{background:'rgba(0,0,0,0.6)'}}>
+          <div className="modal-card" style={{background:isDark?'#131B2E':'#FFF',padding:28,maxWidth:400,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),textAlign:'center'}}>
             <h3 style={{margin:'0 0 8px',fontSize:17,fontWeight:700,color:isDark?'#E8EDF5':'#0F172A'}}>Delete {deleteTarget.full_name}?</h3>
             <p style={{margin:'0 0 20px',fontSize:13,color:'#EF4444'}}>Deletes all data. Cannot be undone.</p>
             <div style={{display:'flex',gap:10}}>

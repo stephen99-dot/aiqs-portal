@@ -45,8 +45,9 @@ export default function ShareLinkModal({ url, title, message, onClose, t }) {
     >
       <div
         onClick={e => e.stopPropagation()}
+        className="modal-card"
         style={{
-          background: t.card, color: t.text, width: '100%', maxWidth: 480,
+          background: t.card, color: t.text, maxWidth: 480,
           borderRadius: '16px 16px 0 0', padding: '20px 20px 28px',
           border: '1px solid ' + t.border, borderBottom: 'none', boxSizing: 'border-box',
         }}

@@ -80,7 +80,7 @@ export default function AlertSettings() {
         <div key={f.key} style={{ marginBottom: 16 }}>
           <label style={lblStyle}>{f.label}</label>
           <input
-            type="number" min="0" step="any"
+            type="number" inputMode="decimal" min="0" step="any"
             defaultValue={thresholds[f.key] ?? ''}
             onBlur={e => save(f.key, e.target.value)}
             style={inputStyle}

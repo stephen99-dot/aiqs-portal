@@ -6,33 +6,13 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon, CubeIcon,
+  InboxIcon, FolderIcon, PoundIcon, HomeIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
 import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
-
-// Representative swatch colour for each selectable theme.
-const THEME_SWATCH = {
-  aiqs: '#F59E0B',
-  chatgpt: '#10A37F',
-  claude: '#C96442',
-  copilot: 'linear-gradient(135deg,#2AA5F4,#2AD4A8,#8B5CF6)',
-};
-
-// ─── Inline icon for Notetaker (mic) ─────────────────────────────────────────
-function MicIcon({ size = 16, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
-      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
-    </svg>
-  );
-}
 
 // Office in a Box — expandable parent containing the add-on workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -143,7 +123,7 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { t, mode, theme, themes, toggle, setTheme } = useTheme();
+  const { t, mode, toggle } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -243,14 +223,43 @@ export default function Layout() {
     return () => window.removeEventListener('aiqs:open-office-nav', open);
   }, []);
 
-  // Sidebar uses the theme's sidebar token (keeps the AI QS dark navy by
-  // default, but re-skins for ChatGPT / Claude / Copilot themes).
-  const sidebarBg = (theme === 'aiqs' && mode === 'dark')
+  // Sidebar keeps the AI QS dark navy gradient in dark mode; flat surface in light.
+  const sidebarBg = mode === 'dark'
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
     : t.sidebar;
 
+  // Bottom nav (phones): the 4-5 most-used destinations per persona. Only on
+  // top-level list pages — detail pages and editors have their own pinned
+  // action bars, and the chat composer needs the full height.
+  const bottomNavItems = isAdmin
+    ? [
+        { path: '/admin/submissions', label: 'Inbox', Icon: InboxIcon },
+        { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+        { path: '/clients', label: 'Clients', Icon: ClientsIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ]
+    : hasEstimator
+    ? [
+        { path: '/office', label: 'Today', Icon: HomeIcon },
+        { path: '/jobs', label: 'Jobs', Icon: FolderIcon },
+        { path: '/money', label: 'Money', Icon: PoundIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ]
+    : [
+        { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+        { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ];
+  const bottomNavRoutes = [
+    '/dashboard', '/submit-drawings', '/office', '/jobs', '/money', '/clients',
+    '/documents', '/tools', '/calculators', '/materials', '/variations',
+    '/estimator', '/pipeline', '/my-rates', '/ai-memory', '/branding',
+    '/admin', '/admin/users', '/admin/submissions',
+  ];
+  const showBottomNav = bottomNavRoutes.includes(location.pathname);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
+    <div className="app-shell" style={{ background: t.bg }}>
 
       {/* ── Mobile header ── */}
       <header className="mobile-header-bar" style={{
@@ -304,7 +313,7 @@ export default function Layout() {
         className={`sidebar-panel ${mobileOpen ? 'open' : ''}`}
         data-tour="sidebar-nav"
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, width: 240,
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 'var(--sidebar-width)',
           background: sidebarBg,
           borderRight: `1px solid ${t.border}`,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -463,39 +472,7 @@ export default function Layout() {
             </div>
           </div>
 
-          {/* Theme picker — pick the overall look. Each theme is shown with its
-              name (a labelled chip) so it's clear without hovering. */}
-          <div style={{ padding: '4px 12px 8px' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: t.textMuted, marginBottom: 7, letterSpacing: '0.02em' }}>Theme</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              {themes.map(th => {
-                const active = theme === th.key;
-                return (
-                  <button
-                    key={th.key}
-                    onClick={() => setTheme(th.key)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 7,
-                      padding: '10px 9px', minHeight: 40, borderRadius: 8, cursor: 'pointer', width: '100%',
-                      background: active ? t.surfaceHover : 'transparent',
-                      border: `1px solid ${active ? t.accent : t.border}`,
-                      color: t.text, fontSize: 12, fontWeight: active ? 700 : 500,
-                      fontFamily: 'inherit', textAlign: 'left',
-                    }}
-                  >
-                    <span style={{
-                      width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                      background: THEME_SWATCH[th.key] || t.accent,
-                      border: `1px solid ${t.border}`,
-                    }} />
-                    {th.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Theme toggle */}
+          {/* Light/dark toggle */}
           <button onClick={toggle} style={{
             display: 'flex', alignItems: 'center', gap: 10,
             width: '100%', padding: '8px 12px', borderRadius: 8,
@@ -533,13 +510,31 @@ export default function Layout() {
       {/* ── Main content ── */}
       <main style={{
         flex: 1,
-        marginLeft: 240,
-        minHeight: '100vh',
+        marginLeft: 'var(--sidebar-width)',
         background: t.bg,
         transition: 'background 0.2s',
-      }} className="main-content">
+      }} className={`main-content${showBottomNav ? ' has-bottom-nav' : ''}`}>
         <Outlet />
       </main>
+
+      {/* ── Bottom nav (phones) ── */}
+      {showBottomNav && (
+        <nav className="bottom-nav" aria-label="Primary">
+          {bottomNavItems.map(item => {
+            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+            return (
+              <NavLink key={item.path} to={item.path} className={`bottom-nav-item${active ? ' active' : ''}`}>
+                <item.Icon size={20} color="currentColor" />
+                {item.label}
+              </NavLink>
+            );
+          })}
+          <button type="button" className="bottom-nav-item" onClick={() => setMobileOpen(true)}>
+            <MenuIcon size={20} color="currentColor" />
+            More
+          </button>
+        </nav>
+      )}
 
       {/* What's new — announce chatbot updates to every user, once per release */}
       <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />

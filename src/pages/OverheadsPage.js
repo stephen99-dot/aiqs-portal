@@ -151,11 +151,11 @@ function Inner() {
         <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 20 }}>
           <div style={{ color: t.text, fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Days you can work</div>
           <label style={lbl(t)}>Working days / month</label>
-          <input type="number" step="any" value={workingDays} onChange={e => { setSavedAt(null); setWorkingDays(e.target.value); }} style={fld(t)} />
+          <input type="number" inputMode="decimal" step="any" value={workingDays} onChange={e => { setSavedAt(null); setWorkingDays(e.target.value); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Hours / day</label>
-          <input type="number" step="any" value={workingHours} onChange={e => { setSavedAt(null); setWorkingHours(e.target.value); }} style={fld(t)} />
+          <input type="number" inputMode="decimal" step="any" value={workingHours} onChange={e => { setSavedAt(null); setWorkingHours(e.target.value); }} style={fld(t)} />
           <label style={lbl(t, 12)}>Target margin %</label>
-          <input type="number" step="any" value={targetMargin} onChange={e => { setSavedAt(null); setTargetMargin(e.target.value); }} placeholder="e.g. 15" style={fld(t)} />
+          <input type="number" inputMode="decimal" step="any" value={targetMargin} onChange={e => { setSavedAt(null); setTargetMargin(e.target.value); }} placeholder="e.g. 15" style={fld(t)} />
 
           <div style={{ borderTop: '1px solid ' + t.border, marginTop: 16, paddingTop: 14 }}>
             <BigStat t={t} label="Total monthly overhead" value={fmt(totals.total)} />
