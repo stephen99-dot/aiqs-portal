@@ -187,7 +187,7 @@ function Field({ t, field, value, onChange }) {
     return (
       <div style={row}>
         <FieldLabel t={t} field={field} required={required} />
-        <input type="number" step="any" value={v} onChange={e => onChange(e.target.value)} style={fld(t)} />
+        <input type="number" inputMode="decimal" step="any" value={v} onChange={e => onChange(e.target.value)} style={fld(t)} />
       </div>
     );
   }

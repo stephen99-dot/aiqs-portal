@@ -952,7 +952,7 @@ function Builder3DInner() {
   const numberField = (label, key, opts = {}) => (
     <label style={{ display: 'block', marginBottom: 12 }}>
       <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>{label}</span>
-      <input type="number" value={active[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
+      <input type="number" inputMode="decimal" value={active[key]} onChange={set(key)} min={opts.min} max={opts.max} step={opts.step || 1}
         style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
     </label>
   );
@@ -1117,11 +1117,11 @@ function Builder3DInner() {
           <div style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: t.textSecondary, margin: '8px 0 12px' }}>Markup (project)</div>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>OH&P (%)</span>
-            <input type="number" value={ohpPct} min={0} max={60} onChange={(e) => setOhpPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+            <input type="number" inputMode="decimal" value={ohpPct} min={0} max={60} onChange={(e) => setOhpPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 12, color: t.textSecondary, display: 'block', marginBottom: 4 }}>VAT (%)</span>
-            <input type="number" value={vatPct} min={0} max={25} onChange={(e) => setVatPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
+            <input type="number" inputMode="decimal" value={vatPct} min={0} max={25} onChange={(e) => setVatPct(Number(e.target.value))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.surface, color: t.text, fontSize: 14 }} />
           </label>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: t.text, cursor: 'pointer' }}>

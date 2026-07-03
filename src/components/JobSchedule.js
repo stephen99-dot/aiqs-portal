@@ -356,7 +356,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
                   />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
-                      type="number" min="1" step="1" defaultValue={task.duration_days}
+                      type="number" inputMode="decimal" min="1" step="1" defaultValue={task.duration_days}
                       onBlur={e => { const v = parseInt(e.target.value, 10); if (v >= 1 && v !== task.duration_days) patchTask(task.id, { duration_days: v }, true); }}
                       style={{ ...input, width: 56, minHeight: 32, padding: '4px 8px' }}
                     />
@@ -404,7 +404,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(120px,1fr) minmax(100px,0.8fr) 70px auto', gap: 8, marginTop: 14 }}>
         <input value={newTask.name} onChange={e => setNewTask({ ...newTask, name: e.target.value })} placeholder="New task" style={input} />
         <input value={newTask.phase} onChange={e => setNewTask({ ...newTask, phase: e.target.value })} placeholder="Phase (optional)" style={input} />
-        <input type="number" min="1" value={newTask.duration_days} onChange={e => setNewTask({ ...newTask, duration_days: e.target.value.replace(/[^0-9]/g, '') })} placeholder="days" style={input} />
+        <input type="number" inputMode="decimal" min="1" value={newTask.duration_days} onChange={e => setNewTask({ ...newTask, duration_days: e.target.value.replace(/[^0-9]/g, '') })} placeholder="days" style={input} />
         <AsyncButton onClick={addTask} busyLabel="Adding…" style={primaryBtn}>+ Add</AsyncButton>
       </div>
       <div style={{ color: t.textMuted, fontSize: 11.5, marginTop: 8 }}>

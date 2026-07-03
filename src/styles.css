@@ -1,7 +1,6 @@
 /* === AI QS — Customer Portal Styles === */
 /* === Theme-aware with CSS variable system === */
-
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Instrument+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Fonts are loaded once from public/index.html. */
 
 :root {
   /* Clean, light, site-friendly default (the design-system refresh). Pages read
@@ -45,9 +44,18 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  min-height: 100dvh; /* dynamic viewport — tracks mobile browser toolbars */
   transition: background 0.3s ease, color 0.3s ease;
 }
-#root { min-height: 100vh; }
+#root { min-height: 100vh; min-height: 100dvh; }
+
+/* App shell (Layout.js). dvh fallback pattern: browsers without dvh keep vh. */
+.app-shell { display: flex; min-height: 100vh; min-height: 100dvh; }
+.main-content { min-height: 100vh; min-height: 100dvh; }
+
+/* Chat page shell — the message list scrolls inside this, the composer stays
+   pinned. dvh keeps the composer above mobile browser toolbars / keyboard. */
+.chat-shell { height: calc(100vh - 48px); height: calc(100dvh - 48px); }
 
 /* --- TRANSITIONS --- */
 .page, .stat-card, .section-card, .section-card-header, .auth-card,
@@ -72,7 +80,7 @@ body {
 
 /* --- LOADING SCREEN --- */
 .loading-screen {
-  min-height: 100vh; display: flex; flex-direction: column;
+  min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 16px;
   background: var(--bg-primary);
 }
@@ -96,7 +104,7 @@ body {
 
 /* --- AUTH PAGES --- */
 .auth-page {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
   padding: 24px; position: relative; overflow: hidden; background: var(--bg-primary);
 }
 .auth-bg-pattern {
@@ -215,8 +223,37 @@ body {
 .btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* --- APP LAYOUT --- */
-.app-layout { display: flex; min-height: 100vh; }
+.app-layout { display: flex; min-height: 100vh; min-height: 100dvh; }
 .mobile-header-bar { display: none !important; }
+
+/* --- BOTTOM NAV (phones only — see media query) --- */
+.bottom-nav { display: none; }
+.bottom-nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; min-height: 52px; padding: 6px 4px;
+  border: none; background: none; cursor: pointer; text-decoration: none;
+  color: var(--text-muted); font-family: var(--font-body);
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.01em;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-nav-item.active { color: var(--accent); }
+
+/* --- MODALS / SHEETS --- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(15,23,42,0.55); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); width: 100%; max-width: 520px;
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto;
+}
+
+/* --- STICKY FIRST COLUMN (scrollable tables) --- */
+.sticky-first-col th:first-child, .sticky-first-col td:first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--bg-card);
+}
 
 /* --- PAGE STYLES --- */
 .page { padding: 32px 36px; max-width: 960px; background: var(--bg-primary); }
@@ -510,6 +547,7 @@ body {
     grid-template-columns: 1fr 80px !important;
     padding: 8px 14px !important;
   }
+  .rates-table-row, .projects-table-row { min-height: 44px; align-items: center; }
 
   /* Admin tables: horizontal scroll wrapper */
   .admin-table-scroll {
@@ -533,10 +571,18 @@ body {
   /* Any raw <table> becomes horizontally scrollable rather than forcing the
      page wide. Wrapping the table in .table-responsive is preferred, but this
      catches the rest. */
-  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Tables that already sit in their own scroll wrapper (.sticky-first-col)
+     keep table layout so their sticky first column works. */
+  table:not(.sticky-first-col) { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
   /* Generous tap targets — Apple/Google guidance is 44px minimum. */
-  button, a.btn-primary, a.btn-secondary, .btn-primary, .btn-secondary { min-height: 44px; }
+  button, a.btn-primary, a.btn-secondary, .btn-primary, .btn-secondary,
+  .sidebar-panel nav a > div, .file-item, select { min-height: 44px; }
+  .sidebar-panel nav { gap: 4px !important; }
+  .form-actions { gap: 12px; }
+
+  /* Chat: mobile header (56px) replaces the desktop offset. */
+  .chat-shell { height: calc(100vh - 56px); height: calc(100dvh - 56px); }
 
   /* iOS zooms the whole page in when you focus an input smaller than 16px —
      the #1 cause of a form feeling "not optimised" on a phone. Force every
@@ -548,6 +594,35 @@ body {
 
   /* Modals/dialogs: keep them inside the viewport with room to scroll. */
   .modal-card, .dialog-card { max-width: calc(100vw - 24px) !important; max-height: 90vh; overflow-y: auto; }
+}
+
+/* === RESPONSIVE — SMALL PHONES (max-width: 640px) === */
+@media (max-width: 640px) {
+  /* Bottom nav: the 4-5 most-used destinations per persona. */
+  .bottom-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 250;
+    background: var(--bg-secondary); border-top: 1px solid var(--border);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+  .has-bottom-nav { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .has-bottom-nav .chat-shell {
+    height: calc(100vh - 56px - 60px - env(safe-area-inset-bottom));
+    height: calc(100dvh - 56px - 60px - env(safe-area-inset-bottom));
+  }
+
+  /* Modals become bottom sheets on phones. !important so the rules win over
+     each modal's bespoke inline styles without rewriting them all. */
+  .modal-overlay {
+    padding: 0 !important;
+    display: flex !important; align-items: flex-end !important; justify-content: center !important;
+  }
+  .modal-card {
+    max-width: 100% !important; width: 100% !important;
+    max-height: calc(100dvh - 40px) !important; overflow-y: auto !important;
+    border-radius: 16px 16px 0 0 !important;
+    border-left: none !important; border-right: none !important; border-bottom: none !important;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important;
+  }
 }
 
 /* === RESPONSIVE — TABLET (max-width: 1024px) === */

@@ -272,7 +272,7 @@ export default function AIMemoryPage() {
             <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
               Contingency %
               <input
-                type="number" min="0" max="100" step="0.5"
+                type="number" inputMode="decimal" min="0" max="100" step="0.5"
                 value={prefs.contingency_pct}
                 onChange={e => setPrefs(p => ({ ...p, contingency_pct: e.target.value }))}
                 style={{
@@ -284,7 +284,7 @@ export default function AIMemoryPage() {
             <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
               Overheads &amp; profit %
               <input
-                type="number" min="0" max="100" step="0.5"
+                type="number" inputMode="decimal" min="0" max="100" step="0.5"
                 value={prefs.ohp_pct}
                 onChange={e => setPrefs(p => ({ ...p, ohp_pct: e.target.value }))}
                 style={{

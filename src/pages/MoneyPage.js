@@ -508,7 +508,7 @@ function Inner() {
               <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input style={{ ...input, flex: 2 }} placeholder="e.g. Van + fuel" value={li.name}
                   onChange={e => { const next = [...ohItems]; next[idx] = { ...li, name: e.target.value }; setOhItems(next); setOhTouched(true); }} />
-                <input style={{ ...input, flex: 1 }} type="number" step="any" placeholder="£/month" value={li.amount}
+                <input style={{ ...input, flex: 1 }} type="number" inputMode="decimal" step="any" placeholder="£/month" value={li.amount}
                   onChange={e => { const next = [...ohItems]; next[idx] = { ...li, amount: e.target.value }; setOhItems(next); setOhTouched(true); }} />
                 <button onClick={() => { setOhItems(ohItems.filter((_, i) => i !== idx)); setOhTouched(true); }}
                   style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 18, minWidth: 36 }}>×</button>
@@ -519,11 +519,11 @@ function Inner() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textSecondary, marginBottom: 4 }}>Days you work a month</div>
-                <input style={input} type="number" min="1" max="31" value={ohDays} onChange={e => { setOhDays(e.target.value); setOhTouched(true); }} />
+                <input style={input} type="number" inputMode="decimal" min="1" max="31" value={ohDays} onChange={e => { setOhDays(e.target.value); setOhTouched(true); }} />
               </div>
               <div>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textSecondary, marginBottom: 4 }}>Hours a day</div>
-                <input style={input} type="number" min="1" max="16" value={ohHours} onChange={e => { setOhHours(e.target.value); setOhTouched(true); }} />
+                <input style={input} type="number" inputMode="decimal" min="1" max="16" value={ohHours} onChange={e => { setOhHours(e.target.value); setOhTouched(true); }} />
               </div>
             </div>
             <button onClick={saveOverheads} disabled={!ohTouched || ohSaving} style={{ ...primaryBtn, opacity: ohTouched ? 1 : 0.5, width: '100%' }}>

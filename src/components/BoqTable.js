@@ -212,7 +212,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
 
               {isOpen && (
                 <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <table style={{ width: '100%', minWidth: isMobile ? 420 : undefined, borderCollapse: 'collapse', fontSize: 12 }}>
+                <table className="sticky-first-col" style={{ width: '100%', minWidth: isMobile ? 420 : undefined, borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.015)' }}>
                       <th style={{ textAlign: 'left',  padding: '6px 10px', color: c.textSub, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Item</th>
@@ -252,7 +252,7 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                           >
                             {isEditing ? (
                               <input
-                                type="number"
+                                type="number" inputMode="decimal"
                                 step="0.01"
                                 min="0"
                                 autoFocus

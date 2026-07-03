@@ -6,6 +6,7 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon, CubeIcon,
+  InboxIcon, FolderIcon, PoundIcon, HomeIcon,
 } from './Icons';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
@@ -227,8 +228,38 @@ export default function Layout() {
     ? 'linear-gradient(180deg, #0A0F1C 0%, #0D1424 100%)'
     : t.sidebar;
 
+  // Bottom nav (phones): the 4-5 most-used destinations per persona. Only on
+  // top-level list pages — detail pages and editors have their own pinned
+  // action bars, and the chat composer needs the full height.
+  const bottomNavItems = isAdmin
+    ? [
+        { path: '/admin/submissions', label: 'Inbox', Icon: InboxIcon },
+        { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+        { path: '/clients', label: 'Clients', Icon: ClientsIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ]
+    : hasEstimator
+    ? [
+        { path: '/office', label: 'Today', Icon: HomeIcon },
+        { path: '/jobs', label: 'Jobs', Icon: FolderIcon },
+        { path: '/money', label: 'Money', Icon: PoundIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ]
+    : [
+        { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+        { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
+        { path: '/chat', label: 'Chat', Icon: ChatIcon },
+      ];
+  const bottomNavRoutes = [
+    '/dashboard', '/submit-drawings', '/office', '/jobs', '/money', '/clients',
+    '/documents', '/tools', '/calculators', '/materials', '/variations',
+    '/estimator', '/pipeline', '/my-rates', '/ai-memory', '/branding',
+    '/admin', '/admin/users', '/admin/submissions',
+  ];
+  const showBottomNav = bottomNavRoutes.includes(location.pathname);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: t.bg }}>
+    <div className="app-shell" style={{ background: t.bg }}>
 
       {/* ── Mobile header ── */}
       <header className="mobile-header-bar" style={{
@@ -282,7 +313,7 @@ export default function Layout() {
         className={`sidebar-panel ${mobileOpen ? 'open' : ''}`}
         data-tour="sidebar-nav"
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, width: 240,
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 'var(--sidebar-width)',
           background: sidebarBg,
           borderRight: `1px solid ${t.border}`,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -479,13 +510,31 @@ export default function Layout() {
       {/* ── Main content ── */}
       <main style={{
         flex: 1,
-        marginLeft: 240,
-        minHeight: '100vh',
+        marginLeft: 'var(--sidebar-width)',
         background: t.bg,
         transition: 'background 0.2s',
-      }} className="main-content">
+      }} className={`main-content${showBottomNav ? ' has-bottom-nav' : ''}`}>
         <Outlet />
       </main>
+
+      {/* ── Bottom nav (phones) ── */}
+      {showBottomNav && (
+        <nav className="bottom-nav" aria-label="Primary">
+          {bottomNavItems.map(item => {
+            const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+            return (
+              <NavLink key={item.path} to={item.path} className={`bottom-nav-item${active ? ' active' : ''}`}>
+                <item.Icon size={20} color="currentColor" />
+                {item.label}
+              </NavLink>
+            );
+          })}
+          <button type="button" className="bottom-nav-item" onClick={() => setMobileOpen(true)}>
+            <MenuIcon size={20} color="currentColor" />
+            More
+          </button>
+        </nav>
+      )}
 
       {/* What's new — announce chatbot updates to every user, once per release */}
       <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />

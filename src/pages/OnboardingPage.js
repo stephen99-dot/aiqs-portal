@@ -128,7 +128,7 @@ export default function OnboardingPage() {
   const numberInput = (key, placeholder) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <input
-        type="number"
+        type="number" inputMode="decimal"
         min="0" max="100" step="0.5"
         value={answers[key] || ''}
         placeholder={placeholder}
