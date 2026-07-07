@@ -471,10 +471,26 @@ router.post('/jobs/from-project', async (req, res) => {
     const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?')
       .get(b.project_id || '', req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found.' });
-    if (!project.boq_filename) return res.status(400).json({ error: 'That project has no BOQ yet — wait for it to be delivered.' });
+
+    // Resolve the BOQ file. Prefer the synced projects.boq_filename, but fall
+    // back to the latest delivered BOQ deliverable when the column was never
+    // populated (older uploads, or a BOQ sent alongside other docs). Self-heal
+    // the column when we recover it so the rest of the portal stays consistent.
+    let boqFilename = project.boq_filename;
+    if (!boqFilename) {
+      const del = db.prepare(
+        "SELECT filename FROM project_deliverables WHERE project_id = ? AND kind = 'boq' AND is_latest = 1 "
+        + "AND (filename LIKE '%.xlsx' OR filename LIKE '%.xls') ORDER BY version DESC, created_at DESC LIMIT 1"
+      ).get(project.id);
+      if (del && del.filename) {
+        boqFilename = del.filename;
+        try { db.prepare('UPDATE projects SET boq_filename = ? WHERE id = ? AND (boq_filename IS NULL OR boq_filename = \'\')').run(boqFilename, project.id); } catch (e) {}
+      }
+    }
+    if (!boqFilename) return res.status(400).json({ error: 'That project has no BOQ yet — wait for it to be delivered.' });
 
     const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
-    const filePath = path.join(DATA_DIR, 'outputs', project.boq_filename);
+    const filePath = path.join(DATA_DIR, 'outputs', boqFilename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server.' });
 
     const parsed = await parseBOQ(filePath);
@@ -574,7 +590,7 @@ router.post('/jobs/from-project', async (req, res) => {
         (b.client_email || '').toString().slice(0, 200) || null,
         project.title || 'Quote from BOQ', project.project_type || null,
         project.currency === 'EUR' ? 'EUR' : 'GBP',
-        'Imported from portal BOQ: ' + project.boq_filename,
+        'Imported from portal BOQ: ' + boqFilename,
         round2(net), 0, 0, contPct, round2(cont), vatPct, round2(vat),
         round2(beforeVat + vat), 0, 0,
         'draft', null, quoteNumber, jobId, clientId

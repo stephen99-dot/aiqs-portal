@@ -232,22 +232,28 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
     // Wire the upload back into the project so the Builder Pack and the
     // Findings editor work for manually-sent docs (i.e. when the QS uploads
     // a hand-built BOQ.xlsx instead of generating one through the chat).
+    // Scan the WHOLE batch — not just the last file — so a BOQ that was
+    // uploaded alongside other docs (findings, drawings) still gets wired up.
+    // Relying on inserted[last] silently dropped boq_filename whenever the
+    // .xlsx wasn't the final file, which then hid the "Got a BOQ?" quote
+    // starter from the customer even though the BOQ had been delivered.
     try {
-      const latest = inserted[inserted.length - 1];
-      if (latest && latest.kind === 'boq' && /\.xlsx?$/i.test(latest.filename)) {
+      const boqXlsx = inserted.find((x) => x.kind === 'boq' && /\.xlsx?$/i.test(x.filename));
+      if (boqXlsx) {
         db.prepare(
           'UPDATE projects SET boq_filename = ?, status = CASE WHEN status IN (?, ?) THEN ? ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-        ).run(latest.filename, 'submitted', 'in_review', 'completed', projectId);
+        ).run(boqXlsx.filename, 'submitted', 'in_review', 'completed', projectId);
       }
-      if (latest && latest.kind === 'findings' && /\.docx?$/i.test(latest.filename)) {
+      const findingsDoc = inserted.find((x) => x.kind === 'findings' && /\.docx?$/i.test(x.filename));
+      if (findingsDoc) {
         db.prepare(
           'UPDATE projects SET findings_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-        ).run(latest.filename, projectId);
+        ).run(findingsDoc.filename, projectId);
 
         // Best-effort: extract the narrative from the .docx so the customer
         // can edit it on the Findings page. If parsing fails we still leave
         // the file in place and the editor will show "no findings stored".
-        await seedFindingsFromDocx(projectId, path.join(outputsDir, latest.filename));
+        await seedFindingsFromDocx(projectId, path.join(outputsDir, findingsDoc.filename));
       }
     } catch (syncErr) {
       console.error('[Deliverables] sync to project error:', syncErr);

@@ -1331,7 +1331,15 @@ router.get('/projects', authMiddleware, (req, res) => {
   const projects = db.prepare(`
     SELECT p.*,
            COUNT(DISTINCT f.id) AS file_count,
-           COUNT(DISTINCT CASE WHEN d.is_latest = 1 THEN d.id END) AS deliverable_count
+           COUNT(DISTINCT CASE WHEN d.is_latest = 1 THEN d.id END) AS deliverable_count,
+           (SELECT d2.filename
+              FROM project_deliverables d2
+             WHERE d2.project_id = p.id
+               AND d2.kind = 'boq'
+               AND d2.is_latest = 1
+               AND (d2.filename LIKE '%.xlsx' OR d2.filename LIKE '%.xls')
+             ORDER BY d2.version DESC, d2.created_at DESC
+             LIMIT 1) AS boq_deliverable_filename
       FROM projects p
       LEFT JOIN files f ON f.project_id = p.id
       LEFT JOIN project_deliverables d ON d.project_id = p.id
@@ -1341,6 +1349,12 @@ router.get('/projects', authMiddleware, (req, res) => {
   `).all(req.user.id);
   res.json(projects.map(p => ({
     ...p,
+    // Surface a delivered BOQ even when projects.boq_filename was never synced
+    // (older uploads, or a BOQ sent alongside other docs). The "Got a BOQ?"
+    // quote starter keys off this, so falling back to the delivered .xlsx keeps
+    // the picker visible for every project that actually has a BOQ.
+    boq_filename: p.boq_filename || p.boq_deliverable_filename || null,
+    boq_deliverable_filename: undefined,
     fullName: undefined,
     fileCount: p.file_count,
     deliverableCount: p.deliverable_count,
