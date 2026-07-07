@@ -13,11 +13,10 @@ import {
 } from '../components/Icons';
 
 const STRIPE = {
-  starter_payg:    'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
-  professional:    'https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04',  // £347/mo Professional
-  premium:         'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // £447/mo Premium
-  extra_sub:       'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',  // £79 extra BOQ (subscribers)
-  upgrade_premium: 'https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05',  // upgrade to premium
+  starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
+  boq_5_pack:   'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h',  // £349 5-BOQ bundle
+  boq_10_pack:  'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f',  // £580 10-BOQ bundle
+  extra_sub:    'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',  // £79 extra BOQ (legacy subscribers)
 };
 
 function UsageBar({ usage, t, user }) {
@@ -63,21 +62,21 @@ function UsageBar({ usage, t, user }) {
           }}>
             <ZapIcon size={11} color="#0A0F1C" /> £150 per BOQ
           </a>
-          <a href={STRIPE.professional} target="_blank" rel="noopener noreferrer" style={{
+          <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 12px', borderRadius: 7,
             background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
             fontSize: 12, fontWeight: 600, color: t.accent, textDecoration: 'none',
           }}>
-            <StarIcon size={11} color={t.accent} /> Pro — £347/mo
+            <StarIcon size={11} color={t.accent} /> 5 BOQs — £349
           </a>
-          <a href={STRIPE.premium} target="_blank" rel="noopener noreferrer" style={{
+          <a href={withUserRef(STRIPE.boq_10_pack, user)} target="_blank" rel="noopener noreferrer" style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             padding: '6px 12px', borderRadius: 7,
             background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)',
             fontSize: 12, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
           }}>
-            <CrownIcon size={11} color="#A78BFA" /> Premium — £447/mo
+            <CrownIcon size={11} color="#A78BFA" /> 10 BOQs — £580
           </a>
         </div>
       </div>
@@ -134,17 +133,24 @@ function UsageBar({ usage, t, user }) {
             <div style={{ fontSize: 11.5, color: t.textMuted }}>Buy more BOQs to continue</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {plan === 'professional' && (
-              <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
-                padding: '7px 14px', borderRadius: 7,
-                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                color: '#fff', fontSize: 12, fontWeight: 600,
-                textDecoration: 'none', whiteSpace: 'nowrap',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}>
-                <CrownIcon size={12} color="#fff" /> Upgrade to Premium — £447/mo
-              </a>
-            )}
+            <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+              padding: '7px 14px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+              color: '#0A0F1C', fontSize: 12, fontWeight: 700,
+              textDecoration: 'none', whiteSpace: 'nowrap',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}>
+              <StarIcon size={12} color="#0A0F1C" /> Buy 5 BOQs — £349
+            </a>
+            <a href={withUserRef(STRIPE.boq_10_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+              padding: '7px 14px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+              color: '#fff', fontSize: 12, fontWeight: 600,
+              textDecoration: 'none', whiteSpace: 'nowrap',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}>
+              <CrownIcon size={12} color="#fff" /> Buy 10 BOQs — £580
+            </a>
             <a
               href={withUserRef(plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg, user)}
               target="_blank" rel="noopener noreferrer"
@@ -167,14 +173,12 @@ function UsageBar({ usage, t, user }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
         }}>
           <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
-          {plan === 'professional' && (
-            <a href={STRIPE.upgrade_premium} target="_blank" rel="noopener noreferrer" style={{
-              fontSize: 11.5, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-            }}>
-              Upgrade to Premium <ArrowRightIcon size={11} color="#A78BFA" />
-            </a>
-          )}
+          <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+            fontSize: 11.5, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+          }}>
+            Save with a 5-BOQ bundle — £349 <ArrowRightIcon size={11} color="#A78BFA" />
+          </a>
         </div>
       )}
     </div>

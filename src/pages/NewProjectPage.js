@@ -22,7 +22,9 @@ const PROJECT_TYPES = [
   'Other',
 ];
 
-const STRIPE_PAYG_LINK = 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g';
+const STRIPE_PAYG_LINK = 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g';   // £150 single BOQ
+const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';    // £349 5-BOQ bundle
+const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';   // £580 10-BOQ bundle
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
@@ -36,9 +38,8 @@ function getFileIcon(name) {
   return map[ext] || PaperclipIcon;
 }
 
-function LimitReachedModal({ usage, t, onClose }) {
+function LimitReachedModal({ usage, t, user, onClose }) {
   const isSubscriber = usage.plan === 'professional' || usage.plan === 'premium';
-  const isProfessional = usage.plan === 'professional';
 
   return (
     <div className="modal-overlay" style={{
@@ -108,61 +109,57 @@ function LimitReachedModal({ usage, t, onClose }) {
             </span>
           </a>
 
-          {/* Go Professional — show for non-subscribers */}
-          {!isSubscriber && (
-            <a href="https://buy.stripe.com/dRmfZh9VucfK5sA0HG73G04" target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 16px', borderRadius: 10,
-              background: 'rgba(245,158,11,0.04)',
-              border: '1px solid rgba(245,158,11,0.15)',
-              textDecoration: 'none', transition: 'all 0.12s',
+          {/* 5-BOQ bundle */}
+          <a href={withUserRef(BOQ_5_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 16px', borderRadius: 10,
+            background: 'rgba(245,158,11,0.04)',
+            border: '1px solid rgba(245,158,11,0.15)',
+            textDecoration: 'none', transition: 'all 0.12s',
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: 'rgba(245,158,11,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 10,
-                background: 'rgba(245,158,11,0.08)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <StarIcon size={18} color="#F59E0B" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Go Professional</div>
-                <div style={{ fontSize: 11.5, color: t.textMuted }}>10 projects/month — save up to 65%</div>
-              </div>
-              <span style={{
-                padding: '5px 12px', borderRadius: 7,
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>£347/mo</span>
-            </a>
-          )}
+              <StarIcon size={18} color="#F59E0B" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>5 BOQ Bundle</div>
+              <div style={{ fontSize: 11.5, color: t.textMuted }}>Just £69.80 per BOQ — credits never expire</div>
+            </div>
+            <span style={{
+              padding: '5px 12px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+              color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
+            }}>£349</span>
+          </a>
 
-          {/* Upgrade to Premium — show for professional users */}
-          {isProfessional && (
-            <a href="https://buy.stripe.com/6oUaEX6Ji2FaaMU76473G05" target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 16px', borderRadius: 10,
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.03))',
-              border: '1px solid rgba(124,58,237,0.15)',
-              textDecoration: 'none', transition: 'all 0.12s',
+          {/* 10-BOQ bundle */}
+          <a href={withUserRef(BOQ_10_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 16px', borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.03))',
+            border: '1px solid rgba(124,58,237,0.15)',
+            textDecoration: 'none', transition: 'all 0.12s',
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: 'rgba(124,58,237,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 10,
-                background: 'rgba(124,58,237,0.08)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                <CrownIcon size={18} color="#A855F7" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Upgrade to Premium</div>
-                <div style={{ fontSize: 11.5, color: t.textMuted }}>20 projects/month + dedicated support</div>
-              </div>
-              <span style={{
-                padding: '5px 12px', borderRadius: 7,
-                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>£447/mo</span>
-            </a>
-          )}
+              <CrownIcon size={18} color="#A855F7" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>10 BOQ Bundle</div>
+              <div style={{ fontSize: 11.5, color: t.textMuted }}>Best value — just £58 per BOQ, credits never expire</div>
+            </div>
+            <span style={{
+              padding: '5px 12px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+              color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
+            }}>£580</span>
+          </a>
 
           {/* Contact */}
           <a href="mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects" style={{
@@ -278,7 +275,7 @@ export default function NewProjectPage() {
   return (
     <div className="page">
       {showLimitModal && usage && (
-        <LimitReachedModal usage={usage} t={t} onClose={() => { setShowLimitModal(false); if (usage.atLimit) navigate('/dashboard'); }} />
+        <LimitReachedModal usage={usage} t={t} user={user} onClose={() => { setShowLimitModal(false); if (usage.atLimit) navigate('/dashboard'); }} />
       )}
 
       <div className="page-header">
