@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiFetch, getToken } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 import useIsMobile from '../utils/useIsMobile';
 import AsyncButton from './AsyncButton';
 
@@ -34,6 +35,10 @@ function shortDate(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 function todayIso() { return new Date().toISOString().slice(0, 10); }
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  return '£' + Math.round(v).toLocaleString('en-GB');
+}
 
 const STATUS_OPTS = [
   { value: 'not_started', label: 'Not started' },
@@ -44,6 +49,8 @@ const STATUS_OPTS = [
 
 export default function JobSchedule({ t, jobId, quotes }) {
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [plan, setPlan] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [win, setWin] = useState({ start: null, end: null });
@@ -411,6 +418,12 @@ export default function JobSchedule({ t, jobId, quotes }) {
         New tasks run after the current programme. Edit durations and the dates re-flow automatically.
       </div>
 
+      {/* Cash flow (admin-only, Phase 1) — expected monthly spend from the
+          programme, with claims to date overlaid. */}
+      {isAdmin && plan && (
+        <CashflowPanel t={t} planId={plan.id} isMobile={isMobile} />
+      )}
+
       {/* Stage 2: tell the assistant what happened on site */}
       <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + t.border }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Update from site</div>
@@ -450,6 +463,117 @@ export default function JobSchedule({ t, jobId, quotes }) {
           <button onClick={sendChat} disabled={sending || !chatInput.trim()} style={{ ...primaryBtn, opacity: (sending || !chatInput.trim()) ? 0.6 : 1 }}>Send</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Cash flow panel (admin-only) ─────────────────────────────────────────────
+// Loads on demand from GET /schedule/plans/:id/cashflow. Shows the contract
+// value spread month-by-month against claims raised to date. Recomputes live on
+// the server, so "Refresh" always reflects the current schedule + costs.
+function CashflowPanel({ t, planId, isMobile }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const r = await apiFetch('/schedule/plans/' + planId + '/cashflow');
+      setData(r);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, [planId]);
+
+  const toggle = async () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !data) await load();
+  };
+
+  const months = data?.months || [];
+  const maxVal = months.reduce((m, r) => Math.max(m, r.planned, r.claimed), 0) || 1;
+  const totals = data?.totals || {};
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + t.border }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Cash flow
+            <span style={{ background: t.accent + '22', color: t.accent, padding: '1px 7px', borderRadius: 6, fontSize: 10.5, fontWeight: 700 }}>Admin</span>
+          </div>
+          <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+            Expected monthly spend from the programme, with claims to date.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {open && <button onClick={load} disabled={loading} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '…' : 'Refresh'}</button>}
+          <button onClick={toggle} style={{ minHeight: 36, padding: '0 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {open ? 'Hide' : 'Show cash flow'}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {error && <div style={{ color: t.danger, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+          {loading && !data && <div style={{ color: t.textMuted, fontSize: 13 }}>Building cash flow…</div>}
+
+          {data && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 14 }}>
+                <Stat t={t} label="Contract value" value={fmtMoney(totals.contractValue)} />
+                <Stat t={t} label="Programme total" value={fmtMoney(totals.plannedTotal)} />
+                <Stat t={t} label="Claimed to date" value={fmtMoney(totals.claimedToDate)} tone="ok" />
+                <Stat t={t} label="Left to claim" value={fmtMoney(totals.remainingToClaim)}
+                  tone={Number(totals.remainingToClaim) < 0 ? 'warn' : undefined} />
+              </div>
+
+              {months.length === 0 ? (
+                <div style={{ color: t.textMuted, fontSize: 13.5, padding: '6px 0' }}>
+                  {data.hasDatedTasks
+                    ? 'No costs to spread yet — add a quote to this job so the schedule has a contract value.'
+                    : 'No dated tasks yet — set task durations so the schedule has a timeline to spread costs across.'}
+                </div>
+              ) : (
+                <>
+                  {/* Header row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '70px 1fr 80px' : '90px 1fr 100px 100px', gap: 10, alignItems: 'center', fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, paddingBottom: 6 }}>
+                    <div>Month</div>
+                    <div>Planned {isMobile ? '' : 'vs claimed'}</div>
+                    <div style={{ textAlign: 'right' }}>Planned</div>
+                    {!isMobile && <div style={{ textAlign: 'right' }}>Claimed</div>}
+                  </div>
+                  {months.map((m) => (
+                    <div key={m.month} style={{ display: 'grid', gridTemplateColumns: isMobile ? '70px 1fr 80px' : '90px 1fr 100px 100px', gap: 10, alignItems: 'center', padding: '6px 0', borderTop: '1px solid ' + t.border }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{m.label}</div>
+                      <div style={{ position: 'relative', height: 22 }}>
+                        {/* planned bar */}
+                        <div style={{ position: 'absolute', top: 3, left: 0, height: 7, width: Math.max(1, (m.planned / maxVal) * 100) + '%', background: t.accent, borderRadius: 4, opacity: 0.9 }}
+                          title={'Planned ' + fmtMoney(m.planned)} />
+                        {/* claimed bar */}
+                        <div style={{ position: 'absolute', top: 12, left: 0, height: 7, width: Math.max(m.claimed > 0 ? 1 : 0, (m.claimed / maxVal) * 100) + '%', background: t.success, borderRadius: 4, opacity: 0.9 }}
+                          title={'Claimed ' + fmtMoney(m.claimed)} />
+                      </div>
+                      <div style={{ fontSize: 12.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(m.planned)}</div>
+                      {!isMobile && <div style={{ fontSize: 12.5, textAlign: 'right', color: m.claimed > 0 ? t.success : t.textMuted, fontVariantNumeric: 'tabular-nums' }}>{m.claimed > 0 ? fmtMoney(m.claimed) : '—'}</div>}
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 11.5, color: t.textMuted, alignItems: 'center' }}>
+                    <Legend t={t} colour={t.accent} label="Planned spend" />
+                    <Legend t={t} colour={t.success} label="Claimed" />
+                  </div>
+                  <div style={{ color: t.textMuted, fontSize: 11.5, marginTop: 8, lineHeight: 1.5 }}>
+                    The contract value is spread across each task's working days — weighted by its priced lines where known, by duration otherwise — then bucketed by month. Claims are invoices raised on this job (sent or paid).
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
