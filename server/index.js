@@ -128,4 +128,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 // A3: automated payment reminders — twice-daily sweep, no-op without SMTP.
 require('./paymentReminders').start();
+// Planning Leads — start the slow background harvester that fills the local
+// planning-application store one area at a time, so scans never hit PlanIt live.
+require('./planningData').startHarvester();
 app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
