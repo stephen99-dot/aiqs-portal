@@ -168,24 +168,58 @@ function withKey(qs) {
   return PLANIT_API_KEY ? qs + '&' + PLANIT_AUTH_PARAM + '=' + encodeURIComponent(PLANIT_API_KEY) : qs;
 }
 
-// ─── Rate-limit cooldown + result cache ──────────────────────────────────────
-// PlanIt returns 429 "try again in NNNs" when we're over its limit. We remember
-// that window and refuse to hammer it until it passes, and we cache successful
-// scans per area so repeat/adjacent scans don't spend a request at all. Planning
-// registers change at most daily, so a multi-hour TTL is safe.
-let _cooldownUntilMs = 0;                 // epoch ms; 0 = not limited
-const _cache = new Map();                 // key -> { at, leadsRaw }
-// Planning registers update ~once a day, so a 24h cache keeps results fresh
-// enough while spending at most one live PlanIt request per area per day — the
-// simplest way to stay well under the free-tier rate limit without any setup.
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// ─── Background collect: persistent store + throttled work queue ─────────────
+// PlanIt's free tier can't sustain live, on-demand scanning — a single request
+// can 429 with a multi-minute ban. So the tool NEVER calls PlanIt during a user
+// scan. Instead each requested area is remembered in a SQLite table, and a slow
+// background worker fills/refreshes it one area at a time, far under the limit.
+// Scans read straight from the table, so they're instant and never rate-limited.
+const db = require('./database');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS planning_area_cache (
+    area_key   TEXT PRIMARY KEY,
+    lat        REAL,
+    lng        REAL,
+    radius_km  INTEGER,
+    area_name  TEXT,
+    leads_json TEXT,          -- normalised applications for the whole area
+    fetched_at INTEGER,       -- epoch ms of last successful PlanIt fetch (0 = never)
+    requested_at INTEGER      -- epoch ms this area was last wanted (drives refresh)
+  );
+`);
+
+let _cooldownUntilMs = 0;                       // epoch ms; 0 = not rate-limited
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;       // refresh an area at most daily
+const WORKER_INTERVAL_MS = 90 * 1000;           // process at most one area / 90s
+const _queue = [];                              // area_keys waiting to be fetched
+const _queued = new Set();                      // dedupe guard for _queue
 
 function nowMs() { return Date.now(); }
 function cooldownRemainingSecs() { return Math.max(0, Math.ceil((_cooldownUntilMs - nowMs()) / 1000)); }
 function cacheKey(lat, lng, radiusKm) {
-  // Round the centre so nearby postcodes share a cache entry.
+  // Round the centre so nearby postcodes share one cached area fetch.
   return [lat.toFixed(2), lng.toFixed(2), Math.round(radiusKm)].join(':');
 }
+
+const _getArea = db.prepare('SELECT * FROM planning_area_cache WHERE area_key = ?');
+const _upsertRequest = db.prepare(`
+  INSERT INTO planning_area_cache (area_key, lat, lng, radius_km, area_name, leads_json, fetched_at, requested_at)
+  VALUES (@area_key, @lat, @lng, @radius_km, @area_name, '[]', 0, @now)
+  ON CONFLICT(area_key) DO UPDATE SET requested_at = @now, radius_km = @radius_km, area_name = @area_name
+`);
+const _saveLeads = db.prepare('UPDATE planning_area_cache SET leads_json = ?, fetched_at = ? WHERE area_key = ?');
+
+// Ask for an area to be (re)fetched: record the request and queue it if it's
+// missing or stale. Cheap and idempotent — safe to call on every scan.
+function requestArea({ key, lat, lng, radiusKm, areaName }) {
+  _upsertRequest.run({ area_key: key, lat, lng, radius_km: radiusKm, area_name: areaName || '', now: nowMs() });
+  const row = _getArea.get(key);
+  const stale = !row || !row.fetched_at || (nowMs() - row.fetched_at) >= CACHE_TTL_MS;
+  if (stale && !_queued.has(key)) { _queued.add(key); _queue.push(key); }
+  return row;
+}
+
+function queueDepth() { return _queue.length; }
 
 // PlanIt requires a spatial/date/search restriction and has shifted its param
 // names over time, so we build a list of candidate spatial queries and use the
@@ -236,7 +270,34 @@ async function fetchPlanit({ lat, lng, radiusKm, pageSize = 100 }) {
   throw lastErr || new Error('PlanIt returned no usable result.');
 }
 
-// The public entry point. Returns { leads, source, area }.
+// Apply the builder's filters to a stored area's raw applications. Kept
+// separate so changing filters never needs a re-fetch — it's a local pass over
+// data we already hold.
+function filterLeads(raw, { categories, stateMode, monthsBack, limit }) {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - monthsBack);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const res = [];
+  const seen = new Set();
+  for (const lead of raw) {
+    if (!categories.some(c => CATEGORIES[c].re.test(lead.description))) continue;
+    const st = (lead.state || '').toLowerCase();
+    if (stateMode === 'granted' && !GRANTED_STATES.has(st)) continue;
+    if (stateMode === 'submitted' && !(st.includes('undecided') || st.includes('pending') || !st)) continue;
+    const dateStr = stateMode === 'submitted' ? lead.submitted_date : (lead.decided_date || lead.submitted_date);
+    if (dateStr && dateStr < cutoffStr) continue;
+    const key = lead.ref || lead.address;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    res.push({ ...lead, category: categories.find(c => CATEGORIES[c].re.test(lead.description)) });
+  }
+  res.sort((a, b) => (b.decided_date || b.submitted_date || '').localeCompare(a.decided_date || a.submitted_date || ''));
+  return res.slice(0, limit);
+}
+
+// The public entry point. Reads from the local store and never calls PlanIt
+// itself. Returns { status: 'ready' | 'collecting', leads, area, ... }.
 //   opts: { postcode, radiusKm, categories[], state, monthsBack, limit }
 async function searchLeads(opts = {}) {
   const radiusKm = Math.min(Math.max(Number(opts.radiusKm) || 8, 1), 40);
@@ -248,78 +309,78 @@ async function searchLeads(opts = {}) {
 
   const geo = await geocodePostcode(opts.postcode);
   const key = cacheKey(geo.lat, geo.lng, radiusKm);
-  const cached = _cache.get(key);
-  const cacheFresh = cached && (nowMs() - cached.at) < CACHE_TTL_MS;
+  // Record/queue this area for the background worker (idempotent).
+  const row = requestArea({ key, lat: geo.lat, lng: geo.lng, radiusKm, areaName: geo.area });
 
-  let raw;
-  let stale = false;
-  if (cacheFresh) {
-    raw = cached.leadsRaw; // reuse the fetched records; re-filter below.
-  } else if (cooldownRemainingSecs() > 0) {
-    // We're inside PlanIt's rate-limit window. Serve stale cache if we have any,
-    // otherwise tell the caller exactly how long to wait.
-    if (cached) { raw = cached.leadsRaw; stale = true; }
-    else {
-      const secs = cooldownRemainingSecs();
-      throw Object.assign(
-        new Error('The planning service is rate-limiting us right now — try again in about ' + Math.ceil(secs / 60) + ' min. Meanwhile you can preview with sample data.'),
-        { code: 'RATE_LIMITED', retryAfter: secs });
-    }
-  } else {
-    try {
-      raw = await fetchPlanit({ lat: geo.lat, lng: geo.lng, radiusKm });
-      _cache.set(key, { at: nowMs(), leadsRaw: raw });
-    } catch (e) {
-      if (e && e.status === 429) {
-        const secs = e.retryAfter || cooldownRemainingSecs() || 60;
-        if (cached) { raw = cached.leadsRaw; stale = true; } // fall back to stale
-        else throw Object.assign(
-          new Error('The planning service is rate-limiting us right now — try again in about ' + Math.ceil(secs / 60) + ' min. Meanwhile you can preview with sample data.'),
-          { code: 'RATE_LIMITED', retryAfter: secs });
-      } else {
-        // Network/policy blocked or outage — surface a clear, non-fatal signal.
-        const err = new Error('The planning data service is unreachable right now. Try again shortly, or use the sample data to preview the tool.');
-        err.code = 'UPSTREAM_UNREACHABLE';
-        err.cause = e;
-        throw err;
-      }
-    }
+  const hasData = row && row.fetched_at && row.leads_json && row.leads_json !== '[]';
+  if (!hasData) {
+    // Nothing collected for this area yet — the worker will fetch it shortly.
+    const ahead = _queue.indexOf(key);
+    const waitSecs = Math.max(cooldownRemainingSecs(), (Math.max(ahead, 0) + 1) * Math.round(WORKER_INTERVAL_MS / 1000));
+    return { status: 'collecting', leads: [], area: geo.area, radiusKm, etaSecs: waitSecs, queueDepth: _queue.length };
   }
 
-  const cutoff = new Date();
-  cutoff.setMonth(cutoff.getMonth() - monthsBack);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-  const res = [];
-  const seen = new Set();
-  for (const lead of raw) {
-    // Category keyword match.
-    if (!categories.some(c => CATEGORIES[c].re.test(lead.description))) continue;
-    // State filter.
-    const st = lead.state.toLowerCase();
-    if (stateMode === 'granted' && !GRANTED_STATES.has(st)) continue;
-    if (stateMode === 'submitted' && !(st.includes('undecided') || st.includes('pending') || !st)) continue;
-    // Recency: for granted, require a decision within the window (that's the
-    // "ready to build now" signal). For submitted, use the submission date.
-    const dateStr = stateMode === 'submitted' ? lead.submitted_date : (lead.decided_date || lead.submitted_date);
-    if (dateStr && dateStr < cutoffStr) continue;
-    // Dedupe by ref (or address if ref missing).
-    const key = lead.ref || lead.address;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    res.push({ ...lead, category: categories.find(c => CATEGORIES[c].re.test(lead.description)) });
-  }
-
-  // Most recently decided first.
-  res.sort((a, b) => (b.decided_date || b.submitted_date || '').localeCompare(a.decided_date || a.submitted_date || ''));
+  let raw = [];
+  try { raw = JSON.parse(row.leads_json) || []; } catch (_) { raw = []; }
+  const leads = filterLeads(raw, { categories, stateMode, monthsBack, limit });
+  const ageMs = nowMs() - row.fetched_at;
   return {
-    leads: res.slice(0, limit),
-    source: stale ? 'planit-cached' : 'planit',
-    area: geo.area,
+    status: 'ready',
+    leads,
+    area: geo.area || row.area_name || '',
     radiusKm,
-    stale,
-    cooldownSecs: cooldownRemainingSecs(),
+    source: 'planit',
+    stale: ageMs >= CACHE_TTL_MS,
+    fetchedAt: new Date(row.fetched_at).toISOString(),
+    totalInArea: raw.length,
   };
+}
+
+// ─── Background worker ───────────────────────────────────────────────────────
+// Processes at most one queued area per tick, and only when we're not inside a
+// PlanIt cooldown — so we sit far below the rate limit and never escalate a ban.
+let _workerTimer = null;
+let _lastRun = { at: null, key: null, ok: null, note: '' };
+
+async function processQueue() {
+  if (cooldownRemainingSecs() > 0) return;      // wait out any ban
+  const key = _queue.shift();
+  if (!key) return;
+  _queued.delete(key);
+  const row = _getArea.get(key);
+  if (!row) return;
+  // Skip if it went fresh while queued (e.g. requested twice).
+  if (row.fetched_at && (nowMs() - row.fetched_at) < CACHE_TTL_MS) return;
+  try {
+    const raw = await fetchPlanit({ lat: row.lat, lng: row.lng, radiusKm: row.radius_km });
+    _saveLeads.run(JSON.stringify(raw), nowMs(), key);
+    _lastRun = { at: new Date().toISOString(), key, ok: true, note: raw.length + ' applications' };
+  } catch (e) {
+    // 429 already set the cooldown inside fetchPlanit; re-queue for later.
+    if (!_queued.has(key)) { _queued.add(key); _queue.push(key); }
+    _lastRun = { at: new Date().toISOString(), key, ok: false, note: (e.status ? 'HTTP ' + e.status + ' ' : '') + (e.retryAfter ? '(retry ' + e.retryAfter + 's)' : e.message) };
+  }
+}
+
+// Re-queue every known area that's gone stale — the daily refresh, spread out
+// naturally by the worker's throttle.
+function enqueueStaleAreas() {
+  const rows = db.prepare('SELECT area_key FROM planning_area_cache WHERE fetched_at = 0 OR fetched_at < ?').all(nowMs() - CACHE_TTL_MS);
+  for (const r of rows) if (!_queued.has(r.area_key)) { _queued.add(r.area_key); _queue.push(r.area_key); }
+}
+
+function startHarvester() {
+  if (_workerTimer) return;
+  enqueueStaleAreas();
+  _workerTimer = setInterval(() => { processQueue().catch(() => {}); }, WORKER_INTERVAL_MS);
+  if (_workerTimer.unref) _workerTimer.unref();
+  // Re-scan for stale areas a few times a day so cached areas stay current.
+  const refresh = setInterval(enqueueStaleAreas, 6 * 60 * 60 * 1000);
+  if (refresh.unref) refresh.unref();
+}
+
+function harvesterStatus() {
+  return { queueDepth: _queue.length, cooldownSecs: cooldownRemainingSecs(), lastRun: _lastRun, intervalSecs: Math.round(WORKER_INTERVAL_MS / 1000) };
 }
 
 // ─── Sample data ─────────────────────────────────────────────────────────────
@@ -345,5 +406,7 @@ module.exports = {
   searchLeads, sampleLeads, geocodePostcode, CATEGORIES,
   buildPlanitQueries, recordsOf, PLANIT_BASE, fetchJson,
   cooldownRemainingSecs, withKey, hasApiKey: () => !!PLANIT_API_KEY,
-  USER_AGENT,
+  USER_AGENT, startHarvester, harvesterStatus, queueDepth,
+  // exported for tests / manual harvest triggering
+  processQueue, filterLeads,
 };

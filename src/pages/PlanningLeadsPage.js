@@ -51,8 +51,9 @@ function Inner() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [diag, setDiag] = useState(null);
-  const [cooldown, setCooldown] = useState(0); // seconds until auto-retry
-  const autoRetriesRef = useRef(0);
+  const [collecting, setCollecting] = useState(false);
+  const [cooldown, setCooldown] = useState(0); // seconds until the next poll
+  const pollsRef = useRef(0);
   const [draftingRef, setDraftingRef] = useState(null);
 
   useEffect(() => {
@@ -76,51 +77,55 @@ function Inner() {
 
   const scan = useCallback(async (demo = false, isAuto = false) => {
     if (loading) return;
-    if (!isAuto) { autoRetriesRef.current = 0; setCooldown(0); } // fresh user action
-    setLoading(true); setError(''); setNotice(''); setDiag(null);
+    if (!isAuto) { pollsRef.current = 0; setCooldown(0); setCollecting(false); } // fresh user action
+    setLoading(true); setError(''); if (!isAuto) setNotice(''); setDiag(null);
     try {
       const body = demo
         ? { demo: true }
         : { postcode: postcode.trim(), radiusKm, categories, state, monthsBack };
       const out = await apiFetch('/planning-leads/search', { method: 'POST', body: JSON.stringify(body) });
-      setLeads(out.leads || []);
-      setMeta({ source: out.source, area: out.area, radiusKm: out.radiusKm });
-      autoRetriesRef.current = 0;
-      if (out.source === 'sample') setNotice('Showing sample data so you can see how it works.');
-      else if (out.stale || out.source === 'planit-cached') setNotice('The live service is busy, so these are cached results from a recent scan of this area.');
-    } catch (e) {
-      const code = e.data?.code;
-      if (code === 'RATE_LIMITED' || e.status === 429) {
-        // PlanIt is throttling us. If the wait is short, count it down and retry
-        // automatically (a couple of times) so it just works without a click.
-        const secs = Math.min(Number(e.data?.retryAfter) || 30, 90);
-        if (autoRetriesRef.current < 3) {
-          setError('');
-          setNotice('The planning service is busy — retrying automatically…');
+
+      if (out.status === 'collecting') {
+        // First time we've been asked about this area — the background worker
+        // is fetching it. Poll quietly until it's ready.
+        setCollecting(true);
+        const secs = Math.min(Math.max(Number(out.etaSecs) || 30, 15), 100);
+        if (pollsRef.current < 15) {
+          setNotice(`Gathering approved applications around ${out.area || 'this area'} — the first collect for a new area takes a minute or two. Checking again automatically…`);
           setCooldown(secs);
         } else {
-          setError(e.message || 'Rate limited.');
-          setNotice('Still busy after a few tries — give it a minute, or preview with sample data.');
+          setNotice('Still gathering this area — check back in a few minutes. You can preview with sample data meanwhile.');
         }
-      } else if (/unreachable|temporarily|502/i.test(e.message || '') || e.status === 502) {
-        // If the live service is unreachable, offer the sample so the screen
-        // isn't dead, and pull the connectivity probe so the cause is visible.
-        setError(e.message || 'Scan failed.');
-        setNotice('The live planning service didn’t answer. You can preview the tool with sample data.');
+        return;
+      }
+
+      // Ready.
+      setCollecting(false); pollsRef.current = 0;
+      setLeads(out.leads || []);
+      setMeta({ source: out.source, area: out.area, radiusKm: out.radiusKm });
+      if (out.source === 'sample') setNotice('Showing sample data so you can see how it works.');
+      else if (out.stale) setNotice('Showing the latest collected results for this area (a fresh update is queued).');
+      else setNotice('');
+    } catch (e) {
+      // searchLeads only throws for geocoding problems now (bad postcode, or the
+      // postcode service being unreachable) — PlanIt errors are handled quietly
+      // by the background worker.
+      setError(e.message || 'Scan failed.');
+      if (/unreachable|temporarily|502/i.test(e.message || '') || e.status === 502) {
+        setNotice('The postcode lookup didn’t answer. You can preview the tool with sample data.');
         apiFetch('/planning-leads/diag').then(setDiag).catch(() => {});
-      } else {
-        setError(e.message || 'Scan failed.');
       }
     } finally { setLoading(false); }
   }, [loading, postcode, radiusKm, categories, state, monthsBack]);
 
-  // Count the cooldown down once a second; at zero, auto-retry the scan.
+  // Count down to the next poll; at zero, quietly re-check whether the area's
+  // data has finished collecting.
   useEffect(() => {
     if (cooldown <= 0) return;
     const id = setTimeout(() => {
       const next = cooldown - 1;
       setCooldown(next);
-      if (next <= 0) { autoRetriesRef.current += 1; scan(false, true); }
+      if (next <= 0) { pollsRef.current += 1; scan(false, true); }
     }, 1000);
     return () => clearTimeout(id);
   }, [cooldown, scan]);
@@ -212,7 +217,7 @@ function Inner() {
             borderRadius: 11, border: 'none', background: AMBER, color: '#0A0F1C',
             fontSize: 15, fontWeight: 800, cursor: (canScan && cooldown === 0) ? 'pointer' : 'not-allowed', opacity: (canScan && cooldown === 0) ? 1 : 0.5,
           }}>
-            <SearchIcon size={17} color="#0A0F1C" /> {cooldown > 0 ? `Retrying in ${cooldown}s…` : loading ? 'Scanning councils…' : 'Scan councils'}
+            <SearchIcon size={17} color="#0A0F1C" /> {collecting ? (cooldown > 0 ? `Gathering… ${cooldown}s` : 'Gathering…') : loading ? 'Scanning councils…' : 'Scan councils'}
           </button>
           <button onClick={() => scan(true)} disabled={loading} style={{
             minHeight: 46, padding: '0 18px', borderRadius: 11,
@@ -328,7 +333,15 @@ function Inner() {
         </>
       )}
 
-      {leads === null && !loading && (
+      {collecting && leads === null && (
+        <div style={{ background: t.card, border: '1px solid ' + AMBER + '55', borderRadius: 12, padding: 30, textAlign: 'center', color: t.textSecondary, fontSize: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: t.text, marginBottom: 6 }}>Gathering this area…</div>
+          The first time you scan a new area, it’s collected in the background so future scans are instant.
+          This usually takes a minute or two{cooldown > 0 ? ` — checking again in ${cooldown}s` : ''}. You can leave this open.
+        </div>
+      )}
+
+      {leads === null && !loading && !collecting && (
         <div style={{ background: t.card, border: '1px dashed ' + t.border, borderRadius: 12, padding: 36, textAlign: 'center', color: t.textSecondary, fontSize: 14 }}>
           Enter your postcode and hit <strong style={{ color: t.text }}>Scan councils</strong> to find local homeowners with approved building work.
         </div>

@@ -18,7 +18,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
-const { searchLeads, sampleLeads, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE, withKey, cooldownRemainingSecs, hasApiKey, USER_AGENT } = require('./planningData');
+const { searchLeads, sampleLeads, CATEGORIES, hasApiKey, USER_AGENT, harvesterStatus } = require('./planningData');
 
 const router = express.Router();
 
@@ -59,46 +59,23 @@ router.get('/config', (req, res) => {
   });
 });
 
-// GET /diag — connectivity probe. Reports whether THIS server can reach each
-// upstream and, if not, the exact reason (403 egress block, DNS, timeout…), so
-// an "unreachable" error can be diagnosed on the live box without guesswork.
+// GET /diag — health of the pipeline. Tests postcodes.io (safe, unlimited) and
+// reports the background harvester's state (queue depth, cooldown, last run).
+// It deliberately does NOT call PlanIt — the harvester owns those calls so a
+// health check can never spend PlanIt quota or trip the rate limit.
 router.get('/diag', async (req, res) => {
-  const probe = async (label, url) => {
-    const started = Date.now();
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
-    try {
-      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
-      const bodyStart = (await r.text()).slice(0, 160);
-      return { label, ok: r.ok, status: r.status, ms: Date.now() - started, bodyStart };
-    } catch (e) {
-      return { label, ok: false, status: null, ms: Date.now() - started,
-        error: e.name + ': ' + e.message, cause: (e.cause && (e.cause.code || e.cause.message)) || null };
-    } finally { clearTimeout(timer); }
-  };
-  // Probe PlanIt with a SINGLE request (the primary query shape) so the check
-  // itself doesn't burn the rate limit. If we're already inside a cooldown,
-  // don't call PlanIt at all — just report the remaining wait.
-  const postcodes = await probe('postcodes.io', 'https://api.postcodes.io/postcodes/SW1A%201AA');
-  const cooldown = cooldownRemainingSecs();
-  let planit;
-  if (cooldown > 0) {
-    planit = [{ shape: 'skipped', ok: false, status: 429, note: 'in cooldown — retry in ~' + Math.ceil(cooldown / 60) + ' min', cooldownSecs: cooldown }];
-  } else {
-    const q = buildPlanitQueries({ lat: 51.501, lng: -0.1419, radiusKm: 5, pageSize: 3 })[0];
-    const started = Date.now();
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
-    try {
-      const r = await fetch(PLANIT_BASE + '?' + withKey(q.qs), { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
-      const text = await r.text();
-      let count = null; try { count = recordsOf(JSON.parse(text)).length; } catch (_) {}
-      planit = [{ shape: q.label, ok: r.ok, status: r.status, ms: Date.now() - started, records: count, bodyStart: r.ok ? undefined : text.slice(0, 160) }];
-    } catch (e) {
-      planit = [{ shape: q.label, ok: false, status: null, ms: Date.now() - started, error: e.name + ': ' + e.message }];
-    } finally { clearTimeout(timer); }
-  }
-  res.json({ node: process.version, hasFetch: typeof fetch === 'function', apiKey: hasApiKey(), postcodes, planit });
+  const started = Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  let postcodes;
+  try {
+    const r = await fetch('https://api.postcodes.io/postcodes/SW1A%201AA', { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
+    const bodyStart = (await r.text()).slice(0, 160);
+    postcodes = { label: 'postcodes.io', ok: r.ok, status: r.status, ms: Date.now() - started, bodyStart: r.ok ? undefined : bodyStart };
+  } catch (e) {
+    postcodes = { label: 'postcodes.io', ok: false, status: null, ms: Date.now() - started, error: e.name + ': ' + e.message };
+  } finally { clearTimeout(timer); }
+  res.json({ node: process.version, apiKey: hasApiKey(), postcodes, harvester: harvesterStatus() });
 });
 
 // POST /search — scan councils around a postcode.
