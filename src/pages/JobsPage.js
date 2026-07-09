@@ -122,7 +122,7 @@ function Inner() {
   };
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
         <h1 data-tour="jobs-title" style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Jobs <HelpTip t={t} title="Jobs" text={"One card per job: the customer, where it's up to, and the number that matters right now.\n\nJobs with overdue money jump to the top with a red edge.\n\nOpen a job and everything about it is on one screen — quote, invoices, changes, photos, paperwork, notes."} /></h1>
@@ -131,7 +131,7 @@ function Inner() {
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 14 }}>{error}</div>}
 
       {/* Big actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 14, maxWidth: 520 }}>
         <button onClick={() => { setCreating(v => !v); setError(''); }} style={{
           minHeight: 52, borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
           fontSize: 15, fontWeight: 700, cursor: 'pointer',
@@ -144,7 +144,7 @@ function Inner() {
 
       {/* New job form — describe it, or start from a BOQ already in the portal */}
       {creating && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
           <datalist id="known-clients">
             {knownClients.map(c => <option key={c.id} value={c.name} />)}
           </datalist>
@@ -218,7 +218,7 @@ function Inner() {
       {/* Search */}
       {jobs.length > 3 && (
         <input
-          style={{ ...input, marginBottom: 14 }}
+          style={{ ...input, marginBottom: 14, maxWidth: 640 }}
           placeholder="Search jobs or customers…"
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -241,7 +241,7 @@ function Inner() {
           )}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 12, alignItems: 'start' }}>
           {visible.map(j => {
             const stage = jobStage(j);
             const sc = stageColours(stage.key, t);

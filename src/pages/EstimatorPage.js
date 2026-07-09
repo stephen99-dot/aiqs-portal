@@ -122,7 +122,7 @@ function EstimatorPageInner() {
   };
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1160, margin: '0 auto' }}>
       <button onClick={() => nav('/jobs')} style={{ background: 'transparent', color: t.textSecondary, border: 'none', padding: '0 0 8px', fontSize: 13, cursor: 'pointer' }}>← Jobs</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
@@ -156,7 +156,7 @@ function EstimatorPageInner() {
           >Make your first quote</button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 12, alignItems: 'start' }}>
           {quotes.map(q => {
             const sc = statusColour(q.status, t);
             return (
