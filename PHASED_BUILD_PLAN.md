@@ -97,9 +97,17 @@ invoices ("claims"). Admin-only.
   order stacked on the contract value (new "Change orders" total + a timeline
   badge). No double counting: explicit-cost tasks are excluded from the
   contract-value spread.
-- ⬜ AI **indicative cost** auto-draft from measurements/rates (office fixes/FOC)
-  — next slice.
+- ✅ AI **indicative cost** auto-draft from measurements/rates —
+  `server/variationDraft.js` + `POST /api/change-orders/ai-draft`. The site
+  manager describes the change in plain English ("plaster 5 sqm, chippy 2
+  days"); the AI drafts priced lines (grounded in the builder's own day/confirmed
+  rates), marked indicative so the office confirms the workload and fixes the
+  cost. Surfaced as an admin-only "AI indicative cost" box in the change-order
+  editor that merges the drafted lines into the existing line editor. Doesn't
+  auto-save — the office reviews, then the normal save persists. **Owner-portal
+  only** (`adminMiddleware`).
 - ⬜ Mobile-friendly polish of the existing public pages.
+- ⬜ FOC toggle + RFI/design-update routing (Phase 8 territory).
 
 **Effort:** M · **Risk:** Low–Med · **Deps:** Phases 0–1
 

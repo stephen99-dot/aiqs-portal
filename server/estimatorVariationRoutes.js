@@ -33,7 +33,7 @@ const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
-const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
+const { authMiddleware, requireEstimator, requireEstimatorPassword, adminMiddleware } = require('./auth');
 const mailer = require('./mailer');
 
 const ownerRouter = express.Router();
@@ -190,6 +190,24 @@ function publicShape(v, lines, branding, user, job) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 ownerRouter.use(authMiddleware, requireEstimator, requireEstimatorPassword);
+
+// POST /api/change-orders/ai-draft — AI indicative-cost draft (Phase 2).
+// Admin-only (layered on top of requireEstimator) so it stays on the owner's
+// portal. Takes a plain-English site description, returns priced draft lines the
+// office reviews and fixes. Does not save — the editor merges them, then the
+// existing PUT /:id/lines persists once the office is happy.
+ownerRouter.post('/ai-draft', adminMiddleware, async (req, res) => {
+  try {
+    const description = String((req.body && req.body.description) || '').trim();
+    if (!description) return res.status(400).json({ error: 'Describe the change first.' });
+    const { draftVariationLines } = require('./variationDraft');
+    const lines = await draftVariationLines(description, req.user.id);
+    res.json({ lines });
+  } catch (err) {
+    console.error('[Variations] ai-draft error:', err.message);
+    res.status(502).json({ error: 'The AI could not draft this change right now. Please try again in a moment.' });
+  }
+});
 
 // GET /api/variations — list all for the user, optionally newest first
 ownerRouter.get('/', (req, res) => {
