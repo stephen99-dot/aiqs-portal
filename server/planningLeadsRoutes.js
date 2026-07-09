@@ -59,6 +59,30 @@ router.get('/config', (req, res) => {
   });
 });
 
+// GET /diag — connectivity probe. Reports whether THIS server can reach each
+// upstream and, if not, the exact reason (403 egress block, DNS, timeout…), so
+// an "unreachable" error can be diagnosed on the live box without guesswork.
+router.get('/diag', async (req, res) => {
+  const probe = async (label, url) => {
+    const started = Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+      const bodyStart = (await r.text()).slice(0, 160);
+      return { label, ok: r.ok, status: r.status, ms: Date.now() - started, bodyStart };
+    } catch (e) {
+      return { label, ok: false, status: null, ms: Date.now() - started,
+        error: e.name + ': ' + e.message, cause: (e.cause && (e.cause.code || e.cause.message)) || null };
+    } finally { clearTimeout(timer); }
+  };
+  const [postcodes, planit] = await Promise.all([
+    probe('postcodes.io', 'https://api.postcodes.io/postcodes/SW1A%201AA'),
+    probe('planit.org.uk', 'https://www.planit.org.uk/api/applics/json?pg_sz=1'),
+  ]);
+  res.json({ node: process.version, hasFetch: typeof fetch === 'function', postcodes, planit });
+});
+
 // POST /search — scan councils around a postcode.
 // Body: { postcode, radiusKm, categories[], state, monthsBack, demo }
 router.post('/search', async (req, res) => {
