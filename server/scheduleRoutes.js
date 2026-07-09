@@ -28,9 +28,10 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
-const { authMiddleware, requireEstimator } = require('./auth');
+const { authMiddleware, requireEstimator, adminMiddleware } = require('./auth');
 const { computeSchedule, programmeWindow } = require('./scheduleEngine');
 const { streamSchedulePdf } = require('./schedulePdf');
+const { buildCashflow } = require('./scheduleCashflow');
 
 const router = express.Router();
 
@@ -737,6 +738,63 @@ router.get('/plans/:id/export', (req, res) => {
   } catch (err) {
     console.error('[Schedule] export error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate the PDF.' });
+  }
+});
+
+// GET /plans/:id/cashflow  — expected monthly cash flow from the programme.
+//
+// Gated tighter than the rest of the schedule: adminMiddleware layers on top of
+// the router-wide requireEstimator, so this trial feature stays on the owner's
+// portal (Phase 1 of PHASED_BUILD_PLAN.md) rather than reaching subscribers.
+//
+// Spreads the quote's contract value across the dated tasks and overlays the
+// claims (invoices) raised to date, month by month.
+router.get('/plans/:id/cashflow', adminMiddleware, (req, res) => {
+  try {
+    const plan = ownedPlan(req.params.id, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
+
+    const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?')
+      .all(plan.id).map(serialiseTask);
+
+    // The quote behind the contract value + the priced-line map for weighting.
+    let quote = null;
+    if (plan.quote_id) {
+      quote = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(plan.quote_id, req.user.id);
+    }
+    if (!quote) {
+      quote = db.prepare('SELECT * FROM quotes WHERE job_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1')
+        .get(plan.job_id, req.user.id);
+    }
+
+    const lineTotalById = new Map();
+    let netSum = 0;
+    if (quote) {
+      const lines = db.prepare('SELECT id, line_total FROM quote_lines WHERE quote_id = ?').all(quote.id);
+      for (const l of lines) {
+        const v = Number(l.line_total) || 0;
+        lineTotalById.set(l.id, v);
+        netSum += v;
+      }
+    }
+    const contractValue = quote ? (Number(quote.grand_total) || netSum) : 0;
+
+    // Claims to date: invoices raised on this job (sent or paid), by issue date.
+    const invRows = db.prepare(
+      "SELECT issue_date, grand_total FROM invoices WHERE job_id = ? AND user_id = ? AND status IN ('sent', 'paid')"
+    ).all(plan.job_id, req.user.id);
+    const claims = invRows.map((r) => ({ date: r.issue_date, amount: Number(r.grand_total) || 0 }));
+
+    const cf = buildCashflow({ tasks, lineTotalById, contractValue, workingDays: plan.working_days, claims });
+    res.json({
+      plan: { id: plan.id, title: plan.title, currency: 'GBP' },
+      quote: quote ? { id: quote.id, grand_total: Number(quote.grand_total) || netSum } : null,
+      hasDatedTasks: tasks.some((t) => t.planned_start && t.planned_end),
+      ...cf,
+    });
+  } catch (err) {
+    console.error('[Schedule] cashflow error:', err);
+    res.status(500).json({ error: 'Failed to build the cash flow.' });
   }
 });
 
