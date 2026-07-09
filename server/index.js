@@ -117,6 +117,10 @@ app.use('/api/schedule', require('./scheduleRoutes'));
 // 3D Builder (Phase 1) — parametric building -> priced take-off. Admin-only
 // for now (the router gates itself with authMiddleware + adminMiddleware).
 app.use('/api/builder3d', require('./builder3dRoutes'));
+// Planning Leads (preview) — scan councils for recently-granted domestic
+// applications and draft a headed intro letter. Locked to a single account
+// (the router gates itself with authMiddleware + an email allowlist).
+app.use('/api/planning-leads', require('./planningLeadsRoutes'));
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
