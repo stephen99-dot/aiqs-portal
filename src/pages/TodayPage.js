@@ -115,7 +115,7 @@ function Inner() {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
@@ -252,7 +252,7 @@ function Inner() {
           <div style={{ color: t.success, fontWeight: 600, fontSize: 15 }}>Nothing needs chasing — you're on top of it.</div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 10, marginBottom: 24, alignItems: 'start' }}>
           {cards.map(card => (
             <div key={card.id} style={{
               background: t.card,

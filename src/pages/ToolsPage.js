@@ -33,12 +33,12 @@ function Inner() {
   ];
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
         <h1 data-tour="tools-title" style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Tools <HelpTip t={t} title="Tools" text={"Reference tools for when you're on site: trade calculators (concrete, bricks, plasterboard…) and current supplier prices you can drop into a quote."} /></h1>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
         {tools.map(tool => (
           <button key={tool.path} onClick={() => nav(tool.path)} style={{
             display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left',

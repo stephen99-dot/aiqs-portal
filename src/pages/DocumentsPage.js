@@ -120,7 +120,7 @@ function Inner() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 760, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1120, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26 }}>Documents <HelpTip t={t} title="Documents" text={"Branded paperwork from fill-in templates — contract, terms, scope of work, payment terms, RAMS, letters.\n\nOr just say what letter you need ('polite letter about the two-week delay') and read the draft before you do anything with it."} /></h1>
@@ -136,7 +136,7 @@ function Inner() {
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 10, borderRadius: 8, marginBottom: 12 }}>{error}</div>}
 
       {/* Describe what you need — AI fills in any template for you to review */}
-      <div style={{ background: t.card, border: '1px solid ' + t.accent + '55', boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+      <div style={{ background: t.card, border: '1px solid ' + t.accent + '55', boxShadow: t.shadowSm, borderRadius: 12, padding: 16, marginBottom: 16, maxWidth: 820 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Let AI write it — just say what you need</div>
         <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
           Pick the type, describe the job in your own words, and the AI fills the whole document in. You review and edit everything before it goes anywhere — e.g. "RAMS for stripping a slate roof on a two-storey terrace" or "contract for the Patel kitchen extension, £42k, starting March."
@@ -199,7 +199,7 @@ function Inner() {
           No documents yet. Click "+ New document" to start.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12, alignItems: 'start' }}>
           {documents.map(d => (
             <div key={d.id} style={{ background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm, borderRadius: 14, padding: '14px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>

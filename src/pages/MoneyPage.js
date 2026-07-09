@@ -265,7 +265,7 @@ function Inner() {
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: t.textSecondary }}>Loading…</div>;
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
         <h1 data-tour="money-title" style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>Money <HelpTip t={t} title="Money" text={"Three views:\n\n'Coming in' — every invoice, with Chase it on anything overdue.\n\n'Due in' — payments you're expecting: stages from payment plans and retention coming back.\n\n'Your numbers' — what the business costs to run each month, and the day rate you need to break even."} /></h1>
@@ -289,7 +289,7 @@ function Inner() {
           </div>
 
           {creating && (
-            <div data-tour="money-invoice-form" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div data-tour="money-invoice-form" style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 680 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: t.textSecondary, marginBottom: 4 }}>Which job is it for?</div>
                 <select value={newInv.job_id} onChange={e => setNewInv({ ...newInv, job_id: e.target.value, from_quote_id: '' })} style={input}>

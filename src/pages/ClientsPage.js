@@ -109,7 +109,7 @@ function Inner() {
   };
 
   return (
-    <div style={{ padding: '20px 16px 32px', color: t.text, maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 32px', color: t.text, maxWidth: 1060, margin: '0 auto' }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ color: '#F59E0B', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Office in a Box</div>
         <h1 style={{ margin: '4px 0 0 0', fontSize: 26, fontWeight: 700, letterSpacing: -0.4 }}>
@@ -120,12 +120,12 @@ function Inner() {
       {error && <div style={{ background: t.dangerBg, color: t.danger, padding: 12, borderRadius: 10, marginBottom: 14 }}>{error}</div>}
 
       <button onClick={() => { setAdding(v => !v); setError(''); }} style={{
-        minHeight: 52, width: '100%', borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
+        minHeight: 52, width: '100%', maxWidth: 640, borderRadius: 12, border: 'none', background: t.accent, color: '#fff',
         fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 14,
       }}>{adding ? 'Cancel' : '+ New client'}</button>
 
       {adding && (
-        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
           <input style={input} placeholder="Name — person or company" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
           <input style={input} type="email" placeholder="Email (optional)" value={draft.email} onChange={e => setDraft({ ...draft, email: e.target.value })} />
           <input style={input} type="tel" placeholder="Phone (optional)" value={draft.phone} onChange={e => setDraft({ ...draft, phone: e.target.value })} />
