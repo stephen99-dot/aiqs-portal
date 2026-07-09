@@ -8,6 +8,7 @@ import {
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, PoundIcon, HomeIcon,
 } from './Icons';
+import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
 import OfficeInABoxPopup from './OfficeInABoxPopup';
 import OfficeTour from './OfficeTour';
@@ -110,7 +111,14 @@ function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobile
                       background: '#F59E0B',
                     }} />
                   )}
-                  {c.label}
+                  <span>{c.label}</span>
+                  {c.badge && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em',
+                      textTransform: 'uppercase', background: 'rgba(245,158,11,0.15)', color: '#F59E0B',
+                      border: '1px solid rgba(245,158,11,0.3)', borderRadius: 5, padding: '1px 4px',
+                    }}>{c.badge}</span>
+                  )}
                 </div>
               </NavLink>
             );
@@ -161,13 +169,15 @@ export default function Layout() {
     { path: '/money', label: 'Money' },
     { path: '/documents', label: 'Documents' },
     { path: '/tools', label: 'Tools' },
+    // Planning Leads is in preview — only the allowlisted account sees it.
+    ...(canUsePlanningLeads(user) ? [{ path: '/planning-leads', label: 'Planning Leads', badge: 'Preview' }] : []),
   ];
   // Pages reached from inside the group (quote editor, invoice editor, job
   // page, documents, tools) keep the group highlighted and open.
   const officeRoutePrefixes = [
     '/office', '/jobs', '/clients', '/money', '/tools',
     '/estimator', '/invoices', '/finance', '/change-orders',
-    '/documents', '/calculators', '/materials', '/pm',
+    '/documents', '/calculators', '/materials', '/pm', '/planning-leads',
   ];
   const isOfficeRouteActive = officeRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 

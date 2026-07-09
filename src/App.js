@@ -46,6 +46,7 @@ import ToolsPage from './pages/ToolsPage';
 import SetupWizardPage from './pages/SetupWizardPage';
 import OfficeInABoxPage from './pages/OfficeInABoxPage';
 import OfficeDemoPage from './pages/OfficeDemoPage';
+import PlanningLeadsPage from './pages/PlanningLeadsPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
@@ -131,6 +132,8 @@ function AppInner() {
           <Route path="/jobs/:id" element={<JobDetailPage />} />
           <Route path="/money" element={<MoneyPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          {/* Planning Leads — preview, self-guards to the allowlisted account. */}
+          <Route path="/planning-leads" element={<PlanningLeadsPage />} />
           <Route path="/estimator" element={<EstimatorPage />} />
           <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
           <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
