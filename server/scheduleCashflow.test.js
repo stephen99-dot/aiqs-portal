@@ -71,6 +71,32 @@ test('no contract value falls back to priced net without throwing', () => {
   assert.equal(cf.totals.plannedTotal, 800);
 });
 
+test('an explicit-cost task (change order) carries its cost and stacks on the contract value', () => {
+  const tasks = [
+    { id: 'a', duration_days: 10, planned_start: '2026-07-01', planned_end: '2026-07-14', source_line_ids: [] },
+    // Approved change order added by scheduleLink: explicit cost, runs in Aug.
+    { id: 'vo', duration_days: 5, planned_start: '2026-08-03', planned_end: '2026-08-07', source_line_ids: [], cost_amount: 3000 },
+  ];
+  const cf = buildCashflow({ tasks, lineTotalById: new Map(), contractValue: 10000, workingDays: WD, claims: [] });
+  // Base quote (10000) is spread over task 'a' only; the VO carries its 3000.
+  assert.equal(cf.totals.contractValue, 13000);
+  assert.equal(cf.totals.variationsValue, 3000);
+  assert.equal(cf.totals.plannedTotal, 13000);
+  const aug = cf.months.find((m) => m.month === '2026-08');
+  assert.equal(aug.planned, 3000); // the VO lands in August
+  const jul = cf.months.find((m) => m.month === '2026-07');
+  assert.equal(jul.planned, 10000); // the full quote value, undiluted by the VO
+});
+
+test('duration heuristic scales with labour and is bounded', () => {
+  const { estimateDurationDays } = require('./scheduleLink');
+  assert.equal(estimateDurationDays([]), 1);                          // no labour → 1 day
+  assert.equal(estimateDurationDays([{ labour: 0 }]), 1);
+  assert.equal(estimateDurationDays([{ labour: 500 }]), 2);           // 500/250 = 2
+  assert.equal(estimateDurationDays([{ labour: 250 }, { labour: 250 }]), 2);
+  assert.equal(estimateDurationDays([{ labour: 100000 }]), 20);       // capped at 20
+});
+
 test('empty schedule yields empty months, not a crash', () => {
   const cf = buildCashflow({ tasks: [], lineTotalById: new Map(), contractValue: 5000, workingDays: WD, claims: [] });
   assert.deepEqual(cf.months, []);

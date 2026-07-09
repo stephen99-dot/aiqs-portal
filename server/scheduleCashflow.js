@@ -33,17 +33,31 @@ function monthLabel(key) {
   return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-// Assign every task a share of the contract value.
-//   base weight   = sum of line_total for the task's source_line_ids (priced);
-//   residual      = contractValue not tied to any priced line, spread across all
-//                   tasks by duration_days so unpriced tasks still carry cost.
+// Assign every task a cost.
+//   • A task with an explicit cost_amount (e.g. an approved change order) carries
+//     that cost directly and is excluded from the contract-value spread.
+//   • The remaining tasks share the quote's contract value: base weight = sum of
+//     line_total for the task's source_line_ids (priced); the residual not tied
+//     to any priced line is spread across them by duration_days so unpriced
+//     tasks still carry cost.
 // If there's no contract value but there are priced lines, fall back to the
 // priced net so the shape still renders. Returns Map(taskId -> cost).
 function computeTaskCosts(tasks, lineTotalById, contractValue) {
   const list = Array.isArray(tasks) ? tasks : [];
+  const costById = new Map();
+
+  // Explicit-cost tasks (change orders) carry their own cost and don't dilute
+  // the contract-value spread.
+  const spread = [];
+  for (const t of list) {
+    const explicit = Number(t.cost_amount);
+    if (Number.isFinite(explicit) && explicit > 0) costById.set(t.id, explicit);
+    else spread.push(t);
+  }
+
   const netById = new Map();
   let allocated = 0;
-  for (const t of list) {
+  for (const t of spread) {
     let net = 0;
     for (const lid of (t.source_line_ids || [])) net += Number(lineTotalById.get(lid)) || 0;
     netById.set(t.id, net);
@@ -51,20 +65,18 @@ function computeTaskCosts(tasks, lineTotalById, contractValue) {
   }
 
   const cv = Number(contractValue) || 0;
-  const costById = new Map();
-
   if (cv <= 0) {
     // No contract value to spread — use the priced net directly (may be all 0).
-    for (const t of list) costById.set(t.id, netById.get(t.id) || 0);
+    for (const t of spread) costById.set(t.id, netById.get(t.id) || 0);
     return costById;
   }
 
   const residual = Math.max(0, cv - allocated);
-  const totalDuration = list.reduce((s, t) => s + (Number(t.duration_days) || 0), 0);
-  for (const t of list) {
+  const totalDuration = spread.reduce((s, t) => s + (Number(t.duration_days) || 0), 0);
+  for (const t of spread) {
     const durShare = totalDuration > 0
       ? residual * ((Number(t.duration_days) || 0) / totalDuration)
-      : residual / (list.length || 1);
+      : (spread.length ? residual / spread.length : 0);
     costById.set(t.id, (netById.get(t.id) || 0) + durShare);
   }
   return costById;
@@ -141,11 +153,19 @@ function buildCashflow({ tasks, lineTotalById, contractValue, workingDays, claim
 
   const plannedTotal = round2([...plannedByMonth.values()].reduce((s, v) => s + v, 0));
   const claimedToDate = round2([...claimedByMonth.values()].reduce((s, v) => s + v, 0));
-  const cv = round2(Number(contractValue) || 0);
+  // Contract value = the quote's value (the spread base) plus any explicit-cost
+  // tasks stacked on top (approved change orders). This reconciles with the
+  // planned total and is what "left to claim" is measured against.
+  const explicitTotal = (tasks || []).reduce((s, t) => {
+    const c = Number(t.cost_amount);
+    return s + (Number.isFinite(c) && c > 0 ? c : 0);
+  }, 0);
+  const cv = round2((Number(contractValue) || 0) + explicitTotal);
   return {
     months,
     totals: {
       contractValue: cv,
+      variationsValue: round2(explicitTotal),
       plannedTotal,
       claimedToDate,
       remainingToClaim: round2(cv - claimedToDate),

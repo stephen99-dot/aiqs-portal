@@ -373,6 +373,11 @@ export default function JobSchedule({ t, jobId, quotes }) {
                         +{task.lag_days}d late
                       </span>
                     )}
+                    {isAdmin && task.variation_id && (
+                      <span title="Auto-added from an approved change order" style={{ fontSize: 10.5, fontWeight: 700, color: t.accent, background: t.accent + '22', padding: '1px 6px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        change order{Number(task.cost_amount) > 0 ? ' · ' + fmtMoney(task.cost_amount) : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -525,6 +530,9 @@ function CashflowPanel({ t, planId, isMobile }) {
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 14 }}>
                 <Stat t={t} label="Contract value" value={fmtMoney(totals.contractValue)} />
+                {Number(totals.variationsValue) > 0 && (
+                  <Stat t={t} label="Change orders" value={'+' + fmtMoney(totals.variationsValue)} tone="ok" />
+                )}
                 <Stat t={t} label="Programme total" value={fmtMoney(totals.plannedTotal)} />
                 <Stat t={t} label="Claimed to date" value={fmtMoney(totals.claimedToDate)} tone="ok" />
                 <Stat t={t} label="Left to claim" value={fmtMoney(totals.remainingToClaim)}

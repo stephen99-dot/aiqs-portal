@@ -804,6 +804,18 @@ publicRouter.post('/:token/approve', (req, res) => {
     // A2: tell the builder — notification bell + email.
     notifyOwnerOfDecision(v, 'approved', name);
 
+    // Phase 2: on the owner's portal, auto-add the approved change order to the
+    // job's build schedule (adds a costed task, re-flows dates, feeds the cash
+    // flow). Best-effort — a scheduling hiccup must never fail the approval.
+    try {
+      const owner = db.prepare('SELECT role FROM users WHERE id = ?').get(v.user_id);
+      const { addApprovedVariationToSchedule } = require('./scheduleLink');
+      const linked = addApprovedVariationToSchedule(v.id, owner && owner.role);
+      if (linked.added) console.log('[Variations] added VO', v.vo_number, 'to schedule', linked.planId);
+    } catch (e) {
+      console.error('[Variations] schedule link failed:', e.message);
+    }
+
     res.json({ ok: true, approved_at: new Date().toISOString() });
   } catch (err) {
     console.error('[Variations] approve error:', err);
