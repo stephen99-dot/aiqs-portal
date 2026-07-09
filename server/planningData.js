@@ -23,6 +23,13 @@
 const PLANIT_BASE = 'https://www.planit.org.uk/api/applics/json';
 const POSTCODES_BASE = 'https://api.postcodes.io/postcodes/';
 
+// Free planning/geo APIs throttle anonymous, unidentified clients hard — some
+// down to almost nothing. Identifying the app with a descriptive User-Agent and
+// a contact email is standard etiquette and typically lifts the limit. Override
+// the contact via PLANIT_CONTACT_EMAIL if you like.
+const CONTACT_EMAIL = process.env.PLANIT_CONTACT_EMAIL || 'hello@crmwizardai.com';
+const USER_AGENT = 'AIQS-Portal-PlanningLeads/1.0 (+mailto:' + CONTACT_EMAIL + ')';
+
 // Timeout wrapper — never let a slow upstream hang the request. On a non-2xx it
 // throws an Error carrying .status, and for rate limits (.status 429) it also
 // parses how many seconds to wait (from the Retry-After header or the body's
@@ -31,7 +38,7 @@ async function fetchJson(url, ms = 12000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+    const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
     if (!r.ok) {
       const e = new Error('Upstream ' + r.status);
       e.status = r.status;
@@ -338,4 +345,5 @@ module.exports = {
   searchLeads, sampleLeads, geocodePostcode, CATEGORIES,
   buildPlanitQueries, recordsOf, PLANIT_BASE, fetchJson,
   cooldownRemainingSecs, withKey, hasApiKey: () => !!PLANIT_API_KEY,
+  USER_AGENT,
 };

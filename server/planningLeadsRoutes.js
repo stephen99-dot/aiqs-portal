@@ -18,7 +18,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
-const { searchLeads, sampleLeads, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE, withKey, cooldownRemainingSecs, hasApiKey } = require('./planningData');
+const { searchLeads, sampleLeads, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE, withKey, cooldownRemainingSecs, hasApiKey, USER_AGENT } = require('./planningData');
 
 const router = express.Router();
 
@@ -68,7 +68,7 @@ router.get('/diag', async (req, res) => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10000);
     try {
-      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
       const bodyStart = (await r.text()).slice(0, 160);
       return { label, ok: r.ok, status: r.status, ms: Date.now() - started, bodyStart };
     } catch (e) {
@@ -90,7 +90,7 @@ router.get('/diag', async (req, res) => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10000);
     try {
-      const r = await fetch(PLANIT_BASE + '?' + withKey(q.qs), { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+      const r = await fetch(PLANIT_BASE + '?' + withKey(q.qs), { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': USER_AGENT } });
       const text = await r.text();
       let count = null; try { count = recordsOf(JSON.parse(text)).length; } catch (_) {}
       planit = [{ shape: q.label, ok: r.ok, status: r.status, ms: Date.now() - started, records: count, bodyStart: r.ok ? undefined : text.slice(0, 160) }];

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -51,6 +51,8 @@ function Inner() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [diag, setDiag] = useState(null);
+  const [cooldown, setCooldown] = useState(0); // seconds until auto-retry
+  const autoRetriesRef = useRef(0);
   const [draftingRef, setDraftingRef] = useState(null);
 
   useEffect(() => {
@@ -72,8 +74,9 @@ function Inner() {
 
   const toggleCat = (id) => setCategories(cs => cs.includes(id) ? cs.filter(c => c !== id) : [...cs, id]);
 
-  const scan = useCallback(async (demo = false) => {
+  const scan = useCallback(async (demo = false, isAuto = false) => {
     if (loading) return;
+    if (!isAuto) { autoRetriesRef.current = 0; setCooldown(0); } // fresh user action
     setLoading(true); setError(''); setNotice(''); setDiag(null);
     try {
       const body = demo
@@ -82,22 +85,45 @@ function Inner() {
       const out = await apiFetch('/planning-leads/search', { method: 'POST', body: JSON.stringify(body) });
       setLeads(out.leads || []);
       setMeta({ source: out.source, area: out.area, radiusKm: out.radiusKm });
+      autoRetriesRef.current = 0;
       if (out.source === 'sample') setNotice('Showing sample data so you can see how it works.');
       else if (out.stale || out.source === 'planit-cached') setNotice('The live service is busy, so these are cached results from a recent scan of this area.');
     } catch (e) {
       const code = e.data?.code;
-      setError(e.message || 'Scan failed.');
       if (code === 'RATE_LIMITED' || e.status === 429) {
-        // PlanIt is throttling us. Nothing to diagnose — just tell them the wait.
-        setNotice('You can preview the tool with sample data while the planning service cools down.');
+        // PlanIt is throttling us. If the wait is short, count it down and retry
+        // automatically (a couple of times) so it just works without a click.
+        const secs = Math.min(Number(e.data?.retryAfter) || 30, 90);
+        if (autoRetriesRef.current < 3) {
+          setError('');
+          setNotice('The planning service is busy — retrying automatically…');
+          setCooldown(secs);
+        } else {
+          setError(e.message || 'Rate limited.');
+          setNotice('Still busy after a few tries — give it a minute, or preview with sample data.');
+        }
       } else if (/unreachable|temporarily|502/i.test(e.message || '') || e.status === 502) {
         // If the live service is unreachable, offer the sample so the screen
         // isn't dead, and pull the connectivity probe so the cause is visible.
+        setError(e.message || 'Scan failed.');
         setNotice('The live planning service didn’t answer. You can preview the tool with sample data.');
         apiFetch('/planning-leads/diag').then(setDiag).catch(() => {});
+      } else {
+        setError(e.message || 'Scan failed.');
       }
     } finally { setLoading(false); }
   }, [loading, postcode, radiusKm, categories, state, monthsBack]);
+
+  // Count the cooldown down once a second; at zero, auto-retry the scan.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => {
+      const next = cooldown - 1;
+      setCooldown(next);
+      if (next <= 0) { autoRetriesRef.current += 1; scan(false, true); }
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [cooldown, scan]);
 
   const draft = async (lead) => {
     if (draftingRef) return;
@@ -181,12 +207,12 @@ function Inner() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-          <button onClick={() => scan(false)} disabled={!canScan} style={{
+          <button onClick={() => scan(false)} disabled={!canScan || cooldown > 0} style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 46, padding: '0 22px',
             borderRadius: 11, border: 'none', background: AMBER, color: '#0A0F1C',
-            fontSize: 15, fontWeight: 800, cursor: canScan ? 'pointer' : 'not-allowed', opacity: canScan ? 1 : 0.5,
+            fontSize: 15, fontWeight: 800, cursor: (canScan && cooldown === 0) ? 'pointer' : 'not-allowed', opacity: (canScan && cooldown === 0) ? 1 : 0.5,
           }}>
-            <SearchIcon size={17} color="#0A0F1C" /> {loading ? 'Scanning councils…' : 'Scan councils'}
+            <SearchIcon size={17} color="#0A0F1C" /> {cooldown > 0 ? `Retrying in ${cooldown}s…` : loading ? 'Scanning councils…' : 'Scan councils'}
           </button>
           <button onClick={() => scan(true)} disabled={loading} style={{
             minHeight: 46, padding: '0 18px', borderRadius: 11,
