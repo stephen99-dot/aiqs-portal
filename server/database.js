@@ -806,6 +806,8 @@ db.exec(`
     percent_complete INTEGER DEFAULT 0,
     status TEXT DEFAULT 'not_started',          -- not_started | in_progress | done | blocked
     source_line_ids TEXT DEFAULT '[]',          -- JSON array of quote_lines.id this task came from
+    cost_amount REAL,                           -- explicit cost (e.g. from an approved change order); overrides the contract-value spread in the cash flow
+    variation_id TEXT,                          -- links the task to the approved change order that created it
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (plan_id) REFERENCES schedule_plans(id)
@@ -947,6 +949,9 @@ const migrations = [
   // Wave 6 Stage 2: accumulated slip (working days) used by the schedule
   // assistant to push a task and everything after it back when site work slips.
   { column: 'lag_days', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN lag_days INTEGER DEFAULT 0" },
+  // Phase 2: an approved change order can auto-add a costed task to the plan.
+  { column: 'cost_amount', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN cost_amount REAL" },
+  { column: 'variation_id', table: 'schedule_tasks', sql: "ALTER TABLE schedule_tasks ADD COLUMN variation_id TEXT" },
   // Builder Pack working state — the in-progress edits (figures, margins,
   // colour scheme, included/excluded lines) the user makes on the Builder Pack
   // screen, stored as JSON so they survive leaving and re-opening the screen.

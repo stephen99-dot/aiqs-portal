@@ -81,13 +81,24 @@ invoices ("claims"). Admin-only.
 
 **Effort:** M · **Risk:** Low · **Deps:** Phase 0
 
-## Phase 2 — Close the change-order "site app" loop
+## Phase 2 — Close the change-order "site app" loop  *(in progress)*
 
 - ✅ Photo + measurements + rates on a variation, client e-sign with audit,
   lock-on-approval — *built*.
-- ⬜ AI **indicative cost** auto-draft from measurements/rates (office fixes/FOC).
-- ⬜ On approval: **auto-add to the schedule/timeline** and re-flow dates.
-- ⬜ On approval: roll into the live cost-tracking + cash flow doc.
+- ✅ On approval: **auto-add to the schedule/timeline** and re-flow dates —
+  `server/scheduleLink.js`. When a change order is approved, a costed task
+  ("VO N: title", phase *Variations*) is appended to the job's programme,
+  scheduled to run after the current work, and the plan re-flows + snapshots.
+  Duration is estimated from the change order's labour (~1 day / £250, capped).
+  Idempotent (never double-adds). **Owner-portal only** — no-ops unless the
+  owning user is admin.
+- ✅ On approval: roll into the cost-tracking + cash flow doc — the added task
+  carries an explicit `cost_amount`, so the Phase 1 cash flow shows the change
+  order stacked on the contract value (new "Change orders" total + a timeline
+  badge). No double counting: explicit-cost tasks are excluded from the
+  contract-value spread.
+- ⬜ AI **indicative cost** auto-draft from measurements/rates (office fixes/FOC)
+  — next slice.
 - ⬜ Mobile-friendly polish of the existing public pages.
 
 **Effort:** M · **Risk:** Low–Med · **Deps:** Phases 0–1
