@@ -23,13 +23,25 @@
 const PLANIT_BASE = 'https://www.planit.org.uk/api/applics/json';
 const POSTCODES_BASE = 'https://api.postcodes.io/postcodes/';
 
-// Timeout wrapper — never let a slow upstream hang the request.
+// Timeout wrapper — never let a slow upstream hang the request. On a non-2xx it
+// throws an Error carrying .status, and for rate limits (.status 429) it also
+// parses how many seconds to wait (from the Retry-After header or the body's
+// "try again in NNNs" message) onto .retryAfter.
 async function fetchJson(url, ms = 12000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
-    if (!r.ok) { const e = new Error('Upstream ' + r.status); e.status = r.status; throw e; }
+    if (!r.ok) {
+      const e = new Error('Upstream ' + r.status);
+      e.status = r.status;
+      if (r.status === 429) {
+        let secs = parseInt(r.headers.get('retry-after') || '', 10);
+        try { const body = await r.text(); const m = body.match(/(\d+)\s*s/); if (!secs && m) secs = parseInt(m[1], 10); } catch (_) {}
+        e.retryAfter = Number.isFinite(secs) ? secs : 60;
+      }
+      throw e;
+    }
     return await r.json();
   } finally { clearTimeout(timer); }
 }
@@ -140,6 +152,34 @@ async function geocodePostcode(postcode) {
 
 const PLANIT_SELECT = 'name,uid,area_name,description,address,postcode,app_state,app_type,app_size,start_date,decided_date,url,location,lat,lng';
 
+// Optional PlanIt API key. PlanIt rate-limits anonymous use hard; registered
+// users get much higher limits. Set PLANIT_API_KEY (and PLANIT_AUTH_PARAM if
+// PlanIt names the query param something other than "auth") to raise the ceiling.
+const PLANIT_API_KEY = process.env.PLANIT_API_KEY || '';
+const PLANIT_AUTH_PARAM = process.env.PLANIT_AUTH_PARAM || 'auth';
+function withKey(qs) {
+  return PLANIT_API_KEY ? qs + '&' + PLANIT_AUTH_PARAM + '=' + encodeURIComponent(PLANIT_API_KEY) : qs;
+}
+
+// ─── Rate-limit cooldown + result cache ──────────────────────────────────────
+// PlanIt returns 429 "try again in NNNs" when we're over its limit. We remember
+// that window and refuse to hammer it until it passes, and we cache successful
+// scans per area so repeat/adjacent scans don't spend a request at all. Planning
+// registers change at most daily, so a multi-hour TTL is safe.
+let _cooldownUntilMs = 0;                 // epoch ms; 0 = not limited
+const _cache = new Map();                 // key -> { at, leadsRaw }
+// Planning registers update ~once a day, so a 24h cache keeps results fresh
+// enough while spending at most one live PlanIt request per area per day — the
+// simplest way to stay well under the free-tier rate limit without any setup.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function nowMs() { return Date.now(); }
+function cooldownRemainingSecs() { return Math.max(0, Math.ceil((_cooldownUntilMs - nowMs()) / 1000)); }
+function cacheKey(lat, lng, radiusKm) {
+  // Round the centre so nearby postcodes share a cache entry.
+  return [lat.toFixed(2), lng.toFixed(2), Math.round(radiusKm)].join(':');
+}
+
 // PlanIt requires a spatial/date/search restriction and has shifted its param
 // names over time, so we build a list of candidate spatial queries and use the
 // first that PlanIt accepts. Order = most precise first. The same builder feeds
@@ -163,18 +203,25 @@ function recordsOf(j) {
   return (j && (j.records || j.applics || j.results || (Array.isArray(j) ? j : null))) || [];
 }
 
-// Fetch raw applications from PlanIt within radiusKm of lat/lng. Tries each
-// candidate query shape; returns the normalised list from the first that works.
+// Fetch raw applications from PlanIt within radiusKm of lat/lng. Issues ONE
+// request (the first query shape); only if PlanIt says 400 "wrong shape" do we
+// try the next candidate — we never fire all shapes speculatively, to stay
+// under the rate limit. A 429 starts a cooldown and is re-thrown so the caller
+// can serve cached/sample data with a clear "try again in N" message.
 async function fetchPlanit({ lat, lng, radiusKm, pageSize = 100 }) {
   const queries = buildPlanitQueries({ lat, lng, radiusKm, pageSize });
   let lastErr;
   for (const q of queries) {
     try {
-      const j = await fetchJson(PLANIT_BASE + '?' + q.qs, 14000);
+      const j = await fetchJson(PLANIT_BASE + '?' + withKey(q.qs), 14000);
       return recordsOf(j).map(normalise);
     } catch (e) {
       lastErr = e;
-      // A 400 just means "wrong query shape" — try the next candidate. Any other
+      if (e && e.status === 429) {
+        _cooldownUntilMs = nowMs() + (e.retryAfter || 60) * 1000;
+        throw e; // don't try other shapes — they'll all be limited too.
+      }
+      // A 400 means "wrong query shape" — try the next candidate. Any other
       // status (403 egress, 5xx, network) is a real outage; stop and report it.
       if (e && e.status && e.status !== 400) throw e;
     }
@@ -193,15 +240,43 @@ async function searchLeads(opts = {}) {
   const limit = Math.min(Math.max(Number(opts.limit) || 40, 1), 80);
 
   const geo = await geocodePostcode(opts.postcode);
+  const key = cacheKey(geo.lat, geo.lng, radiusKm);
+  const cached = _cache.get(key);
+  const cacheFresh = cached && (nowMs() - cached.at) < CACHE_TTL_MS;
+
   let raw;
-  try {
-    raw = await fetchPlanit({ lat: geo.lat, lng: geo.lng, radiusKm });
-  } catch (e) {
-    // Network/policy blocked (e.g. sandbox) — surface a clear, non-fatal signal.
-    const err = new Error('The planning data service is unreachable right now. Try again shortly, or use the sample data to preview the tool.');
-    err.code = 'UPSTREAM_UNREACHABLE';
-    err.cause = e;
-    throw err;
+  let stale = false;
+  if (cacheFresh) {
+    raw = cached.leadsRaw; // reuse the fetched records; re-filter below.
+  } else if (cooldownRemainingSecs() > 0) {
+    // We're inside PlanIt's rate-limit window. Serve stale cache if we have any,
+    // otherwise tell the caller exactly how long to wait.
+    if (cached) { raw = cached.leadsRaw; stale = true; }
+    else {
+      const secs = cooldownRemainingSecs();
+      throw Object.assign(
+        new Error('The planning service is rate-limiting us right now — try again in about ' + Math.ceil(secs / 60) + ' min. Meanwhile you can preview with sample data.'),
+        { code: 'RATE_LIMITED', retryAfter: secs });
+    }
+  } else {
+    try {
+      raw = await fetchPlanit({ lat: geo.lat, lng: geo.lng, radiusKm });
+      _cache.set(key, { at: nowMs(), leadsRaw: raw });
+    } catch (e) {
+      if (e && e.status === 429) {
+        const secs = e.retryAfter || cooldownRemainingSecs() || 60;
+        if (cached) { raw = cached.leadsRaw; stale = true; } // fall back to stale
+        else throw Object.assign(
+          new Error('The planning service is rate-limiting us right now — try again in about ' + Math.ceil(secs / 60) + ' min. Meanwhile you can preview with sample data.'),
+          { code: 'RATE_LIMITED', retryAfter: secs });
+      } else {
+        // Network/policy blocked or outage — surface a clear, non-fatal signal.
+        const err = new Error('The planning data service is unreachable right now. Try again shortly, or use the sample data to preview the tool.');
+        err.code = 'UPSTREAM_UNREACHABLE';
+        err.cause = e;
+        throw err;
+      }
+    }
   }
 
   const cutoff = new Date();
@@ -230,7 +305,14 @@ async function searchLeads(opts = {}) {
 
   // Most recently decided first.
   res.sort((a, b) => (b.decided_date || b.submitted_date || '').localeCompare(a.decided_date || a.submitted_date || ''));
-  return { leads: res.slice(0, limit), source: 'planit', area: geo.area, radiusKm };
+  return {
+    leads: res.slice(0, limit),
+    source: stale ? 'planit-cached' : 'planit',
+    area: geo.area,
+    radiusKm,
+    stale,
+    cooldownSecs: cooldownRemainingSecs(),
+  };
 }
 
 // ─── Sample data ─────────────────────────────────────────────────────────────
@@ -252,4 +334,8 @@ function sampleLeads() {
   };
 }
 
-module.exports = { searchLeads, sampleLeads, geocodePostcode, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE, fetchJson };
+module.exports = {
+  searchLeads, sampleLeads, geocodePostcode, CATEGORIES,
+  buildPlanitQueries, recordsOf, PLANIT_BASE, fetchJson,
+  cooldownRemainingSecs, withKey, hasApiKey: () => !!PLANIT_API_KEY,
+};
