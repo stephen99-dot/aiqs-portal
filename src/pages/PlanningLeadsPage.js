@@ -142,7 +142,7 @@ function Inner() {
   const canScan = postcode.trim().length >= 2 && categories.length > 0 && !loading;
 
   return (
-    <div style={{ padding: '20px 16px 40px', color: t.text, maxWidth: 860, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px 40px', color: t.text, maxWidth: 1320, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ color: AMBER, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
@@ -280,7 +280,7 @@ function Inner() {
               No matching applications in that area and window. Try a wider radius, a longer window, or add more work types.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(430px, 1fr))', gap: 12, alignItems: 'start' }}>
               {leads.map((lead, i) => {
                 const busy = draftingRef === (lead.ref || lead.address);
                 const isGranted = /permit|condition|grant|referr/i.test(lead.state || '');
