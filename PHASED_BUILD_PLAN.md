@@ -77,7 +77,10 @@ invoices ("claims"). Admin-only.
   the rest of the schedule). Returns monthly planned vs claimed + totals.
 - ✅ Cash flow panel in `src/components/JobSchedule.js`, admin-only via
   `useAuth()`. Monthly table + bars + contract/planned/claimed/remaining totals.
-- ⬜ "Show client" branded PDF (reuse the schedule PDF pipeline) — follow-up.
+- ✅ "Show client" branded PDF — `server/cashflowPdf.js` +
+  `GET /api/schedule/plans/:id/cashflow/pdf` (admin-only). Portrait A4 with the
+  builder's branding: totals cards + a month-by-month planned/cumulative/claimed
+  table. "Show client (PDF)" button in the cash flow panel.
 
 **Effort:** M · **Risk:** Low · **Deps:** Phase 0
 

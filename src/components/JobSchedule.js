@@ -481,6 +481,7 @@ function CashflowPanel({ t, planId, isMobile }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -490,6 +491,22 @@ function CashflowPanel({ t, planId, isMobile }) {
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [planId]);
+
+  const downloadPdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true); setError('');
+    try {
+      const r = await fetch('/api/schedule/plans/' + planId + '/cashflow/pdf', { headers: { Authorization: 'Bearer ' + getToken() } });
+      if (!r.ok) throw new Error('Download failed');
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cash-flow.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { setError(e.message); }
+    finally { setPdfBusy(false); }
+  };
 
   const toggle = async () => {
     const next = !open;
@@ -514,6 +531,9 @@ function CashflowPanel({ t, planId, isMobile }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {open && data && data.months && data.months.length > 0 && (
+            <button onClick={downloadPdf} disabled={pdfBusy} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: pdfBusy ? 0.6 : 1 }}>{pdfBusy ? 'Preparing…' : 'Show client (PDF)'}</button>
+          )}
           {open && <button onClick={load} disabled={loading} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '…' : 'Refresh'}</button>}
           <button onClick={toggle} style={{ minHeight: 36, padding: '0 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             {open ? 'Hide' : 'Show cash flow'}

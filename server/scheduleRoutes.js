@@ -31,6 +31,7 @@ const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, adminMiddleware } = require('./auth');
 const { computeSchedule, programmeWindow } = require('./scheduleEngine');
 const { streamSchedulePdf } = require('./schedulePdf');
+const { streamCashflowPdf } = require('./cashflowPdf');
 const { buildCashflow } = require('./scheduleCashflow');
 
 const router = express.Router();
@@ -749,52 +750,73 @@ router.get('/plans/:id/export', (req, res) => {
 //
 // Spreads the quote's contract value across the dated tasks and overlays the
 // claims (invoices) raised to date, month by month.
+// Gather the cash-flow projection for a plan. Shared by the JSON + PDF routes.
+// Returns { cf, quote, netSum, hasDatedTasks }.
+function computePlanCashflow(plan, userId) {
+  const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?')
+    .all(plan.id).map(serialiseTask);
+
+  // The quote behind the contract value + the priced-line map for weighting.
+  let quote = null;
+  if (plan.quote_id) {
+    quote = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(plan.quote_id, userId);
+  }
+  if (!quote) {
+    quote = db.prepare('SELECT * FROM quotes WHERE job_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(plan.job_id, userId);
+  }
+
+  const lineTotalById = new Map();
+  let netSum = 0;
+  if (quote) {
+    const lines = db.prepare('SELECT id, line_total FROM quote_lines WHERE quote_id = ?').all(quote.id);
+    for (const l of lines) {
+      const v = Number(l.line_total) || 0;
+      lineTotalById.set(l.id, v);
+      netSum += v;
+    }
+  }
+  const contractValue = quote ? (Number(quote.grand_total) || netSum) : 0;
+
+  // Claims to date: invoices raised on this job (sent or paid), by issue date.
+  const invRows = db.prepare(
+    "SELECT issue_date, grand_total FROM invoices WHERE job_id = ? AND user_id = ? AND status IN ('sent', 'paid')"
+  ).all(plan.job_id, userId);
+  const claims = invRows.map((r) => ({ date: r.issue_date, amount: Number(r.grand_total) || 0 }));
+
+  const cf = buildCashflow({ tasks, lineTotalById, contractValue, workingDays: plan.working_days, claims });
+  return { cf, quote, netSum, hasDatedTasks: tasks.some((t) => t.planned_start && t.planned_end) };
+}
+
 router.get('/plans/:id/cashflow', adminMiddleware, (req, res) => {
   try {
     const plan = ownedPlan(req.params.id, req.user.id);
     if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
-
-    const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?')
-      .all(plan.id).map(serialiseTask);
-
-    // The quote behind the contract value + the priced-line map for weighting.
-    let quote = null;
-    if (plan.quote_id) {
-      quote = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(plan.quote_id, req.user.id);
-    }
-    if (!quote) {
-      quote = db.prepare('SELECT * FROM quotes WHERE job_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1')
-        .get(plan.job_id, req.user.id);
-    }
-
-    const lineTotalById = new Map();
-    let netSum = 0;
-    if (quote) {
-      const lines = db.prepare('SELECT id, line_total FROM quote_lines WHERE quote_id = ?').all(quote.id);
-      for (const l of lines) {
-        const v = Number(l.line_total) || 0;
-        lineTotalById.set(l.id, v);
-        netSum += v;
-      }
-    }
-    const contractValue = quote ? (Number(quote.grand_total) || netSum) : 0;
-
-    // Claims to date: invoices raised on this job (sent or paid), by issue date.
-    const invRows = db.prepare(
-      "SELECT issue_date, grand_total FROM invoices WHERE job_id = ? AND user_id = ? AND status IN ('sent', 'paid')"
-    ).all(plan.job_id, req.user.id);
-    const claims = invRows.map((r) => ({ date: r.issue_date, amount: Number(r.grand_total) || 0 }));
-
-    const cf = buildCashflow({ tasks, lineTotalById, contractValue, workingDays: plan.working_days, claims });
+    const { cf, quote, netSum, hasDatedTasks } = computePlanCashflow(plan, req.user.id);
     res.json({
       plan: { id: plan.id, title: plan.title, currency: 'GBP' },
       quote: quote ? { id: quote.id, grand_total: Number(quote.grand_total) || netSum } : null,
-      hasDatedTasks: tasks.some((t) => t.planned_start && t.planned_end),
+      hasDatedTasks,
       ...cf,
     });
   } catch (err) {
     console.error('[Schedule] cashflow error:', err);
     res.status(500).json({ error: 'Failed to build the cash flow.' });
+  }
+});
+
+// GET /plans/:id/cashflow/pdf — branded, client-facing cash-flow PDF (admin-only).
+router.get('/plans/:id/cashflow/pdf', adminMiddleware, (req, res) => {
+  try {
+    const plan = ownedPlan(req.params.id, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
+    const { cf } = computePlanCashflow(plan, req.user.id);
+    const branding = getBranding(req.user.id);
+    const userInfo = getUserDisplay(req.user.id);
+    streamCashflowPdf(res, plan, cf, branding, userInfo);
+  } catch (err) {
+    console.error('[Schedule] cashflow pdf error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate the cash-flow PDF.' });
   }
 });
 
