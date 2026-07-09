@@ -79,9 +79,24 @@ function normalise(rec) {
     submitted_date: String(pick(rec, ['start_date', 'date_received', 'received_date'])).slice(0, 10),
     decided_date: String(pick(rec, ['decided_date', 'decision_date', 'decision_issued_date'])).slice(0, 10),
     url: String(pick(rec, ['url', 'link', 'source_url', 'lpa_app_url'])).slice(0, 500),
-    lat: Number(pick(rec, ['lat', 'latitude'], 0)) || null,
-    lng: Number(pick(rec, ['lng', 'lon', 'longitude'], 0)) || null,
+    lat: Number(pick(rec, ['lat', 'latitude'], 0)) || latOf(rec) || null,
+    lng: Number(pick(rec, ['lng', 'lon', 'longitude'], 0)) || lngOf(rec) || null,
   };
+}
+
+// PlanIt sometimes carries the point as location "lat,lng" or a GeoJSON-ish
+// { coordinates: [lng, lat] }. Pull them out defensively.
+function latOf(rec) {
+  const loc = rec.location;
+  if (typeof loc === 'string' && loc.includes(',')) return Number(loc.split(',')[0]) || 0;
+  if (loc && Array.isArray(loc.coordinates)) return Number(loc.coordinates[1]) || 0;
+  return 0;
+}
+function lngOf(rec) {
+  const loc = rec.location;
+  if (typeof loc === 'string' && loc.includes(',')) return Number(loc.split(',')[1]) || 0;
+  if (loc && Array.isArray(loc.coordinates)) return Number(loc.coordinates[0]) || 0;
+  return 0;
 }
 
 // Postcode -> { lat, lng, area } via postcodes.io. Accepts full or partial.
@@ -123,20 +138,48 @@ async function geocodePostcode(postcode) {
     { code: 'UPSTREAM_UNREACHABLE' });
 }
 
-// Fetch raw applications from PlanIt within radiusKm of lat/lng. Returns the
-// normalised, unfiltered list (state/keyword filtering happens in searchLeads).
+const PLANIT_SELECT = 'name,uid,area_name,description,address,postcode,app_state,app_type,app_size,start_date,decided_date,url,location,lat,lng';
+
+// PlanIt requires a spatial/date/search restriction and has shifted its param
+// names over time, so we build a list of candidate spatial queries and use the
+// first that PlanIt accepts. Order = most precise first. The same builder feeds
+// the /diag probe, so the live server tells us which shape works.
+function buildPlanitQueries({ lat, lng, radiusKm, pageSize = 100 }) {
+  const km = Number(radiusKm) || 8;
+  // Bounding box from centre + radius. GeoJSON bbox order: W,S,E,N.
+  const dLat = km / 111;
+  const dLng = km / (111 * Math.cos((lat * Math.PI) / 180) || 1);
+  const bbox = [lng - dLng, lat - dLat, lng + dLng, lat + dLat].map(n => n.toFixed(5)).join(',');
+  const common = `pg_sz=${pageSize}&select=${PLANIT_SELECT}`;
+  return [
+    { label: 'lat/lng/krad', qs: `lat=${lat}&lng=${lng}&krad=${km}&${common}` },
+    { label: 'bbox', qs: `bbox=${bbox}&${common}` },
+    { label: 'geo/krad', qs: `geo=${lat},${lng}&krad=${km}&${common}` },
+  ];
+}
+
+// Extract the records array whatever key PlanIt uses.
+function recordsOf(j) {
+  return (j && (j.records || j.applics || j.results || (Array.isArray(j) ? j : null))) || [];
+}
+
+// Fetch raw applications from PlanIt within radiusKm of lat/lng. Tries each
+// candidate query shape; returns the normalised list from the first that works.
 async function fetchPlanit({ lat, lng, radiusKm, pageSize = 100 }) {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lng: String(lng),
-    krad: String(radiusKm),
-    pg_sz: String(pageSize),
-    sort: '-start_date',
-    select: 'name,uid,area_name,description,address,postcode,app_state,app_type,app_size,start_date,decided_date,url,lat,lng',
-  });
-  const j = await fetchJson(PLANIT_BASE + '?' + params.toString(), 14000);
-  const records = (j && (j.records || j.applics || j.results)) || [];
-  return records.map(normalise);
+  const queries = buildPlanitQueries({ lat, lng, radiusKm, pageSize });
+  let lastErr;
+  for (const q of queries) {
+    try {
+      const j = await fetchJson(PLANIT_BASE + '?' + q.qs, 14000);
+      return recordsOf(j).map(normalise);
+    } catch (e) {
+      lastErr = e;
+      // A 400 just means "wrong query shape" — try the next candidate. Any other
+      // status (403 egress, 5xx, network) is a real outage; stop and report it.
+      if (e && e.status && e.status !== 400) throw e;
+    }
+  }
+  throw lastErr || new Error('PlanIt returned no usable result.');
 }
 
 // The public entry point. Returns { leads, source, area }.
@@ -209,4 +252,4 @@ function sampleLeads() {
   };
 }
 
-module.exports = { searchLeads, sampleLeads, geocodePostcode, CATEGORIES };
+module.exports = { searchLeads, sampleLeads, geocodePostcode, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE, fetchJson };

@@ -18,7 +18,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
-const { searchLeads, sampleLeads, CATEGORIES } = require('./planningData');
+const { searchLeads, sampleLeads, CATEGORIES, buildPlanitQueries, recordsOf, PLANIT_BASE } = require('./planningData');
 
 const router = express.Router();
 
@@ -76,11 +76,28 @@ router.get('/diag', async (req, res) => {
         error: e.name + ': ' + e.message, cause: (e.cause && (e.cause.code || e.cause.message)) || null };
     } finally { clearTimeout(timer); }
   };
-  const [postcodes, planit] = await Promise.all([
+  // Probe each candidate PlanIt spatial query shape (centred on central London)
+  // so the live server tells us which one PlanIt actually accepts. The first to
+  // return records with HTTP 200 is the shape the scanner will use.
+  const probePlanit = async ({ label, qs }) => {
+    const started = Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const r = await fetch(PLANIT_BASE + '?' + qs, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+      const text = await r.text();
+      let count = null; try { count = recordsOf(JSON.parse(text)).length; } catch (_) {}
+      return { shape: label, ok: r.ok, status: r.status, ms: Date.now() - started, records: count, bodyStart: r.ok ? undefined : text.slice(0, 160) };
+    } catch (e) {
+      return { shape: label, ok: false, status: null, ms: Date.now() - started, error: e.name + ': ' + e.message };
+    } finally { clearTimeout(timer); }
+  };
+  const planitShapes = buildPlanitQueries({ lat: 51.501, lng: -0.1419, radiusKm: 5, pageSize: 3 });
+  const [postcodes, ...planitResults] = await Promise.all([
     probe('postcodes.io', 'https://api.postcodes.io/postcodes/SW1A%201AA'),
-    probe('planit.org.uk', 'https://www.planit.org.uk/api/applics/json?pg_sz=1'),
+    ...planitShapes.map(probePlanit),
   ]);
-  res.json({ node: process.version, hasFetch: typeof fetch === 'function', postcodes, planit });
+  res.json({ node: process.version, hasFetch: typeof fetch === 'function', postcodes, planit: planitResults });
 });
 
 // POST /search — scan councils around a postcode.

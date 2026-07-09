@@ -207,13 +207,20 @@ function Inner() {
         <details style={{ marginBottom: 12, fontSize: 12, color: t.textSecondary }}>
           <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Connection diagnostics (why the scan couldn’t run)</summary>
           <div style={{ marginTop: 8, background: t.bg, border: '1px solid ' + t.border, borderRadius: 8, padding: 10, fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {['postcodes', 'planit'].map(k => {
-              const d = diag[k]; if (!d) return null;
-              const line = d.ok
-                ? `✅ ${d.label} — reachable (HTTP ${d.status}, ${d.ms}ms)`
-                : `❌ ${d.label} — ${d.status ? 'HTTP ' + d.status : ''} ${d.error || ''}${d.cause ? ' (' + d.cause + ')' : ''}${d.bodyStart ? '\n     ' + d.bodyStart : ''}`;
-              return <div key={k} style={{ marginBottom: 6 }}>{line}</div>;
-            })}
+            {diag.postcodes && (
+              <div style={{ marginBottom: 6 }}>
+                {diag.postcodes.ok
+                  ? `✅ ${diag.postcodes.label} — reachable (HTTP ${diag.postcodes.status}, ${diag.postcodes.ms}ms)`
+                  : `❌ ${diag.postcodes.label} — ${diag.postcodes.status ? 'HTTP ' + diag.postcodes.status : ''} ${diag.postcodes.error || ''}${diag.postcodes.bodyStart ? '\n     ' + diag.postcodes.bodyStart : ''}`}
+              </div>
+            )}
+            {Array.isArray(diag.planit) && diag.planit.map((d, i) => (
+              <div key={i} style={{ marginBottom: 6 }}>
+                {d.ok
+                  ? `✅ planit.org.uk [${d.shape}] — HTTP ${d.status}, ${d.records} records, ${d.ms}ms`
+                  : `❌ planit.org.uk [${d.shape}] — ${d.status ? 'HTTP ' + d.status : ''} ${d.error || ''}${d.bodyStart ? '\n     ' + d.bodyStart : ''}`}
+              </div>
+            ))}
             <div style={{ color: t.textMuted, marginTop: 4 }}>node {diag.node}</div>
           </div>
         </details>
