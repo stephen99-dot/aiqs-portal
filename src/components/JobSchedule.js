@@ -429,11 +429,18 @@ export default function JobSchedule({ t, jobId, quotes }) {
         <CashflowPanel t={t} planId={plan.id} isMobile={isMobile} />
       )}
 
+      {/* Time & cost capture (admin-only, Phase 3) — log site hours against
+          tasks; feeds Finance Hub and flags labour overruns. */}
+      {isAdmin && plan && (
+        <TimeCapturePanel t={t} planId={plan.id} tasks={tasks} isMobile={isMobile} />
+      )}
+
       {/* Stage 2: tell the assistant what happened on site */}
       <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + t.border }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Update from site</div>
         <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
           Tell me what's happened — e.g. “Roof finished Tuesday, but screed slipped a week waiting on the pump.” I'll update the programme and re-flow the dates.
+          {isAdmin && " Mention hours too — “Dan did 8 hours on groundworks” — and I'll log the labour against the job."}
         </div>
 
         {chat.length > 0 && (
@@ -481,6 +488,7 @@ function CashflowPanel({ t, planId, isMobile }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -490,6 +498,22 @@ function CashflowPanel({ t, planId, isMobile }) {
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [planId]);
+
+  const downloadPdf = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true); setError('');
+    try {
+      const r = await fetch('/api/schedule/plans/' + planId + '/cashflow/pdf', { headers: { Authorization: 'Bearer ' + getToken() } });
+      if (!r.ok) throw new Error('Download failed');
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cash-flow.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { setError(e.message); }
+    finally { setPdfBusy(false); }
+  };
 
   const toggle = async () => {
     const next = !open;
@@ -514,6 +538,9 @@ function CashflowPanel({ t, planId, isMobile }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {open && data && data.months && data.months.length > 0 && (
+            <button onClick={downloadPdf} disabled={pdfBusy} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: pdfBusy ? 0.6 : 1 }}>{pdfBusy ? 'Preparing…' : 'Show client (PDF)'}</button>
+          )}
           {open && <button onClick={load} disabled={loading} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: '1px solid ' + t.border, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '…' : 'Refresh'}</button>}
           <button onClick={toggle} style={{ minHeight: 36, padding: '0 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             {open ? 'Hide' : 'Show cash flow'}
@@ -577,6 +604,167 @@ function CashflowPanel({ t, planId, isMobile }) {
                     The contract value is spread across each task's working days — weighted by its priced lines where known, by duration otherwise — then bucketed by month. Claims are invoices raised on this job (sent or paid).
                   </div>
                 </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Time & cost capture panel (admin-only, Phase 3) ──────────────────────────
+// Log a day's site work against a task: hours, % complete, cost. It feeds the
+// job's actual costs (Finance Hub) and flags where labour is running over the
+// priced budget.
+function TimeCapturePanel({ t, planId, tasks, isMobile }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const blankForm = { task_id: '', entry_date: todayIso(), worker: '', hours: '', hourly_rate: '', percent_complete: '', note: '' };
+  const [form, setForm] = useState(blankForm);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try { setData(await apiFetch('/schedule/plans/' + planId + '/time')); }
+    catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, [planId]);
+
+  const toggle = async () => { const n = !open; setOpen(n); if (n && !data) await load(); };
+
+  const submit = async () => {
+    if (busy) return;
+    const hours = Number(form.hours) || 0;
+    const cost = Number(form.hourly_rate) || 0;
+    if (hours <= 0 && cost <= 0) { setError('Enter hours (and a rate) or a labour cost.'); return; }
+    setBusy(true); setError('');
+    try {
+      const body = {
+        task_id: form.task_id || null,
+        entry_date: form.entry_date,
+        worker: form.worker || null,
+        hours,
+        hourly_rate: cost,
+        percent_complete: form.percent_complete === '' ? null : Number(form.percent_complete),
+        note: form.note || null,
+      };
+      const r = await apiFetch('/schedule/plans/' + planId + '/time', { method: 'POST', body: JSON.stringify(body) });
+      setData(r);
+      setForm({ ...blankForm, entry_date: form.entry_date });
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const del = async (id) => {
+    try { const r = await apiFetch('/schedule/time/' + id, { method: 'DELETE' }); if (r.rows) setData(r); else await load(); }
+    catch (e) { setError(e.message); }
+  };
+
+  const input = { boxSizing: 'border-box', minHeight: 38, padding: '7px 9px', background: t.card, border: '1px solid ' + t.border, color: t.text, borderRadius: 9, fontSize: 13.5, outline: 'none' };
+  const rows = data?.rows || [];
+  const entries = data?.entries || [];
+  const totals = data?.totals || {};
+  const flags = data?.flags || [];
+  const taskName = (id) => (tasks.find(x => x.id === id) || {}).name || '—';
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid ' + t.border }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Time &amp; cost capture
+            <span style={{ background: t.accent + '22', color: t.accent, padding: '1px 7px', borderRadius: 6, fontSize: 10.5, fontWeight: 700 }}>Admin</span>
+          </div>
+          <div style={{ color: t.textMuted, fontSize: 12.5, marginTop: 2 }}>
+            Log site hours against a task — it updates progress, feeds actual costs, and flags labour overruns.
+          </div>
+        </div>
+        <button onClick={toggle} style={{ minHeight: 36, padding: '0 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+          {open ? 'Hide' : 'Capture time'}
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {error && <div style={{ color: t.danger, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+          {loading && !data && <div style={{ color: t.textMuted, fontSize: 13 }}>Loading…</div>}
+
+          {/* Flags */}
+          {flags.length > 0 && (
+            <div style={{ background: t.dangerBg || (t.danger + '18'), border: '1px solid ' + t.danger + '55', borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 12.5, color: t.danger, marginBottom: 2 }}>Needs attention</div>
+              {flags.map((f, i) => <div key={i} style={{ fontSize: 12.5, color: t.text }}>• {f}</div>)}
+            </div>
+          )}
+
+          {/* Log form */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1.6fr 1fr 0.8fr 0.8fr 0.8fr', gap: 8, marginBottom: 8 }}>
+            <select value={form.task_id} onChange={e => setForm({ ...form, task_id: e.target.value })} style={{ ...input, gridColumn: isMobile ? '1 / -1' : 'auto' }}>
+              <option value="">— pick a task —</option>
+              {tasks.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+            <input value={form.worker} onChange={e => setForm({ ...form, worker: e.target.value })} placeholder="Who" style={input} />
+            <input type="number" inputMode="decimal" min="0" step="0.5" value={form.hours} onChange={e => setForm({ ...form, hours: e.target.value })} placeholder="Hours" style={input} />
+            <input type="number" inputMode="decimal" min="0" value={form.hourly_rate} onChange={e => setForm({ ...form, hourly_rate: e.target.value })} placeholder="£/hr" style={input} />
+            <input type="number" inputMode="numeric" min="0" max="100" value={form.percent_complete} onChange={e => setForm({ ...form, percent_complete: e.target.value })} placeholder="% done" style={input} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 160px auto', gap: 8, marginBottom: 14 }}>
+            <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="What was done (optional)" style={input} />
+            <input type="date" value={form.entry_date} onChange={e => setForm({ ...form, entry_date: e.target.value })} style={input} />
+            <button onClick={submit} disabled={busy} style={{ minHeight: 38, padding: '0 16px', borderRadius: 9, border: 'none', background: t.accent, color: '#fff', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? 'Saving…' : 'Log time'}</button>
+          </div>
+
+          {data && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 14 }}>
+                <Stat t={t} label="Planned labour" value={fmtMoney(totals.plannedLabour)} />
+                <Stat t={t} label="Captured labour" value={fmtMoney(totals.capturedLabour)} tone={Number(totals.variance) > 0 ? 'warn' : undefined} />
+                <Stat t={t} label="Hours logged" value={(Number(totals.capturedHours) || 0).toLocaleString('en-GB')} />
+                <Stat t={t} label="Variance" value={(Number(totals.variance) > 0 ? '+' : '') + fmtMoney(totals.variance)} tone={Number(totals.variance) > 0 ? 'warn' : 'ok'} />
+              </div>
+
+              {/* Planned vs actual per task */}
+              {rows.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 70px 70px' : '1.6fr 1fr 1fr 70px 70px', gap: 8, fontSize: 10.5, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, paddingBottom: 6 }}>
+                    <div>Task</div>{!isMobile && <div style={{ textAlign: 'right' }}>Planned</div>}{!isMobile && <div style={{ textAlign: 'right' }}>Captured</div>}<div style={{ textAlign: 'right' }}>{isMobile ? 'Capt.' : 'Hrs'}</div><div style={{ textAlign: 'right' }}>%</div>
+                  </div>
+                  {rows.map(r => (
+                    <div key={r.taskId} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 70px 70px' : '1.6fr 1fr 1fr 70px 70px', gap: 8, alignItems: 'center', padding: '6px 0', borderTop: '1px solid ' + t.border }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                        {r.over && <span title={'£' + Math.round(r.overBy) + ' over'} style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: t.danger, background: t.danger + '22', padding: '1px 6px', borderRadius: 999 }}>over</span>}
+                      </div>
+                      {!isMobile && <div style={{ fontSize: 12.5, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.plannedLabour)}</div>}
+                      {!isMobile && <div style={{ fontSize: 12.5, textAlign: 'right', color: r.over ? t.danger : t.text, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(r.capturedLabour)}</div>}
+                      <div style={{ fontSize: 12.5, textAlign: 'right', color: t.textMuted }}>{isMobile ? fmtMoney(r.capturedLabour) : r.capturedHours}</div>
+                      <div style={{ fontSize: 12.5, textAlign: 'right', color: t.textMuted }}>{r.percent == null ? '—' : r.percent + '%'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recent entries */}
+              {entries.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 4 }}>Recent entries</div>
+                  {entries.slice(0, 8).map(e => (
+                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '5px 0', borderTop: '1px solid ' + t.border, fontSize: 12.5 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <span style={{ color: t.textMuted }}>{shortDate(e.entry_date)}</span> · {taskName(e.task_id)}
+                        {e.worker ? ' · ' + e.worker : ''}{Number(e.hours) ? ' · ' + e.hours + 'h' : ''}
+                        {e.note ? <span style={{ color: t.textMuted }}> — {e.note}</span> : ''}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(e.labour_cost)}</span>
+                        <button onClick={() => del(e.id)} title="Delete" style={{ background: 'transparent', border: 'none', color: t.danger, cursor: 'pointer', fontSize: 15, minWidth: 26 }}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </>
           )}

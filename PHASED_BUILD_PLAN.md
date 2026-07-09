@@ -77,7 +77,10 @@ invoices ("claims"). Admin-only.
   the rest of the schedule). Returns monthly planned vs claimed + totals.
 - ✅ Cash flow panel in `src/components/JobSchedule.js`, admin-only via
   `useAuth()`. Monthly table + bars + contract/planned/claimed/remaining totals.
-- ⬜ "Show client" branded PDF (reuse the schedule PDF pipeline) — follow-up.
+- ✅ "Show client" branded PDF — `server/cashflowPdf.js` +
+  `GET /api/schedule/plans/:id/cashflow/pdf` (admin-only). Portrait A4 with the
+  builder's branding: totals cards + a month-by-month planned/cumulative/claimed
+  table. "Show client (PDF)" button in the cash flow panel.
 
 **Effort:** M · **Risk:** Low · **Deps:** Phase 0
 
@@ -111,15 +114,31 @@ invoices ("claims"). Admin-only.
 
 **Effort:** M · **Risk:** Low–Med · **Deps:** Phases 0–1
 
-## Phase 3 — Site time & cost capture
+## Phase 3 — Site time & cost capture  *(in progress)*
 
 - ✅ Plain-English site update → progress + date re-flow + slip flag — *built*.
-- ⬜ Capture hours/labour + % complete per task/package.
-- ⬜ Compare captured vs planned workload/budget (`job_budgets` / `job_costs`).
-- ⬜ Alert the office when a problem/acceleration looks likely.
-- ⬜ Captured costs → approve → update invoice for sign-off.
+- ✅ Capture hours + % complete per task — `schedule_time_entries` table +
+  `POST/GET/DELETE /api/schedule/plans/:id/time` (admin-only). Each entry logs
+  who/date/hours/rate/%/note against a task; logging updates the task's %
+  complete and status.
+- ✅ Compare captured vs planned & feed Finance Hub — `server/timeCapture.js`
+  rolls captured labour up per task against the priced labour (from each task's
+  source quote lines) and flags overruns; every logged entry also writes a
+  `job_costs` (labour) row so the existing budget-vs-actual + PM over-budget
+  alerts pick it up automatically. Deleting an entry removes its cost row.
+- ✅ Alert when labour is over — deterministic flags in the rollup (per task and
+  overall), shown as a "Needs attention" banner in the capture panel.
+- ✅ Conversational capture — the "Update from site" bot now logs hours too.
+  Extended `update_schedule_progress` with `hours` / `hourly_rate` / `worker`;
+  when the (admin) builder says "Dan did 8 hours on groundworks" the bot logs a
+  site-time entry (via the shared `logTimeEntry` helper) alongside the progress
+  update, and the reply notes "8h logged (£X)". Owner-portal only — the hours
+  fields are ignored and un-prompted for non-admins.
+- ⬜ Captured costs → approve → update invoice for sign-off — deferred to Phase 6
+  (per-package billing), where it belongs.
 
 **Effort:** M · **Risk:** Med · **Deps:** Phase 0
+**Phase 3 is complete** bar the billing hand-off (Phase 6).
 
 ## Phase 4 — Expanded bars + weekly client update
 
