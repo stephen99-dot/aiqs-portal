@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken, getEstimatorKey } from '../utils/api';
 import EstimatorGate from '../components/EstimatorGate';
 import RateAutocomplete from '../components/RateAutocomplete';
@@ -22,6 +23,8 @@ export default function VariationEditorPage() {
 
 function Inner() {
   const { t } = useTheme();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { id } = useParams();
   const [qs] = useSearchParams();
   const nav = useNavigate();
@@ -56,6 +59,10 @@ function Inner() {
   const [copied, setCopied] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendEmail, setSendEmail] = useState('');
+  // Phase 2 (admin-only): AI indicative-cost draft from a plain-English change.
+  const [aiDesc, setAiDesc] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState('');
 
   // Load
   useEffect(() => {
@@ -111,6 +118,25 @@ function Inner() {
     section: 'Change', item: '', description: '', unit: 'item',
     qty: 1, rate: 0, labour: 0, materials: 0, est_rate: true, sort_order: prev.length,
   }]);
+
+  // Draft indicative priced lines from a plain-English site description and
+  // append them for the office to review and fix. Owner-portal only.
+  const aiDraft = async () => {
+    const description = aiDesc.trim();
+    if (!description || aiBusy) return;
+    setAiBusy(true); setAiErr('');
+    try {
+      const r = await apiFetch('/change-orders/ai-draft', {
+        method: 'POST', body: JSON.stringify({ description }),
+      });
+      const drafted = (r.lines || []).map((l, i) => ({
+        ...l, est_rate: true, sort_order: lines.length + i,
+      }));
+      if (drafted.length === 0) { setAiErr('The AI did not return any lines — try describing the change more specifically.'); }
+      else { setLines(prev => [...prev, ...drafted]); setAiDesc(''); }
+    } catch (e) { setAiErr(e.message); }
+    finally { setAiBusy(false); }
+  };
 
   const save = async () => {
     if (locked) return;
@@ -315,6 +341,25 @@ function Inner() {
         </div>
         <label style={{ ...lbl(t), marginTop: 12 }}>Reason for change</label>
         <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Why is this change happening? (Client upgrade, design change, on-site discovery, etc.)" rows={2} disabled={readOnly} style={ta(t)} />
+
+        {/* AI indicative-cost draft (admin-only, Phase 2). Describe the change in
+            plain English — the AI drafts priced lines the office then fixes. */}
+        {isAdmin && !readOnly && (
+          <div style={{ marginTop: 14, padding: 12, border: '1px dashed ' + t.border, borderRadius: 10, background: t.bg }}>
+            <label style={{ ...lbl(t), display: 'flex', alignItems: 'center', gap: 8 }}>
+              AI indicative cost
+              <span style={{ background: t.accent + '22', color: t.accent, padding: '1px 7px', borderRadius: 6, fontSize: 10.5, fontWeight: 700 }}>Admin</span>
+            </label>
+            <div style={{ color: t.textSecondary, fontSize: 12.5, marginBottom: 8 }}>
+              Describe the change as it happened on site — e.g. “plaster 5 sqm to hallway, chippy 2 days fitting new studwork”. The AI drafts priced lines; you confirm the workload and fix the cost.
+            </div>
+            <textarea value={aiDesc} onChange={e => setAiDesc(e.target.value)} placeholder="What's the change? Measurements and trades welcome." rows={2} disabled={aiBusy} style={ta(t)} />
+            {aiErr && <div style={{ color: t.danger, fontSize: 12.5, marginTop: 6 }}>{aiErr}</div>}
+            <button onClick={aiDraft} disabled={aiBusy || !aiDesc.trim()} style={{ marginTop: 8, background: t.accent, color: '#fff', border: 'none', borderRadius: 10, minHeight: 40, padding: '0 16px', fontSize: 13, fontWeight: 700, cursor: (aiBusy || !aiDesc.trim()) ? 'default' : 'pointer', opacity: (aiBusy || !aiDesc.trim()) ? 0.6 : 1 }}>
+              {aiBusy ? 'Drafting…' : 'Draft indicative lines'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lines */}
