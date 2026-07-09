@@ -168,7 +168,10 @@ function withKey(qs) {
 // registers change at most daily, so a multi-hour TTL is safe.
 let _cooldownUntilMs = 0;                 // epoch ms; 0 = not limited
 const _cache = new Map();                 // key -> { at, leadsRaw }
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000;  // 6 hours
+// Planning registers update ~once a day, so a 24h cache keeps results fresh
+// enough while spending at most one live PlanIt request per area per day — the
+// simplest way to stay well under the free-tier rate limit without any setup.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function nowMs() { return Date.now(); }
 function cooldownRemainingSecs() { return Math.max(0, Math.ceil((_cooldownUntilMs - nowMs()) / 1000)); }
