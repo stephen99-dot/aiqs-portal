@@ -440,6 +440,7 @@ export default function JobSchedule({ t, jobId, quotes }) {
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Update from site</div>
         <div style={{ color: t.textMuted, fontSize: 12.5, marginBottom: 10 }}>
           Tell me what's happened — e.g. “Roof finished Tuesday, but screed slipped a week waiting on the pump.” I'll update the programme and re-flow the dates.
+          {isAdmin && " Mention hours too — “Dan did 8 hours on groundworks” — and I'll log the labour against the job."}
         </div>
 
         {chat.length > 0 && (

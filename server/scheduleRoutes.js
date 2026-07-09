@@ -554,6 +554,9 @@ const ASSISTANT_TOOL = {
             actual_end: { type: 'string', description: 'ISO date YYYY-MM-DD when work actually finished.' },
             percent_complete: { type: 'number', description: '0–100.' },
             delay_days: { type: 'number', description: 'NEW slippage to add, in working days (a one-week slip = 5). Pushes this task and everything after it back.' },
+            hours: { type: 'number', description: 'Hours worked on this task, when the builder mentions time spent (e.g. "two lads for 8 hours" = 16). Logs a site-time entry against the task.' },
+            hourly_rate: { type: 'number', description: 'Labour rate £/hour, if the builder states it. Used with hours to cost the labour.' },
+            worker: { type: 'string', description: 'Who did the work, if named.' },
             note: { type: 'string', description: 'Short note, e.g. "waiting on screed pump".' },
           },
         },
@@ -568,7 +571,8 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Apply the model's structured updates to a plan: resolve each task (by id, then
 // by name), set the recorded fields, re-flow, snapshot. Returns a human summary
 // (fed back to the model) plus the list of applied changes.
-function applyScheduleUpdates(plan, input) {
+function applyScheduleUpdates(plan, input, opts) {
+  const isAdmin = !!(opts && opts.isAdmin);
   const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ?').all(plan.id);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const updates = Array.isArray(input && input.updates) ? input.updates : [];
@@ -608,8 +612,20 @@ function applyScheduleUpdates(plan, input) {
         vals.push(task.id);
         db.prepare('UPDATE schedule_tasks SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
         applied.push({ task_id: task.id, name: task.name, changes: changed });
-        if (changed.length) notes.push(task.name + ': ' + changed.join(', ') + '.');
       }
+
+      // Owner-portal only: if the builder mentioned time spent, log a site-time
+      // entry (+ Finance Hub labour cost) against the task. The % is handled by
+      // the sets above, so we don't double-write it here.
+      if (isAdmin && Number(u.hours) > 0) {
+        const r = logTimeEntry(plan, plan.user_id, {
+          task, hours: u.hours, hourlyRate: u.hourly_rate, worker: u.worker,
+          percent: u.percent_complete, note: u.note,
+        });
+        changed.push(r.hours + 'h logged' + (r.labourCost > 0 ? ' (£' + Math.round(r.labourCost) + ')' : ''));
+      }
+
+      if (changed.length) notes.push(task.name + ': ' + changed.join(', ') + '.');
     }
   });
   txn();
@@ -629,7 +645,7 @@ function applyScheduleUpdates(plan, input) {
   return { summary, applied, before: before.end, after: after.end };
 }
 
-function buildAssistantSystem(plan, tasks) {
+function buildAssistantSystem(plan, tasks, isAdmin) {
   const lines = tasks.map((t) => '- [' + t.id + '] ' + t.name
     + (t.phase ? ' (' + t.phase + ')' : '')
     + ' — planned ' + (t.planned_start || '?') + '..' + (t.planned_end || '?')
@@ -643,15 +659,18 @@ function buildAssistantSystem(plan, tasks) {
     + '- Only act on what the builder tells you; never invent progress.\n'
     + '- delay_days is NEW slippage in working days (a one-week slip = 5).\n'
     + '- Convert spoken dates ("Tuesday", "last week") to ISO YYYY-MM-DD near the plan dates.\n'
+    + (isAdmin
+      ? '- When the builder mentions time spent on a task ("Dan did 8 hours on groundworks", "two lads for a day"), set hours on that task (a day ≈ 8h per person). Include hourly_rate only if they state it. This logs the labour against the job.\n'
+      : '')
     + '- Prefer acting over asking: if something is reasonable but not spelled out, make a sensible assumption, apply it, and note the assumption in one short line. Only ask a clarifying question when a reference genuinely matches two or more tasks and you cannot tell which.\n'
     + '- Keep replies to one or two short, plain sentences (no headings, no long lists): what you changed and the new expected completion date.\n'
     + '- If nothing is actionable, reply briefly and do not call the tool.';
 }
 
-async function runScheduleAssistant({ plan, userId, message, history }) {
+async function runScheduleAssistant({ plan, userId, isAdmin, message, history }) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
   const tasks = db.prepare('SELECT * FROM schedule_tasks WHERE plan_id = ? ORDER BY planned_start ASC, sort_order ASC').all(plan.id);
-  const system = buildAssistantSystem(plan, tasks);
+  const system = buildAssistantSystem(plan, tasks, isAdmin);
 
   // Short, sanitised history: last few turns as plain strings.
   const hist = (Array.isArray(history) ? history : [])
@@ -687,7 +706,7 @@ async function runScheduleAssistant({ plan, userId, message, history }) {
     const toolResults = [];
     for (const tu of toolUses) {
       if (tu.name === 'update_schedule_progress') {
-        const r = applyScheduleUpdates(plan, tu.input || {});
+        const r = applyScheduleUpdates(plan, tu.input || {}, { isAdmin });
         applied = applied.concat(r.applied);
         toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: r.summary });
       } else {
@@ -709,7 +728,7 @@ router.post('/plans/:id/assistant', async (req, res) => {
 
     let out;
     try {
-      out = await runScheduleAssistant({ plan, userId: req.user.id, message, history: req.body.history });
+      out = await runScheduleAssistant({ plan, userId: req.user.id, isAdmin: req.user.role === 'admin', message, history: req.body.history });
     } catch (err) {
       console.error('[Schedule] assistant failed:', err.message);
       return res.status(502).json({ error: 'The assistant is unavailable right now. Please try again in a moment.' });
@@ -855,6 +874,42 @@ function timeState(plan) {
   return { entries, ...rollup };
 }
 
+// Record a time entry and the job_costs (labour) row it spawns. Does NOT touch
+// the task itself — the caller owns the % update. Shared by the /time route and
+// the conversational assistant so both cost + record identically.
+// Returns { entryId, hours, labourCost }.
+function logTimeEntry(plan, userId, opts) {
+  const task = opts.task || null;
+  const hours = Math.max(0, Number(opts.hours) || 0);
+  const hourlyRate = Math.max(0, Number(opts.hourlyRate) || 0);
+  const labourCost = opts.labourCost != null && opts.labourCost !== ''
+    ? Math.max(0, Number(opts.labourCost) || 0)
+    : round2(hours * hourlyRate);
+  const entryDate = (opts.entryDate && /^\d{4}-\d{2}-\d{2}$/.test(opts.entryDate))
+    ? opts.entryDate : new Date().toISOString().slice(0, 10);
+  const worker = (opts.worker || '').toString().slice(0, 120) || null;
+  const note = (opts.note || '').toString().slice(0, 1000) || null;
+  const percent = opts.percent != null && opts.percent !== '' ? clampInt(opts.percent, 0, 100, null) : null;
+
+  const entryId = 'te_' + uuidv4().slice(0, 12);
+  let jobCostId = null;
+  if (labourCost > 0) {
+    jobCostId = 'jc_' + uuidv4().slice(0, 12);
+    const desc = ('Site labour' + (task ? ' — ' + task.name : '') + (worker ? ' (' + worker + ')' : '')
+      + (hours ? ' · ' + hours + 'h' : '')).slice(0, 200);
+    db.prepare(
+      'INSERT INTO job_costs (id, job_id, user_id, kind, description, qty, unit, unit_cost, total, occurred_on, notes) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(jobCostId, plan.job_id, userId, 'labour', desc, hours || 0, 'hrs', hourlyRate || 0, labourCost, entryDate, note);
+  }
+  db.prepare(
+    'INSERT INTO schedule_time_entries (id, plan_id, task_id, user_id, entry_date, worker, hours, hourly_rate, labour_cost, percent_complete, note, job_cost_id) '
+    + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(entryId, plan.id, task ? task.id : null, userId, entryDate, worker, hours, hourlyRate, labourCost, percent, note, jobCostId);
+
+  return { entryId, hours, labourCost };
+}
+
 // GET /plans/:id/time — entries + planned-vs-actual labour rollup.
 router.get('/plans/:id/time', adminMiddleware, (req, res) => {
   try {
@@ -886,28 +941,13 @@ router.post('/plans/:id/time', adminMiddleware, (req, res) => {
       task = db.prepare('SELECT * FROM schedule_tasks WHERE id = ? AND plan_id = ?').get(b.task_id, plan.id);
       if (!task) return res.status(400).json({ error: 'That task is not on this schedule.' });
     }
-    const entryDate = (b.entry_date && /^\d{4}-\d{2}-\d{2}$/.test(b.entry_date))
-      ? b.entry_date : new Date().toISOString().slice(0, 10);
-    const worker = (b.worker || '').toString().slice(0, 120) || null;
-    const note = (b.note || '').toString().slice(0, 1000) || null;
     const percent = b.percent_complete != null && b.percent_complete !== ''
       ? clampInt(b.percent_complete, 0, 100, null) : null;
 
-    const entryId = 'te_' + uuidv4().slice(0, 12);
-    let jobCostId = null;
-    if (labourCost > 0) {
-      jobCostId = 'jc_' + uuidv4().slice(0, 12);
-      const desc = ('Site labour' + (task ? ' — ' + task.name : '') + (worker ? ' (' + worker + ')' : '')
-        + (hours ? ' · ' + hours + 'h' : '')).slice(0, 200);
-      db.prepare(
-        'INSERT INTO job_costs (id, job_id, user_id, kind, description, qty, unit, unit_cost, total, occurred_on, notes) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(jobCostId, plan.job_id, req.user.id, 'labour', desc, hours || 0, 'hrs', hourlyRate || 0, labourCost, entryDate, note);
-    }
-    db.prepare(
-      'INSERT INTO schedule_time_entries (id, plan_id, task_id, user_id, entry_date, worker, hours, hourly_rate, labour_cost, percent_complete, note, job_cost_id) '
-      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(entryId, plan.id, task ? task.id : null, req.user.id, entryDate, worker, hours, hourlyRate, labourCost, percent, note, jobCostId);
+    const { entryId } = logTimeEntry(plan, req.user.id, {
+      task, entryDate: b.entry_date, worker: b.worker, hours, hourlyRate, labourCost,
+      percent, note: b.note,
+    });
 
     if (task && percent != null) {
       const status = percent >= 100 ? 'done' : (percent > 0 ? 'in_progress' : task.status);

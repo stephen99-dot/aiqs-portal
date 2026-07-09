@@ -128,12 +128,17 @@ invoices ("claims"). Admin-only.
   alerts pick it up automatically. Deleting an entry removes its cost row.
 - ✅ Alert when labour is over — deterministic flags in the rollup (per task and
   overall), shown as a "Needs attention" banner in the capture panel.
-- ⬜ Conversational capture — let the "Update from site" bot log hours too (next
-  slice; extends the existing `update_schedule_progress` tool).
-- ⬜ Captured costs → approve → update invoice for sign-off (overlaps Phase 6's
-  per-package billing).
+- ✅ Conversational capture — the "Update from site" bot now logs hours too.
+  Extended `update_schedule_progress` with `hours` / `hourly_rate` / `worker`;
+  when the (admin) builder says "Dan did 8 hours on groundworks" the bot logs a
+  site-time entry (via the shared `logTimeEntry` helper) alongside the progress
+  update, and the reply notes "8h logged (£X)". Owner-portal only — the hours
+  fields are ignored and un-prompted for non-admins.
+- ⬜ Captured costs → approve → update invoice for sign-off — deferred to Phase 6
+  (per-package billing), where it belongs.
 
 **Effort:** M · **Risk:** Med · **Deps:** Phase 0
+**Phase 3 is complete** bar the billing hand-off (Phase 6).
 
 ## Phase 4 — Expanded bars + weekly client update
 
