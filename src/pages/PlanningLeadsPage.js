@@ -50,6 +50,7 @@ function Inner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [diag, setDiag] = useState(null);
   const [draftingRef, setDraftingRef] = useState(null);
 
   useEffect(() => {
@@ -73,7 +74,7 @@ function Inner() {
 
   const scan = useCallback(async (demo = false) => {
     if (loading) return;
-    setLoading(true); setError(''); setNotice('');
+    setLoading(true); setError(''); setNotice(''); setDiag(null);
     try {
       const body = demo
         ? { demo: true }
@@ -84,9 +85,11 @@ function Inner() {
       if (out.source === 'sample') setNotice('Showing sample data so you can see how it works.');
     } catch (e) {
       setError(e.message || 'Scan failed.');
-      // If the live service is down, offer the sample so the screen isn't dead.
+      // If the live service is down, offer the sample so the screen isn't dead,
+      // and pull the connectivity probe so the real cause is visible.
       if (/unreachable|temporarily|502/i.test(e.message || '')) {
         setNotice('The live planning service didn’t answer. You can preview the tool with sample data.');
+        apiFetch('/planning-leads/diag').then(setDiag).catch(() => {});
       }
     } finally { setLoading(false); }
   }, [loading, postcode, radiusKm, categories, state, monthsBack]);
@@ -199,6 +202,21 @@ function Inner() {
         <div style={{ background: AMBER + '18', color: t.text, border: '1px solid ' + AMBER + '55', padding: 10, borderRadius: 10, marginBottom: 12, fontSize: 13 }}>
           {notice}
         </div>
+      )}
+      {diag && (
+        <details style={{ marginBottom: 12, fontSize: 12, color: t.textSecondary }}>
+          <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Connection diagnostics (why the scan couldn’t run)</summary>
+          <div style={{ marginTop: 8, background: t.bg, border: '1px solid ' + t.border, borderRadius: 8, padding: 10, fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {['postcodes', 'planit'].map(k => {
+              const d = diag[k]; if (!d) return null;
+              const line = d.ok
+                ? `✅ ${d.label} — reachable (HTTP ${d.status}, ${d.ms}ms)`
+                : `❌ ${d.label} — ${d.status ? 'HTTP ' + d.status : ''} ${d.error || ''}${d.cause ? ' (' + d.cause + ')' : ''}${d.bodyStart ? '\n     ' + d.bodyStart : ''}`;
+              return <div key={k} style={{ marginBottom: 6 }}>{line}</div>;
+            })}
+            <div style={{ color: t.textMuted, marginTop: 4 }}>node {diag.node}</div>
+          </div>
+        </details>
       )}
 
       {/* Results */}
