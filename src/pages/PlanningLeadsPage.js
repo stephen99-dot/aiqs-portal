@@ -83,11 +83,16 @@ function Inner() {
       setLeads(out.leads || []);
       setMeta({ source: out.source, area: out.area, radiusKm: out.radiusKm });
       if (out.source === 'sample') setNotice('Showing sample data so you can see how it works.');
+      else if (out.stale || out.source === 'planit-cached') setNotice('The live service is busy, so these are cached results from a recent scan of this area.');
     } catch (e) {
+      const code = e.data?.code;
       setError(e.message || 'Scan failed.');
-      // If the live service is down, offer the sample so the screen isn't dead,
-      // and pull the connectivity probe so the real cause is visible.
-      if (/unreachable|temporarily|502/i.test(e.message || '')) {
+      if (code === 'RATE_LIMITED' || e.status === 429) {
+        // PlanIt is throttling us. Nothing to diagnose — just tell them the wait.
+        setNotice('You can preview the tool with sample data while the planning service cools down.');
+      } else if (/unreachable|temporarily|502/i.test(e.message || '') || e.status === 502) {
+        // If the live service is unreachable, offer the sample so the screen
+        // isn't dead, and pull the connectivity probe so the cause is visible.
         setNotice('The live planning service didn’t answer. You can preview the tool with sample data.');
         apiFetch('/planning-leads/diag').then(setDiag).catch(() => {});
       }
@@ -218,7 +223,7 @@ function Inner() {
               <div key={i} style={{ marginBottom: 6 }}>
                 {d.ok
                   ? `✅ planit.org.uk [${d.shape}] — HTTP ${d.status}, ${d.records} records, ${d.ms}ms`
-                  : `❌ planit.org.uk [${d.shape}] — ${d.status ? 'HTTP ' + d.status : ''} ${d.error || ''}${d.bodyStart ? '\n     ' + d.bodyStart : ''}`}
+                  : `❌ planit.org.uk [${d.shape}] — ${d.status ? 'HTTP ' + d.status : ''}${d.note ? ' ' + d.note : ''} ${d.error || ''}${d.bodyStart ? '\n     ' + d.bodyStart : ''}`}
               </div>
             ))}
             <div style={{ color: t.textMuted, marginTop: 4 }}>node {diag.node}</div>
