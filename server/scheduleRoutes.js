@@ -33,6 +33,7 @@ const { computeSchedule, programmeWindow } = require('./scheduleEngine');
 const { streamSchedulePdf } = require('./schedulePdf');
 const { streamCashflowPdf } = require('./cashflowPdf');
 const { buildCashflow } = require('./scheduleCashflow');
+const { computeTimeRollup, round2 } = require('./timeCapture');
 
 const router = express.Router();
 
@@ -817,6 +818,121 @@ router.get('/plans/:id/cashflow/pdf', adminMiddleware, (req, res) => {
   } catch (err) {
     console.error('[Schedule] cashflow pdf error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate the cash-flow PDF.' });
+  }
+});
+
+// ── Time & cost capture (Phase 3, admin-only) ────────────────────────────────
+
+// Planned labour £ per task, from the quote lines each task was priced from
+// (labour is per-unit on quote_lines, so line labour = labour × qty).
+function plannedLabourByTask(planId) {
+  const map = new Map();
+  const tasks = db.prepare('SELECT id, source_line_ids FROM schedule_tasks WHERE plan_id = ?').all(planId);
+  const perTask = [];
+  const lineIds = new Set();
+  for (const t of tasks) {
+    const ids = parseJsonArray(t.source_line_ids);
+    perTask.push({ id: t.id, ids });
+    ids.forEach((x) => lineIds.add(x));
+  }
+  if (lineIds.size === 0) return map;
+  const idArr = Array.from(lineIds);
+  const placeholders = idArr.map(() => '?').join(',');
+  const rows = db.prepare('SELECT id, labour, qty FROM quote_lines WHERE id IN (' + placeholders + ')').all(...idArr);
+  const lineLabour = new Map(rows.map((r) => [r.id, (Number(r.labour) || 0) * (Number(r.qty) || 0)]));
+  for (const t of perTask) {
+    let sum = 0;
+    for (const lid of t.ids) sum += lineLabour.get(lid) || 0;
+    if (sum > 0) map.set(t.id, round2(sum));
+  }
+  return map;
+}
+
+function timeState(plan) {
+  const entries = db.prepare('SELECT * FROM schedule_time_entries WHERE plan_id = ? ORDER BY entry_date DESC, created_at DESC').all(plan.id);
+  const tasks = db.prepare('SELECT id, name, phase, percent_complete FROM schedule_tasks WHERE plan_id = ?').all(plan.id);
+  const rollup = computeTimeRollup(tasks, entries, plannedLabourByTask(plan.id));
+  return { entries, ...rollup };
+}
+
+// GET /plans/:id/time — entries + planned-vs-actual labour rollup.
+router.get('/plans/:id/time', adminMiddleware, (req, res) => {
+  try {
+    const plan = ownedPlan(req.params.id, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
+    res.json(timeState(plan));
+  } catch (err) {
+    console.error('[Schedule] time list error:', err);
+    res.status(500).json({ error: 'Failed to load time entries.' });
+  }
+});
+
+// POST /plans/:id/time — log a day's work. Costs the labour into Finance Hub
+// (a job_costs row) and reflects % complete onto the task.
+router.post('/plans/:id/time', adminMiddleware, (req, res) => {
+  try {
+    const plan = ownedPlan(req.params.id, req.user.id);
+    if (!plan) return res.status(404).json({ error: 'Schedule not found.' });
+    const b = req.body || {};
+    const hours = Math.max(0, Number(b.hours) || 0);
+    const hourlyRate = Math.max(0, Number(b.hourly_rate) || 0);
+    const labourCost = b.labour_cost != null && b.labour_cost !== ''
+      ? Math.max(0, Number(b.labour_cost) || 0)
+      : round2(hours * hourlyRate);
+    if (hours <= 0 && labourCost <= 0) return res.status(400).json({ error: 'Enter hours worked or a labour cost.' });
+
+    let task = null;
+    if (b.task_id) {
+      task = db.prepare('SELECT * FROM schedule_tasks WHERE id = ? AND plan_id = ?').get(b.task_id, plan.id);
+      if (!task) return res.status(400).json({ error: 'That task is not on this schedule.' });
+    }
+    const entryDate = (b.entry_date && /^\d{4}-\d{2}-\d{2}$/.test(b.entry_date))
+      ? b.entry_date : new Date().toISOString().slice(0, 10);
+    const worker = (b.worker || '').toString().slice(0, 120) || null;
+    const note = (b.note || '').toString().slice(0, 1000) || null;
+    const percent = b.percent_complete != null && b.percent_complete !== ''
+      ? clampInt(b.percent_complete, 0, 100, null) : null;
+
+    const entryId = 'te_' + uuidv4().slice(0, 12);
+    let jobCostId = null;
+    if (labourCost > 0) {
+      jobCostId = 'jc_' + uuidv4().slice(0, 12);
+      const desc = ('Site labour' + (task ? ' — ' + task.name : '') + (worker ? ' (' + worker + ')' : '')
+        + (hours ? ' · ' + hours + 'h' : '')).slice(0, 200);
+      db.prepare(
+        'INSERT INTO job_costs (id, job_id, user_id, kind, description, qty, unit, unit_cost, total, occurred_on, notes) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(jobCostId, plan.job_id, req.user.id, 'labour', desc, hours || 0, 'hrs', hourlyRate || 0, labourCost, entryDate, note);
+    }
+    db.prepare(
+      'INSERT INTO schedule_time_entries (id, plan_id, task_id, user_id, entry_date, worker, hours, hourly_rate, labour_cost, percent_complete, note, job_cost_id) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(entryId, plan.id, task ? task.id : null, req.user.id, entryDate, worker, hours, hourlyRate, labourCost, percent, note, jobCostId);
+
+    if (task && percent != null) {
+      const status = percent >= 100 ? 'done' : (percent > 0 ? 'in_progress' : task.status);
+      db.prepare('UPDATE schedule_tasks SET percent_complete = ?, status = ? WHERE id = ?').run(percent, status, task.id);
+    }
+
+    res.status(201).json({ id: entryId, ...timeState(plan) });
+  } catch (err) {
+    console.error('[Schedule] time add error:', err);
+    res.status(500).json({ error: 'Failed to log the time.' });
+  }
+});
+
+// DELETE /time/:entryId — remove an entry and the job_costs row it created.
+router.delete('/time/:entryId', adminMiddleware, (req, res) => {
+  try {
+    const row = db.prepare('SELECT * FROM schedule_time_entries WHERE id = ? AND user_id = ?').get(req.params.entryId, req.user.id);
+    if (!row) return res.status(404).json({ error: 'Entry not found.' });
+    if (row.job_cost_id) db.prepare('DELETE FROM job_costs WHERE id = ? AND user_id = ?').run(row.job_cost_id, req.user.id);
+    db.prepare('DELETE FROM schedule_time_entries WHERE id = ?').run(row.id);
+    const plan = ownedPlan(row.plan_id, req.user.id);
+    res.json(plan ? { ok: true, ...timeState(plan) } : { ok: true });
+  } catch (err) {
+    console.error('[Schedule] time delete error:', err);
+    res.status(500).json({ error: 'Failed to delete the entry.' });
   }
 });
 

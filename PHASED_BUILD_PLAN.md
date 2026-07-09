@@ -114,13 +114,24 @@ invoices ("claims"). Admin-only.
 
 **Effort:** M · **Risk:** Low–Med · **Deps:** Phases 0–1
 
-## Phase 3 — Site time & cost capture
+## Phase 3 — Site time & cost capture  *(in progress)*
 
 - ✅ Plain-English site update → progress + date re-flow + slip flag — *built*.
-- ⬜ Capture hours/labour + % complete per task/package.
-- ⬜ Compare captured vs planned workload/budget (`job_budgets` / `job_costs`).
-- ⬜ Alert the office when a problem/acceleration looks likely.
-- ⬜ Captured costs → approve → update invoice for sign-off.
+- ✅ Capture hours + % complete per task — `schedule_time_entries` table +
+  `POST/GET/DELETE /api/schedule/plans/:id/time` (admin-only). Each entry logs
+  who/date/hours/rate/%/note against a task; logging updates the task's %
+  complete and status.
+- ✅ Compare captured vs planned & feed Finance Hub — `server/timeCapture.js`
+  rolls captured labour up per task against the priced labour (from each task's
+  source quote lines) and flags overruns; every logged entry also writes a
+  `job_costs` (labour) row so the existing budget-vs-actual + PM over-budget
+  alerts pick it up automatically. Deleting an entry removes its cost row.
+- ✅ Alert when labour is over — deterministic flags in the rollup (per task and
+  overall), shown as a "Needs attention" banner in the capture panel.
+- ⬜ Conversational capture — let the "Update from site" bot log hours too (next
+  slice; extends the existing `update_schedule_progress` tool).
+- ⬜ Captured costs → approve → update invoice for sign-off (overlaps Phase 6's
+  per-package billing).
 
 **Effort:** M · **Risk:** Med · **Deps:** Phase 0
 

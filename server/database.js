@@ -825,6 +825,28 @@ db.exec(`
     FOREIGN KEY (plan_id) REFERENCES schedule_plans(id)
   );
   CREATE INDEX IF NOT EXISTS idx_schedule_snapshots_plan ON schedule_snapshots(plan_id);
+
+  -- Phase 3: on-site time & cost capture. Each row is a day's work logged
+  -- against a task; it also spawns a job_costs (labour) row so Finance Hub's
+  -- budget-vs-actual reflects site labour. job_cost_id links the two for cleanup.
+  CREATE TABLE IF NOT EXISTS schedule_time_entries (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL,
+    task_id TEXT,                               -- the task the work was against (nullable)
+    user_id TEXT NOT NULL,
+    entry_date DATE,                            -- the work day
+    worker TEXT,                                -- who did it (free text)
+    hours REAL DEFAULT 0,
+    hourly_rate REAL DEFAULT 0,                 -- rate used to cost the labour
+    labour_cost REAL DEFAULT 0,                 -- hours × hourly_rate, or entered directly
+    percent_complete INTEGER,                   -- the task's reported % at this point (nullable)
+    note TEXT,
+    job_cost_id TEXT,                           -- the job_costs row this created
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plan_id) REFERENCES schedule_plans(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_schedule_time_plan ON schedule_time_entries(plan_id);
+  CREATE INDEX IF NOT EXISTS idx_schedule_time_task ON schedule_time_entries(task_id);
 `);
 
 // Migrations for existing databases
