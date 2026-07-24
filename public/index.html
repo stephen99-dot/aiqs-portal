@@ -32,6 +32,18 @@
 (function () {
   if (window.__atpPromo) return; window.__atpPromo = true;
 
+  /* Permanent opt-out: from day 3 a "Don't show this again" link appears;
+     once clicked, the promo never mounts again on this browser. */
+  var LS_DISMISS = 'atp_promo_dismissed', LS_FIRST = 'atp_promo_first_seen';
+  try { if (localStorage.getItem(LS_DISMISS) === '1') return; } catch (e) {}
+  function daysSinceFirstSeen(){
+    try {
+      var first = localStorage.getItem(LS_FIRST);
+      if (!first) { first = String(Date.now()); localStorage.setItem(LS_FIRST, first); }
+      return Math.floor((Date.now() - +first) / 86400000);
+    } catch (e) { return 0; }
+  }
+
   var TRIAL_URL = 'https://app.aitradespilot.com/register';
   var DEMO_URL  = 'https://calendly.com/hello-crmwizardai/30min';
 
@@ -125,6 +137,11 @@
   + '#atpModal .cta .g{border:1px solid rgba(255,255,255,.28);color:#fff}'
   + '#atpModal .fine{text-align:center;font-size:10.5px;letter-spacing:.1em;color:#7E93B8;padding:0 0 16px;'
   + 'font-family:"JetBrains Mono",Menlo,monospace}'
+  + '.atpDismiss{display:none;background:none;border:none;color:#7E93B8;font-size:11px;cursor:pointer;'
+  + 'text-decoration:underline;padding:0;margin-top:9px;font-family:inherit}'
+  + '.atpDismiss:hover{color:#AFC4E4}'
+  + '#atpModal .atpDismiss{display:none;margin:0 auto 14px;text-align:center}'
+  + '#atpModal .atpDismiss.on,#atpCard .atpDismiss.on{display:block}'
   + '#atpMiniStage .atpKicker,#atpMiniStage .atpH{display:none}'
   + '#atpMiniStage .atpRow{font-size:11px;padding:6px 9px}'
   + '@media(max-width:480px){#atpCard{left:14px;right:14px;bottom:14px;width:auto}#atpStage{height:340px}}';
@@ -177,7 +194,8 @@
     + '<div class="mini"><div class="play"><span><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span></div>'
     + '<div id="atpMiniStage" style="position:absolute;inset:0;opacity:.5"></div></div>'
     + '<div class="body"><h3>🚨 New product — The AI Trades Pilot</h3>'
-    + '<p>Prices the job, writes the paperwork, tracks the money, orders the materials. Watch the 60-second demo.</p></div>';
+    + '<p>Prices the job, writes the paperwork, tracks the money, orders the materials. Watch the 60-second demo.</p>'
+    + '<button class="atpDismiss" type="button">Don\'t show this again</button></div>';
 
   var pill = document.createElement('button');
   pill.id = 'atpPill';
@@ -195,7 +213,8 @@
     + '<div id="atpStage"></div>'
     + '<div class="cta"><a class="p" href="' + TRIAL_URL + '" target="_blank" rel="noopener">Start your 14-day free trial</a>'
     + '<a class="g" href="' + DEMO_URL + '" target="_blank" rel="noopener">Book a 30-min demo</a></div>'
-    + '<div class="fine">14 DAYS FREE · 1 FREE AI QS JOB · CANCEL MONTHLY ANY TIME</div></div>';
+    + '<div class="fine">14 DAYS FREE · 1 FREE AI QS JOB · CANCEL MONTHLY ANY TIME</div>'
+    + '<button class="atpDismiss" type="button">Don\'t show this again</button></div>';
 
   /* ── scene engine ───────────────────────────────────────────────────── */
   var stage, dots, current = 0, timers = [], auto;
@@ -265,6 +284,19 @@
     modal.querySelector('.x').addEventListener('click', closeModal);
     modal.addEventListener('click', function(e){ if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeModal(); });
+
+    // From day 3 onwards, offer a permanent opt-out on both card and modal.
+    if (daysSinceFirstSeen() >= 3) {
+      document.querySelectorAll('.atpDismiss').forEach(function(btn){
+        btn.classList.add('on');
+        btn.addEventListener('click', function(e){
+          e.stopPropagation();
+          try { localStorage.setItem(LS_DISMISS, '1'); } catch (err) {}
+          clearTimers();
+          card.remove(); pill.remove(); modal.remove();
+        });
+      });
+    }
   }
   function boot() {
     mount();
