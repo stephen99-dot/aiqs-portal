@@ -101,7 +101,7 @@ export default function EstimatorGate({ children }) {
         {redirecting ? 'Opening checkout…' : 'Start 7-day free trial'}
       </button>
       <button
-        onClick={() => navigate('/office-in-a-box')}
+        onClick={() => navigate('/ai-trades-pilot')}
         style={{
           width: '100%', minHeight: 44, marginTop: 10, borderRadius: 10,
           background: 'transparent', border: `1px solid ${t.border}`, color: t.text,

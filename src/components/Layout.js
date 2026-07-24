@@ -10,7 +10,6 @@ import {
 } from './Icons';
 import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
-import OfficeInABoxPopup from './OfficeInABoxPopup';
 import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
@@ -135,16 +134,11 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  // The "What's new" popup takes priority — the Office upsell waits until it's
-  // been dismissed so the two never stack on top of each other.
+  // The "What's new" popup takes priority — the survey waits until it's been
+  // dismissed so the two never stack on top of each other.
   const [whatsNewSeen, setWhatsNewSeen] = useState(false);
 
   const isAdmin = user?.role === 'admin';
-
-  // The survey waits until the Office in a Box upsell has been answered or
-  // dismissed (its key in localStorage), so two popups never fight.
-  let officePopupDone = false;
-  try { officePopupDone = !!localStorage.getItem('aiqs_office_interest_v1'); } catch (e) {}
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -182,10 +176,10 @@ export default function Layout() {
   const isOfficeRouteActive = officeRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
   // Subscribers (and admins) get the working tool group. Everyone else sees a
-  // single "Office in a Box" entry that opens the Coming Soon / upsell page.
+  // single "AI Trades Pilot" entry that opens the new-product ad page.
   const officeNavItem = hasEstimator
     ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
-    : { path: '/office-in-a-box', label: 'Office in a Box', Icon: ZapIcon, badge: 'New' };
+    : { path: '/ai-trades-pilot', label: 'AI Trades Pilot', Icon: ZapIcon, badge: 'New' };
 
   // Personalisation pages live behind one Settings group so the main nav
   // stays at five entries: the submit → track → deliver loop plus the add-on.
@@ -549,13 +543,9 @@ export default function Layout() {
       {/* What's new — announce chatbot updates to every user, once per release */}
       <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />
 
-      {/* Office in a Box upsell — only for non-subscribers, and not on the page
-          itself, and only once the What's New popup has been dismissed */}
-      {whatsNewSeen && !hasEstimator && location.pathname !== '/office-in-a-box' && <OfficeInABoxPopup />}
-
-      {/* Feedback survey — every non-admin user, once. Waits for What's New,
-          and for non-subscribers also for the Office popup, so they never stack. */}
-      {whatsNewSeen && !isAdmin && (user?.hasEstimator || officePopupDone) && <SurveyPopup />}
+      {/* Feedback survey — every non-admin user, once. Waits for What's New
+          so the two popups never stack. */}
+      {whatsNewSeen && !isAdmin && <SurveyPopup />}
 
       {/* Office in a Box guided walkthrough — auto-runs once for subscribers and
           stays available afterwards via its "Show me around" launcher. Admins

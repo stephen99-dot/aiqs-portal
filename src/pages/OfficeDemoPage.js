@@ -172,11 +172,11 @@ export default function OfficeDemoPage() {
         position: 'fixed', left: 0, right: 0, bottom: 0, padding: '10px 16px calc(10px + env(safe-area-inset-bottom))',
         background: t.card, borderTop: '1px solid ' + t.border,
       }}>
-        <button onClick={() => nav('/office-in-a-box')} style={{
+        <button onClick={() => nav('/ai-trades-pilot')} style={{
           display: 'block', width: '100%', maxWidth: 720, margin: '0 auto', minHeight: 52,
-          borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-          color: '#0A0F1C', fontSize: 16, fontWeight: 800, cursor: 'pointer',
-        }}>Try it on my jobs — 7 days free</button>
+          borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #0071F3, #0059CE)',
+          color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer',
+        }}>Try it on my jobs — 14 days free</button>
       </div>
     </div>
   );

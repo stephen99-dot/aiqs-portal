@@ -44,7 +44,7 @@ import MaterialsPage from './pages/MaterialsPage';
 import TodayPage from './pages/TodayPage';
 import ToolsPage from './pages/ToolsPage';
 import SetupWizardPage from './pages/SetupWizardPage';
-import OfficeInABoxPage from './pages/OfficeInABoxPage';
+import AiTradesPilotPage from './pages/AiTradesPilotPage';
 import OfficeDemoPage from './pages/OfficeDemoPage';
 import PlanningLeadsPage from './pages/PlanningLeadsPage';
 import BrandingPage from './pages/BrandingPage';
@@ -66,11 +66,11 @@ function GuestRoute({ children }) {
 }
 
 // Variations are part of the Office in a Box add-on — everyone else lands on
-// the upsell page when they follow an old link.
+// the AI Trades Pilot page when they follow an old link.
 function OiBRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (!user?.hasEstimator && user?.role !== 'admin') return <Navigate to="/office-in-a-box" replace />;
+  if (!user?.hasEstimator && user?.role !== 'admin') return <Navigate to="/ai-trades-pilot" replace />;
   return children;
 }
 
@@ -153,7 +153,9 @@ function AppInner() {
           <Route path="/finance/jobs" element={<Navigate to="/jobs" replace />} />
           <Route path="/finance/jobs/:id" element={<JobIdRedirect />} />
           <Route path="/invoices" element={<Navigate to="/money" replace />} />
-          <Route path="/office-in-a-box" element={<OfficeInABoxPage />} />
+          <Route path="/ai-trades-pilot" element={<AiTradesPilotPage />} />
+          {/* Retired Office-in-a-Box upsell — old links land on AI Trades Pilot. */}
+          <Route path="/office-in-a-box" element={<Navigate to="/ai-trades-pilot" replace />} />
           {/* D — example-data sandbox, open to non-subscribers on purpose. */}
           <Route path="/office-demo" element={<OfficeDemoPage />} />
           <Route path="/branding" element={<BrandingPage />} />
