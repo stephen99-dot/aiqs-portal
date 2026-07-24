@@ -554,7 +554,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       <a href="#deliverables">Deliverables</a>
       <a href="#pricing">Pricing</a>
       <a href="/blog/">Blog</a>
-      <a href="/officeinabox.html">Office in a Box</a>
+      <a href="https://www.aitradespilot.com" target="_blank" rel="noopener">AI Trades Pilot</a>
       <a href="#faq">FAQ</a>
       <a href="https://aiqs-portal.onrender.com" class="nav-cta" target="_blank" rel="noopener">Login Portal &#8594;</a>
     </div>
