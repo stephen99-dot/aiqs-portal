@@ -645,21 +645,37 @@ const LOCATION_FACTORS = {
 // but currency conversion means the EUR figure is ~1.17x the GBP figure
 const GBP_TO_EUR = 1.17;
 
+// Greater London outward postcode areas: E, EC, N, NW, SE, SW, W, WC (+ TW for the
+// Middlesex fringe). The discriminator that makes these safe to match is that a London
+// outward code puts a DIGIT immediately after the letters — SW1, SE10, N1, EC1A, W12 —
+// whereas every other UK area starting with the same letters has a second letter first:
+// SA (Swansea), SN (Swindon), NE (Newcastle), WA (Warrington), EN (Enfield), ST (Stoke).
+//
+// Testing these as bare substrings (loc.includes('sw')) was matching them INSIDE ordinary
+// place names and pricing all of them at London +20%: Swansea and Swindon via 'sw',
+// Somerset, Dorset, Selby and Sevenoaks via 'se', Cornwall via 'nw', Aberystwyth via 'tw',
+// Ecclesfield via 'ec'. Somerset, Dorset, Cornwall (South West) and Swansea (Wales) are
+// listed in this function's own later branches and were unreachable as a result.
+const LONDON_POSTCODE = /\b(?:ec|wc|nw|sw|se|tw|w|e|n)\d/;
+const LONDON_PLACES = /london|richmond|kingston|wimbledon|croydon/;
+
 function detectLocationFactor(locationStr) {
   if (!locationStr) return { factor: 1.00, label: 'default', isIreland: false };
   const loc = locationStr.toLowerCase();
   // Ireland detection — comprehensive list of Irish counties, cities, and patterns
   const irelandPattern = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow|eircode|co\.\s*(dublin|cork|galway|limerick|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow)|lansborough|athlone|mullingar|tullamore|portlaoise|killarney|tralee|ennis|letterkenny|drogheda|dundalk|navan|naas|newbridge|bray|greystones|swords|malahide|clonmel|carrick|thurles|nenagh|castlebar|ballina|sligo town|boyle|ballinasloe|tuam|loughrea|oranmore/;
   if (irelandPattern.test(loc)) return { factor: 1.10, label: 'Ireland (+10%)', isIreland: true };
-  if (loc.includes('london') || loc.includes('tw') || loc.includes('sw') || loc.includes('se') || loc.includes('ec') || loc.includes('wc') || loc.includes('w1') || loc.includes('e1') || loc.includes('n1') || loc.includes('nw') || loc.includes('richmond') || loc.includes('kingston') || loc.includes('wimbledon') || loc.includes('croydon')) return { factor: 1.20, label: 'London/SE (+20%)', isIreland: false };
+  // Named nations before the London postcode test, as defence in depth: an explicit
+  // "Cardiff" or "Glasgow" must never be outvoted by a stray postcode-shaped token.
+  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)', isIreland: false };
+  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)', isIreland: false };
+  if (LONDON_PLACES.test(loc) || LONDON_POSTCODE.test(loc)) return { factor: 1.20, label: 'London/SE (+20%)', isIreland: false };
   if (loc.includes('brighton') || loc.includes('guildford') || loc.includes('oxford') || loc.includes('cambridge') || loc.includes('surrey') || loc.includes('kent') || loc.includes('essex') || loc.includes('hertford') || loc.includes('reading')) return { factor: 1.15, label: 'South East (+15%)', isIreland: false };
   if (loc.includes('bristol') || loc.includes('bath') || loc.includes('exeter') || loc.includes('devon') || loc.includes('somerset') || loc.includes('dorset') || loc.includes('cornwall')) return { factor: 1.05, label: 'South West (+5%)', isIreland: false };
   if (loc.includes('birmingham') || loc.includes('coventry') || loc.includes('leicester') || loc.includes('nottingham') || loc.includes('derby') || loc.includes('northampton') || loc.includes('stoke')) return { factor: 1.07, label: 'Midlands (+7%)', isIreland: false };
   if (loc.includes('manchester') || loc.includes('liverpool') || loc.includes('chester') || loc.includes('lancashire') || loc.includes('cheshire')) return { factor: 0.98, label: 'North West (-2%)', isIreland: false };
   if (loc.includes('leeds') || loc.includes('sheffield') || loc.includes('york') || loc.includes('hull') || loc.includes('bradford')) return { factor: 0.97, label: 'Yorkshire (-3%)', isIreland: false };
   if (loc.includes('newcastle') || loc.includes('sunderland') || loc.includes('durham') || loc.includes('carlisle') || loc.includes('cumbria')) return { factor: 0.97, label: 'North England (-3%)', isIreland: false };
-  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)', isIreland: false };
-  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)', isIreland: false };
   return { factor: 1.00, label: 'UK average', isIreland: false };
 }
 
