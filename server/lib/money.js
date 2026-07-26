@@ -14,8 +14,18 @@ function round2(n) {
 }
 
 // Net subtotal + percentages → the full cascade.
-// OH&P is applied to net; contingency to (net + OH&P); VAT to the lot.
+//
+// OH&P and contingency are BOTH taken off the net (construction) total, then VAT on
+// the lot. This is the standard UK QS presentation and it deliberately does not
+// compound: charging OH&P on contingency would carry profit on risk money that may
+// never be spent.
+//
+// This must stay in step with deterministicPricer.priceLockedQuantities(), which
+// computes the same cascade for the BOQ path. Two different cascades meant one job
+// had two grand totals depending on which path priced it.
+//
 // Margin % = OH&P / (net + OH&P) — i.e. profit as a share of the marked-up cost.
+// Independent of contingency, so unchanged by the above.
 function computeFinancials(net, opts = {}) {
   net = num(net);
   const ohpPct = num(opts.ohp_pct);
@@ -23,7 +33,7 @@ function computeFinancials(net, opts = {}) {
   const vatPct = num(opts.vat_pct);
 
   const ohp = net * (ohpPct / 100);
-  const cont = (net + ohp) * (contPct / 100);
+  const cont = net * (contPct / 100);
   const beforeVat = net + ohp + cont;
   const vat = beforeVat * (vatPct / 100);
   const grand = beforeVat + vat;
