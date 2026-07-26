@@ -1331,6 +1331,53 @@ function unitFamily(u) {
   return '';
 }
 
+// Confidence tier per rate_source. The distinction that matters is 'estimated':
+// those rates rest on a model guess or on estimateFallbackRate()'s keyword ladder,
+// not on anything anyone has ever quoted. That bucket is what the evidence layers
+// exist to shrink, so it needs to be visible on every job.
+const RATE_SOURCE_TIER = {
+  override:           'evidenced',   // a human set this rate for this job
+  client_verified:    'evidenced',   // this client's own confirmed rate
+  base_library:       'library',     // curated generic rate library (BASE_RATES)
+  ai_estimated:       'estimated',   // model-supplied assumed_rate
+  fallback_estimated: 'estimated',   // estimateFallbackRate() keyword ladder
+  fallback_corrected: 'estimated',   // a guess, then clipped to a unit ceiling
+};
+
+/**
+ * Value-weighted breakdown of where a priced BOQ's rates came from.
+ *
+ * Weighted by value, not line count, deliberately: one GBP 40k steel package priced
+ * off a guess matters far more than twenty GBP 200 lines that weren't. An unrecognised
+ * rate_source counts as unknown and is excluded from coverage_pct, so a new source
+ * can never inflate the number by accident.
+ */
+function computeRateSourceCoverage(pricedItems) {
+  const byTier = { evidenced: 0, library: 0, estimated: 0, unknown: 0 };
+  const bySource = {};
+  let total = 0;
+  for (const it of (Array.isArray(pricedItems) ? pricedItems : [])) {
+    const value = Number(it && it.total) || 0;
+    const source = (it && it.rate_source) || 'unknown';
+    byTier[RATE_SOURCE_TIER[source] || 'unknown'] += value;
+    bySource[source] = (bySource[source] || 0) + value;
+    total += value;
+  }
+  const pct = (v) => (total > 0 ? Math.round((v / total) * 1000) / 10 : 0);
+  for (const k of Object.keys(bySource)) bySource[k] = Math.round(bySource[k] * 100) / 100;
+  return {
+    priced_value: Math.round(total * 100) / 100,
+    evidenced_pct: pct(byTier.evidenced),
+    library_pct: pct(byTier.library),
+    estimated_pct: pct(byTier.estimated),
+    unknown_pct: pct(byTier.unknown),
+    // Headline: the share of value NOT resting on a guess. This is the figure that
+    // must not regress as later phases change how rates are resolved.
+    coverage_pct: pct(byTier.evidenced + byTier.library),
+    by_source: bySource,
+  };
+}
+
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
   // Input guard: drop ghost/malformed items before pricing so a stray entry
   // (e.g. one with no key and description "undefined", or a non-numeric qty)
@@ -1786,6 +1833,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       vat: Math.round(vat * 100) / 100,
       grand_total: Math.round(grandTotal * 100) / 100,
       currency,
+      // Computed after the cap rescaling above, so it describes the numbers actually
+      // being delivered rather than the pre-cap ones.
+      rate_source_coverage: computeRateSourceCoverage(pricedItems),
     },
     location: locationInfo,
     project_type: projectType,
@@ -1837,4 +1887,4 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER };

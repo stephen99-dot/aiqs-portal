@@ -7,7 +7,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { BASE_RATES, detectDuplicatesAndOverlaps, detectLocationFactor } = require('./deterministicPricer');
+const {
+  BASE_RATES, detectDuplicatesAndOverlaps, detectLocationFactor,
+  computeRateSourceCoverage, priceLockedQuantities,
+} = require('./deterministicPricer');
 
 const SPLIT_KEYS = [
   'decorate_skirting', 'decorate_architrave', 'decorate_door',
@@ -136,4 +139,89 @@ test('unknown and empty locations fall back to a neutral factor', () => {
   assert.strictEqual(detectLocationFactor('').factor, 1.00);
   assert.strictEqual(detectLocationFactor(null).factor, 1.00);
   assert.strictEqual(detectLocationFactor(undefined).label, 'default');
+});
+
+// ── computeRateSourceCoverage ─────────────────────────────────────────────────
+// Value-weighted share of a priced BOQ resting on real rates vs. on a guess. The
+// baseline accuracy metric: 'estimated' is the bucket the evidence layers exist to
+// shrink, and coverage_pct is the figure that must not regress.
+
+test('coverage is weighted by value, not by line count', () => {
+  // One big guessed line against many small library lines: line count says 20:1,
+  // value says the guess dominates. The metric must report the value view.
+  const items = [
+    { total: 40000, rate_source: 'fallback_estimated' },
+    ...Array.from({ length: 20 }, () => ({ total: 500, rate_source: 'base_library' })),
+  ];
+  const c = computeRateSourceCoverage(items);
+  assert.strictEqual(c.priced_value, 50000);
+  assert.strictEqual(c.estimated_pct, 80);
+  assert.strictEqual(c.library_pct, 20);
+  assert.strictEqual(c.coverage_pct, 20);
+});
+
+test('coverage buckets each rate_source into the right tier', () => {
+  const c = computeRateSourceCoverage([
+    { total: 100, rate_source: 'override' },
+    { total: 100, rate_source: 'client_verified' },
+    { total: 400, rate_source: 'base_library' },
+    { total: 100, rate_source: 'ai_estimated' },
+    { total: 200, rate_source: 'fallback_estimated' },
+    { total: 100, rate_source: 'fallback_corrected' },
+  ]);
+  assert.strictEqual(c.evidenced_pct, 20);   // override + client_verified
+  assert.strictEqual(c.library_pct, 40);     // base_library
+  assert.strictEqual(c.estimated_pct, 40);   // ai + fallback + corrected
+  assert.strictEqual(c.coverage_pct, 60);    // everything not a guess
+});
+
+test('an unrecognised rate_source cannot inflate coverage', () => {
+  const c = computeRateSourceCoverage([
+    { total: 500, rate_source: 'base_library' },
+    { total: 500, rate_source: 'some_future_source' },
+    { total: 0,   rate_source: undefined },
+  ]);
+  assert.strictEqual(c.coverage_pct, 50, 'unknown source excluded from coverage');
+  assert.strictEqual(c.unknown_pct, 50);
+});
+
+test('coverage percentages sum to 100 and by_source reconciles to priced_value', () => {
+  const items = [
+    { total: 1234.56, rate_source: 'base_library' },
+    { total: 987.65,  rate_source: 'client_verified' },
+    { total: 432.10,  rate_source: 'fallback_estimated' },
+  ];
+  const c = computeRateSourceCoverage(items);
+  const sum = c.evidenced_pct + c.library_pct + c.estimated_pct + c.unknown_pct;
+  assert.ok(Math.abs(sum - 100) < 0.2, `tier percentages sum to ~100, got ${sum}`);
+  const bySourceTotal = Object.values(c.by_source).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(bySourceTotal - c.priced_value) < 0.02, 'by_source reconciles');
+});
+
+test('coverage is safe on empty and malformed input', () => {
+  for (const input of [[], null, undefined, [null, {}, { total: 'x' }]]) {
+    const c = computeRateSourceCoverage(input);
+    assert.strictEqual(c.priced_value, 0);
+    assert.strictEqual(c.coverage_pct, 0, 'no divide-by-zero');
+  }
+});
+
+test('priceLockedQuantities reports coverage that reconciles to the construction total', () => {
+  const items = [
+    { key: 'brick_outer_leaf', qty: 120, unit: 'm²' },
+    { key: 'concrete_slab_150mm', qty: 60, unit: 'm²' },
+    { key: 'blockwork_inner_leaf_100mm', qty: 120, unit: 'm²', override_rate: 45 },
+    { key: 'no_such_key_at_all', qty: 1, unit: 'Item', description: 'bespoke curved oak screen' },
+  ];
+  const r = priceLockedQuantities(items, 'Manchester', { concrete_slab_150mm: 81 },
+    { contingency_pct: 5, ohp_pct: 15, vat_rate: 20 });
+  const c = r.summary.rate_source_coverage;
+  assert.ok(c, 'coverage is present in the summary');
+  assert.strictEqual(c.priced_value, r.summary.construction_total,
+    'coverage covers exactly the construction total');
+  assert.ok(c.by_source.override > 0, 'override line attributed');
+  assert.ok(c.by_source.client_verified > 0, 'client rate attributed');
+  assert.ok(c.by_source.base_library > 0, 'library line attributed');
+  assert.ok(c.estimated_pct > 0, 'the unknown key shows up as estimated');
+  assert.ok(c.coverage_pct > 0 && c.coverage_pct < 100, 'coverage is a real fraction');
 });
