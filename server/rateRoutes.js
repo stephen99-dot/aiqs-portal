@@ -2,6 +2,8 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware, adminMiddleware } = require('./auth');
+const shadowLog = require('./shadowLog');
+const priceEvidence = require('./priceEvidence');
 
 const router = express.Router();
 
@@ -449,6 +451,49 @@ router.get('/admin/rates/trades', authMiddleware, adminMiddleware, (req, res) =>
 router.get('/admin/location-factors', authMiddleware, adminMiddleware, (req, res) => {
   const factors = db.prepare('SELECT * FROM location_factors ORDER BY region ASC, location ASC').all();
   res.json(factors);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RATE RESOLVER — SHADOW MODE DIAGNOSTICS
+// ═══════════════════════════════════════════════════════════════════════════════
+// rateResolver is the single precedence ladder every pricing path will eventually call.
+// It runs alongside the live pricer on every job and its disagreements are logged. These
+// endpoints are how you decide whether it is safe to promote: an empty report after a
+// week of real jobs is the green light, and a populated one names the item keys to fix
+// ranked by the money at stake rather than by how often they occur.
+
+// ── GET the shadow mismatch report ──
+router.get('/admin/rate-resolver/shadow', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const sinceDays = req.query.since_days ? parseInt(req.query.since_days, 10) : null;
+    res.json(shadowLog.report(db, { limit, sinceDays }));
+  } catch (e) {
+    console.error('[ShadowLog] report route error:', e.message);
+    res.status(500).json({ error: 'Could not build the shadow report' });
+  }
+});
+
+// ── GET what the evidence store currently holds ──
+// Confirms the backfill ran and shows which sources are represented.
+router.get('/admin/rate-resolver/evidence', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    res.json(priceEvidence.summary(db));
+  } catch (e) {
+    console.error('[PriceEvidence] summary route error:', e.message);
+    res.status(500).json({ error: 'Could not read the evidence store' });
+  }
+});
+
+// ── CLEAR the shadow log ──
+// For after a divergence is fixed, when the old rows are just noise.
+router.delete('/admin/rate-resolver/shadow', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    res.json({ cleared: shadowLog.clear(db) });
+  } catch (e) {
+    console.error('[ShadowLog] clear route error:', e.message);
+    res.status(500).json({ error: 'Could not clear the shadow log' });
+  }
 });
 
 // ── CREATE rate ──
