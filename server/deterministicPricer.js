@@ -1334,6 +1334,33 @@ function unitFamily(u) {
   return '';
 }
 
+// ───── Unit-based rate ceilings ─────
+// Absolute upper bounds per unit type. Catches AI-hallucinated rates and stale
+// client_rate_library entries with no matching base rate, regardless of which path
+// produced the rate. Values are in GBP; Ireland prices get an additional GBP_TO_EUR
+// multiplier before this check runs.
+//
+// Module scope rather than inside priceLockedQuantities so rateResolver applies the
+// identical ceiling. Two copies of these numbers would drift, and the ceiling clip is
+// exactly the kind of late rewrite a parallel implementation forgets.
+const RATE_CEILINGS_GBP = {
+  m:   500,     // any linear-metre item — lead flash and specialist piping cap out around here
+  lm:  500,
+  'm¹': 500,
+  m2:  800,     // any m² item — solid stone cladding max
+  'm²': 800,
+  sqm: 800,
+  m3:  500,    // m³ — reinforced concrete
+  'm³': 500,
+  kg:  20,
+  t:   2500,
+  tonne: 2500,
+};
+function ceilingFor(unit) {
+  const u = (unit || '').toLowerCase();
+  return RATE_CEILINGS_GBP[u] || null;  // unknown units (Item, Nr, ea) — no ceiling
+}
+
 /**
  * Render the rate library as a compact crib-sheet for an LLM prompt.
  *
@@ -1506,29 +1533,6 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     lockedItems.length = 0;
     for (const d of deduped) lockedItems.push(d);
   })();
-
-  // ───── Unit-based rate ceilings ─────
-  // Absolute upper bounds per unit type. Catches AI-hallucinated rates and
-  // stale client_rate_library entries with no matching base rate, regardless
-  // of which path produced the rate. Values are in GBP; Ireland prices get
-  // an additional GBP_TO_EUR multiplier before this check runs.
-  const RATE_CEILINGS_GBP = {
-    m:   500,     // any linear-metre item — lead flash and specialist piping cap out around here
-    lm:  500,
-    'm¹': 500,
-    m2:  800,     // any m² item — solid stone cladding max
-    'm²': 800,
-    sqm: 800,
-    m3:  500,    // m³ — reinforced concrete
-    'm³': 500,
-    kg:  20,
-    t:   2500,
-    tonne: 2500,
-  };
-  function ceilingFor(unit) {
-    const u = (unit || '').toLowerCase();
-    return RATE_CEILINGS_GBP[u] || null;  // unknown units (Item, Nr, ea) — no ceiling
-  }
 
   const pricedItems = [];
   const warnings = [];
@@ -1924,4 +1928,5 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet,
+  estimateFallbackRate, ceilingFor, RATE_CEILINGS_GBP, GBP_TO_EUR };
