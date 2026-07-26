@@ -225,3 +225,134 @@ test('priceLockedQuantities reports coverage that reconciles to the construction
   assert.ok(c.estimated_pct > 0, 'the unknown key shows up as estimated');
   assert.ok(c.coverage_pct > 0 && c.coverage_pct < 100, 'coverage is a real fraction');
 });
+
+// ── shadow mode ───────────────────────────────────────────────────────────────
+// priceLockedQuantities accepts an injected resolver and compares it per item. The hook
+// exists to prove rateResolver reproduces this file's ladder on real jobs. It runs by
+// default in production, so "cannot change a price" and "cannot break a quote" are
+// load-bearing guarantees rather than nice-to-haves.
+
+const SHADOW_JOB = () => ([
+  { key: 'brick_outer_leaf', qty: 120, unit: 'm²' },
+  { key: 'concrete_slab_150mm', qty: 60, unit: 'm²', override_rate: 91 },
+  { key: 'scaffolding', qty: 200, unit: 'm²' },
+  { key: 'mystery_item', qty: 2, unit: 'Nr', description: 'bespoke ironmongery set' },
+]);
+
+test('no resolver injected means no shadow key and no behaviour change', () => {
+  const r = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, { contingency_pct: 5 });
+  assert.ok(!('shadow' in r), 'the default result shape is untouched');
+});
+
+test('a non-function resolveRate is ignored rather than crashing', () => {
+  for (const junk of ['nope', 42, {}, [], null]) {
+    const r = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, { resolveRate: junk });
+    assert.ok(Number.isFinite(r.summary.grand_total), `survived resolveRate=${JSON.stringify(junk)}`);
+    assert.ok(!('shadow' in r), 'no shadow key for a non-function');
+  }
+});
+
+test('shadow mode changes nothing about the priced output', () => {
+  const { resolveRate } = require('./rateResolver');
+  const clientRates = { scaffolding: 9999 };
+  const opts = { contingency_pct: 5, ohp_pct: 15 };
+
+  const plain = priceLockedQuantities(SHADOW_JOB(), 'Manchester', clientRates, opts);
+  const shadowed = priceLockedQuantities(SHADOW_JOB(), 'Manchester', clientRates, { ...opts, resolveRate });
+
+  const a = JSON.parse(JSON.stringify(plain));
+  const b = JSON.parse(JSON.stringify(shadowed));
+  delete b.shadow;
+  a.priced_at = b.priced_at = 'fixed';
+  assert.deepStrictEqual(b, a, 'identical apart from the shadow key');
+});
+
+test('the real resolver agrees with the pricer on a mixed job', () => {
+  const { resolveRate } = require('./rateResolver');
+  for (const region of ['Manchester', 'London SW1A 1AA', 'Cardiff', 'Dublin']) {
+    const r = priceLockedQuantities(SHADOW_JOB(), region, { scaffolding: 9999 }, { resolveRate });
+    assert.strictEqual(r.shadow.errors, 0, `resolver threw at ${region}`);
+    assert.strictEqual(r.shadow.matched, r.shadow.compared,
+      `mismatches at ${region}: ${JSON.stringify(r.shadow.mismatches)}`);
+  }
+});
+
+test('a resolver that throws on every item cannot break the quote', () => {
+  const good = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, { contingency_pct: 5 });
+  const boom = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, {
+    contingency_pct: 5,
+    resolveRate: () => { throw new Error('resolver exploded'); },
+  });
+  assert.strictEqual(boom.summary.grand_total, good.summary.grand_total,
+    'a broken resolver must not move a single penny');
+  assert.strictEqual(boom.shadow.matched, 0);
+  assert.ok(boom.shadow.errors > 0, 'the failures are reported, not hidden');
+  assert.deepStrictEqual(boom.shadow.mismatches, [], 'an error is not a mismatch');
+});
+
+test('a resolver returning garbage is recorded as a mismatch, not a crash', () => {
+  const r = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, {
+    resolveRate: () => ({ rate: NaN, basis: 'nonsense', rateSource: 'nonsense' }),
+  });
+  assert.ok(Number.isFinite(r.summary.grand_total), 'totals still sound');
+  assert.strictEqual(r.shadow.matched, 0);
+  assert.strictEqual(r.shadow.mismatches.length, r.shadow.compared, 'every item flagged');
+});
+
+test('job-level cap rescaling does not create false mismatches', () => {
+  // The £/m² cap rescales every line's rate to hit a job target. The resolver does not
+  // model job-level caps, so comparing post-cap rates would report a mismatch on every
+  // capped job. Comparison happens inside the pricing loop, before the caps run.
+  const { resolveRate } = require('./rateResolver');
+  const items = () => ([
+    { key: 'structural_steelwork', qty: 1, unit: 'Item' },
+    { key: 'attic_trusses_prefab', qty: 1, unit: 'Item' },
+    { key: 'air_source_heat_pump', qty: 2, unit: 'Nr' },
+    { key: 'kitchen_fitout_high', qty: 2, unit: 'Nr' },
+    { key: 'bathroom_fitout_high', qty: 2, unit: 'Nr' },
+  ]);
+  const r = priceLockedQuantities(items(), 'London SW1A 1AA', {}, {
+    project_type: 'extension', floor_area: 8, resolveRate,
+  });
+  assert.ok(r.warnings.some(w => /COST CAP APPLIED/.test(w)),
+    'the test needs a real rate-rescaling cap to be meaningful');
+  assert.strictEqual(r.shadow.matched, r.shadow.compared,
+    `caps produced false mismatches: ${JSON.stringify(r.shadow.mismatches)}`);
+  assert.strictEqual(r.shadow.excludes_job_caps, true, 'the exclusion is declared in the output');
+});
+
+test('mismatches carry enough context to be actionable, ranked by money', () => {
+  // A resolver deliberately 10% high on everything.
+  const { resolveRate } = require('./rateResolver');
+  const r = priceLockedQuantities(SHADOW_JOB(), 'Manchester', {}, {
+    resolveRate: (p) => {
+      const base = resolveRate(p);
+      return { ...base, rate: Math.round(base.rate * 1.1 * 100) / 100 };
+    },
+  });
+  assert.ok(r.shadow.mismatches.length > 0, 'the skew was detected');
+  for (const m of r.shadow.mismatches) {
+    assert.ok(m.key, 'names the item');
+    assert.ok(Number.isFinite(m.pricer_rate) && Number.isFinite(m.resolver_rate), 'both rates present');
+    assert.ok(m.pricer_source && m.resolver_basis, 'both sources named');
+    assert.ok(Math.abs(m.delta_pct - 10) < 1.5, `delta_pct ~10, got ${m.delta_pct}`);
+    assert.ok(m.value_at_risk >= 0, 'value at risk computed for ranking');
+  }
+  const biggest = r.shadow.mismatches.reduce((a, b) => (a.value_at_risk > b.value_at_risk ? a : b));
+  assert.ok(biggest.value_at_risk > 0, 'ranking by money is possible');
+});
+
+test('deterministicPricer stays pure — no requires, no database access', () => {
+  // This is why the pricer is trustworthy: same inputs, same output, every run. The
+  // resolver arrives by injection precisely to preserve it. A require() here would let
+  // I/O, config or clock into the pricing path.
+  const fs = require('node:fs');
+  const src = fs.readFileSync(require('node:path').join(__dirname, 'deterministicPricer.js'), 'utf8');
+  const code = src
+    .split('\n')
+    .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))   // ignore comments, which discuss require()
+    .join('\n');
+  assert.ok(!/\brequire\s*\(/.test(code), 'deterministicPricer must not require anything');
+  assert.ok(!/\bdb\s*\./.test(code), 'deterministicPricer must not touch a database');
+  assert.ok(!/process\.env/.test(code), 'deterministicPricer must not read the environment');
+});

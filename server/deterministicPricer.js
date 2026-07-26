@@ -1395,6 +1395,91 @@ function renderRateCribSheet(opts = {}) {
   return lines.join('\n');
 }
 
+/**
+ * Shadow-mode comparison harness.
+ *
+ * Phase 1 of the pricing-brain work builds rateResolver as the single ladder every
+ * pricing path will eventually call. Before anything trusts it, it has to be shown to
+ * reproduce this file's inline ladder on real jobs — not just on the one synthetic eval
+ * fixture. So when a resolver is injected, every item is resolved a second time and the
+ * two answers are compared.
+ *
+ * Three properties this must have, in order of importance:
+ *
+ *   1. It cannot change a price. Nothing here writes to pricedItems, a section subtotal
+ *      or a summary figure. It only reads and records.
+ *   2. It cannot break a quote. Every call is wrapped; a resolver that throws on every
+ *      item degrades to "no shadow data", never to a failed job. Shadow mode is on by
+ *      default, so this is load-bearing rather than theoretical.
+ *   3. It compares the right thing. Comparison happens per item at the moment the ladder
+ *      has finished with that item, BEFORE the job-level caps (section caps, £/m² caps,
+ *      the absolute cap). Those caps rescale every line proportionally to hit a job
+ *      target and the resolver does not model them, so comparing post-cap rates would
+ *      report a mismatch on every capped job and bury the real signal.
+ *
+ * Dependency injection rather than a require: this file has no imports and no database
+ * access, and that purity is why its output is reproducible. The resolver arrives as a
+ * function in options.
+ */
+function createShadowComparer(resolveRate, ctx) {
+  const mismatches = [];
+  let compared = 0;
+  let matched = 0;
+  let errors = 0;
+
+  return {
+    compare(item, rate, rateSource) {
+      compared++;
+      try {
+        const r = resolveRate({
+          itemKey: item.key,
+          description: item.description || '',
+          unit: item.unit || '',
+          qty: item.qty,
+          locFactor: ctx.locFactor,
+          overrideRate: item.override_rate,
+          clientRate: ctx.clientRates ? ctx.clientRates[item.key] : undefined,
+          assumedRate: item.assumed_rate,
+          region: ctx.region,
+          projectType: ctx.projectType,
+        });
+        // Half a penny of tolerance: both sides round to 2dp, so exact float equality
+        // would flag rounding noise as a divergence.
+        const sameRate = Math.abs(Number(r.rate) - rate) < 0.005;
+        const sameSource = r.rateSource === rateSource;
+        if (sameRate && sameSource) { matched++; return; }
+        mismatches.push({
+          key: item.key,
+          unit: item.unit || '',
+          qty: item.qty,
+          pricer_rate: Math.round(rate * 100) / 100,
+          resolver_rate: Number(r.rate),
+          pricer_source: rateSource,
+          resolver_basis: r.basis,
+          resolver_source: r.rateSource,
+          delta_pct: rate !== 0 ? Math.round(((Number(r.rate) - rate) / rate) * 1000) / 10 : null,
+          // Ranks mismatches by money rather than frequency: a 2% divergence on a
+          // £40k package matters more than 50% on a £30 line.
+          value_at_risk: Math.round(Math.abs(Number(r.rate) - rate) * (Number(item.qty) || 0) * 100) / 100,
+        });
+      } catch (e) {
+        errors++;
+        if (errors === 1) console.error('[Pricer] shadow resolver threw:', e.message);
+      }
+    },
+    result() {
+      return {
+        compared,
+        matched,
+        errors,
+        // Excludes the job-level caps by design — see the note above.
+        excludes_job_caps: true,
+        mismatches,
+      };
+    },
+  };
+}
+
 // Confidence tier per rate_source. The distinction that matters is 'estimated':
 // those rates rest on a model guess or on estimateFallbackRate()'s keyword ladder,
 // not on anything anyone has ever quoted. That bucket is what the evidence layers
@@ -1540,6 +1625,21 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // Detect project type to control which auto-corrections apply
   const projectType = options.project_type || detectProjectType(lockedItems);
 
+  // Optional shadow comparison against an injected rate resolver. Absent by default, in
+  // which case this function behaves exactly as it did before — no extra work, and no
+  // change in output shape beyond an omitted `shadow` key. Declared after projectType so
+  // it can carry it as context.
+  let shadow = null;
+  if (typeof options.resolveRate === 'function') {
+    try {
+      shadow = createShadowComparer(options.resolveRate, {
+        locFactor, clientRates, region: locationInfo.label, projectType,
+      });
+    } catch (e) {
+      console.error('[Pricer] could not start shadow comparison:', e.message);
+    }
+  }
+
   // Cross-validate quantities for all residential project types
   // (extensions, refurbishments, general) — skip only for infrastructure/commercial
   let crossResult = { warnings: [], corrections: [] };
@@ -1669,6 +1769,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     if (total > 25000) {
       warnings.push(`High-value item: '${bestDescription}' = ${cs}${Math.round(total).toLocaleString()} (${item.qty} ${item.unit || 'Item'} × ${cs}${Math.round(rate * 100) / 100}) — please verify qty and rate`);
     }
+
+    // The ladder plus both post-ladder guards have finished with this item, so `rate` and
+    // `rateSource` are final for it. This is the point the resolver is comparable at —
+    // the job-level caps below rescale everything and are not part of the ladder.
+    if (shadow) shadow.compare(item, rate, rateSource);
 
     pricedItems.push({
       key: item.key,
@@ -1860,7 +1965,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const vat = Math.round(netWithOhp * (vat_rate / 100) * 100) / 100;
   const grandTotal = netWithOhp + vat;
 
-  return {
+  const result = {
     sections: sectionTotals,
     summary: {
       construction_total: Math.round(constructionTotal * 100) / 100,
@@ -1885,6 +1990,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     item_count: pricedItems.length,
     priced_at: new Date().toISOString(),
   };
+
+  // Attached only when a resolver was injected, so the default result shape is unchanged
+  // and every existing consumer sees exactly what it saw before.
+  if (shadow) result.shadow = shadow.result();
+
+  return result;
 }
 
 /**
