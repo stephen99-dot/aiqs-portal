@@ -126,7 +126,10 @@ const BASE_RATES = {
   'utility_plumbing':                  { rate: 2500, unit: 'Item',labour: 0.55, materials: 0.45, description: 'Utility room plumbing provisions washing machine hot/cold waste' },
   // Staircase
   'staircase':                         { rate: 4800, unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'New timber staircase ground to first floor complete with newels balusters handrail' },
-  'stair_opening_formation':           { rate: 750,  unit: 'Item',labour: 0.70, materials: 0.30, description: 'Form stair opening in existing ground floor ceiling/first floor structure' },
+  // stair_opening_formation lives further down at 850/Nr. It was declared here too, at
+  // 750/Item, but a duplicate key in an object literal is simply overwritten — this copy
+  // never took effect, and editing it would have had no result. Removed to leave one
+  // definition. 'Nr' is also the unit the qty cap in crossValidateQuantities assumes.
   // Demolition detail
   'strip_out_existing_roof':           { rate: 2200, unit: 'Item',labour: 0.90, materials: 0.10, description: 'Strip out existing garage/building roof covering rafters and dispose' },
   'demolish_existing_walls':           { rate: 2800, unit: 'Item',labour: 0.90, materials: 0.10, description: 'Demolish existing masonry/block walls and dispose of rubble' },
@@ -645,21 +648,37 @@ const LOCATION_FACTORS = {
 // but currency conversion means the EUR figure is ~1.17x the GBP figure
 const GBP_TO_EUR = 1.17;
 
+// Greater London outward postcode areas: E, EC, N, NW, SE, SW, W, WC (+ TW for the
+// Middlesex fringe). The discriminator that makes these safe to match is that a London
+// outward code puts a DIGIT immediately after the letters — SW1, SE10, N1, EC1A, W12 —
+// whereas every other UK area starting with the same letters has a second letter first:
+// SA (Swansea), SN (Swindon), NE (Newcastle), WA (Warrington), EN (Enfield), ST (Stoke).
+//
+// Testing these as bare substrings (loc.includes('sw')) was matching them INSIDE ordinary
+// place names and pricing all of them at London +20%: Swansea and Swindon via 'sw',
+// Somerset, Dorset, Selby and Sevenoaks via 'se', Cornwall via 'nw', Aberystwyth via 'tw',
+// Ecclesfield via 'ec'. Somerset, Dorset, Cornwall (South West) and Swansea (Wales) are
+// listed in this function's own later branches and were unreachable as a result.
+const LONDON_POSTCODE = /\b(?:ec|wc|nw|sw|se|tw|w|e|n)\d/;
+const LONDON_PLACES = /london|richmond|kingston|wimbledon|croydon/;
+
 function detectLocationFactor(locationStr) {
   if (!locationStr) return { factor: 1.00, label: 'default', isIreland: false };
   const loc = locationStr.toLowerCase();
   // Ireland detection — comprehensive list of Irish counties, cities, and patterns
   const irelandPattern = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow|eircode|co\.\s*(dublin|cork|galway|limerick|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|kerry|mayo|sligo|leitrim|roscommon|donegal|carlow)|lansborough|athlone|mullingar|tullamore|portlaoise|killarney|tralee|ennis|letterkenny|drogheda|dundalk|navan|naas|newbridge|bray|greystones|swords|malahide|clonmel|carrick|thurles|nenagh|castlebar|ballina|sligo town|boyle|ballinasloe|tuam|loughrea|oranmore/;
   if (irelandPattern.test(loc)) return { factor: 1.10, label: 'Ireland (+10%)', isIreland: true };
-  if (loc.includes('london') || loc.includes('tw') || loc.includes('sw') || loc.includes('se') || loc.includes('ec') || loc.includes('wc') || loc.includes('w1') || loc.includes('e1') || loc.includes('n1') || loc.includes('nw') || loc.includes('richmond') || loc.includes('kingston') || loc.includes('wimbledon') || loc.includes('croydon')) return { factor: 1.20, label: 'London/SE (+20%)', isIreland: false };
+  // Named nations before the London postcode test, as defence in depth: an explicit
+  // "Cardiff" or "Glasgow" must never be outvoted by a stray postcode-shaped token.
+  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)', isIreland: false };
+  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)', isIreland: false };
+  if (LONDON_PLACES.test(loc) || LONDON_POSTCODE.test(loc)) return { factor: 1.20, label: 'London/SE (+20%)', isIreland: false };
   if (loc.includes('brighton') || loc.includes('guildford') || loc.includes('oxford') || loc.includes('cambridge') || loc.includes('surrey') || loc.includes('kent') || loc.includes('essex') || loc.includes('hertford') || loc.includes('reading')) return { factor: 1.15, label: 'South East (+15%)', isIreland: false };
   if (loc.includes('bristol') || loc.includes('bath') || loc.includes('exeter') || loc.includes('devon') || loc.includes('somerset') || loc.includes('dorset') || loc.includes('cornwall')) return { factor: 1.05, label: 'South West (+5%)', isIreland: false };
   if (loc.includes('birmingham') || loc.includes('coventry') || loc.includes('leicester') || loc.includes('nottingham') || loc.includes('derby') || loc.includes('northampton') || loc.includes('stoke')) return { factor: 1.07, label: 'Midlands (+7%)', isIreland: false };
   if (loc.includes('manchester') || loc.includes('liverpool') || loc.includes('chester') || loc.includes('lancashire') || loc.includes('cheshire')) return { factor: 0.98, label: 'North West (-2%)', isIreland: false };
   if (loc.includes('leeds') || loc.includes('sheffield') || loc.includes('york') || loc.includes('hull') || loc.includes('bradford')) return { factor: 0.97, label: 'Yorkshire (-3%)', isIreland: false };
   if (loc.includes('newcastle') || loc.includes('sunderland') || loc.includes('durham') || loc.includes('carlisle') || loc.includes('cumbria')) return { factor: 0.97, label: 'North England (-3%)', isIreland: false };
-  if (loc.includes('edinburgh') || loc.includes('glasgow') || loc.includes('scotland') || loc.includes('aberdeen') || loc.includes('inverness') || loc.includes('dundee') || loc.includes('fife') || loc.includes('st andrews') || loc.includes('stirling') || loc.includes('perth') || loc.includes('falkirk') || loc.includes('paisley') || loc.includes('kilmarnock') || loc.includes('ayr')) return { factor: 1.03, label: 'Scotland (+3%)', isIreland: false };
-  if (loc.includes('cardiff') || loc.includes('wales') || loc.includes('swansea') || loc.includes('newport')) return { factor: 0.96, label: 'Wales (-4%)', isIreland: false };
   return { factor: 1.00, label: 'UK average', isIreland: false };
 }
 
@@ -1315,6 +1334,87 @@ function unitFamily(u) {
   return '';
 }
 
+/**
+ * Render the rate library as a compact crib-sheet for an LLM prompt.
+ *
+ * chat.js used to carry hand-typed copies of this table. They drifted: two copies
+ * disagreed with each other AND with this file — excavation 95 vs 75, facing brick
+ * 95 vs 82, OSB sarking 18 vs 22, breather membrane 4.50 vs 8, tile battens 9.50 vs
+ * 12 — all under a header asserting they were the exact figures to use. Rendering
+ * from BASE_RATES makes that class of drift structurally impossible.
+ *
+ * Keyed by canonical item_key rather than prose, because the key is what the model
+ * has to emit; prose names left it guessing at the mapping.
+ *
+ * Output is sorted and carries no timestamp, so it is byte-identical across calls.
+ * That matters: it sits in the cached prompt prefix, and an unstable prefix would
+ * silently destroy prompt caching. Locked by a test.
+ */
+function renderRateCribSheet(opts = {}) {
+  const width = opts.width || 110;
+  const entries = Object.keys(BASE_RATES).sort().map((key) => {
+    const r = BASE_RATES[key];
+    // Trim trailing zeros so 5.50 reads 5.5 and 68.00 reads 68 — shorter and stable.
+    const rate = String(Math.round(r.rate * 100) / 100);
+    return `${key} ${rate}/${r.unit || 'Item'}`;
+  });
+  const lines = [];
+  let line = '';
+  for (const e of entries) {
+    if (line && (line.length + 3 + e.length) > width) { lines.push(line); line = e; }
+    else line = line ? `${line} | ${e}` : e;
+  }
+  if (line) lines.push(line);
+  return lines.join('\n');
+}
+
+// Confidence tier per rate_source. The distinction that matters is 'estimated':
+// those rates rest on a model guess or on estimateFallbackRate()'s keyword ladder,
+// not on anything anyone has ever quoted. That bucket is what the evidence layers
+// exist to shrink, so it needs to be visible on every job.
+const RATE_SOURCE_TIER = {
+  override:           'evidenced',   // a human set this rate for this job
+  client_verified:    'evidenced',   // this client's own confirmed rate
+  base_library:       'library',     // curated generic rate library (BASE_RATES)
+  ai_estimated:       'estimated',   // model-supplied assumed_rate
+  fallback_estimated: 'estimated',   // estimateFallbackRate() keyword ladder
+  fallback_corrected: 'estimated',   // a guess, then clipped to a unit ceiling
+};
+
+/**
+ * Value-weighted breakdown of where a priced BOQ's rates came from.
+ *
+ * Weighted by value, not line count, deliberately: one GBP 40k steel package priced
+ * off a guess matters far more than twenty GBP 200 lines that weren't. An unrecognised
+ * rate_source counts as unknown and is excluded from coverage_pct, so a new source
+ * can never inflate the number by accident.
+ */
+function computeRateSourceCoverage(pricedItems) {
+  const byTier = { evidenced: 0, library: 0, estimated: 0, unknown: 0 };
+  const bySource = {};
+  let total = 0;
+  for (const it of (Array.isArray(pricedItems) ? pricedItems : [])) {
+    const value = Number(it && it.total) || 0;
+    const source = (it && it.rate_source) || 'unknown';
+    byTier[RATE_SOURCE_TIER[source] || 'unknown'] += value;
+    bySource[source] = (bySource[source] || 0) + value;
+    total += value;
+  }
+  const pct = (v) => (total > 0 ? Math.round((v / total) * 1000) / 10 : 0);
+  for (const k of Object.keys(bySource)) bySource[k] = Math.round(bySource[k] * 100) / 100;
+  return {
+    priced_value: Math.round(total * 100) / 100,
+    evidenced_pct: pct(byTier.evidenced),
+    library_pct: pct(byTier.library),
+    estimated_pct: pct(byTier.estimated),
+    unknown_pct: pct(byTier.unknown),
+    // Headline: the share of value NOT resting on a guess. This is the figure that
+    // must not regress as later phases change how rates are resolved.
+    coverage_pct: pct(byTier.evidenced + byTier.library),
+    by_source: bySource,
+  };
+}
+
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
   // Input guard: drop ghost/malformed items before pricing so a stray entry
   // (e.g. one with no key and description "undefined", or a non-numeric qty)
@@ -1770,6 +1870,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       vat: Math.round(vat * 100) / 100,
       grand_total: Math.round(grandTotal * 100) / 100,
       currency,
+      // Computed after the cap rescaling above, so it describes the numbers actually
+      // being delivered rather than the pre-cap ones.
+      rate_source_coverage: computeRateSourceCoverage(pricedItems),
     },
     location: locationInfo,
     project_type: projectType,
@@ -1821,4 +1924,4 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet };

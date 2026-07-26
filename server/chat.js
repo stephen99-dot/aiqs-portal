@@ -95,6 +95,24 @@ try { if (deterministicPricer && deterministicPricer.BASE_RATES) {
   if (cleaned > 0) console.log(`[Startup] Deactivated ${cleaned} corrupted client rate(s)`);
 }} catch(e) { console.error('[Startup] Client rate cleanup error:', e.message); }
 
+// The rate crib-sheet embedded in the prompts below, rendered from the pricer's rate
+// library. This used to be hand-typed in two places; the copies drifted apart from each
+// other and from the pricer (facing brick 95 vs 82, OSB sarking 18 vs 22, breather
+// membrane 4.50 vs 8 …) while both claimed to be the exact figures to use.
+//
+// Rendered ONCE at module load, not per request: it is byte-stable by construction and
+// lives in the cached prompt prefix, so re-rendering per turn would buy nothing and any
+// instability would silently break prompt caching.
+const RATE_CRIB_SHEET = (() => {
+  try {
+    if (deterministicPricer && deterministicPricer.renderRateCribSheet) {
+      return deterministicPricer.renderRateCribSheet();
+    }
+  } catch (e) { /* fall through to the warning below */ }
+  console.error('[Chat] deterministicPricer.renderRateCribSheet unavailable — prompts will carry NO rate library');
+  return '';
+})();
+
 try {
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -489,7 +507,7 @@ Heating/Plumbing: heating_extension (~£4,200 lump — extend existing heating t
 Electrical: consumer_unit_upgrade (~£3,200 — extend CU for new circuits), lighting_installation (~£1,800 per circuit), power_sockets_circuit (~£1,400 per circuit), smoke_heat_detection (~£850 lump), extract_fans (~£320 each), electrical_testing_certificate
 Structural: structural_steelwork (lump sum per structural package), padstone (~£65/Nr), wall_plate_timber (~£14/m), joist_hanger (~£8/Nr), lintels_precast (~£55/Nr), cavity_tray (~£18/m)
 First floor: chipboard_flooring (22mm P5 chipboard to joists per m²)
-Stairs: staircase (~£4,800 complete timber staircase), stair_opening_formation (~£750 — form opening in existing ceiling)
+Stairs: staircase (~£4,800 complete timber staircase), stair_opening_formation (~£850 — form opening in existing ceiling)
 External: external_render (per m²), paving_slabs (per m²), block_paving (per m²), tarmac_driveway (per m²), gravel_driveway (per m²), retaining_wall_block (per m²), garden_wall_brick (per m²), gate_timber (per Nr), gate_metal (per Nr), landscaping_allowance (per Item)
 Roof windows: velux_skylight_780x980, custom_velux_940x1178, custom_velux_balcony
 Provisional: provisional_sum (use qty as £ value, rate=1), architect_fees, planning_application, cdm_principal_designer, project_management
@@ -642,52 +660,11 @@ Respond with this JSON structure:
   if (forDocGen) {
     return `You are an expert UK Quantity Surveyor. You MUST respond with ONLY valid JSON — no markdown, no backticks, no explanation outside the JSON.
 
-FIXED UK RATES — use these exact figures, no deviations:
-
-NEW BUILD / EXTENSION RATES:
-Excavation strip foundation: 95/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill 200mm: 14/m2
-Concrete slab 150mm reinforced: 78/m2 | Concrete slab 100mm: 50/m2 | PIR insulation under slab 150mm: 28/m2 | DPM 1200g: 4.50/m2
-Brick outer leaf facing: 95/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr
-Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Steel lintels bespoke: 1850/Item | Stud wall plasterboard both faces: 65/m2
-Roof structure cut timber: 55/m2 | OSB sarking 18mm: 18/m2 | Breather membrane: 4.50/m2 | Tile battens: 9.50/m2
-Roof tiles interlocking: 52/m2 | Fascia soffit guttering: 48/m | Lead flashing Code 4: 95/m | Roof insulation mineral wool: 28/m2
-UPVC windows standard: 450/ea | Composite external door: 1850/ea | Composite external door standard: 1450/ea | Bi-fold door aluminium: 4400/ea
-
-REFURBISHMENT / HERITAGE RATES:
-Strip-out: General strip out: 18/m2 | Strip out kitchen: 450/Nr | Strip out bathroom: 350/Nr | Strip out heating: 750/Item | Strip out electrics: 450/Item | Strip out flooring: 8/m2 | Strip out plaster: 12/m2 | Strip out ceiling: 10/m2 | Soft strip room: 350/Nr
-Heritage masonry: Lime mortar repointing: 85/m2 | Lime plaster walls: 48/m2 | Lime render external: 65/m2 | Stone repair indent: 125/Nr | Stone cleaning: 35/m2 | Crack stitching: 95/m | Wall tie replacement: 22/Nr | DPC injection: 45/m
-Heritage roofing: Natural slate: 95/m2 | Clay plain tiles: 78/m2 | Lead sheet Code 5: 175/m2 | Lead flashing Code 5: 110/m | Flat roof felt: 65/m2 | Single ply membrane: 85/m2 | Chimney repair: 2500/Nr | Chimney rebuild: 4500/Nr
-Heritage rainwater: Cast iron gutter: 85/m | Cast iron downpipe: 75/m | Cast iron hopper: 120/Nr | Aluminium gutter: 55/m
-Heritage windows: Sash overhaul: 650/Nr | Sash replacement: 1800/Nr | Secondary glazing: 450/Nr | Timber casement: 950/Nr | Door refurbish: 350/Nr | Heritage front door: 2200/Nr
-Damp/timber: Tanking slurry: 75/m2 | Timber treatment spray: 12/m2 | Timber splice repair: 185/Nr | Joist replacement: 45/m | Floorboard replacement: 35/m2 | Floor sanding: 28/m2
-Heating: Gas combi boiler: 3200/Nr | Gas system boiler: 3800/Nr | Oil boiler: 4500/Nr | Hot water cylinder: 1200/Nr | Single radiator: 280/Nr | Double radiator: 380/Nr | Column radiator: 650/Nr | Heating pipework: 35/m | Heating controls: 450/Item | Gas supply/meter: 850/Item
-Electrical: Full rewire: 85/m2 | Rewire per room: 850/Nr | Fire alarm LD2: 1200/Item | Intruder alarm: 1500/Item | TV/data point: 150/Nr | External lighting: 250/Nr
-Decoration: Mist coat: 4/m2 | Emulsion walls 2 coat: 6.50/m2 | Emulsion ceiling: 7/m2 | Gloss woodwork: 12/m2 | External masonry paint: 9/m2 | Wallpaper: 18/m2
-Insulation (refurb): Loft top-up: 12/m2 | Internal wall insulation: 55/m2 | External wall insulation: 95/m2 | Suspended floor insulation: 32/m2
-Asbestos: Survey: 450/Item | Licensed removal: 1500/Item
-
-SHARED RATES:
-Internal doors painted solid core: 420/ea | Plasterboard and skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Metal stud partition: 58/m2
-Wall tiling ceramic: 55/m2 | Wall tiling large format: 72/m2 | Floor tiling porcelain 600x600: 65/m2 | LVT flooring Karndean: 42/m2 | Carpet supply and fit: 28/m2 | Engineered timber: 55/m2 | Screed UFH 75mm: 85/m2 | Screed sand cement 75mm: 42/m2
-Internal decorations (lump): 8.50/m2 | Skirting MDF 95mm: 18/m | External render two-coat: 55/m2
-Kitchen mid: 8500/ea | Kitchen high: 15000/ea | Bathroom mid: 5500/ea | Bathroom high: 8500/ea | WC/cloakroom: 2800/ea | Shower room: 4200/ea
-First fix electrical: 1350/item | Second fix electrical: 850/item | First fix plumbing: 1250/item | Second fix plumbing: 650/item
-Consumer unit upgrade: 680/item | Extract fans: 320/Nr | Electrical testing certificate: 350/item
-Velux skylight 780x980: 1650/Nr | Structural steelwork supply fab install: 3500/Item
-Air source heat pump: 9500/Nr | UFH manifold: 1400/item
-External: Paving slabs: 65/m2 | Block paving: 85/m2 | Tarmac: 55/m2 | Gravel: 25/m2 | Garden wall brick: 145/m2 | Retaining wall: 185/m2 | Drainage run: 125/m | Inspection chamber: 650/Nr | Landscaping: 2500/Item
-Scaffolding: 22/m2 | Site setup scaffold: 2800/Item | Skip hire 8yd: 320/ea | Site welfare: 650/Item
-Building control fees: 950/Item | Party wall surveyor: 1200/Item | Structural engineer fees: 2200/Item | Snagging clearance: 650/Item
-Professional fees: Architect: 5500/Item | Planning application: 462/Item | CDM principal designer: 1800/Item | Project management: 3500/Item
+FIXED UK RATES — use these exact figures, no deviations.
+Keyed by canonical item_key. Rates are GBP, per the unit shown, BEFORE any location
+uplift (that is applied automatically — do not apply it yourself).
+${RATE_CRIB_SHEET}
 Provisional sum: use qty as £ value with rate=1
-
-INFRASTRUCTURE / UTILITY RATES:
-Traffic management plan: 1300/Item | Site fencing/hoarding: 850/Item | Site establishment utility: 1200/Item
-Trench excavation (duct, soft ground): 49.50/m | Trench excavation (road): 132/m | Concrete footpath reinstatement: 93.50/m
-Surface water disposal: 880/Item | Granular backfill clause 804: 38.50/m3 | Disposal excavated material: 27.50/m3
-Sand bed surround 125mm duct: 27.50/m | Cable duct 125mm: 38.50/m | Duct hole cavity wall: 198/Nr | Duct hole external wall: 132/Nr
-Marker tape + tracer wire: 8.80/m | Internal duct run: 38/m | Builders work internal duct: 750/Item
-ESB mini pillar vault: 4950/Nr | ESB metering pillar: 2350/Nr | ESB connection provisional: 2500/Item
 
 LOCATION UPLIFT — apply as a multiplier to all rates: London/SE +20% | South East +15% | South West +5% | Midlands +7% | North West -2% | Yorkshire/North England -3% | Scotland +3% | Wales -4% | Ireland +10% use EUR
 IRELAND: If the project is in Ireland (the Republic — Northern Ireland is UK, £/20%), use EUR (€) not GBP (£). Irish VAT on construction = 13.5%. ESB = Electricity Supply Board.
@@ -818,20 +795,10 @@ ELEMENTAL BREAKDOWN (use these sections):
 14. Electrical — consumer unit, circuits, sockets, switches, lighting, testing, certification
 15. External Works — drainage, paving, landscaping, fencing, retaining walls
 
-FIXED UK RATES (use these exact figures — no ranges, no deviations):
-DEMOLITION: Strip out existing roof: 2200/Item | Demolish existing walls: 2800/Item | Break out existing slab: 85/m2 | Cut back existing finishes at interface: 1400/Item | Asbestos survey: 450/Item | Garage demolition: 3500/Item
-SUBSTRUCTURE: Excavation strip foundation: 75/m3 | Concrete strip foundation C25/30: 185/m3 | Blockwork below DPC 140mm: 68/m2 | DPC polythene: 5.50/m | Hardcore fill: 14/m2 | Concrete slab 150mm: 78/m2 | PIR insulation 150mm: 28/m2 | DPM 1200g: 4.50/m2 | Screed sand cement 75mm: 42/m2
-WALLS: Brick outer leaf facing: 82/m2 | Cavity insulation EPS: 18/m2 | Blockwork inner leaf 100mm: 42/m2 | Cavity wall ties SS: 0.85/Nr | Cavity closers: 14/m | Steel lintels Catnic: 75/ea | Stud wall both faces: 65/m2 | External render: 55/m2
-ROOF: Attic trusses prefab (room-in-roof): 12000/Item LUMP SUM | Roof structure cut timber (simple): 55/m2 | OSB sarking: 22/m2 | Breather membrane: 8/m2 | Tile battens: 12/m2 | Roof tiles interlocking: 68/m2 | Fascia soffit guttering: 45/m | Lead flashing Code 4: 95/m | Roof insulation Thermaroof: 82/m2 | Velux 780x980: 1450/Nr | Velux 940x1178: 1450/Nr | Velux balcony 940x2520: 4200/Nr
-WINDOWS & DOORS: Bi-fold small (up to 2m): 2500/ea | Bi-fold medium (2-3m): 3200/ea | Bi-fold large (3m+): 4500/ea | UPVC bi-fold/patio: 2400/ea | Composite external door: 1250/ea | UPVC window small: 350/ea | UPVC window standard: 450/ea | UPVC window large: 580/ea | Window obscure small: 380/ea | Window obscure standard: 520/ea | Internal door solid core: 380/ea | Internal door glazed: 480/ea | Mastic sealant: 12/m
-INTERNAL: Plasterboard skim walls: 32/m2 | Plasterboard ceilings: 28/m2 | Fire-rated plasterboard: 52/m2 | Moisture-resistant plasterboard: 42/m2 | Metal stud partition: 58/m2 | Skirting MDF 95mm: 18/m
-FINISHES: Internal decorations: 8.50/m2 | LVT Karndean: 42/m2 | LVT luxury: 55/m2 | Floor tile 600x600: 65/m2 | Carpet supply fit: 28/m2 | Wall tiling ceramic: 55/m2 | Ceramic tiles en-suite: 72/m2 | Screed UFH 75mm: 85/m2
-FIT-OUTS: Kitchen mid: 8500/ea | Kitchen high: 15000/ea | Bathroom mid: 5500/ea | Bathroom high: 8500/ea
-STAIRCASE: Timber staircase complete: 4800/ea | Stair opening formation: 750/Item
-DRAINAGE: Foul drainage 110mm connection: 2800/Item | Rainwater drainage: 1200/Item | Surface water drainage: 65/m
-M&P: Heating extension to new rooms: 4200/Item | En-suite sanitary plumbing: 3800/Item | Utility plumbing: 2500/Item | First fix plumbing: 1250/Item | Second fix plumbing: 650/Item
-ELECTRICAL: Consumer unit extend: 3200/Item | Lighting circuit: 1800/Item | Power sockets circuit: 1400/Item | Smoke/heat/CO detection: 850/Item | Extract fans: 320/Nr
-PRELIMS: Scaffolding: 22/m2 | Site setup scaffold: 2200/Item | Skip hire 8yd: 320/ea | Building control fees: 950/Item | Structural engineer: 2200/Item
+FIXED UK RATES (use these exact figures — no ranges, no deviations).
+Keyed by canonical item_key. Rates are GBP, per the unit shown, BEFORE any location
+uplift (that is applied automatically — do not apply it yourself).
+${RATE_CRIB_SHEET}
 
 LOCATION FACTORS:
 London/SE: +20% | South East: +15% | Midlands: +7% | North West: -2% | Yorkshire/North England: -3% | Scotland: +3% | Wales: -4% | Ireland: +10% (use EUR)

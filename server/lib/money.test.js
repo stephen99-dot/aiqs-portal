@@ -17,13 +17,33 @@ test('num coerces safely', () => {
 });
 
 test('computeFinancials applies the cascade correctly', () => {
+  // OH&P and contingency are both off net — no compounding. Matches
+  // deterministicPricer.priceLockedQuantities() so the quote path and the BOQ path
+  // agree on one grand total.
   const r = computeFinancials(1000, { ohp_pct: 15, contingency_pct: 5, vat_pct: 20 });
   assert.equal(r.net_total, 1000);
   assert.equal(r.ohp_amount, 150);              // 1000 * 15%
-  assert.equal(r.contingency_amount, 57.5);     // (1000+150) * 5%
-  assert.equal(r.vat_amount, 241.5);            // 1207.5 * 20%
-  assert.equal(r.grand_total, 1449);            // 1207.5 + 241.5
-  assert.equal(r.margin_pct, 13.04);            // 150 / 1150
+  assert.equal(r.contingency_amount, 50);       // 1000 * 5%  (not (1000+150) * 5%)
+  assert.equal(r.vat_amount, 240);              // 1200 * 20%
+  assert.equal(r.grand_total, 1440);            // 1200 + 240
+  assert.equal(r.margin_pct, 13.04);            // 150 / 1150 — unaffected
+});
+
+test('computeFinancials matches the deterministic pricer cascade', () => {
+  // Guard against the two cascades drifting apart again. Mirrors the arithmetic at
+  // deterministicPricer.js priceLockedQuantities(): contingency and OH&P both off
+  // the construction total, VAT on the sum.
+  for (const [net, ohpPct, contPct, vatPct] of [
+    [1000, 15, 5, 20], [84000, 12, 7.5, 20], [250000, 20, 10, 0], [1234.56, 0, 5, 20],
+  ]) {
+    const r = computeFinancials(net, { ohp_pct: ohpPct, contingency_pct: contPct, vat_pct: vatPct });
+    const cont = round2(net * (contPct / 100));
+    const ohp = round2(net * (ohpPct / 100));
+    const beforeVat = net + cont + ohp;
+    assert.equal(r.contingency_amount, cont, `contingency @ net=${net}`);
+    assert.equal(r.ohp_amount, ohp, `ohp @ net=${net}`);
+    assert.equal(r.grand_total, round2(beforeVat * (1 + vatPct / 100)), `grand @ net=${net}`);
+  }
 });
 
 test('computeFinancials with no percentages is a pass-through', () => {
