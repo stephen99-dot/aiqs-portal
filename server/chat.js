@@ -25,6 +25,10 @@ try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Ch
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
 let priceEvidence; try { priceEvidence = require('./priceEvidence'); } catch (e) { console.log('[Chat] priceEvidence not found — evidence store disabled'); }
+let pricingShadow; try { pricingShadow = require('./pricingShadow'); } catch (e) { console.log('[Chat] pricingShadow not found — resolver shadow mode disabled'); }
+// Falls back to the options untouched, so a missing module simply means no shadow data.
+const withShadow = (opts, ctx) => (pricingShadow ? pricingShadow.withShadow(opts, ctx) : opts);
+const recordShadow = (priced, ctx) => { if (pricingShadow) pricingShadow.record(db, priced, ctx); };
 let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { console.log('[Chat] pdfGeometry not found — drawing text extraction disabled'); }
 let extractBoqMeta; try { extractBoqMeta = require('./extractBoqMeta'); } catch (e) { console.log('[Chat] extractBoqMeta not found — BOQ header metadata disabled'); }
 let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
@@ -1559,7 +1563,9 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
       for (const r of dbRates) clientRates[r.item_key] = r.value;
     } catch(e) {}
     const prefs = getPricingPrefsSafe(req.user.id);
-    const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates, { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type });
+    const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates,
+      withShadow({ contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type }, { userId: req.user.id }));
+    recordShadow(priced, { userId: req.user.id, jobRef: req.params.id });
     res.json({ success: true, priced, items_raw: merged });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
 });
@@ -3170,7 +3176,7 @@ CRITICAL RULES:
               parsed.items,
               parsed.location || '',
               clientRates,
-              (() => {
+              withShadow((() => {
                 const locText = (parsed.location || message || '').toLowerCase();
                 const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
                 const prefs = getPricingPrefsSafe(userId);
@@ -3182,8 +3188,9 @@ CRITICAL RULES:
                   project_type: mergedProjectType,
                   floor_area: intakeFloorArea || parsed.floor_area_m2 || null,
                 };
-              })()
+              })(), { userId })
             );
+            recordShadow(priced, { userId, jobRef: sessionId });
 
             // Log pricing stage
             pipelineLog.push({ stage: 'price', label: 'Stage 2: Deterministic pricing', detail: `${priced.sections.length} sections priced — Construction total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})} — Grand total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`, warnings: priced.warnings || [], ts: Date.now() });
@@ -3456,7 +3463,7 @@ CRITICAL RULES:
           lockedTakeoff.items,
           lockedTakeoff.location || '',
           clientRates,
-          (() => {
+          withShadow((() => {
             const locText = (lockedTakeoff.location || message || '').toLowerCase();
             const isIreland = /dublin|cork|galway|limerick|ireland|waterford|kilkenny|wexford|wicklow|kildare|meath|louth|monaghan|cavan|longford|westmeath|offaly|laois|tipperary|clare|limerick|kerry|mayo|sligo|leitrim|roscommon|galway|donegal/.test(locText);
             const prefs = getPricingPrefsSafe(userId);
@@ -3466,8 +3473,9 @@ CRITICAL RULES:
               vat_rate: isIreland ? 13.5 : 20,
               currency: isIreland ? 'EUR' : 'GBP',
             };
-          })()
+          })(), { userId })
         );
+        recordShadow(pricedResult, { userId, jobRef: lockedTakeoff.id });
 
         // Mark takeoff as confirmed
         if (benchmarkStore) benchmarkStore.updateTakeoff(db, lockedTakeoff.id, { status: 'confirmed' });
