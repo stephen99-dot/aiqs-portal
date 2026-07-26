@@ -24,6 +24,7 @@ try { zipProcessor = require('./zipProcessor'); } catch (e) { console.log('[Chat
 try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Chat] keyNormalizer not found — copy keyNormalizer.js to server/'); }
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
+let priceEvidence; try { priceEvidence = require('./priceEvidence'); } catch (e) { console.log('[Chat] priceEvidence not found — evidence store disabled'); }
 let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { console.log('[Chat] pdfGeometry not found — drawing text extraction disabled'); }
 let extractBoqMeta; try { extractBoqMeta = require('./extractBoqMeta'); } catch (e) { console.log('[Chat] extractBoqMeta not found — BOQ header metadata disabled'); }
 let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
@@ -72,6 +73,17 @@ try {
 try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
 // Init memory engine tables
 try { if (memoryEngine) memoryEngine.initMemoryTables(db); } catch(e) { console.error('[Memory] Init error:', e.message); }
+// Evidence store. The backfill is content-addressed and idempotent, so running it on
+// every boot is a no-op after the first (~10ms) and keeps the store current as client
+// rates and learned rates change underneath it. Must come after initMemoryTables, which
+// creates the memory_rates table it reads.
+try {
+  if (priceEvidence) {
+    const stats = priceEvidence.backfill(db);
+    const added = Object.values(stats).filter(v => typeof v === 'number').reduce((a, b) => a + b, 0);
+    if (added > 0) console.log('[PriceEvidence] backfilled', JSON.stringify(stats));
+  }
+} catch(e) { console.error('[PriceEvidence] Init error:', e.message); }
 // Clean corrupted memory rates on startup (e.g. scaffolding at £2,245 vs base £22)
 try { if (memoryEngine && deterministicPricer && deterministicPricer.BASE_RATES) {
   const baseRateValues = {};
