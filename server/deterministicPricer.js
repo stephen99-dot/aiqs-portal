@@ -126,7 +126,10 @@ const BASE_RATES = {
   'utility_plumbing':                  { rate: 2500, unit: 'Item',labour: 0.55, materials: 0.45, description: 'Utility room plumbing provisions washing machine hot/cold waste' },
   // Staircase
   'staircase':                         { rate: 4800, unit: 'Nr',  labour: 0.55, materials: 0.45, description: 'New timber staircase ground to first floor complete with newels balusters handrail' },
-  'stair_opening_formation':           { rate: 750,  unit: 'Item',labour: 0.70, materials: 0.30, description: 'Form stair opening in existing ground floor ceiling/first floor structure' },
+  // stair_opening_formation lives further down at 850/Nr. It was declared here too, at
+  // 750/Item, but a duplicate key in an object literal is simply overwritten — this copy
+  // never took effect, and editing it would have had no result. Removed to leave one
+  // definition. 'Nr' is also the unit the qty cap in crossValidateQuantities assumes.
   // Demolition detail
   'strip_out_existing_roof':           { rate: 2200, unit: 'Item',labour: 0.90, materials: 0.10, description: 'Strip out existing garage/building roof covering rafters and dispose' },
   'demolish_existing_walls':           { rate: 2800, unit: 'Item',labour: 0.90, materials: 0.10, description: 'Demolish existing masonry/block walls and dispose of rubble' },
@@ -1331,6 +1334,40 @@ function unitFamily(u) {
   return '';
 }
 
+/**
+ * Render the rate library as a compact crib-sheet for an LLM prompt.
+ *
+ * chat.js used to carry hand-typed copies of this table. They drifted: two copies
+ * disagreed with each other AND with this file — excavation 95 vs 75, facing brick
+ * 95 vs 82, OSB sarking 18 vs 22, breather membrane 4.50 vs 8, tile battens 9.50 vs
+ * 12 — all under a header asserting they were the exact figures to use. Rendering
+ * from BASE_RATES makes that class of drift structurally impossible.
+ *
+ * Keyed by canonical item_key rather than prose, because the key is what the model
+ * has to emit; prose names left it guessing at the mapping.
+ *
+ * Output is sorted and carries no timestamp, so it is byte-identical across calls.
+ * That matters: it sits in the cached prompt prefix, and an unstable prefix would
+ * silently destroy prompt caching. Locked by a test.
+ */
+function renderRateCribSheet(opts = {}) {
+  const width = opts.width || 110;
+  const entries = Object.keys(BASE_RATES).sort().map((key) => {
+    const r = BASE_RATES[key];
+    // Trim trailing zeros so 5.50 reads 5.5 and 68.00 reads 68 — shorter and stable.
+    const rate = String(Math.round(r.rate * 100) / 100);
+    return `${key} ${rate}/${r.unit || 'Item'}`;
+  });
+  const lines = [];
+  let line = '';
+  for (const e of entries) {
+    if (line && (line.length + 3 + e.length) > width) { lines.push(line); line = e; }
+    else line = line ? `${line} | ${e}` : e;
+  }
+  if (line) lines.push(line);
+  return lines.join('\n');
+}
+
 // Confidence tier per rate_source. The distinction that matters is 'estimated':
 // those rates rest on a model guess or on estimateFallbackRate()'s keyword ladder,
 // not on anything anyone has ever quoted. That bucket is what the evidence layers
@@ -1887,4 +1924,4 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER };
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet };
