@@ -978,6 +978,14 @@ const migrations = [
   // colour scheme, included/excluded lines) the user makes on the Builder Pack
   // screen, stored as JSON so they survive leaving and re-opening the screen.
   { column: 'builder_pack_state', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN builder_pack_state TEXT" },
+  // How much of this project's price was actually known vs. guessed, captured at the
+  // moment it was priced. Read by the delivery gate: a job whose value mostly rests on
+  // estimateFallbackRate's keyword guesses must not reach a client without a human
+  // signing it off. JSON — see assessPricingConfidence in deterministicPricer.
+  { column: 'pricing_confidence', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN pricing_confidence TEXT" },
+  // Set when a human has looked at a flagged job and accepted it anyway.
+  { column: 'pricing_reviewed_at', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN pricing_reviewed_at DATETIME" },
+  { column: 'pricing_reviewed_by', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN pricing_reviewed_by TEXT" },
   // Native Xero connection — OAuth2 tokens for the builder's own Xero org, so
   // invoices push straight in (alongside the CSV export). Access tokens live
   // 30 min; the refresh token rotates on every refresh (see xeroClient.js).

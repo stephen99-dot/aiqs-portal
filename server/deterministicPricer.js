@@ -1527,6 +1527,97 @@ function computeRateSourceCoverage(pricedItems) {
   };
 }
 
+/**
+ * How much of this job is actually known, and should a human look before it goes out?
+ *
+ * The failure this exists to stop is silent, not inaccurate. An unfamiliar item falls
+ * through estimateFallbackRate()'s keyword ladder, which pattern-matches words in a
+ * description and terminates in a flat generic figure. It produced a reinforced-concrete
+ * swimming pool shell at £1,440 — less than a Velux window in this same library — and
+ * nothing anywhere flagged it. The number simply appeared in a bill and looked like all
+ * the others.
+ *
+ * Two signals drive the assessment:
+ *
+ *   1. HOW MUCH of the job's value rests on a guess (rate_source_coverage already knows).
+ *   2. WHETHER any guessed line is UNBOUNDED. This is the sharp one. The per-unit ceiling
+ *      above only covers m, m², m³, kg and tonnes — ceilingFor('Item') and ceilingFor('Nr')
+ *      both return null. So a guessed rate per m² is wrong by at most the ceiling, while a
+ *      guessed lump sum has no anchor whatsoever and can be out by any factor in either
+ *      direction. Every catastrophic miss is a guessed lump sum.
+ *
+ * The thresholds below are a defensible starting point, not a calibrated truth. They sit
+ * in one named block precisely so they can be tuned once there is real data on how often
+ * each fires.
+ */
+const CONFIDENCE_THRESHOLDS = {
+  reviewEstimatedPct: 15,      // % of construction value resting on a guess
+  reviewEstimatedValue: 5000,  // absolute £ resting on a guess
+  reviewSingleLine: 2500,      // any one guessed line worth this much
+  blockEstimatedPct: 35,       // most of the job is guesswork
+  blockUnboundedLine: 10000,   // a guessed lump sum this large has no sanity anchor
+};
+
+function assessPricingConfidence(pricedItems, coverage, opts = {}) {
+  const t = { ...CONFIDENCE_THRESHOLDS, ...(opts.thresholds || {}) };
+  const items = Array.isArray(pricedItems) ? pricedItems : [];
+  const cov = coverage || computeRateSourceCoverage(items);
+
+  const guessed = items.filter(i => RATE_SOURCE_TIER[i && i.rate_source] === 'estimated');
+  const estimatedValue = Math.round(guessed.reduce((s, i) => s + (Number(i.total) || 0), 0) * 100) / 100;
+
+  const flagged = guessed.map(i => ({
+    key: i.key,
+    description: i.description,
+    unit: i.unit,
+    qty: i.qty,
+    rate: i.rate,
+    total: i.total,
+    rate_source: i.rate_source,
+    // No per-unit ceiling exists for this unit, so nothing bounded how wrong it can be.
+    unbounded: ceilingFor(i.unit) === null,
+  })).sort((a, b) => (b.total || 0) - (a.total || 0));
+
+  const reasons = [];
+  const add = (code, detail, value) => reasons.push({ code, detail, value });
+
+  if (cov.estimated_pct >= t.blockEstimatedPct) {
+    add('MOSTLY_ESTIMATED', `${cov.estimated_pct}% of the value is estimated rather than priced from a known rate`, cov.estimated_pct);
+  } else if (cov.estimated_pct >= t.reviewEstimatedPct) {
+    add('SIGNIFICANT_ESTIMATED', `${cov.estimated_pct}% of the value is estimated`, cov.estimated_pct);
+  }
+
+  if (estimatedValue >= t.reviewEstimatedValue) {
+    add('ESTIMATED_VALUE', `${estimatedValue} of value rests on estimated rates`, estimatedValue);
+  }
+
+  const bigUnbounded = flagged.filter(f => f.unbounded && (f.total || 0) >= t.blockUnboundedLine);
+  for (const f of bigUnbounded) {
+    add('UNBOUNDED_LUMP_SUM', `'${f.key}' is an estimated ${f.unit} line at ${f.total} with no per-unit ceiling to sanity-check it`, f.total);
+  }
+
+  const bigLines = flagged.filter(f => (f.total || 0) >= t.reviewSingleLine && !bigUnbounded.includes(f));
+  for (const f of bigLines) {
+    add('LARGE_ESTIMATED_LINE', `'${f.key}' is estimated at ${f.total}`, f.total);
+  }
+
+  let level = 'ok';
+  if (reasons.length > 0) level = 'review';
+  if (cov.estimated_pct >= t.blockEstimatedPct || bigUnbounded.length > 0) level = 'blocked';
+
+  return {
+    level,
+    estimated_pct: cov.estimated_pct,
+    estimated_value: estimatedValue,
+    estimated_line_count: guessed.length,
+    unbounded_line_count: flagged.filter(f => f.unbounded).length,
+    reasons,
+    // Capped: the point is to name the worst offenders, not to reproduce the bill.
+    flagged_lines: flagged.slice(0, 20),
+    thresholds: t,
+  };
+}
+
 function priceLockedQuantities(lockedItems, location, clientRates = {}, options = {}) {
   // Input guard: drop ghost/malformed items before pricing so a stray entry
   // (e.g. one with no key and description "undefined", or a non-numeric qty)
@@ -1965,6 +2056,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const vat = Math.round(netWithOhp * (vat_rate / 100) * 100) / 100;
   const grandTotal = netWithOhp + vat;
 
+  const coverage = computeRateSourceCoverage(pricedItems);
   const result = {
     sections: sectionTotals,
     summary: {
@@ -1981,7 +2073,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       currency,
       // Computed after the cap rescaling above, so it describes the numbers actually
       // being delivered rather than the pre-cap ones.
-      rate_source_coverage: computeRateSourceCoverage(pricedItems),
+      rate_source_coverage: coverage,
+      // Whether a human needs to look before this goes out. See
+      // assessPricingConfidence — the failure it guards is silent, not inaccurate.
+      pricing_confidence: assessPricingConfidence(pricedItems, coverage),
     },
     location: locationInfo,
     project_type: projectType,
@@ -2040,4 +2135,5 @@ function getBaseRate(key) {
 }
 
 module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet,
+  assessPricingConfidence, CONFIDENCE_THRESHOLDS,
   estimateFallbackRate, ceilingFor, RATE_CEILINGS_GBP, GBP_TO_EUR };

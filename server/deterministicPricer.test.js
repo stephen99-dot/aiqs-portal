@@ -10,6 +10,7 @@ const assert = require('node:assert');
 const {
   BASE_RATES, detectDuplicatesAndOverlaps, detectLocationFactor,
   computeRateSourceCoverage, priceLockedQuantities,
+  assessPricingConfidence, CONFIDENCE_THRESHOLDS,
 } = require('./deterministicPricer');
 
 const SPLIT_KEYS = [
@@ -355,4 +356,147 @@ test('deterministicPricer stays pure — no requires, no database access', () =>
   assert.ok(!/\brequire\s*\(/.test(code), 'deterministicPricer must not require anything');
   assert.ok(!/\bdb\s*\./.test(code), 'deterministicPricer must not touch a database');
   assert.ok(!/process\.env/.test(code), 'deterministicPricer must not read the environment');
+});
+
+// ── assessPricingConfidence ───────────────────────────────────────────────────
+// The failure this guards is silent, not inaccurate. An unfamiliar item falls through
+// estimateFallbackRate's keyword ladder and a plausible-looking number appears in the
+// bill with nothing marking it as a guess. A reinforced-concrete pool shell came out at
+// £1,440 — less than a Velux window from this same library — and nothing flagged it.
+
+const guessedLine = (over = {}) => ({
+  key: 'unknown_thing', description: 'something unusual', unit: 'Item',
+  qty: 1, rate: 1000, total: 1000, rate_source: 'fallback_estimated', ...over,
+});
+const knownLine = (over = {}) => ({
+  key: 'brick_outer_leaf', description: 'facing brick', unit: 'm²',
+  qty: 100, rate: 82, total: 8200, rate_source: 'base_library', ...over,
+});
+
+test('a job priced entirely from known rates is not flagged', () => {
+  const c = assessPricingConfidence([knownLine(), knownLine({ key: 'slab', total: 4000 })]);
+  assert.strictEqual(c.level, 'ok');
+  assert.deepStrictEqual(c.reasons, []);
+  assert.strictEqual(c.estimated_value, 0);
+  assert.strictEqual(c.estimated_line_count, 0);
+});
+
+test('one small guess on a large job does not cry wolf', () => {
+  // A gate that fires on every job gets ignored, which is worse than no gate.
+  const c = assessPricingConfidence([
+    knownLine({ total: 50000 }),
+    guessedLine({ total: 400 }),
+  ]);
+  assert.strictEqual(c.level, 'ok', `expected ok, got ${c.level}: ${JSON.stringify(c.reasons)}`);
+});
+
+test('a job that is mostly guesswork is blocked', () => {
+  const c = assessPricingConfidence([
+    knownLine({ total: 1000 }),
+    guessedLine({ total: 9000, unit: 'm²' }),
+  ]);
+  assert.strictEqual(c.level, 'blocked');
+  assert.ok(c.reasons.some(r => r.code === 'MOSTLY_ESTIMATED'), 'names why');
+  assert.strictEqual(c.estimated_pct, 90);
+});
+
+test('a large guessed LUMP SUM blocks even when the job is mostly known', () => {
+  // The sharp case. Per-unit ceilings bound m/m²/m³/kg/t, but ceilingFor('Item') is null,
+  // so nothing at all constrains how wrong a guessed lump sum can be.
+  const c = assessPricingConfidence([
+    knownLine({ total: 200000 }),
+    guessedLine({ key: 'swimming_pool_shell', unit: 'Item', total: 12000 }),
+  ]);
+  assert.strictEqual(c.level, 'blocked', 'an unbounded guess must block regardless of proportion');
+  assert.ok(c.reasons.some(r => r.code === 'UNBOUNDED_LUMP_SUM'));
+  assert.strictEqual(c.estimated_pct, 5.7, 'and it blocks despite being a small share of value');
+});
+
+test('a guessed line with a per-unit ceiling is treated as less dangerous', () => {
+  // Same money, bounded unit: worth review, not a block, because the ceiling caps the
+  // damage a wrong rate can do.
+  const bounded = assessPricingConfidence([
+    knownLine({ total: 200000 }),
+    guessedLine({ unit: 'm²', qty: 200, rate: 60, total: 12000 }),
+  ]);
+  assert.strictEqual(bounded.level, 'review');
+  assert.ok(!bounded.reasons.some(r => r.code === 'UNBOUNDED_LUMP_SUM'));
+});
+
+test('flagged lines name the worst offenders first', () => {
+  const c = assessPricingConfidence([
+    knownLine(),
+    guessedLine({ key: 'small', total: 300 }),
+    guessedLine({ key: 'biggest', total: 9000 }),
+    guessedLine({ key: 'middling', total: 3000 }),
+  ]);
+  assert.deepStrictEqual(c.flagged_lines.map(f => f.key), ['biggest', 'middling', 'small'],
+    'ordered by money at stake');
+  assert.strictEqual(c.flagged_lines.every(f => f.rate_source === 'fallback_estimated'), true);
+});
+
+test('unbounded is decided by the unit, not by the value', () => {
+  const c = assessPricingConfidence([
+    guessedLine({ key: 'lump', unit: 'Item', total: 100 }),
+    guessedLine({ key: 'each', unit: 'Nr', total: 100 }),
+    guessedLine({ key: 'area', unit: 'm²', total: 100 }),
+    guessedLine({ key: 'linear', unit: 'm', total: 100 }),
+  ]);
+  const byKey = Object.fromEntries(c.flagged_lines.map(f => [f.key, f.unbounded]));
+  assert.strictEqual(byKey.lump, true, 'Item has no ceiling');
+  assert.strictEqual(byKey.each, true, 'Nr has no ceiling');
+  assert.strictEqual(byKey.area, false, 'm² is bounded');
+  assert.strictEqual(byKey.linear, false, 'm is bounded');
+});
+
+test('every tier of guess counts, not just the keyword ladder', () => {
+  for (const source of ['fallback_estimated', 'ai_estimated', 'fallback_corrected']) {
+    const c = assessPricingConfidence([knownLine({ total: 1000 }), guessedLine({ total: 9000, rate_source: source })]);
+    assert.strictEqual(c.level, 'blocked', `${source} must count as a guess`);
+  }
+});
+
+test('thresholds can be overridden without editing the module', () => {
+  const lines = [knownLine({ total: 9000 }), guessedLine({ total: 1000, unit: 'm²' })];
+  assert.strictEqual(assessPricingConfidence(lines).level, 'ok');
+  const strict = assessPricingConfidence(lines, null, { thresholds: { reviewEstimatedPct: 5 } });
+  assert.strictEqual(strict.level, 'review', 'a tighter threshold changes the verdict');
+  assert.strictEqual(strict.thresholds.reviewEstimatedPct, 5, 'the thresholds used are reported');
+});
+
+test('assessment is safe on empty and malformed input', () => {
+  for (const input of [[], null, undefined, [null, {}, { total: 'x' }]]) {
+    const c = assessPricingConfidence(input);
+    assert.strictEqual(c.level, 'ok');
+    assert.strictEqual(c.estimated_value, 0);
+  }
+});
+
+test('priceLockedQuantities blocks the awkward job and passes the ordinary one', () => {
+  const awkward = priceLockedQuantities([
+    { key: 'swimming_pool_shell', qty: 1, unit: 'Item', description: 'reinforced concrete pool shell with tanking' },
+    { key: 'basement_excavation_restricted', qty: 140, unit: 'm³', description: 'basement dig by conveyor, spoil barrowed to street' },
+    { key: 'brick_outer_leaf', qty: 90, unit: 'm²' },
+  ], 'London SW1A 1AA', {}, { project_type: 'refurbishment' });
+  assert.strictEqual(awkward.summary.pricing_confidence.level, 'blocked');
+  assert.ok(awkward.summary.pricing_confidence.flagged_lines.length >= 2);
+
+  const ordinary = priceLockedQuantities([
+    { key: 'brick_outer_leaf', qty: 120, unit: 'm²' },
+    { key: 'concrete_slab_150mm', qty: 60, unit: 'm²' },
+    { key: 'roof_tiles_interlocking', qty: 80, unit: 'm²' },
+  ], 'Manchester', {}, {});
+  assert.strictEqual(ordinary.summary.pricing_confidence.level, 'ok');
+});
+
+test('the assessment agrees with the coverage figure beside it', () => {
+  const r = priceLockedQuantities([
+    { key: 'brick_outer_leaf', qty: 100, unit: 'm²' },
+    { key: 'mystery', qty: 1, unit: 'Item', description: 'bespoke thing' },
+  ], 'Manchester', {}, {});
+  assert.strictEqual(
+    r.summary.pricing_confidence.estimated_pct,
+    r.summary.rate_source_coverage.estimated_pct,
+    'two numbers describing the same thing must not disagree'
+  );
 });

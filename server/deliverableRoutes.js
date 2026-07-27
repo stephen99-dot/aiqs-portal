@@ -26,6 +26,37 @@ const { authMiddleware } = require('./auth');
 
 const router = express.Router();
 
+/**
+ * Should this project be held back from `delivered`?
+ *
+ * Reads the confidence recorded when the job was priced. Fails OPEN on purpose: an
+ * unreadable or absent assessment must not strand a legitimate job, because most projects
+ * predate this column and every one of them is fine. Only an explicit `blocked` verdict,
+ * not yet signed off by a human, holds a job back.
+ */
+function assessDeliveryGate(projectId) {
+  try {
+    const row = db.prepare(
+      'SELECT pricing_confidence, pricing_reviewed_at FROM projects WHERE id = ?'
+    ).get(projectId);
+    if (!row || !row.pricing_confidence) return { blocked: false, reason: 'no assessment recorded' };
+    if (row.pricing_reviewed_at) return { blocked: false, reason: 'signed off by a human' };
+
+    const conf = JSON.parse(row.pricing_confidence);
+    if (conf.level !== 'blocked') return { blocked: false, level: conf.level };
+
+    return {
+      blocked: true,
+      level: conf.level,
+      reason: `${conf.estimated_pct}% of the value is estimated`,
+      confidence: conf,
+    };
+  } catch (e) {
+    console.error('[Deliverables] confidence gate could not read project:', e.message);
+    return { blocked: false, reason: 'gate error, failing open' };
+  }
+}
+
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(outputsDir)) fs.mkdirSync(outputsDir, { recursive: true });
@@ -259,13 +290,27 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
       console.error('[Deliverables] sync to project error:', syncErr);
     }
 
-    // Flip project status to delivered (don't downgrade if it's already there)
-    db.prepare(`
-      UPDATE projects
-      SET status = CASE WHEN status IN ('completed', 'delivered') THEN 'delivered' ELSE 'delivered' END,
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(projectId);
+    // ── Pricing confidence gate ──
+    // A job whose value mostly rests on estimateFallbackRate's keyword guesses must not
+    // reach a client on the quiet. This used to be unconditional — the CASE below always
+    // evaluated to 'delivered', and needs_admin_review was written in agenticTakeoff and
+    // read nowhere at all — so a bill that was 76% guesswork shipped looking exactly like
+    // one priced entirely from known rates.
+    //
+    // The block is on the STATUS transition, not on the upload: the files are already
+    // stored above and nothing is lost. A human clears it by signing the job off, which is
+    // recorded against them.
+    const gate = assessDeliveryGate(projectId);
+    if (gate.blocked) {
+      console.log(`[Deliverables] ${projectId} not marked delivered — ${gate.reason}`);
+    } else {
+      // Flip project status to delivered (don't downgrade if it's already there)
+      db.prepare(`
+        UPDATE projects
+        SET status = 'delivered', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(projectId);
+    }
 
     // If the upload was tied to a submission, mark it actioned
     if (submissionId) {
@@ -278,10 +323,63 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
       `).run(req.user.email || req.user.id, projectId, submissionId, submissionId);
     }
 
-    res.json({ ok: true, deliverables: inserted });
+    // The caller is told plainly when a job was held back, and why. Silently not
+    // delivering would be its own kind of quiet failure.
+    res.json({
+      ok: true,
+      deliverables: inserted,
+      delivered: !gate.blocked,
+      ...(gate.blocked ? {
+        held_for_review: {
+          reason: gate.reason,
+          estimated_pct: gate.confidence.estimated_pct,
+          flagged_lines: gate.confidence.flagged_lines,
+          sign_off_url: `/api/projects/${projectId}/pricing-sign-off`,
+        },
+      } : {}),
+    });
   } catch (err) {
     console.error('[Deliverables] upload error:', err);
     res.status(500).json({ error: 'Upload failed: ' + err.message });
+  }
+});
+
+// ─── Pricing confidence: read, and sign off ──────────────────────────────────
+
+router.get('/projects/:projectId/pricing-confidence', authMiddleware, (req, res) => {
+  try {
+    const project = loadProject(req.params.projectId, req.user);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    const row = db.prepare(
+      'SELECT pricing_confidence, pricing_reviewed_at, pricing_reviewed_by FROM projects WHERE id = ?'
+    ).get(req.params.projectId);
+    res.json({
+      confidence: row && row.pricing_confidence ? JSON.parse(row.pricing_confidence) : null,
+      reviewed_at: row ? row.pricing_reviewed_at : null,
+      reviewed_by: row ? row.pricing_reviewed_by : null,
+      gate: assessDeliveryGate(req.params.projectId),
+    });
+  } catch (e) {
+    console.error('[Deliverables] confidence read error:', e.message);
+    res.status(500).json({ error: 'Failed to read pricing confidence' });
+  }
+});
+
+// A human has looked at the flagged lines and accepts the price. Recorded against them,
+// because "who signed this off" is the question that gets asked when a job goes wrong.
+router.post('/projects/:projectId/pricing-sign-off', authMiddleware, (req, res) => {
+  try {
+    const project = loadProject(req.params.projectId, req.user);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    db.prepare(`
+      UPDATE projects
+      SET pricing_reviewed_at = CURRENT_TIMESTAMP, pricing_reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.user.email || req.user.id, req.params.projectId);
+    res.json({ ok: true, reviewed_by: req.user.email || req.user.id });
+  } catch (e) {
+    console.error('[Deliverables] sign-off error:', e.message);
+    res.status(500).json({ error: 'Failed to record sign-off' });
   }
 });
 

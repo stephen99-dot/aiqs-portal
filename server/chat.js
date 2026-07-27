@@ -3670,6 +3670,19 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
               try { db.exec('ALTER TABLE projects ADD COLUMN findings_filename TEXT'); } catch(e) {}
               db.prepare(`INSERT INTO projects (id, user_id, title, status, total_value, currency, item_count, project_type, boq_filename, findings_filename) VALUES (?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`)
                 .run(projId, userId, projectName, grandTotal, projCurrency, itemCount, lockedTakeoff ? lockedTakeoff.project_type : null, boqF ? boqF.name : null, docF ? docF.name : null);
+              // Record how much of this price was known vs. guessed, at the moment it was
+              // priced. The delivery gate reads it later — by then the takeoff items are no
+              // longer to hand, so it has to be captured here or not at all.
+              try {
+                const conf = pricedResult.summary && pricedResult.summary.pricing_confidence;
+                if (conf) {
+                  db.prepare('UPDATE projects SET pricing_confidence = ? WHERE id = ?')
+                    .run(JSON.stringify(conf), projId);
+                  if (conf.level !== 'ok') {
+                    console.log(`[Pricing] ${projId} flagged ${conf.level}: ${conf.estimated_pct}% estimated (${conf.reasons.length} reason(s))`);
+                  }
+                }
+              } catch (confErr) { console.error('[Pricing] could not record confidence:', confErr.message); }
               // Stash structured findings JSON so the customer can edit it later
               // (Findings page reads from project_data and re-renders the .docx
               // with their branding on demand).
