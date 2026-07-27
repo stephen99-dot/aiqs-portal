@@ -37,6 +37,11 @@ export default function AIMemoryPage() {
   const [newMemoryText, setNewMemoryText] = useState('');
   const [editingMemoryId, setEditingMemoryId] = useState(null);
   const [editingText, setEditingText] = useState('');
+  // Entities — the people and firms on this builder's jobs. Personal data, so the whole
+  // point of surfacing it here is that the builder can see it, correct it and delete it.
+  const [entities, setEntities] = useState([]);
+  const [expandedEntityId, setExpandedEntityId] = useState(null);
+  const [newFactText, setNewFactText] = useState('');
   const [prefs, setPrefs] = useState(null);          // { ohp_pct, contingency_pct }
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
@@ -45,13 +50,15 @@ export default function AIMemoryPage() {
 
   async function loadData() {
     try {
-      const [insightData, rateData, memData, onbData, prefData] = await Promise.all([
+      const [insightData, rateData, memData, onbData, prefData, entData] = await Promise.all([
         apiFetch('/my-insights').catch(() => ({ insights: [], stats: null })),
         apiFetch('/my-rates').catch(() => ({ stats: null })),
         apiFetch('/memories').catch(() => ({ memories: [] })),
         apiFetch('/onboarding').catch(() => null),
         apiFetch('/pricing-prefs').catch(() => null),
+        apiFetch('/entities').catch(() => ({ entities: [] })),
       ]);
+      setEntities(entData.entities || []);
       setInsights(insightData.insights || []);
       setStats(insightData.stats || { total: 0, categories: 0 });
       setRateStats(rateData.stats || { total: 0, avg_confidence: 0 });
@@ -62,6 +69,70 @@ export default function AIMemoryPage() {
       console.error('Load error:', err);
     }
     setLoading(false);
+  }
+
+  async function handleDeleteEntity(ent) {
+    if (!window.confirm(
+      `Delete "${ent.display_name}" and everything remembered about them?\n\nThis cannot be undone.`
+    )) return;
+    try {
+      await apiFetch('/entities/' + ent.id, { method: 'DELETE' });
+      setEntities(prev => prev.filter(e => e.id !== ent.id));
+    } catch (err) { alert('Failed to delete'); }
+  }
+
+  async function handleRenameEntity(ent) {
+    const name = window.prompt('Name', ent.display_name);
+    if (!name || name.trim() === ent.display_name) return;
+    try {
+      const res = await apiFetch('/entities/' + ent.id, {
+        method: 'PUT', body: JSON.stringify({ name: name.trim() }),
+      });
+      setEntities(prev => prev.map(e => (e.id === ent.id ? { ...e, ...res.entity } : e)));
+    } catch (err) { alert('Failed to rename'); }
+  }
+
+  // Facts expire rather than delete, so what the system used to believe stays on record
+  // while no longer reaching the model.
+  async function handleForgetFact(entityId, factId) {
+    try {
+      await apiFetch('/entities/facts/' + factId, { method: 'DELETE' });
+      setEntities(prev => prev.map(e =>
+        e.id === entityId ? { ...e, facts: e.facts.filter(f => f.id !== factId) } : e
+      ));
+    } catch (err) { alert('Failed to remove'); }
+  }
+
+  async function handleAddFact(entityId) {
+    const content = newFactText.trim();
+    if (!content) return;
+    try {
+      const res = await apiFetch('/entities/' + entityId + '/facts', {
+        method: 'POST', body: JSON.stringify({ content }),
+      });
+      setEntities(prev => prev.map(e =>
+        e.id === entityId ? { ...e, facts: [res.fact, ...(e.facts || [])] } : e
+      ));
+      setNewFactText('');
+    } catch (err) { alert('Failed to add'); }
+  }
+
+  async function handleMergeEntity(ent) {
+    const others = entities.filter(e => e.id !== ent.id && e.kind === ent.kind);
+    if (others.length === 0) return alert(`No other ${ent.kind.replace(/_/g, ' ')} records to merge into.`);
+    const choice = window.prompt(
+      `Merge "${ent.display_name}" into which record?\n\n`
+      + others.map((e, i) => `${i + 1}. ${e.display_name}`).join('\n')
+      + '\n\nEnter a number:'
+    );
+    const idx = parseInt(choice, 10) - 1;
+    if (!(idx >= 0 && idx < others.length)) return;
+    try {
+      await apiFetch('/entities/' + ent.id + '/merge', {
+        method: 'POST', body: JSON.stringify({ into: others[idx].id }),
+      });
+      await loadData();
+    } catch (err) { alert('Failed to merge'); }
   }
 
   async function handleDelete(id) {
@@ -454,6 +525,147 @@ export default function AIMemoryPage() {
                       </>
                     )}
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* People and firms — the entity graph */}
+      <div style={{
+        padding: '18px 20px', borderRadius: 10, marginBottom: 20,
+        background: colors.card, border: '1px solid ' + colors.cardBorder,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <BrainIcon size={18} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>People &amp; firms</div>
+            <div style={{ fontSize: 12, color: colors.textMuted }}>
+              Who's on your jobs — clients, subbies, architects, suppliers. The assistant uses this to
+              recall who someone is and what happened last time. Nothing here changes a price.
+            </div>
+          </div>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            padding: '2px 8px', borderRadius: 10,
+            background: colors.accentBg, color: colors.accent,
+          }}>
+            {entities.length}
+          </div>
+        </div>
+
+        {entities.length === 0 ? (
+          <div style={{ padding: '18px 8px', fontSize: 12.5, color: colors.textMuted, textAlign: 'center' }}>
+            Nobody recorded yet. Your saved clients appear here automatically, and the assistant will
+            ask before adding anyone it hears about in a chat.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {entities.map(ent => {
+              const isOpen = expandedEntityId === ent.id;
+              const kindLabel = ent.kind.replace(/_/g, ' ');
+              const jobCount = new Set((ent.events || []).filter(e => e.job_id).map(e => e.job_id)).size;
+              return (
+                <div key={ent.id} style={{
+                  padding: '10px 14px', borderRadius: 8,
+                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+                  border: '1px solid ' + (isOpen ? colors.accentBorder : 'transparent'),
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: colors.text, fontWeight: 600 }}>
+                        {ent.display_name}
+                      </div>
+                      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ textTransform: 'capitalize' }}>{kindLabel}</span>
+                        {jobCount > 0 && <span>· {jobCount} job{jobCount === 1 ? '' : 's'}</span>}
+                        {(ent.facts || []).length > 0 && <span>· {ent.facts.length} thing{ent.facts.length === 1 ? '' : 's'} remembered</span>}
+                        {ent.source === 'estimator_clients' && <span>· From your clients</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        onClick={() => { setExpandedEntityId(isOpen ? null : ent.id); setNewFactText(''); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, padding: '2px 6px', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                      >
+                        {isOpen ? 'Close' : 'Details'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteEntity(ent)}
+                        title="Delete this person or firm and everything remembered about them"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, padding: '2px 6px', fontSize: 12, fontFamily: 'inherit' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  {isOpen && (
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid ' + colors.cardBorder }}>
+                      {(ent.facts || []).length === 0 ? (
+                        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+                          Nothing remembered about them yet.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                          {ent.facts.map(f => (
+                            <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <div style={{ flex: 1, fontSize: 12.5, color: colors.text, lineHeight: 1.5 }}>{f.content}</div>
+                              <button
+                                onClick={() => handleForgetFact(ent.id, f.id)}
+                                title="Stop using this. It stays on record but is no longer given to the assistant."
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11, padding: '0 4px', fontFamily: 'inherit' }}
+                              >
+                                Forget
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                        <input
+                          value={newFactText}
+                          onChange={e => setNewFactText(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddFact(ent.id); }}
+                          placeholder="e.g. Always wants the kitchen priced as a PC sum"
+                          style={{
+                            flex: 1, padding: '7px 10px', borderRadius: 6,
+                            background: isDark ? '#0F1520' : '#FFFFFF',
+                            border: '1px solid ' + colors.cardBorder,
+                            color: colors.text, fontSize: 12.5, outline: 'none', fontFamily: 'inherit',
+                          }}
+                        />
+                        <button
+                          onClick={() => handleAddFact(ent.id)}
+                          style={{
+                            padding: '7px 12px', borderRadius: 6,
+                            background: colors.accentBg, border: '1px solid ' + colors.accentBorder,
+                            color: colors.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <button
+                          onClick={() => handleRenameEntity(ent)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11.5, padding: 0, fontFamily: 'inherit' }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={() => handleMergeEntity(ent)}
+                          title="Same person or firm recorded twice? Merge them."
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11.5, padding: 0, fontFamily: 'inherit' }}
+                        >
+                          Merge into another
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

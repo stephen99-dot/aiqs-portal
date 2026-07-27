@@ -5,6 +5,7 @@ const express = require('express');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
 const memoryStore = require('./memoryStore');
+const entityStore = require('./entityStore');
 
 const router = express.Router();
 
@@ -214,6 +215,111 @@ router.get('/project-intake/:sessionId', authMiddleware, (req, res) => {
     res.json({ intake: row || null });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load intake' });
+  }
+});
+
+// ── Entities ──────────────────────────────────────────────────────────
+// The people and firms on a builder's jobs. This is personal data, some of it a
+// judgement about a named subcontractor, so it must be visible and correctable: if the
+// system believes something about someone, the builder can see it, disagree and
+// overrule it. Every call is scoped to req.user.id — entityStore throws without one.
+
+router.get('/entities', authMiddleware, (req, res) => {
+  try {
+    const entities = entityStore.listEntities(db, { userId: req.user.id });
+    // Facts and a short history come back with the list: the page shows them inline, and
+    // one query per entity beats a request per row from the browser.
+    const withDetail = entities.map(e => ({
+      ...e,
+      external_refs: e.external_refs ? JSON.parse(e.external_refs) : null,
+      facts: entityStore.listFacts(db, { userId: req.user.id, entityId: e.id }),
+      events: entityStore.listEvents(db, { userId: req.user.id, entityId: e.id, limit: 5 }),
+    }));
+    res.json({ entities: withDetail, summary: entityStore.summary(db, { userId: req.user.id }) });
+  } catch (e) {
+    console.error('[Entities] list error:', e.message);
+    res.status(500).json({ error: 'Failed to load entities' });
+  }
+});
+
+router.post('/entities', authMiddleware, (req, res) => {
+  try {
+    const { name, kind } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name required' });
+    if (!entityStore.KINDS.includes(kind)) {
+      return res.status(400).json({ error: `kind must be one of: ${entityStore.KINDS.join(', ')}` });
+    }
+    const { entity, created } = entityStore.upsertEntity(db, {
+      userId: req.user.id, kind, displayName: name, source: 'manual',
+    });
+    res.json({ entity, created });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Failed to create entity' });
+  }
+});
+
+router.put('/entities/:id', authMiddleware, (req, res) => {
+  try {
+    const { name } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'name required' });
+    const ok = entityStore.renameEntity(db, { userId: req.user.id, id: req.params.id, displayName: name });
+    if (!ok) return res.status(404).json({ error: 'Entity not found' });
+    res.json({ entity: entityStore.getEntity(db, { userId: req.user.id, id: req.params.id }) });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Failed to rename entity' });
+  }
+});
+
+router.delete('/entities/:id', authMiddleware, (req, res) => {
+  try {
+    const ok = entityStore.deleteEntity(db, { userId: req.user.id, id: req.params.id });
+    if (!ok) return res.status(404).json({ error: 'Entity not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[Entities] delete error:', e.message);
+    res.status(500).json({ error: 'Failed to delete entity' });
+  }
+});
+
+// Soft merge — the loser keeps existing and points at the winner, so a merge made in
+// error stays visible rather than silently destroying a record.
+router.post('/entities/:id/merge', authMiddleware, (req, res) => {
+  try {
+    const { into } = req.body || {};
+    if (!into) return res.status(400).json({ error: 'into required' });
+    const ok = entityStore.mergeEntities(db, { userId: req.user.id, fromId: req.params.id, intoId: into });
+    if (!ok) return res.status(404).json({ error: 'Entity not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Failed to merge' });
+  }
+});
+
+router.post('/entities/:id/facts', authMiddleware, (req, res) => {
+  try {
+    const { content, category } = req.body || {};
+    if (!content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
+    const fact = entityStore.addFact(db, {
+      userId: req.user.id, entityId: req.params.id, content, category, source: 'user', confidence: 1,
+    });
+    res.json({ fact });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Failed to add fact' });
+  }
+});
+
+// Expire rather than delete by default: that something was once believed is worth
+// keeping, and an expired fact stops reaching the model either way.
+router.delete('/entities/facts/:factId', authMiddleware, (req, res) => {
+  try {
+    const hard = req.query.hard === '1';
+    const ok = hard
+      ? entityStore.deleteFact(db, { userId: req.user.id, id: req.params.factId })
+      : entityStore.expireFact(db, { userId: req.user.id, id: req.params.factId });
+    if (!ok) return res.status(404).json({ error: 'Fact not found' });
+    res.json({ success: true, mode: hard ? 'deleted' : 'expired' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to remove fact' });
   }
 });
 
