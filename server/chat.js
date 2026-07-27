@@ -25,6 +25,8 @@ try { keyNormalizer = require('./keyNormalizer'); } catch (e) { console.log('[Ch
 try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[Chat] memoryStore not found — memories disabled'); }
 let autoLearn; try { autoLearn = require('./autoLearn'); } catch (e) { console.log('[Chat] autoLearn not found — always-on learning disabled'); }
 let priceEvidence; try { priceEvidence = require('./priceEvidence'); } catch (e) { console.log('[Chat] priceEvidence not found — evidence store disabled'); }
+let entityStore; try { entityStore = require('./entityStore'); } catch (e) { console.log('[Chat] entityStore not found — entity memory disabled'); }
+let entityResolver; try { entityResolver = require('./entityResolver'); } catch (e) { console.log('[Chat] entityResolver not found — entity cards disabled'); }
 let pricingShadow; try { pricingShadow = require('./pricingShadow'); } catch (e) { console.log('[Chat] pricingShadow not found — resolver shadow mode disabled'); }
 // Falls back to the options untouched, so a missing module simply means no shadow data.
 const withShadow = (opts, ctx) => (pricingShadow ? pricingShadow.withShadow(opts, ctx) : opts);
@@ -88,6 +90,17 @@ try {
     if (added > 0) console.log('[PriceEvidence] backfilled', JSON.stringify(stats));
   }
 } catch(e) { console.error('[PriceEvidence] Init error:', e.message); }
+// Entity graph. The backfill from estimator_clients is idempotent, so running it on boot
+// keeps the graph in step as the builder adds clients. Free-text crew names are NOT
+// backfilled here — turning those into named people is a judgement the builder makes on
+// screen, not something that happens to them on restart.
+try {
+  if (entityStore) {
+    entityStore.initEntityTables(db);
+    const stats = entityStore.backfillFromClients(db);
+    if (stats.created > 0) console.log('[Entities] backfilled', JSON.stringify(stats));
+  }
+} catch(e) { console.error('[Entities] Init error:', e.message); }
 // Clean corrupted memory rates on startup (e.g. scaffolding at £2,245 vs base £22)
 try { if (memoryEngine && deterministicPricer && deterministicPricer.BASE_RATES) {
   const baseRateValues = {};
@@ -2086,6 +2099,31 @@ ${summary}`);
         }
       }
     } catch (memErr) { console.error('[Memory] retrieval error:', memErr.message); }
+
+    // ── ENTITY CARDS: who is on this job ──
+    // The structured complement to user_memories: retrieved by WHO is involved rather
+    // than by similarity to the last message, so the assistant can name the client, the
+    // architect and what happened last time without being told.
+    //
+    // This MUST stay below the `stableSystemBase` capture above. That split is positional
+    // — the cached prefix is the first stableSystemBase.length characters and the
+    // uncached tail is everything after — so injecting per-job content any earlier would
+    // change the cached prefix on every job and silently destroy prompt caching, with no
+    // symptom other than the bill. entityResolver.test.js asserts this ordering against
+    // the source of this file.
+    try {
+      if (entityResolver && entityStore) {
+        const entityIds = entityStore
+          .listEntities(db, { userId })
+          .filter(e => !e.merged_into)
+          .map(e => e.id);
+        if (entityIds.length > 0) {
+          systemPrompt += entityResolver.formatCardsForPrompt(
+            entityResolver.buildCards(db, { userId, entityIds })
+          );
+        }
+      }
+    } catch (entErr) { console.error('[Entities] card injection error:', entErr.message); }
 
     // ── PROJECT INTAKE: user-confirmed answers for this session's upload ──
     // Priority 1: intake_json in body (just-filled-out, first turn before session_id exists)

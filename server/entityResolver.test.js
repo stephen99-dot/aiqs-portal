@@ -249,3 +249,62 @@ test('card rendering is deterministic for the same inputs', () => {
   const twice = er.formatCardsForPrompt(er.buildCards(db, { userId: 'u1', entityIds: [hughes.id, kerr.id] }));
   assert.strictEqual(once, twice);
 });
+
+// ── the cache boundary ────────────────────────────────────────────────────────
+// chat.js sends `stableSystemBase` with cache_control: ephemeral, and the per-turn tail
+// is literally `systemPrompt.slice(stableSystemBase.length)` — a POSITIONAL split. So
+// anything per-job appended before that capture silently changes the cached prefix on
+// every job and destroys prompt caching. There is no runtime symptom: the answers stay
+// correct and the bill goes up. These assertions are made against the source of chat.js
+// because that is where the mistake would be made.
+
+const fs = require('node:fs');
+const path = require('node:path');
+const CHAT_SRC = fs.readFileSync(path.join(__dirname, 'chat.js'), 'utf8');
+const chatLineOf = (needle) => {
+  const idx = CHAT_SRC.indexOf(needle);
+  assert.ok(idx > 0, `expected to find ${JSON.stringify(needle)} in chat.js`);
+  return CHAT_SRC.slice(0, idx).split('\n').length;
+};
+
+test('entity cards are injected AFTER the cached prefix is captured', () => {
+  const captureLine = chatLineOf('const stableSystemBase = systemPrompt;');
+  const injectLine = chatLineOf('entityResolver.formatCardsForPrompt(');
+  assert.ok(
+    injectLine > captureLine,
+    `entity cards are injected at line ${injectLine}, which is at or above the cached-prefix `
+    + `capture at line ${captureLine}. Per-job content above that line is baked into the `
+    + `cached prefix and breaks prompt caching on every job.`
+  );
+});
+
+test('entity cards are appended, never spliced into the prefix', () => {
+  // The tail only works because every injection is a `systemPrompt +=`. A direct
+  // assignment or a splice would break the slice() that derives the tail.
+  const after = CHAT_SRC.slice(CHAT_SRC.indexOf('const stableSystemBase = systemPrompt;'));
+  const injection = after.slice(after.indexOf('entityResolver.formatCardsForPrompt('));
+  const statementStart = injection.lastIndexOf('systemPrompt', 0) === 0;
+  assert.ok(
+    /systemPrompt \+=\s*[\s\S]{0,120}entityResolver\.formatCardsForPrompt\(/.test(after) || statementStart,
+    'entity cards must be appended with `systemPrompt +=`'
+  );
+});
+
+test('the cached prefix is identical for two different jobs', () => {
+  // The behavioural counterpart to the source check above: whatever the cards say, the
+  // bytes before the cache breakpoint must not move.
+  const db = freshDb();
+  const { hughes, kerr } = seed(db);
+  es.addFact(db, { userId: 'u1', entityId: hughes.id, content: 'Wants the kitchen as a PC sum' });
+  es.addFact(db, { userId: 'u1', entityId: kerr.id, content: 'Drawings usually lack drainage' });
+
+  // Stand in for buildSystemPrompt: the same base for this user on any job.
+  const base = 'IDENTITY + RULES + RATE LIBRARY (stable for this user)';
+  const jobA = base + er.formatCardsForPrompt(er.buildCards(db, { userId: 'u1', entityIds: [hughes.id] }));
+  const jobB = base + er.formatCardsForPrompt(er.buildCards(db, { userId: 'u1', entityIds: [kerr.id] }));
+
+  assert.strictEqual(jobA.slice(0, base.length), jobB.slice(0, base.length), 'cached prefix moved');
+  assert.notStrictEqual(jobA, jobB, 'the tails genuinely differ, so this test is not vacuous');
+  assert.match(jobA.slice(base.length), /Mrs Hughes/);
+  assert.match(jobB.slice(base.length), /Kerr Architects/);
+});
