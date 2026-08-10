@@ -810,6 +810,105 @@ function CostsTab({ t }) {
   );
 }
 
+// ─── Suitability survey results — feature demand + tailored ATP packages ────
+// Labels mirror server/suitability.js ids.
+const SUIT_FEATURES = {
+  ai_call_handler: 'AI call handler', valuations: 'Valuations, variations & RFIs',
+  boq: 'AI-priced BOQs', cost_tracking: 'Live cost tracking',
+  documents: 'Quotes, RAMS & invoices', materials: 'Materials comparison',
+  crm_leads: 'CRM & lead generation', programmes: 'Programmes & schedules',
+  site_team: 'Site tools for the team', client_signoff: 'Client sign-off portal',
+  multi_site: 'Multi-site overview',
+};
+const SUIT_TEAM = { solo: 'Just me', s2_10: '2–10', s11_25: '11–25', s26plus: '25+' };
+const SUIT_JOBS = { adhoc: 'now & then', monthly: '~1 job/mo', s2_5: '2–5 jobs/mo', s6plus: '5+ jobs/mo' };
+const TIER_COLOURS = { platform: '#94A3B8', trade: '#0071F3', builder: '#7C5CFC', contractor: '#F59E0B' };
+
+function SuitabilitySection({ t }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    apiFetch('/admin/suitability').then(setData).catch(e => setError(e.message));
+  }, []);
+
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '16px 20px' };
+  if (error) return <div style={{ color: '#EF4444', padding: 20 }}>{error}</div>;
+  if (!data) return <div style={{ color: t.textMuted, padding: 20 }}>Loading…</div>;
+
+  const responses = data.responses || [];
+  const featureCounts = Object.entries(data.featureCounts || {}).sort((a, b) => b[1] - a[1]);
+  const maxCount = featureCounts.length ? featureCounts[0][1] : 1;
+  const tierCounts = data.tierCounts || {};
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: t.text, margin: '0 0 4px' }}>Suitability survey — AI Trades Pilot fit</h2>
+      <p style={{ fontSize: 12.5, color: t.textMuted, margin: '0 0 14px' }}>
+        What users want, and the package each was invited to trial. Follow up the trial invites from here.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{responses.length}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Responses</div>
+        </div>
+        {['platform', 'trade', 'builder', 'contractor'].map(k => (
+          <div key={k} style={card}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: TIER_COLOURS[k] }}>{tierCounts[k] || 0}</div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>{k.charAt(0).toUpperCase() + k.slice(1)} recommended</div>
+          </div>
+        ))}
+      </div>
+
+      {featureCounts.length > 0 && (
+        <div style={{ ...card, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: t.text, marginBottom: 10 }}>Feature demand</div>
+          {featureCounts.map(([id, n]) => (
+            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <div style={{ flex: '0 0 220px', fontSize: 12.5, color: t.textMuted }}>{SUIT_FEATURES[id] || id}</div>
+              <div style={{ flex: 1, height: 8, borderRadius: 4, background: t.surface, overflow: 'hidden' }}>
+                <div style={{ width: Math.round((n / maxCount) * 100) + '%', height: '100%', background: '#0071F3', borderRadius: 4 }} />
+              </div>
+              <div style={{ flex: '0 0 28px', fontSize: 12.5, fontWeight: 700, color: t.text, textAlign: 'right' }}>{n}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {responses.length === 0 ? (
+        <div style={{ ...card, color: t.textMuted, fontSize: 13.5 }}>No responses yet — the suitability popup is live for every signed-in user.</div>
+      ) : responses.map(r => (
+        <div key={r.id} style={{ ...card, marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <div style={{ fontWeight: 600, color: t.text, fontSize: 14 }}>
+              {r.full_name || r.email}{r.company ? ' · ' + r.company : ''}
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted }}>{(r.created_at || '').slice(0, 10)}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 12.5, color: t.textMuted, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{
+              fontWeight: 700, color: '#fff', background: TIER_COLOURS[r.recommended_tier] || '#94A3B8',
+              borderRadius: 6, padding: '2px 8px', fontSize: 11.5,
+            }}>{(r.recommended_tier || '').charAt(0).toUpperCase() + (r.recommended_tier || '').slice(1)}</span>
+            <span>Team: {SUIT_TEAM[r.team_size] || r.team_size || '—'}</span>
+            <span>Pricing {SUIT_JOBS[r.jobs_per_month] || r.jobs_per_month || '—'}</span>
+          </div>
+          {(r.features || []).length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+              {r.features.map(f => (
+                <span key={f} style={{
+                  fontSize: 11.5, color: t.text, background: t.surface,
+                  border: '1px solid ' + t.border, borderRadius: 6, padding: '2px 8px',
+                }}>{SUIT_FEATURES[f] || f}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Feedback tab — in-portal survey results ────────────────────────────────
 function SurveyTab({ t }) {
   const [data, setData] = useState(null);
@@ -888,7 +987,7 @@ export default function AdminPage() {
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'submissions' && <SubmissionsTab t={t} />}
-      {tab === 'feedback' && <SurveyTab t={t} />}
+      {tab === 'feedback' && <><SuitabilitySection t={t} /><SurveyTab t={t} /></>}
       {tab === 'costs' && <CostsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
       {tab === 'playbooks' && <PlaybooksTab t={t} />}

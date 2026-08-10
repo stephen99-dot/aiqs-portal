@@ -1649,3 +1649,6 @@ router.post('/admin/flywheel/run', authMiddleware, adminMiddleware, async (req, 
 });
 
 module.exports = router;
+// Portal-branded transactional mail ("AI QS" sender) — reused by other route
+// modules (e.g. the suitability-survey trial invite) so there's one SMTP path.
+module.exports.sendEmail = sendEmail;

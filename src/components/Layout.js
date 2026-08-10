@@ -13,6 +13,7 @@ import NotificationBell from './NotificationBell';
 import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
+import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
 // Office in a Box — expandable parent containing the add-on workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -137,6 +138,9 @@ export default function Layout() {
   // The "What's new" popup takes priority — the survey waits until it's been
   // dismissed so the two never stack on top of each other.
   const [whatsNewSeen, setWhatsNewSeen] = useState(false);
+  // null = suitability popup still deciding; true = it's showing this session
+  // (so the feedback survey stays out of the way); false = nothing to show.
+  const [suitabilityShowing, setSuitabilityShowing] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -543,9 +547,14 @@ export default function Layout() {
       {/* What's new — announce chatbot updates to every user, once per release */}
       <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />
 
-      {/* Feedback survey — every non-admin user, once. Waits for What's New
-          so the two popups never stack. */}
-      {whatsNewSeen && !isAdmin && <SurveyPopup />}
+      {/* Suitability survey — qualifying questions that tailor an AI Trades
+          Pilot package + free-trial invite. Waits for What's New. */}
+      {whatsNewSeen && !isAdmin && <SuitabilitySurveyPopup onDecided={setSuitabilityShowing} />}
+
+      {/* Feedback survey — every non-admin user, once. Only runs in sessions
+          where neither What's New nor the suitability survey is showing, so
+          popups never stack. */}
+      {whatsNewSeen && !isAdmin && suitabilityShowing === false && <SurveyPopup />}
 
       {/* Office in a Box guided walkthrough — auto-runs once for subscribers and
           stays available afterwards via its "Show me around" launcher. Admins
