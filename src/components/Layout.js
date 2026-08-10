@@ -13,6 +13,7 @@ import NotificationBell from './NotificationBell';
 import OfficeTour from './OfficeTour';
 import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
+import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
 // Office in a Box — expandable parent containing the add-on workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -542,6 +543,14 @@ export default function Layout() {
 
       {/* What's new — announce chatbot updates to every user, once per release */}
       <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />
+
+      {/* Suitability survey — qualifying questions that tailor an AI Trades
+          Pilot package + free-trial invite. Waits for What's New.
+          TESTING GATE: admin-only for now. To roll out to every user, swap
+          `isAdmin` for `!isAdmin` and restore the onDecided sequencing with
+          the feedback survey (see git history of this block) so the two
+          popups never stack. */}
+      {whatsNewSeen && isAdmin && <SuitabilitySurveyPopup />}
 
       {/* Feedback survey — every non-admin user, once. Waits for What's New
           so the two popups never stack. */}
