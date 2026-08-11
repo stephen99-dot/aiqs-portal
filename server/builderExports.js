@@ -142,6 +142,11 @@ const UNIT_TOKENS = new Set([
 ]);
 const BARE_NUMBER = /^\d+(?:\.\d+)?$/;
 
+// Sub-total row label — the word "subtotal" anywhere, so a leading
+// "Sub-total — Preliminaries", a trailing "Section 1 subtotal" and a bare
+// "Subtotal 10.0" are all caught.
+const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
+
 function looksLikeUnit(s) {
   const t = String(s || '').trim().toLowerCase();
   if (!t) return false;
@@ -331,12 +336,15 @@ async function parseBOQ(filePath) {
   // OH&P — instead of dropping it with everything else below the stop marker.
   let inProvSums = false;
   let provSection = null;
-  // boqGenerator prints a "PRIME COST & PROVISIONAL SUMS (shown for reference)"
-  // recap of figures already inside the priced lines. It must NOT be parsed as
-  // an authoritative Provisional Sums section — doing so both double-counts the
-  // lines and shows only the keyword-matched subset. Once we cross into that
-  // recap, skip every remaining row. A genuine tender's "PROVISIONAL SUMS"
-  // section header carries none of these reference markers, so it still parses.
+  // boqGenerator prints a "PRIME COST & PROVISIONAL SUMS (included in the rates
+  // above — shown for reference)" recap of figures already inside the priced
+  // lines. It must NOT be parsed as an authoritative Provisional Sums section —
+  // doing so both double-counts the lines and shows only the keyword-matched
+  // subset. Once we cross into that recap, skip every remaining row. Detection
+  // keys on the recap's distinctive reference wording ONLY — a tender whose
+  // priced sections include e.g. "10.0 PRIME COST & PROVISIONAL SUMS" carries
+  // no such wording, and matching on the bare phrase used to silently drop that
+  // section and every section after it (the whole back half of the BOQ).
   let inReferenceRecap = false;
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
@@ -360,8 +368,7 @@ async function parseBOQ(filePath) {
     // Reference recap detector — distinctive boqGenerator wording, not present
     // on a real tender PS block. Everything from here down is reference-only.
     if (!inReferenceRecap &&
-        (/PRIME COST & PROVISIONAL SUMS/.test(upperLabel) ||
-         /SHOWN FOR REFERENCE/.test(upperLabel) ||
+        (/SHOWN FOR REFERENCE/.test(upperLabel) ||
          /INCLUDED IN THE RATES ABOVE/.test(upperLabel))) {
       inReferenceRecap = true;
     }
@@ -379,12 +386,27 @@ async function parseBOQ(filePath) {
       // back to the rate cell. Percent-formatted cells store a fraction
       // (0.155 → 15.5%), as does any bare value ≤ 1; otherwise it's already a %.
       const pctFromRateCell = () => {
-        const cell = cols.rate ? row.getCell(cols.rate) : null;
-        let v = cellNumber(cell);
-        if (!v) return null;
-        const fmt = (cell && cell.numFmt) || '';
-        if (fmt.includes('%') || v <= 1) v = v * 100;
-        return Math.round(v * 1000) / 1000;
+        const read = (cell) => {
+          let v = cellNumber(cell);
+          if (!v) return null;
+          const fmt = (cell && cell.numFmt) || '';
+          if (fmt.includes('%') || v <= 1) v = v * 100;
+          return Math.round(v * 1000) / 1000;
+        };
+        const fromRate = read(cols.rate ? row.getCell(cols.rate) : null);
+        if (fromRate != null) return fromRate;
+        // Some tender summaries park the percentage in a different value column
+        // (e.g. a 0.0%-formatted cell under Materials, with the £ amount in
+        // Total). Only a percent-FORMATTED cell is trusted in this sweep — a
+        // bare number elsewhere on the row could be anything.
+        for (let c = 1; c <= 14; c++) {
+          if (c === cols.total) continue;
+          const cell = row.getCell(c);
+          if (!(((cell && cell.numFmt) || '').includes('%'))) continue;
+          const v = read(cell);
+          if (v != null) return v;
+        }
+        return null;
       };
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
@@ -465,7 +487,16 @@ async function parseBOQ(filePath) {
         /\bPROVISIONAL\s+SUMS?\b/.test(upperLabel) && !/\bTOTAL\b/.test(upperLabel) &&
         provTotalCell <= 0 && !hasUnitOrQty) {
       inProvSums = true;
-      provSection = { number: 'PS', title: 'Provisional Sums', items: [], subtotal: { labour: 0, materials: 0, total: 0 }, provisional: true };
+      // Keep the source document's own numbering when the header carries one
+      // ("10.0 PRIME COST & PROVISIONAL SUMS"), so the client copy lists the
+      // trade exactly as the delivered BOQ named it. Unnumbered PS blocks keep
+      // the legacy PS label.
+      const numbered = (a || b).match(/^\s*([\d]+(?:\.\d+)*)[.)]?\s+(.+)$/);
+      provSection = {
+        number: numbered ? numbered[1] : 'PS',
+        title: numbered ? numbered[2].trim() : 'Provisional Sums',
+        items: [], subtotal: { labour: 0, materials: 0, total: 0 }, provisional: true,
+      };
       return;
     }
     if (inProvSums) {
@@ -473,11 +504,21 @@ async function parseBOQ(filePath) {
       // amount (e.g. "PS.1 | Air-conditioning | 31754", "A | Asbestos removal |
       // 1000"). Capture only that shape. Anything else — a cost-summary value
       // line ("Net works sub-total", "Preliminaries, overheads & profit"), the
-      // next block header ("COST SUMMARY"), a spacer, OR a "SUB-TOTAL — SECTION"
-      // row (which boqGenerator prints with an empty item cell) — ENDS the block
-      // and falls through to the stop / subtotal / summary detection below.
-      if (a && b && provTotalCell > 0) {
-        provSection.items.push({ itemRef: a, description: b, unit: '', qty: 1, rate: provTotalCell, labour: 0, materials: 0, total: provTotalCell });
+      // next block header ("COST SUMMARY"), a spacer, OR a sub-total row — ENDS
+      // the block and falls through to the stop / subtotal / summary detection
+      // below. boqGenerator prints its sub-total with an empty item cell, but a
+      // tender's merged "Subtotal 10.0" row mirrors its label into EVERY cell of
+      // the merge (so both ref and description read as the label): the mirrored
+      // and SUB-TOTAL guards stop that row being swallowed as a £-for-£ extra
+      // provisional line.
+      const mirroredLabel = !!a && a === b && (!unitText || unitText === a);
+      if (a && b && provTotalCell > 0 && !mirroredLabel &&
+          !SUBTOTAL_RE.test(upperA) && !SUBTOTAL_RE.test(upperB)) {
+        provSection.items.push({
+          itemRef: a, description: b, unit: unitText, qty: 1, rate: provTotalCell,
+          labour: numAt(row, cols.labour), materials: numAt(row, cols.materials),
+          total: provTotalCell,
+        });
         return;
       }
       if (provSection && provSection.items.length) sections.push(provSection);
@@ -497,6 +538,7 @@ async function parseBOQ(filePath) {
     // Stop at the summary block — that's QS-side, not item-level
     if (upperA.includes('PROJECT SUMMARY') || upperB.includes('PROJECT SUMMARY') ||
         upperLabel.includes('SUMMARY OF TOTALS') ||
+        upperLabel.includes('SUMMARY OF TENDER') ||
         upperLabel.includes('COST SUMMARY') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
@@ -508,11 +550,9 @@ async function parseBOQ(filePath) {
       return;
     }
 
-    // Sub-total row — the word "subtotal" anywhere in either label, so both a
-    // leading "Sub-total — Preliminaries" and a trailing "Section 1 subtotal"
-    // are caught. Without the trailing form the subtotal row was read as a
-    // priced line, doubling the section total.
-    const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
+    // Sub-total row (SUBTOTAL_RE, module scope). Without catching the trailing
+    // "Section 1 subtotal" form the subtotal row was read as a priced line,
+    // doubling the section total.
     if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB)) {
       if (current) {
         current.subtotal = {
