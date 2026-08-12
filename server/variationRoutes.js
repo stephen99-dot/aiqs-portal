@@ -825,9 +825,10 @@ function rebuildFromEdits(editedSections) {
           const materials = parseFloat(it.materials) || 0;
           // A split line's total is labour + materials; a composite (single-rate)
           // line has no split, so honour the total/rate it carries instead of
-          // collapsing to zero.
+          // collapsing to zero. Non-zero, not positive: a credit line carries a
+          // NEGATIVE split and must not fall through to a stale total.
           const lm = labour + materials;
-          const total = lm > 0 ? lm : (parseFloat(it.total) || 0);
+          const total = lm !== 0 ? lm : (parseFloat(it.total) || 0);
           const rate = qty > 0 ? total / qty : (parseFloat(it.rate) || 0);
           return {
             itemRef: it.itemRef || '',
@@ -928,7 +929,9 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       // Any previously-saved working state (edited figures, margins, colours,
       // included/excluded lines). When present the UI restores it over the
       // freshly-parsed BOQ so the user picks up exactly where they left off.
-      saved_state: parseBuilderPackState(project.builder_pack_state),
+      // Dropped automatically when the project's BOQ has been reissued since
+      // the state was saved — the fresh document must win over stale edits.
+      saved_state: savedStateForProject(project),
     });
   } catch (err) {
     console.error('[BuilderPack] breakdown error:', err);
@@ -947,13 +950,27 @@ function parseBuilderPackState(raw) {
   }
 }
 
+// Saved working state for a project, discarded when stale. Each save is
+// stamped with the BOQ file it was edited against (_boq_source, added on
+// write); when a project's BOQ is reissued the filename changes, and serving
+// the old saved sections over the fresh parse would silently show the
+// superseded figures — exactly the "reissued but online still shows the old
+// version" report. A stale stamp means the fresh parse wins. States saved
+// before stamping (no _boq_source) can't be checked and are served as-is.
+function savedStateForProject(project) {
+  const saved = parseBuilderPackState(project.builder_pack_state);
+  if (!saved) return null;
+  if (saved._boq_source && project.boq_filename && saved._boq_source !== project.boq_filename) return null;
+  return saved;
+}
+
 // GET /api/projects/:projectId/builder-pack-state
 //   → { saved_state: {...} | null }  (lightweight read used on reload)
 router.get('/projects/:projectId/builder-pack-state', authMiddleware, (req, res) => {
   try {
     const project = loadProjectForUser(req);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    res.json({ saved_state: parseBuilderPackState(project.builder_pack_state) });
+    res.json({ saved_state: savedStateForProject(project) });
   } catch (err) {
     console.error('[BuilderPack] state read error:', err);
     res.status(500).json({ error: 'Failed to read saved Builder Pack' });
@@ -973,7 +990,10 @@ router.put('/projects/:projectId/builder-pack-state', authMiddleware, (req, res)
     }
     let json;
     try {
-      json = JSON.stringify(state);
+      // Stamp the state with the BOQ file it was edited against, so a reissued
+      // BOQ (new filename) invalidates it on read instead of shadowing the new
+      // document with stale sections.
+      json = JSON.stringify({ ...state, _boq_source: project.boq_filename || null });
     } catch (err) {
       return res.status(400).json({ error: 'State is not serialisable' });
     }
@@ -1091,6 +1111,169 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
   } catch (err) {
     console.error('[ClientCopyPro] error:', err);
     res.status(500).json({ error: 'Failed to generate client copy: ' + err.message });
+  }
+});
+
+// POST /api/projects/:projectId/client-quote
+//   Body: same shape as /client-copy-pro (margins, prelims, day rate,
+//   edited_sections…) plus optional { client_name, client_email }.
+//   → { quote_id, quote_number, net_total, grand_total, updated }
+//
+// Turns the Client Copy exactly as previewed into a sendable quote, so
+// "share with client" works the same way as AI Trades Pilot: the caller
+// then POSTs /api/estimator/quotes/:id/send to mint the public /q/<token>
+// acceptance link (branded page, PDF, ask-a-question, accept with typed
+// signature). The maths mirrors generateClientCopyPro line for line —
+// overhead × profit compounded into the rates (per-trade override wins),
+// provisional sums carried at face value, prelims / day-rate as their own
+// lines, contingency and VAT at quote level — so the quote's bottom line is
+// the preview's bottom line. Re-sharing after edits refreshes the SAME quote
+// (projects.client_quote_id) so the client's link stays live; an accepted
+// quote is never mutated — a fresh quote is issued instead.
+router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
+
+    const filePath = path.join(outputsDir, project.boq_filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+
+    const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
+    if (!parsed.sections.length) return res.status(400).json({ error: 'The BOQ has no priced line items.' });
+
+    const num = (v, fb = 0) => { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; };
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const b = req.body || {};
+    const overheadPct = Number.isFinite(parseFloat(b.overhead_pct)) ? parseFloat(b.overhead_pct) : num(b.default_ohp);
+    const profitPct = num(b.profit_pct);
+    const contingencyPct = num(b.contingency);
+    const vatPct = num(b.vat);
+    const perTradeOhp = b.per_trade_ohp || {};
+    const rounding = [0, 1, 10, 100].includes(parseInt(b.rounding, 10)) ? parseInt(b.rounding, 10) : 0;
+    const roundMoney = (v) => (!rounding || rounding < 1 ? v : Math.round(v / rounding) * rounding);
+    const baseUplift = (1 + overheadPct / 100) * (1 + profitPct / 100);
+    const factorFor = (sectionNumber) => {
+      if (Object.prototype.hasOwnProperty.call(perTradeOhp, sectionNumber)) {
+        const v = parseFloat(perTradeOhp[sectionNumber]);
+        if (Number.isFinite(v)) return 1 + v / 100;
+      }
+      return baseUplift;
+    };
+
+    // Lines: rate carries the client-facing price (OH&P baked in, no margin
+    // line — same philosophy as the Client Copy); labour/materials stay at raw
+    // cost so the Finance budget seeded on acceptance reflects cost, not price.
+    const lines = [];
+    let originalNet = 0; // pre-uplift construction net — contingency/prelims-% basis
+    const hasProvSection = parsed.sections.some((s) => s.provisional);
+    for (const s of parsed.sections) {
+      const sectionLabel = (s.number ? s.number + ' — ' : '') + (s.title || 'Section');
+      const factor = s.provisional ? 1 : factorFor(s.number);
+      for (const it of s.items) {
+        if (!(it.description || '').trim()) continue;
+        const base = ((num(it.labour)) + (num(it.materials))) || num(it.total);
+        if (!s.provisional) originalNet += base;
+        const lineTotal = s.provisional ? num(it.total) : roundMoney(base * factor);
+        const qty = num(it.qty) > 0 ? num(it.qty) : 1;
+        lines.push({
+          section: sectionLabel + (s.provisional ? ' (provisional, excl. OH&P)' : ''),
+          item: it.itemRef || '', description: it.description, unit: it.unit || 'item',
+          qty, rate: round2(lineTotal / qty), labour: num(it.labour), materials: num(it.materials),
+          line_total: round2(lineTotal),
+        });
+      }
+    }
+    const prelimsAmount = num(b.prelims_amount);
+    const prelimsPct = num(b.prelims_pct);
+    if (prelimsAmount > 0) {
+      lines.push({ section: 'Preliminaries & management', item: '', description: 'Preliminaries', unit: 'item', qty: 1, rate: round2(prelimsAmount), labour: 0, materials: 0, line_total: round2(prelimsAmount) });
+    } else if (prelimsPct > 0) {
+      const v = round2(originalNet * (prelimsPct / 100));
+      lines.push({ section: 'Preliminaries & management', item: '', description: 'Preliminaries (' + prelimsPct + '% of net)', unit: 'item', qty: 1, rate: v, labour: 0, materials: 0, line_total: v });
+    }
+    const dayRate = b.day_rate && num(b.day_rate.days) > 0 && num(b.day_rate.rate_per_day) > 0 ? b.day_rate : null;
+    if (dayRate) {
+      lines.push({ section: 'Preliminaries & management', item: '', description: String(dayRate.label || 'Day-rate / management').slice(0, 200), unit: 'day', qty: num(dayRate.days), rate: round2(num(dayRate.rate_per_day)), labour: 0, materials: 0, line_total: round2(num(dayRate.days) * num(dayRate.rate_per_day)) });
+    }
+    // Legacy flat provisional lump — only when the BOQ carries no itemised
+    // provisional section (mirrors the preview: never both).
+    const provisionalSum = num(b.provisional_sum);
+    if (!hasProvSection && provisionalSum > 0) {
+      lines.push({ section: 'Provisional sums (excl. OH&P)', item: '', description: 'Provisional sums (carried from tender)', unit: 'item', qty: 1, rate: round2(provisionalSum), labour: 0, materials: 0, line_total: round2(provisionalSum) });
+    }
+
+    const net = lines.reduce((a, l) => a + l.line_total, 0);
+    const cont = originalNet * (contingencyPct / 100);
+    const vatAmount = (net + cont) * (vatPct / 100);
+    const grand = net + cont + vatAmount;
+
+    const clientName = String(b.client_name || '').trim().slice(0, 200) || null;
+    const clientEmail = String(b.client_email || '').trim().slice(0, 200) || null;
+
+    // Refresh the linked quote when it exists and isn't accepted; an accepted
+    // quote is a signed record — leave it be and issue a fresh one.
+    let existing = project.client_quote_id
+      ? db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(project.client_quote_id, req.user.id)
+      : null;
+    if (existing && existing.status === 'accepted') existing = null;
+
+    let quoteId, quoteNumber;
+    const txn = db.transaction(() => {
+      if (existing) {
+        quoteId = existing.id;
+        quoteNumber = existing.quote_number;
+        db.prepare(
+          'UPDATE quotes SET project_name = ?, currency = ?, net_total = ?, ohp_pct = 0, ohp_amount = 0, '
+          + 'contingency_pct = ?, contingency_amount = ?, vat_pct = ?, vat_amount = ?, grand_total = ?, '
+          + 'client_name = COALESCE(?, client_name), client_email = COALESCE(?, client_email), '
+          + 'updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).run(
+          documentTitleForProject(project), project.currency === 'EUR' ? 'EUR' : 'GBP',
+          round2(net), contingencyPct, round2(cont), vatPct, round2(vatAmount), round2(grand),
+          clientName, clientEmail, quoteId
+        );
+        db.prepare('DELETE FROM quote_lines WHERE quote_id = ?').run(quoteId);
+      } else {
+        quoteId = uuidv4();
+        const d = new Date();
+        quoteNumber = 'Q-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0')
+          + '-' + Math.floor(1000 + Math.random() * 9000);
+        db.prepare(
+          'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
+          + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
+          + 'grand_total, target_margin_pct, margin_pct, status, quote_number) '
+          + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, 0, 0, ?, ?)'
+        ).run(
+          quoteId, req.user.id, clientName, clientEmail,
+          documentTitleForProject(project), project.project_type || null,
+          project.currency === 'EUR' ? 'EUR' : 'GBP',
+          'Client copy of portal BOQ: ' + project.boq_filename,
+          round2(net), contingencyPct, round2(cont), vatPct, round2(vatAmount), round2(grand),
+          'draft', quoteNumber
+        );
+        db.prepare('UPDATE projects SET client_quote_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(quoteId, project.id);
+      }
+      const ins = db.prepare(
+        'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)'
+      );
+      lines.forEach((ln, i) => {
+        ins.run(uuidv4(), quoteId, ln.section, ln.item, ln.description, ln.unit, ln.qty, ln.rate, ln.labour, ln.materials, ln.line_total, i);
+      });
+    });
+    txn();
+
+    res.status(existing ? 200 : 201).json({
+      quote_id: quoteId,
+      quote_number: quoteNumber,
+      net_total: round2(net),
+      grand_total: round2(grand),
+      updated: !!existing,
+    });
+  } catch (err) {
+    console.error('[ClientQuote] error:', err);
+    res.status(500).json({ error: 'Failed to prepare the client quote: ' + err.message });
   }
 });
 

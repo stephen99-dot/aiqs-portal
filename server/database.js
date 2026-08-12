@@ -931,6 +931,10 @@ const migrations = [
   // A2: email delivery — quotes need a recipient; invoices get a public
   // /i/<token> view page (the shareable link, and where A3's Pay now lives).
   { column: 'client_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN client_email TEXT" },
+  // Client-copy sharing: the quote minted from a project's Builder Pack client
+  // copy, so re-sharing refreshes the same quote (and keeps its /q/ link)
+  // instead of minting a new one each time.
+  { column: 'client_quote_id', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN client_quote_id TEXT" },
   { column: 'public_token', table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN public_token TEXT" },
   // A3: automated payment reminders — on by default for new invoices, the
   // toggle is per invoice. reminder_stage: 0 none sent, 1 due-date, 2 = +7d,

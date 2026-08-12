@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 import useIsMobile from '../utils/useIsMobile';
+import { useTheme } from '../context/ThemeContext';
+import ShareLinkModal from '../components/ShareLinkModal';
 
 /**
  * Builder Pack page — full-width workspace for turning a priced BOQ into the
@@ -60,8 +62,10 @@ function unitRates(it) {
 // composite (single-rate) BOQ carries it only in `total`, with no split — fall
 // back to that so composite lines don't read as £0 everywhere.
 function lineTotal(it) {
+  // Non-zero, not positive: a credit line ("Deduct: deposit already
+  // discharged…") carries a NEGATIVE split, and is still a split line.
   const lm = num(it.labour) + num(it.materials);
-  return lm > 0 ? lm : num(it.total);
+  return lm !== 0 ? lm : num(it.total);
 }
 
 export default function BuilderPackPage() {
@@ -76,6 +80,9 @@ export default function BuilderPackPage() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState('builder');
   const [downloading, setDownloading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [share, setShare] = useState(null); // { url } — public /q/<token> link for the client
+  const { t } = useTheme();
   const [openSectionIds, setOpenSectionIds] = useState({}); // { '1': true }
 
   // Builder-tab controls
@@ -271,8 +278,12 @@ export default function BuilderPackPage() {
     () => sections.map((s) => s.items.reduce(
       (acc, it) => {
         const ls = num(it.labour), ms = num(it.materials);
-        // Composite lines (no labour/materials split) contribute their `total`.
-        const comp = (ls + ms) > 0 ? 0 : num(it.total);
+        // Composite lines (no labour/materials split at all) contribute their
+        // `total`. The test must be "no split", not "split ≤ 0": a credit line
+        // ("Deduct: deposit already discharged…") has a NEGATIVE split, and
+        // treating it as composite too counted its value twice — the preview's
+        // net ran £3.5k under the exported client copy on 9 Dartmouth.
+        const comp = (ls !== 0 || ms !== 0) ? 0 : num(it.total);
         return {
           labour: acc.labour + ls,
           materials: acc.materials + ms,
@@ -289,7 +300,7 @@ export default function BuilderPackPage() {
   // split, so the Labour/Materials columns are all zero — pure visual noise.
   // Detect a real split anywhere and only then show those two columns.
   const hasSplit = useMemo(
-    () => sections.some((s) => s.items.some((it) => num(it.labour) > 0 || num(it.materials) > 0)),
+    () => sections.some((s) => s.items.some((it) => num(it.labour) !== 0 || num(it.materials) !== 0)),
     [sections]
   );
 
@@ -440,6 +451,32 @@ export default function BuilderPackPage() {
       await streamBlob(resp);
     } catch (err) { setError(err.message); }
     finally { setDownloading(false); }
+  }
+
+  // Share the client copy the same way AI Trades Pilot sends a quote: turn the
+  // preview into a quote server-side (margins baked into rates), mint the
+  // public /q/<token> acceptance link, and hand back a share sheet. Re-sharing
+  // after edits refreshes the same quote so the client's link stays live.
+  async function shareWithClient() {
+    setSharing(true); setError('');
+    try {
+      const q = await apiFetch(`/projects/${id}/client-quote`, {
+        method: 'POST',
+        body: JSON.stringify({
+          contingency, default_ohp: defaultOhp, overhead_pct: defaultOhp, profit_pct: profit, vat,
+          per_trade_ohp: perTradeOhp,
+          prelims_amount: prelimsMode === 'flat' ? prelimsAmount : 0,
+          prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
+          provisional_sum: provisionalSum,
+          day_rate: dayRateOn ? dayRate : null,
+          rounding,
+          edited_sections: editsForBody(),
+        }),
+      });
+      const sent = await apiFetch(`/estimator/quotes/${q.quote_id}/send`, { method: 'POST' });
+      setShare({ url: window.location.origin + sent.path });
+    } catch (err) { setError(err.message); }
+    finally { setSharing(false); }
   }
 
   async function streamBlob(resp) {
@@ -662,6 +699,7 @@ export default function BuilderPackPage() {
                 perTradeOhp={perTradeOhp} setPerTradeOhp={setPerTradeOhp}
                 sections={sections} sym={sym}
                 onDownload={downloadClientCopy} downloading={downloading}
+                onShare={shareWithClient} sharing={sharing}
                 disabled={clientRows.length === 0}
                 isDirty={isDirty} onReset={resetEdits} sourceSeeded={sourceSeeded}
               />
@@ -838,6 +876,16 @@ export default function BuilderPackPage() {
           </div>
         </div>
       )}
+
+      {share && (
+        <ShareLinkModal
+          t={t}
+          url={share.url}
+          title="Send the quote to your client"
+          message="Here’s your quote — you can view and accept it here:"
+          onClose={() => setShare(null)}
+        />
+      )}
     </div>
   );
 }
@@ -925,7 +973,7 @@ function ClientControls({
   dayRateOn, setDayRateOn, dayRate, setDayRate,
   provisionalSum, setProvisionalSum,
   perTradeOhp, setPerTradeOhp, sections, sym,
-  onDownload, downloading, disabled, isDirty, onReset, sourceSeeded,
+  onDownload, downloading, onShare, sharing, disabled, isDirty, onReset, sourceSeeded,
 }) {
   return (
     <>
@@ -1052,6 +1100,15 @@ function ClientControls({
       <button onClick={onDownload} disabled={downloading || disabled} style={primaryBtn('#A855F7', downloading || disabled, '#fff')}>
         {downloading ? 'Generating…' : 'Download Client Copy'}
       </button>
+
+      <button onClick={onShare} disabled={sharing || disabled} style={{ ...primaryBtn('#16A34A', sharing || disabled, '#fff'), marginTop: 8 }}>
+        {sharing ? 'Preparing link…' : 'Share with client'}
+      </button>
+      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+        Creates a private link your client can open on their phone — branded quote
+        page with the figures above, PDF download, ask-a-question, and accept
+        online with a typed signature. Re-share after edits to refresh the same link.
+      </p>
     </>
   );
 }

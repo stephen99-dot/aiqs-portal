@@ -156,7 +156,9 @@ async function buildSplitHeaderWorkbook(file) {
   ws.addRow([null, 'Section 1 total — PRELIMINARIES', null, null, null, 5060, 0, 5060]);
   header('5', 'WINDOWS, DOORS AND ROOFLIGHT');
   ws.addRow(['5.01', 'Door and frame D2 per quotation', 'no', 1, 2500, 0, 2500, 2500]);
-  ws.addRow(['5.04', 'Deduct: deposit already discharged against order', 'item', 1, -1000, 0, -1000, -1000]);
+  // Credit line with an empty Rate cell: its value lives only in the negative
+  // materials/total split — exercises the lm !== 0 normalisation branch.
+  ws.addRow(['5.04', 'Deduct: deposit already discharged against order', 'item', 1, null, 0, -1000, -1000]);
   ws.addRow(['5.05', 'Rooflight RL3 per quotation', 'no', 1, 2000, 0, 2000, 2000]);
   ws.addRow([null, 'Section 5 total — WINDOWS, DOORS AND ROOFLIGHT', null, null, null, 0, 3500, 3500]);
   ws.addRow([null, 'NET MEASURED COST', null, null, null, null, null, 8560]);
