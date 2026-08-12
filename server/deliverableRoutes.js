@@ -109,11 +109,19 @@ async function seedFindingsFromDocx(projectId, docxPath) {
   // approximate…") sits after the last section heading and would otherwise be
   // swept into that section's bullets.
   const FOOTER_RE = /^(issued by\b|this document is prepared\b|estimates are approximate\b)/i;
+  // A numbered heading we DON'T recognise ("4.  Cost summary", "7. Commercial
+  // basis and tender summary") starts a section whose content must not leak
+  // into the previous bucket — before this guard, every cost-table row was
+  // swept into the preceding section as bullets ("• £60,290.00"). The digits +
+  // dot + space + short-title shape never matches real content lines.
+  const UNKNOWN_HEADING_RE = /^\d{1,2}[.)]\s+\S/;
   for (const line of lines) {
-    if (FOOTER_RE.test(line.trim())) break;
+    const t = line.trim();
+    if (FOOTER_RE.test(t)) break;
     const head = isHeading(line);
     if (head) { current = head; buckets[current] = buckets[current] || []; continue; }
-    if (current && line.trim()) buckets[current].push(line.trim());
+    if (UNKNOWN_HEADING_RE.test(t) && t.length < 60) { current = null; continue; }
+    if (current && t) buckets[current].push(t);
   }
 
   function collectBullets(arr) {
