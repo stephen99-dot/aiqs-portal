@@ -146,6 +146,9 @@ const BARE_NUMBER = /^\d+(?:\.\d+)?$/;
 // "Sub-total — Preliminaries", a trailing "Section 1 subtotal" and a bare
 // "Subtotal 10.0" are all caught.
 const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
+// The other common wording: "Section 1 total — PRELIMINARIES". Without this
+// the row is read as a priced line, exactly doubling every section.
+const SECTION_TOTAL_RE = /^SECTION\s+\S+\s+TOTALS?\b/;
 
 function looksLikeUnit(s) {
   const t = String(s || '').trim().toLowerCase();
@@ -254,12 +257,18 @@ function looksLikeSectionRow(row, mergedRows, cols) {
   const itemC = cols.item, descC = cols.description;
   const a = itemC ? cellText(row.getCell(itemC)).trim() : '';
   const b = descC ? cellText(row.getCell(descC)).trim() : '';
-  const text = a || b;
+  // Some BOQs split a heading across two cells ("1" | "PRELIMINARIES"); test
+  // the joined text so the numbered-prefix pattern sees the whole heading.
+  // Merged rows mirror one value into both cells — join only distinct text.
+  const text = (a && b && a !== b) ? a + ' ' + b : (a || b);
   if (!text) return false;
 
-  // No numeric data in rate / labour / materials / total — section rows are label-only
+  // No numeric data in rate / labour / materials / total — section rows are
+  // label-only. Non-zero, not positive: a credit line ("Deduct: deposit
+  // already discharged… −3582.42") is numeric data too, and treating it as a
+  // heading split its section in half.
   const num = (c) => (c ? cellNumber(row.getCell(c)) : 0);
-  const hasNumbers = num(cols.rate) > 0 || num(cols.labour) > 0 || num(cols.materials) > 0 || num(cols.total) > 0;
+  const hasNumbers = num(cols.rate) !== 0 || num(cols.labour) !== 0 || num(cols.materials) !== 0 || num(cols.total) !== 0;
   if (hasNumbers) return false;
 
   // Pattern: "1.", "1.2", "A.", "Section 1", "TRADE" all-caps with letters
@@ -364,12 +373,16 @@ async function parseBOQ(filePath) {
     // just a label and a value. Merged label rows mirror their text into every
     // column, so a unit cell that just repeats the label doesn't count.
     const upperLabel = (upperA || upperB);
+    // Headings split across the ref + description cells ("PS" |
+    // "PROVISIONAL SUMS — …") only reveal themselves joined; merged rows
+    // mirror one value into both cells, so join only distinct text.
+    const upperJoined = (upperA && upperB && upperA !== upperB) ? upperA + ' ' + upperB : upperLabel;
 
     // Reference recap detector — distinctive boqGenerator wording, not present
     // on a real tender PS block. Everything from here down is reference-only.
     if (!inReferenceRecap &&
-        (/SHOWN FOR REFERENCE/.test(upperLabel) ||
-         /INCLUDED IN THE RATES ABOVE/.test(upperLabel))) {
+        (/SHOWN FOR REFERENCE/.test(upperJoined) ||
+         /INCLUDED IN THE RATES ABOVE/.test(upperJoined))) {
       inReferenceRecap = true;
     }
     if (inReferenceRecap) return;
@@ -484,17 +497,18 @@ async function parseBOQ(filePath) {
     // amount with no qty/unit (e.g. "J  Glazing & roof lanterns  60000").
     const provTotalCell = numAt(row, cols.total);
     if (!inProvSums &&
-        /\bPROVISIONAL\s+SUMS?\b/.test(upperLabel) && !/\bTOTAL\b/.test(upperLabel) &&
+        /\bPROVISIONAL\s+SUMS?\b/.test(upperJoined) && !/\bTOTAL\b/.test(upperJoined) &&
         provTotalCell <= 0 && !hasUnitOrQty) {
       inProvSums = true;
       // Keep the source document's own numbering when the header carries one
       // ("10.0 PRIME COST & PROVISIONAL SUMS"), so the client copy lists the
       // trade exactly as the delivered BOQ named it. Unnumbered PS blocks keep
       // the legacy PS label.
-      const numbered = (a || b).match(/^\s*([\d]+(?:\.\d+)*)[.)]?\s+(.+)$/);
+      const split = !!(a && b && a !== b); // ref + title in separate cells ("PS" | "PROVISIONAL SUMS — …")
+      const numbered = (split ? a + ' ' + b : (a || b)).match(/^\s*([\d]+(?:\.\d+)*)[.)]?\s+(.+)$/);
       provSection = {
-        number: numbered ? numbered[1] : 'PS',
-        title: numbered ? numbered[2].trim() : 'Provisional Sums',
+        number: numbered ? numbered[1] : (split ? a : 'PS'),
+        title: numbered ? numbered[2].trim() : (split ? b : 'Provisional Sums'),
         items: [], subtotal: { labour: 0, materials: 0, total: 0 }, provisional: true,
       };
       return;
@@ -513,7 +527,8 @@ async function parseBOQ(filePath) {
       // provisional line.
       const mirroredLabel = !!a && a === b && (!unitText || unitText === a);
       if (a && b && provTotalCell > 0 && !mirroredLabel &&
-          !SUBTOTAL_RE.test(upperA) && !SUBTOTAL_RE.test(upperB)) {
+          !SUBTOTAL_RE.test(upperA) && !SUBTOTAL_RE.test(upperB) &&
+          !SECTION_TOTAL_RE.test(upperA) && !SECTION_TOTAL_RE.test(upperB)) {
         provSection.items.push({
           itemRef: a, description: b, unit: unitText, qty: 1, rate: provTotalCell,
           labour: numAt(row, cols.labour), materials: numAt(row, cols.materials),
@@ -542,7 +557,7 @@ async function parseBOQ(filePath) {
         upperLabel.includes('COST SUMMARY') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
-        upperLabel.startsWith('NET MEASURED WORKS') ||
+        upperLabel.startsWith('NET MEASURED') ||
         upperLabel.startsWith('NET CONSTRUCTION COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
@@ -550,10 +565,11 @@ async function parseBOQ(filePath) {
       return;
     }
 
-    // Sub-total row (SUBTOTAL_RE, module scope). Without catching the trailing
-    // "Section 1 subtotal" form the subtotal row was read as a priced line,
-    // doubling the section total.
-    if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB)) {
+    // Sub-total row (SUBTOTAL_RE / SECTION_TOTAL_RE, module scope). Without
+    // catching the trailing "Section 1 subtotal" and "Section 1 total — …"
+    // forms the row was read as a priced line, doubling the section total.
+    if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB) ||
+        SECTION_TOTAL_RE.test(upperA) || SECTION_TOTAL_RE.test(upperB)) {
       if (current) {
         current.subtotal = {
           labour: numAt(row, cols.labour),
@@ -564,9 +580,12 @@ async function parseBOQ(filePath) {
       return;
     }
 
-    // Section header detection (merge OR fill OR numbered/all-caps prefix)
+    // Section header detection (merge OR fill OR numbered/all-caps prefix).
+    // Join a heading split across the ref + description cells ("1" |
+    // "PRELIMINARIES") so the number and the title both survive — reading only
+    // the first cell left every trade named by its bare number.
     if (looksLikeSectionRow(row, mergedRows, cols)) {
-      const label = a || b;
+      const label = (a && b && a !== b) ? a + ' ' + b : (a || b);
       const { number, title } = parseSectionLabel(label, sections.length);
       // Avoid creating an empty section if we get two heading rows in a row
       // before any items — just update the current pointer.
@@ -604,7 +623,7 @@ async function parseBOQ(filePath) {
       unit = '';
     }
 
-    if (description && (qty > 0 || rate > 0 || labour > 0 || materials > 0 || total > 0)) {
+    if (description && (qty > 0 || rate !== 0 || labour !== 0 || materials !== 0 || total !== 0)) {
       if (!current) {
         current = { number: '1', title: 'GENERAL', items: [], subtotal: { labour: 0, materials: 0, total: 0 } };
         sections.push(current);
