@@ -39,7 +39,6 @@ export default function TeamInvitePage() {
         setStatus('error');
         setError(err.message);
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function handleSubmit(e) {
