@@ -46,11 +46,33 @@ function writeFindings(projectId, obj) {
   ).run(projectId, 'findings_json', JSON.stringify(obj || {}));
 }
 
-router.get('/projects/:projectId/findings', authMiddleware, (req, res) => {
+router.get('/projects/:projectId/findings', authMiddleware, async (req, res) => {
   try {
     const project = loadProject(req);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    const findings = readFindings(project.id);
+    let findings = readFindings(project.id);
+    if (!findings) {
+      // Self-heal: some deliveries attach the Findings .docx without seeding
+      // the editable JSON (older uploads, files wired up by side channels).
+      // Parse the delivered document on the fly and store the result, so Edit
+      // works on any project that has the file at all.
+      let docx = project.findings_filename;
+      if (!docx) {
+        const del = db.prepare(
+          "SELECT filename FROM project_deliverables WHERE project_id = ? AND kind = 'findings' AND is_latest = 1 "
+          + "AND (filename LIKE '%.docx' OR filename LIKE '%.doc') ORDER BY version DESC, created_at DESC LIMIT 1"
+        ).get(project.id);
+        if (del && del.filename) docx = del.filename;
+      }
+      if (docx && fs.existsSync(path.join(outputsDir, docx))) {
+        try {
+          await require('./deliverableRoutes').seedFindingsFromDocx(project.id, path.join(outputsDir, docx));
+        } catch (seedErr) {
+          console.error('[Findings] lazy seed error:', seedErr.message);
+        }
+        findings = readFindings(project.id);
+      }
+    }
     if (!findings) {
       return res.status(404).json({ error: 'No findings stored for this project yet — generate the BOQ first.' });
     }
