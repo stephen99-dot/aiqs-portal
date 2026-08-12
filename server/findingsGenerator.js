@@ -15,9 +15,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
   WidthType, AlignmentType, BorderStyle, ShadingType, PageNumber,
-  Header, Footer, LevelFormat,
+  Header, Footer, LevelFormat, VerticalAlign,
 } = require('docx');
 
 // Mix a hex colour towards white — used to derive the tinted title band and
@@ -73,11 +73,59 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
   const children = [];
 
   // ── Masthead: navy company band over a tinted report band ────────────────
-  children.push(new Paragraph({
-    children: [run('  ' + String(company).toUpperCase(), { bold: true, size: 34, color: 'FFFFFF' })],
-    shading: { type: ShadingType.CLEAR, fill: navy },
-    spacing: { after: 0 },
-  }));
+  // With a logo the band becomes a borderless two-cell table (name left, logo
+  // right) so the logo sits INSIDE the navy band rather than floating above it.
+  let logo = null;
+  try { logo = await require('./docTemplates').resolveLogo(b); } catch (e) { /* logo optional */ }
+  const companyRun = run('  ' + String(company).toUpperCase(), { bold: true, size: 34, color: 'FFFFFF' });
+  if (logo && logo.buffer) {
+    const maxW = 150, maxH = 44;
+    let w = maxW, h = maxH;
+    if (logo.naturalWidth && logo.naturalHeight) {
+      const scale = Math.min(maxW / logo.naturalWidth, maxH / logo.naturalHeight);
+      w = Math.max(1, Math.round(logo.naturalWidth * scale));
+      h = Math.max(1, Math.round(logo.naturalHeight * scale));
+    }
+    const NONE = { style: BorderStyle.NONE, size: 0, color: 'auto' };
+    const noBorders = { top: NONE, bottom: NONE, left: NONE, right: NONE };
+    children.push(new Table({
+      rows: [new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [companyRun], spacing: { before: 40, after: 40 } })],
+            width: { size: 6800, type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, fill: navy },
+            verticalAlign: VerticalAlign.CENTER,
+            borders: noBorders,
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new ImageRun({ data: logo.buffer, type: logo.extension || 'png', transformation: { width: w, height: h } })],
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 40, after: 40 },
+            })],
+            width: { size: 2658, type: WidthType.DXA },
+            shading: { type: ShadingType.CLEAR, fill: navy },
+            verticalAlign: VerticalAlign.CENTER,
+            borders: noBorders,
+            margins: { right: 100 },
+          }),
+        ],
+      })],
+      width: { size: 9458, type: WidthType.DXA },
+      columnWidths: [6800, 2658],
+      borders: {
+        top: NONE, bottom: NONE, left: NONE, right: NONE,
+        insideHorizontal: NONE, insideVertical: NONE,
+      },
+    }));
+  } else {
+    children.push(new Paragraph({
+      children: [companyRun],
+      shading: { type: ShadingType.CLEAR, fill: navy },
+      spacing: { after: 0 },
+    }));
+  }
   children.push(new Paragraph({
     children: [run('  FINDINGS REPORT', { bold: true, size: 24, color: navy })],
     shading: { type: ShadingType.CLEAR, fill: band },
