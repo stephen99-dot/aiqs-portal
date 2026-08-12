@@ -507,21 +507,45 @@ router.post('/auth/register', async (req, res) => {
   }
 });
 
+// An authorized email (added on the admin Users page) signs in with its own
+// credentials but resolves to the account owner's user row — everything after
+// authentication behaves exactly as if the owner logged in.
+function findDelegate(email) {
+  try {
+    return db.prepare('SELECT * FROM authorized_emails WHERE email = ?').get(email.toLowerCase());
+  } catch (e) { return null; }
+}
+
 router.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
-    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+    let delegate = null;
+    if (!user) {
+      // Not a primary account — check the authorized sign-in emails.
+      delegate = findDelegate(email);
+      if (!delegate || !delegate.password_hash) return res.status(401).json({ error: 'Invalid email or password' });
+      const delegateValid = await bcrypt.compare(password, delegate.password_hash);
+      if (!delegateValid) return res.status(401).json({ error: 'Invalid email or password' });
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(delegate.user_id);
+      if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+      db.prepare('UPDATE authorized_emails SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(delegate.id);
+    } else {
+      const valid = await bcrypt.compare(password, user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    }
     if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
     // Claim any BOQ credits paid for under this email but not matched to an
     // account at webhook time (e.g. paid via Payment Link with a different email).
     claimPendingCredits(user);
     const token = generateToken(user);
     const planInfo = getUserPlanInfo(user);
-    logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    if (delegate) {
+      logActivity({ event_type: 'login', title: (delegate.full_name || delegate.email) + ' logged in to ' + (user.full_name || user.email) + "'s account", detail: 'Authorized email: ' + delegate.email, user_id: user.id, user_name: user.full_name, user_email: user.email });
+    } else {
+      logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
+    }
     res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1, hasEstimator: !!user.has_estimator } });
   } catch (err) {
     console.error('Login error:', err);
@@ -570,6 +594,57 @@ router.get('/auth/magic', (req, res) => {
   } catch (err) {
     console.error('Magic link login error:', err);
     res.status(500).json({ error: 'Failed to process magic link' });
+  }
+});
+
+// ── Authorized email invites — a colleague invited from the admin Users page
+// opens /team-invite?token=..., sets their own password, and is signed straight
+// in to the account they've been given access to. ──────────────────────────────
+
+router.get('/auth/team-invite', (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+    const delegate = db.prepare('SELECT * FROM authorized_emails WHERE invite_token = ?').get(token);
+    if (!delegate) return res.status(400).json({ error: 'Invalid or expired invite link' });
+    if (delegate.invite_expires_at && new Date().toISOString() > delegate.invite_expires_at) {
+      return res.status(400).json({ error: 'This invite link has expired — ask for a new one' });
+    }
+    const owner = db.prepare('SELECT full_name, company, email FROM users WHERE id = ?').get(delegate.user_id);
+    if (!owner) return res.status(400).json({ error: 'Invalid or expired invite link' });
+    res.json({ email: delegate.email, fullName: delegate.full_name, ownerName: owner.full_name, ownerCompany: owner.company });
+  } catch (err) {
+    console.error('Team invite lookup error:', err);
+    res.status(500).json({ error: 'Failed to load invite' });
+  }
+});
+
+router.post('/auth/team-invite', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+    if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const delegate = db.prepare('SELECT * FROM authorized_emails WHERE invite_token = ?').get(token);
+    if (!delegate) return res.status(400).json({ error: 'Invalid or expired invite link' });
+    if (delegate.invite_expires_at && new Date().toISOString() > delegate.invite_expires_at) {
+      return res.status(400).json({ error: 'This invite link has expired — ask for a new one' });
+    }
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(delegate.user_id);
+    if (!user) return res.status(400).json({ error: 'Invalid or expired invite link' });
+    if (user.suspended) return res.status(403).json({ error: 'This account has been suspended. Contact support for assistance.', suspended: true });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    db.prepare('UPDATE authorized_emails SET password_hash = ?, invite_token = NULL, invite_expires_at = NULL, last_login_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(passwordHash, delegate.id);
+
+    claimPendingCredits(user);
+    const authToken = generateToken(user);
+    const planInfo = getUserPlanInfo(user);
+    logActivity({ event_type: 'login', title: (delegate.full_name || delegate.email) + ' accepted team access to ' + (user.full_name || user.email) + "'s account", detail: 'Authorized email: ' + delegate.email, user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator } });
+  } catch (err) {
+    console.error('Team invite accept error:', err);
+    res.status(500).json({ error: 'Failed to accept invite' });
   }
 });
 
@@ -627,6 +702,24 @@ router.get('/auth/google/callback', async (req, res) => {
 
     // Find or create user
     let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+
+    // Authorized sign-in email? Google has verified they own the address, so
+    // send them into the account they're authorized on instead of creating a
+    // fresh empty one.
+    if (!user) {
+      const delegate = findDelegate(email);
+      if (delegate) {
+        user = db.prepare('SELECT * FROM users WHERE id = ?').get(delegate.user_id);
+        if (user) {
+          if (user.suspended) return res.redirect(`/login?error=account_suspended`);
+          db.prepare('UPDATE authorized_emails SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(delegate.id);
+          logActivity({ event_type: 'login', title: (delegate.full_name || delegate.email) + ' logged in to ' + (user.full_name || user.email) + "'s account via Google", detail: 'Authorized email: ' + delegate.email, user_id: user.id, user_name: user.full_name, user_email: user.email });
+          claimPendingCredits(user);
+          const delegateToken = generateToken(user);
+          return res.redirect(`/auth/google/success?token=${delegateToken}`);
+        }
+      }
+    }
 
     if (!user) {
       // New user — create account
@@ -1281,6 +1374,126 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
   } catch (err) {
     console.error('Magic link error:', err);
     res.status(500).json({ error: 'Failed to generate magic link' });
+  }
+});
+
+// ── Authorized sign-in emails — admin panel on the Users page. Each row lets a
+// colleague sign in with their own email/password (or Google) and land in this
+// user's account with full access. ─────────────────────────────────────────────
+
+function sendTeamInviteEmail({ delegate, owner, inviteUrl }) {
+  const firstName = (delegate.full_name || 'there').split(' ')[0];
+  const ownerLabel = owner.company || owner.full_name || owner.email;
+  return sendEmail({
+    to: delegate.email,
+    subject: `You've been given access to ${ownerLabel}'s AI QS Portal`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+        <div style="text-align:center;margin-bottom:32px;">
+          <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+          <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+        </div>
+        <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Hi ${firstName},</h2>
+        <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 8px;">You've been given access to <strong>${ownerLabel}</strong>'s account on the <strong>AI QS Portal</strong>.</p>
+        <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 24px;">Click the button below to set your own password — you'll then sign in with this email address (${delegate.email}).</p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${inviteUrl}" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Set Up Your Access</a>
+        </div>
+        <p style="font-size:13px;color:#94A3B8;line-height:1.5;">This link expires in 7 days. If it expires, ask for a new invite.</p>
+        <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+        <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+      </div>
+    `,
+  });
+}
+
+router.get('/admin/users/:id/authorized-emails', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const rows = db.prepare('SELECT id, email, full_name, last_login_at, created_at, password_hash IS NOT NULL AND password_hash != \'\' AS has_password, invite_token IS NOT NULL AS invite_pending, invite_expires_at FROM authorized_emails WHERE user_id = ? ORDER BY created_at DESC').all(req.params.id);
+    res.json({ emails: rows.map(r => ({ id: r.id, email: r.email, fullName: r.full_name, hasPassword: !!r.has_password, invitePending: !!r.invite_pending, inviteExpiresAt: r.invite_expires_at, lastLoginAt: r.last_login_at, createdAt: r.created_at })) });
+  } catch (err) {
+    console.error('List authorized emails error:', err);
+    res.status(500).json({ error: 'Failed to load authorized emails' });
+  }
+});
+
+router.post('/admin/users/:id/authorized-emails', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const owner = db.prepare('SELECT id, email, full_name, company FROM users WHERE id = ?').get(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'User not found' });
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const fullName = String(req.body.fullName || '').trim() || null;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
+    if (email === owner.email) return res.status(400).json({ error: 'That is already the account\'s own login email' });
+    if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
+      return res.status(409).json({ error: 'That email already has its own portal account — it can\'t also be an authorized email' });
+    }
+    const existing = db.prepare('SELECT * FROM authorized_emails WHERE email = ?').get(email);
+    if (existing) {
+      return res.status(409).json({ error: existing.user_id === owner.id ? 'That email is already authorized on this account' : 'That email is already authorized on another account' });
+    }
+
+    const id = uuidv4();
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('INSERT INTO authorized_emails (id, user_id, email, full_name, invite_token, invite_expires_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, owner.id, email, fullName, inviteToken, inviteExpires);
+
+    const portalUrl = process.env.PORTAL_URL || PORTAL_BASE_URL;
+    const inviteUrl = `${portalUrl}/team-invite?token=${inviteToken}`;
+    let emailSent = false;
+    try {
+      emailSent = await sendTeamInviteEmail({ delegate: { email, full_name: fullName }, owner, inviteUrl });
+    } catch (mailErr) {
+      console.error('[Team invite] Failed to send:', mailErr.message);
+    }
+
+    logActivity({ event_type: 'admin', title: 'Authorized email added to ' + (owner.full_name || owner.email) + "'s account", detail: email, user_id: owner.id, user_name: owner.full_name, user_email: owner.email });
+    res.status(201).json({ id, email, fullName, hasPassword: false, invitePending: true, inviteExpiresAt: inviteExpires, emailSent, inviteUrl: emailSent ? null : inviteUrl });
+  } catch (err) {
+    console.error('Add authorized email error:', err);
+    res.status(500).json({ error: 'Failed to add authorized email' });
+  }
+});
+
+// Re-issue the set-password invite (new token, 7 days).
+router.post('/admin/users/:id/authorized-emails/:aeId/invite', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const owner = db.prepare('SELECT id, email, full_name, company FROM users WHERE id = ?').get(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'User not found' });
+    const delegate = db.prepare('SELECT * FROM authorized_emails WHERE id = ? AND user_id = ?').get(req.params.aeId, owner.id);
+    if (!delegate) return res.status(404).json({ error: 'Authorized email not found' });
+
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare('UPDATE authorized_emails SET invite_token = ?, invite_expires_at = ? WHERE id = ?').run(inviteToken, inviteExpires, delegate.id);
+
+    const portalUrl = process.env.PORTAL_URL || PORTAL_BASE_URL;
+    const inviteUrl = `${portalUrl}/team-invite?token=${inviteToken}`;
+    let emailSent = false;
+    try {
+      emailSent = await sendTeamInviteEmail({ delegate, owner, inviteUrl });
+    } catch (mailErr) {
+      console.error('[Team invite] Failed to send:', mailErr.message);
+    }
+    res.json({ success: true, emailSent, inviteUrl: emailSent ? null : inviteUrl, inviteExpiresAt: inviteExpires });
+  } catch (err) {
+    console.error('Resend team invite error:', err);
+    res.status(500).json({ error: 'Failed to resend invite' });
+  }
+});
+
+router.delete('/admin/users/:id/authorized-emails/:aeId', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const delegate = db.prepare('SELECT * FROM authorized_emails WHERE id = ? AND user_id = ?').get(req.params.aeId, req.params.id);
+    if (!delegate) return res.status(404).json({ error: 'Authorized email not found' });
+    db.prepare('DELETE FROM authorized_emails WHERE id = ?').run(delegate.id);
+    const owner = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    logActivity({ event_type: 'admin', title: 'Authorized email removed from ' + (owner ? (owner.full_name || owner.email) : 'account'), detail: delegate.email, user_id: req.params.id, user_name: owner && owner.full_name, user_email: owner && owner.email });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Remove authorized email error:', err);
+    res.status(500).json({ error: 'Failed to remove authorized email' });
   }
 });
 

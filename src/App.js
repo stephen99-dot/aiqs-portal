@@ -19,6 +19,7 @@ import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
+import TeamInvitePage from './pages/TeamInvitePage';
 import VariationsPage from './pages/VariationsPage';
 import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
 import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
@@ -100,6 +101,7 @@ function AppInner() {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
+        <Route path="/team-invite" element={<TeamInvitePage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
         {/* Public quote acceptance — same pattern, the builder's client opens this. */}
