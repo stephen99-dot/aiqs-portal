@@ -36,20 +36,21 @@ export default function ShareLinkModal({ url, title, message, onClose, t }) {
   };
 
   return (
+    // Standard modal classes: centred dialog on desktop, and the global
+    // max-width: 640px media query turns it into a bottom sheet on phones —
+    // hard-coding the sheet inline pinned it to the bottom of tall screens.
     <div
       onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', zIndex: 1000,
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      }}
+      className="modal-overlay"
+      style={{ zIndex: 1000 }}
     >
       <div
         onClick={e => e.stopPropagation()}
         className="modal-card"
         style={{
           background: t.card, color: t.text, maxWidth: 480,
-          borderRadius: '16px 16px 0 0', padding: '20px 20px 28px',
-          border: '1px solid ' + t.border, borderBottom: 'none', boxSizing: 'border-box',
+          borderRadius: 16, padding: '20px 20px 28px',
+          border: '1px solid ' + t.border, boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
