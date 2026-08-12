@@ -1,226 +1,259 @@
-const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HeadingLevel, ShadingType, PageNumber, NumberFormat } = require('docx');
+// ═══════════════════════════════════════════════════════════════════════════════
+// FINDINGS REPORT GENERATOR — server/findingsGenerator.js
+//
+// Renders the structured findings JSON as a branded .docx in the house report
+// style (modelled on the delivered tender findings reports): Arial, a navy
+// masthead band with the company name over a tinted "FINDINGS REPORT" band,
+// numbered section headings ruled in the accent colour, real bulleted lists,
+// a bordered cost table with a navy header row, and a running page header /
+// "Page X of Y" footer.
+//
+// The section headings keep the wording the deliverable seeder recognises
+// (Project description / Scope summary / Key findings / Assumptions /
+// Exclusions / Recommendations), so a delivered report round-trips back into
+// the Findings editor.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const {
+  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+  WidthType, AlignmentType, BorderStyle, ShadingType, PageNumber,
+  Header, Footer, LevelFormat,
+} = require('docx');
+
+// Mix a hex colour towards white — used to derive the tinted title band and
+// total-row fill from the brand's primary colour.
+function tint(hex6, amount) {
+  const n = parseInt(hex6, 16);
+  const mix = (v) => Math.round(v + (255 - v) * amount);
+  const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), bl = mix(n & 255);
+  return ((r << 16) | (g << 8) | bl).toString(16).padStart(6, '0').toUpperCase();
+}
 
 async function generateFindingsReport(findings, clientName, projectName, branding) {
   const ref = findings.reference || ('AI-QS-' + Date.now().toString(36).toUpperCase().slice(-6));
 
-  // Pull colours and font from branding when present, otherwise the legacy
-  // navy + amber defaults. docx wants 6-char hex (no leading #).
   const b = branding || {};
   function hex(s, fallback) {
     if (typeof s !== 'string') return fallback;
     const m = s.replace('#', '').toUpperCase();
     return /^[0-9A-F]{6}$/.test(m) ? m : fallback;
   }
-  const navy = hex(b.primary_colour, '1B2A4A');
-  const amber = hex(b.accent_colour, 'D97706');
+  const navy = hex(b.primary_colour, '1F3864');
+  const gold = hex(b.accent_colour, 'C9A227');
+  const band = tint(navy, 0.85);
+  const totalFill = tint(navy, 0.90);
+  const GREY = '595959';
   const docFont = (b.template === 'professional' || b.template === 'heritage') ? 'Cambria' : 'Arial';
   const company = b.company_name || 'The AI QS';
   const footerLine = b.footer_text || 'theaiqs.co.uk';
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const run = (text, opts = {}) => new TextRun({ text, font: docFont, ...opts });
+  const body = (text, opts = {}) => new Paragraph({
+    children: [run(text, { size: 20, ...opts })], spacing: { after: 120 },
+  });
+  const bullet = (text) => new Paragraph({
+    children: [run(text, { size: 20 })],
+    numbering: { reference: 'findings-bullets', level: 0 },
+    spacing: { after: 70 },
+  });
+
+  // Numbered section headings, ruled in the accent colour like the delivered
+  // reports. Numbering is sequential over the sections actually present.
+  let sectionNo = 0;
+  const heading = (title) => {
+    sectionNo += 1;
+    return new Paragraph({
+      children: [run(sectionNo + '.  ' + title, { bold: true, size: 26, color: navy })],
+      border: { bottom: { color: gold, size: 8, style: BorderStyle.SINGLE } },
+      spacing: { before: 280, after: 140 },
+    });
+  };
 
   const children = [];
 
-  // Customer logo at the very top, centred — optional, never blocks the report.
-  try {
-    const logo = await require('./docTemplates').resolveLogo(b);
-    if (logo && logo.buffer) {
-      const maxW = 150, maxH = 56;
-      let w = maxW, h = maxH;
-      if (logo.naturalWidth && logo.naturalHeight) {
-        const scale = Math.min(maxW / logo.naturalWidth, maxH / logo.naturalHeight);
-        w = Math.max(1, Math.round(logo.naturalWidth * scale));
-        h = Math.max(1, Math.round(logo.naturalHeight * scale));
-      }
-      children.push(new Paragraph({
-        children: [new ImageRun({ data: logo.buffer, transformation: { width: w, height: h } })],
-        alignment: AlignmentType.CENTER, spacing: { after: 200 }
-      }));
-    }
-  } catch (e) { /* logo is optional */ }
-
-  // Title
+  // ── Masthead: navy company band over a tinted report band ────────────────
   children.push(new Paragraph({
-    children: [new TextRun({ text: 'FINDINGS REPORT', bold: true, size: 36, color: navy, font: docFont })],
-    alignment: AlignmentType.CENTER, spacing: { after: 100 }
+    children: [run('  ' + String(company).toUpperCase(), { bold: true, size: 34, color: 'FFFFFF' })],
+    shading: { type: ShadingType.CLEAR, fill: navy },
+    spacing: { after: 0 },
   }));
   children.push(new Paragraph({
-    children: [new TextRun({ text: projectName, bold: true, size: 28, color: navy, font: docFont })],
-    alignment: AlignmentType.CENTER, spacing: { after: 100 }
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: 'Reference: ' + ref + '  |  Date: ' + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }), size: 20, color: '666666', font: docFont })],
-    alignment: AlignmentType.CENTER, spacing: { after: 200 }
-  }));
-  children.push(new Paragraph({
-    children: [new TextRun({ text: 'Prepared for: ' + clientName, size: 20, color: '666666', font: docFont })],
-    alignment: AlignmentType.CENTER, spacing: { after: 400 }
+    children: [run('  FINDINGS REPORT', { bold: true, size: 24, color: navy })],
+    shading: { type: ShadingType.CLEAR, fill: band },
+    spacing: { after: 240 },
   }));
 
-  // Divider
-  children.push(new Paragraph({ border: { bottom: { color: navy, size: 2, style: BorderStyle.SINGLE } }, spacing: { after: 300 } }));
+  // ── Title block ──────────────────────────────────────────────────────────
+  children.push(new Paragraph({
+    children: [run(projectName, { bold: true, size: 28, color: navy })],
+    spacing: { after: 60 },
+  }));
+  const subtitleBits = [];
+  if (findings.project_type) subtitleBits.push(findings.project_type);
+  if (findings.location) subtitleBits.push(findings.location);
+  if (subtitleBits.length) {
+    children.push(new Paragraph({
+      children: [run(subtitleBits.join(' — '), { size: 22 })],
+      spacing: { after: 60 },
+    }));
+  }
+  children.push(new Paragraph({
+    children: [run(
+      'Prepared for ' + (clientName || 'Client') + '   |   Reference ' + ref + '   |   ' + dateStr,
+      { size: 19, color: GREY }
+    )],
+    spacing: { after: 240 },
+  }));
 
-  // Project Description
+  // ── 1. Project description ───────────────────────────────────────────────
   if (findings.description) {
-    children.push(new Paragraph({ text: '1. PROJECT DESCRIPTION', heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-    children.push(new Paragraph({
-      children: [new TextRun({ text: findings.description, size: 22, font: docFont })],
-      spacing: { after: 200 }
-    }));
-  }
-  if (findings.project_type) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: 'Project Type: ', bold: true, size: 22, font: docFont }), new TextRun({ text: findings.project_type, size: 22, font: docFont })],
-      spacing: { after: 100 }
-    }));
-  }
-  if (findings.location) {
-    children.push(new Paragraph({
-      children: [new TextRun({ text: 'Location: ', bold: true, size: 22, font: docFont }), new TextRun({ text: findings.location, size: 22, font: docFont })],
-      spacing: { after: 200 }
-    }));
+    children.push(heading('Project description'));
+    children.push(body(findings.description));
   }
 
-  // Scope Summary
+  // ── 2. Scope summary ─────────────────────────────────────────────────────
   if (findings.scope_summary) {
-    children.push(new Paragraph({ text: '2. SCOPE SUMMARY', heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-    children.push(new Paragraph({
-      children: [new TextRun({ text: findings.scope_summary, size: 22, font: docFont })],
-      spacing: { after: 200 }
-    }));
+    children.push(heading('Scope summary'));
+    children.push(body(findings.scope_summary));
   }
 
-  // Key Findings
+  // ── 3. Key findings ──────────────────────────────────────────────────────
   if (findings.key_findings && findings.key_findings.length > 0) {
-    children.push(new Paragraph({ text: '3. KEY FINDINGS', heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-    for (var kf of findings.key_findings) {
+    children.push(heading('Key findings'));
+    for (const kf of findings.key_findings) {
       children.push(new Paragraph({
-        children: [new TextRun({ text: kf.title || 'Finding', bold: true, size: 22, font: docFont, color: navy })],
-        spacing: { before: 100, after: 50 }
+        children: [run(kf.title || 'Finding', { bold: true, size: 20, color: navy })],
+        spacing: { before: 120, after: 60 },
       }));
-      if (kf.detail) {
-        children.push(new Paragraph({
-          children: [new TextRun({ text: kf.detail, size: 22, font: docFont })],
-          spacing: { after: 50 }
-        }));
-      }
-      if (kf.items) {
-        for (var bi of kf.items) {
-          children.push(new Paragraph({
-            children: [new TextRun({ text: '\u2022 ' + bi, size: 22, font: docFont })],
-            indent: { left: 400 }, spacing: { after: 30 }
-          }));
-        }
-      }
+      if (kf.detail) children.push(body(kf.detail));
+      for (const bi of (kf.items || [])) children.push(bullet(bi));
     }
   }
 
-  // Cost Summary Table
+  // ── 4. Cost summary ──────────────────────────────────────────────────────
   if (findings.cost_summary) {
-    var cs = findings.cost_summary;
-    // Use the currency symbol supplied with the cost summary; only fall back
-    // to \u00a3 when nothing was passed. This stops Irish/Euro projects from
-    // rendering with sterling totals on the report.
-    var cur = (typeof cs.currency === 'string' && cs.currency) ? cs.currency : '\u00a3';
-    children.push(new Paragraph({ text: '4. COST SUMMARY', heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 100 } }));
+    const cs = findings.cost_summary;
+    const cur = (typeof cs.currency === 'string' && cs.currency) ? cs.currency : '£';
+    const money = (v) => cur + (v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    children.push(heading('Cost summary'));
 
-    var tableRows = [];
-    // Header
-    tableRows.push(new TableRow({
+    const CELL_MARGINS = { top: 60, bottom: 60, left: 100, right: 100 };
+    const cell = (text, { w, bold = false, right = false, fill = null, white = false } = {}) => new TableCell({
+      children: [new Paragraph({
+        children: [run(text, { size: 19, bold, color: white ? 'FFFFFF' : undefined })],
+        alignment: right ? AlignmentType.RIGHT : AlignmentType.LEFT,
+      })],
+      width: { size: w, type: WidthType.DXA },
+      margins: CELL_MARGINS,
+      shading: fill ? { type: ShadingType.CLEAR, fill } : undefined,
+    });
+
+    const rows = [new TableRow({
       children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Section', bold: true, size: 20, color: 'FFFFFF', font: docFont })], alignment: AlignmentType.LEFT })], shading: { type: ShadingType.SOLID, color: navy }, width: { size: 65, type: WidthType.PERCENTAGE } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Total', bold: true, size: 20, color: 'FFFFFF', font: docFont })], alignment: AlignmentType.RIGHT })], shading: { type: ShadingType.SOLID, color: navy }, width: { size: 35, type: WidthType.PERCENTAGE } })
-      ]
-    }));
-
-    // Section rows
-    if (cs.sections) {
-      for (var i = 0; i < cs.sections.length; i++) {
-        var sec = cs.sections[i];
-        var bg = i % 2 === 0 ? 'F5F5F5' : 'FFFFFF';
-        tableRows.push(new TableRow({
-          children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: sec.name || 'Section', size: 20, font: docFont })], alignment: AlignmentType.LEFT })], shading: { type: ShadingType.SOLID, color: bg } }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cur + (sec.total || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: { type: ShadingType.SOLID, color: bg } })
-          ]
-        }));
-      }
-    }
-
-    // Totals
-    var addSummaryRow = function(label, value, bold, bg) {
-      tableRows.push(new TableRow({
+        cell('Section', { w: 7400, bold: true, fill: navy, white: true }),
+        cell('Net cost', { w: 1800, bold: true, right: true, fill: navy, white: true }),
+      ],
+    })];
+    for (const sec of (cs.sections || [])) {
+      rows.push(new TableRow({
         children: [
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: label, bold: bold, size: 20, font: docFont })], alignment: AlignmentType.LEFT })], shading: bg ? { type: ShadingType.SOLID, color: bg } : undefined }),
-          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: cur + (value || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), bold: bold, size: 20, font: docFont })], alignment: AlignmentType.RIGHT })], shading: bg ? { type: ShadingType.SOLID, color: bg } : undefined })
-        ]
+          cell(sec.name || 'Section', { w: 7400 }),
+          cell(money(sec.total), { w: 1800, right: true }),
+        ],
       }));
-    };
+    }
+    const totalRow = (label, value, { bold = false, fill = null } = {}) => rows.push(new TableRow({
+      children: [
+        cell(label, { w: 7400, bold, fill }),
+        cell(money(value), { w: 1800, bold, right: true, fill }),
+      ],
+    }));
+    totalRow('Net total', cs.net_total, { bold: true });
+    if (cs.contingency) totalRow('Contingency at ' + (cs.contingency_pct != null ? cs.contingency_pct : 7.5) + '%', cs.contingency);
+    if (cs.ohp) totalRow('Overheads & profit at ' + (cs.ohp_pct != null ? cs.ohp_pct : 12) + '%', cs.ohp);
+    if (cs.vat) totalRow('VAT at ' + (cs.vat_rate != null ? cs.vat_rate : 20) + '%', cs.vat);
+    totalRow('TENDER TOTAL', cs.grand_total, { bold: true, fill: totalFill });
 
-    addSummaryRow('Net Total', cs.net_total, true, 'E8E8E8');
-    if (cs.contingency) addSummaryRow('Contingency (' + (cs.contingency_pct || 7.5) + '%)', cs.contingency, false);
-    if (cs.ohp) addSummaryRow('Overheads & Profit (' + (cs.ohp_pct || 12) + '%)', cs.ohp, false);
-    if (cs.vat) addSummaryRow('VAT (' + (cs.vat_rate != null ? cs.vat_rate : 20) + '%)', cs.vat, false);
-    addSummaryRow('GRAND TOTAL', cs.grand_total, true, 'D6E4F0');
-
+    const border = { style: BorderStyle.SINGLE, size: 4, color: 'auto' };
     children.push(new Table({
-      rows: tableRows,
-      width: { size: 100, type: WidthType.PERCENTAGE }
+      rows,
+      width: { size: 9200, type: WidthType.DXA },
+      columnWidths: [7400, 1800],
+      borders: {
+        top: border, bottom: border, left: border, right: border,
+        insideHorizontal: border, insideVertical: border,
+      },
     }));
   }
 
-  // Assumptions
-  if (findings.assumptions && findings.assumptions.length > 0) {
-    children.push(new Paragraph({ text: '5. ASSUMPTIONS', heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 100 } }));
-    for (var a of findings.assumptions) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: '\u2022 ' + a, size: 22, font: docFont })],
-        indent: { left: 200 }, spacing: { after: 50 }
-      }));
-    }
-  }
+  // ── 5–7. Assumptions / Exclusions / Recommendations ─────────────────────
+  const bulletSection = (title, arr) => {
+    if (!arr || arr.length === 0) return;
+    children.push(heading(title));
+    for (const item of arr) children.push(bullet(item));
+  };
+  bulletSection('Assumptions', findings.assumptions);
+  bulletSection('Exclusions', findings.exclusions);
+  bulletSection('Recommendations', findings.recommendations);
 
-  // Exclusions
-  if (findings.exclusions && findings.exclusions.length > 0) {
-    children.push(new Paragraph({ text: '6. EXCLUSIONS', heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-    for (var ex of findings.exclusions) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: '\u2022 ' + ex, size: 22, font: docFont })],
-        indent: { left: 200 }, spacing: { after: 50 }
-      }));
-    }
-  }
-
-  // Recommendations
-  if (findings.recommendations && findings.recommendations.length > 0) {
-    children.push(new Paragraph({ text: '7. RECOMMENDATIONS', heading: HeadingLevel.HEADING_2, spacing: { before: 200, after: 100 } }));
-    for (var rec of findings.recommendations) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: '\u2022 ' + rec, size: 22, font: docFont })],
-        indent: { left: 200 }, spacing: { after: 50 }
-      }));
-    }
-  }
-
-  // Footer
-  children.push(new Paragraph({ border: { top: { color: navy, size: 1, style: BorderStyle.SINGLE } }, spacing: { before: 400, after: 100 } }));
+  // ── Closing note ─────────────────────────────────────────────────────────
+  // Keep the leading "Issued by" wording — the deliverable seeder uses it to
+  // stop parsing at the boilerplate.
   children.push(new Paragraph({
-    children: [new TextRun({
-      text: 'Issued by ' + company + (footerLine ? ' · ' + footerLine : '')
+    children: [run(
+      'Issued by ' + company + (footerLine ? ' · ' + footerLine : '')
         + '. Estimates are approximate, based on information provided and current market rates. Subject to detailed measurement and site survey.',
-      size: 18, italic: true, color: '999999', font: docFont
-    })],
-    alignment: AlignmentType.CENTER
+      { size: 16, italics: true, color: GREY }
+    )],
+    border: { top: { color: 'C9CDD4', size: 4, style: BorderStyle.SINGLE } },
+    spacing: { before: 360 },
   }));
 
   const doc = new Document({
+    numbering: {
+      config: [{
+        reference: 'findings-bullets',
+        levels: [{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: '●',
+          alignment: AlignmentType.LEFT,
+          style: { paragraph: { indent: { left: 620, hanging: 260 } } },
+        }],
+      }],
+    },
     sections: [{
-      properties: { page: { margin: { top: 1000, bottom: 800, left: 1000, right: 1000 } } },
-      children: children
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838 },
+          margin: { top: 1224, bottom: 1224, left: 1224, right: 1224, header: 708, footer: 708 },
+        },
+      },
+      headers: {
+        default: new Header({
+          children: [new Paragraph({
+            children: [run(company + '  |  ' + projectName + '  |  Findings Report', { size: 16, color: GREY })],
+            alignment: AlignmentType.RIGHT,
+            border: { bottom: { color: navy, size: 4, style: BorderStyle.SINGLE } },
+          })],
+        }),
+      },
+      footers: {
+        default: new Footer({
+          children: [new Paragraph({
+            children: [
+              run(ref + '  |  Page ', { size: 16, color: GREY }),
+              new TextRun({ children: [PageNumber.CURRENT], font: docFont, size: 16, bold: true, color: GREY }),
+              run(' of ', { size: 16, color: GREY }),
+              new TextRun({ children: [PageNumber.TOTAL_PAGES], font: docFont, size: 16, color: GREY }),
+            ],
+            alignment: AlignmentType.RIGHT,
+          })],
+        }),
+      },
+      children,
     }],
-    styles: {
-      paragraphStyles: [{
-        id: 'Heading2', name: 'Heading 2', run: { font: docFont, size: 26, bold: true, color: navy }
-      }]
-    }
   });
 
   const buf = await Packer.toBuffer(doc);
