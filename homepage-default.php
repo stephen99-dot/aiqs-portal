@@ -117,6 +117,18 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
+  "@type": "Service",
+  "serviceType": "Quantity surveying",
+  "name": "AI-powered Bills of Quantities, cost estimates and feasibility reports",
+  "description": "Upload construction drawings and receive a professionally formatted Bill of Quantities with current UK and Ireland market rates, plus a findings report — same day.",
+  "url": "https://theaiqs.co.uk/",
+  "provider": { "@type": "Organization", "name": "AI QS", "url": "https://theaiqs.co.uk/" },
+  "areaServed": ["GB", "IE"]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
     {

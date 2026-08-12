@@ -1,0 +1,6 @@
+# The portal app: login, workspace pages and tokened client documents.
+# None of it belongs in a search index — the indexable site is
+# theaiqs.co.uk, and letting the app domain get crawled only splits
+# ranking signals between the two and risks surfacing client documents.
+User-agent: *
+Disallow: /
