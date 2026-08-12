@@ -327,21 +327,28 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .demo-dl-btn { display: flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 7px; font-size: 11px; font-weight: 600; border: none; }
 .demo-dl-btn.xl { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.15); color: #10B981; }
 .demo-dl-btn.wd { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.15); color: #3B82F6; }
+.demo-dl-btn.cc { background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.15); color: #A855F7; }
+.demo-status { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 6px 12px; border-radius: 7px; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.15); font-size: 11px; font-weight: 600; color: var(--accent); }
+.demo-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: demoPulse 1.4s ease infinite; }
+.demo-timeskip { display: flex; align-items: center; gap: 10px; align-self: stretch; max-width: 100%; margin: 2px 0; }
+.demo-timeskip::before, .demo-timeskip::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.demo-timeskip span { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
 .demo-input-bar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; margin-top: 14px; border-radius: 10px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); }
 .demo-input-bar input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-body); font-size: 12.5px; }
 .demo-input-bar input::placeholder { color: var(--text-muted); }
 .demo-send { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .demo-send svg { width: 14px; height: 14px; color: var(--bg-primary); }
 .demo-steps { display: flex; justify-content: center; margin-top: 48px; position: relative; }
-.demo-step { display: flex; flex-direction: column; align-items: center; width: 200px; position: relative; z-index: 1; }
+.demo-step { display: flex; flex-direction: column; align-items: center; width: 180px; position: relative; z-index: 1; }
 .demo-step-num { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; font-family: var(--font-mono); background: var(--bg-card); border: 2px solid var(--border); color: var(--text-muted); transition: all 0.6s ease; z-index: 2; position: relative; }
 .demo-step.done .demo-step-num { background: rgba(245,158,11,0.12); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 30px rgba(245,158,11,0.1); }
 .demo-step-label { margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text-muted); transition: color 0.6s; }
 .demo-step.done .demo-step-label { color: var(--text-primary); }
 .demo-step-desc { margin-top: 4px; font-size: 11px; color: var(--text-muted); text-align: center; opacity: 0.6; }
 .demo-connector { position: absolute; top: 22px; height: 2px; background: var(--border); z-index: 0; transition: all 0.6s; }
-.demo-connector.c1 { left: calc(16.6% + 22px); width: calc(33.3% - 44px); }
-.demo-connector.c2 { left: calc(50% + 22px); width: calc(33.3% - 44px); }
+.demo-connector.c1 { left: calc(50% - 270px + 22px); width: 136px; }
+.demo-connector.c2 { left: calc(50% - 90px + 22px); width: 136px; }
+.demo-connector.c3 { left: calc(50% + 90px + 22px); width: 136px; }
 .demo-connector.done { background: var(--accent); box-shadow: 0 0 12px rgba(245,158,11,0.15); }
 .deliverables { padding: 100px 0; position: relative; }
 .del-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 56px; }
@@ -644,8 +651,8 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   <div class="container">
     <div class="how-header">
       <div class="section-label">How It Works</div>
-      <h2 class="section-title">From Drawings to BOQ<br>in Minutes, Not Days</h2>
-      <p class="section-sub">Upload your construction drawings, chat with our AI quantity surveyor, and get a professionally formatted Bill of Quantities — complete with your own trained rates.</p>
+      <h2 class="section-title">Submit Your Drawings.<br>Full BOQ Back Same Day.</h2>
+      <p class="section-sub">Send us your construction drawings and we produce a full detailed Bill of Quantities and Findings Report the same day — then generate a polished client copy to send straight on to your client.</p>
     </div>
     <div class="demo-stage" id="demoStage">
       <div class="demo-browser">
@@ -666,7 +673,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
             <div class="demo-messages" id="demoMessages"></div>
             <div class="demo-input-bar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);flex-shrink:0"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-              <input type="text" placeholder="Upload drawings or describe your project..." id="demoInput" readonly>
+              <input type="text" placeholder="Submit your drawings to get started..." id="demoInput" readonly>
               <div class="demo-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
             </div>
           </div>
@@ -675,9 +682,11 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       <div class="demo-steps" id="demoSteps">
         <div class="demo-connector c1" id="dConn1"></div>
         <div class="demo-connector c2" id="dConn2"></div>
-        <div class="demo-step" id="dStep1"><div class="demo-step-num">1</div><div class="demo-step-label">Upload Drawings</div><div class="demo-step-desc">PDF plans & specs</div></div>
-        <div class="demo-step" id="dStep2"><div class="demo-step-num">2</div><div class="demo-step-label">AI Analysis</div><div class="demo-step-desc">Measures & prices everything</div></div>
-        <div class="demo-step" id="dStep3"><div class="demo-step-num">3</div><div class="demo-step-label">Documents Ready</div><div class="demo-step-desc">Excel BOQ & Findings Report</div></div>
+        <div class="demo-connector c3" id="dConn3"></div>
+        <div class="demo-step" id="dStep1"><div class="demo-step-num">1</div><div class="demo-step-label">Submit Drawings</div><div class="demo-step-desc">Plans, elevations & specs</div></div>
+        <div class="demo-step" id="dStep2"><div class="demo-step-num">2</div><div class="demo-step-label">We Get to Work</div><div class="demo-step-desc">Full detailed take-off & pricing</div></div>
+        <div class="demo-step" id="dStep3"><div class="demo-step-num">3</div><div class="demo-step-label">Same-Day Delivery</div><div class="demo-step-desc">Excel BOQ & Findings Report</div></div>
+        <div class="demo-step" id="dStep4"><div class="demo-step-num">4</div><div class="demo-step-label">Client Copy</div><div class="demo-step-desc">Ready to send to your client</div></div>
       </div>
     </div>
   </div>
@@ -1063,8 +1072,14 @@ document.addEventListener('click', function(e) {
       else { clearInterval(iv); setTimeout(function() { inputEl.value = ''; resolve(); }, 300); } }, 35); }); }
   function markStep(n) { document.getElementById('dStep' + n).classList.add('done');
     if (n > 1) document.getElementById('dConn' + (n - 1)).classList.add('done'); }
-  function resetSteps() { [1,2,3].forEach(function(n) { document.getElementById('dStep' + n).classList.remove('done'); });
-    [1,2].forEach(function(n) { document.getElementById('dConn' + n).classList.remove('done'); }); }
+  function resetSteps() { [1,2,3,4].forEach(function(n) { document.getElementById('dStep' + n).classList.remove('done'); });
+    [1,2,3].forEach(function(n) { document.getElementById('dConn' + n).classList.remove('done'); }); }
+  function addTimeskip(text) {
+    var div = document.createElement('div'); div.className = 'demo-timeskip';
+    div.innerHTML = '<span>' + text + '</span>';
+    div.style.opacity = '0'; div.style.transform = 'translateY(10px)'; chat.appendChild(div);
+    requestAnimationFrame(function() { div.style.transition = 'opacity 0.5s ease, transform 0.5s ease'; div.style.opacity = '1'; div.style.transform = 'translateY(0)'; });
+    chat.scrollTop = chat.scrollHeight; }
   var boqHTML = '<div class="demo-boq"><div class="demo-boq-hdr"><span>Item</span><span>Description</span><span>Unit</span><span>Qty</span><span>Total</span></div>'
     + '<div class="demo-boq-row sec">3. Substructure</div>'
     + '<div class="demo-boq-row"><span>3.1</span><span>Strip foundations 600×250 <span class="demo-rbadge v">Verified</span></span><span>m</span><span>18.4</span><span>£1,601</span></div>'
@@ -1076,22 +1091,27 @@ document.addEventListener('click', function(e) {
     + '<div class="demo-boq-row sub"><span></span><span></span><span></span><span></span><span>£67,284</span></div></div>';
   var dlHTML = '<div class="demo-dl"><div class="demo-dl-btn xl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2M8 17h2M14 13h2M14 17h2"/></svg> BOQ-4-Acresfield.xlsx</div>'
     + '<div class="demo-dl-btn wd"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg> Findings-Report.docx</div></div>';
+  var ccHTML = '<div class="demo-dl"><div class="demo-dl-btn cc"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg> Client-Copy-4-Acresfield.pdf</div></div>';
   async function runDemo() { chat.innerHTML = ''; resetSteps(); await sleep(800);
-    await typeInput('Here are the drawings for 4 Acresfield Road');
+    await typeInput('Sending over the drawings for 4 Acresfield Road');
     addMsg('user', 'Here are the drawings for 4 Acresfield Road — single storey rear extension, cavity wall, flat roof.'
       + '<div class="demo-upload"><div class="demo-upload-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>'
       + '<div><div class="demo-upload-name">4-Acresfield-Plans.pdf</div><div class="demo-upload-size">2.4 MB — Floor plan, elevations, sections</div></div></div>');
     markStep(1); await sleep(1400);
-    addTyping(); markStep(2); await sleep(3000); removeTyping();
-    addMsg('ai', 'I’ve measured the extension at approximately 24.0m² ground floor area with cavity wall construction to three elevations and a flat roof with parapet detail.'
-      + '<br><br>External walls total 42.6m² net of openings. I’ve assumed strip foundations at 600×250mm, 18.4m run, with a 150mm reinforced concrete slab.'
-      + '<br><br>The total net construction cost comes to <strong>£67,284</strong> with 7.5% contingency and 12% OH&P bringing it to <strong style="color:var(--accent)">£80,856 excluding VAT</strong>.'
-      + '<br><br>86 line items across 15 sections. 34 items used your verified rates, the remainder use current UK generic rates.');
-    await sleep(2200);
-    await typeInput('Generate documents'); addMsg('user', 'Generate documents'); await sleep(900);
-    addTyping(); await sleep(2400); removeTyping(); markStep(3);
-    addMsg('ai', 'Your documents have been generated for <strong>4 Acresfield Road</strong>. 86 line items across 15 sections, total project value £80,856 (excl. VAT).'
-      + '<br><br>Download your Excel BOQ and Findings Report below.' + boqHTML + dlHTML);
+    addTyping(); await sleep(2200); removeTyping(); markStep(2);
+    addMsg('ai', 'Thanks — your drawings for <strong>4 Acresfield Road</strong> have been received and are with our QS team now.'
+      + '<br><br>We’re producing your full detailed Bill of Quantities and Findings Report — every element measured, priced with current UK rates, and sense-checked before delivery.'
+      + '<div class="demo-status"><span class="demo-status-dot"></span> In production — delivery today</div>');
+    await sleep(2400);
+    addTimeskip('Later that day — 3:47pm'); await sleep(1400);
+    addTyping(); await sleep(2200); removeTyping(); markStep(3);
+    addMsg('ai', 'Your documents for <strong>4 Acresfield Road</strong> are ready.'
+      + '<br><br>Full detailed BOQ — 86 line items across 15 sections — plus a Findings Report covering scope, assumptions and risk flags. Total project value <strong style="color:var(--accent)">£80,856 excluding VAT</strong>.'
+      + boqHTML + dlHTML);
+    await sleep(3200);
+    await typeInput('Generate a client copy'); addMsg('user', 'Generate a client copy'); await sleep(900);
+    addTyping(); await sleep(2200); removeTyping(); markStep(4);
+    addMsg('ai', 'Client copy generated — a clean, presentation-ready version with summary pricing, ready to send straight to your client.' + ccHTML);
     await sleep(9000);
     if (AIQS_REDUCE_MOTION) return;
     if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; } }
