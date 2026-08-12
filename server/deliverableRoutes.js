@@ -105,7 +105,12 @@ async function seedFindingsFromDocx(projectId, docxPath) {
   const lines = raw.split(/\r?\n/);
   const buckets = {};
   let current = null;
+  // The document's closing boilerplate ("Issued by … Estimates are
+  // approximate…") sits after the last section heading and would otherwise be
+  // swept into that section's bullets.
+  const FOOTER_RE = /^(issued by\b|this document is prepared\b|estimates are approximate\b)/i;
   for (const line of lines) {
+    if (FOOTER_RE.test(line.trim())) break;
     const head = isHeading(line);
     if (head) { current = head; buckets[current] = buckets[current] || []; continue; }
     if (current && line.trim()) buckets[current].push(line.trim());
@@ -358,3 +363,6 @@ router.delete('/deliverables/:id', authMiddleware, (req, res) => {
 });
 
 module.exports = router;
+// Reused by findingsRoutes as a lazy fallback: a project whose findings .docx
+// arrived without the editable JSON gets seeded on first open of the editor.
+module.exports.seedFindingsFromDocx = seedFindingsFromDocx;
