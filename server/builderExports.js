@@ -656,7 +656,10 @@ async function parseBOQ(filePath) {
           it.materials = round2(it.total * ((it.materials || 0) / lm));
         }
       } else if (!(it.total > 0)) {
-        it.total = lm > 0 ? round2(lm) : round2((it.rate || 0) * (it.qty || 0));
+        // lm !== 0, not lm > 0: a credit line's split is negative and is still
+        // the line's value — falling through to rate × qty loses it when the
+        // rate cell is empty.
+        it.total = lm !== 0 ? round2(lm) : round2((it.rate || 0) * (it.qty || 0));
       }
     }
     // Recompute subtotals from the normalised items so they always agree

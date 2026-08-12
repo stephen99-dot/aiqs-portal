@@ -62,8 +62,10 @@ function unitRates(it) {
 // composite (single-rate) BOQ carries it only in `total`, with no split — fall
 // back to that so composite lines don't read as £0 everywhere.
 function lineTotal(it) {
+  // Non-zero, not positive: a credit line ("Deduct: deposit already
+  // discharged…") carries a NEGATIVE split, and is still a split line.
   const lm = num(it.labour) + num(it.materials);
-  return lm > 0 ? lm : num(it.total);
+  return lm !== 0 ? lm : num(it.total);
 }
 
 export default function BuilderPackPage() {
@@ -276,8 +278,12 @@ export default function BuilderPackPage() {
     () => sections.map((s) => s.items.reduce(
       (acc, it) => {
         const ls = num(it.labour), ms = num(it.materials);
-        // Composite lines (no labour/materials split) contribute their `total`.
-        const comp = (ls + ms) > 0 ? 0 : num(it.total);
+        // Composite lines (no labour/materials split at all) contribute their
+        // `total`. The test must be "no split", not "split ≤ 0": a credit line
+        // ("Deduct: deposit already discharged…") has a NEGATIVE split, and
+        // treating it as composite too counted its value twice — the preview's
+        // net ran £3.5k under the exported client copy on 9 Dartmouth.
+        const comp = (ls !== 0 || ms !== 0) ? 0 : num(it.total);
         return {
           labour: acc.labour + ls,
           materials: acc.materials + ms,
@@ -294,7 +300,7 @@ export default function BuilderPackPage() {
   // split, so the Labour/Materials columns are all zero — pure visual noise.
   // Detect a real split anywhere and only then show those two columns.
   const hasSplit = useMemo(
-    () => sections.some((s) => s.items.some((it) => num(it.labour) > 0 || num(it.materials) > 0)),
+    () => sections.some((s) => s.items.some((it) => num(it.labour) !== 0 || num(it.materials) !== 0)),
     [sections]
   );
 

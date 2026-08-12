@@ -825,9 +825,10 @@ function rebuildFromEdits(editedSections) {
           const materials = parseFloat(it.materials) || 0;
           // A split line's total is labour + materials; a composite (single-rate)
           // line has no split, so honour the total/rate it carries instead of
-          // collapsing to zero.
+          // collapsing to zero. Non-zero, not positive: a credit line carries a
+          // NEGATIVE split and must not fall through to a stale total.
           const lm = labour + materials;
-          const total = lm > 0 ? lm : (parseFloat(it.total) || 0);
+          const total = lm !== 0 ? lm : (parseFloat(it.total) || 0);
           const rate = qty > 0 ? total / qty : (parseFloat(it.rate) || 0);
           return {
             itemRef: it.itemRef || '',
