@@ -256,6 +256,28 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
         db.prepare(
           'UPDATE projects SET boq_filename = ?, status = CASE WHEN status IN (?, ?) THEN ? ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
         ).run(boqXlsx.filename, 'submitted', 'in_review', 'completed', projectId);
+        // A new BOQ supersedes any saved Builder Pack working state edited
+        // against an older delivery. States stamped with _boq_source die on
+        // read once boq_filename changes, but LEGACY unstamped states (saved
+        // before stamping existed) would shadow the reissued document forever
+        // — that's the "reissued BOQ but the portal still shows the old lines"
+        // report. Clear the state here unless it was saved against this very
+        // file.
+        try {
+          const row = db.prepare('SELECT builder_pack_state FROM projects WHERE id = ?').get(projectId);
+          let keep = false;
+          if (row && row.builder_pack_state) {
+            try {
+              const st = JSON.parse(row.builder_pack_state);
+              keep = !!(st && st._boq_source && st._boq_source === boqXlsx.filename);
+            } catch (e) { /* corrupt state — clear it */ }
+            if (!keep) {
+              db.prepare('UPDATE projects SET builder_pack_state = NULL WHERE id = ?').run(projectId);
+            }
+          }
+        } catch (stateErr) {
+          console.error('[Deliverables] builder-pack state reset error:', stateErr);
+        }
       }
       const findingsDoc = inserted.find((x) => x.kind === 'findings' && /\.docx?$/i.test(x.filename));
       if (findingsDoc) {
