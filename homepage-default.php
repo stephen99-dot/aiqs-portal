@@ -100,6 +100,7 @@
   "name": "AI QS",
   "legalName": "TheAIQS Ltd",
   "url": "https://theaiqs.co.uk/",
+  "sameAs": ["https://aitradespilot.com/"],
   "logo": "https://theaiqs.co.uk/apple-touch-icon.png",
   "description": "AI-powered quantity surveying for the UK and Ireland construction industry. Professional Bills of Quantities, cost estimates and feasibility reports.",
   "areaServed": ["GB", "IE"],
@@ -844,7 +845,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
         </a>
         <p>AI-powered quantity surveying for the UK and Ireland construction industry. Professional BOQs, cost estimates, and feasibility reports -- delivered fast.</p>
       </div>
-      <div class="footer-col"><h4>Service</h4><a href="#how">How It Works</a><a href="#deliverables">Deliverables</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
+      <div class="footer-col"><h4>Service</h4><a href="#how">How It Works</a><a href="#deliverables">Deliverables</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="https://aitradespilot.com/">AI Trades Pilot — for builders</a></div>
       <div class="footer-col"><h4>Project Types</h4><a href="#">Residential Extensions</a><a href="#">New Builds</a><a href="#">Commercial Fit-Outs</a><a href="#">Structural Steelwork</a><a href="#">Refurbishments</a></div>
       <div class="footer-col"><h4>Contact</h4><a href="/cdn-cgi/l/email-protection#bed6dbd2d2d1feddccd3c9d7c4dfccdadfd790ddd1d3"><span class="__cf_email__" data-cfemail="c4aca1a8a8ab84a7b6a9b3adbea5b6a0a5adeaa7aba9">[email&#160;protected]</span></a><a href="#">TheAIQS Ltd</a><a href="#">UK &amp; Ireland</a></div>
     </div>
