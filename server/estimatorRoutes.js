@@ -60,8 +60,14 @@ function genQuoteNumber() {
 // 32 url-safe chars, cryptographically random — same scheme as variation
 // approval tokens. Powers the public /q/<token> acceptance link.
 function newShareToken() {
-  return crypto.randomBytes(24).toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // Regenerate until the token ends alphanumerically — WhatsApp/SMS link
+  // parsers sometimes clip a trailing '-' or '_' off a pasted URL, which
+  // would break the tokened link for the recipient.
+  for (;;) {
+    const t = crypto.randomBytes(24).toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    if (/[A-Za-z0-9]$/.test(t)) return t;
+  }
 }
 
 // Accepted quotes are the signed audit record — no silent edits.

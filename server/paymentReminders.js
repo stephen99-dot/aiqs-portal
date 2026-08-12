@@ -29,8 +29,14 @@ function daysOverdue(dueDate) {
   return Math.round((new Date(todayIso()) - new Date(dueDate)) / 86400000);
 }
 function newShareToken() {
-  return crypto.randomBytes(24).toString('base64')
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  // Regenerate until the token ends alphanumerically — WhatsApp/SMS link
+  // parsers sometimes clip a trailing '-' or '_' off a pasted URL, which
+  // would break the tokened link for the recipient.
+  for (;;) {
+    const t = crypto.randomBytes(24).toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    if (/[A-Za-z0-9]$/.test(t)) return t;
+  }
 }
 
 // Tone ladder. {amount} {number} {due} {days} {company} are filled in below.

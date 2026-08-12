@@ -76,13 +76,23 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   if (res.status === 401) {
-    // Only redirect to login if this is NOT a login/register request
-    const isAuthRequest = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
-    if (!isAuthRequest) {
+    // Only redirect to login if this is NOT a login/register request, and NOT
+    // the session probe — AuthProvider fires /auth/me on load whenever a token
+    // is stored, and if that token has expired the caller clears it and the
+    // app continues as a guest (ProtectedRoute handles protected pages).
+    const isAuthRequest = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register')
+      || endpoint.startsWith('/auth/me');
+    // Never bounce a PUBLIC page to the portal login. The builder's client
+    // opens /q (quote), /v (variation), /i (invoice) and /magic links with no
+    // portal account — a stale token left in the browser must not turn a
+    // tokened public link into a login wall.
+    const onPublicPage = /^\/(q|v|i)\/|^\/magic/.test(window.location.pathname);
+    if (!isAuthRequest && !onPublicPage) {
       clearToken();
       window.location.href = '/login';
       throw new Error('Session expired');
     }
+    if (onPublicPage) clearToken();
   }
   let data;
   try {
