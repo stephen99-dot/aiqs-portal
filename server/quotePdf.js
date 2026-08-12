@@ -61,7 +61,9 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
 
   doc.fillColor('#ffffff')
     .font('Helvetica-Bold').fontSize(20)
-    .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Quotation', titleX, 28);
+    // One line, ellipsised — a long company name must not wrap out of the band.
+    .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Quotation', titleX, 28,
+      { width: doc.page.width - titleX - 40, height: 24, ellipsis: true });
   doc.font('Helvetica').fontSize(9)
     .text('Quote ' + (q.quote_number || ''), titleX, 56)
     .text(new Date(q.created_at || Date.now()).toLocaleDateString('en-GB'), titleX, 70);
@@ -74,14 +76,24 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
     bannerOffset = 20;
   }
 
-  // Quote meta block
+  // Quote meta block. Portal project titles can run to a full scope
+  // description, so the title is constrained to the left column (clear of the
+  // contact block at x=360) and its wrapped height is MEASURED — every line
+  // below starts after it instead of being stamped over it at a fixed Y.
+  const TITLE_W = 305;
+  const titleText = q.project_name || 'Quotation';
   doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14)
-    .text(q.project_name || 'Quotation', 40, 110 + bannerOffset);
+    .text(titleText, 40, 110 + bannerOffset, { width: TITLE_W });
+  let metaY = 110 + bannerOffset + doc.heightOfString(titleText, { width: TITLE_W }) + 6;
   doc.font('Helvetica').fontSize(10).fillColor('#444444');
-  let metaY = 130 + bannerOffset;
-  if (q.client_name) { doc.text('Client: ' + q.client_name, 40, metaY); metaY += 14; }
-  if (q.project_type) { doc.text('Project type: ' + q.project_type, 40, metaY); metaY += 14; }
-  doc.text('Valid for 30 days from issue.', 40, metaY); metaY += 18;
+  const metaLine = (txt) => {
+    doc.text(txt, 40, metaY, { width: TITLE_W });
+    metaY += doc.heightOfString(txt, { width: TITLE_W }) + 3;
+  };
+  if (q.client_name) metaLine('Client: ' + q.client_name);
+  if (q.project_type) metaLine('Project type: ' + q.project_type);
+  metaLine('Valid for 30 days from issue.');
+  metaY += 4;
 
   // Company contact block (right)
   let rightY = 110 + bannerOffset;
@@ -138,7 +150,10 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
   for (const sec of sectionOrder) {
     ensureRoom(20);
     doc.rect(40, y, 515, 16).fill(accent);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10).text(sec, 44, y + 3);
+    // One line, ellipsised — section labels from a tender BOQ can be long and
+    // must not spill out of the 16pt band.
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10)
+      .text(sec, 44, y + 3, { width: 507, height: 12, ellipsis: true });
     y += 16;
     doc.fillColor('#111111').font('Helvetica').fontSize(9);
 
@@ -175,10 +190,23 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
     y += 18;
   }
 
-  // Summary block
-  ensureRoom(140);
+  // Summary block. Zero-valued OH&P / contingency rows are dropped — a quote
+  // minted from the Client Copy carries its margin baked into the rates (no
+  // margin shown separately), and printing "Overheads & profit (0.0%) £0.00"
+  // would contradict that. VAT always prints (0% is a real statement). The box
+  // is sized to the rows it actually contains.
+  const summaryRows = [['Net', fmtMoney(q.net_total, cc), false]];
+  if (num(q.ohp_pct) !== 0 || num(q.ohp_amount) !== 0) {
+    summaryRows.push(['Overheads & profit (' + num(q.ohp_pct).toFixed(1) + '%)', fmtMoney(q.ohp_amount, cc), false]);
+  }
+  if (num(q.contingency_pct) !== 0 || num(q.contingency_amount) !== 0) {
+    summaryRows.push(['Contingency (' + num(q.contingency_pct).toFixed(1) + '%)', fmtMoney(q.contingency_amount, cc), false]);
+  }
+  summaryRows.push(['VAT (' + num(q.vat_pct).toFixed(1) + '%)', fmtMoney(q.vat_amount, cc), false]);
+  const boxH = 8 + summaryRows.length * 16 + 4 + 6 + 16 + 8;
+  ensureRoom(boxH + 20);
   y += 10;
-  doc.rect(310, y, 245, 130).strokeColor(primary).lineWidth(1).stroke();
+  doc.rect(310, y, 245, boxH).strokeColor(primary).lineWidth(1).stroke();
   let sy = y + 8;
   function summaryRow(label, value, bold) {
     doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10).fillColor('#111111');
@@ -186,15 +214,12 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
     doc.text(value, 460, sy, { width: 90, align: 'right' });
     sy += 16;
   }
-  summaryRow('Net', fmtMoney(q.net_total, cc));
-  summaryRow('Overheads & profit (' + num(q.ohp_pct).toFixed(1) + '%)', fmtMoney(q.ohp_amount, cc));
-  summaryRow('Contingency (' + num(q.contingency_pct).toFixed(1) + '%)', fmtMoney(q.contingency_amount, cc));
-  summaryRow('VAT (' + num(q.vat_pct).toFixed(1) + '%)', fmtMoney(q.vat_amount, cc));
+  for (const [label, value, bold] of summaryRows) summaryRow(label, value, bold);
   sy += 4;
   doc.moveTo(315, sy).lineTo(550, sy).strokeColor('#cbd5e1').stroke();
   sy += 6;
   summaryRow('Grand Total', fmtMoney(q.grand_total, cc), true);
-  y += 140;
+  y += boxH + 10;
 
   // est_rate marker explanation
   const anyEst = lines.some(l => l.est_rate);
