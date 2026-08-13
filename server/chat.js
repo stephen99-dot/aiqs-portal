@@ -3710,7 +3710,12 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             // free credits). The doc_generated row above is already written, so
             // the helper is told the event is already counted this cycle.
             if (!boqIsRevision && req.user.role !== 'admin') {
-              try { boqCredits.consumeBoqCredit(userId, { eventAlreadyLogged: true }); }
+              try {
+                const afterSpend = boqCredits.consumeBoqCredit(userId, { eventAlreadyLogged: true });
+                // Confirm the spend to the customer, plus the LOW-balance
+                // top-up email when they're down to their last couple.
+                require('./creditNotifications').notifyCreditSpent(req.user, afterSpend.total, projectName);
+              }
               catch (credErr) { console.error('[Credits] consume error:', credErr.message); }
             }
 

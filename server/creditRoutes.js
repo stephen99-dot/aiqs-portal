@@ -68,6 +68,12 @@ router.post('/use', (req, res) => {
     db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     const after = consumeBoqCredit(user.id, { eventAlreadyLogged: false });
 
+    // Confirm the spend to the customer, plus the LOW-balance top-up email
+    // when they're down to their last couple of credits.
+    try {
+      require('./creditNotifications').notifyCreditSpent(user, after.total);
+    } catch (e) { console.error('[Credits] notification error:', e.message); }
+
     res.json({
       success: true,
       remaining: after.total,
