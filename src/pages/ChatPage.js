@@ -1172,6 +1172,10 @@ export default function ChatPage() {
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.2)', color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
                       <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 10 BOQs — £580
                     </a>
+                    <a href={withUserRef("https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l", user)} target="_blank" rel="noopener noreferrer"
+                      style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.2)', color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
+                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 20 BOQs — £980
+                    </a>
                   </div>
                 </div>
               </div>

@@ -25,6 +25,7 @@ const PROJECT_TYPES = [
 const STRIPE_PAYG_LINK = 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g';   // £150 single BOQ
 const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';    // £349 5-BOQ bundle
 const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';   // £580 10-BOQ bundle
+const BOQ_20_PACK_LINK = 'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l';   // £980 20-BOQ bundle
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
@@ -151,13 +152,39 @@ function LimitReachedModal({ usage, t, user, onClose }) {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>10 BOQ Bundle</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>Best value — just £58 per BOQ, credits never expire</div>
+              <div style={{ fontSize: 11.5, color: t.textMuted }}>Just £58 per BOQ — credits never expire</div>
             </div>
             <span style={{
               padding: '5px 12px', borderRadius: 7,
               background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
               color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
             }}>£580</span>
+          </a>
+
+          {/* 20-BOQ bundle */}
+          <a href={withUserRef(BOQ_20_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '14px 16px', borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.06), rgba(16,185,129,0.03))',
+            border: '1px solid rgba(16,185,129,0.15)',
+            textDecoration: 'none', transition: 'all 0.12s',
+          }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: 'rgba(16,185,129,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <CrownIcon size={18} color="#10B981" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>20 BOQ Bundle</div>
+              <div style={{ fontSize: 11.5, color: t.textMuted }}>Best value — just £49 per BOQ, credits never expire</div>
+            </div>
+            <span style={{
+              padding: '5px 12px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #10B981, #059669)',
+              color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
+            }}>£980</span>
           </a>
 
           {/* Contact */}

@@ -6,6 +6,7 @@ import { withUserRef } from '../utils/stripeLinks';
 
 const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
 const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
+const BOQ_20_PACK_LINK = 'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
@@ -743,7 +744,7 @@ export default function SubmitDrawingsPage() {
                 </div>
               </div>
               <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
-                Best value — just <strong style={{ color: t.text }}>£58 per BOQ</strong>, saves you £920 vs. PAYG.
+                Just <strong style={{ color: t.text }}>£58 per BOQ</strong> — saves you £920 vs. PAYG.
               </div>
               <div style={{ fontSize: 12, color: t.textMuted }}>
                 Credits never expire. Use them whenever you like.
@@ -766,6 +767,48 @@ export default function SubmitDrawingsPage() {
             >
               <ZapIcon size={15} color="#fff" />
               Buy 10 BOQs — £580
+              <ArrowRightIcon size={15} color="#fff" />
+            </a>
+
+            <div style={{
+              marginTop: 14,
+              padding: '18px 18px 16px', borderRadius: 12,
+              background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))',
+              border: '1px solid rgba(16,185,129,0.25)',
+              marginBottom: 14,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>
+                  20 BOQ pack
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#10B981', fontFamily: "'DM Serif Display', Georgia, serif" }}>
+                  £980
+                </div>
+              </div>
+              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
+                Best value — just <strong style={{ color: t.text }}>£49 per BOQ</strong>, saves you £2,020 vs. PAYG.
+              </div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>
+                Credits never expire. Use them whenever you like.
+              </div>
+            </div>
+
+            <a
+              href={withUserRef(BOQ_20_PACK_LINK, user)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', padding: '13px 22px', borderRadius: 11,
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+                color: '#fff',
+                fontWeight: 700, fontSize: 14.5,
+                textDecoration: 'none',
+                boxShadow: '0 4px 18px rgba(16,185,129,0.35)',
+              }}
+            >
+              <ZapIcon size={15} color="#fff" />
+              Buy 20 BOQs — £980
               <ArrowRightIcon size={15} color="#fff" />
             </a>
 

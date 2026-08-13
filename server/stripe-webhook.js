@@ -359,9 +359,9 @@ function handleInvoicePaymentComplete(session) {
 // e.g. '{"15000":1,"34900":5,"58000":10}'.
 function resolvePackCredits(session) {
   // Pence -> BOQ credits. Keep in step with the live pack prices:
-  //   £150 single = 1, £349 five-pack = 5, £580 ten-pack = 10.
+  //   £150 single = 1, £349 five-pack = 5, £580 ten-pack = 10, £980 twenty-pack = 20.
   // The £79/£99/£300 entries are legacy/subscriber prices kept for back-compat.
-  let PACKS = { 7900: 1, 9900: 1, 15000: 1, 30000: 5, 34900: 5, 58000: 10 };
+  let PACKS = { 7900: 1, 9900: 1, 15000: 1, 30000: 5, 34900: 5, 58000: 10, 98000: 20 };
   if (process.env.STRIPE_BOQ_PACKS) {
     try {
       const parsed = JSON.parse(process.env.STRIPE_BOQ_PACKS);
