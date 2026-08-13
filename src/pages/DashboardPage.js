@@ -16,7 +16,8 @@ const STRIPE = {
   starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
   boq_5_pack:   'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h',  // £349 5-BOQ bundle
   boq_10_pack:  'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f',  // £580 10-BOQ bundle
-  extra_sub:    'https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06',  // £79 extra BOQ (legacy subscribers)
+  // Retired: the £79 subscriber extra (buy.stripe.com/28E8wPd7Ggw0f3abmk73G06).
+  // Everyone now buys extras at the flat £150 single-BOQ price.
 };
 
 function UsageBar({ usage, t, user }) {
@@ -152,7 +153,7 @@ function UsageBar({ usage, t, user }) {
               <CrownIcon size={12} color="#fff" /> Buy 10 BOQs — £580
             </a>
             <a
-              href={withUserRef(plan === 'professional' || plan === 'premium' ? STRIPE.extra_sub : STRIPE.starter_payg, user)}
+              href={withUserRef(STRIPE.starter_payg, user)}
               target="_blank" rel="noopener noreferrer"
               style={{
                 padding: '7px 14px', borderRadius: 7,
@@ -161,7 +162,7 @@ function UsageBar({ usage, t, user }) {
                 textDecoration: 'none', whiteSpace: 'nowrap',
               }}
             >
-              Buy Extra BOQ — {plan === 'professional' || plan === 'premium' ? '£79' : '£150'}
+              Buy Extra BOQ — £150
             </a>
           </div>
         </div>

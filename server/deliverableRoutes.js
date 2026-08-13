@@ -313,6 +313,36 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
       `).run(req.user.email || req.user.id, projectId, submissionId, submissionId);
     }
 
+    // Tell the customer their job has landed in the portal. Fire-and-forget —
+    // a mail hiccup never fails the delivery itself. Skipped when the QS is
+    // uploading into their own account (no point emailing yourself).
+    try {
+      const owner = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(project.user_id);
+      if (owner && owner.email && owner.id !== req.user.id) {
+        const KIND_WORDS = {
+          boq: 'Bill of Quantities', findings: 'Findings Report', marked_drawing: 'Marked-up drawings',
+          supplier_quote: 'Supplier quote', schedule: 'Build schedule', client_copy: 'Client copy',
+        };
+        const docNames = [...new Set(inserted.map((x) => KIND_WORDS[x.kind] || 'Documents'))];
+        const docList = docNames.join(', ');
+        require('./mailer').sendMail({
+          type: 'deliverables_ready',
+          to: owner.email,
+          subject: 'Your job is ready — ' + (project.title || 'your project') + ' is now in your portal',
+          heading: 'Your documents are ready',
+          paragraphs: [
+            'Good news — "' + (project.title || 'your project') + '" has been priced and delivered to your portal.',
+            'Now available to download: ' + docList + '.',
+            'Open the project to download your documents, build the client copy, or share the quote with your client.',
+          ],
+          ctaText: 'Open your project',
+          ctaUrl: require('./mailer').BASE_URL + '/project/' + project.id,
+        }).catch(() => {});
+      }
+    } catch (mailErr) {
+      console.error('[Deliverables] delivery email error:', mailErr.message);
+    }
+
     res.json({ ok: true, deliverables: inserted });
   } catch (err) {
     console.error('[Deliverables] upload error:', err);
