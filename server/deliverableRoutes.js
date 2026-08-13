@@ -325,17 +325,31 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
         };
         const docNames = [...new Set(inserted.map((x) => KIND_WORDS[x.kind] || 'Documents'))];
         const docList = docNames.join(', ');
+        const title = project.title || 'your project';
+        // Every re-delivery of the same kind bumps the stored version, so
+        // version > 1 on this batch means the job was UPDATED (a reissue),
+        // not delivered for the first time — say so, and name the version.
+        const ver = Math.max(1, ...inserted.map((x) => x.version || 1));
+        const isUpdate = ver > 1;
         require('./mailer').sendMail({
-          type: 'deliverables_ready',
+          type: isUpdate ? 'deliverables_updated' : 'deliverables_ready',
           to: owner.email,
-          subject: 'Your job is ready — ' + (project.title || 'your project') + ' is now in your portal',
-          heading: 'Your documents are ready',
-          paragraphs: [
-            'Good news — "' + (project.title || 'your project') + '" has been priced and delivered to your portal.',
-            'Now available to download: ' + docList + '.',
-            'Open the project to download your documents, build the client copy, or share the quote with your client.',
-          ],
-          ctaText: 'Open your project',
+          subject: isUpdate
+            ? 'Job updated — ' + title + ' (V' + ver + ') is in your portal'
+            : 'Your job is ready — ' + title + ' is now in your portal',
+          heading: isUpdate ? 'Your job has been updated' : 'Your documents are ready',
+          paragraphs: isUpdate
+            ? [
+              '"' + title + '" has been revised and the updated documents (V' + ver + ') are now in your portal.',
+              'Updated: ' + docList + '. The previous versions have been superseded — please work from the latest documents.',
+              'Open the project to download the revised documents; your Builder Pack will pick up the new figures automatically.',
+            ]
+            : [
+              'Good news — "' + title + '" has been priced and delivered to your portal.',
+              'Now available to download: ' + docList + '.',
+              'Open the project to download your documents, build the client copy, or share the quote with your client.',
+            ],
+          ctaText: isUpdate ? 'See what changed' : 'Open your project',
           ctaUrl: require('./mailer').BASE_URL + '/project/' + project.id,
         }).catch(() => {});
       }
