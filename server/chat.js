@@ -1225,6 +1225,22 @@ router.delete('/chat-sessions/:id', authMiddleware, (req, res) => {
   } catch (e) { console.error('[ChatSessions] Delete error:', e.message); res.status(500).json({ error: 'Failed to delete session' }); }
 });
 
+// Rename a project — the title shown on the dashboard, project page and every
+// generated document heading. Owner (or admin) only.
+router.patch('/projects/:id', authMiddleware, (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const project = req.user.role === 'admin'
+      ? db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)
+      : db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(projectId, req.user.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    const title = String((req.body || {}).title || '').trim().slice(0, 300);
+    if (!title) return res.status(400).json({ error: 'Please enter a project name.' });
+    db.prepare('UPDATE projects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(title, projectId);
+    res.json({ ok: true, id: projectId, title });
+  } catch (e) { console.error('[Projects] Rename error:', e.message); res.status(500).json({ error: 'Failed to rename project' }); }
+});
+
 router.delete('/projects/:id', authMiddleware, (req, res) => {
   try {
     const projectId = req.params.id;
