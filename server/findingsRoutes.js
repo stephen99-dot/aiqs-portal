@@ -212,7 +212,7 @@ router.get('/projects/:projectId/findings', authMiddleware, async (req, res) => 
   }
 });
 
-router.patch('/projects/:projectId/findings', authMiddleware, (req, res) => {
+router.patch('/projects/:projectId/findings', authMiddleware, async (req, res) => {
   try {
     const project = loadProject(req);
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -230,7 +230,12 @@ router.patch('/projects/:projectId/findings', authMiddleware, (req, res) => {
       }
     }
 
+    sanitizeFindings(existing);
     writeFindings(project.id, existing);
+    // Echo back with the LIVE cost summary attached (same as GET) so the
+    // editor's totals don't blank out after a save.
+    const cs = await currentCostSummary(project);
+    if (cs) existing.cost_summary = cs;
     res.json({ ok: true, findings: existing });
   } catch (err) {
     console.error('[Findings] PATCH error:', err);

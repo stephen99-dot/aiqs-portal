@@ -52,12 +52,16 @@ export default function FindingsEditorPage() {
     setFindings((prev) => ({ ...prev, [field]: value }));
   }
 
-  async function saveField(field) {
+  async function saveField(field, value) {
     if (!findings) return;
     setSavingField(field);
     setError('');
     try {
-      const body = { [field]: findings[field] };
+      // An explicit value wins over state: a remove handler saves the array it
+      // just computed. Reading findings[field] here after a removal PATCHed the
+      // stale pre-delete array — the server then echoed the old list back and
+      // the "deleted" row reappeared.
+      const body = { [field]: value !== undefined ? value : findings[field] };
       const data = await apiFetch(`/projects/${id}/findings`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -232,7 +236,7 @@ export default function FindingsEditorPage() {
                 placeholder="Finding title (e.g. 'Structural assumptions')"
                 style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
               />
-              <button onClick={() => removeAtIndex(setField, findings, 'key_findings', idx, () => saveField('key_findings'))} style={removeBtnStyle} title="Remove finding">×</button>
+              <button onClick={() => removeAtIndex(setField, findings, 'key_findings', idx, (arr) => saveField('key_findings', arr))} style={removeBtnStyle} title="Remove finding">×</button>
             </div>
             <textarea
               rows={2}
@@ -260,7 +264,7 @@ export default function FindingsEditorPage() {
                 <button
                   onClick={() => {
                     const items = (kf.items || []).filter((_, k) => k !== j);
-                    updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, items }, () => saveField('key_findings'));
+                    updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, items }, (arr) => saveField('key_findings', arr));
                   }}
                   style={removeBtnStyle} title="Remove bullet">×</button>
               </div>
@@ -316,12 +320,12 @@ function updateAtIndex(setField, findings, key, idx, value, after) {
   const arr = (findings[key] || []).slice();
   arr[idx] = value;
   setField(key, arr);
-  if (after) setTimeout(after, 0);
+  if (after) setTimeout(() => after(arr), 0);
 }
 function removeAtIndex(setField, findings, key, idx, after) {
   const arr = (findings[key] || []).filter((_, i) => i !== idx);
   setField(key, arr);
-  if (after) setTimeout(after, 0);
+  if (after) setTimeout(() => after(arr), 0);
 }
 
 const inputStyle = {
@@ -404,7 +408,7 @@ function BulletListCard({ title, field, findings, setField, saveField, savingFie
             style={{ ...inputStyle, flex: 1 }}
           />
           <button
-            onClick={() => removeAtIndex(setField, findings, field, idx, () => saveField(field))}
+            onClick={() => removeAtIndex(setField, findings, field, idx, (arr) => saveField(field, arr))}
             style={removeBtnStyle} title="Remove">×</button>
         </div>
       ))}

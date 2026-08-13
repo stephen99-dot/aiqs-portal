@@ -241,7 +241,13 @@ router.post('/', uploadFiles, async (req, res) => {
       // Called BEFORE the drawing_submissions row is inserted below, so the
       // helper measures this cycle's usage without counting this job yet.
       db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
-      consumeBoqCredit(user.id, { eventAlreadyLogged: false });
+      const after = consumeBoqCredit(user.id, { eventAlreadyLogged: false });
+      creditsRemaining = Math.max(0, after.total);
+      // Confirm the spend to the customer — and the LOW-balance top-up email
+      // when they're down to their last couple of credits.
+      try {
+        require('./creditNotifications').notifyCreditSpent(user, after.total, siteAddress || projectType);
+      } catch (e) { console.error('[Submissions] credit notification error:', e.message); }
     }
 
     db.prepare(`

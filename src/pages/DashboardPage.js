@@ -9,7 +9,7 @@ import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
   UploadIcon, DownloadIcon, ChatIcon,
-  BrainIcon,
+  BrainIcon, EditIcon,
 } from '../components/Icons';
 
 const STRIPE = {
@@ -465,6 +465,25 @@ export default function DashboardPage() {
     }
   }
 
+  // Inline project rename on the list
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [renamingId, setRenamingId] = useState(null);
+  async function handleRenameProject(projectId) {
+    const title = editTitle.trim();
+    if (!title) return;
+    setRenamingId(projectId);
+    try {
+      await apiFetch(`/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify({ title }) });
+      setProjects(prev => prev.map(p => p.id === projectId ? { ...p, title } : p));
+      setEditingId(null);
+    } catch (err) {
+      alert(err?.message ? `Couldn't rename project: ${err.message}` : 'Failed to rename project. Please try again.');
+    } finally {
+      setRenamingId(null);
+    }
+  }
+
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   useEffect(() => {
@@ -672,6 +691,38 @@ export default function DashboardPage() {
                   className="project-row"
                   style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '100%', overflow: 'hidden', gap: 10 }}
                 >
+                  {editingId === project.id ? (
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameProject(project.id);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      autoFocus
+                      style={{
+                        flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8,
+                        border: '1px solid var(--border)', background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => handleRenameProject(project.id)}
+                      disabled={renamingId === project.id || !editTitle.trim()}
+                      className="btn-primary"
+                      style={{ padding: '7px 14px', fontSize: 12, flexShrink: 0 }}
+                    >{renamingId === project.id ? 'Saving…' : 'Save'}</button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      style={{
+                        background: 'none', border: '1px solid var(--border)', borderRadius: 7,
+                        padding: '7px 12px', fontSize: 12, color: t.textMuted, cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >Cancel</button>
+                  </div>
+                  ) : (
                   <Link
                     to={`/project/${project.id}`}
                     style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
@@ -716,6 +767,25 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   </Link>
+                  )}
+                  {editingId !== project.id && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingId(project.id);
+                      setEditTitle(project.title || '');
+                    }}
+                    title="Rename project"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: t.textMuted, padding: '2px 6px', borderRadius: 5,
+                      opacity: 0.5, lineHeight: 1, flexShrink: 0,
+                    }}
+                  >
+                    <EditIcon size={14} />
+                  </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.preventDefault();

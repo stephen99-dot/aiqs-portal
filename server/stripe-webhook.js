@@ -398,6 +398,11 @@ function grantPackCredits(session, customerEmail) {
   if (!credits) {
     console.error(`[Stripe] PAID checkout ${session.id} from ${email || 'unknown email'} — amount ${session.amount_total} (subtotal ${session.amount_subtotal}) matched no BOQ pack (known: ${Object.keys(PACKS).join(', ')}). Recording as unclaimed for review.`);
     recordPendingCredit(session, email, 0, 'amount_unmatched');
+    try {
+      require('./creditNotifications').notifyPackPurchased({
+        email, credits: 0, amountPence: session.amount_total, sessionId: session.id, status: 'amount_unmatched',
+      });
+    } catch (e) { /* never blocks the webhook */ }
     return;
   }
 
@@ -413,6 +418,11 @@ function grantPackCredits(session, customerEmail) {
   if (!user) {
     console.error(`[Stripe] PAID checkout ${session.id} worth ${credits} BOQ credit(s) (£${(session.amount_total / 100).toFixed(2)}) from ${email || 'unknown email'} could NOT be matched to a portal user (client_reference_id=${session.client_reference_id || 'none'}). Recording as PENDING — will auto-claim when that email logs in.`);
     recordPendingCredit(session, email, credits, 'user_not_found');
+    try {
+      require('./creditNotifications').notifyPackPurchased({
+        email, credits, amountPence: session.amount_total, sessionId: session.id, status: 'user_not_found',
+      });
+    } catch (e) { /* never blocks the webhook */ }
     return;
   }
 
@@ -423,6 +433,9 @@ function grantPackCredits(session, customerEmail) {
     .run(credits, user.id);
   console.log(`[Stripe] Granted ${credits} BOQ credit(s) to ${user.email} (£${(session.amount_total / 100).toFixed(2)}, session ${session.id})`);
 
+  // Both sides of the sale get told. The BUYER gets the branded purchase
+  // confirmation; the ADMIN inbox gets the sale notification with the
+  // resulting balance. Fire-and-forget — never blocks the webhook.
   const packName = credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`;
   sendPurchaseEmail({
     email: user.email,
@@ -432,6 +445,13 @@ function grantPackCredits(session, customerEmail) {
     amountTotal: session.amount_total,
     currency: session.currency,
   });
+  try {
+    const balance = require('./boqCredits').getBoqBalance(user.id);
+    require('./creditNotifications').notifyPackPurchased({
+      email: user.email, credits, amountPence: session.amount_total,
+      sessionId: session.id, balanceAfter: balance.total,
+    });
+  } catch (e) { console.error('[Stripe] purchase notification error:', e.message); }
 }
 
 async function handleSubscriptionUpdate(subscription, stripeSecret) {
