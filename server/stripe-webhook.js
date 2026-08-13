@@ -38,6 +38,53 @@ function deactivateOffice(user) {
     .run(user.id);
   console.log(`[Stripe] Office in a Box DEACTIVATED for ${user.email}`);
 }
+// ─── Purchase confirmation email ────────────────────────────────────────────
+// Portal-branded ("AI QS" sender) thank-you sent to the buyer whenever a
+// checkout completes — plan upgrade, Office in a Box, or a BOQ credit pack.
+// Fire-and-forget: a mail failure must never affect webhook handling.
+function sendPurchaseEmail({ email, name, packageName, detailLines, amountTotal, currency }) {
+  try {
+    const { sendEmail } = require('./routes'); // lazy — avoids any load-order tangle
+    if (!email || typeof sendEmail !== 'function') return;
+    const firstName = (name || 'there').split(' ')[0];
+    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+    const sym = (currency || 'gbp').toLowerCase() === 'eur' ? '€' : '£';
+    const amountText = typeof amountTotal === 'number'
+      ? sym + (amountTotal / 100).toLocaleString('en-GB', { minimumFractionDigits: 2 })
+      : null;
+    const details = [...(detailLines || [])];
+    if (amountText) details.push(`Amount paid: ${amountText}`);
+    const detailHtml = details
+      .map(d => `<p style="margin:0 0 6px;font-size:14px;color:#1E293B;">${d}</p>`)
+      .join('');
+    sendEmail({
+      to: email,
+      subject: `Purchase confirmed — ${packageName}`,
+      html: `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+            <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+          </div>
+          <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Thanks for your purchase, ${firstName}!</h2>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">You've purchased <strong>${packageName}</strong>. It's live on your account now — no action needed.</p>
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:18px;margin:0 0 24px;">
+            ${detailHtml}
+          </div>
+          <div style="text-align:center;margin:28px 0;">
+            <a href="${portalUrl}/dashboard" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Go to Your Dashboard</a>
+          </div>
+          <p style="font-size:13px;color:#94A3B8;line-height:1.5;">Questions about your purchase? Just reply to this email and we'll help.</p>
+          <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+          <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+        </div>
+      `,
+    }).catch(err => console.error('[Stripe] Purchase email failed:', err.message));
+  } catch (err) {
+    console.error('[Stripe] Purchase email failed:', err.message);
+  }
+}
+
 // Resolve the portal account for a checkout: account id (client_reference_id,
 // stamped by withUserRef) first — exact and reliable — then the email typed.
 function resolveCheckoutUser(session, email) {
@@ -212,7 +259,17 @@ async function handleCheckoutComplete(session, stripeSecret) {
     // Office in a Box add-on — flip has_estimator on and stop.
     if (isOfficeSubscription(subscription)) {
       const user = resolveCheckoutUser(session, customerEmail);
-      if (user) activateOffice(user, subscription.id);
+      if (user) {
+        activateOffice(user, subscription.id);
+        sendPurchaseEmail({
+          email: user.email,
+          name: user.full_name,
+          packageName: 'Office in a Box',
+          detailLines: ['Estimator, quotes, invoices and payment tools are now unlocked on your account.'],
+          amountTotal: session.amount_total,
+          currency: session.currency,
+        });
+      }
       else console.error(`[Stripe] Office subscription paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
       return;
     }
@@ -221,7 +278,19 @@ async function handleCheckoutComplete(session, stripeSecret) {
       const planInfo = PRICE_TO_PLAN[priceId];
       // Set billing_cycle_start to subscription's current period start
       const cycleStart = new Date(subscription.current_period_start * 1000).toISOString();
-      updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id, cycleStart);
+      const user = updateUserPlan(customerEmail, planInfo.plan, planInfo.msgQuota, planInfo.boqQuota, subscription.id, cycleStart);
+      const planName = planInfo.plan.charAt(0).toUpperCase() + planInfo.plan.slice(1) + ' plan';
+      sendPurchaseEmail({
+        email: (user && user.email) || customerEmail,
+        name: user && user.full_name,
+        packageName: planName,
+        detailLines: [
+          `${planInfo.msgQuota} AI messages per month`,
+          `${planInfo.boqQuota} BOQs per month`,
+        ],
+        amountTotal: session.amount_total,
+        currency: session.currency,
+      });
     } else {
       console.error(`[Stripe] Unknown price ID: ${priceId} — customer: ${customerEmail}, amount: ${session.amount_total}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     }
@@ -364,8 +433,18 @@ function grantPackCredits(session, customerEmail) {
     .run(credits, user.id);
   console.log(`[Stripe] Granted ${credits} BOQ credit(s) to ${user.email} (£${(session.amount_total / 100).toFixed(2)}, session ${session.id})`);
 
-  // Tell the admin inbox about every pack purchase (the customer already gets
-  // Stripe's own receipt). Fire-and-forget — never blocks the webhook.
+  // Both sides of the sale get told. The BUYER gets the branded purchase
+  // confirmation; the ADMIN inbox gets the sale notification with the
+  // resulting balance. Fire-and-forget — never blocks the webhook.
+  const packName = credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`;
+  sendPurchaseEmail({
+    email: user.email,
+    name: user.full_name,
+    packageName: packName,
+    detailLines: [`${credits} BOQ credit${credits === 1 ? '' : 's'} added to your account — ready to use straight away.`],
+    amountTotal: session.amount_total,
+    currency: session.currency,
+  });
   try {
     const balance = require('./boqCredits').getBoqBalance(user.id);
     require('./creditNotifications').notifyPackPurchased({
@@ -499,11 +578,12 @@ function updateUserPlan(email, plan, msgQuota, boqQuota, subscriptionId, cycleSt
 
   if (!user) {
     console.log(`[Stripe] No portal user found for email: ${email}`);
-    return;
+    return null;
   }
 
   console.log(`[Stripe] Updating ${email} to ${plan} (messages: ${msgQuota}, BOQs: ${boqQuota}, cycle: ${cycleStart})`);
 
   db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, stripe_subscription_id = ?, billing_cycle_start = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(plan, msgQuota, boqQuota, subscriptionId, cycleStart, user.id);
+  return user;
 }

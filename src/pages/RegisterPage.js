@@ -85,8 +85,10 @@ export default function RegisterPage() {
           <div style={styles.circle2} />
           <div style={styles.gridLines} />
           <div style={styles.brand}>
-            <div style={styles.logoLeft}>QS</div>
-            <span style={styles.brandName}>AI QS Portal</span>
+            <div>
+              <div style={styles.brandWordmark}>AI <span style={{ color: '#F59E0B' }}>QS</span></div>
+              <div style={styles.brandTagline}>Quantity Surveying</div>
+            </div>
           </div>
           <div style={styles.statsRow}>
             {stats.map(s => (
@@ -179,8 +181,8 @@ const styles = {
   circle2: { position: 'absolute', bottom: -80, left: -80, width: 300, height: 300, borderRadius: '50%', border: '1px solid rgba(245,166,35,0.12)', pointerEvents: 'none' },
   gridLines: { position: 'absolute', inset: 0, backgroundImage: `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`, backgroundSize: '48px 48px', pointerEvents: 'none' },
   brand: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 40 },
-  logoLeft: { width: 40, height: 40, borderRadius: 10, background: '#F5A623', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 15, color: '#fff' },
-  brandName: { color: 'rgba(255,255,255,0.8)', fontSize: 16 },
+  brandWordmark: { fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em', lineHeight: 1 },
+  brandTagline: { fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', marginTop: 4 },
   statsRow: { display: 'flex', gap: 32, marginBottom: 36 },
   stat: { display: 'flex', flexDirection: 'column', gap: 2 },
   statVal: { color: '#F5A623', fontSize: 22, fontWeight: 'bold' },

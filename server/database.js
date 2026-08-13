@@ -1017,4 +1017,28 @@ try {
   console.log('Public token indexes:', err.message);
 }
 
+// Authorized sign-in emails — extra email addresses (colleagues, team members)
+// allowed to sign in to an existing account. They authenticate with their OWN
+// email (password set via the invite link, or Google) but land in the owner's
+// account with full access to it. Managed from the admin Users page.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS authorized_emails (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,                       -- the account they sign in to
+      email TEXT UNIQUE NOT NULL,                  -- their own email, lowercase
+      full_name TEXT,
+      password_hash TEXT,                          -- null until set via invite link
+      invite_token TEXT,                           -- pending set-password invite
+      invite_expires_at TEXT,
+      last_login_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_authorized_emails_user ON authorized_emails(user_id);
+  `);
+} catch (err) {
+  console.log('authorized_emails table:', err.message);
+}
+
 module.exports = db;

@@ -96,6 +96,137 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
   );
 }
 
+// Authorized sign-in emails — colleagues/team members who can sign in with
+// their OWN email (invite sets their password; Google works too) and land in
+// this user's account with full access to everything in it.
+function AuthorizedEmailsCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn, showSuccess, setErrorMsg }) {
+  const [emails, setEmails] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newName, setNewName] = useState('');
+  const [busy, setBusy] = useState('');
+  const [inviteLinks, setInviteLinks] = useState({}); // id -> url (when email isn't configured)
+
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+
+  useEffect(() => {
+    apiFetch('/admin/users/' + user.id + '/authorized-emails')
+      .then(res => { setEmails(res.emails || []); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, [user.id]);
+
+  const addEmail = async () => {
+    if (!newEmail.trim()) return;
+    setBusy('add'); setErrorMsg('');
+    try {
+      const res = await apiFetch('/admin/users/' + user.id + '/authorized-emails', {
+        method: 'POST', body: JSON.stringify({ email: newEmail.trim(), fullName: newName.trim() }),
+      });
+      setEmails(prev => [{ id: res.id, email: res.email, fullName: res.fullName, hasPassword: false, invitePending: true, inviteExpiresAt: res.inviteExpiresAt, lastLoginAt: null }, ...prev]);
+      if (res.inviteUrl) {
+        setInviteLinks(prev => ({ ...prev, [res.id]: res.inviteUrl }));
+        showSuccess(res.email + ' authorized — email not configured, copy the invite link below');
+      } else {
+        showSuccess('Invite emailed to ' + res.email);
+      }
+      setNewEmail(''); setNewName('');
+    } catch (e) { setErrorMsg(e.message || 'Failed to add email'); }
+    finally { setBusy(''); }
+  };
+
+  const resendInvite = async (ae) => {
+    setBusy('invite-' + ae.id); setErrorMsg('');
+    try {
+      const res = await apiFetch('/admin/users/' + user.id + '/authorized-emails/' + ae.id + '/invite', { method: 'POST' });
+      setEmails(prev => prev.map(e => e.id === ae.id ? { ...e, invitePending: true, inviteExpiresAt: res.inviteExpiresAt } : e));
+      if (res.inviteUrl) {
+        setInviteLinks(prev => ({ ...prev, [ae.id]: res.inviteUrl }));
+        showSuccess('Invite link generated — copy it below');
+      } else {
+        setInviteLinks(prev => { const n = { ...prev }; delete n[ae.id]; return n; });
+        showSuccess('Invite emailed to ' + ae.email);
+      }
+    } catch (e) { setErrorMsg(e.message || 'Failed to send invite'); }
+    finally { setBusy(''); }
+  };
+
+  const removeEmail = async (ae) => {
+    if (!window.confirm('Remove ' + ae.email + '? They will no longer be able to sign in to this account.')) return;
+    setBusy('remove-' + ae.id); setErrorMsg('');
+    try {
+      await apiFetch('/admin/users/' + user.id + '/authorized-emails/' + ae.id, { method: 'DELETE' });
+      setEmails(prev => prev.filter(e => e.id !== ae.id));
+      showSuccess(ae.email + ' removed');
+    } catch (e) { setErrorMsg(e.message || 'Failed to remove email'); }
+    finally { setBusy(''); }
+  };
+
+  const copyLink = (url) => {
+    try { navigator.clipboard.writeText(url); showSuccess('Invite link copied!'); } catch (e) {}
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={lbl}><Users size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />Authorized Sign-in Emails</div>
+      <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
+        Colleagues added here sign in with their <strong>own</strong> email and password (or Google) and get full access to this account — no need to share {(user.full_name || 'the user').split(' ')[0]}'s login.
+      </div>
+
+      {/* Add form */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+        <div style={{ flex: '1 1 180px' }}>
+          <div style={lbl}>Email</div>
+          <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="colleague@company.com" style={{ ...sInp, width: '100%', boxSizing: 'border-box' }} />
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <div style={lbl}>Name (optional)</div>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Sam Taylor" style={{ ...sInp, width: '100%', boxSizing: 'border-box' }} />
+        </div>
+        <button onClick={addEmail} disabled={busy === 'add' || !newEmail.trim()} style={{ ...btn('#2563EB'), opacity: (busy === 'add' || !newEmail.trim()) ? 0.5 : 1 }}>
+          <UserPlus size={12} /> {busy === 'add' ? 'Adding…' : 'Authorize & Invite'}
+        </button>
+      </div>
+
+      {/* List */}
+      {!loaded ? (
+        <div style={{ fontSize: 12, color: muted }}>Loading…</div>
+      ) : emails.length === 0 ? (
+        <div style={{ fontSize: 12, color: muted, fontStyle: 'italic' }}>No authorized emails yet — only {user.email} can sign in to this account.</div>
+      ) : emails.map(ae => (
+        <div key={ae.id} style={{ padding: '8px 10px', borderRadius: 8, background: isDark ? '#0D1320' : '#F1F5F9', marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: text }}>{ae.email}</div>
+              <div style={{ fontSize: 11, color: muted }}>
+                {ae.fullName ? ae.fullName + ' · ' : ''}
+                {ae.hasPassword
+                  ? (ae.lastLoginAt ? 'Active — last sign-in ' + new Date(ae.lastLoginAt).toLocaleDateString('en-GB') : 'Password set')
+                  : ae.invitePending ? 'Invite sent — waiting for them to set a password' : 'No password yet'}
+                {!ae.hasPassword ? ' (Google sign-in works immediately)' : ''}
+              </div>
+            </div>
+            <button onClick={() => resendInvite(ae)} disabled={!!busy} style={{ ...outBtn, padding: '5px 10px', fontSize: 11 }}>
+              <Send size={11} /> {busy === 'invite-' + ae.id ? 'Sending…' : ae.invitePending ? 'Resend invite' : 'Send invite'}
+            </button>
+            <button onClick={() => removeEmail(ae)} disabled={!!busy}
+              style={{ ...outBtn, padding: '5px 10px', fontSize: 11, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+              <Trash2 size={11} /> Remove
+            </button>
+          </div>
+          {inviteLinks[ae.id] && (
+            <div onClick={() => copyLink(inviteLinks[ae.id])}
+              style={{ marginTop: 6, padding: 8, borderRadius: 6, background: isDark ? '#131B2E' : '#FFF', fontSize: 11, wordBreak: 'break-all', color: '#2563EB', cursor: 'pointer', border: '1px solid ' + border }}>
+              {inviteLinks[ae.id]}<br /><span style={{ color: muted }}>Click to copy and send it to them yourself</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
@@ -502,6 +633,14 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </div>
             )}
           </div>
+
+          {/* Authorized sign-in emails — team access to this account */}
+          <AuthorizedEmailsCard
+            user={user} isDark={isDark}
+            cardStyle={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}
+            lbl={lbl} sInp={sInp} btn={btn} outBtn={outBtn}
+            showSuccess={showSuccess} setErrorMsg={setErrorMsg}
+          />
 
           {/* Send Message */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}>
