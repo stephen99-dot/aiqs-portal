@@ -73,13 +73,22 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Escape a paragraph, then turn any bare URLs back into real links. Mail
+// clients render our HTML as-is — they do NOT linkify plain text — so a URL
+// left as escaped text (e.g. the top-up options in the low-credit email)
+// would be dead words on the page.
+function escapeAndLinkify(s) {
+  return escapeHtml(s).replace(/(https?:\/\/[^\s<]+)/g, (url) =>
+    '<a href="' + url + '" style="color:#1D4ED8;text-decoration:underline;word-break:break-all;">' + url + '</a>');
+}
+
 // One branded template for everything — header band in the builder's primary
 // colour, optional CTA button in the accent colour, footer from their branding.
 function renderHtml({ branding, companyName, heading, paragraphs, ctaText, ctaUrl, hasLogo }) {
   const primary = branding.primary_colour || '#1B2A4A';
   const accent = branding.accent_colour || '#F59E0B';
   const paras = (paragraphs || [])
-    .map(p => '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">' + escapeHtml(p) + '</p>')
+    .map(p => '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">' + escapeAndLinkify(p) + '</p>')
     .join('');
   const cta = (ctaText && ctaUrl)
     ? '<div style="text-align:center;margin:26px 0 8px;">'
