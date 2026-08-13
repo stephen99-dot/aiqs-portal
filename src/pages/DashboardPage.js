@@ -16,6 +16,7 @@ const STRIPE = {
   starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
   boq_5_pack:   'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h',  // £349 5-BOQ bundle
   boq_10_pack:  'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f',  // £580 10-BOQ bundle
+  boq_20_pack:  'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l',  // £980 20-BOQ bundle
   // Retired: the £79 subscriber extra (buy.stripe.com/28E8wPd7Ggw0f3abmk73G06).
   // Everyone now buys extras at the flat £150 single-BOQ price.
 };
@@ -78,6 +79,14 @@ function UsageBar({ usage, t, user }) {
             fontSize: 12, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
           }}>
             <CrownIcon size={11} color="#A78BFA" /> 10 BOQs — £580
+          </a>
+          <a href={withUserRef(STRIPE.boq_20_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 12px', borderRadius: 7,
+            background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)',
+            fontSize: 12, fontWeight: 600, color: '#10B981', textDecoration: 'none',
+          }}>
+            <CrownIcon size={11} color="#10B981" /> 20 BOQs — £980
           </a>
         </div>
       </div>
@@ -151,6 +160,15 @@ function UsageBar({ usage, t, user }) {
               display: 'inline-flex', alignItems: 'center', gap: 5,
             }}>
               <CrownIcon size={12} color="#fff" /> Buy 10 BOQs — £580
+            </a>
+            <a href={withUserRef(STRIPE.boq_20_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+              padding: '7px 14px', borderRadius: 7,
+              background: 'linear-gradient(135deg, #10B981, #059669)',
+              color: '#fff', fontSize: 12, fontWeight: 600,
+              textDecoration: 'none', whiteSpace: 'nowrap',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}>
+              <CrownIcon size={12} color="#fff" /> Buy 20 BOQs — £980
             </a>
             <a
               href={withUserRef(STRIPE.starter_payg, user)}

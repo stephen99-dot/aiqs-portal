@@ -28,10 +28,8 @@ const TOPUP_OPTIONS = [
   { label: '1 BOQ — £150', url: process.env.STRIPE_LINK_BOQ_1 || 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g' },
   { label: '5 BOQs — £349', url: process.env.STRIPE_LINK_BOQ_5 || 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h' },
   { label: '10 BOQs — £580', url: process.env.STRIPE_LINK_BOQ_10 || 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f' },
-  // 20-pack shows up in top-up emails once its payment link is created
-  // (scripts/create-20-job-package.ps1) and set in the env.
-  process.env.STRIPE_LINK_BOQ_20 && { label: '20 BOQs — £980', url: process.env.STRIPE_LINK_BOQ_20 },
-].filter(Boolean);
+  { label: '20 BOQs — £980', url: process.env.STRIPE_LINK_BOQ_20 || 'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l' },
+];
 
 function fmtRemaining(n) {
   return n === 1 ? '1 BOQ credit' : n + ' BOQ credits';
