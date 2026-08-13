@@ -39,7 +39,6 @@ function getFileIcon(name) {
 }
 
 function LimitReachedModal({ usage, t, user, onClose }) {
-  const isSubscriber = usage.plan === 'professional' || usage.plan === 'premium';
 
   return (
     <div className="modal-overlay" style={{
@@ -79,7 +78,7 @@ function LimitReachedModal({ usage, t, user, onClose }) {
 
           {/* Buy Extra Project — always shown */}
           <a
-            href={withUserRef(isSubscriber ? "https://buy.stripe.com/28E8wPd7Ggw0f3abmk73G06" : "https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)}
+            href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)}
             target="_blank" rel="noopener noreferrer"
             style={{
               display: 'flex', alignItems: 'center', gap: 12,
@@ -105,7 +104,7 @@ function LimitReachedModal({ usage, t, user, onClose }) {
               background: 'linear-gradient(135deg, #10B981, #059669)',
               color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
             }}>
-              {isSubscriber ? '£79' : '£150'}
+              £150
             </span>
           </a>
 
