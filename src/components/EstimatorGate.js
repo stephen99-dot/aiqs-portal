@@ -85,8 +85,10 @@ export default function EstimatorGate({ children }) {
       </div>
       <h2 style={{ margin: 0, color: t.text }}>Office in a Box</h2>
       <p style={{ color: t.textSecondary, fontSize: 14.5, lineHeight: 1.55, marginTop: 12, marginBottom: 20 }}>
-        Office in a Box isn't active on your account yet. Start your 7-day free
-        trial and it switches on straight away — no charge today.
+        Office in a Box isn't active on your account yet. It comes with the
+        AI Trades Pilot Unlimited plan — £199/month with unlimited AI QS priced
+        jobs. Start your free trial and it switches on straight away — no
+        charge today.
       </p>
       <button
         onClick={startTrial}
@@ -98,7 +100,7 @@ export default function EstimatorGate({ children }) {
           opacity: redirecting ? 0.7 : 1,
         }}
       >
-        {redirecting ? 'Opening checkout…' : 'Start 7-day free trial'}
+        {redirecting ? 'Opening checkout…' : 'Start 14-day free trial'}
       </button>
       <button
         onClick={() => navigate('/ai-trades-pilot')}

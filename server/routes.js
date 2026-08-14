@@ -282,7 +282,9 @@ router.post('/office/verify', authMiddleware, async (req, res) => {
     const isOffice = (sub) => {
       const price = sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price;
       if (!price) return false;
-      return officeIds.length ? officeIds.includes(price.id) : price.unit_amount === 10000;
+      // £100 legacy OiB, £199 Unlimited, £249 Bundle (2026-08 repricing).
+      return officeIds.length ? officeIds.includes(price.id)
+        : [10000, 19900, 24900].includes(price.unit_amount);
     };
 
     // A user may have more than one Stripe customer record under their email.
