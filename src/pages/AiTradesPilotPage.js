@@ -17,20 +17,30 @@ const SITE_URL = 'https://www.aitradespilot.com';
 const REGISTER_URL = 'https://app.aitradespilot.com/register';
 const DEMO_URL = 'https://calendly.com/hello-crmwizardai/30min';
 
-// Direct Stripe Payment Links for the three plans, set at build time. When
-// present, the card buttons sell on the spot: Stripe checkout (14-day trial),
-// then the link's own redirect drops the buyer into app.aitradespilot.com to
-// create their login — the subscription attaches to the account by email, so
-// prefilling the email here matters. Without a link we fall back to the
-// register-first flow.
+// Direct Stripe Payment Links for the three plans, set at build time — one
+// per billing interval, matching the Annual/Monthly toggle. When present, the
+// card buttons sell on the spot: Stripe checkout (14-day trial), then the
+// link's own redirect drops the buyer into app.aitradespilot.com to create
+// their login — the subscription attaches to the account by email, so
+// prefilling the email here matters. Without a link for the selected interval
+// we fall back to the register-first flow (where both intervals are offered).
 const PAYLINKS = {
-  sales: process.env.REACT_APP_ATP_PAYLINK_SALES || '',
-  unlimited: process.env.REACT_APP_ATP_PAYLINK_UNLIMITED || '',
-  bundle: process.env.REACT_APP_ATP_PAYLINK_BUNDLE || '',
+  sales: {
+    m: process.env.REACT_APP_ATP_PAYLINK_SALES || '',
+    a: process.env.REACT_APP_ATP_PAYLINK_SALES_ANNUAL || '',
+  },
+  unlimited: {
+    m: process.env.REACT_APP_ATP_PAYLINK_UNLIMITED || '',
+    a: process.env.REACT_APP_ATP_PAYLINK_UNLIMITED_ANNUAL || '',
+  },
+  bundle: {
+    m: process.env.REACT_APP_ATP_PAYLINK_BUNDLE || '',
+    a: process.env.REACT_APP_ATP_PAYLINK_BUNDLE_ANNUAL || '',
+  },
 };
 
-function planCheckoutUrl(planKey, user) {
-  const link = PAYLINKS[planKey];
+function planCheckoutUrl(planKey, user, cycle) {
+  const link = (PAYLINKS[planKey] || {})[cycle === 'a' ? 'a' : 'm'];
   if (!link) return `${REGISTER_URL}?plan=${planKey}`;
   try {
     const u = new URL(link);
@@ -367,7 +377,7 @@ export default function AiTradesPilotPage() {
               </div>
               <a
                 className={plan.popular ? 'atp-cta' : undefined}
-                href={planCheckoutUrl(plan.key, user)}
+                href={planCheckoutUrl(plan.key, user, cycle)}
                 target="_blank" rel="noopener noreferrer"
                 style={{
                   ...(plan.popular ? primaryBtn : ghostBtn),
