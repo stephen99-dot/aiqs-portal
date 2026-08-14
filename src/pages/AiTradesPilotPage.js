@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import {
   ZapIcon, RulerIcon, TrendingUpIcon, FileTextIcon, CalendarIcon,
   ClientsIcon, PipelineIcon, PackageIcon, ClockIcon, BarChartIcon,
@@ -15,6 +16,30 @@ const BLUE_DIM = '#0059CE';
 const SITE_URL = 'https://www.aitradespilot.com';
 const REGISTER_URL = 'https://app.aitradespilot.com/register';
 const DEMO_URL = 'https://calendly.com/hello-crmwizardai/30min';
+
+// Direct Stripe Payment Links for the three plans, set at build time. When
+// present, the card buttons sell on the spot: Stripe checkout (14-day trial),
+// then the link's own redirect drops the buyer into app.aitradespilot.com to
+// create their login — the subscription attaches to the account by email, so
+// prefilling the email here matters. Without a link we fall back to the
+// register-first flow.
+const PAYLINKS = {
+  sales: process.env.REACT_APP_ATP_PAYLINK_SALES || '',
+  unlimited: process.env.REACT_APP_ATP_PAYLINK_UNLIMITED || '',
+  bundle: process.env.REACT_APP_ATP_PAYLINK_BUNDLE || '',
+};
+
+function planCheckoutUrl(planKey, user) {
+  const link = PAYLINKS[planKey];
+  if (!link) return `${REGISTER_URL}?plan=${planKey}`;
+  try {
+    const u = new URL(link);
+    if (user && user.email) u.searchParams.set('prefilled_email', user.email);
+    return u.toString();
+  } catch (e) {
+    return link;
+  }
+}
 
 // The full platform, as sold on aitradespilot.com.
 const FEATURES = [
@@ -95,6 +120,7 @@ const GUARANTEES = [
 
 export default function AiTradesPilotPage() {
   const { t, mode } = useTheme();
+  const { user } = useAuth();
   const isDark = mode === 'dark';
   const [cycle, setCycle] = useState('a'); // 'a' annual (default, 2 months free) | 'm' monthly
 
@@ -257,10 +283,10 @@ export default function AiTradesPilotPage() {
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: BLUE, marginBottom: 4 }}>
             Pricing
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>One subscription per company</div>
+          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>Two packages. One bundle.</div>
           <div style={{ fontSize: 14, color: t.textSecondary, marginTop: 6, maxWidth: 640, marginLeft: 'auto', marginRight: 'auto' }}>
-            Not per seat — your whole team works from one plan. AI QS jobs are included
-            every month, and the higher the tier, the more you get and the less an extra one costs.
+            Priced per company, not per seat. £99 wins you the work, £199 runs the whole
+            job with unlimited AI QS priced jobs — or take both for £249 and save £49 a month.
           </div>
         </div>
 
@@ -287,7 +313,7 @@ export default function AiTradesPilotPage() {
           ))}
         </div>
 
-        <div className="atp-plan-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
+        <div className="atp-plan-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, maxWidth: 1060, margin: '0 auto' }}>
           {PLANS.map(plan => (
             <div key={plan.key} style={{
               position: 'relative', display: 'flex', flexDirection: 'column',
@@ -341,7 +367,7 @@ export default function AiTradesPilotPage() {
               </div>
               <a
                 className={plan.popular ? 'atp-cta' : undefined}
-                href={`${REGISTER_URL}?plan=${plan.key}`}
+                href={planCheckoutUrl(plan.key, user)}
                 target="_blank" rel="noopener noreferrer"
                 style={{
                   ...(plan.popular ? primaryBtn : ghostBtn),
