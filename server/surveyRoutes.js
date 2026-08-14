@@ -223,7 +223,7 @@ async function sendTrialInvite(userId, rec) {
       +     '<div style="background:#1B2A4A;padding:18px 24px;color:#ffffff;font-size:18px;font-weight:700;">AI QS</div>'
       +     '<div style="padding:26px 24px 22px;">'
       +       '<h2 style="margin:0 0 14px;font-size:19px;color:#0F172A;">' + esc(firstName) + ', here\'s the package we\'d build for you</h2>'
-      +       '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">Based on what you told us in the portal, the <strong>' + esc(TIERS[rec.tier].label) + '</strong> plan on AI Trades Pilot fits your business best — <strong>&pound;' + rec.monthly + '/month</strong>, with a 14-day free trial and a free AI QS job to try.</p>'
+      +       '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">Based on what you told us in the portal, the <strong>' + esc(TIERS[rec.tier].label) + '</strong> plan on AI Trades Pilot fits your business best — <strong>&pound;' + rec.monthly + '/month</strong>, with a 14-day free trial.</p>'
       +       (coveredList ? '<p style="margin:0 0 6px;font-size:14px;color:#0F172A;font-weight:700;">It covers what you asked for:</p><ul style="margin:0 0 14px;padding-left:20px;font-size:14px;color:#334155;">' + coveredList + '</ul>' : '')
       +       addonNote
       +       '<div style="text-align:center;margin:24px 0 8px;">'

@@ -31,7 +31,8 @@ const FEATURE_OPTIONS = [
   { id: 'cost_tracking',   label: 'Live cost tracking', blurb: 'Planned vs actual, with alerts when margin slips' },
   { id: 'documents',       label: 'Quotes, RAMS & invoices', blurb: 'AI-drafted paperwork on your letterhead' },
   { id: 'materials',       label: 'Materials comparison', blurb: 'Every line priced across merchants before you order' },
-  { id: 'crm_leads',       label: 'CRM & lead generation', blurb: 'A pipeline that fills itself from job portals' },
+  { id: 'crm_leads',       label: 'CRM & priced planning leads', blurb: 'Approved planning near you, priced at your rates on the spot' },
+  { id: 'letters',         label: 'Client letter generator', blurb: 'Headed intro and follow-up letters, ready to post' },
   { id: 'programmes',      label: 'Programmes & schedules', blurb: 'A build programme that plans itself' },
   { id: 'site_team',       label: 'Site tools for the team', blurb: 'Clock-in, photo reports and delegated tasks' },
   { id: 'client_signoff',  label: 'Client sign-off portal', blurb: 'Customers approve changes online, signed & dated' },
@@ -53,10 +54,9 @@ const JOBS_OPTIONS = [
 ];
 
 const TIER_BLURBS = {
-  platform: 'Gets the work in and the paperwork done.',
-  trade: 'Stops you losing money while the job runs.',
-  builder: 'Priced work on tap, with clients signing off online.',
-  contractor: 'Your whole business of jobs — every site, one place.',
+  sales: 'Fills your pipeline — CRM, priced planning leads and client letters.',
+  unlimited: 'Runs the whole job — unlimited AI QS priced jobs, contracts and everything else.',
+  bundle: 'Both packages together — win the work, then run it. Save £49 a month.',
 };
 
 export default function SuitabilitySurveyPopup({ onDecided }) {

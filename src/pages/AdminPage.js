@@ -822,7 +822,11 @@ const SUIT_FEATURES = {
 };
 const SUIT_TEAM = { solo: 'Just me', s2_10: '2–10', s11_25: '11–25', s26plus: '25+' };
 const SUIT_JOBS = { adhoc: 'now & then', monthly: '~1 job/mo', s2_5: '2–5 jobs/mo', s6plus: '5+ jobs/mo' };
-const TIER_COLOURS = { platform: '#94A3B8', trade: '#0071F3', builder: '#7C5CFC', contractor: '#F59E0B' };
+const TIER_COLOURS = {
+  sales: '#10B981', unlimited: '#0071F3', bundle: '#7C5CFC',
+  // retired 2026-07 tiers — old survey results may still reference them
+  platform: '#94A3B8', trade: '#0071F3', builder: '#7C5CFC', contractor: '#F59E0B',
+};
 
 function SuitabilitySection({ t }) {
   const [data, setData] = useState(null);
@@ -852,7 +856,7 @@ function SuitabilitySection({ t }) {
           <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{responses.length}</div>
           <div style={{ fontSize: 12, color: t.textMuted }}>Responses</div>
         </div>
-        {['platform', 'trade', 'builder', 'contractor'].map(k => (
+        {['sales', 'unlimited', 'bundle'].map(k => (
           <div key={k} style={card}>
             <div style={{ fontSize: 26, fontWeight: 700, color: TIER_COLOURS[k] }}>{tierCounts[k] || 0}</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>{k.charAt(0).toUpperCase() + k.slice(1)} recommended</div>

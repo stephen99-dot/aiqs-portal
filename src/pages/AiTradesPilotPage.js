@@ -43,61 +43,45 @@ const JOURNEY = [
   ['Final account', 'Closed out, start to finish'],
 ];
 
-// Four 2026 tiers. Prices per company, not per seat. Annual = pay 10 months.
+// 2026-08 packaging: two packages plus the bundle of both. Prices per
+// company, not per seat. Annual = pay 10 months, get 12.
 const PLANS = [
   {
-    key: 'platform', name: 'Platform', monthly: 59, annual: 49,
-    audience: 'Sole traders & 1–2 person firms',
-    summary: 'Gets the work in and the paperwork done. Everything you do at night — quotes, RAMS, chasing customers — handled.',
-    jobsPill: { big: '£150', small: 'per AI QS job, pay as you go' },
+    key: 'sales', name: 'Sales & Marketing', monthly: 99, annual: 82,
+    audience: 'For getting more of the right jobs in',
+    summary: 'Fills your pipeline. Finds the work near you, prices it on the spot and gets your name through the right doors first.',
+    jobsPill: { big: 'Win-the-work toolkit', small: 'CRM · planning leads · letters' },
     features: [
-      ['Quotes, RAMS, contracts & invoices', 'Written for you in minutes, on your letterhead'],
-      ['Job programmes', 'A build schedule that plans itself from your start date'],
-      ['Compare & order materials', 'See the cheapest merchant before you buy'],
-      ['Customer list + email writer', 'Every job in one place; AI drafts the emails you hate writing'],
-      ['Send jobs for AI pricing', 'Drawings in, priced job back — same day, £150 a job'],
-      ['Job photos & file storage', 'Snap progress on site; every plan, quote & photo kept on the job — 10 GB'],
+      ['CRM & customer list', 'Every enquiry, job and follow-up in one place; AI drafts the emails you hate writing'],
+      ['Planning leads, found for you', 'Council registers scanned around your postcode — extensions, lofts, conversions, new builds'],
+      ['Price a lead there and then', 'One tap prices it at your rates — an honest indicative range, not a guess'],
+      ['Client letter generator', 'Headed intro and follow-up letters written for you, ready to post'],
+      ['Tasks & follow-ups', 'Never lose track of who to chase next'],
     ],
   },
   {
-    key: 'trade', name: 'Trade', monthly: 149, annual: 124, popular: true,
-    audience: 'Small builders, 3–10 on site',
-    summary: 'Stops you losing money while the job runs. Catch overspend early and get paid for every change.',
-    jobsPill: { big: '1 AI QS job', small: 'included every month · extras £129' },
-    everythingIn: 'Platform',
+    key: 'unlimited', name: 'Unlimited', monthly: 199, annual: 166, popular: true,
+    audience: 'The whole platform — no counting',
+    summary: 'Runs the whole job. Every set of drawings priced, every document written, every site tracked — unlimited.',
+    jobsPill: { big: 'Unlimited AI QS jobs', small: 'priced by the system — same day' },
     features: [
-      ['1 priced job a month, included', 'Unused jobs roll over for 60 days; extras are £129 one-offs'],
-      ['Live cost tracker', 'Warns you the moment a job starts going over — while you can still fix it'],
-      ['Get paid for changes', 'Prices variations & valuations and gets them signed off — no more forgotten extras'],
-      ['Real merchant prices', 'Live trade prices in your quotes, not guesses'],
-      ['Site tools for your team', 'Staff clock-in with geofence, photo reports, delegated tasks'],
-      ['More storage — 100 GB', 'Room for photo logs across every job on the go'],
+      ['Unlimited AI QS priced jobs', 'Drawings in, priced Bill of Quantities back — same day, at your rates, no per-job fees'],
+      ['Contracts, RAMS, quotes & invoices', 'Written for you in minutes, on your letterhead'],
+      ['Live cost tracker & variations', 'Catch overspend early and get paid for every change, signed off online'],
+      ['Materials comparison & call-offs', 'Every line priced across merchants; ordered on time, at the best basket'],
+      ['Programmes, client sign-off & multi-site', 'The build schedule plans itself; every live job on one view'],
+      ['Your whole team on site', 'Clock-in with geofence, photo reports, delegated tasks — unlimited staff, 500 GB storage'],
     ],
   },
   {
-    key: 'builder', name: 'Builder', monthly: 399, annual: 333,
-    audience: 'Growing firms pricing every week',
-    summary: 'Priced work on tap. Five jobs a month through the AI QS, plus your clients signing changes off online.',
-    jobsPill: { big: '5 AI QS jobs', small: 'included every month · extras £99' },
-    everythingIn: 'Trade',
+    key: 'bundle', name: 'Bundle', monthly: 249, annual: 207,
+    audience: 'Both packages together — save £49 a month',
+    summary: 'Win the work, then run it. Everything in Sales & Marketing and everything in Unlimited, on one subscription.',
+    jobsPill: { big: 'Everything', small: 'both packages · unlimited AI QS jobs' },
     features: [
-      ['5 priced jobs a month, included', 'Unused jobs roll over for 60 days; extras are £99 one-offs'],
-      ['Client login & sign-off', 'Customers approve changes online, signed and dated — ends the "I never agreed" arguments'],
-      ['More storage — 250 GB', 'Photo history across every job, kept for good'],
-    ],
-  },
-  {
-    key: 'contractor', name: 'Contractor', monthly: 599, annual: 499,
-    audience: 'Main contractors, multi-site',
-    summary: 'Runs your whole business of jobs. Every site, your team and your clients — in one place, in your name.',
-    jobsPill: { big: '10 AI QS jobs', small: 'included every month · extras £79' },
-    everythingIn: 'Builder',
-    features: [
-      ['10 priced jobs a month, included', 'Unused jobs roll over for 60 days; extras are £79 one-offs'],
-      ['All your sites, one view', 'See every live job at once instead of one at a time'],
-      ['Team ordering with approvals', 'Staff raise orders across jobs; nothing bought without a sign-off'],
-      ['Your branding + front-of-queue pricing', 'The whole system in your name; your jobs priced first — unlimited staff'],
-      ['Most storage — 500 GB', 'Full photo history across every site and team member'],
+      ['Everything in Sales & Marketing', 'CRM, priced planning leads and the client letter generator'],
+      ['Everything in Unlimited', 'Unlimited AI QS jobs, contracts, RAMS, cost tracking, materials and the site tools'],
+      ['£49 a month off the pair', 'The two packages together are £298 — the Bundle is £249'],
     ],
   },
 ];
@@ -150,7 +134,7 @@ export default function AiTradesPilotPage() {
         .atp-feat { transition: transform .14s ease, box-shadow .14s ease; }
         .atp-feat:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.12); }
         @media (prefers-reduced-motion: reduce) { .atp-cta { animation: none; } }
-        .atp-plan-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14; }
+        .atp-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14; }
         @media (max-width: 1080px) { .atp-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
         @media (max-width: 640px)  { .atp-plan-grid { grid-template-columns: 1fr !important; } }
         @media (max-width: 880px) {
@@ -370,9 +354,8 @@ export default function AiTradesPilotPage() {
           ))}
         </div>
         <div style={{ textAlign: 'center', fontSize: 12.5, color: t.textSecondary, marginTop: 14, lineHeight: 1.5 }}>
-          Every plan comes with AI QS jobs built in (Platform is pay-as-you-go). Unused monthly
-          jobs roll over for 60 days, and extra jobs are simple one-offs at your plan's rate —{' '}
-          <b>£150, £129, £99 or £79</b>.
+          All plans are per company — bring the whole team. Unlimited and the Bundle include{' '}
+          <b>unlimited AI QS priced jobs</b>: no quotas, no per-job fees. Pay annually and get two months free.
         </div>
 
         {/* Work phone add-on */}

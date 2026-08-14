@@ -12,8 +12,9 @@ const PRICE_TO_PLAN = {
 // Paying the Office in a Box subscription flips the user's has_estimator flag
 // on (and cancelling flips it off). Match is by Stripe Price ID when configured
 // via STRIPE_OFFICE_PRICE_ID / STRIPE_OFFICE_PRICE_IDS (comma-separated);
-// otherwise we fall back to a £100.00/mo amount, which is what the Payment Link
-// charges. Set the env var to lock it to an exact price later.
+// otherwise we fall back to matching the amount: £100/mo (legacy link),
+// £199/mo (Unlimited) or £249/mo (Bundle). Set the env var to lock it to
+// exact prices later.
 function officePriceIds() {
   const raw = process.env.STRIPE_OFFICE_PRICE_IDS || process.env.STRIPE_OFFICE_PRICE_ID || '';
   return raw.split(',').map(s => s.trim()).filter(Boolean);
@@ -24,7 +25,8 @@ function isOfficeSubscription(subscription) {
   const amount = item && item.price && item.price.unit_amount;
   const ids = officePriceIds();
   if (ids.length) return ids.includes(priceId);
-  return amount === 10000; // £100.00 fallback
+  // £100 legacy OiB, £199 Unlimited, £249 Bundle (2026-08 repricing).
+  return amount === 10000 || amount === 19900 || amount === 24900;
 }
 function activateOffice(user, subscriptionId) {
   if (!user) return;

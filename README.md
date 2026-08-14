@@ -69,12 +69,15 @@ All estimator routes and UI are gated behind `users.has_estimator`:
   reprompted on next use. Remove the env var to take the lock off (and reopen access
   via the `has_estimator` flag only).
 
-### Stripe wiring (Phase 2 TODO)
+### Stripe wiring
 
-The £50/month add-on is currently flag-only. To self-serve subscribers, add the new
-price ID to the `PRICE_TO_PLAN` map in `server/stripe-webhook.js` and set
-`has_estimator = 1` from the `customer.subscription.updated` handler. Search for
-`TODO: wire to billing` in `server/routes.js` for the hook point.
+Office in a Box is sold as the AI Trades Pilot **Unlimited** plan
+(£199/month, unlimited AI QS jobs; the £249 Bundle also unlocks it — legacy
+£100/month subscribers are grandfathered). The paywall opens the Payment Link
+in `REACT_APP_OFFICE_PAYMENT_LINK`; the webhook flips `has_estimator` on any
+subscription matching `STRIPE_OFFICE_PRICE_IDS` (or the £100/£199/£249 amount
+fallback). See PRICING_RESTRUCTURE.md in the aitradespilot repo for the full
+runbook.
 
 ### Render notes
 
@@ -324,7 +327,6 @@ Two new entries below Invoices: **Documents** and **Calculators**, both gated on
 
 ### Earlier Phase 2 TODOs (still open)
 
-- Stripe self-serve billing for the £50 add-on.
 - Client login / approval portal for issued quotes (will be revisited in Wave 4).
 - Bulk import of historical rates per user (`client_rate_library` is already there
   but isn't yet consulted by the estimator — easy follow-up).
