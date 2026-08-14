@@ -435,13 +435,19 @@ router.post('/admin/:id/create-project', (req, res) => {
 
     const { v4: uuidv4 } = require('uuid');
     const projectId = uuidv4();
-    const title = (req.body && req.body.title) || (sub.project_type ? sub.project_type + ' — ' + new Date(sub.created_at).toLocaleDateString('en-GB') : 'Untitled job');
+    // Title priority: explicit title from the admin, then the site address the
+    // customer gave us, then type + date as a last resort. Customers know their
+    // jobs by site, not by category.
+    const siteAddress = (sub.site_address || '').trim();
+    const title = (req.body && req.body.title)
+      || siteAddress
+      || (sub.project_type ? sub.project_type + ' — ' + new Date(sub.created_at).toLocaleDateString('en-GB') : 'Untitled job');
     const description = sub.message || null;
 
     db.prepare(`
-      INSERT INTO projects (id, user_id, title, project_type, description, status, source)
-      VALUES (?, ?, ?, ?, ?, 'in_progress', 'submission')
-    `).run(projectId, sub.user_id, title, sub.project_type || 'Other', description);
+      INSERT INTO projects (id, user_id, title, project_type, description, location, status, source)
+      VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'submission')
+    `).run(projectId, sub.user_id, title, sub.project_type || 'Other', description, siteAddress || null);
 
     db.prepare('UPDATE drawing_submissions SET project_id = ? WHERE id = ?').run(projectId, sub.id);
 
