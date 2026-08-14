@@ -1041,4 +1041,29 @@ try {
   console.log('authorized_emails table:', err.message);
 }
 
+// Rename projects that got the auto-generated "<type> — <date>" title even
+// though the customer supplied a site address on their submission. Customers
+// know jobs by site, so the site address is the title. Only touches titles
+// that still start with the project type followed by " — " (the generated
+// shape), so admin-typed titles are left alone. Idempotent: once renamed the
+// title no longer matches the pattern.
+try {
+  const renamed = db.prepare(`
+    UPDATE projects SET title = (
+      SELECT TRIM(s.site_address) FROM drawing_submissions s
+      WHERE s.project_id = projects.id
+        AND s.site_address IS NOT NULL AND TRIM(s.site_address) != ''
+    )
+    WHERE title LIKE project_type || ' — %'
+      AND EXISTS (
+        SELECT 1 FROM drawing_submissions s
+        WHERE s.project_id = projects.id
+          AND s.site_address IS NOT NULL AND TRIM(s.site_address) != ''
+      )
+  `).run();
+  if (renamed.changes > 0) console.log(`Renamed ${renamed.changes} project(s) to their site address`);
+} catch (err) {
+  console.log('Site-address title backfill:', err.message);
+}
+
 module.exports = db;

@@ -194,7 +194,7 @@ router.post('/webhook/new-project', async (req, res) => {
 
     // ─── Create the project ─────────────────────────────────────────
     const projectId = uuidv4();
-    const title = project_title || 'Email Submission — ' + new Date().toLocaleDateString('en-GB');
+    const title = project_title || project_location || 'Email Submission — ' + new Date().toLocaleDateString('en-GB');
 
     db.prepare(`
       INSERT INTO projects (id, user_id, title, project_type, description, location, status, source)
