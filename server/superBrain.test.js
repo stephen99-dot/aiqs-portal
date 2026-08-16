@@ -134,6 +134,47 @@ test('recallSharedRate prefers exact region and project type matches', () => {
   assert.strictEqual(superBrain.recallSharedRate(db, { itemKey: 'nope' }).length, 0);
 });
 
+test('formatSharedKnowledgeForPrompt is empty without shared data, advisory with it', () => {
+  const db = freshDb();
+  assert.strictEqual(superBrain.formatSharedKnowledgeForPrompt(db, {}), '');
+
+  superBrain.importPack(db, {
+    version: 1, source: 'aitradespilot',
+    rates: [
+      { item_key: 'roof_tiling', region: 'london', project_type: 'extension', rate: 96, sample_count: 3, confidence: 0.6 },
+      { item_key: 'roof_tiling', region: 'scotland', project_type: 'extension', rate: 70, sample_count: 5, confidence: 0.6 },
+    ],
+    patterns: [{ item_key_a: 'excavation', item_key_b: 'muck_away', project_type: 'extension', co_occurrence_count: 4 }],
+  });
+
+  const block = superBrain.formatSharedKnowledgeForPrompt(db, { region: 'london', projectType: 'extension' });
+  assert.ok(block.includes('CROSS-APP ADVISORY'));
+  assert.ok(block.includes('NEVER price from this'));
+  assert.ok(block.includes('roof_tiling: ~£96.00'));
+  assert.ok(!block.includes('£70.00'), 'other regions must be filtered out');
+  assert.ok(block.includes('excavation → muck_away'));
+});
+
+test('buildMemoryContext carries the cross-app advisory block', () => {
+  const db = freshDb();
+  superBrain.importPack(db, {
+    version: 1, source: 'aitradespilot',
+    rates: [{ item_key: 'roof_tiling', region: 'uk_average', project_type: 'any', rate: 80, sample_count: 10, confidence: 0.7 }],
+  });
+  const ctx = memoryEngine.buildMemoryContext(db, {
+    userId: 'user-alpha', projectType: 'extension', region: 'uk_average',
+  });
+  assert.ok(ctx.includes('CROSS-APP ADVISORY'));
+  assert.ok(ctx.includes('roof_tiling'));
+
+  // And without shared knowledge the block stays out entirely.
+  const empty = freshDb();
+  const ctx2 = memoryEngine.buildMemoryContext(empty, {
+    userId: 'user-alpha', projectType: 'extension', region: 'uk_average',
+  });
+  assert.ok(!ctx2.includes('CROSS-APP ADVISORY'));
+});
+
 test('snapshot reports layers, the shared layer and recent learnings', () => {
   const db = freshDb();
   seedKnowledge(db);

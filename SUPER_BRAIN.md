@@ -55,11 +55,19 @@ to move knowledge both ways.
 | `POST /api/super-brain/sync` | admin | Pull the peer's pack and import it |
 | `POST /api/super-brain/import` | admin | Import a pack pasted manually |
 
+## Phase 2 (shipped): advisory in chat
+
+`buildMemoryContext()` now appends a `CROSS-APP ADVISORY` block built by
+`superBrain.formatSharedKnowledgeForPrompt()` — the shared rates and scope
+patterns relevant to the job's region and project type. The block's wording
+instructs the model to cite and sanity-check with them only ("the sibling
+side has seen this at ~£X") and states that local learned rates and fixed
+rates always win. Nothing is priced from shared knowledge; the block is
+omitted entirely when no shared knowledge exists.
+
 ## Later phases (not built)
 
 - **Consume:** let `rateResolver.js` treat shared rates as one more evidence
   source (lowest precedence, provenance-tagged), gated by the parity evals.
-- **Advisory in chat:** a `recallSharedRate()` helper exists for the chat to
-  cite what the sibling app has seen, without pricing off it.
 - **Scheduled sync:** a daily cron hitting `/api/super-brain/sync` on both
   apps, instead of the manual button.

@@ -662,6 +662,15 @@ ${lines}
 ===`);
   }
 
+  // Cross-app advisory — what the sibling app (Super Brain exchange) has seen.
+  // Lazy require with a guard: memory context must keep working when the
+  // Super Brain module or its tables are absent.
+  try {
+    const superBrain = require('./superBrain');
+    const sharedBlock = superBrain.formatSharedKnowledgeForPrompt(db, { region, projectType });
+    if (sharedBlock) sections.push(sharedBlock);
+  } catch (e) { /* advisory only — never let it break the prompt build */ }
+
   return sections.length > 0 ? '\n' + sections.join('\n\n') + '\n' : '';
 }
 
