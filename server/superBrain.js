@@ -350,6 +350,43 @@ function recallSharedRate(db, { itemKey, region = 'uk_average', projectType = 'a
     LIMIT 5`).all(String(itemKey), String(region), String(projectType)), []) || [];
 }
 
+// Prompt block for the chat/agent: what the sibling app has seen that is
+// relevant to this job. Advisory by construction — the wording instructs the
+// model to cite and sanity-check with it, never to price from it, so local
+// learned rates and the pricer's fixed rates keep precedence.
+function formatSharedKnowledgeForPrompt(db, { region = 'uk_average', projectType = 'any', limit = 18 } = {}) {
+  const rates = safe(() => db.prepare(`
+    SELECT source_app, item_key, region, project_type, rate, sample_count, confidence
+    FROM brain_shared_rates
+    WHERE region IN (?, 'uk_average') AND project_type IN (?, 'any')
+    ORDER BY (region = ?) DESC, (project_type = ?) DESC, sample_count DESC
+    LIMIT ?`).all(String(region), String(projectType), String(region), String(projectType), limit), []) || [];
+  if (rates.length === 0) return '';
+
+  const patterns = safe(() => db.prepare(`
+    SELECT item_key_a, item_key_b, co_occurrence_count
+    FROM brain_shared_patterns
+    WHERE project_type IN (?, 'any')
+    ORDER BY co_occurrence_count DESC LIMIT 5`).all(String(projectType)), []) || [];
+
+  const sources = [...new Set(rates.map(r => APP_LABELS[r.source_app] || r.source_app))].join(', ');
+  const lines = rates.map(r =>
+    `  ${r.item_key}: ~£${Number(r.rate).toFixed(2)} (${r.region}, ${r.project_type}, n=${r.sample_count}, conf ${Math.round((r.confidence || 0) * 100)}%)`
+  ).join('\n');
+  const patternLines = patterns.length > 0
+    ? '\nScope patterns the sibling app has seen (jobs with A usually also need B):\n'
+      + patterns.map(p => `  ${p.item_key_a} → ${p.item_key_b} (${p.co_occurrence_count}×)`).join('\n')
+    : '';
+
+  return `=== CROSS-APP ADVISORY — learned by ${sources} (cite only, NEVER price from this) ===
+Anonymised aggregates from the sibling app's confirmed jobs. Use them to
+sanity-check your figures or to cite ("the ${sources} side has seen this at
+~£X"). If one of these disagrees with a local learned rate or a fixed rate,
+the local rate ALWAYS wins — mention the difference, do not adopt it.
+${lines}${patternLines}
+===`;
+}
+
 module.exports = {
   APP_ID,
   APP_LABELS,
@@ -360,4 +397,5 @@ module.exports = {
   importPack,
   logServed,
   recallSharedRate,
+  formatSharedKnowledgeForPrompt,
 };
