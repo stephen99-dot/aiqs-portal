@@ -6,7 +6,7 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon, CubeIcon,
-  InboxIcon, FolderIcon, PoundIcon, HomeIcon,
+  InboxIcon, FolderIcon, PoundIcon, HomeIcon, BrainIcon,
 } from './Icons';
 import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
@@ -205,6 +205,7 @@ export default function Layout() {
     { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
+    { path: '/super-brain', label: 'Super Brain', Icon: BrainIcon, adminOnly: true, badge: 'New' },
     { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
   ];
 

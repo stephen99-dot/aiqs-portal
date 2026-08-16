@@ -17,6 +17,7 @@ import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
+import SuperBrainPage from './pages/SuperBrainPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import TeamInvitePage from './pages/TeamInvitePage';
@@ -117,6 +118,7 @@ function AppInner() {
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
+          <Route path="/super-brain" element={<SuperBrainPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/clients" element={<ClientsPage />} />
