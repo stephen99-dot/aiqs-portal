@@ -309,7 +309,7 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
       const hovKey = hoverRef && hoverRef.current ? hoverRef.current.key : null;
       const wantIdx = hovKey ? keys.indexOf(hovKey) : -1;
       if (wantIdx !== hovIdx) { hovIdx = wantIdx; hovMix = 0; }
-      hovMix = Math.min(1, hovMix + 0.07 * (dt / 16.7));
+      hovMix = Math.min(1, hovMix + 0.13 * (dt / 16.7));
 
       // Starfield.
       ctx.fillStyle = '#8FA3BF';
@@ -797,7 +797,7 @@ export default function SuperBrainPage() {
       <style>{CSS}</style>
 
       {/* ── HERO: the mind itself ── */}
-      <div style={{ position: 'relative', maxWidth: 1160, margin: '0 auto', height: 620 }}>
+      <div style={{ position: 'relative', maxWidth: 1160, margin: '0 auto', height: 500 }}>
         <div style={{ position: 'absolute', inset: 0 }}>
           <BrainCanvas
             totalKnowledge={snap.totalKnowledge}
@@ -812,7 +812,7 @@ export default function SuperBrainPage() {
         <span className="sb-hud sb-hud-bl" /><span className="sb-hud sb-hud-br" />
         {/* scrim so the title never fights the neurons for contrast */}
         <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0, height: 250, pointerEvents: 'none',
+          position: 'absolute', left: 0, right: 0, bottom: 0, height: 210, pointerEvents: 'none',
           background: 'linear-gradient(180deg, rgba(4,6,11,0) 0%, rgba(4,6,11,0.85) 55%, rgba(4,6,11,0.96) 100%)',
         }} />
 
@@ -841,41 +841,8 @@ export default function SuperBrainPage() {
         </div>
       </div>
 
-      {/* ── CROSS-APP EXCHANGE ── */}
-      <div style={{ maxWidth: 980, margin: '26px auto 0', padding: '0 24px' }}>
-        <div className="sb-card" style={{ padding: '22px 26px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-            <Orb label={snap.appLabel} sub="this mind" color={AMBER} active />
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <ExchangeStream active={linked} />
-              <div style={{ textAlign: 'center', fontSize: 11.5, color: linked ? '#A5F3FC' : faint, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 4 }}>
-                {linked
-                  ? `${shared[0].rates} rates · ${shared[0].quantities} quantities · ${shared[0].patterns} patterns · synced ${timeAgo(shared[0].imported_at)}`
-                  : snap.peerConfigured ? 'no knowledge exchanged yet' : 'set SUPER_BRAIN_KEY + SUPER_BRAIN_PEER_URL to link'}
-              </div>
-            </div>
-            <Orb label={peerLabel} sub="sibling mind" color={CYAN} active={linked} />
-            <button className="sb-sync-btn" onClick={syncNow} disabled={syncing || !snap.peerConfigured}>
-              {syncing ? 'Syncing…' : 'Sync now'}
-            </button>
-          </div>
-          {syncMsg && (
-            <div style={{
-              marginTop: 14, padding: '9px 14px', borderRadius: 9, fontSize: 13,
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: syncMsg.ok ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-              border: `1px solid ${syncMsg.ok ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
-              color: syncMsg.ok ? '#34D399' : '#F87171',
-            }}>
-              {syncMsg.ok ? <CheckCircleIcon size={15} /> : <AlertCircleIcon size={15} />}
-              {syncMsg.text}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* ── KNOWLEDGE LAYERS ── */}
-      <div style={{ maxWidth: 980, margin: '34px auto 0', padding: '0 24px' }}>
+      <div style={{ maxWidth: 980, margin: '18px auto 0', padding: '0 24px' }}>
         <h2 style={{ fontSize: 12, fontWeight: 800, color: faint, margin: '0 0 14px', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
           ◢ Knowledge layers
         </h2>
@@ -916,6 +883,39 @@ export default function SuperBrainPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ── CROSS-APP EXCHANGE ── */}
+      <div style={{ maxWidth: 980, margin: '26px auto 0', padding: '0 24px' }}>
+        <div className="sb-card" style={{ padding: '22px 26px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+            <Orb label={snap.appLabel} sub="this mind" color={AMBER} active />
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <ExchangeStream active={linked} />
+              <div style={{ textAlign: 'center', fontSize: 11.5, color: linked ? '#A5F3FC' : faint, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 4 }}>
+                {linked
+                  ? `${shared[0].rates} rates · ${shared[0].quantities} quantities · ${shared[0].patterns} patterns · synced ${timeAgo(shared[0].imported_at)}`
+                  : snap.peerConfigured ? 'no knowledge exchanged yet' : 'set SUPER_BRAIN_KEY + SUPER_BRAIN_PEER_URL to link'}
+              </div>
+            </div>
+            <Orb label={peerLabel} sub="sibling mind" color={CYAN} active={linked} />
+            <button className="sb-sync-btn" onClick={syncNow} disabled={syncing || !snap.peerConfigured}>
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
+          {syncMsg && (
+            <div style={{
+              marginTop: 14, padding: '9px 14px', borderRadius: 9, fontSize: 13,
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: syncMsg.ok ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+              border: `1px solid ${syncMsg.ok ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)'}`,
+              color: syncMsg.ok ? '#34D399' : '#F87171',
+            }}>
+              {syncMsg.ok ? <CheckCircleIcon size={15} /> : <AlertCircleIcon size={15} />}
+              {syncMsg.text}
+            </div>
+          )}
         </div>
       </div>
 
