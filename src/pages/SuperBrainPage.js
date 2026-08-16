@@ -153,22 +153,45 @@ function nearestEdges(pts, k = 2, extra = 0.12) {
   return edges;
 }
 
-function BrainCanvas({ totalKnowledge, linked, burstKey }) {
+// Anchor directions for the knowledge-layer regions, spread evenly over the
+// cortex with a golden-angle spiral. Hovering a layer card lights up the
+// neurons nearest its anchor — each layer literally lives somewhere in the
+// brain.
+function makeAnchors(count) {
+  const anchors = [];
+  for (let i = 0; i < count; i++) {
+    const y = 1 - (2 * (i + 0.5)) / count;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const phi = i * 2.399963229728653;
+    anchors.push({ x: Math.cos(phi) * r * 1.32, y: y * 1.0, z: Math.sin(phi) * r * 1.06 });
+  }
+  return anchors;
+}
+
+function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
+  const keysSig = (layerKeys || []).join(',');
 
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return undefined;
     const ctx = canvas.getContext('2d');
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const keys = keysSig ? keysSig.split(',') : [];
 
     let raf = 0; let W = 0; let H = 0;
     let pts = []; let edges = []; let pulses = []; let stars = [];
+    let anchors = []; let edgesByRegion = [];
     let rotY = -0.6; let rotYTarget = -0.6;
     let tiltX = -0.30; let tiltXTarget = -0.30;
     let dragging = false; let lastPX = 0; let autoSpin = true;
     let flash = 0; // cyan burst flash 0..1
+    let hovIdx = -1; let hovMix = 0;
+    // Bloom pass: the scene is downsampled, blurred and added back on top.
+    const bloomCanvas = document.createElement('canvas');
+    const bloomCtx = bloomCanvas.getContext('2d');
+    let bloomOK = typeof ctx.filter === 'string';
 
     function build() {
       const dpr = window.devicePixelRatio || 1;
@@ -181,6 +204,25 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
       pts = makeBrainPoints(N, linked);
       edges = nearestEdges(pts);
       pulses = [];
+      bloomCanvas.width = Math.max(1, Math.floor(W / 2));
+      bloomCanvas.height = Math.max(1, Math.floor(H / 2));
+
+      // Map every neuron to its nearest layer anchor — the region a hovered
+      // layer card lights up.
+      anchors = makeAnchors(Math.max(1, keys.length));
+      pts.forEach((p) => {
+        let best = 0; let bestD = Infinity;
+        anchors.forEach((a, ai) => {
+          const d = (p.x - a.x) ** 2 + (p.y - a.y) ** 2 + (p.z - a.z) ** 2;
+          if (d < bestD) { bestD = d; best = ai; }
+        });
+        p.region = best;
+      });
+      edgesByRegion = anchors.map(() => []);
+      edges.forEach((e, ei) => {
+        edgesByRegion[pts[e[0]].region].push(ei);
+        if (pts[e[1]].region !== pts[e[0]].region) edgesByRegion[pts[e[1]].region].push(ei);
+      });
       stars = Array.from({ length: 130 }, () => ({
         x: Math.random() * W, y: Math.random() * H,
         r: 0.4 + Math.random() * 0.9,
@@ -191,7 +233,15 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
 
     function spawnPulse(color) {
       if (edges.length === 0) return;
-      const [a, b] = edges[Math.floor(Math.random() * edges.length)];
+      // While a layer is hovered, thoughts fire mostly inside its region.
+      let edge;
+      const regional = hovIdx >= 0 ? edgesByRegion[hovIdx] : null;
+      if (regional && regional.length && Math.random() < 0.8) {
+        edge = edges[regional[Math.floor(Math.random() * regional.length)]];
+      } else {
+        edge = edges[Math.floor(Math.random() * edges.length)];
+      }
+      const [a, b] = edge;
       pulses.push({
         a, b, t: 0,
         speed: 0.008 + Math.random() * 0.012,
@@ -227,6 +277,16 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
     function draw(now) {
       const dt = Math.min(50, now - lastNow); lastNow = now;
       ctx.clearRect(0, 0, W, H);
+
+      // Hover state — which layer's region is lit, eased in and out.
+      const hovKey = hoverRef && hoverRef.current ? hoverRef.current.key : null;
+      const wantIdx = hovKey ? keys.indexOf(hovKey) : -1;
+      if (wantIdx !== hovIdx) { hovIdx = wantIdx; hovMix = 0; }
+      hovMix = Math.min(1, hovMix + 0.07 * (dt / 16.7));
+      const regionGain = (region) => {
+        if (hovIdx < 0) return 1;
+        return region === hovIdx ? 1 + 1.0 * hovMix : 1 - 0.72 * hovMix;
+      };
 
       // Starfield.
       ctx.fillStyle = '#8FA3BF';
@@ -277,33 +337,49 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
       // Project all neurons once per frame.
       const proj = pts.map((p) => project(p, cx0, cy0, scale));
 
-      // Synapses, fogged by depth.
+      // Synapses, fogged by depth and dimmed outside a hovered region.
       ctx.lineWidth = 0.6;
       edges.forEach(([i, j]) => {
         const a = proj[i]; const b = proj[j];
         const depth = (a.depth + b.depth) / 2;
-        const fog = Math.max(0, 0.20 - depth * 0.06);
+        let fog = Math.max(0, 0.20 - depth * 0.06);
+        if (hovIdx >= 0) {
+          const inRegion = pts[i].region === hovIdx || pts[j].region === hovIdx;
+          fog *= inRegion ? 1 + 1.2 * hovMix : 1 - 0.72 * hovMix;
+        }
         if (fog <= 0.01) return;
         const sharedEdge = pts[i].shared || pts[j].shared;
         ctx.strokeStyle = sharedEdge
-          ? `rgba(34,211,238,${fog})`
-          : `rgba(245,158,11,${fog})`;
+          ? `rgba(34,211,238,${Math.min(0.5, fog)})`
+          : `rgba(245,158,11,${Math.min(0.5, fog)})`;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       });
+
+      // A soft aura over the hovered region's anchor.
+      if (hovIdx >= 0 && anchors[hovIdx]) {
+        const qa = project(anchors[hovIdx], cx0, cy0, scale);
+        const g = ctx.createRadialGradient(qa.x, qa.y, 0, qa.x, qa.y, scale * 0.62);
+        g.addColorStop(0, `rgba(251,191,36,${0.11 * hovMix * qa.f})`);
+        g.addColorStop(1, 'rgba(251,191,36,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      }
 
       // Neurons — near ones large and bright, far ones swallowed by fog.
       pts.forEach((p, i) => {
         const q = proj[i];
         const tw = reduceMotion ? 0.7 : 0.55 + 0.45 * Math.sin(p.phase + now / 900);
         const fog = Math.max(0.06, Math.min(1, 1.05 - (q.depth + 1.4) * 0.42));
+        const gain = regionGain(p.region);
+        const alpha = Math.min(1, (0.3 + 0.55 * tw) * fog * gain);
         const col = p.shared ? CYAN : AMBER;
         ctx.shadowColor = col;
-        ctx.shadowBlur = 10 * tw * fog;
+        ctx.shadowBlur = 10 * tw * fog * gain;
         ctx.fillStyle = p.shared
-          ? `rgba(34,211,238,${(0.3 + 0.55 * tw) * fog})`
-          : `rgba(251,191,36,${(0.3 + 0.55 * tw) * fog})`;
+          ? `rgba(34,211,238,${alpha})`
+          : `rgba(251,191,36,${alpha})`;
         ctx.beginPath();
-        ctx.arc(q.x, q.y, p.size * q.f * (0.75 + 0.4 * tw), 0, Math.PI * 2);
+        ctx.arc(q.x, q.y, p.size * q.f * (0.75 + 0.4 * tw) * (gain > 1 ? 1 + 0.3 * hovMix : 1), 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -326,7 +402,9 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
           ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke();
         });
-        if (now - lastSpawn > 200 && pulses.length < 18) { spawnPulse(); lastSpawn = now; }
+        const spawnEvery = hovIdx >= 0 ? 90 : 200;
+        const maxPulses = hovIdx >= 0 ? 26 : 18;
+        if (now - lastSpawn > spawnEvery && pulses.length < maxPulses) { spawnPulse(); lastSpawn = now; }
       }
 
       // Sync burst flash — a cyan halo swelling out of the cortex.
@@ -340,6 +418,24 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
       }
 
       ctx.globalCompositeOperation = 'source-over';
+
+      // Bloom: downsample the frame, blur it, add it back. Real volumetric
+      // glow for the cost of one blurred drawImage. Browsers without canvas
+      // filters simply skip it.
+      if (bloomOK) {
+        try {
+          bloomCtx.clearRect(0, 0, bloomCanvas.width, bloomCanvas.height);
+          bloomCtx.drawImage(canvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.globalAlpha = 0.55;
+          ctx.filter = 'blur(9px) saturate(1.35)';
+          ctx.drawImage(bloomCanvas, 0, 0, W, H);
+          ctx.restore();
+          ctx.filter = 'none';
+        } catch (e) { bloomOK = false; }
+      }
+
       if (!reduceMotion) raf = requestAnimationFrame(draw);
     }
 
@@ -373,7 +469,7 @@ function BrainCanvas({ totalKnowledge, linked, burstKey }) {
       window.removeEventListener('pointerup', onPointerUp);
       apiRef.current = null;
     };
-  }, [totalKnowledge, linked]);
+  }, [totalKnowledge, linked, keysSig]);
 
   // A sync landed — fire the cyan burst.
   useEffect(() => {
@@ -414,6 +510,35 @@ function ExchangeStream({ active }) {
       ))}
     </svg>
   );
+}
+
+// A short synth chime when a sync lands — pure WebAudio, no assets, and only
+// ever triggered by the user's own click on Sync now.
+function playSyncChime() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ac = new AC();
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.08, ac.currentTime + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 1.1);
+    g.connect(ac.destination);
+    const o1 = ac.createOscillator();
+    o1.type = 'sine';
+    o1.frequency.setValueAtTime(340, ac.currentTime);
+    o1.frequency.exponentialRampToValueAtTime(1020, ac.currentTime + 0.5);
+    o1.connect(g);
+    const o2 = ac.createOscillator();
+    o2.type = 'triangle';
+    o2.frequency.setValueAtTime(510, ac.currentTime);
+    o2.frequency.exponentialRampToValueAtTime(1530, ac.currentTime + 0.5);
+    const g2 = ac.createGain(); g2.gain.value = 0.3;
+    o2.connect(g2); g2.connect(g);
+    o1.start(); o2.start();
+    o1.stop(ac.currentTime + 1.2); o2.stop(ac.currentTime + 1.2);
+    setTimeout(() => { try { ac.close(); } catch (e) {} }, 1600);
+  } catch (e) { /* the chime is a garnish, never a failure */ }
 }
 
 function Orb({ label, sub, color, active }) {
@@ -520,6 +645,9 @@ export default function SuperBrainPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
   const [burstKey, setBurstKey] = useState(0);
+  // Which layer card the cursor is on — read by the canvas every frame, so a
+  // ref keeps hover out of React's render loop entirely.
+  const hoverRef = useRef({ key: null });
 
   useEffect(() => { load(); }, []);
 
@@ -540,6 +668,7 @@ export default function SuperBrainPage() {
         text: `Pulled from ${r.peer || r.source}: ${r.imported.rates} rates, ${r.imported.quantities} quantity benchmarks, ${r.imported.patterns} patterns.`,
       });
       setBurstKey(k => k + 1);
+      playSyncChime();
       load();
     } catch (e) {
       setSyncMsg({ ok: false, text: e.message || 'Sync failed' });
@@ -596,7 +725,13 @@ export default function SuperBrainPage() {
       {/* ── HERO: the mind itself ── */}
       <div style={{ position: 'relative', maxWidth: 1160, margin: '0 auto', height: 620 }}>
         <div style={{ position: 'absolute', inset: 0 }}>
-          <BrainCanvas totalKnowledge={snap.totalKnowledge} linked={linked} burstKey={burstKey} />
+          <BrainCanvas
+            totalKnowledge={snap.totalKnowledge}
+            linked={linked}
+            burstKey={burstKey}
+            hoverRef={hoverRef}
+            layerKeys={layers.map(l => l.key)}
+          />
         </div>
         {/* HUD corner brackets */}
         <span className="sb-hud sb-hud-tl" /><span className="sb-hud sb-hud-tr" />
@@ -627,7 +762,7 @@ export default function SuperBrainPage() {
           <div style={{ marginTop: 8, fontSize: 12.5, color: faint, maxWidth: 640, margin: '8px auto 0', lineHeight: 1.6 }}>
             <span style={{ color: AMBER_BRIGHT }}>●</span> amber neurons — knowledge this app grew itself&nbsp;&nbsp;
             <span style={{ color: CYAN }}>●</span> cyan — learned from {peerLabel}. Aggregates only, never names, clients or memories.
-            <span style={{ display: 'block', marginTop: 4, fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.7 }}>drag the brain to spin it</span>
+            <span style={{ display: 'block', marginTop: 4, fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.7 }}>drag the brain to spin it · hover a knowledge layer to light up its region</span>
           </div>
         </div>
       </div>
@@ -675,7 +810,13 @@ export default function SuperBrainPage() {
             const Icon = LAYER_ICONS[l.key] || BrainIcon;
             const pct = Math.max(4, Math.round(((l.count || 0) / maxCount) * 100));
             return (
-              <div key={l.key} className="sb-card" style={{ animationDelay: `${idx * 60}ms` }}>
+              <div
+                key={l.key}
+                className="sb-card"
+                style={{ animationDelay: `${idx * 60}ms` }}
+                onMouseEnter={() => { hoverRef.current.key = l.key; }}
+                onMouseLeave={() => { if (hoverRef.current.key === l.key) hoverRef.current.key = null; }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#E2E8F0', fontSize: 14, fontWeight: 700 }}>
                     <span style={{ color: AMBER, filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.7))', display: 'flex' }}><Icon size={15} /></span>
