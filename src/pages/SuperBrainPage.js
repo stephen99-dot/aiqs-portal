@@ -10,15 +10,20 @@ import {
 // A rotating 3D point-cloud brain, hand-projected onto a 2D canvas — no
 // dependencies. Two wrinkled cortical hemispheres, a cerebellum, depth fog,
 // synapses firing in three dimensions, orbital data rings and a starfield.
-// Drag to spin it; it drifts on its own otherwise.
+// Drag to spin it; it drifts on its own otherwise. Hovering a knowledge
+// layer card lights up that layer's region of the cortex.
+//
+// Performance is engineered, not hoped for: glow comes from pre-rendered
+// radial-gradient sprites (never per-particle shadowBlur), synapses draw in
+// six batched strokes, the backing store is capped at 1.5× DPR, bloom runs
+// at quarter resolution, a frame-time governor sheds bloom and then
+// particles on slow devices, and the whole loop stops when the brain is
+// scrolled out of view or the tab is hidden.
 //
 // The visual is data-driven: neuron count scales with total knowledge, and
 // once the cross-app link is live a share of neurons and pulses turn cyan —
 // knowledge received from the sibling app. A successful sync fires a cyan
 // burst through the whole cortex.
-//
-// The page stays deep-space dark in both themes — it is the one place in the
-// portal allowed to look like a machine dreaming.
 
 const AMBER = '#F59E0B';
 const AMBER_BRIGHT = '#FBBF24';
@@ -78,22 +83,16 @@ function useCountUp(target, ms = 1800) {
 }
 
 // ─── The 3D brain ───────────────────────────────────────────────────────────
-//
-// Points are sampled on a wrinkled ellipsoid (the cortex) plus a smaller,
-// finer-wrinkled lobe at the back-bottom (the cerebellum). A midline groove
-// splits the hemispheres. Everything lives in unit-ish space and is rotated,
-// perspective-projected and fogged each frame.
 
 function makeBrainPoints(count, linked) {
   const pts = [];
   const cortexN = Math.floor(count * 0.86);
   for (let i = 0; i < count; i++) {
     const cerebellum = i >= cortexN;
-    // Uniform direction on a sphere.
     const u = Math.random() * 2 - 1;
     const t = Math.random() * Math.PI * 2;
     const s = Math.sqrt(1 - u * u);
-    let ux = s * Math.cos(t); let uy = u; let uz = s * Math.sin(t);
+    const ux = s * Math.cos(t); const uy = u; const uz = s * Math.sin(t);
 
     let x; let y; let z;
     if (!cerebellum) {
@@ -123,7 +122,7 @@ function makeBrainPoints(count, linked) {
       phase: Math.random() * Math.PI * 2,
       size: cerebellum ? 1.0 + Math.random() * 0.9 : 1.1 + Math.random() * 1.5,
       shared: linked && Math.random() < 0.28,
-      cerebellum,
+      region: 0,
     });
   }
   return pts;
@@ -146,7 +145,6 @@ function nearestEdges(pts, k = 2, extra = 0.12) {
     dists.sort((a, b) => a.d - b.d);
     for (let n = 0; n < k; n++) link(i, dists[n].j);
   }
-  // A few long association fibres so pulses cross the whole cortex.
   for (let n = 0; n < Math.floor(pts.length * extra); n++) {
     link(Math.floor(Math.random() * pts.length), Math.floor(Math.random() * pts.length));
   }
@@ -154,9 +152,7 @@ function nearestEdges(pts, k = 2, extra = 0.12) {
 }
 
 // Anchor directions for the knowledge-layer regions, spread evenly over the
-// cortex with a golden-angle spiral. Hovering a layer card lights up the
-// neurons nearest its anchor — each layer literally lives somewhere in the
-// brain.
+// cortex with a golden-angle spiral.
 function makeAnchors(count) {
   const anchors = [];
   for (let i = 0; i < count; i++) {
@@ -166,6 +162,24 @@ function makeAnchors(count) {
     anchors.push({ x: Math.cos(phi) * r * 1.32, y: y * 1.0, z: Math.sin(phi) * r * 1.06 });
   }
   return anchors;
+}
+
+// Glow sprite: a radial gradient baked once and stamped with drawImage —
+// the entire reason this page runs at 60fps. Per-particle shadowBlur is
+// 10–50× slower than one sprite stamp.
+function makeGlowSprite(coreRGB, haloRGB) {
+  const size = 64;
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, `rgba(${coreRGB},1)`);
+  grad.addColorStop(0.18, `rgba(${haloRGB},0.6)`);
+  grad.addColorStop(0.45, `rgba(${haloRGB},0.16)`);
+  grad.addColorStop(1, `rgba(${haloRGB},0)`);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return c;
 }
 
 function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) {
@@ -180,35 +194,55 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const keys = keysSig ? keysSig.split(',') : [];
 
-    let raf = 0; let W = 0; let H = 0;
+    const amberSprite = makeGlowSprite('255,241,209', '245,158,11');
+    const cyanSprite = makeGlowSprite('224,252,255', '34,211,238');
+
+    let raf = 0; let running = false; let visible = true;
+    let W = 0; let H = 0;
     let pts = []; let edges = []; let pulses = []; let stars = [];
     let anchors = []; let edgesByRegion = [];
+    // Projection targets, reallocated only on rebuild — zero per-frame GC.
+    let PX = null; let PY = null; let PF = null; let PD = null;
+    // Batched synapse segments: [amber|cyan][faint|mid|bright] → flat coords.
+    const segs = [[[], [], []], [[], [], []]];
     let rotY = -0.6; let rotYTarget = -0.6;
     let tiltX = -0.30; let tiltXTarget = -0.30;
     let dragging = false; let lastPX = 0; let autoSpin = true;
-    let flash = 0; // cyan burst flash 0..1
+    let flash = 0;
     let hovIdx = -1; let hovMix = 0;
-    // Bloom pass: the scene is downsampled, blurred and added back on top.
+    // Quality governor: 3 = bloom on, full density · 2 = no bloom · 1 = fewer
+    // neurons too. Frame-time average decides; it only ever steps down.
+    let quality = 3; let frameAcc = 0; let frameCnt = 0;
     const bloomCanvas = document.createElement('canvas');
     const bloomCtx = bloomCanvas.getContext('2d');
     let bloomOK = typeof ctx.filter === 'string';
 
     function build() {
-      const dpr = window.devicePixelRatio || 1;
+      // 1.5× is visually indistinguishable from full retina here and halves
+      // the pixels pushed per frame on 2× displays.
+      const dpr = quality === 1 ? 1 : Math.min(1.5, window.devicePixelRatio || 1);
       W = canvas.clientWidth; H = canvas.clientHeight;
-      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.width = Math.max(1, Math.floor(W * dpr));
+      canvas.height = Math.max(1, Math.floor(H * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Neurons grow with knowledge: 140 at zero → 460 at ~5000 pieces.
-      const N = Math.min(480, 170 + Math.floor(Math.sqrt(totalKnowledge || 0) * 4.6));
+      // Neurons grow with knowledge; the governor may thin them on slow devices.
+      const budget = quality === 1 ? 0.55 : 1;
+      const N = Math.floor(Math.min(480, 170 + Math.floor(Math.sqrt(totalKnowledge || 0) * 4.6)) * budget);
       pts = makeBrainPoints(N, linked);
-      edges = nearestEdges(pts);
+      edges = nearestEdges(pts, 2, quality === 1 ? 0.05 : 0.12);
       pulses = [];
-      bloomCanvas.width = Math.max(1, Math.floor(W / 2));
-      bloomCanvas.height = Math.max(1, Math.floor(H / 2));
+      PX = new Float32Array(N); PY = new Float32Array(N);
+      PF = new Float32Array(N); PD = new Float32Array(N);
+      bloomCanvas.width = Math.max(1, Math.floor(W / 4));
+      bloomCanvas.height = Math.max(1, Math.floor(H / 4));
+      stars = Array.from({ length: 110 }, () => ({
+        x: Math.random() * W, y: Math.random() * H,
+        r: 0.4 + Math.random() * 0.9,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.4 + Math.random() * 0.8,
+      }));
 
-      // Map every neuron to its nearest layer anchor — the region a hovered
-      // layer card lights up.
       anchors = makeAnchors(Math.max(1, keys.length));
       pts.forEach((p) => {
         let best = 0; let bestD = Infinity;
@@ -223,17 +257,10 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
         edgesByRegion[pts[e[0]].region].push(ei);
         if (pts[e[1]].region !== pts[e[0]].region) edgesByRegion[pts[e[1]].region].push(ei);
       });
-      stars = Array.from({ length: 130 }, () => ({
-        x: Math.random() * W, y: Math.random() * H,
-        r: 0.4 + Math.random() * 0.9,
-        phase: Math.random() * Math.PI * 2,
-        speed: 0.4 + Math.random() * 0.8,
-      }));
     }
 
     function spawnPulse(color) {
       if (edges.length === 0) return;
-      // While a layer is hovered, thoughts fire mostly inside its region.
       let edge;
       const regional = hovIdx >= 0 ? edgesByRegion[hovIdx] : null;
       if (regional && regional.length && Math.random() < 0.8) {
@@ -241,9 +268,8 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
       } else {
         edge = edges[Math.floor(Math.random() * edges.length)];
       }
-      const [a, b] = edge;
       pulses.push({
-        a, b, t: 0,
+        a: edge[0], b: edge[1], t: 0,
         speed: 0.008 + Math.random() * 0.012,
         color: color || (linked && Math.random() < 0.35 ? CYAN : AMBER_BRIGHT),
       });
@@ -251,12 +277,11 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
 
     apiRef.current = {
       burst() {
-        for (let i = 0; i < 46; i++) spawnPulse(CYAN);
+        for (let i = 0; i < 40; i++) spawnPulse(CYAN);
         flash = 1;
       },
     };
 
-    // Project a 3D point through the current rotation into screen space.
     function project(p, cx0, cy0, scale) {
       const cy = Math.cos(rotY); const sy = Math.sin(rotY);
       const cxr = Math.cos(tiltX); const sxr = Math.sin(tiltX);
@@ -265,16 +290,18 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
       const y1 = p.y * cxr - z1 * sxr;
       const z2 = p.y * sxr + z1 * cxr;
       const f = 3.4 / (3.4 + z2 + 0.2);
-      return {
-        x: cx0 + x1 * f * scale,
-        y: cy0 - y1 * f * scale,
-        f,
-        depth: z2, // -1.5 (near) .. 1.5 (far)
-      };
+      return { x: cx0 + x1 * f * scale, y: cy0 - y1 * f * scale, f, depth: z2 };
     }
 
     let lastSpawn = 0; let lastNow = performance.now();
     function draw(now) {
+      // Lowest quality tier renders at 30fps — half the work for software
+      // renderers, imperceptible for a background ambience piece.
+      if (quality === 1 && now - lastNow < 30) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      const t0 = performance.now();
       const dt = Math.min(50, now - lastNow); lastNow = now;
       ctx.clearRect(0, 0, W, H);
 
@@ -283,77 +310,98 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
       const wantIdx = hovKey ? keys.indexOf(hovKey) : -1;
       if (wantIdx !== hovIdx) { hovIdx = wantIdx; hovMix = 0; }
       hovMix = Math.min(1, hovMix + 0.07 * (dt / 16.7));
-      const regionGain = (region) => {
-        if (hovIdx < 0) return 1;
-        return region === hovIdx ? 1 + 1.0 * hovMix : 1 - 0.72 * hovMix;
-      };
 
       // Starfield.
       ctx.fillStyle = '#8FA3BF';
-      stars.forEach((st) => {
-        const a = reduceMotion ? 0.4 : 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(st.phase + now / (1400 / st.speed)));
-        ctx.globalAlpha = a;
+      for (let i = 0; i < stars.length; i++) {
+        const st = stars[i];
+        ctx.globalAlpha = reduceMotion ? 0.4 : 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(st.phase + now / (1400 / st.speed)));
         ctx.fillRect(st.x, st.y, st.r, st.r);
-      });
+      }
       ctx.globalAlpha = 1;
 
       const cx0 = W / 2;
       const cy0 = H * 0.40;
       const scale = Math.min(W * 0.24, H * 0.34);
 
-      // Camera drift + drag inertia.
       if (!reduceMotion) {
         if (autoSpin && !dragging) rotYTarget += 0.00022 * dt;
         rotY += (rotYTarget - rotY) * 0.08;
         tiltX += (tiltXTarget - tiltX) * 0.06;
       }
 
-      // Orbital data rings — two tilted particle rings circling the mind.
+      // Orbital data rings — sprite dots, no shadows.
       ctx.globalCompositeOperation = 'lighter';
-      [[1.75, 0.42, 26, now / 5200], [2.05, -0.3, 20, -now / 7400]].forEach(([rr, tilt, nDots, orbit], ri) => {
+      const rings = [[1.75, 0.42, 22, now / 5200], [2.05, -0.3, 16, -now / 7400]];
+      for (let ri = 0; ri < rings.length; ri++) {
+        const rr = rings[ri][0]; const tilt = rings[ri][1]; const nDots = rings[ri][2];
+        const orbit = reduceMotion ? 0 : rings[ri][3];
         ctx.strokeStyle = ri === 0 ? 'rgba(245,158,11,0.10)' : 'rgba(34,211,238,0.08)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let i = 0; i <= 64; i++) {
-          const a = (i / 64) * Math.PI * 2;
-          const p = { x: Math.cos(a) * rr, y: Math.sin(a) * rr * Math.sin(tilt), z: Math.sin(a) * rr * Math.cos(tilt) };
-          const q = project(p, cx0, cy0, scale);
+        for (let i = 0; i <= 56; i++) {
+          const a = (i / 56) * Math.PI * 2;
+          const q = project({ x: Math.cos(a) * rr, y: Math.sin(a) * rr * Math.sin(tilt), z: Math.sin(a) * rr * Math.cos(tilt) }, cx0, cy0, scale);
           if (i === 0) ctx.moveTo(q.x, q.y); else ctx.lineTo(q.x, q.y);
         }
         ctx.stroke();
         for (let i = 0; i < nDots; i++) {
-          const a = (i / nDots) * Math.PI * 2 + (reduceMotion ? 0 : orbit);
-          const p = { x: Math.cos(a) * rr, y: Math.sin(a) * rr * Math.sin(tilt), z: Math.sin(a) * rr * Math.cos(tilt) };
-          const q = project(p, cx0, cy0, scale);
-          const col = (i + ri) % 3 === 0 ? CYAN : AMBER_BRIGHT;
-          ctx.fillStyle = col;
+          const a = (i / nDots) * Math.PI * 2 + orbit;
+          const q = project({ x: Math.cos(a) * rr, y: Math.sin(a) * rr * Math.sin(tilt), z: Math.sin(a) * rr * Math.cos(tilt) }, cx0, cy0, scale);
+          const sprite = (i + ri) % 3 === 0 ? cyanSprite : amberSprite;
+          const R = 4.5 * q.f;
           ctx.globalAlpha = 0.16 + 0.3 * q.f;
-          ctx.shadowColor = col; ctx.shadowBlur = 6;
-          ctx.beginPath(); ctx.arc(q.x, q.y, 1.1 * q.f, 0, Math.PI * 2); ctx.fill();
+          ctx.drawImage(sprite, q.x - R, q.y - R, R * 2, R * 2);
         }
-        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
-      });
+        ctx.globalAlpha = 1;
+      }
 
-      // Project all neurons once per frame.
-      const proj = pts.map((p) => project(p, cx0, cy0, scale));
+      // Project every neuron into the reusable buffers.
+      const cyR = Math.cos(rotY); const syR = Math.sin(rotY);
+      const cxR = Math.cos(tiltX); const sxR = Math.sin(tiltX);
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const x1 = p.x * cyR + p.z * syR;
+        const z1 = -p.x * syR + p.z * cyR;
+        const y1 = p.y * cxR - z1 * sxR;
+        const z2 = p.y * sxR + z1 * cxR;
+        const f = 3.4 / (3.4 + z2 + 0.2);
+        PX[i] = cx0 + x1 * f * scale;
+        PY[i] = cy0 - y1 * f * scale;
+        PF[i] = f; PD[i] = z2;
+      }
 
-      // Synapses, fogged by depth and dimmed outside a hovered region.
-      ctx.lineWidth = 0.6;
-      edges.forEach(([i, j]) => {
-        const a = proj[i]; const b = proj[j];
-        const depth = (a.depth + b.depth) / 2;
-        let fog = Math.max(0, 0.20 - depth * 0.06);
+      // Synapses in six batched strokes: 2 colours × 3 brightness bands.
+      for (let c = 0; c < 2; c++) { segs[c][0].length = 0; segs[c][1].length = 0; segs[c][2].length = 0; }
+      for (let e = 0; e < edges.length; e++) {
+        const i = edges[e][0]; const j = edges[e][1];
+        const depth = (PD[i] + PD[j]) / 2;
+        let a = Math.max(0, 0.20 - depth * 0.06);
         if (hovIdx >= 0) {
           const inRegion = pts[i].region === hovIdx || pts[j].region === hovIdx;
-          fog *= inRegion ? 1 + 1.2 * hovMix : 1 - 0.72 * hovMix;
+          a *= inRegion ? 1 + 1.2 * hovMix : 1 - 0.72 * hovMix;
         }
-        if (fog <= 0.01) return;
-        const sharedEdge = pts[i].shared || pts[j].shared;
-        ctx.strokeStyle = sharedEdge
-          ? `rgba(34,211,238,${Math.min(0.5, fog)})`
-          : `rgba(245,158,11,${Math.min(0.5, fog)})`;
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      });
+        if (a <= 0.03) continue;
+        const color = (pts[i].shared || pts[j].shared) ? 1 : 0;
+        const band = a < 0.09 ? 0 : a < 0.17 ? 1 : 2;
+        segs[color][band].push(PX[i], PY[i], PX[j], PY[j]);
+      }
+      const bandAlpha = [0.06, 0.13, 0.24];
+      ctx.lineWidth = 0.6;
+      for (let c = 0; c < 2; c++) {
+        for (let b = 0; b < 3; b++) {
+          const arr = segs[c][b];
+          if (!arr.length) continue;
+          ctx.strokeStyle = c === 1
+            ? `rgba(34,211,238,${bandAlpha[b]})`
+            : `rgba(245,158,11,${bandAlpha[b]})`;
+          ctx.beginPath();
+          for (let k = 0; k < arr.length; k += 4) {
+            ctx.moveTo(arr[k], arr[k + 1]); ctx.lineTo(arr[k + 2], arr[k + 3]);
+          }
+          ctx.stroke();
+        }
+      }
 
       // A soft aura over the hovered region's anchor.
       if (hovIdx >= 0 && anchors[hovIdx]) {
@@ -365,43 +413,41 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
         ctx.fillRect(0, 0, W, H);
       }
 
-      // Neurons — near ones large and bright, far ones swallowed by fog.
-      pts.forEach((p, i) => {
-        const q = proj[i];
+      // Neurons — one sprite stamp each. Near ones large, far ones fogged.
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
         const tw = reduceMotion ? 0.7 : 0.55 + 0.45 * Math.sin(p.phase + now / 900);
-        const fog = Math.max(0.06, Math.min(1, 1.05 - (q.depth + 1.4) * 0.42));
-        const gain = regionGain(p.region);
+        const fog = Math.max(0.06, Math.min(1, 1.05 - (PD[i] + 1.4) * 0.42));
+        let gain = 1;
+        if (hovIdx >= 0) gain = p.region === hovIdx ? 1 + 1.0 * hovMix : 1 - 0.72 * hovMix;
         const alpha = Math.min(1, (0.3 + 0.55 * tw) * fog * gain);
-        const col = p.shared ? CYAN : AMBER;
-        ctx.shadowColor = col;
-        ctx.shadowBlur = 10 * tw * fog * gain;
-        ctx.fillStyle = p.shared
-          ? `rgba(34,211,238,${alpha})`
-          : `rgba(251,191,36,${alpha})`;
-        ctx.beginPath();
-        ctx.arc(q.x, q.y, p.size * q.f * (0.75 + 0.4 * tw) * (gain > 1 ? 1 + 0.3 * hovMix : 1), 0, Math.PI * 2);
-        ctx.fill();
-      });
+        if (alpha <= 0.02) continue;
+        const R = p.size * PF[i] * (0.75 + 0.4 * tw) * (gain > 1 ? 1 + 0.3 * hovMix : 1) * 3.4;
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(p.shared ? cyanSprite : amberSprite, PX[i] - R, PY[i] - R, R * 2, R * 2);
+      }
+      ctx.globalAlpha = 1;
 
-      // Thoughts in flight.
+      // Thoughts in flight — sprite heads with short trails.
       if (!reduceMotion) {
         pulses = pulses.filter((pl) => pl.t <= 1);
-        pulses.forEach((pl) => {
+        for (let n = 0; n < pulses.length; n++) {
+          const pl = pulses[n];
           pl.t += pl.speed * (dt / 16.7);
-          const a = proj[pl.a]; const b = proj[pl.b];
-          const x = a.x + (b.x - a.x) * pl.t;
-          const y = a.y + (b.y - a.y) * pl.t;
-          const f = a.f + (b.f - a.f) * pl.t;
-          ctx.shadowColor = pl.color; ctx.shadowBlur = 18;
-          ctx.fillStyle = pl.color;
-          ctx.beginPath(); ctx.arc(x, y, 2.1 * f, 0, Math.PI * 2); ctx.fill();
-          ctx.shadowBlur = 0;
-          const t0 = Math.max(0, pl.t - 0.14);
-          const tx = a.x + (b.x - a.x) * t0; const ty = a.y + (b.y - a.y) * t0;
+          const ai = pl.a; const bi = pl.b;
+          const x = PX[ai] + (PX[bi] - PX[ai]) * pl.t;
+          const y = PY[ai] + (PY[bi] - PY[ai]) * pl.t;
+          const f = PF[ai] + (PF[bi] - PF[ai]) * pl.t;
+          const t0p = Math.max(0, pl.t - 0.14);
           ctx.strokeStyle = pl.color === CYAN ? 'rgba(34,211,238,0.3)' : 'rgba(251,191,36,0.3)';
           ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(x, y); ctx.stroke();
-        });
+          ctx.beginPath();
+          ctx.moveTo(PX[ai] + (PX[bi] - PX[ai]) * t0p, PY[ai] + (PY[bi] - PY[ai]) * t0p);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+          const R = 7 * f;
+          ctx.drawImage(pl.color === CYAN ? cyanSprite : amberSprite, x - R, y - R, R * 2, R * 2);
+        }
         const spawnEvery = hovIdx >= 0 ? 90 : 200;
         const maxPulses = hovIdx >= 0 ? 26 : 18;
         if (now - lastSpawn > spawnEvery && pulses.length < maxPulses) { spawnPulse(); lastSpawn = now; }
@@ -419,24 +465,41 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
 
       ctx.globalCompositeOperation = 'source-over';
 
-      // Bloom: downsample the frame, blur it, add it back. Real volumetric
-      // glow for the cost of one blurred drawImage. Browsers without canvas
-      // filters simply skip it.
-      if (bloomOK) {
+      // Bloom at quarter resolution, only while the device holds full quality.
+      if (bloomOK && quality >= 3) {
         try {
           bloomCtx.clearRect(0, 0, bloomCanvas.width, bloomCanvas.height);
           bloomCtx.drawImage(canvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
           ctx.save();
           ctx.globalCompositeOperation = 'lighter';
           ctx.globalAlpha = 0.55;
-          ctx.filter = 'blur(9px) saturate(1.35)';
+          ctx.filter = 'blur(5px) saturate(1.35)';
           ctx.drawImage(bloomCanvas, 0, 0, W, H);
           ctx.restore();
           ctx.filter = 'none';
         } catch (e) { bloomOK = false; }
       }
 
-      if (!reduceMotion) raf = requestAnimationFrame(draw);
+      // Frame-time governor: a rolling average over 60 frames; too slow →
+      // drop bloom, still too slow → thin the neurons. Never steps back up,
+      // so quality can't oscillate.
+      frameAcc += performance.now() - t0; frameCnt++;
+      if (frameCnt >= 60) {
+        const avg = frameAcc / frameCnt;
+        frameAcc = 0; frameCnt = 0;
+        if (avg > 12 && quality === 3) { quality = 2; }
+        else if (avg > 12 && quality === 2) { quality = 1; build(); }
+      }
+
+      if (!reduceMotion && visible) { raf = requestAnimationFrame(draw); running = true; }
+      else { running = false; }
+    }
+
+    function start() {
+      if (running || reduceMotion) { if (reduceMotion) draw(performance.now()); return; }
+      lastNow = performance.now();
+      running = true;
+      raf = requestAnimationFrame(draw);
     }
 
     // ── Interaction: drag to spin, hover to lean in. ──
@@ -446,7 +509,7 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
       if (dragging) {
         rotYTarget += (e.clientX - lastPX) * 0.006;
         lastPX = e.clientX;
-      } else {
+      } else if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
         const my = (e.clientY - rect.top) / rect.height;
         tiltXTarget = -0.30 + (my - 0.45) * -0.18;
       }
@@ -454,8 +517,19 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
     function onPointerUp() { dragging = false; setTimeout(() => { autoSpin = true; }, 2200); }
 
     build();
-    raf = requestAnimationFrame(draw);
-    if (reduceMotion) draw(performance.now());
+    start();
+
+    // Stop burning CPU the moment the brain scrolls out of view.
+    let io = null;
+    if (typeof IntersectionObserver === 'function') {
+      io = new IntersectionObserver((entries) => {
+        const nowVisible = entries[0] ? entries[0].isIntersecting : true;
+        if (nowVisible && !visible) { visible = true; start(); }
+        else if (!nowVisible) { visible = false; }
+      }, { threshold: 0.02 });
+      io.observe(canvas);
+    }
+
     const onResize = () => build();
     window.addEventListener('resize', onResize);
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -463,6 +537,7 @@ function BrainCanvas({ totalKnowledge, linked, burstKey, hoverRef, layerKeys }) 
     window.addEventListener('pointerup', onPointerUp);
     return () => {
       cancelAnimationFrame(raf);
+      if (io) io.disconnect();
       window.removeEventListener('resize', onResize);
       canvas.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
@@ -567,10 +642,9 @@ const CSS = `
   .sb-chip {
     display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border-radius: 999px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    border: 1px solid rgba(245,158,11,0.35); color: #FDE68A; background: rgba(245,158,11,0.08);
-    backdrop-filter: blur(6px);
+    border: 1px solid rgba(245,158,11,0.35); color: #FDE68A; background: rgba(10,15,28,0.75);
   }
-  .sb-chip-cyan { border-color: rgba(34,211,238,0.4); color: #A5F3FC; background: rgba(34,211,238,0.08); }
+  .sb-chip-cyan { border-color: rgba(34,211,238,0.4); color: #A5F3FC; }
   .sb-dot { width: 7px; height: 7px; border-radius: 50%; background: #34D399; box-shadow: 0 0 8px #34D399; animation: sb-blink 2.2s ease-in-out infinite; }
   .sb-dot-off { background: #64748B; box-shadow: none; animation: none; }
   @keyframes sb-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
