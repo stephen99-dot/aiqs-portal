@@ -261,7 +261,12 @@ function importPack(db, pack, { via = 'manual' } = {}) {
   if (pack.version !== PACK_VERSION) throw new Error(`Unsupported pack version: ${pack.version}`);
   const source = String(pack.source || '').trim();
   if (!source) throw new Error('Pack has no source app');
-  if (source === APP_ID) throw new Error('Refusing to import a pack from this same app');
+  if (source === APP_ID) {
+    throw new Error(
+      'Refusing to import a pack from this same app — the peer returned ' + APP_ID + "'s own knowledge. " +
+      "SUPER_BRAIN_PEER_URL is almost certainly pointing at this app itself; set it to the sibling app's URL."
+    );
+  }
 
   ensureSchema(db);
 

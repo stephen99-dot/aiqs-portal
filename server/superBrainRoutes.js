@@ -73,6 +73,18 @@ router.post('/super-brain/sync', authMiddleware, adminMiddleware, async (req, re
   const peerUrl = (process.env.SUPER_BRAIN_PEER_URL || '').replace(/\/+$/, '');
   if (!peerUrl) return res.status(400).json({ error: 'SUPER_BRAIN_PEER_URL is not configured' });
   if (!process.env.SUPER_BRAIN_KEY) return res.status(400).json({ error: 'SUPER_BRAIN_KEY is not configured' });
+  // Catch the classic misconfiguration before wasting a round trip: the peer
+  // URL pointing back at this very app (easy to do when both services share
+  // an env group). Same-host means self-sync, which can never be right.
+  try {
+    const ownHost = String(req.get('host') || '').toLowerCase().replace(/^www\./, '');
+    const peerHost = new URL(peerUrl).host.toLowerCase().replace(/^www\./, '');
+    if (ownHost && peerHost && ownHost === peerHost) {
+      return res.status(400).json({
+        error: `SUPER_BRAIN_PEER_URL points at this app itself (${peerHost}). It must be the sibling app's URL — e.g. the AI QS Portal's peer is AI Trades Pilot, and vice versa.`,
+      });
+    }
+  } catch (e) { /* unparseable peer URL falls through to the fetch error */ }
   try {
     const resp = await fetch(peerUrl + '/api/super-brain/export', {
       headers: {
