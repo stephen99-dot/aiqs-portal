@@ -1,34 +1,33 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { setToken } from '../utils/api';
 
 export default function GoogleSuccessPage() {
   const [searchParams] = useSearchParams();
-  const { setUserFromToken } = useAuth();
+  const { loginWithToken } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     const token = searchParams.get('token');
     if (!token) {
-      navigate('/login?error=google_failed');
+      navigate('/login?error=google_failed', { replace: true });
       return;
     }
-    setToken(token);
-    // Re-fetch user from /auth/me using the new token
+    // Fetch the user with the new token, then log in via AuthContext so the
+    // token is stored and user state is set before we enter a protected route.
     fetch('/api/auth/me', {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
       .then(user => {
         if (user && user.id) {
-          setUserFromToken(user);
-          navigate('/dashboard');
+          loginWithToken(token, user);
+          navigate(user.hasEstimator ? '/office' : '/dashboard', { replace: true });
         } else {
-          navigate('/login?error=google_failed');
+          navigate('/login?error=google_failed', { replace: true });
         }
       })
-      .catch(() => navigate('/login?error=google_failed'));
+      .catch(() => navigate('/login?error=google_failed', { replace: true }));
   }, []);
 
   return (

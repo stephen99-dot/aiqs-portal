@@ -20,6 +20,7 @@ import AIMemoryPage from './pages/AIMemoryPage';
 import SuperBrainPage from './pages/SuperBrainPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
+import GoogleSuccessPage from './pages/GoogleSuccessPage';
 import TeamInvitePage from './pages/TeamInvitePage';
 import VariationsPage from './pages/VariationsPage';
 import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
@@ -102,6 +103,8 @@ function AppInner() {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
+        {/* Google OAuth landing — the server redirects here with ?token= */}
+        <Route path="/auth/google/success" element={<GoogleSuccessPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
