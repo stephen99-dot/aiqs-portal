@@ -65,7 +65,7 @@ function notifyCreditSpent(user, remaining, jobLabel) {
       paragraphs: [
         'You have ' + fmtRemaining(n) + ' remaining — top up now so your next job isn\'t held up.',
         'Choose the pack that suits you:',
-        ...TOPUP_OPTIONS.map((o) => o.label + ' — ' + o.url),
+        ...TOPUP_OPTIONS.map((o) => ({ button: true, label: o.label, url: o.url })),
         'Credits are added to your account the moment payment completes.',
       ],
       ctaText: 'Top up your credits',
