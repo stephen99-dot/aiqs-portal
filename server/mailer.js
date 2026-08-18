@@ -84,11 +84,18 @@ function escapeAndLinkify(s) {
 
 // One branded template for everything — header band in the builder's primary
 // colour, optional CTA button in the accent colour, footer from their branding.
+// Paragraph entries may also be { button: true, label, url } objects, rendered
+// as stacked buttons in the primary colour (e.g. the top-up packs in the
+// low-credit email).
 function renderHtml({ branding, companyName, heading, paragraphs, ctaText, ctaUrl, hasLogo }) {
   const primary = branding.primary_colour || '#1B2A4A';
   const accent = branding.accent_colour || '#F59E0B';
   const paras = (paragraphs || [])
-    .map(p => '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">' + escapeAndLinkify(p) + '</p>')
+    .map(p => (p && p.button)
+      ? '<div style="text-align:center;margin:0 0 10px;">'
+        + '<a href="' + escapeHtml(p.url) + '" style="display:inline-block;min-width:220px;padding:12px 24px;background:' + primary + ';color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">'
+        + escapeHtml(p.label) + '</a></div>'
+      : '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">' + escapeAndLinkify(p) + '</p>')
     .join('');
   const cta = (ctaText && ctaUrl)
     ? '<div style="text-align:center;margin:26px 0 8px;">'
@@ -126,7 +133,8 @@ function renderHtml({ branding, companyName, heading, paragraphs, ctaText, ctaUr
 }
 
 function renderText({ heading, paragraphs, ctaText, ctaUrl }) {
-  const parts = [heading, '', ...(paragraphs || [])];
+  const lines = (paragraphs || []).map(p => (p && p.button) ? p.label + ': ' + p.url : p);
+  const parts = [heading, '', ...lines];
   if (ctaText && ctaUrl) parts.push('', ctaText + ': ' + ctaUrl);
   return parts.join('\n');
 }
