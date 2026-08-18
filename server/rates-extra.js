@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const { authMiddleware } = require('./auth');
 const db = require('./database');
+const rateOnboarding = require('./rateOnboarding');
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ router.post('/my-rates/add', authMiddleware, (req, res) => {
     if (existing) return res.status(409).json({ error: 'Rate already exists in that category. Edit it instead.' });
     const id = 'rl_' + uuidv4().slice(0, 8);
     db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note) VALUES (?, ?, ?, ?, ?, ?, ?, 0.80, ?)').run(id, userId, category, item_key, display_name, parseFloat(value), unit, note || null);
+    rateOnboarding.markOwnRatesAdded(req.user, { source: 'manual', count: 1 });
     res.json({ success: true, id, message: 'Added: ' + display_name + ' = ' + value + ' ' + unit });
   } catch(e) { console.error('[Rates] Add:', e); res.status(500).json({ error: 'Failed to add rate' }); }
 });
@@ -213,6 +215,7 @@ router.post('/my-rates/import', authMiddleware, upload.single('file'), async (re
 
     try { fs.unlinkSync(req.file.path); } catch(e) {}
     console.log('[Import] ' + imported.length + ' rates from ' + sheetsProcessed.length + ' sheets imported for ' + req.user.email);
+    if (imported.length > 0) rateOnboarding.markOwnRatesAdded(req.user, { source: 'import', count: imported.length });
     res.json({ success: true, imported: imported.length, skipped: skipped.length, sheets: sheetsProcessed, skipped_items: skipped.slice(0, 10), rates: imported.slice(0, 20) });
   } catch(e) {
     console.error('[Import]', e);
@@ -331,6 +334,8 @@ router.post('/admin/import-rates/:clientId', authMiddleware, upload.single('file
 
     try { fs.unlinkSync(req.file.path); } catch(e) {}
     console.log('[AdminImport] ' + imported.length + ' rates from ' + sheetsProcessed.length + ' sheets for ' + targetUser.email);
+    // We loaded these ourselves — stop the reminders, but no admin alert needed.
+    if (imported.length > 0) rateOnboarding.markOwnRatesAdded(targetUser, { source: 'admin_import', count: imported.length, silent: true });
     res.json({ success: true, client: targetUser.full_name || targetUser.email, imported: imported.length, skipped: skipped.length, sheets: sheetsProcessed, rates: imported.slice(0, 20) });
   } catch(e) { console.error('[AdminImport]',e); res.status(500).json({error:'Import failed: '+e.message}); }
 });

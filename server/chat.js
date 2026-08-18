@@ -35,6 +35,7 @@ let pdfGeometry; try { pdfGeometry = require('./pdfGeometry'); } catch (e) { con
 let extractBoqMeta; try { extractBoqMeta = require('./extractBoqMeta'); } catch (e) { console.log('[Chat] extractBoqMeta not found — BOQ header metadata disabled'); }
 let dxfReader; try { dxfReader = require('./dxfReader'); } catch (e) { console.log('[Chat] dxfReader not found — DXF extraction disabled'); }
 const dedupeRates = require('./dedupeRates');
+const rateOnboarding = require('./rateOnboarding');
 
 // Live web search — gives the chat the same "search the web" ability as the
 // claude.ai front end. Runs as Anthropic's server-side web_search tool, so no
@@ -1425,6 +1426,7 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
       }
     });
     tx();
+    if (results.length > 0) rateOnboarding.markOwnRatesAdded(req.user, { source: 'correction', count: results.length });
     res.json({ results, saved: results.length });
   } catch(e) { console.error('[Rates]', e); res.status(500).json({ error: 'Failed to save corrections' }); }
 });
