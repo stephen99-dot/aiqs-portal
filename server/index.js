@@ -130,6 +130,9 @@ if (process.env.NODE_ENV === 'production') {
 }
 // A3: automated payment reminders — twice-daily sweep, no-op without SMTP.
 require('./paymentReminders').start();
+// Rate onboarding — remind new signups to add their rates (day 3/7/14), and
+// alert the admin the moment they do. Same twice-daily sweep pattern.
+require('./rateOnboarding').start();
 // Planning Leads — start the slow background harvester that fills the local
 // planning-application store one area at a time, so scans never hit PlanIt live.
 require('./planningData').startHarvester();
