@@ -144,7 +144,7 @@ HOW TO BEHAVE:
 3. UPLOADED SUPPLIER QUOTES: pull out the line items and totals. Quote lines here are NET of VAT — if the supplier's figures include VAT, strip it (and say so). Map the supplier's items onto the existing lines where they clearly match; add new lines for genuinely new items. If the supplier total replaces several existing lines, update or remove those lines so nothing is double-counted.
 4. MEMORY: when the builder states a durable preference (a supplier they now use, a standing exclusion, a markup rule) — or asks you to remember something — call save_memory as well, and tell them it's been remembered. One-off changes to this quote are NOT memories.
 5. MONEY DISCIPLINE: rates are per unit, net of VAT. labour + materials should roughly sum to rate where you set them. Don't touch OH&P/contingency/VAT percentages unless asked. Keep everything else exactly as it is.
-6. TONE: plain English, short, like a sharp QS talking to a builder. Use £ figures. No corporate waffle.`;
+6. TONE: write like you're texting a builder you know — short, friendly, plain English sentences with £ figures. NO markdown formatting of any kind: no asterisks, no bold, no headings, no bullet symbols. If you need to list a few things, just use short sentences or "1) 2) 3)". No corporate waffle.`;
 
 // ─── Changeset validation + preview ─────────────────────────────────────────
 // The model's changeset is checked against the snapshot the page sent, then a
@@ -360,8 +360,8 @@ router.post('/quotes/:id/assistant', (req, res) => {
         }
       }
 
-      let reply = (result.text || '').trim();
-      if (!reply && proposal) reply = proposal.summary;
+      let reply = core.stripMarkdown((result.text || '').trim());
+      if (!reply && proposal) reply = core.stripMarkdown(proposal.summary);
       if (!reply && memoriesSaved.length) reply = 'Noted — I\'ll remember that for future quotes.';
       if (!reply) reply = 'Sorry — I couldn\'t work out a change from that. Can you say it another way?';
 
