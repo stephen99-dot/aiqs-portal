@@ -72,6 +72,45 @@ test('composite lines update via total; removals splice bottom-up; adds target a
   assert.ok(p.totals_note.length > 0);
 });
 
+test('a new section is created with the next number and carries its money', () => {
+  const v = validateAndPreview({
+    summary: 'New appliances section',
+    new_sections: [{
+      title: 'Appliances',
+      items: [{ description: 'Supply only — Siemens ovens (provisional)', unit: 'Nr', qty: 4, total: 2796 }],
+    }],
+  }, PROJECT, SECTIONS, CONTROLS);
+  assert.equal(v.ok, true);
+  const p = v.proposal;
+  assert.equal(p.new_sections.length, 1);
+  assert.equal(p.new_sections[0].number, '3');       // follows sections 1 and 2
+  assert.equal(p.new_sections[0].items[0].total, 2796);
+  assert.equal(p.after_total, 26446);                // 23650 + 2796 — the price lands
+  assert.match(p.changes[0].label, /New section 3: Appliances .*£2796/);
+  assert.equal(v.warnings.length, 0);
+});
+
+test('a new line priced only as a composite total keeps its money', () => {
+  const v = validateAndPreview({
+    summary: 'Skip',
+    new_lines: [{ section_number: '1', description: 'Second skip', unit: 'nr', qty: 1, total: 400 }],
+  }, PROJECT, SECTIONS, CONTROLS);
+  assert.equal(v.ok, true);
+  assert.equal(v.proposal.new_lines[0].total, 400);
+  assert.equal(v.proposal.after_total, 24050);
+});
+
+test('a priceless new item and an unmatched section number both warn instead of failing silently', () => {
+  const v = validateAndPreview({
+    summary: 'x',
+    new_lines: [{ section_number: '9', description: 'Mystery item', qty: 1 }],
+  }, PROJECT, SECTIONS, CONTROLS);
+  assert.equal(v.ok, true);
+  assert.equal(v.warnings.length, 2); // no section "9" + no price
+  assert.match(v.warnings.join(' | '), /no section numbered "9"/);
+  assert.match(v.warnings.join(' | '), /no price/);
+});
+
 test('unknown refs are warned about, not applied; empty proposals are refused', () => {
   const v = validateAndPreview({ summary: 'x', line_updates: [{ ref: 40, qty: 2 }] }, PROJECT, SECTIONS, CONTROLS);
   assert.equal(v.ok, false);
