@@ -123,7 +123,7 @@ const UPDATE_TOOL = {
       },
       new_lines: {
         type: 'array',
-        description: 'Brand new items to add. section_number picks which section (from the ITEMS list); omit to add to the last section.',
+        description: 'Brand new items to add to an EXISTING section. ALWAYS set section_number (from the ITEMS list). For a section that does not exist yet, use new_sections instead. Give each item its money: labour + materials line totals, or `total` alone for a composite value.',
         items: {
           type: 'object',
           properties: {
@@ -133,8 +133,36 @@ const UPDATE_TOOL = {
             qty: { type: 'number' },
             labour: { type: 'number', description: 'Labour LINE TOTAL in £' },
             materials: { type: 'number', description: 'Materials LINE TOTAL in £' },
+            total: { type: 'number', description: 'Composite line total in £ — use when there is no labour/materials split' },
           },
           required: ['description', 'qty'],
+        },
+      },
+      new_sections: {
+        type: 'array',
+        description: 'Brand new sections to add to the bill, each with its items. Use this when the work belongs in a trade/section that does not exist yet (e.g. adding an Appliances section) — never shove it into an unrelated section.',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            provisional: { type: 'boolean', description: 'true if the whole section is a provisional sum (carried excl. OH&P)' },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  description: { type: 'string' },
+                  unit: { type: 'string' },
+                  qty: { type: 'number' },
+                  labour: { type: 'number', description: 'Labour LINE TOTAL in £' },
+                  materials: { type: 'number', description: 'Materials LINE TOTAL in £' },
+                  total: { type: 'number', description: 'Composite line total in £ — use when there is no labour/materials split' },
+                },
+                required: ['description', 'qty'],
+              },
+            },
+          },
+          required: ['title', 'items'],
         },
       },
       remove_refs: {
@@ -171,6 +199,7 @@ HOW TO BEHAVE:
 1. QUALIFYING QUESTIONS: if the request is ambiguous — you can't tell which items it means, whether an uploaded quote includes VAT, whether it's supply-only or supply-and-fit, or whether it replaces or adds to existing items — ask 1-3 short questions in plain text and DO NOT call propose_pack_update yet. Never guess on money.
 2. WHEN CONFIDENT, call propose_pack_update with only what changes. The builder sees the changes and taps Apply — you never change anything directly, so don't say "I've updated it"; say what you're proposing.
 3. DATA SHAPE: labour and materials are LINE TOTALS in £ (not per-unit rates). A composite line (labour and materials both 0) carries its money in the line total — set \`total\` for those, never invent a labour/materials split. All figures are NET of VAT.
+   Every NEW item must carry its money — labour + materials, or \`total\` — otherwise it lands on the bill at £0. New items for an existing section need its section_number; if the right section doesn't exist yet (e.g. adding an Appliances section), create it with new_sections instead of dumping the item somewhere unrelated.
 4. UPLOADED SUPPLIER QUOTES: pull out the line items and totals. If the supplier's figures include VAT, strip it (and say so). Map their items onto existing lines where they clearly match; add new items for genuinely new work. If a supplier total replaces several existing items, update or remove those so nothing is double-counted.
 5. MEMORY: when the builder states a durable preference (a supplier they now use, a standing exclusion, a markup rule) — or asks you to remember something — call save_memory as well, and tell them it's been remembered. One-off changes to this BOQ are NOT memories.
 6. Don't touch overhead/profit/contingency/VAT unless asked. Keep everything else exactly as it is.
@@ -203,23 +232,56 @@ function validateAndPreview(input, project, sections, controls) {
     if (Object.keys(clean).length > 3) lineUpdates.push(clean);
   }
 
+  // A new item's money arrives as labour + materials line totals, or as a
+  // composite `total` when there's no split. Missing money is a real warning —
+  // an item landing on the bill at £0 with the price in its description text
+  // is exactly the failure this guards against.
+  const cleanNewItem = (nl) => {
+    const qty = round2(num(nl.qty)) || 1;
+    const labour = round2(num(nl.labour));
+    const materials = round2(num(nl.materials));
+    const total = (labour !== 0 || materials !== 0) ? round2(labour + materials) : round2(num(nl.total));
+    const item = {
+      description: String(nl.description || '').slice(0, 500),
+      unit: String(nl.unit || 'item').slice(0, 20),
+      qty, labour, materials, total,
+    };
+    if (total === 0) errors.push(`"${item.description.slice(0, 60)}" has no price — it would land on the bill at £0`);
+    return item;
+  };
+
   const newLines = [];
   for (const nl of (Array.isArray(input.new_lines) ? input.new_lines : [])) {
     if (!nl || nl.description == null) continue;
-    let sIdx = sections.length - 1;
+    let sIdx = -1;
     if (nl.section_number != null) {
-      const found = sections.findIndex(s => String(s.number) === String(nl.section_number));
-      if (found >= 0) sIdx = found;
+      sIdx = sections.findIndex(s => String(s.number) === String(nl.section_number));
+      if (sIdx < 0) errors.push(`no section numbered "${nl.section_number}" — added "${String(nl.description).slice(0, 40)}" to ${sections[sections.length - 1]?.title || 'the last section'} instead`);
     }
+    if (sIdx < 0) sIdx = sections.length - 1;
     if (sIdx < 0) { errors.push('no section to add the new item to'); continue; }
     newLines.push({
       s: sIdx,
       section_title: sections[sIdx] ? sections[sIdx].title : '',
-      description: String(nl.description || '').slice(0, 500),
-      unit: String(nl.unit || 'item').slice(0, 20),
-      qty: round2(num(nl.qty)) || 1,
-      labour: round2(num(nl.labour)),
-      materials: round2(num(nl.materials)),
+      ...cleanNewItem(nl),
+    });
+  }
+
+  // Brand new sections, numbered on from the existing ones so refs and the
+  // per-trade uplift override stay unambiguous.
+  const maxSectionNo = sections.reduce((m, s) => {
+    const n = parseInt(s.number, 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  const baseSectionNo = maxSectionNo || sections.length; // non-numeric numbering falls back to position
+  const newSections = [];
+  for (const ns of (Array.isArray(input.new_sections) ? input.new_sections : [])) {
+    if (!ns || !ns.title || !Array.isArray(ns.items) || ns.items.length === 0) continue;
+    newSections.push({
+      number: String(baseSectionNo + newSections.length + 1),
+      title: String(ns.title).slice(0, 120),
+      provisional: !!ns.provisional,
+      items: ns.items.filter(it => it && it.description != null).map(cleanNewItem),
     });
   }
 
@@ -241,7 +303,7 @@ function validateAndPreview(input, project, sections, controls) {
     if (Object.keys(controlChanges).length === 0) controlChanges = null;
   }
 
-  if (lineUpdates.length === 0 && newLines.length === 0 && removeLocs.length === 0 && !controlChanges) {
+  if (lineUpdates.length === 0 && newLines.length === 0 && newSections.length === 0 && removeLocs.length === 0 && !controlChanges) {
     return { ok: false, errors: errors.length ? errors : ['the proposal contained no valid changes'] };
   }
 
@@ -272,9 +334,13 @@ function validateAndPreview(input, project, sections, controls) {
     work[loc.s].items.splice(loc.i, 1);
   }
   for (const nl of newLines) {
-    const value = round2(nl.labour + nl.materials);
-    changes.push({ kind: 'add', label: `Added to ${nl.section_title || 'section'}: ${nl.description.slice(0, 80)} — ${nl.qty} ${nl.unit} (£${value})` });
-    work[nl.s].items.push({ description: nl.description, unit: nl.unit, qty: nl.qty, labour: nl.labour, materials: nl.materials, total: value });
+    changes.push({ kind: 'add', label: `Added to ${nl.section_title || 'section'}: ${nl.description.slice(0, 80)} — ${nl.qty} ${nl.unit} (£${nl.total})` });
+    work[nl.s].items.push({ description: nl.description, unit: nl.unit, qty: nl.qty, labour: nl.labour, materials: nl.materials, total: nl.total });
+  }
+  for (const ns of newSections) {
+    const value = round2(ns.items.reduce((a, it) => a + it.total, 0));
+    changes.push({ kind: 'add', label: `New section ${ns.number}: ${ns.title} — ${ns.items.length} item${ns.items.length === 1 ? '' : 's'} (£${value})${ns.provisional ? ', provisional' : ''}` });
+    work.push({ number: ns.number, title: ns.title, provisional: ns.provisional, items: ns.items.map(it => ({ ...it })) });
   }
   if (controlChanges) {
     const pretty = { overhead_pct: 'Overhead %', profit_pct: 'Profit %', contingency_pct: 'Contingency %', vat_pct: 'VAT %', provisional_sum: 'Provisional sums £' };
@@ -290,6 +356,7 @@ function validateAndPreview(input, project, sections, controls) {
       summary: String(input.summary || '').slice(0, 600),
       line_updates: lineUpdates,
       new_lines: newLines,
+      new_sections: newSections,
       remove_locs: sortedRemoves,
       controls: controlChanges,
       changes,

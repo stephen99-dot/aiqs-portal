@@ -524,6 +524,22 @@ export default function BuilderPackPage() {
   });
 
   const applyAssistantProposal = (p) => {
+    // The server sends each new item's money as labour/materials line totals,
+    // or as a composite `total` when there's no split — build the row the same
+    // way the manual editor would, so unit rates stay right for qty edits.
+    const buildNewItem = (nl) => {
+      const q = num(nl.qty) || 1;
+      const labour = round2(num(nl.labour)), materials = round2(num(nl.materials));
+      const total = (labour !== 0 || materials !== 0) ? round2(labour + materials) : round2(num(nl.total));
+      return {
+        _id: uid(), itemRef: '', description: nl.description || 'New item',
+        unit: nl.unit || 'item', qty: q,
+        rate: q > 0 ? round2(total / q) : total,
+        labour, materials, total,
+        unitLabour: q > 0 ? labour / q : labour,
+        unitMaterials: q > 0 ? materials / q : materials,
+      };
+    };
     setSections((prev) => {
       const next = prev.map((s) => ({ ...s, items: s.items.slice() }));
       for (const u of (p.line_updates || [])) {
@@ -541,19 +557,24 @@ export default function BuilderPackPage() {
       for (const nl of (p.new_lines || [])) {
         const sec = next[nl.s] || next[next.length - 1];
         if (!sec) continue;
-        const q = num(nl.qty) || 1;
-        const labour = num(nl.labour), materials = num(nl.materials);
-        sec.items.push({
-          _id: uid(), itemRef: '', description: nl.description || 'New item',
-          unit: nl.unit || 'item', qty: q, rate: 0,
-          labour: round2(labour), materials: round2(materials),
-          total: round2(labour + materials),
-          unitLabour: q > 0 ? labour / q : labour,
-          unitMaterials: q > 0 ? materials / q : materials,
+        sec.items.push(buildNewItem(nl));
+      }
+      for (const ns of (p.new_sections || [])) {
+        next.push({
+          number: ns.number, title: ns.title, provisional: !!ns.provisional,
+          items: (ns.items || []).map(buildNewItem),
         });
       }
       return next;
     });
+    // Open any freshly-created sections so the builder sees them land.
+    if (p.new_sections && p.new_sections.length) {
+      setOpenSectionIds((m) => {
+        const o = { ...m };
+        for (const ns of p.new_sections) o[ns.number] = true;
+        return o;
+      });
+    }
     const c = p.controls || {};
     if (c.overhead_pct != null) setDefaultOhp(c.overhead_pct);
     if (c.profit_pct != null) setProfit(c.profit_pct);

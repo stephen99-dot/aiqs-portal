@@ -79,6 +79,7 @@ export default function AssistantDrawer({
         role: 'assistant',
         text: r.reply || '',
         proposal: r.proposal || null,
+        warnings: (r.warnings && r.warnings.length) ? r.warnings : null,
         memories: (r.memories_saved && r.memories_saved.length) ? r.memories_saved : null,
       }]);
     } catch (e) {
@@ -199,6 +200,14 @@ export default function AssistantDrawer({
                     </button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Anything the server couldn't take at face value (an item with no
+                price, an unmatched section) — shown so £0 lines never land silently. */}
+            {m.warnings && (
+              <div style={{ marginTop: 6, fontSize: 12, color: t.warning, background: t.warningBg, borderRadius: 8, padding: '6px 10px', lineHeight: 1.5 }}>
+                {m.warnings.map((w, wi) => <div key={wi}>⚠ {w}</div>)}
               </div>
             )}
 
