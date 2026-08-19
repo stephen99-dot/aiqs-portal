@@ -1867,3 +1867,6 @@ module.exports = router;
 // Portal-branded transactional mail ("AI QS" sender) — reused by other route
 // modules (e.g. the suitability-survey trial invite) so there's one SMTP path.
 module.exports.sendEmail = sendEmail;
+// Admin bell notifications, same table the header bell reads — reused by other
+// route modules (e.g. the suitability-survey completion alert).
+module.exports.notifyAdmin = notifyAdmin;

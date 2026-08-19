@@ -14,6 +14,7 @@ const { recommendTier, FEATURES, TEAM_SIZES, JOBS_BANDS, TIERS } = require('./su
 const router = express.Router();
 
 const ATP_REGISTER_URL = process.env.ATP_REGISTER_URL || 'https://app.aitradespilot.com/register';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'hello@crmwizardai.com';
 
 let schemaReady = false;
 function ensureSchema() {
@@ -160,6 +161,8 @@ router.post('/survey/suitability', authMiddleware, (req, res) => {
     `).run(uuidv4(), req.user.id, key, JSON.stringify(features), teamSize, jobsPerMonth, rec.tier);
 
     sendTrialInvite(req.user.id, rec).catch((e) => console.warn('[Suitability] invite email failed:', e.message));
+    sendAdminSuitabilityAlert(req.user.id, rec, { features, teamSize, jobsPerMonth })
+      .catch((e) => console.warn('[Suitability] admin alert failed:', e.message));
 
     res.json({ ok: true, recommendation: rec, trialUrl: trialUrl(rec.tier) });
   } catch (e) {
@@ -234,6 +237,65 @@ async function sendTrialInvite(userId, rec) {
       +     '<div style="padding:14px 24px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;text-align:center;">Card at signup, first charge after the trial — cancel anytime on monthly.</div>'
       +   '</div>'
       + '</div>',
+  });
+}
+
+// Tells the admin who just completed the suitability survey: their contact
+// details, what they picked, and the package they were offered — so trial
+// follow-ups can happen while the lead is warm. Also drops an admin bell
+// notification. Best-effort, same as the invite: never breaks the submission.
+async function sendAdminSuitabilityAlert(userId, rec, { features, teamSize, jobsPerMonth }) {
+  const { sendEmail, notifyAdmin } = require('./routes'); // lazy — avoids any load-order tangle
+  const user = db.prepare('SELECT full_name, email, company FROM users WHERE id = ?').get(userId);
+  if (!user) return;
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tier = TIERS[rec.tier];
+  const packageLine = `${tier.label} — £${rec.monthly}/month`;
+
+  if (typeof notifyAdmin === 'function') {
+    notifyAdmin({
+      type: 'suitability_survey',
+      title: `Survey completed: ${user.full_name || user.email}`,
+      detail: `${user.email} — offered ${packageLine}`,
+      icon: 'clipboard-check',
+    });
+  }
+
+  if (!user.email || typeof sendEmail !== 'function') return;
+
+  const row = (label, value) =>
+    `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;vertical-align:top;">${label}</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${value}</td></tr>`;
+  const featureList = features.map((f) => esc(FEATURES[f].label)).join('<br/>');
+
+  await sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `📋 Suitability survey completed: ${user.full_name || user.email}`,
+    html: `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#0F172A;border-radius:16px;">
+        <div style="text-align:center;margin-bottom:28px;">
+          <div style="font-size:28px;font-weight:800;color:#F1F5F9;">AI <span style="color:#F59E0B;">QS</span></div>
+          <div style="font-size:10px;letter-spacing:3px;color:#64748B;text-transform:uppercase;margin-top:2px;">Suitability Survey — New Response</div>
+        </div>
+        <div style="background:#1E293B;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:20px;">
+          <div style="font-size:16px;font-weight:700;color:#F59E0B;margin-bottom:16px;">📋 Someone just filled out the survey</div>
+          <table style="width:100%;border-collapse:collapse;">
+            ${row('Name', esc(user.full_name || '—'))}
+            ${row('Email', `<a href="mailto:${esc(user.email)}" style="color:#38BDF8;text-decoration:none;">${esc(user.email)}</a>`)}
+            ${user.company ? row('Company', esc(user.company)) : ''}
+            ${row('Offered', `<span style="color:#10B981;">${esc(packageLine)}</span>`)}
+            ${row('Features wanted', featureList || '—')}
+            ${row('Team size', esc(TEAM_SIZES[teamSize] ? TEAM_SIZES[teamSize].label : teamSize || '—'))}
+            ${row('Prices work', esc(JOBS_BANDS[jobsPerMonth] ? JOBS_BANDS[jobsPerMonth].label : jobsPerMonth || '—'))}
+            ${row('Time', new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }))}
+          </table>
+        </div>
+        <div style="text-align:center;">
+          <a href="mailto:${esc(user.email)}" style="display:inline-block;padding:12px 28px;background:#F59E0B;color:#0F172A;font-size:14px;font-weight:700;text-decoration:none;border-radius:8px;">Follow up with ${esc((user.full_name || '').split(' ')[0] || 'them')}</a>
+        </div>
+        <p style="font-size:11px;color:#475569;text-align:center;margin-top:24px;">They've been emailed their tailored package and free-trial link. Full results are in the Admin Dashboard feedback tab.</p>
+      </div>
+    `,
   });
 }
 
