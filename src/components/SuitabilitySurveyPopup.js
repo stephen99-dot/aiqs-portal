@@ -4,16 +4,19 @@ import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { XIcon, CheckIcon, ArrowRightIcon, ExternalLinkIcon } from './Icons';
 
-// Suitability survey — qualifying questions that tailor an AI Trades Pilot
-// package to the user, then invite them onto a free trial of it. Three quick
-// screens: which features they'd love, a bit about the business, then the
-// package we'd build for them with a deep link into app.aitradespilot.com
-// (the plan rides the ?plan= param all the way to ATP's tier picker).
+// New-product prompt + suitability survey. Opens with a simple yes/no —
+// "We have a new product. Would you like to see it?" — and only a Yes leads
+// into the qualifying questions that tailor an AI Trades Pilot package, then
+// invite them onto a free trial of it. Three quick screens after the prompt:
+// which features they'd love, a bit about the business, then the package
+// we'd build for them with a deep link into app.aitradespilot.com (the plan
+// rides the ?plan= param all the way to ATP's tier picker).
 //
-// Shown once per SURVEY_KEY; "Not now" snoozes 3 days client-side, finishing
-// completes it on the server so it follows the user across devices. The
-// parent is told via onDecided(willShow) so the feedback survey never stacks
-// on top of this one. Bump SURVEY_KEY to re-run.
+// Shown once per SURVEY_KEY; "No thanks" dismisses it for good on this
+// device, "Not now"/close snoozes 3 days, finishing completes it on the
+// server so it follows the user across devices. The parent is told via
+// onDecided(willShow) so the feedback survey never stacks on top of this
+// one. Bump SURVEY_KEY to re-run.
 
 const SURVEY_KEY = 'suitability_2026_08';
 const SNOOZE_KEY = 'aiqs_suitability_snooze_' + SURVEY_KEY;
@@ -65,7 +68,7 @@ export default function SuitabilitySurveyPopup({ onDecided }) {
   const isDark = mode === 'dark';
 
   const [visible, setVisible] = useState(false);
-  const [step, setStep] = useState('features'); // features → about → result
+  const [step, setStep] = useState('ask'); // ask → features → about → result
   const [features, setFeatures] = useState([]);
   const [teamSize, setTeamSize] = useState('');
   const [jobs, setJobs] = useState('');
@@ -110,6 +113,12 @@ export default function SuitabilitySurveyPopup({ onDecided }) {
   }
 
   function finish() {
+    try { localStorage.setItem(DONE_KEY, '1'); } catch (e) {}
+    setVisible(false);
+  }
+
+  // A straight "No" to the new-product prompt — don't nag them again.
+  function decline() {
     try { localStorage.setItem(DONE_KEY, '1'); } catch (e) {}
     setVisible(false);
   }
@@ -172,10 +181,10 @@ export default function SuitabilitySurveyPopup({ onDecided }) {
       }}
     >
       <div style={card}>
-        {/* header */}
+        {/* header — the ask step draws its own centred heading below */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div>
-            {step !== 'result' ? (
+            {step === 'ask' ? null : step !== 'result' ? (
               <>
                 <div style={{ fontSize: 18, fontWeight: 800, color: t.text }}>
                   {step === 'features' ? 'What would make the biggest difference to your business?' : 'Two quick ones about the business'}
@@ -197,6 +206,42 @@ export default function SuitabilitySurveyPopup({ onDecided }) {
             <XIcon size={18} color={t.textMuted} />
           </button>
         </div>
+
+        {/* step 0 — the new-product prompt: a simple yes/no before any questions */}
+        {step === 'ask' && (
+          <div style={{ textAlign: 'center', padding: '6px 8px 8px' }}>
+            <span style={{
+              display: 'inline-block', fontSize: 10.5, fontWeight: 800,
+              letterSpacing: '0.09em', textTransform: 'uppercase',
+              color: BLUE, background: isDark ? 'rgba(0,113,243,0.14)' : 'rgba(0,113,243,0.08)',
+              border: '1px solid ' + (isDark ? 'rgba(0,113,243,0.4)' : 'rgba(0,113,243,0.3)'),
+              borderRadius: 999, padding: '4px 12px',
+            }}>
+              New product
+            </span>
+            <div style={{ fontSize: 21, fontWeight: 800, color: t.text, marginTop: 14, letterSpacing: '-0.02em' }}>
+              We have a new product.
+            </div>
+            <div style={{ fontSize: 14.5, color: t.textSecondary, marginTop: 6, lineHeight: 1.5 }}>
+              Would you like to see it?
+            </div>
+            <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 8, lineHeight: 1.5, maxWidth: 380, marginLeft: 'auto', marginRight: 'auto' }}>
+              Answer a few quick questions and we&rsquo;ll tailor the perfect package for you.
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setStep('features')} style={primaryBtn(false)}>
+                Yes — show me <ArrowRightIcon size={16} color="#FFFFFF" />
+              </button>
+              <button onClick={decline} style={{
+                flex: '0 0 auto', minHeight: 46, padding: '0 18px', borderRadius: 10, cursor: 'pointer',
+                background: 'none', border: '1px solid ' + t.border, color: t.textMuted,
+                fontSize: 13.5, fontWeight: 700,
+              }}>
+                No thanks
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* step 1 — feature multi-select */}
         {step === 'features' && (
