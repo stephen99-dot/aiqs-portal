@@ -18,115 +18,28 @@
 //   POST /api/estimator/quotes/:id/assistant   (multipart: message, history,
 //        quote_state, files[]) -> { reply, proposal?, memories_saved }
 //
-// Deliberately self-contained, same posture as variationDraft.js.
+// Shared plumbing (uploads -> content blocks, history sanitising, memory
+// persistence) lives in assistantCore.js — the builder-pack assistant uses
+// the same pieces.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 const { computeFinancials, netFromLines } = require('./lib/money');
 const { builderContext } = require('./variationDraft');
-
-let memoryStore;
-try { memoryStore = require('./memoryStore'); } catch (e) { console.log('[EstimatorAssistant] memoryStore not found — memories disabled'); }
-let mammoth;
-try { mammoth = require('mammoth'); } catch (e) { /* docx uploads degrade to "unreadable" */ }
-let XLSX;
-try { XLSX = require('xlsx'); } catch (e) { /* xlsx uploads degrade to "unreadable" */ }
+const core = require('./assistantCore');
 
 const router = express.Router();
+const upload = core.createUpload();
 
 function num(v, fb = 0) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : fb;
 }
 function round2(n) { return Math.round((num(n)) * 100) / 100; }
-
-// ─── Uploads — supplier quotes, invoices, photos of paperwork ────────────────
-const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
-const uploadsDir = path.join(DATA_DIR, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const ALLOWED_EXTS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.xlsx', '.xls', '.csv', '.docx'];
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname).toLowerCase()}`),
-  }),
-  limits: { fileSize: 25 * 1024 * 1024, files: 5, fieldSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (!ALLOWED_EXTS.includes(ext)) {
-      if (!req._rejectedFiles) req._rejectedFiles = [];
-      req._rejectedFiles.push(file.originalname);
-    }
-    cb(null, ALLOWED_EXTS.includes(ext));
-  },
-});
-
-// Anthropic's request cap is ~25MB; keep the PDF share well under it.
-const MAX_PDF_DIRECT_BYTES = 9 * 1024 * 1024;
-
-// Turn one uploaded file into content blocks for the model. PDFs and images go
-// in natively; spreadsheets and Word docs are flattened to text (the model only
-// needs the figures, not the formatting).
-function fileToBlocks(filePath, originalName) {
-  const ext = path.extname(filePath).toLowerCase();
-  const label = { type: 'text', text: `[Uploaded file: ${originalName}]` };
-  try {
-    if (ext === '.pdf') {
-      const data = fs.readFileSync(filePath);
-      if (data.length > MAX_PDF_DIRECT_BYTES) {
-        return [{ type: 'text', text: `[Uploaded file ${originalName} is too large to read (over 9MB). Ask the user for a smaller copy or the key figures.]` }];
-      }
-      return [label, { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: data.toString('base64') } }];
-    }
-    const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
-    if (imageTypes[ext]) {
-      const data = fs.readFileSync(filePath);
-      return [label, { type: 'image', source: { type: 'base64', media_type: imageTypes[ext], data: data.toString('base64') } }];
-    }
-    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
-      if (!XLSX) return [{ type: 'text', text: `[Could not read ${originalName} — spreadsheet reader unavailable.]` }];
-      const wb = XLSX.readFile(filePath);
-      const parts = [];
-      for (const sheetName of wb.SheetNames.slice(0, 5)) {
-        const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]).trim();
-        if (csv) parts.push(`--- Sheet: ${sheetName} ---\n${csv}`);
-      }
-      const text = parts.join('\n\n').slice(0, 40000) || '(empty spreadsheet)';
-      return [{ type: 'text', text: `[Uploaded spreadsheet: ${originalName}]\n${text}` }];
-    }
-    if (ext === '.docx') {
-      if (!mammoth) return [{ type: 'text', text: `[Could not read ${originalName} — Word reader unavailable.]` }];
-      // mammoth is async; handled by the caller via fileToBlocksAsync.
-      return null;
-    }
-  } catch (e) {
-    console.error('[EstimatorAssistant] file read error:', e.message);
-  }
-  return [{ type: 'text', text: `[Could not read the uploaded file ${originalName}.]` }];
-}
-
-async function fileToBlocksAsync(filePath, originalName) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.docx' && mammoth) {
-    try {
-      const r = await mammoth.extractRawText({ path: filePath });
-      const text = String(r.value || '').trim().slice(0, 40000) || '(empty document)';
-      return [{ type: 'text', text: `[Uploaded Word document: ${originalName}]\n${text}` }];
-    } catch (e) {
-      console.error('[EstimatorAssistant] docx read error:', e.message);
-      return [{ type: 'text', text: `[Could not read the uploaded file ${originalName}.]` }];
-    }
-  }
-  return fileToBlocks(filePath, originalName);
-}
 
 // ─── Quote snapshot — what the model sees ────────────────────────────────────
 // Lines are numbered ref 1..N (position in the CURRENT editor state, which the
@@ -214,19 +127,6 @@ const UPDATE_TOOL = {
       },
     },
     required: ['summary'],
-  },
-};
-
-const MEMORY_TOOL = {
-  name: 'save_memory',
-  description: 'Save a durable preference or fact the builder will want remembered on FUTURE quotes (e.g. "Use SparkPro Electrical for electrics — their 2026 rates are on file", "Always excludes decorating from quotes"). Never use it for one-off changes to this quote.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      content: { type: 'string', description: 'The preference/fact, one sentence, self-contained.' },
-      category: { type: 'string', description: 'One of: supplier, spec_preference, markup, exclusion, commercial, workflow, rate_note, general.' },
-    },
-    required: ['content'],
   },
 };
 
@@ -373,29 +273,26 @@ router.use(authMiddleware, requireEstimator, requireEstimatorPassword);
 
 router.post('/quotes/:id/assistant', (req, res) => {
   upload.array('files', 5)(req, res, async (err) => {
-    const cleanupFiles = () => {
-      for (const f of (req.files || [])) { try { fs.unlinkSync(f.path); } catch (e) {} }
-    };
     try {
       if (err) {
-        cleanupFiles();
+        core.cleanupUploads(req);
         return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'That file is too big — 25MB max.' : 'Upload failed: ' + err.message });
       }
       if (!process.env.ANTHROPIC_API_KEY) {
-        cleanupFiles();
+        core.cleanupUploads(req);
         return res.status(502).json({ error: 'The AI is not configured on this server.' });
       }
 
       const q = db.prepare('SELECT * FROM quotes WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
-      if (!q) { cleanupFiles(); return res.status(404).json({ error: 'Quote not found.' }); }
+      if (!q) { core.cleanupUploads(req); return res.status(404).json({ error: 'Quote not found.' }); }
       if (q.locked) {
-        cleanupFiles();
+        core.cleanupUploads(req);
         return res.status(423).json({ error: 'This quote has been accepted by the client and is locked. Duplicate it to make a revised version.', code: 'QUOTE_LOCKED' });
       }
 
       const message = String(req.body.message || '').trim().slice(0, 8000);
       if (!message && (!req.files || req.files.length === 0)) {
-        cleanupFiles();
+        core.cleanupUploads(req);
         return res.status(400).json({ error: 'Say what you want changed (or attach a file).' });
       }
 
@@ -413,47 +310,20 @@ router.post('/quotes/:id/assistant', (req, res) => {
         header = q;
         lines = db.prepare('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY sort_order ASC, rowid ASC').all(q.id);
       }
-      if (lines.length > 300) { cleanupFiles(); return res.status(400).json({ error: 'This quote is too large for the assistant.' }); }
+      if (lines.length > 300) { core.cleanupUploads(req); return res.status(400).json({ error: 'This quote is too large for the assistant.' }); }
 
-      // Prior turns (text only, capped) so follow-up answers keep their context.
-      let history = [];
-      try {
-        const h = req.body.history ? JSON.parse(req.body.history) : [];
-        if (Array.isArray(h)) {
-          history = h.slice(-16)
-            .filter(m => m && (m.role === 'user' || m.role === 'assistant') && m.text)
-            .map(m => ({ role: m.role, content: String(m.text).slice(0, 4000) }));
-        }
-      } catch (e) { /* start fresh */ }
-      // The API requires alternating turns starting with 'user'; drop anything
-      // before the first user turn and merge accidental same-role runs.
-      while (history.length && history[0].role !== 'user') history.shift();
-      history = history.filter((m, i) => i === 0 || m.role !== history[i - 1].role);
-      if (history.length && history[history.length - 1].role === 'user') history.pop();
+      const history = core.sanitizeHistory(req.body.history);
 
       // System prompt: role + the builder's own numbers + their memories.
       const system = [{ type: 'text', text: SYSTEM_PROMPT }];
       const ctx = builderContext(req.user.id);
       if (ctx) system.push({ type: 'text', text: 'THIS BUILDER:\n' + ctx });
-      let memoriesUsed = [];
-      if (memoryStore) {
-        try {
-          memoriesUsed = await memoryStore.retrieveRelevant(db, { userId: req.user.id, query: message || q.project_name, topK: 8 });
-          const block = memoryStore.formatForPrompt(memoriesUsed);
-          if (block) system.push({ type: 'text', text: block });
-          memoryStore.markUsed(db, memoriesUsed.map(m => m.id));
-        } catch (e) { /* memories are best-effort */ }
-      }
+      const memBlock = await core.memoryPromptBlock(db, req.user.id, message || q.project_name);
+      if (memBlock) system.push({ type: 'text', text: memBlock });
 
       // Final user turn: the quote snapshot + uploaded files + the message.
       const content = [{ type: 'text', text: 'THE QUOTE AS IT STANDS NOW:\n' + snapshotForPrompt(header, lines) }];
-      for (const f of (req.files || [])) {
-        const blocks = await fileToBlocksAsync(f.path, f.originalname);
-        if (blocks) content.push(...blocks);
-      }
-      if (req._rejectedFiles && req._rejectedFiles.length) {
-        content.push({ type: 'text', text: `[These files were rejected (unsupported type): ${req._rejectedFiles.join(', ')}. Supported: PDF, photos, Excel, CSV, Word.]` });
-      }
+      content.push(...await core.uploadedFileBlocks(req));
       content.push({ type: 'text', text: 'BUILDER SAYS:\n' + (message || '(no message — just the attached file)') });
 
       const result = await callModel({
@@ -464,12 +334,12 @@ router.post('/quotes/:id/assistant', (req, res) => {
         cacheSystem: true,
         cacheMessages: true,
         messages: [...history, { role: 'user', content }],
-        tools: [UPDATE_TOOL, MEMORY_TOOL],
+        tools: [UPDATE_TOOL, core.MEMORY_TOOL],
         userId: req.user.id,
         action: 'estimator_assistant',
         detail: 'quote:' + q.id,
       });
-      cleanupFiles();
+      core.cleanupUploads(req);
 
       if (!result.ok) {
         const errMsg = result.error?.error?.message || result.error?.message || '';
@@ -479,23 +349,11 @@ router.post('/quotes/:id/assistant', (req, res) => {
 
       // Handle tool calls: memories persist immediately (cheap + reversible from
       // /ai-memory); the quote changeset only ever comes back as a proposal.
+      const memoriesSaved = await core.saveMemoriesFromToolUse(db, req.user.id, result.toolUse, 'estimator_assistant');
       let proposal = null;
-      const memoriesSaved = [];
       const warnings = [];
       for (const tc of (result.toolUse || [])) {
-        if (tc.name === 'save_memory' && memoryStore && tc.input && tc.input.content) {
-          try {
-            if (!memoryStore.isDuplicate(db, { userId: req.user.id, content: tc.input.content })) {
-              const mem = await memoryStore.createMemory(db, {
-                userId: req.user.id,
-                content: tc.input.content,
-                category: tc.input.category,
-                source: 'estimator_assistant',
-              });
-              memoriesSaved.push({ id: mem.id, content: mem.content, category: mem.category });
-            }
-          } catch (e) { console.error('[EstimatorAssistant] memory save failed:', e.message); }
-        } else if (tc.name === 'propose_quote_update' && tc.input) {
+        if (tc.name === 'propose_quote_update' && tc.input) {
           const v = validateAndPreview(tc.input, header, lines);
           if (v.ok) { proposal = v.proposal; warnings.push(...v.warnings); }
           else warnings.push(...v.errors);
@@ -509,7 +367,7 @@ router.post('/quotes/:id/assistant', (req, res) => {
 
       res.json({ reply, proposal, memories_saved: memoriesSaved, warnings: warnings.length ? warnings : undefined });
     } catch (e) {
-      cleanupFiles();
+      core.cleanupUploads(req);
       console.error('[EstimatorAssistant] error:', e);
       res.status(500).json({ error: 'The assistant hit a problem. Please try again.' });
     }

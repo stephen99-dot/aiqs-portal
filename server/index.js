@@ -90,6 +90,10 @@ app.use('/api/estimator', estimatorRoutes);
 // Self-contained router (see estimatorAssistantRoutes.js); mounted on the same
 // prefix so it shares the estimator gates and the x-estimator-key header.
 app.use('/api/estimator', require('./estimatorAssistantRoutes'));
+// The same assistant on the Builder Pack / Client Copy screen — amends BOQ
+// items and client-copy controls by chat. Auth-only, same project access rule
+// as the other /projects/:id/builder-pack routes.
+app.use('/api', require('./builderPackAssistantRoutes'));
 app.use('/api/finance', financeRoutes);
 // Wave 4: Variations / Change Orders. Owner side is /api/change-orders to
 // avoid colliding with the BOQ-pipeline /api/variations/:projectId routes.
