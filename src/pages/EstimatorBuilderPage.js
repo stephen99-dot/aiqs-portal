@@ -8,6 +8,7 @@ import RateAutocomplete from '../components/RateAutocomplete';
 import MaterialAutocomplete from '../components/MaterialAutocomplete';
 import ShareLinkModal from '../components/ShareLinkModal';
 import HelpTip from '../components/HelpTip';
+import QuoteAssistant from '../components/QuoteAssistant';
 import useIsMobile from '../utils/useIsMobile';
 
 // Two-mode page:
@@ -407,6 +408,59 @@ function EstimatorBuilderPageInner() {
       est_rate: true,
       sort_order: prev.length,
     }]);
+  };
+
+  // ─── AI assistant — "tell it what changed" ────────────────────────────────
+  // The drawer posts the CURRENT on-screen state (so unsaved edits are seen and
+  // the changeset's line refs match what the builder is looking at), and the
+  // proposal comes back for review. Applying patches the same state the manual
+  // grid edits use, then auto-saves through the normal save path.
+  const getQuoteState = () => ({
+    header: {
+      quote_number: quoteNumber, project_name: projectName, client_name: clientName,
+      currency, ohp_pct: ohpPct, contingency_pct: contPct, vat_pct: vatPct, notes,
+    },
+    lines: lines.map(ln => ({
+      section: ln.section, item: ln.item, description: ln.description, unit: ln.unit,
+      qty: ln.qty, rate: ln.rate, labour: ln.labour, materials: ln.materials,
+    })),
+  });
+
+  // Auto-save fires from an effect so it reads the state AFTER the proposal has
+  // been committed (save() reads the lines/header from state, not arguments).
+  const [pendingAutoSave, setPendingAutoSave] = useState(false);
+  useEffect(() => {
+    if (!pendingAutoSave) return;
+    setPendingAutoSave(false);
+    save();
+    // eslint-disable-next-line
+  }, [pendingAutoSave]);
+
+  const applyAssistantProposal = (p) => {
+    setLines(prev => {
+      let next = prev.map((ln, i) => {
+        const u = (p.line_updates || []).find(x => x.ref === i + 1);
+        if (!u) return ln;
+        const { ref, ...patch } = u;
+        const out = { ...ln, ...patch };
+        if (patch.rate != null) out.est_rate = false; // a sourced figure, not an AI guess
+        return out;
+      });
+      const removes = p.remove_refs || [];
+      next = next.filter((_, i) => !removes.includes(i + 1));
+      for (const nl of (p.new_lines || [])) {
+        next.push({ ...nl, est_rate: true, sort_order: next.length });
+      }
+      return next.map((ln, i) => ({ ...ln, sort_order: i }));
+    });
+    const h = p.header || {};
+    if (h.project_name != null) setProjectName(h.project_name);
+    if (h.client_name != null) setClientName(h.client_name);
+    if (h.notes != null) setNotes(h.notes);
+    if (h.ohp_pct != null) setOhpPct(h.ohp_pct);
+    if (h.contingency_pct != null) setContPct(h.contingency_pct);
+    if (h.vat_pct != null) setVatPct(h.vat_pct);
+    setPendingAutoSave(true);
   };
 
   // ─── Save / save changes ──────────────────────────────────────────────────
@@ -1072,6 +1126,19 @@ function EstimatorBuilderPageInner() {
           title={share.emailedTo ? ('Emailed to ' + share.emailedTo) : 'Send the quote to your client'}
           message="Here’s your quote — you can view and accept it here:"
           onClose={() => setShare(null)}
+        />
+      )}
+
+      {/* "Update with AI" — chat drawer for amending a saved quote. Locked
+          (accepted) quotes are the signed record, so no assistant there. */}
+      {quoteId && !locked && (
+        <QuoteAssistant
+          t={t}
+          isMobile={isMobile}
+          quoteId={quoteId}
+          currency={currency}
+          getQuoteState={getQuoteState}
+          onApply={applyAssistantProposal}
         />
       )}
 
