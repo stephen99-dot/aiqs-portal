@@ -8,7 +8,7 @@ import RateAutocomplete from '../components/RateAutocomplete';
 import MaterialAutocomplete from '../components/MaterialAutocomplete';
 import ShareLinkModal from '../components/ShareLinkModal';
 import HelpTip from '../components/HelpTip';
-import QuoteAssistant from '../components/QuoteAssistant';
+import AssistantDrawer from '../components/AssistantDrawer';
 import useIsMobile from '../utils/useIsMobile';
 
 // Two-mode page:
@@ -1132,12 +1132,12 @@ function EstimatorBuilderPageInner() {
       {/* "Update with AI" — chat drawer for amending a saved quote. Locked
           (accepted) quotes are the signed record, so no assistant there. */}
       {quoteId && !locked && (
-        <QuoteAssistant
+        <AssistantDrawer
           t={t}
           isMobile={isMobile}
-          quoteId={quoteId}
+          endpoint={'/estimator/quotes/' + quoteId + '/assistant'}
+          getFormFields={() => ({ quote_state: JSON.stringify(getQuoteState()) })}
           currency={currency}
-          getQuoteState={getQuoteState}
           onApply={applyAssistantProposal}
         />
       )}

@@ -1,12 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
 
-// "Update with AI" — a chat drawer on the quote editor. The builder says what
-// changed ("I've got the electrician's quote now" + upload, "add £400 for a
-// skip"), the assistant asks qualifying questions when it needs to, then comes
-// back with a proposed changeset. Nothing touches the quote until the builder
-// taps Apply — the parent page then patches its on-screen lines and saves
-// through the normal save path.
+// "Update with AI" — a chat drawer for amending a document by talking. Used on
+// the quote editor (/estimator/quote/:id) and the Builder Pack / Client Copy
+// screen (/project/:id/builder-pack). The builder says what changed ("I've got
+// the electrician's quote now" + upload, "add £400 for a skip"), the assistant
+// asks qualifying questions when it needs to, then comes back with a proposed
+// changeset. Nothing changes until the builder taps Apply — the parent page
+// then patches its own on-screen state and saves through its normal path.
+//
+// Props:
+//   t, isMobile        — theme + layout
+//   endpoint           — apiFetch path to POST the multipart message to
+//   getFormFields()    — extra string fields for the FormData (current state)
+//   onApply(proposal)  — apply a validated changeset to the page state
+//   currency           — 'GBP' | 'EUR' for the before/after totals
+//   title, subtitle, examples, appliedNote, fabLabel — copy overrides
 
 function fmtMoney(n, currency) {
   const sym = currency === 'EUR' ? '€' : '£';
@@ -16,7 +25,19 @@ function fmtMoney(n, currency) {
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.xlsx,.xls,.csv,.docx';
 
-export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuoteState, onApply }) {
+export default function AssistantDrawer({
+  t, isMobile, endpoint, getFormFields, onApply, currency,
+  title = '✨ Update this quote',
+  subtitle = "Say what's changed — attach a supplier's quote if you've got one",
+  examples = [
+    '"I\'ve got the electrician\'s quote now" — attach it and I\'ll adjust the costs',
+    '"Add £400 for a second skip"',
+    '"The roof section needs to be £6,200 all in"',
+    '"Take the decorating out"',
+  ],
+  appliedNote = "✓ Applied and saved — download the new PDF or resend when you're ready.",
+  fabLabel = '✨ Update with AI',
+}) {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);   // { role, text, proposal?, applied?, memories? }
   const [input, setInput] = useState('');
@@ -48,11 +69,12 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
       const fd = new FormData();
       fd.append('message', message);
       fd.append('history', JSON.stringify(history));
-      fd.append('quote_state', JSON.stringify(getQuoteState()));
+      const extra = getFormFields ? getFormFields() : {};
+      for (const [k, v] of Object.entries(extra)) fd.append(k, v);
       for (const f of files) fd.append('files', f);
       setFiles([]);
       if (fileRef.current) fileRef.current.value = '';
-      const r = await apiFetch('/estimator/quotes/' + quoteId + '/assistant', { method: 'POST', body: fd });
+      const r = await apiFetch(endpoint, { method: 'POST', body: fd });
       setMsgs(prev => [...prev, {
         role: 'assistant',
         text: r.reply || '',
@@ -83,16 +105,16 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
     return (
       <button
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-        title="Tell the AI what's changed on this quote"
+        title="Tell the AI what's changed"
         style={{
-          position: 'fixed', right: 16, bottom: isMobile ? 86 : 24, zIndex: 180,
+          position: 'fixed', right: 16, bottom: 86, zIndex: 180,
           display: 'inline-flex', alignItems: 'center', gap: 8,
           minHeight: 50, padding: '0 18px', borderRadius: 999, border: 'none',
           background: t.accent, color: '#fff', fontSize: 14.5, fontWeight: 700,
           cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
         }}
       >
-        ✨ Update with AI
+        {fabLabel}
       </button>
     );
   }
@@ -111,8 +133,8 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid ' + t.border }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: t.text }}>✨ Update this quote</div>
-          <div style={{ fontSize: 12, color: t.textMuted }}>Say what's changed — attach a supplier's quote if you've got one</div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: t.text }}>{title}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>{subtitle}</div>
         </div>
         <button onClick={() => setOpen(false)} style={{ background: 'transparent', border: 'none', color: t.textSecondary, fontSize: 20, cursor: 'pointer', padding: 4 }}>×</button>
       </div>
@@ -123,10 +145,7 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
           <div style={{ color: t.textSecondary, fontSize: 13.5, lineHeight: 1.55, background: t.surface, borderRadius: 12, padding: 14 }}>
             Try things like:
             <ul style={{ margin: '8px 0 0 18px', padding: 0 }}>
-              <li>"I've got the electrician's quote now" — attach it and I'll adjust the costs</li>
-              <li>"Add £400 for a second skip"</li>
-              <li>"The roof section needs to be £6,200 all in"</li>
-              <li>"Take the decorating out"</li>
+              {examples.map((ex, i) => <li key={i}>{ex}</li>)}
             </ul>
             <div style={{ marginTop: 8 }}>I'll ask if anything's unclear, and you approve every change before it lands.</div>
           </div>
@@ -162,11 +181,14 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
                       ({m.proposal.after_total >= m.proposal.before_total ? '+' : '−'}{fmtMoney(Math.abs(m.proposal.after_total - m.proposal.before_total), currency)})
                     </span>
                   </div>
+                  {m.proposal.totals_note && (
+                    <div style={{ marginTop: 4, fontSize: 11.5, color: t.textMuted }}>{m.proposal.totals_note}</div>
+                  )}
                 </div>
                 <div style={{ padding: '10px 12px', borderTop: '1px solid ' + t.border, display: 'flex', gap: 8, alignItems: 'center' }}>
                   {m.applied ? (
                     <div style={{ color: t.success, fontSize: 13.5, fontWeight: 700 }}>
-                      ✓ Applied and saved — download the new PDF or resend when you're ready.
+                      {appliedNote}
                     </div>
                   ) : (
                     <button onClick={() => applyProposal(i)} style={{
@@ -193,7 +215,7 @@ export default function QuoteAssistant({ t, isMobile, quoteId, currency, getQuot
         ))}
         {sending && (
           <div style={{ alignSelf: 'flex-start', color: t.textMuted, fontSize: 13, padding: '6px 2px' }}>
-            Reading the quote{files.length ? ' and your file' : ''}…
+            Reading the figures…
           </div>
         )}
         {error && (

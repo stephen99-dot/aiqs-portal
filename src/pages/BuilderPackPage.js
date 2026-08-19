@@ -4,6 +4,7 @@ import { apiFetch, getToken } from '../utils/api';
 import useIsMobile from '../utils/useIsMobile';
 import { useTheme } from '../context/ThemeContext';
 import ShareLinkModal from '../components/ShareLinkModal';
+import AssistantDrawer from '../components/AssistantDrawer';
 
 /**
  * Builder Pack page — full-width workspace for turning a priced BOQ into the
@@ -68,9 +69,70 @@ function lineTotal(it) {
   return lm !== 0 ? lm : num(it.total);
 }
 
+// Merge an edit into a line, keeping the maths accurate (line total = qty × rate).
+// Shared by the manual grid edits and the AI assistant's Apply, so both paths
+// rescale/redefine unit rates identically.
+function applyItemPatch(cur, patch) {
+  const merged = { ...cur, ...patch };
+  if ('qty' in patch) {
+    // Changing the quantity rescales labour & materials at the line's
+    // existing unit rate, so the nett moves the way a builder expects.
+    const { unitLabour, unitMaterials } = unitRates(cur);
+    const q = num(patch.qty);
+    merged.unitLabour = unitLabour;
+    merged.unitMaterials = unitMaterials;
+    merged.labour = round2(unitLabour * q);
+    merged.materials = round2(unitMaterials * q);
+    // Keep `total` in step. A composite line (no split) carries its value in
+    // `total` alone, so rescale it at its own unit rate; a split line's total
+    // is simply labour + materials.
+    const curLm = num(cur.labour) + num(cur.materials);
+    if (curLm > 0) {
+      merged.total = round2(merged.labour + merged.materials);
+    } else {
+      const oldQ = num(cur.qty);
+      const unitTotal = oldQ > 0 ? num(cur.total) / oldQ : num(cur.total);
+      merged.total = round2(unitTotal * q);
+    }
+  }
+  // Editing a money column directly redefines that line's unit rate, and the
+  // line total follows the split.
+  if ('labour' in patch) {
+    const q = num(merged.qty);
+    merged.unitLabour = q > 0 ? num(patch.labour) / q : num(patch.labour);
+    merged.total = round2(num(merged.labour) + num(merged.materials));
+  }
+  if ('materials' in patch) {
+    const q = num(merged.qty);
+    merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
+    merged.total = round2(num(merged.labour) + num(merged.materials));
+  }
+  // Editing the line total directly (composite BOQs with no labour/materials
+  // split) redefines the line's value and its implied unit rate. The line
+  // stays composite — no split is introduced.
+  if ('total' in patch) {
+    const q = num(merged.qty);
+    merged.total = round2(num(patch.total));
+    merged.rate = q > 0 ? round2(merged.total / q) : merged.total;
+    merged.labour = 0; merged.materials = 0;
+    merged.unitLabour = 0; merged.unitMaterials = 0;
+  }
+  return merged;
+}
+
 export default function BuilderPackPage() {
   const { id } = useParams();
   const isMobile = useIsMobile();
+  // Laptop screens (13"/14" Macs especially) can't fit the sticky control
+  // sidebar AND the items table side by side — stack them below ~1150px so
+  // the table gets the full width instead of clipping its Total column.
+  const [winW, setWinW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1440);
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const isNarrow = isMobile || winW < 1150;
   const [project, setProject] = useState(null);
   const [sections, setSections] = useState([]);   // editable copy of breakdown.sections
   const [originalSections, setOriginalSections] = useState([]); // for "reset"
@@ -194,53 +256,7 @@ export default function BuilderPackPage() {
     setSections((prev) => {
       const next = prev.slice();
       const sec = { ...next[sIdx], items: next[sIdx].items.slice() };
-      const cur = sec.items[iIdx];
-      const merged = { ...cur, ...patch };
-      // Keep the maths accurate: a line total = qty × rate.
-      if ('qty' in patch) {
-        // Changing the quantity rescales labour & materials at the line's
-        // existing unit rate, so the nett moves the way a builder expects.
-        const { unitLabour, unitMaterials } = unitRates(cur);
-        const q = num(patch.qty);
-        merged.unitLabour = unitLabour;
-        merged.unitMaterials = unitMaterials;
-        merged.labour = round2(unitLabour * q);
-        merged.materials = round2(unitMaterials * q);
-        // Keep `total` in step. A composite line (no split) carries its value in
-        // `total` alone, so rescale it at its own unit rate; a split line's total
-        // is simply labour + materials.
-        const curLm = num(cur.labour) + num(cur.materials);
-        if (curLm > 0) {
-          merged.total = round2(merged.labour + merged.materials);
-        } else {
-          const oldQ = num(cur.qty);
-          const unitTotal = oldQ > 0 ? num(cur.total) / oldQ : num(cur.total);
-          merged.total = round2(unitTotal * q);
-        }
-      }
-      // Editing a money column directly redefines that line's unit rate, and the
-      // line total follows the split.
-      if ('labour' in patch) {
-        const q = num(merged.qty);
-        merged.unitLabour = q > 0 ? num(patch.labour) / q : num(patch.labour);
-        merged.total = round2(num(merged.labour) + num(merged.materials));
-      }
-      if ('materials' in patch) {
-        const q = num(merged.qty);
-        merged.unitMaterials = q > 0 ? num(patch.materials) / q : num(patch.materials);
-        merged.total = round2(num(merged.labour) + num(merged.materials));
-      }
-      // Editing the line total directly (composite BOQs with no labour/materials
-      // split) redefines the line's value and its implied unit rate. The line
-      // stays composite — no split is introduced.
-      if ('total' in patch) {
-        const q = num(merged.qty);
-        merged.total = round2(num(patch.total));
-        merged.rate = q > 0 ? round2(merged.total / q) : merged.total;
-        merged.labour = 0; merged.materials = 0;
-        merged.unitLabour = 0; merged.unitMaterials = 0;
-      }
-      sec.items[iIdx] = merged;
+      sec.items[iIdx] = applyItemPatch(sec.items[iIdx], patch);
       next[sIdx] = sec;
       return next;
     });
@@ -491,6 +507,61 @@ export default function BuilderPackPage() {
     window.URL.revokeObjectURL(url);
   }
 
+  // ─── AI assistant — "tell it what changed" ────────────────────────────────
+  // Posts the CURRENT on-screen sections + client-copy controls (same shape the
+  // download/share endpoints get) so the changeset's refs match what's on
+  // screen. Applying goes through applyItemPatch — the same maths as manual
+  // edits — and the debounced auto-save persists it like any other edit.
+  const getPackState = () => ({
+    sections: editsForBody(),
+    controls: {
+      overhead_pct: defaultOhp,
+      profit_pct: profit,
+      contingency_pct: contingency,
+      vat_pct: vat,
+      provisional_sum: provisionalSum,
+    },
+  });
+
+  const applyAssistantProposal = (p) => {
+    setSections((prev) => {
+      const next = prev.map((s) => ({ ...s, items: s.items.slice() }));
+      for (const u of (p.line_updates || [])) {
+        const sec = next[u.s];
+        if (!sec || !sec.items[u.i]) continue;
+        const { ref, s, i, ...fields } = u;
+        sec.items[u.i] = applyItemPatch(sec.items[u.i], fields);
+      }
+      // remove_locs arrives sorted bottom-up so splices don't shift later ones.
+      for (const loc of (p.remove_locs || [])) {
+        const sec = next[loc.s];
+        if (!sec || !sec.items[loc.i]) continue;
+        sec.items.splice(loc.i, 1);
+      }
+      for (const nl of (p.new_lines || [])) {
+        const sec = next[nl.s] || next[next.length - 1];
+        if (!sec) continue;
+        const q = num(nl.qty) || 1;
+        const labour = num(nl.labour), materials = num(nl.materials);
+        sec.items.push({
+          _id: uid(), itemRef: '', description: nl.description || 'New item',
+          unit: nl.unit || 'item', qty: q, rate: 0,
+          labour: round2(labour), materials: round2(materials),
+          total: round2(labour + materials),
+          unitLabour: q > 0 ? labour / q : labour,
+          unitMaterials: q > 0 ? materials / q : materials,
+        });
+      }
+      return next;
+    });
+    const c = p.controls || {};
+    if (c.overhead_pct != null) setDefaultOhp(c.overhead_pct);
+    if (c.profit_pct != null) setProfit(c.profit_pct);
+    if (c.contingency_pct != null) setContingency(c.contingency_pct);
+    if (c.vat_pct != null) setVat(c.vat_pct);
+    if (c.provisional_sum != null) setProvisionalSum(c.provisional_sum);
+  };
+
   const totalItemCount = sections.reduce((a, s) => a + s.items.length, 0);
   const isDirty = useMemo(() =>
     JSON.stringify(sections) !== JSON.stringify(originalSections),
@@ -667,13 +738,17 @@ export default function BuilderPackPage() {
       )}
 
       {!loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(320px, 360px) 1fr', gap: 18, alignItems: 'flex-start' }}>
-          {/* Sticky control sidebar */}
+        // minmax(0, 1fr) matters: a bare 1fr's min-size is the table's
+        // min-content width, which blew the grid out past the viewport and
+        // clipped the Total column on laptop screens instead of letting the
+        // table scroll inside its own card.
+        <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'minmax(0, 1fr)' : 'minmax(260px, 310px) minmax(0, 1fr)', gap: 18, alignItems: 'flex-start' }}>
+          {/* Sticky control sidebar (stacks on top below ~1150px) */}
           <div style={{
-            position: isMobile ? 'static' : 'sticky', top: 12,
+            position: isNarrow ? 'static' : 'sticky', top: 12,
             padding: 18, borderRadius: 12,
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
+            maxHeight: isNarrow ? 'none' : 'calc(100vh - 40px)', overflowY: isNarrow ? 'visible' : 'auto',
           }}>
             {tab === 'builder' ? (
               <BuilderControls
@@ -763,17 +838,17 @@ export default function BuilderPackPage() {
 
                     {open && (
                       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: isMobile ? 560 : 900, tableLayout: 'fixed' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: isMobile ? 560 : 700, tableLayout: 'fixed' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)', textAlign: 'left' }}>
-                              <th style={th(64)}>Ref</th>
-                              <th style={{ ...th(), minWidth: 320, width: 'auto' }}>Description</th>
-                              <th style={th(84)}>Unit</th>
-                              <th style={{ ...th(70), textAlign: 'right' }}>Qty</th>
-                              {hasSplit && <th style={{ ...th(100), textAlign: 'right' }}>Labour</th>}
-                              {hasSplit && <th style={{ ...th(100), textAlign: 'right' }}>Materials</th>}
-                              <th style={{ ...th(100), textAlign: 'right' }}>Total</th>
-                              <th style={th(36)}></th>
+                              <th style={th(48)}>Ref</th>
+                              <th style={{ ...th(), minWidth: 200, width: 'auto' }}>Description</th>
+                              <th style={th(60)}>Unit</th>
+                              <th style={{ ...th(60), textAlign: 'right' }}>Qty</th>
+                              {hasSplit && <th style={{ ...th(90), textAlign: 'right' }}>Labour</th>}
+                              {hasSplit && <th style={{ ...th(90), textAlign: 'right' }}>Materials</th>}
+                              <th style={{ ...th(96), textAlign: 'right' }}>Total</th>
+                              <th style={th(30)}></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -884,6 +959,28 @@ export default function BuilderPackPage() {
           title="Send the quote to your client"
           message="Here’s your quote — you can view and accept it here:"
           onClose={() => setShare(null)}
+        />
+      )}
+
+      {/* "Update with AI" — chat drawer for amending the bill. Applied changes
+          go through the same state as manual edits, so auto-save, the live
+          preview, downloads and the share link all pick them up. */}
+      {!loading && sections.length > 0 && (
+        <AssistantDrawer
+          t={t}
+          isMobile={isMobile}
+          endpoint={`/projects/${id}/builder-pack/assistant`}
+          getFormFields={() => ({ pack_state: JSON.stringify(getPackState()) })}
+          currency={project && project.currency === 'EUR' ? 'EUR' : 'GBP'}
+          onApply={applyAssistantProposal}
+          title="✨ Update this bill"
+          examples={[
+            '"I\'ve got the electrician\'s quote now" — attach it and I\'ll adjust the costs',
+            '"Add £400 for a second skip"',
+            '"Scaffold\'s gone up to £21,500"',
+            '"Set VAT to 20% and add 5% contingency"',
+          ]}
+          appliedNote="✓ Applied — saved automatically. Download the client copy or re-share when you're ready."
         />
       )}
     </div>
