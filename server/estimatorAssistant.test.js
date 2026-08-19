@@ -9,6 +9,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateAndPreview, snapshotForPrompt } = require('./estimatorAssistantRoutes')._test;
+const { stripMarkdown } = require('./assistantCore');
 
 const HEADER = { quote_number: 'Q-1', project_name: 'Kitchen extension', currency: 'GBP', ohp_pct: 15, contingency_pct: 5, vat_pct: 20, notes: '' };
 const LINES = [
@@ -83,6 +84,17 @@ test('garbage numbers are coerced, strings are clamped, and est_rate is not inve
   assert.equal(v.proposal.summary.length, 600);
   assert.equal(v.proposal.line_updates[0].qty, 35.5);
   assert.equal(v.proposal.line_updates[0].description.length, 500);
+});
+
+// The chat drawer renders plain text, so stray markdown must be scrubbed or
+// the builder sees literal asterisks in the reply bubble.
+test('stripMarkdown removes bold/headings/backticks and keeps the words', () => {
+  assert.equal(
+    stripMarkdown('### Electrics\nI\'ve read **SparkPro\'s** quote — `first fix` is £1,850.\n- update first fix\n- update second fix'),
+    'Electrics\nI\'ve read SparkPro\'s quote — first fix is £1,850.\n• update first fix\n• update second fix'
+  );
+  assert.equal(stripMarkdown('Plain reply, 2 * 3 = 6, no markdown here.'), 'Plain reply, 2 * 3 = 6, no markdown here.');
+  assert.equal(stripMarkdown(''), '');
 });
 
 test('snapshot numbers lines from 1 and carries the grand total', () => {

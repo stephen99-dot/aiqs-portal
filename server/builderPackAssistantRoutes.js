@@ -174,7 +174,7 @@ HOW TO BEHAVE:
 4. UPLOADED SUPPLIER QUOTES: pull out the line items and totals. If the supplier's figures include VAT, strip it (and say so). Map their items onto existing lines where they clearly match; add new items for genuinely new work. If a supplier total replaces several existing items, update or remove those so nothing is double-counted.
 5. MEMORY: when the builder states a durable preference (a supplier they now use, a standing exclusion, a markup rule) — or asks you to remember something — call save_memory as well, and tell them it's been remembered. One-off changes to this BOQ are NOT memories.
 6. Don't touch overhead/profit/contingency/VAT unless asked. Keep everything else exactly as it is.
-7. TONE: plain English, short, like a sharp QS talking to a builder. Use £ figures. No corporate waffle.`;
+7. TONE: write like you're texting a builder you know — short, friendly, plain English sentences with £ figures. NO markdown formatting of any kind: no asterisks, no bold, no headings, no bullet symbols. If you need to list a few things, just use short sentences or "1) 2) 3)". No corporate waffle.`;
 
 // ─── Changeset validation + preview ─────────────────────────────────────────
 // Checked against the sections the page sent; returns a normalized changeset
@@ -387,8 +387,8 @@ router.post('/projects/:projectId/builder-pack/assistant', authMiddleware, (req,
         }
       }
 
-      let reply = (result.text || '').trim();
-      if (!reply && proposal) reply = proposal.summary;
+      let reply = core.stripMarkdown((result.text || '').trim());
+      if (!reply && proposal) reply = core.stripMarkdown(proposal.summary);
       if (!reply && memoriesSaved.length) reply = 'Noted — I\'ll remember that for future jobs.';
       if (!reply) reply = 'Sorry — I couldn\'t work out a change from that. Can you say it another way?';
 

@@ -128,6 +128,21 @@ function sanitizeHistory(raw) {
   return history;
 }
 
+// The chat drawer renders plain text, so markdown markers show up literally
+// (**bold**, ### headings, backticks). The prompts ask for plain conversational
+// text; this scrub catches anything that slips through. Bullet dashes become a
+// proper bullet dot so lists still read fine.
+function stripMarkdown(text) {
+  if (!text) return text;
+  return String(text)
+    .replace(/^#{1,6}\s+/gm, '')            // headings
+    .replace(/\*\*([^*]+)\*\*/g, '$1')      // **bold**
+    .replace(/__([^_]+)__/g, '$1')          // __bold__
+    .replace(/(^|\s)\*([^*\n]+)\*(?=[\s.,;:!?)]|$)/g, '$1$2') // *italic*
+    .replace(/`([^`]+)`/g, '$1')            // `code`
+    .replace(/^\s*[-*]\s+/gm, '• ');        // - bullets → • bullets
+}
+
 // The save_memory tool, shared by both assistants.
 const MEMORY_TOOL = {
   name: 'save_memory',
@@ -175,6 +190,7 @@ async function saveMemoriesFromToolUse(db, userId, toolUse, source) {
 module.exports = {
   ALLOWED_EXTS,
   createUpload,
+  stripMarkdown,
   fileToBlocksAsync,
   uploadedFileBlocks,
   cleanupUploads,
