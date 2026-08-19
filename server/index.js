@@ -133,6 +133,9 @@ require('./paymentReminders').start();
 // Rate onboarding — remind new signups to add their rates (day 3/7/14), and
 // alert the admin the moment they do. Same twice-daily sweep pattern.
 require('./rateOnboarding').start();
+// Credit top-up drip — chase zero-balance accounts on day 2/4/6/8/10 after
+// running out, then one final sign-off on day 12. Stops itself on top-up.
+require('./creditNotifications').start();
 // Planning Leads — start the slow background harvester that fills the local
 // planning-application store one area at a time, so scans never hit PlanIt live.
 require('./planningData').startHarvester();
