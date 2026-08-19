@@ -86,6 +86,10 @@ app.use('/api', superBrainRoutes);
 app.use('/api', surveyRoutes);
 app.use('/api', agentRoutes);
 app.use('/api/estimator', estimatorRoutes);
+// AI assistant on a saved quote — "tell it what changed, it proposes the edit".
+// Self-contained router (see estimatorAssistantRoutes.js); mounted on the same
+// prefix so it shares the estimator gates and the x-estimator-key header.
+app.use('/api/estimator', require('./estimatorAssistantRoutes'));
 app.use('/api/finance', financeRoutes);
 // Wave 4: Variations / Change Orders. Owner side is /api/change-orders to
 // avoid colliding with the BOQ-pipeline /api/variations/:projectId routes.
