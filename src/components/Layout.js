@@ -11,7 +11,6 @@ import {
 import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
 import OfficeTour from './OfficeTour';
-import WhatsNewPopup from './WhatsNewPopup';
 import SurveyPopup from './SurveyPopup';
 import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
@@ -135,9 +134,10 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  // The "What's new" popup takes priority — the survey waits until it's been
-  // dismissed so the two never stack on top of each other.
-  const [whatsNewSeen, setWhatsNewSeen] = useState(false);
+  // null = new-product prompt still deciding whether to show; true = it's
+  // showing this session (so the feedback survey stays out of the way);
+  // false = nothing to show, the feedback survey may run.
+  const [suitabilityShowing, setSuitabilityShowing] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -542,20 +542,16 @@ export default function Layout() {
         </nav>
       )}
 
-      {/* What's new — announce chatbot updates to every user, once per release */}
-      <WhatsNewPopup onClose={() => setWhatsNewSeen(true)} />
+      {/* New-product prompt — "We have a new product. Would you like to see
+          it?" A Yes leads into the suitability survey that tailors an AI
+          Trades Pilot package + free-trial invite. Replaced the old What's
+          New popup ad. */}
+      {!isAdmin && <SuitabilitySurveyPopup onDecided={setSuitabilityShowing} />}
 
-      {/* Suitability survey — qualifying questions that tailor an AI Trades
-          Pilot package + free-trial invite. Waits for What's New.
-          TESTING GATE: admin-only for now. To roll out to every user, swap
-          `isAdmin` for `!isAdmin` and restore the onDecided sequencing with
-          the feedback survey (see git history of this block) so the two
-          popups never stack. */}
-      {whatsNewSeen && isAdmin && <SuitabilitySurveyPopup />}
-
-      {/* Feedback survey — every non-admin user, once. Waits for What's New
-          so the two popups never stack. */}
-      {whatsNewSeen && !isAdmin && <SurveyPopup />}
+      {/* Feedback survey — every non-admin user, once. Only runs in sessions
+          where the new-product prompt isn't showing, so the two popups never
+          stack. */}
+      {!isAdmin && suitabilityShowing === false && <SurveyPopup />}
 
       {/* Office in a Box guided walkthrough — auto-runs once for subscribers and
           stays available afterwards via its "Show me around" launcher. Admins
