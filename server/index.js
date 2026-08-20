@@ -11,6 +11,7 @@ const creditRoutes = require('./creditRoutes');
 const submissionRoutes = require('./submissionRoutes');
 const rateRoutes = require('./rateRoutes');
 const ratesExtra = require('./rates-extra');
+const rateImportRoutes = require('./rateImportRoutes');
 const projectsUsage = require('./projects-usage');
 const { router: activityRoutes } = require('./activityRoutes');
 const { router: pipelineRoutes } = require('./pipelineRoutes');
@@ -74,6 +75,7 @@ app.post('/api/submissions/webhook/drive-link', submissionRoutes.driveLinkWebhoo
 app.use('/api/submissions', authMiddleware, submissionRoutes);
 app.use('/api', rateRoutes);
 app.use('/api', ratesExtra);
+app.use('/api', rateImportRoutes);
 app.use('/api', projectsUsage);
 app.use('/api', activityRoutes);
 app.use('/api', pipelineRoutes);
