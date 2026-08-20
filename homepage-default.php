@@ -940,9 +940,9 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       </div>
     </div>
     <div style="padding:8px 16px 12px;text-align:center;border-top:1px solid #0D1320">
-      <a href="tel:+447534808399" style="font-size:11px;color:#3B4D66;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">
+      <a href="tel:+447446901398" style="font-size:11px;color:#3B4D66;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        +44 7534 808 399 &#183; Prefer a call? Tap to ring
+        +44 7446 901 398 &#183; Prefer a call? Tap to ring
       </a>
     </div>
   </div>
@@ -993,9 +993,9 @@ function aiqsGo(url) { aiqsTrack('Lead', { content_name: 'Send Drawings (chat wi
 var waOpen = false;
 function toggleWaPanel() { waOpen = !waOpen; var p = document.getElementById('wa-panel'); var pulse = document.getElementById('wa-pulse');
   if (waOpen) { p.classList.add('open'); if (pulse) pulse.style.display = 'none'; } else { p.classList.remove('open'); } }
-function waQuick(msg) { aiqsTrack('Contact', { content_name: 'WhatsApp quick action' }); window.open('https://wa.me/447534808399?text=' + encodeURIComponent(msg), '_blank'); toggleWaPanel(); }
+function waQuick(msg) { aiqsTrack('Contact', { content_name: 'WhatsApp quick action' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); toggleWaPanel(); }
 function waSend() { var input = document.getElementById('wa-input'); var msg = input.value.trim();
-  if (msg) { aiqsTrack('Contact', { content_name: 'WhatsApp message' }); window.open('https://wa.me/447534808399?text=' + encodeURIComponent(msg), '_blank'); input.value = ''; toggleWaPanel(); } }
+  if (msg) { aiqsTrack('Contact', { content_name: 'WhatsApp message' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); input.value = ''; toggleWaPanel(); } }
 (function() {
   var canvas = document.createElement('canvas'); canvas.id = 'confetti-canvas';
   canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999999';

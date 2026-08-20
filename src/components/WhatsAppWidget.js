@@ -7,8 +7,8 @@ import { HandIcon } from './Icons';
 // Draggable floating WhatsApp button with chat panel and quick actions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const WHATSAPP_NUMBER = '447534808399';
-const WHATSAPP_DISPLAY = '+44 7534 808 399';
+const WHATSAPP_NUMBER = '447446901398';
+const WHATSAPP_DISPLAY = '+44 7446 901 398';
 
 const QUICK_ACTIONS = [
   {
