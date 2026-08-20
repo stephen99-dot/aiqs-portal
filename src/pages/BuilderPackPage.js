@@ -171,6 +171,19 @@ export default function BuilderPackPage() {
   // OH&P). Added flat to the bottom line so the client copy matches the tender.
   const [provisionalSum, setProvisionalSum] = useState(0);
 
+  // Rate-library import: rates extracted from this BOQ, offered to the user.
+  // Nothing is written until they review and confirm in the modal.
+  const [rateImport, setRateImport] = useState(null); // { candidates, counts, currency }
+  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [rateImportResult, setRateImportResult] = useState(null);
+  const [rateBannerDismissed, setRateBannerDismissed] = useState(
+    () => { try { return localStorage.getItem('aiqs_rate_import_dismissed_' + id) === '1'; } catch (e) { return false; } }
+  );
+  const dismissRateBanner = () => {
+    setRateBannerDismissed(true);
+    try { localStorage.setItem('aiqs_rate_import_dismissed_' + id, '1'); } catch (e) {}
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -246,6 +259,19 @@ export default function BuilderPackPage() {
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Failed to load BOQ'); })
       .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // Extract the rates this BOQ was priced at and check them against the user's
+  // rate library, so we can offer the import. Non-blocking — a failure here
+  // just means no banner.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`/projects/${id}/rate-import/preview`)
+      .then((d) => {
+        if (!cancelled && d && Array.isArray(d.candidates) && d.candidates.length) setRateImport(d);
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [id]);
 
@@ -752,6 +778,49 @@ export default function BuilderPackPage() {
         }}>{error}</div>
       )}
 
+      {/* Rate-library import offer */}
+      {rateImportResult && (
+        <div style={{
+          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
+          background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',
+          color: '#10B981', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span>
+            ✓ Rate library updated — {rateImportResult.created} new rate{rateImportResult.created === 1 ? '' : 's'} added
+            {rateImportResult.updated > 0 ? `, ${rateImportResult.updated} updated` : ''}
+            {rateImportResult.skipped_existing > 0 ? ` · ${rateImportResult.skipped_existing} kept at your existing value` : ''}.
+          </span>
+          <button onClick={() => setRateImportResult(null)}
+            style={{ background: 'none', border: 'none', color: '#10B981', cursor: 'pointer', fontSize: 15, fontWeight: 700 }}>×</button>
+        </div>
+      )}
+      {!loading && rateImport && !rateBannerDismissed && !rateImportResult && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
+          background: 'rgba(37,99,235,0.07)', border: '1px solid rgba(37,99,235,0.25)',
+        }}>
+          <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+            <strong>{rateImport.counts.total}</strong> priced rate{rateImport.counts.total === 1 ? '' : 's'} found in this BOQ
+            {rateImport.counts.new > 0
+              ? <> — <strong>{rateImport.counts.new}</strong> not yet in your rate library{rateImport.counts.exists_differs > 0 ? `, ${rateImport.counts.exists_differs} already saved at a different value` : ''}.</>
+              : rateImport.counts.exists_differs > 0
+                ? <> — all in your library, but <strong>{rateImport.counts.exists_differs}</strong> at a different value.</>
+                : ' — all already in your rate library at the same values.'}
+          </span>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+            <button onClick={() => setRateModalOpen(true)}
+              style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12.5, fontWeight: 700, background: '#2563EB', color: '#fff', border: 'none', cursor: 'pointer' }}>
+              Review & import
+            </button>
+            <button onClick={dismissRateBanner}
+              style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12.5, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div style={{ padding: 40, textAlign: 'center', fontSize: 13.5, color: 'var(--text-muted)' }}>
           Reading the BOQ…
@@ -1004,6 +1073,20 @@ export default function BuilderPackPage() {
           appliedNote="✓ Applied — saved automatically. Download the client copy or re-share when you're ready."
         />
       )}
+
+      {rateModalOpen && rateImport && (
+        <RateImportModal
+          projectId={id}
+          candidates={rateImport.candidates}
+          sym={sym}
+          onClose={() => setRateModalOpen(false)}
+          onImported={(result) => {
+            setRateImportResult(result);
+            setRateModalOpen(false);
+            dismissRateBanner();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1057,6 +1140,159 @@ function ResetRow({ isDirty, onReset }) {
       <button onClick={onReset}
         style={{ background: 'none', border: '1px solid rgba(245,158,11,0.35)', color: '#F59E0B', borderRadius: 5, padding: '3px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
       >Reset</button>
+    </div>
+  );
+}
+
+// Review-and-confirm dialog for pulling this BOQ's rates into the user's rate
+// library. New rates are pre-ticked; rates the user already holds are shown
+// with their existing value and are only overwritten if explicitly ticked.
+function RateImportModal({ projectId, candidates, sym, onClose, onImported }) {
+  const ordered = useMemo(() => {
+    const rank = { new: 0, exists_differs: 1, exists_same: 2 };
+    return candidates.slice().sort((a, b) =>
+      (rank[a.status] ?? 3) - (rank[b.status] ?? 3) || a.display_name.localeCompare(b.display_name));
+  }, [candidates]);
+
+  const [sel, setSel] = useState(() => {
+    const s = {};
+    for (const c of candidates) s[c.category + '|' + c.item_key + '|' + c.unit] = c.status === 'new';
+    return s;
+  });
+  const [importing, setImporting] = useState(false);
+  const [err, setErr] = useState('');
+
+  const keyOf = (c) => c.category + '|' + c.item_key + '|' + c.unit;
+  const selectedCount = ordered.filter((c) => sel[keyOf(c)]).length;
+
+  const setAllNew = (on) => {
+    setSel((prev) => {
+      const next = { ...prev };
+      for (const c of ordered) if (c.status === 'new') next[keyOf(c)] = on;
+      return next;
+    });
+  };
+
+  async function doImport() {
+    setImporting(true); setErr('');
+    try {
+      const rates = ordered.filter((c) => sel[keyOf(c)]).map((c) => ({
+        category: c.category,
+        display_name: c.display_name,
+        value: c.value,
+        unit: c.unit,
+        update_existing: c.status === 'exists_differs',
+      }));
+      const result = await apiFetch(`/projects/${projectId}/rate-import/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rates }),
+      });
+      if (result.error) throw new Error(result.error);
+      onImported(result);
+    } catch (e) {
+      setErr(e.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const catLabel = (cat) => cat.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+  const money = (v) => sym + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: 'min(820px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+        boxShadow: '0 18px 60px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 700 }}>Import rates to your library</h3>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer' }}>×</button>
+          </div>
+          <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'var(--text-muted)' }}>
+            These are the unit rates this BOQ was priced at. New rates are ticked; rates already in your
+            library are left unticked — ticking one of those will <strong>overwrite</strong> your saved value with the BOQ's.
+          </p>
+          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+            <button onClick={() => setAllNew(true)}
+              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, background: 'transparent', color: '#2563EB', border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer' }}>
+              Select all new
+            </button>
+            <button onClick={() => setAllNew(false)}
+              style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              Clear new
+            </button>
+          </div>
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '6px 20px', flex: 1 }}>
+          {ordered.map((c) => {
+            const k = keyOf(c);
+            const checked = !!sel[k];
+            return (
+              <label key={k} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 4px',
+                borderBottom: '1px solid var(--border)', cursor: 'pointer',
+              }}>
+                <input type="checkbox" checked={checked}
+                  onChange={(e) => setSel((prev) => ({ ...prev, [k]: e.target.checked }))}
+                  style={{ marginTop: 3, cursor: 'pointer' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                    {c.display_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span>{catLabel(c.category)}</span>
+                    <span>·</span>
+                    <span>{money(c.value)} / {c.unit}</span>
+                    {c.status === 'new' && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#10B981', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 6, padding: '1px 7px' }}>New</span>
+                    )}
+                    {c.status === 'exists_same' && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', background: 'rgba(148,163,184,0.12)', border: '1px solid rgba(148,163,184,0.3)', borderRadius: 6, padding: '1px 7px' }}>Already in your library — same rate</span>
+                    )}
+                    {c.status === 'exists_differs' && c.existing && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 6, padding: '1px 7px' }}>
+                        In your library at {money(c.existing.value)} — tick to overwrite with {money(c.value)}
+                      </span>
+                    )}
+                    {c.variant_rates && (
+                      <span style={{ fontSize: 10, color: '#F59E0B' }}>
+                        Multiple rates in this BOQ ({c.variant_rates.map(money).join(', ')}) — highest-quantity rate shown
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: '12px 20px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {err && <span style={{ fontSize: 12, color: '#EF4444' }}>{err}</span>}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+            <button onClick={onClose}
+              style={{ padding: '9px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button onClick={doImport} disabled={importing || selectedCount === 0}
+              style={{
+                padding: '9px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none',
+                background: '#2563EB', color: '#fff',
+                cursor: (importing || selectedCount === 0) ? 'not-allowed' : 'pointer',
+                opacity: (importing || selectedCount === 0) ? 0.55 : 1,
+              }}>
+              {importing ? 'Importing…' : `Import ${selectedCount} rate${selectedCount === 1 ? '' : 's'}`}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
