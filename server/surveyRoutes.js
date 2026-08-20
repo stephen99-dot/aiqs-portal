@@ -266,7 +266,12 @@ async function sendAdminSuitabilityAlert(userId, rec, { features, teamSize, jobs
 
   const row = (label, value) =>
     `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;vertical-align:top;">${label}</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${value}</td></tr>`;
-  const featureList = features.map((f) => esc(FEATURES[f].label)).join('<br/>');
+  // Add-on features (the work phone) aren't part of any package — flag them
+  // so the admin doesn't read them as included in the offered price.
+  const featureList = features
+    .map((f) => esc(FEATURES[f].label)
+      + (FEATURES[f].addon ? ' <span style="color:#94A3B8;font-weight:500;font-size:12px;">(add-on — extra over, not in the package price)</span>' : ''))
+    .join('<br/>');
 
   await sendEmail({
     to: ADMIN_EMAIL,
