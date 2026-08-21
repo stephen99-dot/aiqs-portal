@@ -66,4 +66,39 @@ function saveTradeRates(db, { userId, rates }) {
   return { saved };
 }
 
-module.exports = { DEFAULT_TRADE_DAY_RATES, saveTradeRates, slugKey, CATEGORY };
+// Upsert the filled-in rows of a trade's onboarding rate sheet. `values` is
+// {itemKey: price}; only keys the catalogue knows for this trade are
+// accepted, so labels and units always come from the catalogue, never the
+// client. Blank / missing items are simply not saved — pricing falls back to
+// the generic UK rates for those. Returns { saved }.
+function saveTradeItemRates(db, { userId, trade, values }) {
+  if (!userId || !values || typeof values !== 'object' || Array.isArray(values)) return { saved: 0 };
+  const items = require('./tradeCatalog').getRateItemsForTrade(trade);
+  if (!items.length) return { saved: 0 };
+  const byKey = new Map(items.map(i => [i.key, i]));
+  const category = slugKey(trade) || CATEGORY;
+
+  const sel = db.prepare(
+    'SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1'
+  );
+  const upd = db.prepare(
+    'UPDATE client_rate_library SET value = ?, display_name = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  );
+  const ins = db.prepare(
+    'INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, 0.9)'
+  );
+
+  let saved = 0;
+  for (const [key, raw] of Object.entries(values)) {
+    const item = byKey.get(key);
+    const value = parseFloat(raw);
+    if (!item || !Number.isFinite(value) || value <= 0 || value >= 1000000) continue;
+    const existing = sel.get(userId, category, item.key);
+    if (existing) upd.run(value, item.label, item.unit, existing.id);
+    else ins.run('rl_' + uuidv4().slice(0, 8), userId, category, item.key, item.label, value, item.unit);
+    saved++;
+  }
+  return { saved };
+}
+
+module.exports = { DEFAULT_TRADE_DAY_RATES, saveTradeRates, saveTradeItemRates, slugKey, CATEGORY };

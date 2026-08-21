@@ -124,7 +124,7 @@ export default function RegisterPage() {
         <div className="auth-right-panel">
           <div style={styles.formWrap}>
             <div className="auth-header" style={{ marginBottom: 24 }}>
-              <div className="auth-logo-mark">QS</div>
+              <div className="auth-logo-mark">AI <span>QS</span></div>
               <h1>Create your account</h1>
               <p>Start getting professional BOQs in hours</p>
             </div>

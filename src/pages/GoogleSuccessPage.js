@@ -34,7 +34,7 @@ export default function GoogleSuccessPage() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <div style={{ textAlign: 'center' }}>
-        <div className="auth-logo-mark" style={{ margin: '0 auto 16px' }}>QS</div>
+        <div className="auth-logo-mark" style={{ margin: "0 auto 16px" }}>AI <span>QS</span></div>
         <p style={{ color: 'var(--text-secondary)' }}>Signing you in with Google...</p>
       </div>
     </div>

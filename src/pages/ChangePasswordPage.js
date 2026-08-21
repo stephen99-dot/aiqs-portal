@@ -37,7 +37,7 @@ export default function ChangePasswordPage() {
       <div className="auth-container">
         <div className="auth-card">
           <div className="auth-header">
-            <div className="auth-logo-mark">QS</div>
+            <div className="auth-logo-mark">AI <span>QS</span></div>
             <h1>Set a new password</h1>
             <p>Your password has been reset by an admin. Please choose a new password before continuing.</p>
           </div>

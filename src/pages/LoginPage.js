@@ -127,7 +127,7 @@ export default function LoginPage() {
         <div className="auth-right-panel">
           <div style={styles.formWrap}>
             <div className="auth-header" style={{ marginBottom: 28 }}>
-              <div className="auth-logo-mark">QS</div>
+              <div className="auth-logo-mark">AI <span>QS</span></div>
               <h1>Welcome back</h1>
               <p>Sign in to your AI QS portal</p>
             </div>

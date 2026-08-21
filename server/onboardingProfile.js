@@ -8,7 +8,7 @@
 // existing /branding/logo/:userId route).
 
 const { v4: uuidv4 } = require('uuid');
-const { getQuestionsForTrade } = require('./tradeCatalog');
+const { getQuestionsForTrade, getRateItemsForTrade } = require('./tradeCatalog');
 
 function ensureTable(db) {
   db.exec(`
@@ -80,6 +80,16 @@ function answerRows(submission) {
     const v = qual[q.id];
     const val = Array.isArray(v) ? v.join(', ') : String(v);
     if (val !== '') rows.push([q.label + (q.unit ? ' (' + q.unit + ')' : ''), val]);
+  }
+  // The itemised rate sheet, labelled from the catalogue so the download
+  // reads like the screen did ("Skim over existing (£/m²): 18").
+  if (qual.rate_items && typeof qual.rate_items === 'object' && !Array.isArray(qual.rate_items)) {
+    seen.add('rate_items');
+    const byKey = new Map(getRateItemsForTrade(submission.trade).map(i => [i.key, i]));
+    for (const [k, v] of Object.entries(qual.rate_items)) {
+      const item = byKey.get(k);
+      rows.push([item ? item.label + ' (' + item.unit + ')' : k, String(v)]);
+    }
   }
   for (const [id, v] of Object.entries(qual)) {
     if (seen.has(id)) continue;

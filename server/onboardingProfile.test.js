@@ -78,6 +78,17 @@ test('answerRows come out in question order with human labels', () => {
   assert.strictEqual(spec[1], 'Rewires, EV chargers');
 });
 
+test('answerRows labels rate-sheet items from the catalogue', () => {
+  const db = freshDb();
+  const row = op.saveSubmission(db, {
+    userId: 'u1', trade: 'Electrician',
+    qualifying: { ...QUAL, rate_items: { rewire_3bed: 4200, unknown_item: 10 } },
+  });
+  const rows = op.answerRows(op.getSubmission(db, row.id));
+  assert.ok(rows.some(r => r[0] === 'Full rewire — 3-bed house (£/job)' && r[1] === '4200'));
+  assert.ok(rows.some(r => r[0] === 'unknown_item' && r[1] === '10'));
+});
+
 test('answerRows survives an id the catalogue no longer knows', () => {
   const db = freshDb();
   const row = op.saveSubmission(db, { userId: 'u1', trade: 'Electrician', qualifying: { retired_question: 'yes', day_rate: 360 } });
