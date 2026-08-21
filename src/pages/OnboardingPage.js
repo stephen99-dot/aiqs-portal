@@ -66,6 +66,12 @@ export default function OnboardingPage() {
   const [qualifying, setQualifying] = useState({});
   const [dayRateTouched, setDayRateTouched] = useState(false);
 
+  // Step 3 — the trade's itemised rate sheet. All optional: typical figures
+  // sit as placeholders, and anything left blank is priced with generic UK
+  // rates instead.
+  const [rateItems, setRateItems] = useState([]);
+  const [itemRates, setItemRates] = useState({});
+
   // Step 3 — anything else
   const [notes, setNotes] = useState('');
 
@@ -88,6 +94,8 @@ export default function OnboardingPage() {
       .then(d => {
         const qs = d.questions || [];
         setQuestions(qs);
+        setRateItems(d.rate_items || []);
+        setItemRates({});
         setQuestionsFor(trade);
         setQualifying(prev => {
           const next = {};
@@ -155,6 +163,12 @@ export default function OnboardingPage() {
         body.trade_rates = { [trade]: dayRate };
         body.trade_rates_touched = dayRateTouched;
       }
+      const filledItems = {};
+      for (const [k, v] of Object.entries(itemRates)) {
+        const n = parseFloat(v);
+        if (n > 0) filledItems[k] = n;
+      }
+      if (trade && Object.keys(filledItems).length > 0) body.rate_items = filledItems;
       await apiFetch('/onboarding', { method: 'POST', body: JSON.stringify(body) });
       setDone(true);
     } catch (e) {
@@ -395,6 +409,38 @@ export default function OnboardingPage() {
             </Field>
           )),
     },
+    // Only trades the catalogue knows get a rate sheet; a custom trade goes
+    // straight from questions to notes.
+    ...(rateItems.length > 0 ? [{
+      title: 'Your rates for the usual jobs',
+      sub: "These are the jobs " + (trade ? 'a ' + trade.toLowerCase() : 'your trade') + " prices every week. Fill in the ones you know — every estimate will use YOUR figure. Leave anything blank and we'll price it with standard UK rates until you tell us otherwise.",
+      canNext: true,
+      body: (
+        <>
+          {rateItems.map(item => (
+            <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text }}>{item.label}</div>
+                <div style={{ fontSize: 11.5, color: c.textMuted }}>{item.unit}</div>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>£</span>
+                <input
+                  type="number" inputMode="decimal" min="0"
+                  value={itemRates[item.key] ?? ''}
+                  placeholder={String(item.typical)}
+                  onChange={e => setItemRates(r => ({ ...r, [item.key]: e.target.value }))}
+                  style={{ ...inputStyle, width: 120, paddingLeft: 24 }}
+                />
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 12, padding: '10px 12px', background: c.pill, borderRadius: 8 }}>
+            The grey figures are typical UK rates, not yours — type over them where yours differ. Everything here lands in My Rates, where you can add more jobs or import a full rate spreadsheet any time.
+          </div>
+        </>
+      ),
+    }] : []),
     {
       title: 'Anything you want to add?',
       sub: "Anything else we should know — how you like to quote, what you never take on, rates for other trades you use. It all goes to our team and into your AI's memory.",

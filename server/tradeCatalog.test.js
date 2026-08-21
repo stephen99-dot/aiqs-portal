@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { TRADES, searchTrades, findTrade, getQuestionsForTrade } = require('./tradeCatalog');
+const { TRADES, RATE_ITEMS, searchTrades, findTrade, getQuestionsForTrade, getRateItemsForTrade } = require('./tradeCatalog');
 
 test('search matches on name prefix first', () => {
   const results = searchTrades('plu');
@@ -57,6 +57,26 @@ test('a known trade gets its own certs and specialisms', () => {
   assert.ok(certs.options.includes('NICEIC'));
   const spec = qs.find(q => q.id === 'specialisms');
   assert.ok(spec && spec.options.includes('Rewires'));
+});
+
+test('every rate sheet belongs to a real trade and every item is complete', () => {
+  const names = new Set(TRADES.map(t => t.name));
+  for (const [tradeName, items] of Object.entries(RATE_ITEMS)) {
+    assert.ok(names.has(tradeName), `rate sheet for unknown trade "${tradeName}"`);
+    const keys = new Set();
+    for (const item of items) {
+      assert.ok(item.key && item.label && item.unit, tradeName + ' has an incomplete item: ' + JSON.stringify(item));
+      assert.ok(item.typical > 0, tradeName + '/' + item.key + ' has no typical figure');
+      assert.ok(!keys.has(item.key), tradeName + ' repeats key ' + item.key);
+      keys.add(item.key);
+    }
+  }
+});
+
+test('rate sheets resolve through aliases; unknown trades get none', () => {
+  assert.ok(getRateItemsForTrade('sparky').some(i => i.key === 'rewire_3bed'));
+  assert.ok(getRateItemsForTrade('Roofer').some(i => i.key === 'retile_pitched_m2'));
+  assert.deepStrictEqual(getRateItemsForTrade('Thatcher'), []);
 });
 
 test('an unknown custom trade still gets the common questions', () => {

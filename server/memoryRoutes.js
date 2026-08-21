@@ -117,6 +117,9 @@ router.get('/onboarding/questions', authMiddleware, (req, res) => {
       trade,
       matched: !!tradeCatalog.findTrade(trade),
       questions: tradeCatalog.getQuestionsForTrade(trade),
+      // The optional itemised rate sheet for this trade — typical figures are
+      // placeholders only; blanks fall back to generic UK rates.
+      rate_items: tradeCatalog.getRateItemsForTrade(trade),
     });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load questions' });
@@ -198,35 +201,66 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       }
     }
 
+    // The itemised rate sheet for their trade — only rows they actually
+    // filled in. Kept on the submission record (so the admin download shows
+    // them) and saved to the rate library below. Blank rows aren't stored
+    // anywhere: pricing falls back to generic UK rates for those.
+    const rateItemValues = {};
+    if (trade && req.body && req.body.rate_items && typeof req.body.rate_items === 'object' && !Array.isArray(req.body.rate_items)) {
+      const known = new Set(tradeCatalog.getRateItemsForTrade(trade).map(i => i.key));
+      for (const [k, v] of Object.entries(req.body.rate_items)) {
+        const n = parseFloat(v);
+        if (known.has(k) && Number.isFinite(n) && n > 0) rateItemValues[k] = n;
+      }
+    }
+
     // Keep the submission verbatim and alert the admin (bell + email) so the
     // profile — and their logo — can be downloaded from Admin → Onboarding.
     if (trade || Object.keys(qualifying).length > 0 || notes) {
       try {
-        const submission = onboardingProfile.saveSubmission(db, { userId, trade, qualifying, notes });
+        const record = Object.keys(rateItemValues).length > 0
+          ? { ...qualifying, rate_items: rateItemValues }
+          : qualifying;
+        const submission = onboardingProfile.saveSubmission(db, { userId, trade, qualifying: record, notes });
         if (submission) onboardingProfile.alertAdmin(db, req.user, submission);
       } catch (err) {
         console.error('[Onboarding] submission save error:', err.message);
       }
     }
 
-    // Trade day rates from the onboarding rates step. They go into the rate
-    // library (not memories) so the pricer and chat use them like any other
-    // client rate. touched=false means the user accepted the prefilled UK
-    // defaults unchanged — still worth saving, but not worth the "client
-    // added their own rates" admin alert.
+    // Rates from onboarding go into the rate library (not memories) so the
+    // pricer and chat use them like any other client rate. touched=false
+    // means they only accepted the prefilled day-rate default unchanged —
+    // still worth saving, but not worth the "client added their own rates"
+    // admin alert. Typed-in rate-sheet figures always count as touched.
+    let ratesSaved = 0;
+    let ratesTouched = Boolean(req.body && req.body.trade_rates_touched);
     const tradeRates = req.body && req.body.trade_rates;
     if (tradeRates && typeof tradeRates === 'object') {
       try {
-        const { saved } = require('./tradeRates').saveTradeRates(db, { userId, rates: tradeRates });
-        if (saved > 0) {
-          require('./rateOnboarding').markOwnRatesAdded(req.user, {
-            source: 'onboarding',
-            count: saved,
-            silent: !(req.body && req.body.trade_rates_touched),
-          });
-        }
+        ratesSaved += require('./tradeRates').saveTradeRates(db, { userId, rates: tradeRates }).saved;
       } catch (err) {
         console.error('[Onboarding] trade rates save error:', err.message);
+      }
+    }
+    if (trade && Object.keys(rateItemValues).length > 0) {
+      try {
+        const { saved } = require('./tradeRates').saveTradeItemRates(db, { userId, trade, values: rateItemValues });
+        ratesSaved += saved;
+        if (saved > 0) ratesTouched = true;
+      } catch (err) {
+        console.error('[Onboarding] rate sheet save error:', err.message);
+      }
+    }
+    if (ratesSaved > 0) {
+      try {
+        require('./rateOnboarding').markOwnRatesAdded(req.user, {
+          source: 'onboarding',
+          count: ratesSaved,
+          silent: !ratesTouched,
+        });
+      } catch (err) {
+        console.error('[Onboarding] rates milestone error:', err.message);
       }
     }
 

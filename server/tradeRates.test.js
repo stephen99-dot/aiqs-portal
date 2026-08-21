@@ -10,7 +10,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const Database = require('better-sqlite3');
 
-const { saveTradeRates, slugKey, DEFAULT_TRADE_DAY_RATES, CATEGORY } = require('./tradeRates');
+const { saveTradeRates, saveTradeItemRates, slugKey, DEFAULT_TRADE_DAY_RATES, CATEGORY } = require('./tradeRates');
 
 function freshDb() {
   const db = new Database(':memory:');
@@ -100,6 +100,47 @@ test('default trade list is sane — every entry would save', () => {
   const db = freshDb();
   const { saved } = saveTradeRates(db, { userId: 'u1', rates: DEFAULT_TRADE_DAY_RATES });
   assert.strictEqual(saved, Object.keys(DEFAULT_TRADE_DAY_RATES).length);
+});
+
+test('rate-sheet items save with the catalogue label and unit under the trade category', () => {
+  const db = freshDb();
+  const { saved } = saveTradeItemRates(db, {
+    userId: 'u1', trade: 'Electrician',
+    values: { rewire_3bed: 4200, double_socket_installed: 85 },
+  });
+  assert.strictEqual(saved, 2);
+  const rows = all(db, 'u1');
+  const rewire = rows.find(r => r.item_key === 'rewire_3bed');
+  assert.strictEqual(rewire.category, 'electrician');
+  assert.strictEqual(rewire.value, 4200);
+  assert.strictEqual(rewire.unit, '£/job');
+  assert.strictEqual(rewire.display_name, 'Full rewire — 3-bed house');
+  assert.strictEqual(rows.find(r => r.item_key === 'double_socket_installed').unit, '£/point');
+});
+
+test('rate-sheet blanks, junk and unknown keys are simply not saved', () => {
+  const db = freshDb();
+  const { saved } = saveTradeItemRates(db, {
+    userId: 'u1', trade: 'Electrician',
+    values: { rewire_3bed: '', eicr_3bed: 'abc', made_up_key: 500, downlight_fitted: -5 },
+  });
+  assert.strictEqual(saved, 0);
+  assert.strictEqual(all(db, 'u1').length, 0);
+});
+
+test('rate-sheet re-submission updates values instead of duplicating', () => {
+  const db = freshDb();
+  saveTradeItemRates(db, { userId: 'u1', trade: 'Plasterer', values: { skim_walls_m2: 18 } });
+  saveTradeItemRates(db, { userId: 'u1', trade: 'Plasterer', values: { skim_walls_m2: 20 } });
+  const rows = all(db, 'u1');
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].value, 20);
+});
+
+test('rate-sheet save is a no-op for a trade the catalogue does not know', () => {
+  const db = freshDb();
+  const { saved } = saveTradeItemRates(db, { userId: 'u1', trade: 'Thatcher', values: { anything: 100 } });
+  assert.strictEqual(saved, 0);
 });
 
 test('slugKey matches the my-rates import slug rule', () => {
