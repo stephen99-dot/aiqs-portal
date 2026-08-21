@@ -93,6 +93,9 @@ export default function SuitabilitySurveyPopup({ onDecided }) {
           decide(false);
           return;
         }
+        // Too new an account — the server says not yet. Don't mark anything
+        // locally; we simply re-check next session.
+        if (r.eligible === false) { decide(false); return; }
         decide(true);
         setTimeout(() => { if (!cancelled) setVisible(true); }, 1500);
       })

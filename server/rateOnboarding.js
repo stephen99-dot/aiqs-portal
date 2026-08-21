@@ -79,6 +79,7 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
 
     const total = db.prepare('SELECT COUNT(*) AS c FROM client_rate_library WHERE user_id = ? AND is_active = 1').get(row.id).c;
     mailer.sendMail({
+      platform: true,
       type: 'rates_added_admin',
       to: ADMIN_EMAIL,
       subject: 'Rates added — ' + who + ' (' + countLabel + ')',
@@ -163,6 +164,7 @@ async function runRateReminders() {
       const ctx = { first: (u.full_name || '').trim().split(/\s+/)[0] || '' };
       const mail = await mailer.sendMail({
         userId: u.id,
+        platform: true,
         type: 'rates_reminder_' + target.stage,
         to: u.email,
         subject: target.subject,

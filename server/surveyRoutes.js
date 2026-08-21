@@ -43,6 +43,24 @@ function ensureSchema() {
   schemaReady = true;
 }
 
+// Feedback popups only make sense once someone has actually used the product
+// — a brand-new signup being asked "how are we doing?" on day one reads as
+// noise. Gated here, server-side, so every popup obeys it and the threshold
+// lives in one place. eligible=false just means "not yet": the popups leave
+// their local state untouched and re-check next session.
+const MIN_ACCOUNT_AGE_DAYS = 10;
+function accountOldEnough(userId) {
+  try {
+    const u = db.prepare('SELECT created_at FROM users WHERE id = ?').get(userId);
+    if (!u || !u.created_at) return false;
+    // created_at is SQLite's 'YYYY-MM-DD HH:MM:SS' in UTC — normalise to ISO.
+    const createdIso = String(u.created_at).replace(' ', 'T').replace(/Z?$/, 'Z');
+    return (Date.now() - new Date(createdIso).getTime()) / 86400000 >= MIN_ACCOUNT_AGE_DAYS;
+  } catch (e) {
+    return false;
+  }
+}
+
 // GET /api/survey/status?key=portal_2026_06 — has this user already answered?
 router.get('/survey/status', authMiddleware, (req, res) => {
   try {
@@ -50,7 +68,7 @@ router.get('/survey/status', authMiddleware, (req, res) => {
     const key = String(req.query.key || '').slice(0, 64);
     if (!key) return res.status(400).json({ error: 'key required' });
     const row = db.prepare('SELECT id FROM user_surveys WHERE user_id = ? AND survey_key = ?').get(req.user.id, key);
-    res.json({ completed: !!row });
+    res.json({ completed: !!row, eligible: accountOldEnough(req.user.id) });
   } catch (e) {
     console.error('[Survey] status error:', e.message);
     res.status(500).json({ error: 'Failed to check survey status' });
@@ -126,7 +144,7 @@ router.get('/survey/suitability/status', authMiddleware, (req, res) => {
     const key = String(req.query.key || '').slice(0, 64);
     if (!key) return res.status(400).json({ error: 'key required' });
     const row = db.prepare('SELECT id FROM suitability_surveys WHERE user_id = ? AND survey_key = ?').get(req.user.id, key);
-    res.json({ completed: !!row });
+    res.json({ completed: !!row, eligible: accountOldEnough(req.user.id) });
   } catch (e) {
     console.error('[Suitability] status error:', e.message);
     res.status(500).json({ error: 'Failed to check survey status' });
