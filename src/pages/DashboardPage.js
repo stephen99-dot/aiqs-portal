@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
@@ -424,6 +424,19 @@ export default function DashboardPage() {
   const [adminMessages, setAdminMessages] = useState([]);
   const [onboardingStatus, setOnboardingStatus] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const navigate = useNavigate();
+
+  // New signups go through onboarding before they see the dashboard or the
+  // tour — whichever door they came in by (register, login, magic link).
+  // Completing or skipping it clears the flag, so no loop.
+  const mustOnboard = onboardingStatus
+    && onboardingStatus.is_new_account
+    && !onboardingStatus.completed_at
+    && !onboardingStatus.skipped;
+
+  useEffect(() => {
+    if (mustOnboard) navigate('/onboarding', { replace: true });
+  }, [mustOnboard, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -506,7 +519,7 @@ export default function DashboardPage() {
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && !mustOnboard) {
       const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
       const whatsNewKey = `aiqs_whats_new_v5_${user?.id || 'default'}`;
       try {
@@ -523,7 +536,7 @@ export default function DashboardPage() {
         }
       } catch {}
     }
-  }, [loading, user?.id]);
+  }, [loading, user?.id, mustOnboard]);
 
   const needsOnboarding = onboardingStatus
     && !onboardingStatus.completed_at
@@ -531,6 +544,9 @@ export default function DashboardPage() {
 
   const firstName = user?.fullName?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
   const projectList = Array.isArray(projects) ? projects : [];
+
+  // On their way to onboarding — don't flash the dashboard behind the redirect.
+  if (mustOnboard) return null;
 
   return (
     <div className="page" data-tour="welcome">

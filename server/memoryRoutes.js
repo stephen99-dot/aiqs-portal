@@ -78,10 +78,20 @@ router.delete('/memories/:id', authMiddleware, (req, res) => {
 // Returns current onboarding status and a suggested question set
 router.get('/onboarding', authMiddleware, (req, res) => {
   try {
-    const u = db.prepare('SELECT onboarding_completed_at, onboarding_skipped FROM users WHERE id = ?').get(req.user.id);
+    const u = db.prepare('SELECT onboarding_completed_at, onboarding_skipped, created_at FROM users WHERE id = ?').get(req.user.id);
+    // is_new_account: the dashboard forces brand-new signups (however they
+    // arrive — register, login, magic link) into onboarding before anything
+    // else. Scoped to recent accounts so the existing back book is nudged by
+    // the banner, not marched through a form.
+    let isNew = false;
+    if (u && u.created_at) {
+      const createdIso = String(u.created_at).replace(' ', 'T').replace(/Z?$/, 'Z');
+      isNew = (Date.now() - new Date(createdIso).getTime()) / 86400000 <= 14;
+    }
     res.json({
       completed_at: u ? u.onboarding_completed_at : null,
       skipped: u ? !!u.onboarding_skipped : false,
+      is_new_account: isNew,
     });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load onboarding status' });
