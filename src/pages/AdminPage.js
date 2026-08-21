@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, getToken } from '../utils/api';
 import { ClientsIcon, FileTextIcon, PoundIcon, ZapIcon, KeyIcon, CheckCircleIcon, XCircleIcon, XIcon, EditIcon, MailIcon, TrashIcon, AlertTriangleIcon, BookIcon, InboxIcon, UploadIcon, SearchIcon, CheckIcon, UserIcon, ClipboardIcon, CreditCardIcon, PaperclipIcon, BarChartIcon, InfoIcon, RefreshIcon } from '../components/Icons';
 
 const PLAN_OPTIONS = [
@@ -647,6 +647,127 @@ function SubmissionsTab({ t }) {
   );
 }
 
+// ── Onboarding tab — completed trade profiles, downloadable with logo ──────
+function OnboardingTab({ t }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(null);
+
+  useEffect(() => {
+    apiFetch('/admin/onboarding-submissions')
+      .then(d => setRows(d.submissions || []))
+      .catch(e => console.error('Admin onboarding load error:', e))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Auth rides in a header, so downloads go through fetch → blob, not <a href>.
+  const download = async (url, filename) => {
+    try {
+      const res = await fetch('/api' + url, { headers: { Authorization: 'Bearer ' + getToken() } });
+      if (!res.ok) throw new Error('Download failed (' + res.status + ')');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { alert(e.message || 'Download failed'); }
+  };
+
+  const btn = {
+    padding: '5px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+    background: t.surface, border: '1px solid ' + t.border, color: t.text,
+    fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+  };
+
+  if (loading) return <div style={{ padding: 24, color: t.textMuted, fontSize: 13 }}>Loading onboarding profiles…</div>;
+
+  if (rows.length === 0) {
+    return (
+      <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13.5 }}>
+        No onboarding profiles yet. When a client completes onboarding you'll get a bell + email, and their profile appears here to download.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + t.border }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Onboarding profiles</div>
+        <div style={{ fontSize: 12, color: t.textMuted }}>{rows.length} completed — download the profile as a spreadsheet, and their logo where they've added one</div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ background: t.surface }}>
+              {['When', 'Client', 'Trade', 'Answers', 'Downloads'].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '10px 14px', color: t.textMuted, fontWeight: 600, fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '1px solid ' + t.border, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const safeName = (r.full_name || r.email || 'client').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '-') || 'client';
+              return (
+                <React.Fragment key={r.id}>
+                  <tr style={{ borderBottom: '1px solid ' + t.border }}>
+                    <td style={{ padding: '10px 14px', color: t.textMuted, whiteSpace: 'nowrap' }}>
+                      {new Date(r.created_at.replace(' ', 'T') + 'Z').toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: t.text }}>
+                      <div style={{ fontWeight: 600 }}>{r.full_name || '—'}</div>
+                      <div style={{ fontSize: 11, color: t.textMuted }}>{r.email}{r.company ? ' · ' + r.company : ''}</div>
+                    </td>
+                    <td style={{ padding: '10px 14px', color: t.text, whiteSpace: 'nowrap', fontWeight: 600 }}>{r.trade || '—'}</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <button onClick={() => setOpen(open === r.id ? null : r.id)} style={{ ...btn, background: 'transparent' }}>
+                        {open === r.id ? 'Hide' : 'View'} ({(r.answers || []).length}{r.notes ? ' + notes' : ''})
+                      </button>
+                    </td>
+                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => download('/admin/onboarding-submissions/' + r.id + '/download', 'onboarding-' + safeName + '.xlsx')} style={{ ...btn, marginRight: 6 }}>
+                        Profile (.xlsx)
+                      </button>
+                      <button
+                        onClick={() => download('/branding/logo/' + r.user_id, 'logo-' + safeName + '.png')}
+                        disabled={!r.has_logo}
+                        title={r.has_logo ? 'Download their logo' : 'No logo uploaded'}
+                        style={{ ...btn, opacity: r.has_logo ? 1 : 0.4, cursor: r.has_logo ? 'pointer' : 'not-allowed' }}
+                      >
+                        Logo
+                      </button>
+                    </td>
+                  </tr>
+                  {open === r.id && (
+                    <tr style={{ borderBottom: '1px solid ' + t.border }}>
+                      <td colSpan={5} style={{ padding: '12px 14px', background: t.surface }}>
+                        {(r.answers || []).map(a => (
+                          <div key={a.label} style={{ fontSize: 12.5, marginBottom: 4 }}>
+                            <span style={{ color: t.textMuted }}>{a.label}: </span>
+                            <span style={{ color: t.text, fontWeight: 600 }}>{a.value}</span>
+                          </div>
+                        ))}
+                        {r.notes && (
+                          <div style={{ fontSize: 12.5, marginTop: 8, color: t.text }}>
+                            <span style={{ color: t.textMuted }}>Anything else: </span>“{r.notes}”
+                          </div>
+                        )}
+                        {(r.answers || []).length === 0 && !r.notes && (
+                          <div style={{ fontSize: 12.5, color: t.textMuted }}>No qualifying answers given.</div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({ t }) {
   const sections = [
     { title: 'API Configuration', items: [{ label: 'Anthropic API Key', value: 'sk-...7xQ4', type: 'secret' }, { label: 'Pipedream Webhook URL', value: 'https://eo...pipedream.net/...', type: 'url' }, { label: 'Google Drive Folder ID', value: '1abc...xyz', type: 'text' }] },
@@ -977,7 +1098,7 @@ function SurveyTab({ t }) {
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'feedback', label: 'Feedback' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'onboarding', label: 'Onboarding' }, { key: 'feedback', label: 'Feedback' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -991,6 +1112,7 @@ export default function AdminPage() {
       {tab === 'overview' && <OverviewTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'submissions' && <SubmissionsTab t={t} />}
+      {tab === 'onboarding' && <OnboardingTab t={t} />}
       {tab === 'feedback' && <><SuitabilitySection t={t} /><SurveyTab t={t} /></>}
       {tab === 'costs' && <CostsTab t={t} />}
       {tab === 'rates' && <RatesTab t={t} />}
