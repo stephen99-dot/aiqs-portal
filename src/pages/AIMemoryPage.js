@@ -286,7 +286,7 @@ export default function AIMemoryPage() {
               Teach the AI how you work — 2 minutes
             </div>
             <div style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.55 }}>
-              Three short steps — who you are, your day rates for each trade, and your pricing defaults — and every estimate after this will price from your rates and preferences.
+              Three short steps — your trade, a few qualifying questions, and anything you want to add — and every estimate after this will price from your rates and preferences.
             </div>
           </div>
           <Link to="/onboarding" style={{

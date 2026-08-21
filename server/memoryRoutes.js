@@ -2,10 +2,12 @@
 // Mounted under /api by index.js.
 
 const express = require('express');
-const { authMiddleware } = require('./auth');
+const { authMiddleware, adminMiddleware } = require('./auth');
 const db = require('./database');
 const memoryStore = require('./memoryStore');
 const entityStore = require('./entityStore');
+const tradeCatalog = require('./tradeCatalog');
+const onboardingProfile = require('./onboardingProfile');
 
 const router = express.Router();
 
@@ -86,14 +88,48 @@ router.get('/onboarding', authMiddleware, (req, res) => {
   }
 });
 
+// The trade list for the live-search picker. Names + aliases only — the
+// client filters locally as the user types, no per-keystroke round trips.
+router.get('/onboarding/trades', authMiddleware, (req, res) => {
+  try {
+    res.json({ trades: tradeCatalog.TRADES.map(t => ({ name: t.name, aliases: t.aliases })) });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load trades' });
+  }
+});
+
+// Qualifying questions for a chosen (or typed-in) trade. Unknown trades get
+// the common question set, so a custom trade never dead-ends the flow.
+router.get('/onboarding/questions', authMiddleware, (req, res) => {
+  try {
+    const trade = String(req.query.trade || '');
+    res.json({
+      trade,
+      matched: !!tradeCatalog.findTrade(trade),
+      questions: tradeCatalog.getQuestionsForTrade(trade),
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load questions' });
+  }
+});
+
 // Save onboarding answers. Each answer becomes a high-confidence user_memory
 // marked source='onboarding'. Submitting multiple times updates the completion time.
 router.post('/onboarding', authMiddleware, async (req, res) => {
   try {
-    const answers = (req.body && req.body.answers) || {};
     const skipped = Boolean(req.body && req.body.skipped);
     const userId = req.user.id;
     const saved = [];
+
+    // New flow: trade + qualifying answers + free-text notes. The legacy
+    // `answers` object is still accepted so nothing old breaks.
+    const trade = String((req.body && req.body.trade) || '').trim();
+    const qualifying = (req.body && req.body.qualifying && typeof req.body.qualifying === 'object' && !Array.isArray(req.body.qualifying))
+      ? req.body.qualifying : {};
+    const notes = String((req.body && req.body.notes) || '').trim();
+    const answers = { ...((req.body && req.body.answers) || {}), ...qualifying };
+    if (trade) answers.trade = trade;
+    if (notes) answers.extra_notes = notes;
 
     if (skipped) {
       db.prepare('UPDATE users SET onboarding_skipped = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
@@ -102,7 +138,16 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
 
     // Each question maps to a category + a memory content template.
     // Multi-select fields come as arrays; we save each selection as its own memory.
+    // day_rate is deliberately absent: it goes to the rate library below, and a
+    // memory copy would just drift from the value the pricer actually uses.
     const mapping = [
+      { key: 'trade',                category: 'profile',               template: v => `Trade: ${v}` },
+      { key: 'years_trading',        category: 'profile',               template: v => `Experience: ${v}` },
+      { key: 'team_size',            category: 'team',                  template: v => `Team size: ${v}` },
+      { key: 'typical_job_value',    category: 'commercial',            template: v => `Typical job value: ${v}` },
+      { key: 'specialisms',          category: 'project_type',          template: v => `Specialises in: ${v}`, multi: true },
+      { key: 'certifications',       category: 'profile',               template: v => `Certification: ${v}`, multi: true },
+      { key: 'extra_notes',          category: 'general',               template: v => `Note from onboarding: ${v}` },
       { key: 'role',                 category: 'profile',               template: v => `Company/role: ${v}` },
       { key: 'company_name',         category: 'profile',               template: v => `Company name: ${v}` },
       { key: 'project_types',        category: 'project_type',          template: v => `Typically works on ${v} projects`, multi: true },
@@ -143,6 +188,17 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       }
     }
 
+    // Keep the submission verbatim and alert the admin (bell + email) so the
+    // profile — and their logo — can be downloaded from Admin → Onboarding.
+    if (trade || Object.keys(qualifying).length > 0 || notes) {
+      try {
+        const submission = onboardingProfile.saveSubmission(db, { userId, trade, qualifying, notes });
+        if (submission) onboardingProfile.alertAdmin(db, req.user, submission);
+      } catch (err) {
+        console.error('[Onboarding] submission save error:', err.message);
+      }
+    }
+
     // Trade day rates from the onboarding rates step. They go into the rate
     // library (not memories) so the pricer and chat use them like any other
     // client rate. touched=false means the user accepted the prefilled UK
@@ -179,6 +235,47 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
   } catch (e) {
     console.error('[Onboarding] save error:', e.message);
     res.status(500).json({ error: 'Failed to save onboarding' });
+  }
+});
+
+// ── Admin: onboarding submissions ────────────────────────────────────
+// The list behind Admin → Onboarding, and the per-submission Excel download
+// (logo embedded when they uploaded one). The logo file itself downloads via
+// the existing admin-permitted GET /branding/logo/:userId.
+
+router.get('/admin/onboarding-submissions', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const rows = onboardingProfile.listSubmissions(db).map(s => ({
+      ...s,
+      answers: onboardingProfile.answerRows(s).map(([label, value]) => ({ label, value })),
+    }));
+    res.json({ submissions: rows });
+  } catch (e) {
+    console.error('[Onboarding] admin list error:', e.message);
+    res.status(500).json({ error: 'Failed to load onboarding submissions' });
+  }
+});
+
+router.get('/admin/onboarding-submissions/:id/download', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const submission = onboardingProfile.getSubmission(db, req.params.id);
+    if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+    let logoPath = null;
+    if (submission.logo_filename) {
+      const path = require('path');
+      logoPath = path.join(require('./brandingRoutes').brandingDir, submission.logo_filename);
+    }
+    const wb = await onboardingProfile.buildWorkbook(submission, logoPath);
+
+    const safeName = String(submission.full_name || submission.email || 'client').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '-') || 'client';
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="onboarding-${safeName}.xlsx"`);
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (e) {
+    console.error('[Onboarding] admin download error:', e.message);
+    res.status(500).json({ error: 'Failed to build download' });
   }
 });
 
