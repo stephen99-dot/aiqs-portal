@@ -332,6 +332,7 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
         const ver = Math.max(1, ...inserted.map((x) => x.version || 1));
         const isUpdate = ver > 1;
         require('./mailer').sendMail({
+          platform: true,
           type: isUpdate ? 'deliverables_updated' : 'deliverables_ready',
           to: owner.email,
           subject: isUpdate

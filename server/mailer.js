@@ -67,77 +67,11 @@ function getUser(userId) {
   return db.prepare('SELECT email, full_name, company FROM users WHERE id = ?').get(userId);
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-// Escape a paragraph, then turn any bare URLs back into real links. Mail
-// clients render our HTML as-is — they do NOT linkify plain text — so a URL
-// left as escaped text (e.g. the top-up options in the low-credit email)
-// would be dead words on the page.
-function escapeAndLinkify(s) {
-  return escapeHtml(s).replace(/(https?:\/\/[^\s<]+)/g, (url) =>
-    '<a href="' + url + '" style="color:#1D4ED8;text-decoration:underline;word-break:break-all;">' + url + '</a>');
-}
-
-// One branded template for everything — header band in the builder's primary
-// colour, optional CTA button in the accent colour, footer from their branding.
-// Paragraph entries may also be { button: true, label, url } objects, rendered
-// as stacked buttons in the primary colour (e.g. the top-up packs in the
-// low-credit email).
-function renderHtml({ branding, companyName, heading, paragraphs, ctaText, ctaUrl, hasLogo }) {
-  const primary = branding.primary_colour || '#1B2A4A';
-  const accent = branding.accent_colour || '#F59E0B';
-  const paras = (paragraphs || [])
-    .map(p => (p && p.button)
-      ? '<div style="text-align:center;margin:0 0 10px;">'
-        + '<a href="' + escapeHtml(p.url) + '" style="display:inline-block;min-width:220px;padding:12px 24px;background:' + primary + ';color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">'
-        + escapeHtml(p.label) + '</a></div>'
-      : '<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#334155;">' + escapeAndLinkify(p) + '</p>')
-    .join('');
-  const cta = (ctaText && ctaUrl)
-    ? '<div style="text-align:center;margin:26px 0 8px;">'
-      + '<a href="' + escapeHtml(ctaUrl) + '" style="display:inline-block;padding:14px 32px;background:' + accent + ';color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;border-radius:10px;">'
-      + escapeHtml(ctaText) + '</a></div>'
-      + '<p style="margin:10px 0 0;font-size:12px;color:#94A3B8;text-align:center;word-break:break-all;">'
-      + 'Or copy this link: ' + escapeHtml(ctaUrl) + '</p>'
-    : '';
-  const logo = hasLogo
-    ? '<img src="cid:brandlogo" alt="" style="max-height:44px;max-width:140px;vertical-align:middle;background:#ffffff;border-radius:6px;padding:3px;margin-right:12px;" />'
-    : '';
-  const footer = branding.footer_text
-    ? escapeHtml(branding.footer_text)
-    : escapeHtml(companyName || '');
-  const address = branding.company_address
-    ? '<div style="margin-top:4px;white-space:pre-line;">' + escapeHtml(branding.company_address) + '</div>'
-    : '';
-  return ''
-    + '<div style="background:#F1F5F9;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
-    +   '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;">'
-    +     '<div style="background:' + primary + ';padding:18px 24px;">'
-    +       logo
-    +       '<span style="color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle;">' + escapeHtml(companyName || '') + '</span>'
-    +     '</div>'
-    +     '<div style="padding:26px 24px 22px;">'
-    +       '<h2 style="margin:0 0 16px;font-size:19px;color:#0F172A;">' + escapeHtml(heading || '') + '</h2>'
-    +       paras
-    +       cta
-    +     '</div>'
-    +     '<div style="padding:14px 24px;border-top:1px solid #E2E8F0;font-size:12px;color:#94A3B8;text-align:center;">'
-    +       footer + address
-    +     '</div>'
-    +   '</div>'
-    + '</div>';
-}
-
-function renderText({ heading, paragraphs, ctaText, ctaUrl }) {
-  const lines = (paragraphs || []).map(p => (p && p.button) ? p.label + ': ' + p.url : p);
-  const parts = [heading, '', ...lines];
-  if (ctaText && ctaUrl) parts.push('', ctaText + ': ' + ctaUrl);
-  return parts.join('\n');
-}
+// The HTML/text rendering lives in mailTemplate.js (pure, testable). Two
+// wardrobes on one template: builder branding by default, or the AI QS
+// platform look when the caller passes platform: true (mail from the
+// platform to the builder or admin — reminders, alerts, receipts).
+const { renderHtml, renderText } = require('./mailTemplate');
 
 function logMail({ userId, type, recipient, subject, status, error }) {
   try {
@@ -155,9 +89,10 @@ function logMail({ userId, type, recipient, subject, status, error }) {
 // Returns { ok, delivery: 'email' | 'manual', error? } — never throws.
 async function sendMail(opts) {
   const { userId, type, to, subject } = opts;
+  const platform = !!opts.platform;
   const branding = getBranding(userId);
   const user = getUser(userId);
-  const companyName = branding.company_name || user?.company || user?.full_name || '';
+  const companyName = platform ? 'AI QS' : (branding.company_name || user?.company || user?.full_name || '');
 
   if (!to || !isConfigured()) {
     logMail({ userId, type, recipient: to, subject, status: 'manual' });
@@ -166,7 +101,8 @@ async function sendMail(opts) {
 
   const attachments = [...(opts.attachments || [])];
   let hasLogo = false;
-  if (branding.logo_filename) {
+  // Platform mail wears the AI QS wordmark, never the recipient's own logo.
+  if (!platform && branding.logo_filename) {
     const logoPath = path.join(brandingDir, branding.logo_filename);
     if (fs.existsSync(logoPath)) {
       attachments.push({ filename: branding.logo_filename, path: logoPath, cid: 'brandlogo' });
@@ -174,7 +110,7 @@ async function sendMail(opts) {
     }
   }
 
-  const html = renderHtml({ ...opts, branding, companyName, hasLogo });
+  const html = renderHtml({ ...opts, branding, companyName, hasLogo, platform });
   const text = renderText(opts);
   const from = '"' + (companyName || 'AI QS').replace(/"/g, '') + '" <' + (process.env.MAIL_FROM || smtpUser()) + '>';
 
@@ -182,7 +118,9 @@ async function sendMail(opts) {
     await getTransporter().sendMail({
       from,
       to,
-      replyTo: opts.replyTo || user?.email || undefined,
+      // Builder-branded mail replies to the builder; platform mail replies
+      // wherever the caller says (or nowhere special — the MAIL_FROM inbox).
+      replyTo: opts.replyTo || (platform ? undefined : user?.email) || undefined,
       subject,
       html,
       text,

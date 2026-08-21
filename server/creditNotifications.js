@@ -55,6 +55,7 @@ function notifyCreditSpent(user, remaining, jobLabel) {
 
   mailer.sendMail({
     userId: user.id,
+    platform: true,
     type: 'credit_spent',
     to: user.email,
     subject: '1 BOQ credit used — ' + fmtRemaining(n) + ' remaining',
@@ -79,6 +80,7 @@ function notifyCreditSpent(user, remaining, jobLabel) {
 
     mailer.sendMail({
       userId: user.id,
+      platform: true,
       type: out ? 'credit_out' : 'credit_low',
       to: user.email,
       subject: out
@@ -105,6 +107,7 @@ function notifyPackPurchased({ email, credits, amountPence, sessionId, status, b
   const amount = '£' + ((amountPence || 0) / 100).toFixed(2);
   const ok = !status || status === 'granted';
   mailer.sendMail({
+    platform: true,
     type: ok ? 'pack_purchased_admin' : 'pack_purchase_pending_admin',
     to: ADMIN_EMAIL,
     subject: ok
@@ -235,6 +238,7 @@ async function runCreditReminders() {
       const ctx = { first: (u.full_name || '').trim().split(/\s+/)[0] || '' };
       const mail = await mailer.sendMail({
         userId: u.id,
+        platform: true,
         type: 'credit_topup_reminder_' + target.stage,
         to: u.email,
         subject: target.subject,

@@ -251,6 +251,7 @@ router.post('/:token/accept', postLimit, (req, res) => {
     const owner = getUserDisplay(q.user_id);
     mailer.sendMail({
       userId: q.user_id,
+      platform: true,
       type: 'quote_accepted',
       to: owner?.email,
       subject: name + ' accepted your quote for ' + fmtMoney(q.grand_total, q.currency),
@@ -302,6 +303,7 @@ router.post('/:token/question', postLimit, (req, res) => {
     const owner = getUserDisplay(q.user_id);
     mailer.sendMail({
       userId: q.user_id,
+      platform: true,
       type: 'quote_question',
       to: owner?.email,
       replyTo: email || undefined,

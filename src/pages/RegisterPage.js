@@ -49,7 +49,9 @@ export default function RegisterPage() {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       await register(form);
-      navigate('/dashboard');
+      // Straight into onboarding — new signups tell us their trade before
+      // they see the dashboard or the tour. Skippable from there.
+      navigate('/onboarding');
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }

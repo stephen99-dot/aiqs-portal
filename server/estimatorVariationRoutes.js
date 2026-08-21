@@ -738,6 +738,7 @@ function notifyOwnerOfDecision(v, decision, clientName, reason) {
     const owner = getUserDisplay(v.user_id);
     mailer.sendMail({
       userId: v.user_id,
+      platform: true,
       type: 'variation_' + decision,
       to: owner?.email,
       subject: decision === 'approved'

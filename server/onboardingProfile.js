@@ -150,6 +150,7 @@ function alertAdmin(db, user, submission) {
 
     const lines = answerRows(submission).map(([label, value]) => label + ': ' + value);
     mailer.sendMail({
+      platform: true,
       type: 'onboarding_profile_admin',
       to: ADMIN_EMAIL,
       subject: 'Onboarding completed — ' + who + tradeLabel,

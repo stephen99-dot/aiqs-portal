@@ -340,6 +340,7 @@ function handleInvoicePaymentComplete(session) {
     const owner = db.prepare('SELECT email FROM users WHERE id = ?').get(inv.user_id);
     mailer.sendMail({
       userId: inv.user_id,
+      platform: true,
       type: 'invoice_paid',
       to: owner?.email,
       subject: 'Paid: invoice ' + (inv.invoice_number || '') + ' — ' + amountText,
