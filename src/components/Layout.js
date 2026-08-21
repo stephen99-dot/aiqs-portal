@@ -289,15 +289,9 @@ export default function Layout() {
             ? <XIcon size={22} color={t.text} />
             : <MenuIcon size={22} color={t.text} />}
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <ZapIcon size={13} color="#0A0F1C" />
-          </div>
-          <span style={{ fontWeight: 800, fontSize: 15, color: t.text, letterSpacing: '-0.02em' }}>AI QS</span>
+        <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
+          <span style={{ color: t.text }}>AI</span>
+          <span style={{ color: '#F59E0B' }}> QS</span>
         </div>
         {isAdmin ? <NotificationBell /> : <div style={{ width: 30 }} />}
       </header>
@@ -330,33 +324,26 @@ export default function Layout() {
         {/* Top section */}
         <div style={{ padding: '20px 12px 16px' }}>
 
-          {/* Logo */}
+          {/* Logo — the AI QS wordmark (matches the homepage logo: "AI" in
+              ink, "QS" in amber, letterspaced strapline beneath). */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 28, padding: '2px 6px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div>
               <div style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 2px 8px rgba(245,158,11,0.18)',
+                fontWeight: 800, fontSize: 21, lineHeight: 1.1,
+                letterSpacing: '0.01em', whiteSpace: 'nowrap',
               }}>
-                <ZapIcon size={15} color="#0A0F1C" />
+                <span style={{ color: t.text }}>AI</span>
+                <span style={{ color: '#F59E0B' }}> QS</span>
               </div>
-              <div>
-                <div style={{
-                  fontWeight: 800, fontSize: 14.5, color: t.text,
-                  lineHeight: 1.15, letterSpacing: '-0.02em',
-                }}>AI QS</div>
-                <div style={{
-                  fontSize: 9.5, fontWeight: 600, letterSpacing: '0.05em',
-                  color: isAdmin ? (t.gold || '#D4A853') : t.textMuted,
-                  textTransform: 'uppercase', marginTop: 1,
-                }}>
-                  {isAdmin ? 'Admin Portal' : 'Client Portal'}
-                </div>
+              <div style={{
+                fontSize: 9, fontWeight: 600, letterSpacing: '0.18em',
+                color: isAdmin ? (t.gold || '#D4A853') : t.textMuted,
+                textTransform: 'uppercase', marginTop: 3, whiteSpace: 'nowrap',
+              }}>
+                {isAdmin ? 'Admin Portal' : 'Client Portal'}
               </div>
             </div>
             {isAdmin && <NotificationBell />}
