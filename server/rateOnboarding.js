@@ -42,6 +42,7 @@ const SOURCE_LABELS = {
   import: 'imported from Excel',
   correction: 'corrected via chat / rate edits',
   admin_import: 'imported by an admin',
+  onboarding: 'entered during onboarding',
 };
 
 // The user just put their own rates in. First call wins; later calls no-op.

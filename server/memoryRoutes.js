@@ -143,6 +143,27 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       }
     }
 
+    // Trade day rates from the onboarding rates step. They go into the rate
+    // library (not memories) so the pricer and chat use them like any other
+    // client rate. touched=false means the user accepted the prefilled UK
+    // defaults unchanged — still worth saving, but not worth the "client
+    // added their own rates" admin alert.
+    const tradeRates = req.body && req.body.trade_rates;
+    if (tradeRates && typeof tradeRates === 'object') {
+      try {
+        const { saved } = require('./tradeRates').saveTradeRates(db, { userId, rates: tradeRates });
+        if (saved > 0) {
+          require('./rateOnboarding').markOwnRatesAdded(req.user, {
+            source: 'onboarding',
+            count: saved,
+            silent: !(req.body && req.body.trade_rates_touched),
+          });
+        }
+      } catch (err) {
+        console.error('[Onboarding] trade rates save error:', err.message);
+      }
+    }
+
     // Contingency/OH&P answers also land in the playbook — that's what the
     // pricer actually reads (getPricingPrefs), not the memory text above.
     const pctAnswers = {};

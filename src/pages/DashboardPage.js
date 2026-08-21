@@ -557,7 +557,7 @@ export default function DashboardPage() {
                   Teach the AI how you work — 2 minutes
                 </div>
                 <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.5 }}>
-                  Set your default contingency, standard exclusions, regions, and project types. Every future estimate will be grounded in your actual preferences.
+                  Set your day rates for each trade, your regions and your standard exclusions. Every future estimate will price labour from your rates, not generic figures.
                 </div>
               </div>
             </div>
