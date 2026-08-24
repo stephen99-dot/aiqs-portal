@@ -2465,6 +2465,10 @@ ${summary}`);
     }
     const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocuments; // files OR a described project = extract phase
     let downloadFiles = null;
+    // Structured, client-safe summary of the priced bill (see deliverySummary.js).
+    // Replaces dumping every pricer warning into the reply text.
+    let deliveryPayload = null;
+    let boqRecalc = null;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
     // free — they don't consume a credit). Set in the credit gate below and
@@ -3602,6 +3606,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             try {
               const { assertBOQMatches } = require('./recalcGate');
               const recalc = await assertBOQMatches(buf, pricedResult.summary.construction_total);
+              boqRecalc = recalc;
               if (!recalc.ok) console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`);
               else console.log(`[Stage 3] Recalc OK — ${recalc.rows} lines reconcile to £${recalc.expected}`);
             } catch (recalcErr) {
@@ -3694,8 +3699,23 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           const docCurrSym = (pricedResult.summary.currency === 'EUR') ? '€' : '£';
           reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): ${docCurrSym}${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
 
-          if (pricedResult.warnings && pricedResult.warnings.length > 0) {
-            reply += '\n\nNotes: ' + pricedResult.warnings.join(' | ');
+          // The pricer's warnings used to be concatenated onto the reply as
+          // "Notes: ... | ... | ...", which put raw item keys, rate-library
+          // chatter and internal ceilings in front of the customer. They now go
+          // through deliverySummary, which separates the few lines a QS must
+          // settle from the diagnostics, and withholds the headline entirely if
+          // the priced total does not reconcile to the spreadsheet.
+          try {
+            const { buildDeliverySummary } = require('./deliverySummary');
+            deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc, {
+              floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+            });
+            if (!deliveryPayload.reconciled) {
+              // Never state a total the downloaded file does not contain.
+              reply = `Documents generated for ${projectName}.\n\n${deliveryPayload.statusLine}`;
+            }
+          } catch (dsErr) {
+            console.error('[Stage 3] delivery summary:', dsErr.message);
           }
 
           // Store project + benchmarks
@@ -4111,6 +4131,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
       pipeline_log: pipelineLog || null,
       captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
       sources: webSources.length > 0 ? webSources : null,
+      delivery: deliveryPayload,
     };
 
     if (req.streaming) {
@@ -4142,6 +4163,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         pipeline_log: pipelineLog || null,
         captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
         sources: webSources.length > 0 ? webSources : null,
+        delivery: deliveryPayload,
       });
     } else {
       res.json(responsePayload);

@@ -10,6 +10,7 @@ import useIsMobile from '../utils/useIsMobile';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
 import AgentPanel from '../components/AgentPanel';
+import DeliverySummary from '../components/DeliverySummary';
 import {
   RulerIcon, BrainIcon, SettingsIcon, AlertTriangleIcon, EditIcon,
   UserIcon, CheckIcon, StarIcon, CrownIcon, ChatIcon, SearchIcon,
@@ -576,6 +577,9 @@ export default function ChatPage() {
         agentRunId: m.agentRunId || null,
         agentRunCompleted: m.agentRunCompleted || null,
         files: m.files || null,
+        // Persisted so the summary survives a reload rather than the chat
+        // falling back to a bare reply with no numbers.
+        delivery: m.delivery || null,
       }));
       const d = await apiFetch('/chat-sessions', {
         method: 'POST',
@@ -732,6 +736,7 @@ export default function ChatPage() {
           takeoffId: data.takeoff_id,
           capturedMemories: data.captured_memories || null,
           sources: data.sources || null,
+          delivery: data.delivery || null,
           timestamp: new Date().toISOString(),
         };
         setMessages(p => [...p, aiMsg]);
@@ -1141,6 +1146,11 @@ export default function ChatPage() {
                   : 'Draft quantities — review above, then say "confirm" to lock them in'}
               </div>
             )}
+
+            {/* Priced-bill summary — the headline, the lines needing a decision,
+                and diagnostics behind a toggle. Sits above the file cards so the
+                numbers are read before the download. */}
+            {msg.delivery && <DeliverySummary delivery={msg.delivery} />}
 
             {/* Download files — claude.ai-style attachment cards */}
             {msg.downloadFiles?.length > 0 && (
