@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, BrowserRouter, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, BrowserRouter } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ToastProvider } from './ui';
@@ -11,8 +11,6 @@ import DashboardPage from './pages/DashboardPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
-import PipelinePage from './pages/PipelinePage';
-import ClientsPage from './pages/ClientsPage';
 import AdminPage from './pages/AdminPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -28,28 +26,11 @@ import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import BuilderPackPage from './pages/BuilderPackPage';
 import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
-import EstimatorPage from './pages/EstimatorPage';
-import EstimatorBuilderPage from './pages/EstimatorBuilderPage';
-import OverheadsPage from './pages/OverheadsPage';
-import JobsPage from './pages/JobsPage';
-import JobDetailPage from './pages/JobDetailPage';
-import VariationEditorPage from './pages/VariationEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
 import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
 import InvoicePublicPage from './pages/InvoicePublicPage';
-import MoneyPage from './pages/MoneyPage';
-import InvoiceEditorPage from './pages/InvoiceEditorPage';
-import DocumentsPage from './pages/DocumentsPage';
-import DocumentEditorPage from './pages/DocumentEditorPage';
-import CalculatorsPage from './pages/CalculatorsPage';
 import Builder3DPage from './pages/Builder3DPage';
-import MaterialsPage from './pages/MaterialsPage';
-import TodayPage from './pages/TodayPage';
-import ToolsPage from './pages/ToolsPage';
-import SetupWizardPage from './pages/SetupWizardPage';
 import AiTradesPilotPage from './pages/AiTradesPilotPage';
-import OfficeDemoPage from './pages/OfficeDemoPage';
-import PlanningLeadsPage from './pages/PlanningLeadsPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
@@ -64,32 +45,17 @@ function ProtectedRoute({ children }) {
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (user) return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
-// Variations are part of the Office in a Box add-on — everyone else lands on
-// the AI Trades Pilot page when they follow an old link.
-function OiBRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (!user?.hasEstimator && user?.role !== 'admin') return <Navigate to="/ai-trades-pilot" replace />;
-  return children;
-}
-
-// Office in a Box subscribers land on Today (/office); everyone else on the
-// BOQ-pipeline dashboard. Used for the catch-all and post-login redirect.
+// Everyone lands on the BOQ-pipeline dashboard. Used for the catch-all and
+// post-login redirect.
 function HomeRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.hasEstimator ? '/office' : '/dashboard'} replace />;
-}
-
-// Old bookmark redirects that need to carry the :id through.
-function JobIdRedirect() {
-  const { id } = useParams();
-  return <Navigate to={'/jobs/' + id} replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 function AppInner() {
@@ -106,9 +72,10 @@ function AppInner() {
         <Route path="/team-invite" element={<TeamInvitePage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
-        {/* Public quote acceptance — same pattern, the builder's client opens this. */}
+        {/* Public quote/invoice views — kept so links already sent to
+            builders' clients keep resolving (Office in a Box itself is
+            retired; nothing in the portal creates new ones). */}
         <Route path="/q/:token" element={<QuoteAcceptancePage />} />
-        {/* Public invoice view — emailed/WhatsApped to the builder's client. */}
         <Route path="/i/:token" element={<InvoicePublicPage />} />
         {/* Protected routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -121,50 +88,36 @@ function AppInner() {
           <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/super-brain" element={<SuperBrainPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
-          <Route path="/pipeline" element={<PipelinePage />} />
-          <Route path="/clients" element={<ClientsPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
           <Route path="/admin/submissions" element={<SubmissionsInboxPage />} />
-          <Route path="/variations" element={<OiBRoute><VariationsHubPage /></OiBRoute>} />
-          <Route path="/project/:id/variations" element={<OiBRoute><VariationsPage /></OiBRoute>} />
+          {/* Variations live on the project: raised from the project page,
+              scanned across projects from the hub. */}
+          <Route path="/variations" element={<VariationsHubPage />} />
+          <Route path="/project/:id/variations" element={<VariationsPage />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
-          {/* Office in a Box — three destinations: Today / Jobs / Money (+ Tools). */}
-          <Route path="/office" element={<TodayPage />} />
-          <Route path="/office/setup" element={<SetupWizardPage />} />
-          <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/jobs/:id" element={<JobDetailPage />} />
-          <Route path="/money" element={<MoneyPage />} />
-          <Route path="/tools" element={<ToolsPage />} />
-          {/* Planning Leads — preview, self-guards to the allowlisted account. */}
-          <Route path="/planning-leads" element={<PlanningLeadsPage />} />
-          <Route path="/estimator" element={<EstimatorPage />} />
-          <Route path="/estimator/new" element={<EstimatorBuilderPage />} />
-          <Route path="/estimator/quote/:id" element={<EstimatorBuilderPage />} />
-          <Route path="/finance/overheads" element={<OverheadsPage />} />
-          <Route path="/change-orders/new" element={<VariationEditorPage />} />
-          <Route path="/change-orders/:id" element={<VariationEditorPage />} />
-          <Route path="/invoices/:id" element={<InvoiceEditorPage />} />
-          <Route path="/documents" element={<DocumentsPage />} />
-          <Route path="/documents/:id" element={<DocumentEditorPage />} />
-          <Route path="/calculators" element={<CalculatorsPage />} />
           {/* 3D Builder — admin-only preview (page self-guards on role). */}
           <Route path="/builder3d" element={<Builder3DPage />} />
-          <Route path="/materials" element={<MaterialsPage />} />
-          {/* Old OiB homes — keep bookmarks and in-app links working. */}
-          <Route path="/pm" element={<Navigate to="/office" replace />} />
-          <Route path="/finance" element={<Navigate to="/money" replace />} />
-          <Route path="/finance/jobs" element={<Navigate to="/jobs" replace />} />
-          <Route path="/finance/jobs/:id" element={<JobIdRedirect />} />
-          <Route path="/invoices" element={<Navigate to="/money" replace />} />
           <Route path="/ai-trades-pilot" element={<AiTradesPilotPage />} />
-          {/* Retired Office-in-a-Box upsell — old links land on AI Trades Pilot. */}
+          {/* Office in a Box is retired — its workflow moved to the AI Trades
+              Pilot product. Old bookmarks land on that page so users see
+              where the feature went. */}
+          <Route path="/office" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/jobs" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/money" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/clients" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/documents" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/tools" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/estimator" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/calculators" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/materials" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/pm" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/finance" element={<Navigate to="/ai-trades-pilot" replace />} />
+          <Route path="/invoices" element={<Navigate to="/ai-trades-pilot" replace />} />
           <Route path="/office-in-a-box" element={<Navigate to="/ai-trades-pilot" replace />} />
-          {/* D — example-data sandbox, open to non-subscribers on purpose. */}
-          <Route path="/office-demo" element={<OfficeDemoPage />} />
+          <Route path="/office-demo" element={<Navigate to="/ai-trades-pilot" replace />} />
           <Route path="/branding" element={<BrandingPage />} />
-          <Route path="/settings" element={<BrandingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<HomeRedirect />} />

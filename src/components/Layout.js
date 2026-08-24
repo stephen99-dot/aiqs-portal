@@ -6,18 +6,16 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
   UploadIcon, SettingsIcon, CubeIcon,
-  InboxIcon, FolderIcon, PoundIcon, HomeIcon, BrainIcon,
+  InboxIcon, FolderIcon, BrainIcon,
 } from './Icons';
 import { Badge } from '../ui';
-import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
-import OfficeTour from './OfficeTour';
 import SurveyPopup from './SurveyPopup';
 import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
-// Nav groups ("Office in a Box", "Settings") — expandable parents containing
-// workflow pages. Clicking the header toggles expand/collapse; clicking a
-// child navigates. All hover/active/focus states live in ui.css.
+// Nav groups ("Settings") — expandable parents containing workflow pages.
+// Clicking the header toggles expand/collapse; clicking a child navigates.
+// All hover/active/focus states live in ui.css.
 function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, location }) {
   return (
     <div>
@@ -40,7 +38,7 @@ function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, locati
               <NavLink
                 key={c.path}
                 to={c.path}
-                data-tour={'nav-' + (c.path === '/office' ? 'today' : c.path.replace('/', ''))}
+                data-tour={'nav-' + c.path.replace('/', '')}
                 className={`ui-nav-subitem${isChildActive ? ' ui-nav-subitem--active' : ''}`}
                 onClick={() => setMobileOpen(false)}
               >
@@ -80,38 +78,10 @@ export default function Layout() {
     logout(); navigate('/login');
   };
 
-  const hasEstimator = !!user?.hasEstimator || isAdmin;
-
-  // The "Office in a Box" add-on navigates the way a builder thinks: Today
-  // (what needs doing), Jobs (everything about one job), Money (in and out).
-  // Calculators + materials prices live behind Tools — reference, not workflow.
-  const officeInABoxChildren = [
-    { path: '/office', label: 'Today' },
-    { path: '/jobs', label: 'Jobs' },
-    { path: '/clients', label: 'Clients' },
-    { path: '/money', label: 'Money' },
-    { path: '/documents', label: 'Documents' },
-    { path: '/tools', label: 'Tools' },
-    // Planning Leads is in preview — only the allowlisted account sees it.
-    ...(canUsePlanningLeads(user) ? [{ path: '/planning-leads', label: 'Planning Leads', badge: 'Preview' }] : []),
-  ];
-  // Pages reached from inside the group (quote editor, invoice editor, job
-  // page, documents, tools) keep the group highlighted and open.
-  const officeRoutePrefixes = [
-    '/office', '/jobs', '/clients', '/money', '/tools',
-    '/estimator', '/invoices', '/finance', '/change-orders',
-    '/documents', '/calculators', '/materials', '/pm', '/planning-leads',
-  ];
-  const isOfficeRouteActive = officeRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
-
-  // Subscribers (and admins) get the working tool group. Everyone else sees a
-  // single "AI Trades Pilot" entry that opens the new-product ad page.
-  const officeNavItem = hasEstimator
-    ? { group: 'office', label: 'Office in a Box', Icon: ZapIcon, badge: 'Add-on', children: officeInABoxChildren, defaultExpanded: isOfficeRouteActive }
-    : { path: '/ai-trades-pilot', label: 'AI Trades Pilot', Icon: ZapIcon, badge: 'New' };
-
   // Personalisation pages live behind one Settings group so the main nav
-  // stays at five entries: the submit → track → deliver loop plus the add-on.
+  // stays at five entries: the submit → track → deliver loop plus the
+  // AI Trades Pilot pointer (Office in a Box is retired — its workflow
+  // lives in that separate product now).
   const settingsChildren = [
     { path: '/my-rates', label: 'My Rates' },
     { path: '/ai-memory', label: 'AI Memory' },
@@ -128,7 +98,7 @@ export default function Layout() {
     // No standalone Variations entry: OiB users raise them from the job page,
     // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
-    officeNavItem,
+    { path: '/ai-trades-pilot', label: 'AI Trades Pilot', Icon: ZapIcon, badge: 'New', clientOnly: true },
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
     { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
@@ -139,23 +109,14 @@ export default function Layout() {
 
   const visibleNavItems = navItems.filter(item => {
     if (item.adminOnly && !isAdmin) return false;
-    if (item.estimatorOnly && !hasEstimator) return false;
+    if (item.clientOnly && isAdmin) return false;
     return true;
   });
 
-  // Expanded state for each group. Persists across renders within a session.
-  const [officeExpanded, setOfficeExpanded] = useState(isOfficeRouteActive);
+  // Expanded state for the Settings group. Persists within a session and
+  // auto-opens when navigating to one of its children.
   const [settingsExpanded, setSettingsExpanded] = useState(isSettingsRouteActive);
-  // Auto-open when navigating to one of the children.
-  useEffect(() => { if (isOfficeRouteActive) setOfficeExpanded(true); }, [isOfficeRouteActive]);
   useEffect(() => { if (isSettingsRouteActive) setSettingsExpanded(true); }, [isSettingsRouteActive]);
-  // The Office tour fires this when it needs a sidebar menu item to be reachable
-  // (expanded on desktop, and the drawer open on mobile).
-  useEffect(() => {
-    const open = () => { setOfficeExpanded(true); setMobileOpen(true); };
-    window.addEventListener('aiqs:open-office-nav', open);
-    return () => window.removeEventListener('aiqs:open-office-nav', open);
-  }, []);
 
   // Sidebar keeps the AI QS dark navy gradient in dark mode; flat surface in light.
   const sidebarBg = mode === 'dark'
@@ -169,14 +130,7 @@ export default function Layout() {
     ? [
         { path: '/admin/submissions', label: 'Inbox', Icon: InboxIcon },
         { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
-        { path: '/clients', label: 'Clients', Icon: ClientsIcon },
-        { path: '/chat', label: 'Chat', Icon: ChatIcon },
-      ]
-    : hasEstimator
-    ? [
-        { path: '/office', label: 'Today', Icon: HomeIcon },
-        { path: '/jobs', label: 'Jobs', Icon: FolderIcon },
-        { path: '/money', label: 'Money', Icon: PoundIcon },
+        { path: '/admin/users', label: 'Users', Icon: ClientsIcon },
         { path: '/chat', label: 'Chat', Icon: ChatIcon },
       ]
     : [
@@ -185,9 +139,8 @@ export default function Layout() {
         { path: '/chat', label: 'Chat', Icon: ChatIcon },
       ];
   const bottomNavRoutes = [
-    '/dashboard', '/submit-drawings', '/office', '/jobs', '/money', '/clients',
-    '/documents', '/tools', '/calculators', '/materials', '/variations',
-    '/estimator', '/pipeline', '/my-rates', '/ai-memory', '/branding',
+    '/dashboard', '/submit-drawings', '/variations',
+    '/my-rates', '/ai-memory', '/branding', '/ai-trades-pilot',
     '/admin', '/admin/users', '/admin/submissions',
   ];
   const showBottomNav = bottomNavRoutes.includes(location.pathname);
@@ -277,14 +230,13 @@ export default function Layout() {
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => {
               if (item.group) {
-                const isOffice = item.group === 'office';
                 return (
                   <NavGroup
                     key={item.group}
                     item={item}
-                    expanded={isOffice ? officeExpanded : settingsExpanded}
-                    onToggle={() => (isOffice ? setOfficeExpanded(v => !v) : setSettingsExpanded(v => !v))}
-                    isAnyActive={isOffice ? isOfficeRouteActive : isSettingsRouteActive}
+                    expanded={settingsExpanded}
+                    onToggle={() => setSettingsExpanded(v => !v)}
+                    isAnyActive={isSettingsRouteActive}
                     setMobileOpen={setMobileOpen}
                     location={location}
                   />
@@ -407,11 +359,6 @@ export default function Layout() {
           where the new-product prompt isn't showing, so the two popups never
           stack. */}
       {!isAdmin && suitabilityShowing === false && <SurveyPopup />}
-
-      {/* Office in a Box guided walkthrough — auto-runs once for subscribers and
-          stays available afterwards via its "Show me around" launcher. Admins
-          can replay it but it never auto-pops for them. */}
-      {hasEstimator && <OfficeTour userId={user?.id} autoStart={!!user?.hasEstimator} />}
     </div>
   );
 }
