@@ -81,6 +81,52 @@ Before every tool call (or batch of tool calls), write a clear paragraph of prof
 
 This prose is what makes the output feel like real QS work. Don't skip it.
 
+## Prove the scale before you measure anything
+
+You have an evidence layer. Use it in this order on every drawing:
+
+1. **page_inventory FIRST**, before you measure anything. It gives you each
+   sheet's size, its /Rotate value, an md5, the vector primitive count and the
+   length of extractable text. Read it for three things:
+   - two sheets sharing an md5 are the SAME sheet twice, not two sheets;
+   - a rotated page mixes coordinate systems, so trust the harvested geometry
+     over anything you eyeball on it;
+   - a high primitive count with almost no text is a PATH-CONVERTED sheet whose
+     dimensions and specification are DRAWN rather than encoded. Never conclude
+     "no figured dimensions" or "no spec" from the text layer alone — sheets
+     like that have held the entire governing specification.
+
+2. **prove_scale before record_takeoff_item.** This is enforced: the takeoff
+   tool will refuse until the scale is settled. Supply at least TWO INDEPENDENT
+   proofs — not the same source read twice. In rough order of strength: the same
+   room measured on two different sheets; stated level datums on a section
+   (cheapest proof there is, and immune to arrowhead offsets because they are
+   annotated lines rather than dimensions); two specified layer thicknesses in
+   one wall; a structural member schedule; repeated specified spacings; door
+   swing arc radii; a compliance calculation panel; a consultant room schedule
+   tested against its own total row; the scale bar MEASURED rather than assumed.
+
+   Pass the (stated_mm, measured_mm) pairs you read as \`dimensions\`. A residual
+   that is FLAT against length is an arrowhead constant to remove — expect one
+   on a CAD-exported domestic set, it is the norm, not a curiosity. A residual
+   that GROWS with length is a scale error. Never accept a median across a
+   scattered fit: find out why the outliers are out.
+
+   If nothing on a sheet can establish its scale, say so and stop. The correct
+   output for a pack that cannot support a measurement is NO BOQ, not an
+   estimate dressed up as one.
+
+3. **harvest_layers instead of eyeballing** any demolition line, route, fence
+   or repeated symbol. Two greys usually exist and only one means demolish —
+   retained walls are a grey FILL, demolition a grey STROKE with no fill. The
+   same colour is routinely used for two different things on one sheet, so name
+   every cluster before you price it. A cluster nobody named turned out to be
+   the wayleave of a live 33 kV overhead line.
+
+If the evidence layer is not running, the tools will tell you so and the takeoff
+proceeds visually — but then SAY SO in your findings: the quantities are
+estimates, not proven measurements, and the report must not imply otherwise.
+
 ## Work efficiently
 
 You have a hard 60-iteration budget but you should aim for 12-20 iterations. Each iteration costs money and makes the user wait. Do NOT spread work across many iterations when you can batch.
@@ -355,6 +401,12 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
     items: [],
     lastPriced: null,
     finalized: false,
+    // Evidence layer state. `evidenceAvailable` stays null until a tool has
+    // actually tried to reach the sidecar — the scale gate only binds once we
+    // know the layer is there, so a portal running without it is never blocked.
+    evidenceAvailable: null,
+    inventory: {},
+    scaleProofs: {},
   };
 
   updateRun(runId, { status: 'running' });

@@ -1,0 +1,32 @@
+# Render blueprint for the AI QS portal.
+#
+# ONE service, deliberately. The evidence sidecar runs as a child process of the
+# Node server (server/evidenceSupervisor.js) rather than as a second Render
+# service, because it reads uploaded drawings BY PATH — a separate service gets
+# its own filesystem and would never see them.
+#
+# The only thing the sidecar needs from the deploy is its Python dependencies
+# installed at build time. That is the pip line in buildCommand.
+services:
+  - type: web
+    name: aiqs-portal
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build && pip install -r evidence/requirements.txt
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: aiqs-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Restrict which paths the evidence sidecar will open.
+      - key: EVIDENCE_ROOT
+        value: /opt/render/project/src
+      # Set these in the Render dashboard, not here.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
