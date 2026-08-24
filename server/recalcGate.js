@@ -10,9 +10,17 @@
 // col8 = line total. We recompute qty*rate per data row and also read the stored
 // total, and sum across the sheet.
 //
-// Hard-gate behaviour is opt-in via STRICT_RECALC=1 (throws on mismatch). Default
-// is warn-and-flag so an unverified heuristic can't block all BOQ output in
-// production; flip STRICT_RECALC on once verified against a real job.
+// Hard-gate behaviour is ON by default: a bill whose line items do not sum to
+// the pricer's construction total is not issued. Set STRICT_RECALC=0 to fall
+// back to warn-and-flag.
+//
+// This was warn-only until a real job proved the cost of that: a whole-house
+// remodel was delivered where the chat reported £1,170,875 and the spreadsheet's
+// line items summed to £141,123. This gate detected the £1,029,752 gap exactly
+// (ok:false, diff -1029752.16) and the bill shipped anyway, because nothing
+// acted on the result. Verified before flipping: a legitimate bill reconciles
+// to the penny (diff 0) with contingency and OH&P at 0/0, 5/0, 5/15 and 0/15,
+// so markups do not false-positive.
 
 const ExcelJS = require('exceljs');
 
@@ -52,8 +60,14 @@ async function recomputeBOQ(buffer) {
   return { lineSum, recomputedSum, rows, mismatches };
 }
 
+// True unless the operator has explicitly opted out. Exported so the call
+// sites share one definition of "strict" rather than each testing the env var.
+function isStrictRecalc() { return process.env.STRICT_RECALC !== '0'; }
+
 // Assert the workbook reconciles to the deterministic construction total.
-// Returns { ok, lineSum, expected, diff, mismatches }. Throws when STRICT_RECALC=1.
+// Returns { ok, lineSum, expected, diff, mismatches }. Throws unless
+// STRICT_RECALC=0; the thrown error carries `.recalc` with the same figures so
+// a caller can still report them.
 async function assertBOQMatches(buffer, expectedConstructionTotal) {
   const r = await recomputeBOQ(buffer);
   const expected = round2(expectedConstructionTotal);
@@ -64,7 +78,7 @@ async function assertBOQMatches(buffer, expectedConstructionTotal) {
 
   if (!ok) {
     const msg = `[recalc] BOQ does not reconcile: sheet line-sum ${r.lineSum} vs pricer construction total ${expected} (diff ${diff}); ${r.mismatches.length} per-row qty*rate mismatches.`;
-    if (process.env.STRICT_RECALC === '1') {
+    if (isStrictRecalc()) {
       const err = new Error(msg);
       err.recalc = { ...r, expected, diff };
       throw err;
@@ -88,4 +102,4 @@ function cellStr(row, c) {
 }
 function round2(n) { return Math.round(Number(n || 0) * 100) / 100; }
 
-module.exports = { recomputeBOQ, assertBOQMatches };
+module.exports = { recomputeBOQ, assertBOQMatches, isStrictRecalc };

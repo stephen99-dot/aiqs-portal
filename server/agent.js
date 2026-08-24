@@ -921,13 +921,16 @@ async function runGenerationForRun(runId, opts = {}) {
         const rc = await assertBOQMatches(excelBuf, priced.summary.construction_total);
         if (!rc.ok) {
           console.error(`[Agent ${runId}] RECALC MISMATCH: sheet ${rc.lineSum} vs pricer ${rc.expected} (diff ${rc.diff})`);
-          if (process.env.STRICT_RECALC === '1') throw new Error(`BOQ recalc mismatch (diff ${rc.diff})`);
+          const { isStrictRecalc } = require('./recalcGate');
+          if (isStrictRecalc()) throw new Error(`BOQ recalc mismatch (diff ${rc.diff})`);
         } else {
           console.log(`[Agent ${runId}] Recalc OK — ${rc.rows} lines reconcile to ${rc.expected}`);
         }
       } catch (recErr) {
-        if (process.env.STRICT_RECALC === '1') throw recErr;
+        const { isStrictRecalc } = require('./recalcGate');
         console.error(`[Agent ${runId}] recalc gate:`, recErr.message);
+        // Strict by default: a bill that does not reconcile is not issued.
+        if (isStrictRecalc()) throw recErr;
       }
       // Deliverable hardening gate: runs on the ISSUED bytes, because the
       // defects it catches (uncached formulas that render as 0 in every

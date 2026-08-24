@@ -2469,6 +2469,9 @@ ${summary}`);
     // Replaces dumping every pricer warning into the reply text.
     let deliveryPayload = null;
     let boqRecalc = null;
+    // Set when the bill fails to reconcile: no document is issued, and the
+    // chat reports both figures instead of a total the file does not contain.
+    let reconcileFailed = false;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
     // free — they don't consume a credit). Set in the credit gate below and
@@ -3607,11 +3610,16 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
               const { assertBOQMatches } = require('./recalcGate');
               const recalc = await assertBOQMatches(buf, pricedResult.summary.construction_total);
               boqRecalc = recalc;
-              if (!recalc.ok) console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`);
+              if (!recalc.ok) { reconcileFailed = true; console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`); }
               else console.log(`[Stage 3] Recalc OK — ${recalc.rows} lines reconcile to £${recalc.expected}`);
             } catch (recalcErr) {
               console.error('[Stage 3] Recalc gate:', recalcErr.message);
-              if (process.env.STRICT_RECALC === '1') throw recalcErr; // hard gate
+              // assertBOQMatches attaches the figures to the error, so the chat
+              // can still name both numbers even though it threw.
+              if (recalcErr.recalc) boqRecalc = { ok: false, ...recalcErr.recalc };
+              reconcileFailed = true;
+              const { isStrictRecalc } = require('./recalcGate');
+              if (isStrictRecalc()) throw recalcErr; // hard gate — nothing is issued
             }
             // Deliverable hardening gate — see preIssueGate.js. Runs on the
             // issued bytes; warns by default, STRICT_ISSUE_GATE=1 hard-fails.
@@ -3636,8 +3644,12 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           }
         } catch (excelErr) { console.error('[Stage 3] Excel error:', excelErr.message); }
 
-        // Generate Findings Report — AI writes narrative only, not quantities
+        // Generate Findings Report — AI writes narrative only, not quantities.
+        // Skipped entirely when the bill did not reconcile: it narrates the same
+        // figures, so issuing it would put the conflicting numbers back in front
+        // of the customer in a second document.
         try {
+          if (reconcileFailed) throw new Error('skipped — BOQ did not reconcile');
           const findingsPrompt = buildSystemPrompt(userId, 'generate_findings');
           const findingsInput = {
             priced_summary: pricedResult.summary,
@@ -3693,7 +3705,20 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         var _pendingFindingsJSON = null;
         try { _pendingFindingsJSON = JSON.stringify(findings || {}); } catch (e) {}
 
-        if (downloadFiles.length > 0) {
+        // Nothing reconciled, so nothing was issued. Say exactly that, and name
+        // both figures — the state that previously shipped as a confident total.
+        if (reconcileFailed) {
+          try {
+            const { buildDeliverySummary } = require('./deliverySummary');
+            deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc || { ok: false, lineSum: null, expected: pricedResult.summary.construction_total, diff: null }, {
+              floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+            });
+          } catch (dsErr) { console.error('[Stage 3] delivery summary:', dsErr.message); }
+          reply = `I have not issued documents for ${projectName}.\n\n`
+            + (deliveryPayload ? deliveryPayload.statusLine : 'The priced total does not reconcile to the generated spreadsheet, so nothing has been issued.')
+            + '\n\nThe quantities are still locked — nothing is lost. Once the mismatch is settled the documents will generate from the same takeoff.';
+          console.error('[Stage 3] BLOCKED: no documents issued — BOQ did not reconcile.');
+        } else if (downloadFiles.length > 0) {
           const itemCount = pricedResult.item_count || 0;
           const grandTotal = pricedResult.summary.grand_total;
           const docCurrSym = (pricedResult.summary.currency === 'EUR') ? '€' : '£';
