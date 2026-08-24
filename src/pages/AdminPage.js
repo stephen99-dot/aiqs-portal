@@ -398,7 +398,7 @@ function RatesTab({ t }) {
       {showAdd && (
         <div style={{ background: t.card, border: '1px solid ' + (t.accent || '#F59E0B') + '40', borderRadius: 14, padding: '16px 20px' }}>
           <h4 style={{ fontSize: 13, fontWeight: 600, color: t.text, margin: '0 0 12px' }}>Add New Rate</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 160px 60px 90px 90px', gap: 8, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Code</label><input style={{ ...iS, width: '100%' }} placeholder="GW-039" value={addData.code} onChange={e => setAddData(p => ({ ...p, code: e.target.value }))} /></div>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Description</label><input style={{ ...iS, width: '100%' }} placeholder="Description..." value={addData.description} onChange={e => setAddData(p => ({ ...p, description: e.target.value }))} /></div>
             <div><label style={{ fontSize: 10, color: t.textMuted, display: 'block', marginBottom: 3 }}>Trade</label><select style={{ ...iS, width: '100%' }} value={addData.trade} onChange={e => setAddData(p => ({ ...p, trade: e.target.value }))}><option value="">Select...</option>{trades.map(tr => <option key={tr} value={tr}>{tr}</option>)}</select></div>

@@ -330,6 +330,47 @@ summary:focus-visible {
   .ui-toast-stack { bottom: calc(76px + env(safe-area-inset-bottom)); }
 }
 
+/* --- Tile: a large clickable row (document downloads, feature links).
+       Colour it with the --tile-* custom properties; hover state is CSS. --- */
+.ui-tile {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 18px; border-radius: 10px;
+  background: var(--tile-bg, var(--bg-card));
+  border: 1px solid var(--tile-border, var(--border));
+  cursor: pointer; text-align: left; text-decoration: none;
+  color: var(--text-primary); font-family: var(--font-body);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.ui-tile:hover:not(:disabled) {
+  background: var(--tile-bg-hover, var(--bg-card-hover));
+}
+.ui-tile:disabled { opacity: 0.6; cursor: progress; }
+.ui-tile__title { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.ui-tile__meta { font-size: 0.78rem; color: var(--text-muted); }
+
+/* --- Split layout: content + side panel. Set the panel width with the
+       --split-side custom property; stacks to one column on small screens.
+       This replaces the old [style*="grid-template-columns..."] mobile
+       hacks — never write a fixed two-column grid inline. --- */
+.ui-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--split-side, 340px);
+  gap: 20px; align-items: start;
+}
+.ui-split--side-first {
+  grid-template-columns: var(--split-side, 340px) minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+  .ui-split, .ui-split--side-first { grid-template-columns: 1fr; }
+}
+
+/* --- Card grid: responsive auto-fill of equal cards. --- */
+.ui-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min, 280px), 1fr));
+  gap: 12px; align-items: start;
+}
+
 /* --- List rows (project/job rows inside cards) --- */
 .ui-row {
   display: flex; align-items: center; gap: 12px;
