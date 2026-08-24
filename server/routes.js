@@ -13,7 +13,7 @@ const { startPipelineRun } = require('./pipelineRoutes');
 const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
 const { getMessageBalance } = require('./messageCredits');
-const { claimPendingCredits } = require('./pendingCredits');
+const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
 
 const router = express.Router();
 
@@ -1228,6 +1228,11 @@ router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, re
     if (hasFree) {
       db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, free_credits = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(bonus_messages, bonus_docs, free_credits, req.params.id);
+      // The admin has declared the true balance — retire any unclaimed Stripe
+      // payment sitting against this email, otherwise the user's next login
+      // auto-claims it on top and the balance doubles.
+      const absorbed = absorbPendingCredits(user, req.user.id);
+      if (absorbed > 0) console.log(`[Admin] set-credits for ${user.email} absorbed ${absorbed} pending credit(s) — auto-claim on next login suppressed`);
     } else {
       db.prepare('UPDATE users SET bonus_messages = ?, bonus_docs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(bonus_messages, bonus_docs, req.params.id);
@@ -1336,6 +1341,41 @@ router.put('/admin/users/:id/password', authMiddleware, adminMiddleware, async (
   } catch (err) {
     console.error('Reset password error:', err);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Amend a user's login email — e.g. fixing a typo made at signup. The new
+// address becomes their sign-in email immediately; everything else (projects,
+// credits, rates) is keyed by user id so nothing else moves.
+router.put('/admin/users/:id/email', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'A valid email address is required' });
+    }
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (email === user.email) return res.json({ success: true, email });
+
+    const clash = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, user.id);
+    if (clash) return res.status(409).json({ error: 'Another account already uses that email' });
+    const aeClash = db.prepare('SELECT id FROM authorized_emails WHERE email = ?').get(email);
+    if (aeClash) return res.status(409).json({ error: 'That email is already an authorized sign-in on another account' });
+
+    db.prepare('UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(email, user.id);
+    logActivity({
+      event_type: 'account_updated',
+      title: (user.full_name || user.email) + ' email changed to ' + email,
+      detail: 'Previous email: ' + user.email,
+      user_id: user.id, user_name: user.full_name, user_email: email,
+    });
+    // A payment made under the corrected email may be waiting in pending
+    // credits — apply it now rather than on their next login.
+    const claimed = claimPendingCredits({ id: user.id, email, full_name: user.full_name });
+    res.json({ success: true, email, claimedCredits: claimed || 0 });
+  } catch (err) {
+    console.error('Change email error:', err);
+    res.status(500).json({ error: 'Failed to change email' });
   }
 });
 

@@ -346,6 +346,51 @@ router.get('/admin/clients-list', authMiddleware, function(req, res) {
   res.json({clients: db.prepare("SELECT id,email,full_name,company FROM users WHERE role NOT IN ('admin','system') ORDER BY full_name").all()});
 });
 
+// Admin: view a client's rate library. The "client added their rates" alert
+// links the admin to user management — this is the endpoint that actually
+// shows what they added. Each rate is flagged against the system defaults:
+//   is_custom  — the client added this line themselves (no matching default)
+//   is_edited  — a seeded default whose value the client changed
+// so the admin can see the client's own numbers at a glance.
+router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const rates = db.prepare(`
+      SELECT r.*,
+        CASE WHEN d.id IS NULL THEN 1 ELSE 0 END AS is_custom,
+        CASE WHEN d.id IS NOT NULL AND d.value != r.value THEN 1 ELSE 0 END AS is_edited,
+        d.value AS default_value
+      FROM client_rate_library r
+      LEFT JOIN client_rate_library d
+        ON d.user_id = '__system_default__' AND d.is_active = 1
+        AND d.category = r.category AND d.item_key = r.item_key
+      WHERE r.user_id = ? AND r.is_active = 1
+      ORDER BY (CASE WHEN d.id IS NULL OR d.value != r.value THEN 0 ELSE 1 END), r.updated_at DESC, r.category, r.item_key
+    `).all(user.id);
+    const corrections = db.prepare(`
+      SELECT c.*, r.display_name FROM rate_corrections_log c
+      LEFT JOIN client_rate_library r ON r.id = c.rate_id
+      WHERE c.user_id = ? ORDER BY c.created_at DESC LIMIT 20
+    `).all(user.id);
+    res.json({
+      user: { id: user.id, email: user.email, full_name: user.full_name },
+      rates,
+      stats: {
+        total: rates.length,
+        custom: rates.filter(r => r.is_custom).length,
+        edited: rates.filter(r => r.is_edited).length,
+        last_updated: rates.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '') || null,
+      },
+      corrections,
+    });
+  } catch (e) {
+    console.error('[AdminRates] view error:', e);
+    res.status(500).json({ error: 'Failed to load rate library' });
+  }
+});
+
 // ─── SYSTEM DEFAULT RATES — seed every new signup with these ────────────────
 // Stored as rows in client_rate_library under the synthetic user_id below.
 // New signups copy these rows into their own library via seedDefaultRates().
