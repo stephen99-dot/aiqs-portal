@@ -106,25 +106,39 @@ function notifyCreditSpent(user, remaining, jobLabel) {
 function notifyPackPurchased({ email, credits, amountPence, sessionId, status, balanceAfter }) {
   const amount = '£' + ((amountPence || 0) / 100).toFixed(2);
   const ok = !status || status === 'granted';
+  // 'user_not_found' just means they paid before creating their account — the
+  // credits auto-apply the moment that email registers or logs in, so it only
+  // needs a human if the customer typed a DIFFERENT email at Stripe. Reserve
+  // the "NEEDS REVIEW" alarm for payments whose amount matched no known pack.
+  const willSelfResolve = status === 'user_not_found' && credits > 0;
   mailer.sendMail({
     platform: true,
     type: ok ? 'pack_purchased_admin' : 'pack_purchase_pending_admin',
     to: ADMIN_EMAIL,
     subject: ok
       ? amount + ' BOQ pack purchased — ' + (email || 'unknown') + ' (+' + credits + ' credit' + (credits === 1 ? '' : 's') + ')'
-      : amount + ' Stripe payment NEEDS REVIEW — ' + (email || 'unknown email'),
-    heading: ok ? 'BOQ pack purchased' : 'Stripe payment needs review',
+      : willSelfResolve
+        ? amount + ' Stripe payment waiting for signup — ' + (email || 'unknown email') + ' (will auto-apply)'
+        : amount + ' Stripe payment NEEDS REVIEW — ' + (email || 'unknown email'),
+    heading: ok ? 'BOQ pack purchased' : willSelfResolve ? 'Payment waiting for account — no action needed' : 'Stripe payment needs review',
     paragraphs: ok
       ? [
         (email || 'A customer') + ' bought a ' + amount + ' pack — ' + credits + ' BOQ credit' + (credits === 1 ? '' : 's') + ' added.',
         balanceAfter != null ? 'Their balance is now ' + fmtRemaining(balanceAfter) + '.' : '',
         'Stripe session: ' + (sessionId || 'n/a'),
       ].filter(Boolean)
-      : [
-        'A paid Stripe checkout for ' + amount + ' from ' + (email || 'an unknown email') + ' could not be applied automatically (' + status + ').',
-        'It has been recorded in pending credits and will auto-claim if that email logs in — but check it hasn\'t been lost.',
-        'Stripe session: ' + (sessionId || 'n/a'),
-      ],
+      : willSelfResolve
+        ? [
+          (email || 'A customer') + ' paid ' + amount + ' (' + credits + ' BOQ credit' + (credits === 1 ? '' : 's') + ') but has no portal account with that email yet.',
+          'Nothing to do: the credits apply automatically the moment an account with that email registers or logs in, and you\'ll get a confirmation when it happens.',
+          'Do NOT add the credits by hand — a manual grant plus the auto-claim is how balances end up doubled. Only step in if they signed up under a DIFFERENT email: fix their account email (Users → Manage → Change Email) and the credits apply on their next login.',
+          'Stripe session: ' + (sessionId || 'n/a'),
+        ]
+        : [
+          'A paid Stripe checkout for ' + amount + ' from ' + (email || 'an unknown email') + ' could not be applied automatically (' + status + ') — the amount matched no known credit pack, so this one DOES need a human eye.',
+          'It has been recorded in pending credits; assign it to the right account from there once you know what it was for.',
+          'Stripe session: ' + (sessionId || 'n/a'),
+        ],
   }).catch(() => {});
 }
 

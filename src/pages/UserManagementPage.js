@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap } from 'lucide-react';
+import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap, Mail } from 'lucide-react';
 import { KeyIcon } from '../components/Icons';
 
 const API_BASE = '/api';
@@ -92,6 +92,155 @@ function ResetPasswordModal({ user, isDark, onClose, onSuccess }) {
           <button onClick={onClose} style={{padding:'11px 18px',borderRadius:10,border:'1px solid '+border,background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Amend a user's login email — for fixing a typo made at signup. Everything
+// else on the account (projects, credits, rates) stays put; only the sign-in
+// address changes.
+function ChangeEmailModal({ user, isDark, onClose, onSuccess, onUpdate }) {
+  const [email, setEmail] = useState(user.email || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+  const handleSave = async () => {
+    const next = email.trim().toLowerCase();
+    if (!next || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) { setError('Enter a valid email address'); return; }
+    if (next === (user.email || '').toLowerCase()) { onClose(); return; }
+    setSaving(true); setError('');
+    try {
+      const res = await apiFetch('/admin/users/' + user.id + '/email', { method: 'PUT', body: JSON.stringify({ email: next }) });
+      onUpdate({ ...user, email: res.email });
+      onSuccess('Email updated to ' + res.email + ' — they now sign in with the new address'
+        + (res.claimedCredits > 0 ? '. ' + res.claimedCredits + ' pending BOQ credit(s) from an earlier Stripe payment were applied automatically.' : ''));
+      onClose();
+    } catch (err) { setError(err.message || 'Failed to change email'); } finally { setSaving(false); }
+  };
+  return (
+    <div className="modal-overlay" style={{background:'rgba(0,0,0,0.6)'}}>
+      <div className="modal-card" style={{background:isDark?'#131B2E':'#FFF',padding:28,maxWidth:420,border:'1px solid '+border}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:text}}><Mail size={16} style={{ verticalAlign: 'middle' }} /> Change Email</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',color:muted}}><X size={16} /></button>
+        </div>
+        <p style={{fontSize:13,color:muted,margin:'0 0 16px',lineHeight:1.5}}>
+          Amending the sign-in email for <strong style={{color:text}}>{user.full_name || user.email}</strong>. Their projects, credits and rates are untouched — they simply sign in with the corrected address (same password).
+        </p>
+        <div style={{marginBottom:16}}>
+          <label style={{display:'block',fontSize:11,fontWeight:600,color:muted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em'}}>Current Email</label>
+          <div style={{fontSize:13,color:text,marginBottom:12,wordBreak:'break-all'}}>{user.email}</div>
+          <label style={{display:'block',fontSize:11,fontWeight:600,color:muted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em'}}>New Email</label>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+            style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid '+border,background:isDark?'#0D1320':'#F8FAFC',color:text,fontSize:14,outline:'none',boxSizing:'border-box'}} />
+        </div>
+        {error && (
+          <div style={{marginBottom:14,padding:'8px 12px',borderRadius:8,background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',color:'#EF4444',fontSize:12.5,fontWeight:500}}>{error}</div>
+        )}
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={handleSave} disabled={saving} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:700,cursor:'pointer',opacity:saving?0.6:1}}>
+            {saving ? 'Saving...' : 'Save New Email'}
+          </button>
+          <button onClick={onClose} style={{padding:'11px 18px',borderRadius:10,border:'1px solid '+border,background:'transparent',color:muted,fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The client's rate library, viewed from the admin side. The "client added
+// their rates" alert points here — custom lines (added by the client) and
+// edited defaults are flagged and sorted to the top so what they added is
+// visible at a glance.
+function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [loadingRates, setLoadingRates] = useState(false);
+  const [ownOnly, setOwnOnly] = useState(true);
+  const border = isDark ? '#1C2A44' : '#E2E8F0';
+  const text = isDark ? '#E8EDF5' : '#0F172A';
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+
+  const load = async () => {
+    setLoadingRates(true);
+    try {
+      const res = await apiFetch('/admin/users/' + user.id + '/rates');
+      setData(res);
+      // Default to "their own" when they have any; otherwise show everything.
+      setOwnOnly((res.stats.custom + res.stats.edited) > 0);
+    } catch (e) { setErrorMsg(e.message || 'Failed to load rate library'); }
+    finally { setLoadingRates(false); }
+  };
+  const toggle = () => { const next = !open; setOpen(next); if (next && !data) load(); };
+
+  const shown = data ? data.rates.filter(r => !ownOnly || r.is_custom || r.is_edited) : [];
+  const fmtDate = (d) => { try { return new Date(String(d).replace(' ', 'T') + (String(d).endsWith('Z') ? '' : 'Z')).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return d; } };
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={lbl}>Rate Library</div>
+        <button onClick={toggle} style={outBtn}>{open ? 'Hide rates' : 'View rates'}</button>
+      </div>
+      {open && (
+        loadingRates ? (
+          <div style={{ fontSize: 12, color: muted, marginTop: 10 }}>Loading rates…</div>
+        ) : !data ? null : (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10, fontSize: 12, color: muted }}>
+              <span><strong style={{ color: text }}>{data.stats.total}</strong> active</span>
+              <span><strong style={{ color: '#10B981' }}>{data.stats.custom}</strong> added by client</span>
+              <span><strong style={{ color: '#F59E0B' }}>{data.stats.edited}</strong> defaults edited</span>
+              {data.stats.last_updated && <span>last change {fmtDate(data.stats.last_updated)}</span>}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginLeft: 'auto' }}>
+                <input type="checkbox" checked={ownOnly} onChange={e => setOwnOnly(e.target.checked)} />
+                Their own rates only
+              </label>
+            </div>
+            {shown.length === 0 ? (
+              <div style={{ fontSize: 12, color: muted, fontStyle: 'italic' }}>
+                {ownOnly ? 'No client-added or edited rates yet — everything matches the seeded defaults.' : 'No active rates.'}
+              </div>
+            ) : (
+              <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid ' + border, borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ position: 'sticky', top: 0, background: isDark ? '#0D1320' : '#F1F5F9' }}>
+                      {['Item', 'Category', 'Rate', 'Unit', 'Source', 'Updated'].map(h => (
+                        <th key={h} style={{ textAlign: 'left', padding: '7px 10px', color: muted, fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map(r => (
+                      <tr key={r.id} style={{ borderTop: '1px solid ' + border }}>
+                        <td style={{ padding: '7px 10px', color: text, fontWeight: (r.is_custom || r.is_edited) ? 600 : 400 }}>{r.display_name || r.item_key}</td>
+                        <td style={{ padding: '7px 10px', color: muted, textTransform: 'capitalize' }}>{r.category}</td>
+                        <td style={{ padding: '7px 10px', color: text }}>
+                          £{Number(r.value).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
+                          {r.is_edited && r.default_value != null && (
+                            <span style={{ color: muted, marginLeft: 6, textDecoration: 'line-through' }}>£{Number(r.default_value).toLocaleString('en-GB', { maximumFractionDigits: 2 })}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '7px 10px', color: muted }}>{r.unit}</td>
+                        <td style={{ padding: '7px 10px' }}>
+                          {r.is_custom ? <span style={{ color: '#10B981', fontWeight: 600 }}>Client added</span>
+                            : r.is_edited ? <span style={{ color: '#F59E0B', fontWeight: 600 }}>Client edited</span>
+                            : <span style={{ color: muted }}>Default</span>}
+                        </td>
+                        <td style={{ padding: '7px 10px', color: muted, whiteSpace: 'nowrap' }}>{fmtDate(r.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -238,6 +387,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const [suspendReason, setSuspendReason] = useState(user.suspended_reason || '');
   const [magicLink, setMagicLink] = useState('');
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [importResult, setImportResult] = useState(null);
   const [userMsg, setUserMsg] = useState('');
@@ -435,6 +585,9 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
       {showResetModal && (
         <ResetPasswordModal user={user} isDark={isDark} onClose={() => setShowResetModal(false)} onSuccess={showSuccess} />
       )}
+      {showEmailModal && (
+        <ChangeEmailModal user={user} isDark={isDark} onClose={() => setShowEmailModal(false)} onSuccess={showSuccess} onUpdate={onUpdate} />
+      )}
       <div style={{ background: isDark ? '#0D1320' : '#F8FAFC', borderTop: '1px solid ' + border, padding: '20px 24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: text }}>Manage: {user.full_name || user.email}</div>
@@ -616,6 +769,10 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
                 style={{ ...outBtn, color: '#F59E0B', borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.06)' }}>
                 <Key size={12} /> Reset Password
               </button>
+              <button onClick={() => setShowEmailModal(true)} disabled={!!loading}
+                style={{ ...outBtn, color: '#2563EB', borderColor: 'rgba(37,99,235,0.3)', background: 'rgba(37,99,235,0.06)' }}>
+                <Mail size={12} /> Change Email
+              </button>
               <button onClick={syncStripe} disabled={!!loading}
                 style={{ ...outBtn, color: '#8B5CF6', borderColor: 'rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.06)' }}>
                 <RefreshCw size={12} /> Sync Stripe
@@ -633,6 +790,15 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </div>
             )}
           </div>
+
+          {/* Rate library — what this client has in My Rates, their own additions flagged */}
+          {user.role !== 'admin' && (
+            <ClientRatesCard
+              user={user} isDark={isDark}
+              cardStyle={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}
+              lbl={lbl} outBtn={outBtn} setErrorMsg={setErrorMsg}
+            />
+          )}
 
           {/* Authorized sign-in emails — team access to this account */}
           <AuthorizedEmailsCard
