@@ -191,6 +191,62 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'page_inventory',
+    description: 'STEP ONE on every drawing, before you measure anything. Returns each sheet\'s size in points, its /Rotate value, an md5, the count of vector primitives and the length of extractable text. Read it for three things: a rotated page mixes coordinate systems and must be flattened; two sheets sharing an md5 are the SAME sheet twice, not two sheets; and a high primitive count against almost no text means a PATH-CONVERTED sheet whose dimensions and specification are drawn rather than encoded — never conclude "no figured dimensions" or "no spec" from the text layer alone.',
+    input_schema: {
+      type: 'object',
+      properties: { filename: { type: 'string', description: 'The PDF to inventory, exactly as listed in the file summary.' } },
+      required: ['filename'],
+    },
+  },
+  {
+    name: 'prove_scale',
+    description: 'Prove a sheet\'s scale from independent evidence. YOU MUST CALL THIS BEFORE record_takeoff_item — a quantity taken off an unproven sheet is an opinion, not a measurement. Supply at least TWO independent proofs (figured dimensions, level datums on a section, two specified layer thicknesses in one wall, a structural member schedule, repeated specified spacings, door swing arc radii, a compliance calc panel, the scale bar measured rather than assumed). Also pass the (stated_mm, measured_mm) dimension pairs you read: a residual that is FLAT against length is an arrowhead constant to remove, and a residual that GROWS with length is a scale error. Returns a proof table, never a single number.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string' },
+        page: { type: 'integer', description: '0-based page index.' },
+        proofs: {
+          type: 'array',
+          description: 'At least two independent proofs.',
+          items: {
+            type: 'object',
+            properties: {
+              source: { type: 'string', description: 'e.g. "figured dimensions", "level datums", "door swing radii".' },
+              mm_per_pt: { type: 'number', description: 'Real millimetres per PDF point implied by this proof.' },
+              samples: { type: 'integer' },
+              spread_pct: { type: 'number', description: 'Max deviation across the samples, as a percentage.' },
+              note: { type: 'string' },
+            },
+            required: ['source', 'mm_per_pt'],
+          },
+        },
+        dimensions: {
+          type: 'array',
+          description: 'Pairs of [stated_mm, measured_mm] read off the sheet — 3 or more to separate an arrowhead constant from a scale error.',
+          items: { type: 'array', items: { type: 'number' } },
+        },
+        stated_scale: { type: 'string', description: 'e.g. "1:100 @ A1" exactly as the title block reads.' },
+        stated_paper: { type: 'string', description: 'The paper size the title block claims — A0/A1/A2/A3/A4.' },
+      },
+      required: ['filename', 'proofs'],
+    },
+  },
+  {
+    name: 'harvest_layers',
+    description: 'Census every vector item on a sheet by (type, stroke colour, fill colour, width) — what a CAD layer becomes inside a PDF. Use it instead of eyeballing a demolition line or a route: a visual 4.0 m estimate measured 8-10 m once clustered. Two greys usually exist and only ONE means demolish (retained walls are a grey FILL, demolition a grey STROKE with no fill), and the same colour is routinely used for two different things on one sheet. Every cluster comes back unnamed and you must name each one before pricing — a cluster logged as "curvy lines, resolve later" was the wayleave of a live 33 kV overhead line.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: { type: 'string' },
+        page: { type: 'integer', description: '0-based page index.' },
+        min_cluster: { type: 'integer', description: 'Ignore clusters smaller than this (default 1).' },
+      },
+      required: ['filename'],
+    },
+  },
+  {
     name: 'record_takeoff_item',
     description: 'Add a line item to the BOQ. Include the actual measurement working in the description so the client can audit it. Use standard item keys from the rate library where possible — e.g. concrete_slab_150mm, brick_outer_leaf, plasterboard_skim_walls, lvt_karndean, kitchen_fitout_high. For items not in the library, pass assumed_rate with a realistic GBP rate (pre-location uplift).',
     input_schema: {
@@ -444,6 +500,51 @@ async function renderPdfRegion(tmpDir, filename, page, region) {
   }
 }
 
+// Resolve a filename the model gave us to a real path in the upload, tolerating
+// the paraphrasing it sometimes does (same lookup renderPdfPage uses).
+function resolveUploadPath(tmpDir, filename) {
+  try {
+    const direct = path.join(tmpDir, filename);
+    if (fs.existsSync(direct)) return direct;
+    const alt = fs.readdirSync(tmpDir).find((f) =>
+      f.toLowerCase() === String(filename).toLowerCase()
+      || path.basename(f, path.extname(f)).toLowerCase() === String(filename).toLowerCase());
+    return alt ? path.join(tmpDir, alt) : null;
+  } catch (e) { return null; }
+}
+
+// The scale gate (brief §15 acceptance test 1): refuse to record a takeoff item
+// before prove_scale has returned two independent proofs for the sheet.
+function checkScaleGate(runState) {
+  // The gate only binds when the evidence layer is actually available. If the
+  // sidecar was never reachable this run, the takeoff proceeds and is reported
+  // as visual-only rather than blocked.
+  if (runState.evidenceAvailable !== true) return { ok: true, visualOnly: true };
+
+  const tables = Object.values(runState.scaleProofs || {});
+  const usable = tables.filter((t) => t && t.usable);
+  if (usable.length > 0) return { ok: true };
+
+  if (tables.length === 0) {
+    return {
+      ok: false,
+      message: 'REFUSED: no scale has been proven yet. Call prove_scale first with at least TWO independent '
+        + 'proofs for the sheet you are measuring (figured dimensions, level datums, two specified layer '
+        + 'thicknesses in one wall, a member schedule, repeated specified spacings, door swing radii, a '
+        + 'compliance calc panel, or the scale bar measured rather than assumed). A quantity taken off an '
+        + 'unproven sheet is an opinion, not a measurement.',
+    };
+  }
+  const verdicts = tables.map((t) => t.verdict).filter(Boolean).join(' | ');
+  return {
+    ok: false,
+    message: 'REFUSED: the scale is not yet settled. ' + verdicts
+      + ' Supply a second, independent proof (a different source, not the same one re-read) and call '
+      + 'prove_scale again. If nothing on the sheet can establish its scale, say so and stop — the correct '
+      + 'output for a pack that cannot support a measurement is no BOQ, not an estimate.',
+  };
+}
+
 // Synchronous tool execution — mutates the run state and returns a tool_result
 // content block to send back to Claude in the next turn.
 async function executeTool(runId, toolName, toolInput, runState) {
@@ -493,7 +594,75 @@ async function executeTool(runId, toolName, toolInput, runState) {
       return { type: 'tool_result', content: `Recorded. Project: ${toolInput.project_type}, ${toolInput.floor_area_m2}m², ${toolInput.location}, ${toolInput.spec_level} spec.` };
     }
 
+    case 'page_inventory': {
+      setActivity(runId, `Inventorying ${toolInput.filename}`);
+      const evidence = require('./evidenceClient');
+      const src = resolveUploadPath(runState.tmpDir, toolInput.filename);
+      if (!src) return { type: 'tool_result', content: `file ${toolInput.filename} not found in upload`, is_error: true };
+      const r = await evidence.pageInventory(src);
+      if (!r.available) {
+        runState.evidenceAvailable = false;
+        return { type: 'tool_result', content: 'The evidence layer is not running, so no geometry can be harvested. Continue by reading the drawings visually — but say so: quantities will be estimates, not proven measurements.' };
+      }
+      if (!r.ok) return { type: 'tool_result', content: r.error, is_error: true };
+      runState.evidenceAvailable = true;
+      runState.inventory = runState.inventory || {};
+      runState.inventory[toolInput.filename] = r.data;
+      return { type: 'tool_result', content: JSON.stringify(r.data) };
+    }
+
+    case 'harvest_layers': {
+      setActivity(runId, `Harvesting vectors from ${toolInput.filename}`);
+      const evidence = require('./evidenceClient');
+      const src = resolveUploadPath(runState.tmpDir, toolInput.filename);
+      if (!src) return { type: 'tool_result', content: `file ${toolInput.filename} not found in upload`, is_error: true };
+      const r = await evidence.harvestLayers(src, toolInput.page || 0, toolInput.min_cluster || 1);
+      if (!r.available) {
+        runState.evidenceAvailable = false;
+        return { type: 'tool_result', content: 'The evidence layer is not running — vectors cannot be harvested on this run.' };
+      }
+      if (!r.ok) return { type: 'tool_result', content: r.error, is_error: true };
+      runState.evidenceAvailable = true;
+      return { type: 'tool_result', content: JSON.stringify(r.data) };
+    }
+
+    case 'prove_scale': {
+      setActivity(runId, `Proving the scale of ${toolInput.filename}`);
+      const evidence = require('./evidenceClient');
+      const inv = (runState.inventory || {})[toolInput.filename];
+      const pageInfo = inv && inv.pages ? inv.pages[toolInput.page || 0] : null;
+      const r = await evidence.proveScale({
+        proofs: toolInput.proofs || [],
+        dimensions: toolInput.dimensions || [],
+        stated_scale: toolInput.stated_scale || null,
+        stated_paper: toolInput.stated_paper || null,
+        page_width_pt: pageInfo ? pageInfo.width_pt : null,
+        page_height_pt: pageInfo ? pageInfo.height_pt : null,
+      });
+      if (!r.available) {
+        runState.evidenceAvailable = false;
+        return { type: 'tool_result', content: 'The evidence layer is not running, so the scale cannot be proven arithmetically. Continue visually and state that the quantities are estimates.' };
+      }
+      if (!r.ok) return { type: 'tool_result', content: r.error, is_error: true };
+      runState.evidenceAvailable = true;
+      const table = r.data;
+      runState.scaleProofs = runState.scaleProofs || {};
+      runState.scaleProofs[toolInput.filename] = table;
+      emit(runId, { type: 'scale_proof', filename: toolInput.filename, usable: table.usable, verdict: table.verdict });
+      return { type: 'tool_result', content: JSON.stringify(table) };
+    }
+
     case 'record_takeoff_item': {
+      // GATE: a quantity taken off an unproven sheet is an opinion, not a
+      // measurement. When the evidence layer is running, the scale must have
+      // been proven twice from independent evidence before anything is
+      // recorded. Without the sidecar the run is marked visual-only and
+      // continues — a missing evidence layer lowers confidence, it does not
+      // break the portal.
+      const gate = checkScaleGate(runState);
+      if (!gate.ok) {
+        return { type: 'tool_result', content: gate.message, is_error: true };
+      }
       setActivity(runId, `Recording ${toolInput.key} — ${toolInput.qty} ${toolInput.unit}`);
       // Dedupe: if same key already exists, replace
       const existingIdx = runState.items.findIndex(i => i.key === toolInput.key);
@@ -1074,6 +1243,8 @@ async function runGenerationForRun(runId, opts = {}) {
 module.exports = {
   TOOL_DEFINITIONS,
   executeTool,
+  checkScaleGate,
+  resolveUploadPath,
   runGenerationForRun,
   updateRun,
   getRun,
