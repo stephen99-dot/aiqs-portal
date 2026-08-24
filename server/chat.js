@@ -78,6 +78,7 @@ try {
 
 // Init benchmark/takeoff tables
 try { if (benchmarkStore) benchmarkStore.initBenchmarkTables(db); } catch(e) { console.error('[Benchmarks] Init error:', e.message); }
+try { require('./evidenceLedger').initEvidenceTables(db); } catch (e) { console.error('[EvidenceLedger] Init error:', e.message); }
 // Init memory engine tables
 try { if (memoryEngine) memoryEngine.initMemoryTables(db); } catch(e) { console.error('[Memory] Init error:', e.message); }
 // Evidence store. The backfill is content-addressed and idempotent, so running it on
@@ -1923,6 +1924,22 @@ async function chatHandler(req, res) {
 
     if (req.files && req.files.length > 0) {
       if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'upload', detail: `Processing ${req.files.length} file(s)...` });
+      // Match this upload against jobs already on file before pricing anything.
+      // The same pack has come back the day after issue with only the scope
+      // sentence changed, deleting a whole section — the fingerprints catch it.
+      try {
+        const ledger = require('./evidenceLedger');
+        const prints = req.files.map((f) => {
+          try { return { name: f.originalname, buffer: fs.readFileSync(f.path) }; }
+          catch (e) { return null; }
+        }).filter(Boolean);
+        resubmission = ledger.checkResubmission(db, userId, prints);
+        if (resubmission.isResubmission) console.warn('[Resubmission] ' + resubmission.note);
+        if (resubmission.duplicatesInPack.length) {
+          console.warn('[Resubmission] duplicate sheets in this pack: ' + resubmission.duplicatesInPack.join(', '));
+        }
+        ledger.recordFingerprints(db, { userId, takeoffId: null, projectName: null, prints: resubmission.prints });
+      } catch (e) { console.error('[Resubmission] check failed:', e.message); }
       for (const file of req.files) {
         const ext = path.extname(file.originalname).toLowerCase();
         console.log(`[Upload] ${file.originalname} (${(file.size/1024/1024).toFixed(2)}MB)`);
@@ -2472,6 +2489,8 @@ ${summary}`);
     // Set when the bill fails to reconcile: no document is issued, and the
     // chat reports both figures instead of a total the file does not contain.
     let reconcileFailed = false;
+    // Set when this upload matches a pack already priced for this user.
+    let resubmission = null;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
     // free — they don't consume a credit). Set in the credit gate below and
@@ -3712,7 +3731,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc || { ok: false, lineSum: null, expected: pricedResult.summary.construction_total, diff: null }, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
-              passes: runQsPasses(pricedResult, lockedTakeoff),
+              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission),
             });
           } catch (dsErr) { console.error('[Stage 3] delivery summary:', dsErr.message); }
           reply = `I have not issued documents for ${projectName}.\n\n`
@@ -3735,7 +3754,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
-              passes: runQsPasses(pricedResult, lockedTakeoff),
+              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission),
             });
             if (!deliveryPayload.reconciled) {
               // Never state a total the downloaded file does not contain.
@@ -4213,8 +4232,9 @@ module.exports = router;
 // see the same determinations. None of these change a price: each raises a
 // question for a human, which is the whole point — the measure was already
 // deterministic, the judgement was what was missing.
-function runQsPasses(pricedResult, lockedTakeoff) {
+function runQsPasses(pricedResult, lockedTakeoff, resubmission) {
   const passes = {};
+  if (resubmission && resubmission.isResubmission) passes.resubmission = resubmission;
   const takeoff = lockedTakeoff || {};
   const items = [];
   for (const s of (pricedResult.sections || [])) for (const i of (s.items || [])) items.push(i);

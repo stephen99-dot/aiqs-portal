@@ -216,6 +216,22 @@ function buildDeliverySummary(priced, recalc, opts = {}) {
     qs.missed = passes.missed.findings;
   }
 
+  // A resubmission is checked BEFORE anything is priced, and it goes to the top
+  // of the list: the same pack has come back with only the scope sentence
+  // changed, deleting a whole section.
+  if (passes.resubmission && passes.resubmission.isResubmission) {
+    needsCheck.unshift({
+      id: 'resubmission',
+      title: 'These drawings have been priced before',
+      detail: passes.resubmission.note,
+      why: 'Compare the scope wording against the earlier issue, and re-prove the scale from this file rather than inheriting it.',
+    });
+    qs.resubmission = {
+      matches: passes.resubmission.matches,
+      duplicatesInPack: passes.resubmission.duplicatesInPack || [],
+    };
+  }
+
   if (passes.deferrals && passes.deferrals.total > 0) {
     qs.deferrals = {
       total: passes.deferrals.total, byKind: passes.deferrals.byKind,
