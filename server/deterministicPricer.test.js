@@ -356,3 +356,34 @@ test('deterministicPricer stays pure — no requires, no database access', () =>
   assert.ok(!/\bdb\s*\./.test(code), 'deterministicPricer must not touch a database');
   assert.ok(!/process\.env/.test(code), 'deterministicPricer must not read the environment');
 });
+
+// ── Unit-ceiling clip: regression from a real delivered bill ────────────────
+// A whole-house remodel was issued where the ceiling guard replaced rates with
+// an unrelated fallback estimate: garage construction at £17,250/m became
+// £40.25/m (428x), a roof strip-out at £2,530/m2 became £74.75/m2 (34x), and a
+// 10-month perimeter scaffold ended up at £5.46. The bill's line items summed
+// to £141k while the chat reported £1.17m. A rate over the ceiling must clip
+// TO THE CEILING — the highest defensible rate for that unit — never below it.
+test('a rate over the unit ceiling clips to the ceiling, never below it', () => {
+  const items = [{
+    key: 'garage_construction', qty: 10, unit: 'm',
+    description: 'oak-framed cart barn garage superstructure',
+    assumed_rate: 17250,
+  }];
+  const out = priceLockedQuantities(items, 'Manchester', {}, {});
+  const line = out.sections[0].items[0];
+  const flag = out.review_flags[0];
+
+  // The clipped rate is the ceiling itself, not an unrelated fallback estimate.
+  // Under the old behaviour this line came back at ~£40/m.
+  assert.strictEqual(line.rate_source, 'ceiling_clipped');
+  assert.strictEqual(line.rate, flag.ceiling,
+    'a rate over the ceiling must be clipped to exactly the ceiling');
+  assert.ok(line.rate > 100,
+    `expected a clip to the ceiling, got ${line.rate}/m — the under-price regression is back`);
+
+  // It is reported for human review, because a rate this far over the ceiling
+  // usually means the UNIT is wrong, not the rate.
+  assert.strictEqual(flag.reason, 'rate_above_unit_ceiling');
+  assert.ok(flag.originalRate > flag.ceiling);
+});

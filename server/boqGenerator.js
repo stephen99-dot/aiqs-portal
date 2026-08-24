@@ -7,6 +7,10 @@
  * the customer's chosen template (modern / professional / heritage / minimalist).
  */
 const ExcelJS = require('exceljs');
+
+// Cached formula results are written to 2dp so the previewer's view matches
+// the formatted cell exactly.
+function round2(n) { return Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 100; }
 const { styleFor, renderCoverSheet, renderHeroBlock, hexToArgb, tintHex, sanitizeXmlText, writeXlsxBuffer } = require('./docTemplates');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +130,13 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // \u2500\u2500 BOQ sheet (parser still expects this name) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   const ws = wb.addWorksheet('BOQ', {
-    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    // fitToHeight MUST be 0 (= "as many pages tall as it takes"). ExcelJS
+    // defaults it to 1, which squashes the whole bill onto a single page and
+    // renders it unreadably small — the "print-scale collapse".
+    pageSetup: {
+      paperSize: 9, orientation: 'landscape',
+      fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    },
     views: [{ showGridLines: false }],
   });
 
@@ -255,6 +265,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // === DATA ROWS ===
   var subtotalRows = [];
+  var subtotalVals = [];
 
   for (var si = 0; si < sections.length; si++) {
     var section = sections[si];
@@ -297,12 +308,18 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
     var firstItemRow = row;
     var items = section.items || [];
+    // Running section sums — used as the CACHED RESULT on the subtotal
+    // formulas below. Without a cached value every previewer (Google Drive,
+    // Apple Numbers, Outlook, SharePoint, iOS Quick Look) renders the cell
+    // blank or zero, so an emailed bill reads as broken.
+    var secLabour = 0, secMaterials = 0, secTotal = 0;
 
     for (var ii = 0; ii < items.length; ii++) {
       var item = items[ii];
       var labour = parseFloat(item.labour) || 0;
       var materials = parseFloat(item.materials) || 0;
       var total = parseFloat(item.total) || (labour + materials) || ((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0));
+      secLabour += labour; secMaterials += materials; secTotal += total;
 
       // Map the pricer's rate_source values to friendly labels. Previously this
       // only matched legacy values (verified/emerging/client), so every line
@@ -314,6 +331,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       else if (rs === 'emerging') srcLabel = 'Your rate*';
       else if (rs === 'base_library') srcLabel = 'Standard';
       else if (rs === 'ai_estimated') srcLabel = 'AI estimate';
+      else if (rs === 'ceiling_clipped') srcLabel = 'Capped';
       else if (rs === 'fallback_estimated' || rs === 'fallback_corrected') srcLabel = 'Estimate';
 
       var dataRow = ws.getRow(row);
@@ -360,9 +378,9 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       subRow.getCell(3).value = '';
       subRow.getCell(4).value = '';
       subRow.getCell(5).value = '';
-      subRow.getCell(6).value = { formula: 'SUM(F' + firstItemRow + ':F' + lastItemRow + ')' };
-      subRow.getCell(7).value = { formula: 'SUM(G' + firstItemRow + ':G' + lastItemRow + ')' };
-      subRow.getCell(8).value = { formula: 'SUM(H' + firstItemRow + ':H' + lastItemRow + ')' };
+      subRow.getCell(6).value = { formula: 'SUM(F' + firstItemRow + ':F' + lastItemRow + ')', result: round2(secLabour) };
+      subRow.getCell(7).value = { formula: 'SUM(G' + firstItemRow + ':G' + lastItemRow + ')', result: round2(secMaterials) };
+      subRow.getCell(8).value = { formula: 'SUM(H' + firstItemRow + ':H' + lastItemRow + ')', result: round2(secTotal) };
       subRow.getCell(9).value = '';
       
       for (var sc = 1; sc <= 9; sc++) {
@@ -381,6 +399,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       }
       subRow.height = 22;
       subtotalRows.push(row);
+      subtotalVals.push(round2(secTotal));
       row++;
     }
 
@@ -400,10 +419,11 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
   // Net total
   var netFormula = subtotalRows.length > 0 ? subtotalRows.map(function(r) { return 'H' + r; }).join('+') : '0';
+  var netVal = round2(subtotalVals.reduce(function(a, b) { return a + b; }, 0));
   var netRow = ws.getRow(row);
   netRow.getCell(2).value = 'Net Construction Cost';
   netRow.getCell(2).font = { name: bodyFont, size: 10, bold: true };
-  netRow.getCell(8).value = { formula: netFormula };
+  netRow.getCell(8).value = { formula: netFormula, result: netVal };
   netRow.getCell(8).numFmt = currFmt;
   netRow.getCell(8).font = { name: bodyFont, size: 10, bold: true };
   netRow.getCell(8).border = allBorders;
@@ -414,11 +434,14 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   // (default is 0: rates are all-in, nothing stacked on top). The grand-total
   // formula is built from whichever rows were written.
   var gtParts = ['H' + netRowNum];
+  var gtVal = netVal;
   if (contingencyPct > 0) {
     var contRow = ws.getRow(row);
     contRow.getCell(2).value = 'Contingency (' + contingencyPct + '%)';
     contRow.getCell(2).font = { name: bodyFont, size: 10 };
-    contRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (contingencyPct / 100) };
+    var contVal = round2(netVal * (contingencyPct / 100));
+    contRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (contingencyPct / 100), result: contVal };
+    gtVal += contVal;
     contRow.getCell(8).numFmt = currFmt;
     contRow.getCell(8).font = { name: bodyFont, size: 10 };
     contRow.getCell(8).border = allBorders;
@@ -430,7 +453,9 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     var ohpRow = ws.getRow(row);
     ohpRow.getCell(2).value = 'Overheads & Profit (' + ohpPct + '%)';
     ohpRow.getCell(2).font = { name: bodyFont, size: 10 };
-    ohpRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (ohpPct / 100) };
+    var ohpVal = round2(netVal * (ohpPct / 100));
+    ohpRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (ohpPct / 100), result: ohpVal };
+    gtVal += ohpVal;
     ohpRow.getCell(8).numFmt = currFmt;
     ohpRow.getCell(8).font = { name: bodyFont, size: 10 };
     ohpRow.getCell(8).border = allBorders;
@@ -442,7 +467,8 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   var gtRow = ws.getRow(row);
   gtRow.getCell(2).value = 'TOTAL CONSTRUCTION COST (EXCL. VAT)';
   gtRow.getCell(2).font = { name: headingFont, size: 11, bold: true, color: { argb: PRIMARY } };
-  gtRow.getCell(8).value = { formula: gtParts.join('+') };
+  gtVal = round2(gtVal);
+  gtRow.getCell(8).value = { formula: gtParts.join('+'), result: gtVal };
   gtRow.getCell(8).numFmt = currFmt;
   gtRow.getCell(8).font = { name: headingFont, size: 11, bold: true };
   for (var gc = 1; gc <= 9; gc++) {
@@ -456,7 +482,8 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   var vatRow = ws.getRow(row);
   vatRow.getCell(2).value = 'VAT @ ' + vatRate + '%';
   vatRow.getCell(2).font = { name: bodyFont, size: 10 };
-  vatRow.getCell(8).value = { formula: 'H' + gtRowNum + '*' + (vatRate / 100) };
+  var vatVal = round2(gtVal * (vatRate / 100));
+  vatRow.getCell(8).value = { formula: 'H' + gtRowNum + '*' + (vatRate / 100), result: vatVal };
   vatRow.getCell(8).numFmt = currFmt;
   vatRow.getCell(8).font = { name: bodyFont, size: 10 };
   vatRow.getCell(8).border = allBorders;
@@ -467,7 +494,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   var inclRow = ws.getRow(row);
   inclRow.getCell(2).value = 'TOTAL CONSTRUCTION COST (INCL. VAT @ ' + vatRate + '%)';
   inclRow.getCell(2).font = { name: headingFont, size: 11, bold: true, color: { argb: PRIMARY } };
-  inclRow.getCell(8).value = { formula: 'H' + gtRowNum + '+H' + vatRowNum };
+  inclRow.getCell(8).value = { formula: 'H' + gtRowNum + '+H' + vatRowNum, result: round2(gtVal + vatVal) };
   inclRow.getCell(8).numFmt = currFmt;
   inclRow.getCell(8).font = { name: headingFont, size: 11, bold: true };
   for (var ic = 1; ic <= 9; ic++) {
@@ -524,7 +551,8 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       var stRow = ws.getRow(row);
       stRow.getCell(2).value = title + ' — total (at face)';
       stRow.getCell(2).font = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
-      stRow.getCell(8).value = { formula: 'SUM(H' + groupStart + ':H' + (row - 1) + ')' };
+      var grpVal = round2(entries.reduce(function (a, x) { return a + (Number(x.total) || 0); }, 0));
+      stRow.getCell(8).value = { formula: 'SUM(H' + groupStart + ':H' + (row - 1) + ')', result: grpVal };
       stRow.getCell(8).numFmt = currFmt;
       stRow.getCell(8).font = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
       stRow.getCell(8).border = { top: { style: 'thin', color: { argb: BORDER_COL } } };
@@ -551,7 +579,10 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
 
   // Freeze panes
-  ws.views = [{ state: 'frozen', ySplit: headerRowNum, activeCell: 'A' + (headerRowNum + 1) }];
+  // House format rule: no frozen panes and no split in any Excel deliverable.
+  // The header is repeated on every printed page instead.
+  ws.views = [{ showGridLines: false }];
+  ws.pageSetup.printTitlesRow = headerRowNum + ':' + headerRowNum;
 
   // Footer
   ws.headerFooter.oddFooter = '&L' + (branding.footer_text || branding.company_name || 'The AI QS — theaiqs.co.uk') + '&RPage &P of &N';

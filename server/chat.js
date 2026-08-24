@@ -2465,6 +2465,13 @@ ${summary}`);
     }
     const wantsExtract = (hasFiles || describesPricingProject) && !wantsDocuments; // files OR a described project = extract phase
     let downloadFiles = null;
+    // Structured, client-safe summary of the priced bill (see deliverySummary.js).
+    // Replaces dumping every pricer warning into the reply text.
+    let deliveryPayload = null;
+    let boqRecalc = null;
+    // Set when the bill fails to reconcile: no document is issued, and the
+    // chat reports both figures instead of a total the file does not contain.
+    let reconcileFailed = false;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
     // free — they don't consume a credit). Set in the credit gate below and
@@ -3571,6 +3578,15 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
               _meta = extractBoqMeta.extractContractMeta(briefText);
             }
           } catch (e) { /* metadata is optional — never block the BOQ */ }
+          // Labour plausibility gate — see labourGovernor.js. Advisory only.
+          try {
+            const { runLabourGovernor } = require('./labourGovernor');
+            const lg = runLabourGovernor(boqSections, { dayRate: Number(process.env.BLENDED_DAY_RATE) || 250 });
+            console.log('[Stage 3] ' + lg.summary);
+            for (const f of lg.findings) {
+              console.warn(`[Stage 3] labour ${f.severity}: ${f.item} ${f.description} — ${f.message}`);
+            }
+          } catch (lgErr) { console.error('[Stage 3] labour governor:', lgErr.message); }
           const buf = await boqGen.generateBOQExcel(boqSections, projectName, clientName, {
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
@@ -3593,11 +3609,33 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             try {
               const { assertBOQMatches } = require('./recalcGate');
               const recalc = await assertBOQMatches(buf, pricedResult.summary.construction_total);
-              if (!recalc.ok) console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`);
+              boqRecalc = recalc;
+              if (!recalc.ok) { reconcileFailed = true; console.error(`[Stage 3] RECALC MISMATCH: sheet ${recalc.lineSum} vs pricer ${recalc.expected} (diff ${recalc.diff})`); }
               else console.log(`[Stage 3] Recalc OK — ${recalc.rows} lines reconcile to £${recalc.expected}`);
             } catch (recalcErr) {
               console.error('[Stage 3] Recalc gate:', recalcErr.message);
-              if (process.env.STRICT_RECALC === '1') throw recalcErr; // hard gate
+              // assertBOQMatches attaches the figures to the error, so the chat
+              // can still name both numbers even though it threw.
+              if (recalcErr.recalc) boqRecalc = { ok: false, ...recalcErr.recalc };
+              reconcileFailed = true;
+              const { isStrictRecalc } = require('./recalcGate');
+              if (isStrictRecalc()) throw recalcErr; // hard gate — nothing is issued
+            }
+            // Deliverable hardening gate — see preIssueGate.js. Runs on the
+            // issued bytes; warns by default, STRICT_ISSUE_GATE=1 hard-fails.
+            try {
+              const { runPreIssueGate } = require('./preIssueGate');
+              const gate = await runPreIssueGate(buf);
+              if (gate.blocking) {
+                console.error('[Stage 3] PRE-ISSUE GATE FAILED: ' + gate.errors.slice(0, 10).join(' | '));
+                if (process.env.STRICT_ISSUE_GATE === '1') throw new Error(gate.summary);
+              } else {
+                console.log('[Stage 3] ' + gate.summary);
+              }
+              for (const w of gate.warnings) console.warn('[Stage 3] issue-gate warning: ' + w);
+            } catch (gateErr) {
+              if (process.env.STRICT_ISSUE_GATE === '1') throw gateErr;
+              console.error('[Stage 3] pre-issue gate:', gateErr.message);
             }
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
             fs.writeFileSync(path.join(outputsDir, fname), buf);
@@ -3606,8 +3644,12 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           }
         } catch (excelErr) { console.error('[Stage 3] Excel error:', excelErr.message); }
 
-        // Generate Findings Report — AI writes narrative only, not quantities
+        // Generate Findings Report — AI writes narrative only, not quantities.
+        // Skipped entirely when the bill did not reconcile: it narrates the same
+        // figures, so issuing it would put the conflicting numbers back in front
+        // of the customer in a second document.
         try {
+          if (reconcileFailed) throw new Error('skipped — BOQ did not reconcile');
           const findingsPrompt = buildSystemPrompt(userId, 'generate_findings');
           const findingsInput = {
             priced_summary: pricedResult.summary,
@@ -3663,14 +3705,44 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         var _pendingFindingsJSON = null;
         try { _pendingFindingsJSON = JSON.stringify(findings || {}); } catch (e) {}
 
-        if (downloadFiles.length > 0) {
+        // Nothing reconciled, so nothing was issued. Say exactly that, and name
+        // both figures — the state that previously shipped as a confident total.
+        if (reconcileFailed) {
+          try {
+            const { buildDeliverySummary } = require('./deliverySummary');
+            deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc || { ok: false, lineSum: null, expected: pricedResult.summary.construction_total, diff: null }, {
+              floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+              passes: runQsPasses(pricedResult, lockedTakeoff),
+            });
+          } catch (dsErr) { console.error('[Stage 3] delivery summary:', dsErr.message); }
+          reply = `I have not issued documents for ${projectName}.\n\n`
+            + (deliveryPayload ? deliveryPayload.statusLine : 'The priced total does not reconcile to the generated spreadsheet, so nothing has been issued.')
+            + '\n\nThe quantities are still locked — nothing is lost. Once the mismatch is settled the documents will generate from the same takeoff.';
+          console.error('[Stage 3] BLOCKED: no documents issued — BOQ did not reconcile.');
+        } else if (downloadFiles.length > 0) {
           const itemCount = pricedResult.item_count || 0;
           const grandTotal = pricedResult.summary.grand_total;
           const docCurrSym = (pricedResult.summary.currency === 'EUR') ? '€' : '£';
           reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): ${docCurrSym}${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
 
-          if (pricedResult.warnings && pricedResult.warnings.length > 0) {
-            reply += '\n\nNotes: ' + pricedResult.warnings.join(' | ');
+          // The pricer's warnings used to be concatenated onto the reply as
+          // "Notes: ... | ... | ...", which put raw item keys, rate-library
+          // chatter and internal ceilings in front of the customer. They now go
+          // through deliverySummary, which separates the few lines a QS must
+          // settle from the diagnostics, and withholds the headline entirely if
+          // the priced total does not reconcile to the spreadsheet.
+          try {
+            const { buildDeliverySummary } = require('./deliverySummary');
+            deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc, {
+              floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+              passes: runQsPasses(pricedResult, lockedTakeoff),
+            });
+            if (!deliveryPayload.reconciled) {
+              // Never state a total the downloaded file does not contain.
+              reply = `Documents generated for ${projectName}.\n\n${deliveryPayload.statusLine}`;
+            }
+          } catch (dsErr) {
+            console.error('[Stage 3] delivery summary:', dsErr.message);
           }
 
           // Store project + benchmarks
@@ -4086,6 +4158,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
       pipeline_log: pipelineLog || null,
       captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
       sources: webSources.length > 0 ? webSources : null,
+      delivery: deliveryPayload,
     };
 
     if (req.streaming) {
@@ -4117,6 +4190,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         pipeline_log: pipelineLog || null,
         captured_memories: capturedMemories.length > 0 ? capturedMemories : null,
         sources: webSources.length > 0 ? webSources : null,
+        delivery: deliveryPayload,
       });
     } else {
       res.json(responsePayload);
@@ -4133,3 +4207,51 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
 }
 
 module.exports = router;
+
+// ── QS passes (improvement brief §5.2, §8, §9, §13) ────────────────────────
+// Run together so the chat, the findings report and any future document all
+// see the same determinations. None of these change a price: each raises a
+// question for a human, which is the whole point — the measure was already
+// deterministic, the judgement was what was missing.
+function runQsPasses(pricedResult, lockedTakeoff) {
+  const passes = {};
+  const takeoff = lockedTakeoff || {};
+  const items = [];
+  for (const s of (pricedResult.sections || [])) for (const i of (s.items || [])) items.push(i);
+
+  try {
+    const { determineVat } = require('./statutory');
+    const loc = String(takeoff.location || '');
+    passes.vat = determineVat({
+      jurisdiction: /ireland|dublin|cork|galway|limerick/i.test(loc) ? 'IE' : 'GB',
+      projectType: takeoff.project_type || '',
+      description: takeoff.description || '',
+      enquiryText: takeoff.brief || takeoff.notes || '',
+    });
+  } catch (e) { console.error('[QS pass] vat:', e.message); }
+
+  try {
+    const { deriveProgramme } = require('./programme');
+    passes.programme = deriveProgramme(pricedResult.sections, {
+      dayRate: Number(process.env.BLENDED_DAY_RATE) || 250,
+      domesticClient: true,
+    });
+  } catch (e) { console.error('[QS pass] programme:', e.message); }
+
+  try {
+    const { checkMissedItems } = require('./missedItems');
+    passes.missed = checkMissedItems(items, {
+      projectType: takeoff.project_type || '',
+      description: takeoff.description || '',
+    });
+  } catch (e) { console.error('[QS pass] missed items:', e.message); }
+
+  try {
+    const { scanDeferrals } = require('./qualifications');
+    const text = [takeoff.brief, takeoff.notes, takeoff.description]
+      .filter(Boolean).join('\n');
+    if (text.trim()) passes.deferrals = scanDeferrals(text);
+  } catch (e) { console.error('[QS pass] deferrals:', e.message); }
+
+  return passes;
+}
