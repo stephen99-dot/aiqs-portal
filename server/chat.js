@@ -3731,7 +3731,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc || { ok: false, lineSum: null, expected: pricedResult.summary.construction_total, diff: null }, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
-              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission),
+              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission, { replyText: reply }),
             });
           } catch (dsErr) { console.error('[Stage 3] delivery summary:', dsErr.message); }
           reply = `I have not issued documents for ${projectName}.\n\n`
@@ -3754,7 +3754,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
-              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission),
+              passes: runQsPasses(pricedResult, lockedTakeoff, resubmission, { replyText: reply }),
             });
             if (!deliveryPayload.reconciled) {
               // Never state a total the downloaded file does not contain.
@@ -4232,7 +4232,7 @@ module.exports = router;
 // see the same determinations. None of these change a price: each raises a
 // question for a human, which is the whole point — the measure was already
 // deterministic, the judgement was what was missing.
-function runQsPasses(pricedResult, lockedTakeoff, resubmission) {
+function runQsPasses(pricedResult, lockedTakeoff, resubmission, qsOpts = {}) {
   const passes = {};
   if (resubmission && resubmission.isResubmission) passes.resubmission = resubmission;
   const takeoff = lockedTakeoff || {};
@@ -4265,6 +4265,15 @@ function runQsPasses(pricedResult, lockedTakeoff, resubmission) {
       description: takeoff.description || '',
     });
   } catch (e) { console.error('[QS pass] missed items:', e.message); }
+
+  try {
+    const { checkBillCredibility } = require('./billCredibility');
+    passes.credibility = checkBillCredibility(pricedResult, {
+      replyText: qsOpts.replyText,
+      statedProvisionalSums: qsOpts.statedProvisionalSums,
+    });
+    if (passes.credibility.blocking) console.error('[QS pass] ' + passes.credibility.summary);
+  } catch (e) { console.error('[QS pass] credibility:', e.message); }
 
   try {
     const { scanDeferrals } = require('./qualifications');

@@ -216,6 +216,28 @@ function buildDeliverySummary(priced, recalc, opts = {}) {
     qs.missed = passes.missed.findings;
   }
 
+  // Bill credibility (billCredibility.js): a bill can pass the recalc and
+  // pre-issue gates — internally flawless — and still not be issuable, because
+  // its rates came from one estimator, its provisional sums were re-priced, or
+  // the reply stated a total the bill does not contain.
+  if (passes.credibility && (passes.credibility.findings || []).length) {
+    qs.credibility = passes.credibility;
+    for (const f of passes.credibility.findings) {
+      needsCheck.unshift({
+        id: f.id,
+        title: {
+          narrative_total_mismatch: 'A stated figure is not in the bill',
+          provisional_sums_repriced: 'Provisional sums were re-priced, not carried',
+          provisional_sums_estimated: 'Provisional sums were estimated',
+          fallback_concentration: 'Most of this bill is generic estimates',
+          rate_monoculture: 'One estimator priced this whole family of lines',
+        }[f.id] || 'Bill credibility',
+        detail: f.message,
+        why: 'The arithmetic can be perfect and the pricing still meaningless — this is a commercial check, not a numerical one.',
+      });
+    }
+  }
+
   // A resubmission is checked BEFORE anything is priced, and it goes to the top
   // of the list: the same pack has come back with only the scope sentence
   // changed, deleting a whole section.
