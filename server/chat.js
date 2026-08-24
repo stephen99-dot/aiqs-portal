@@ -3571,6 +3571,15 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
               _meta = extractBoqMeta.extractContractMeta(briefText);
             }
           } catch (e) { /* metadata is optional — never block the BOQ */ }
+          // Labour plausibility gate — see labourGovernor.js. Advisory only.
+          try {
+            const { runLabourGovernor } = require('./labourGovernor');
+            const lg = runLabourGovernor(boqSections, { dayRate: Number(process.env.BLENDED_DAY_RATE) || 250 });
+            console.log('[Stage 3] ' + lg.summary);
+            for (const f of lg.findings) {
+              console.warn(`[Stage 3] labour ${f.severity}: ${f.item} ${f.description} — ${f.message}`);
+            }
+          } catch (lgErr) { console.error('[Stage 3] labour governor:', lgErr.message); }
           const buf = await boqGen.generateBOQExcel(boqSections, projectName, clientName, {
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
@@ -3598,6 +3607,22 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             } catch (recalcErr) {
               console.error('[Stage 3] Recalc gate:', recalcErr.message);
               if (process.env.STRICT_RECALC === '1') throw recalcErr; // hard gate
+            }
+            // Deliverable hardening gate — see preIssueGate.js. Runs on the
+            // issued bytes; warns by default, STRICT_ISSUE_GATE=1 hard-fails.
+            try {
+              const { runPreIssueGate } = require('./preIssueGate');
+              const gate = await runPreIssueGate(buf);
+              if (gate.blocking) {
+                console.error('[Stage 3] PRE-ISSUE GATE FAILED: ' + gate.errors.slice(0, 10).join(' | '));
+                if (process.env.STRICT_ISSUE_GATE === '1') throw new Error(gate.summary);
+              } else {
+                console.log('[Stage 3] ' + gate.summary);
+              }
+              for (const w of gate.warnings) console.warn('[Stage 3] issue-gate warning: ' + w);
+            } catch (gateErr) {
+              if (process.env.STRICT_ISSUE_GATE === '1') throw gateErr;
+              console.error('[Stage 3] pre-issue gate:', gateErr.message);
             }
             const fname = `BOQ-${safeName}-${ts}.xlsx`;
             fs.writeFileSync(path.join(outputsDir, fname), buf);

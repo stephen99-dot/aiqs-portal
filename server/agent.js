@@ -890,6 +890,17 @@ async function runGenerationForRun(runId, opts = {}) {
 
   try {
     const boqSections = pricer.toPricedSections ? pricer.toPricedSections(priced) : priced.sections;
+    // Labour plausibility gate — converts every measured line's labour back to
+    // units per operative-day and flags anything outside the trade benchmark.
+    // Advisory: it never edits a price, it raises the question for a human.
+    try {
+      const { runLabourGovernor } = require('./labourGovernor');
+      const lg = runLabourGovernor(boqSections, { dayRate: Number(process.env.BLENDED_DAY_RATE) || 250 });
+      console.log(`[Agent ${runId}] ` + lg.summary);
+      for (const f of lg.findings) {
+        console.warn(`[Agent ${runId}] labour ${f.severity}: ${f.item} ${f.description} — ${f.message}`);
+      }
+    } catch (lgErr) { console.error(`[Agent ${runId}] labour governor:`, lgErr.message); }
     const excelBuf = await boqGen.generateBOQExcel(boqSections, projectName, '', {
       contingency_pct: priced.summary.contingency_pct,
       ohp_pct: priced.summary.ohp_pct,
@@ -917,6 +928,25 @@ async function runGenerationForRun(runId, opts = {}) {
       } catch (recErr) {
         if (process.env.STRICT_RECALC === '1') throw recErr;
         console.error(`[Agent ${runId}] recalc gate:`, recErr.message);
+      }
+      // Deliverable hardening gate: runs on the ISSUED bytes, because the
+      // defects it catches (uncached formulas that render as 0 in every
+      // previewer, merged-away labels, the fitToHeight print collapse) are
+      // introduced by serialisation and are invisible on our own screen.
+      // Warns by default; STRICT_ISSUE_GATE=1 hard-fails generation.
+      try {
+        const { runPreIssueGate } = require('./preIssueGate');
+        const gate = await runPreIssueGate(excelBuf);
+        if (gate.blocking) {
+          console.error(`[Agent ${runId}] PRE-ISSUE GATE FAILED: ` + gate.errors.slice(0, 10).join(' | '));
+          if (process.env.STRICT_ISSUE_GATE === '1') throw new Error(gate.summary);
+        } else {
+          console.log(`[Agent ${runId}] ` + gate.summary);
+        }
+        for (const w of gate.warnings) console.warn(`[Agent ${runId}] issue-gate warning: ` + w);
+      } catch (gateErr) {
+        if (process.env.STRICT_ISSUE_GATE === '1') throw gateErr;
+        console.error(`[Agent ${runId}] pre-issue gate:`, gateErr.message);
       }
       const fname = `BOQ-${safeName}-${ts}.xlsx`;
       fs.writeFileSync(path.join(outputsDir, fname), excelBuf);
