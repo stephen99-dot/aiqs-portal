@@ -3712,6 +3712,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc || { ok: false, lineSum: null, expected: pricedResult.summary.construction_total, diff: null }, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+              passes: runQsPasses(pricedResult, lockedTakeoff),
             });
           } catch (dsErr) { console.error('[Stage 3] delivery summary:', dsErr.message); }
           reply = `I have not issued documents for ${projectName}.\n\n`
@@ -3734,6 +3735,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             const { buildDeliverySummary } = require('./deliverySummary');
             deliveryPayload = buildDeliverySummary(pricedResult, boqRecalc, {
               floorAreaM2: lockedTakeoff ? lockedTakeoff.floor_area_m2 : undefined,
+              passes: runQsPasses(pricedResult, lockedTakeoff),
             });
             if (!deliveryPayload.reconciled) {
               // Never state a total the downloaded file does not contain.
@@ -4205,3 +4207,51 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
 }
 
 module.exports = router;
+
+// ── QS passes (improvement brief §5.2, §8, §9, §13) ────────────────────────
+// Run together so the chat, the findings report and any future document all
+// see the same determinations. None of these change a price: each raises a
+// question for a human, which is the whole point — the measure was already
+// deterministic, the judgement was what was missing.
+function runQsPasses(pricedResult, lockedTakeoff) {
+  const passes = {};
+  const takeoff = lockedTakeoff || {};
+  const items = [];
+  for (const s of (pricedResult.sections || [])) for (const i of (s.items || [])) items.push(i);
+
+  try {
+    const { determineVat } = require('./statutory');
+    const loc = String(takeoff.location || '');
+    passes.vat = determineVat({
+      jurisdiction: /ireland|dublin|cork|galway|limerick/i.test(loc) ? 'IE' : 'GB',
+      projectType: takeoff.project_type || '',
+      description: takeoff.description || '',
+      enquiryText: takeoff.brief || takeoff.notes || '',
+    });
+  } catch (e) { console.error('[QS pass] vat:', e.message); }
+
+  try {
+    const { deriveProgramme } = require('./programme');
+    passes.programme = deriveProgramme(pricedResult.sections, {
+      dayRate: Number(process.env.BLENDED_DAY_RATE) || 250,
+      domesticClient: true,
+    });
+  } catch (e) { console.error('[QS pass] programme:', e.message); }
+
+  try {
+    const { checkMissedItems } = require('./missedItems');
+    passes.missed = checkMissedItems(items, {
+      projectType: takeoff.project_type || '',
+      description: takeoff.description || '',
+    });
+  } catch (e) { console.error('[QS pass] missed items:', e.message); }
+
+  try {
+    const { scanDeferrals } = require('./qualifications');
+    const text = [takeoff.brief, takeoff.notes, takeoff.description]
+      .filter(Boolean).join('\n');
+    if (text.trim()) passes.deferrals = scanDeferrals(text);
+  } catch (e) { console.error('[QS pass] deferrals:', e.message); }
+
+  return passes;
+}

@@ -19,7 +19,7 @@ export default function DeliverySummary({ delivery }) {
   const [showInternal, setShowInternal] = useState(false);
   if (!delivery) return null;
 
-  const { reconciled, reconciliation, headline, sections, needsCheck, internal, statusLine } = delivery;
+  const { reconciled, reconciliation, headline, sections, needsCheck, internal, statusLine, qs } = delivery;
 
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -149,6 +149,95 @@ export default function DeliverySummary({ delivery }) {
           <CheckCircleIcon size={15} />
           {statusLine}
         </div>
+      )}
+
+      {/* ── VAT determination (§9). Stated with its reasoning, never inherited
+              from the last job. ── */}
+      {qs && qs.vat && (
+        <Card>
+          <Card.Header title="VAT" extra={`${qs.vat.rate}%`} />
+          <Card.Body>
+            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+              {qs.vat.basis}
+              {qs.vat.confidence === 'low' && (
+                <Badge tone="warning" size="sm" style={{ marginLeft: 8 }}>needs confirming</Badge>
+              )}
+            </div>
+            {qs.vat.reasoning.map((r, i) => (
+              <div key={i} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 5 }}>{r}</div>
+            ))}
+            {qs.vat.queries.map((q, i) => (
+              <div key={i} style={{ fontSize: '0.82rem', color: 'var(--warning)', lineHeight: 1.6, marginTop: 6 }}>{q}</div>
+            ))}
+            {qs.vat.warnings.map((w, i) => (
+              <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 6 }}>{w}</div>
+            ))}
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* ── Programme (§8), derived from the priced labour. ── */}
+      {qs && qs.programme && qs.programme.weeks > 0 && (
+        <Card>
+          <Card.Header title="Programme" extra={`${qs.programme.weeks} weeks`} />
+          <Card.Body>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: '0.84rem', marginBottom: 8 }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Crew <strong style={{ color: 'var(--text-primary)' }}>{qs.programme.crew}</strong>
+                {qs.programme.crewLimitedByAccess && (
+                  <Badge tone="warning" size="sm" style={{ marginLeft: 6 }}>capped</Badge>
+                )}
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Operative-days <strong style={{ color: 'var(--text-primary)' }}>{qs.programme.operativeDays}</strong>
+              </span>
+              {qs.programme.cdmNotifiable && <Badge tone="danger" size="sm">CDM notifiable</Badge>}
+            </div>
+            {qs.programme.notes.map((n, i) => (
+              <div key={i} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 5 }}>{n}</div>
+            ))}
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* ── Deferral count (§5.2) — the argument for a provisional-sum schedule. ── */}
+      {qs && qs.deferrals && (
+        <Card>
+          <Card.Header title="What the information defers" extra={`${qs.deferrals.total} deferrals`} />
+          <Card.Body>
+            <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              {qs.deferrals.argument}
+            </div>
+            {qs.deferrals.priceableAssumptions.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 5 }}>
+                  Assumptions that read as an instruction to price
+                </div>
+                {qs.deferrals.priceableAssumptions.slice(0, 5).map((a, i) => (
+                  <div key={i} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.55, paddingLeft: 10, borderLeft: '2px solid var(--border-accent)', marginBottom: 4 }}>{a}</div>
+                ))}
+              </div>
+            )}
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* ── Commonly-missed items this job needs and the takeoff does not have. ── */}
+      {qs && qs.missed && qs.missed.length > 0 && (
+        <Card>
+          <Card.Header title="Commonly missed on this job type" extra={`${qs.missed.length}`} />
+          <div>
+            {qs.missed.map((m, i) => (
+              <div key={i} className="ui-row" style={{ alignItems: 'flex-start' }}>
+                <Badge tone="neutral" size="sm" style={{ flexShrink: 0, marginTop: 2 }}>{m.category}</Badge>
+                <div className="ui-row__main">
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2, whiteSpace: 'normal' }}>{m.item}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, whiteSpace: 'normal' }}>{m.why}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* ── Diagnostics: engineering output, closed by default. ── */}

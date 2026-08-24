@@ -85,7 +85,11 @@ function isInternalOnly(text) {
 /**
  * @param {object} priced     the deterministic pricer's result
  * @param {object} recalc     { ok, lineSum, expected, diff } from recalcGate, or null
- * @param {object} opts       { floorAreaM2 }
+ * @param {object} opts       { floorAreaM2, passes }
+ *   passes.vat        determineVat() result      — statutory.js  (§9)
+ *   passes.programme  deriveProgramme() result   — programme.js  (§8)
+ *   passes.missed     checkMissedItems() result  — missedItems.js (§13)
+ *   passes.deferrals  scanDeferrals() result     — qualifications.js (§5.2)
  */
 function buildDeliverySummary(priced, recalc, opts = {}) {
   const summary = (priced && priced.summary) || {};
@@ -169,10 +173,72 @@ function buildDeliverySummary(priced, recalc, opts = {}) {
     statusLine = 'The bill reconciles to the spreadsheet and no lines are flagged for review.';
   }
 
+  // ── The QS passes. These never change a price; each one raises a question
+  // a human settles, so they ride alongside the numbers rather than inside them.
+  const passes = opts.passes || {};
+  const qs = {};
+
+  if (passes.vat) {
+    qs.vat = {
+      rate: passes.vat.rate, basis: passes.vat.basis, confidence: passes.vat.confidence,
+      reasoning: passes.vat.reasoning || [], queries: passes.vat.queries || [],
+      warnings: passes.vat.warnings || [],
+    };
+    // A low-confidence VAT answer is worth more attention than most line items:
+    // on a refurbishment the empty-property question can dwarf every other saving.
+    if (passes.vat.confidence === 'low' && (passes.vat.queries || []).length) {
+      needsCheck.unshift({
+        id: 'vat_determination',
+        title: `VAT — ${passes.vat.basis}`,
+        detail: passes.vat.queries[0],
+        why: 'VAT is settled before the first application, not at final account, and on some jobs it is the largest single number on the page.',
+      });
+    }
+  }
+
+  if (passes.programme) {
+    const p = passes.programme;
+    qs.programme = {
+      weeks: p.weeks, crew: p.crew, operativeDays: p.operativeDays,
+      crewLimitedByAccess: p.crewLimitedByAccess, cdmNotifiable: p.cdmNotifiable,
+      notes: p.notes || [],
+    };
+    if (p.cdmNotifiable) {
+      needsCheck.push({
+        id: 'cdm_notifiable', title: 'CDM: the project is notifiable',
+        detail: `${Math.round(p.personDays)} person-days exceeds the 500-day threshold.`,
+        why: 'An F10 must be filed before construction starts.',
+      });
+    }
+  }
+
+  if (passes.missed && (passes.missed.findings || []).length) {
+    qs.missed = passes.missed.findings;
+  }
+
+  if (passes.deferrals && passes.deferrals.total > 0) {
+    qs.deferrals = {
+      total: passes.deferrals.total, byKind: passes.deferrals.byKind,
+      unchecked: passes.deferrals.unchecked, argument: passes.deferrals.argument,
+      priceableAssumptions: passes.deferrals.priceableAssumptions || [],
+    };
+    if (passes.deferrals.unchecked > 0) {
+      needsCheck.push({
+        id: 'unchecked_calculation',
+        title: 'A calculation states on its face that it was not checked',
+        detail: `${passes.deferrals.unchecked} statement${passes.deferrals.unchecked === 1 ? '' : 's'} of the form "has not been checked" in the information.`,
+        why: 'On one job this was the highest-utilised beam in the pack.',
+      });
+    }
+  }
+
   return {
     reconciled, reconciliation, headline, sections,
-    needsCheck, internal, statusLine,
-    counts: { sections: sections.length, needsCheck: needsCheck.length, internal: internal.length },
+    needsCheck, internal, statusLine, qs,
+    counts: {
+      sections: sections.length, needsCheck: needsCheck.length, internal: internal.length,
+      missed: (qs.missed || []).length,
+    },
   };
 }
 
