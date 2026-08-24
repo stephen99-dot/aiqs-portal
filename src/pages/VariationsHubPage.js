@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import useIsMobile from '../utils/useIsMobile';
+import { Card, Banner, PageHeader, EmptyState, SkeletonRows } from '../ui';
+import { LayersIcon } from '../components/Icons';
 
 /**
  * Variations hub — top-level entry that lists every project with at least
@@ -33,45 +35,33 @@ export default function VariationsHubPage() {
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1200, margin: '0 auto' }}>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
-        }}>
-          Variations
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
-          Every project with variation orders. Click a row to manage that project's variations.
-        </p>
-      </div>
+      <PageHeader
+        title="Variations"
+        subtitle="Every project with variation orders. Click a row to manage that project's variations."
+      />
 
       {error && (
-        <div style={{
-          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-          color: '#EF4444', fontSize: 13,
-        }}>{error}</div>
+        <Banner tone="danger" style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</Banner>
       )}
 
-      {loading && <div style={{ padding: 28, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
+      {loading && (
+        <Card>
+          <SkeletonRows rows={4} />
+        </Card>
+      )}
 
       {!loading && projects.length === 0 && !error && (
-        <div style={{
-          padding: 36, textAlign: 'center', borderRadius: 12,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
-        }}>
-          <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>No variations yet</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0 }}>
-            Open a project and add a variation order from its variations tab.
-          </p>
-        </div>
+        <Card>
+          <EmptyState
+            icon={LayersIcon}
+            title="No variations yet"
+            body="Open a project and add a variation order from its variations tab."
+          />
+        </Card>
       )}
 
       {!loading && projects.length > 0 && (
-        <div style={{
-          borderRadius: 12, border: '1px solid var(--border)',
-          background: 'var(--bg-card)', overflow: 'hidden',
-        }}>
+        <Card>
           <div style={{ overflowX: isMobile ? 'visible' : 'auto', WebkitOverflowScrolling: 'touch' }}>
           {!isMobile && (
           <div style={{
@@ -79,7 +69,7 @@ export default function VariationsHubPage() {
             gridTemplateColumns: '1fr 130px 100px 100px 130px 70px',
             minWidth: 560,
             gap: 8, padding: '11px 16px',
-            background: 'rgba(27,42,74,0.06)',
+            background: 'var(--surface-hover)',
             fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
             color: 'var(--text-muted)', textTransform: 'uppercase',
           }}>
@@ -120,16 +110,16 @@ export default function VariationsHubPage() {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Total: <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.variation_count}</span>
                   {p.draft_count > 0 && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B' }}> · {p.draft_count} draft</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--warning)' }}> · {p.draft_count} draft</span>
                   )}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Approved: <span style={{ fontWeight: 700, color: '#10B981' }}>{p.approved_count || 0}</span>
+                  Approved: <span style={{ fontWeight: 700, color: 'var(--success)' }}>{p.approved_count || 0}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Net change: <span style={{
                     fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                    color: (p.total_net_change || 0) >= 0 ? '#10B981' : '#EF4444',
+                    color: (p.total_net_change || 0) >= 0 ? 'var(--success)' : 'var(--danger)',
                   }}>{fmt(p)}</span>
                 </div>
               </div>
@@ -160,15 +150,15 @@ export default function VariationsHubPage() {
               <div style={{ textAlign: 'center', fontWeight: 700 }}>
                 {p.variation_count}
                 {p.draft_count > 0 && (
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#F59E0B' }}>{p.draft_count} draft</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--warning)' }}>{p.draft_count} draft</div>
                 )}
               </div>
-              <div style={{ textAlign: 'center', fontWeight: 700, color: '#10B981' }}>
+              <div style={{ textAlign: 'center', fontWeight: 700, color: 'var(--success)' }}>
                 {p.approved_count || 0}
               </div>
               <div style={{
                 textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700,
-                color: (p.total_net_change || 0) >= 0 ? '#10B981' : '#EF4444',
+                color: (p.total_net_change || 0) >= 0 ? 'var(--success)' : 'var(--danger)',
               }}>
                 {fmt(p)}
               </div>
@@ -177,7 +167,7 @@ export default function VariationsHubPage() {
             )
           ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

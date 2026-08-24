@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
+import {
+  Button, IconButton, Card, Banner, PageHeader, EmptyState,
+  Input, Textarea, Field, Skeleton, SkeletonCard, Stat,
+} from '../ui';
 
 /**
  * Findings editor — every narrative section of the Findings Report is
@@ -124,132 +128,120 @@ export default function FindingsEditorPage() {
   }
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', fontSize: 13.5, color: 'var(--text-muted)' }}>Loading findings…</div>;
+    return (
+      <div style={{ padding: '24px 28px 60px', maxWidth: 1080, margin: '0 auto' }}>
+        <Skeleton width={140} height={12} style={{ marginBottom: 12 }} />
+        <Skeleton width={240} height={28} style={{ marginBottom: 8 }} />
+        <Skeleton width={340} height={13} style={{ marginBottom: 24 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <SkeletonCard height={140} />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </div>
+    );
   }
   if (!findings) {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-muted)' }}>{error || "No findings stored for this project. Generate the BOQ first."}</p>
-        <Link to={`/project/${id}`} className="btn-secondary" style={{ marginTop: 12, display: 'inline-block' }}>← Back to project</Link>
+      <div style={{ padding: 40 }}>
+        <EmptyState
+          title="No findings available"
+          body={error || 'No findings stored for this project. Generate the BOQ first.'}
+          action={<Button variant="secondary" to={`/project/${id}`}>← Back to project</Button>}
+        />
       </div>
     );
   }
 
   return (
     <div style={{ padding: '24px 28px 60px', maxWidth: 1080, margin: '0 auto' }}>
-      <div style={{ marginBottom: 18 }}>
-        <Link to={`/project/${id}`} style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none' }}>
-          ← Back to project
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{
-              fontFamily: "'DM Serif Display', Georgia, serif",
-              fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
-            }}>
-              Findings Report
-            </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
-              {projectTitle ? projectTitle + ' · ' : ''}Edit any section, then download the branded .docx.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={saveAll}
-              disabled={savingField === 'all'}
-              style={{
-                padding: '10px 16px', borderRadius: 9, border: '1px solid var(--border)',
-                background: 'var(--bg-card)', color: 'var(--text-primary)',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              }}
-            >{savingField === 'all' ? 'Saving…' : 'Save all'}</button>
-            <button
-              onClick={downloadDocx}
-              disabled={downloading}
-              style={{
-                padding: '10px 16px', borderRadius: 9, border: 'none',
-                background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-                color: '#fff', fontSize: 13.5, fontWeight: 700,
-                cursor: downloading ? 'wait' : 'pointer',
-                boxShadow: '0 2px 10px rgba(59,130,246,0.25)',
-              }}
-            >{downloading ? 'Generating…' : 'Download branded .docx'}</button>
-          </div>
-        </div>
-      </div>
+      <Link to={`/project/${id}`} style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'none', display: 'inline-block', marginBottom: 4 }}>
+        ← Back to project
+      </Link>
+      <PageHeader
+        title="Findings Report"
+        subtitle={`${projectTitle ? projectTitle + ' · ' : ''}Edit any section, then download the branded .docx.`}
+        actions={
+          <>
+            <Button variant="secondary" onClick={saveAll} disabled={savingField === 'all'}>
+              {savingField === 'all' ? 'Saving…' : 'Save all'}
+            </Button>
+            <Button onClick={downloadDocx} disabled={downloading}>
+              {downloading ? 'Generating…' : 'Download branded .docx'}
+            </Button>
+          </>
+        }
+      />
 
       {error && (
-        <div style={{
-          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-          color: '#EF4444', fontSize: 13,
-        }}>{error}</div>
+        <Banner tone="danger" style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</Banner>
       )}
       {statusMsg && (
-        <div style={{
-          padding: '8px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
-          color: '#10B981', fontSize: 12.5, fontWeight: 600,
-        }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}</div>
+        <Banner tone="success" style={{ color: 'var(--success)', fontSize: 12.5, fontWeight: 600 }}>
+          <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}
+        </Banner>
       )}
 
       {/* Top fields */}
-      <Card title="Project details">
+      <Section title="Project details">
         {SECTION_FIELDS.map(({ key, label, type, placeholder }) => (
-          <Field key={key} label={label} saving={savingField === key}>
+          <Field key={key} label={label} hint={savingField === key ? 'Saving…' : undefined} style={{ marginBottom: 10 }}>
             {type === 'textarea' ? (
-              <textarea
+              <Textarea
                 rows={3}
                 value={findings[key] || ''}
                 onChange={(e) => setField(key, e.target.value)}
                 onBlur={() => saveField(key)}
                 placeholder={placeholder}
-                style={{ ...inputStyle, resize: 'vertical', minHeight: 70, fontFamily: 'inherit' }}
+                style={{ minHeight: 70 }}
               />
             ) : (
-              <input
+              <Input
                 type="text"
                 value={findings[key] || ''}
                 onChange={(e) => setField(key, e.target.value)}
                 onBlur={() => saveField(key)}
                 placeholder={placeholder}
-                style={inputStyle}
               />
             )}
           </Field>
         ))}
-      </Card>
+      </Section>
 
       {/* Key findings — array of {title, detail, items[]} */}
-      <Card title="Key findings"
-        action={<AddButton onClick={() => setField('key_findings', [...(findings.key_findings || []), { title: 'New finding', detail: '', items: [] }])} label="+ Add finding" />}
+      <Section title="Key findings"
+        action={
+          <Button variant="secondary" size="sm"
+            onClick={() => setField('key_findings', [...(findings.key_findings || []), { title: 'New finding', detail: '', items: [] }])}
+          >+ Add finding</Button>
+        }
       >
         {(findings.key_findings || []).length === 0 && <Empty hint="No findings yet — add one." />}
         {(findings.key_findings || []).map((kf, idx) => (
           <div key={idx} style={cardRowStyle}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-              <input
+            <div style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'center' }}>
+              <Input
                 type="text"
                 value={kf.title || ''}
                 onChange={(e) => updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, title: e.target.value })}
                 onBlur={() => saveField('key_findings')}
                 placeholder="Finding title (e.g. 'Structural assumptions')"
-                style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
+                style={{ flex: 1, fontWeight: 600 }}
               />
-              <button onClick={() => removeAtIndex(setField, findings, 'key_findings', idx, (arr) => saveField('key_findings', arr))} style={removeBtnStyle} title="Remove finding">×</button>
+              <IconButton danger onClick={() => removeAtIndex(setField, findings, 'key_findings', idx, (arr) => saveField('key_findings', arr))} title="Remove finding" aria-label="Remove finding">×</IconButton>
             </div>
-            <textarea
+            <Textarea
               rows={2}
               value={kf.detail || ''}
               onChange={(e) => updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, detail: e.target.value })}
               onBlur={() => saveField('key_findings')}
               placeholder="Detail / explanation"
-              style={{ ...inputStyle, marginBottom: 8, resize: 'vertical', minHeight: 56, fontFamily: 'inherit' }}
+              style={{ marginBottom: 8, minHeight: 56 }}
             />
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>Bullet points</div>
             {(kf.items || []).map((it, j) => (
-              <div key={j} style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-                <input
+              <div key={j} style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' }}>
+                <Input
                   type="text"
                   value={it || ''}
                   onChange={(e) => {
@@ -259,23 +251,22 @@ export default function FindingsEditorPage() {
                   }}
                   onBlur={() => saveField('key_findings')}
                   placeholder="Bullet point"
-                  style={{ ...inputStyle, flex: 1 }}
+                  style={{ flex: 1 }}
                 />
-                <button
+                <IconButton danger
                   onClick={() => {
                     const items = (kf.items || []).filter((_, k) => k !== j);
                     updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, items }, (arr) => saveField('key_findings', arr));
                   }}
-                  style={removeBtnStyle} title="Remove bullet">×</button>
+                  title="Remove bullet" aria-label="Remove bullet">×</IconButton>
               </div>
             ))}
-            <button
+            <Button variant="ghost" size="sm" style={{ marginTop: 4 }}
               onClick={() => updateAtIndex(setField, findings, 'key_findings', idx, { ...kf, items: [...(kf.items || []), ''] })}
-              style={addLinkStyle}
-            >+ Add bullet</button>
+            >+ Add bullet</Button>
           </div>
         ))}
-      </Card>
+      </Section>
 
       {/* Simple list sections */}
       <BulletListCard title="Assumptions"     field="assumptions"     findings={findings} setField={setField} saveField={saveField} savingField={savingField} />
@@ -284,13 +275,13 @@ export default function FindingsEditorPage() {
 
       {/* Cost summary — read-only callout (driven by the priced BOQ) */}
       {findings.cost_summary && findings.cost_summary.grand_total > 0 && (
-        <Card title="Cost summary (read-only)" subtitle="Pulled from the priced BOQ — edit the BOQ on the Builder Pack page if these need to change.">
-          <div style={{ display: 'grid', gridTemplateColumns: findings.cost_summary.ohp > 0 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 10 }}>
-            <Stat label="Net total"        value={findings.cost_summary.net_total} />
-            {findings.cost_summary.ohp > 0 && <Stat label="OH&P" value={findings.cost_summary.ohp} />}
-            <Stat label="Grand total"      value={findings.cost_summary.grand_total} accent />
+        <Section title="Cost summary (read-only)" subtitle="Pulled from the priced BOQ — edit the BOQ on the Builder Pack page if these need to change.">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+            <Stat label="Net total"   value={money(findings.cost_summary.net_total)} />
+            {findings.cost_summary.ohp > 0 && <Stat label="OH&P" value={money(findings.cost_summary.ohp)} />}
+            <Stat label="Grand total" value={money(findings.cost_summary.grand_total)} accent />
           </div>
-        </Card>
+        </Section>
       )}
     </div>
   );
@@ -328,61 +319,26 @@ function removeAtIndex(setField, findings, key, idx, after) {
   if (after) setTimeout(() => after(arr), 0);
 }
 
-const inputStyle = {
-  width: '100%', padding: '8px 12px', borderRadius: 8,
-  background: 'var(--bg-primary)', color: 'var(--text-primary)',
-  border: '1px solid var(--border)', fontSize: 13, outline: 'none',
-  boxSizing: 'border-box',
-};
+function money(v) {
+  return '£' + Math.round(v || 0).toLocaleString('en-GB');
+}
+
 const cardRowStyle = {
   padding: 12, borderRadius: 9, marginBottom: 8,
   background: 'var(--bg-primary)', border: '1px solid var(--border)',
 };
-const removeBtnStyle = {
-  width: 30, flexShrink: 0,
-  background: 'none', border: '1px solid var(--border)', borderRadius: 7,
-  color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14,
-};
-const addLinkStyle = {
-  background: 'none', border: '1px dashed var(--border)', borderRadius: 6,
-  padding: '5px 10px', fontSize: 11.5, fontWeight: 600,
-  color: 'var(--text-muted)', cursor: 'pointer', marginTop: 4,
-};
 
-function Card({ title, subtitle, action, children }) {
+// Section — a kit Card with the editor's compact header (title, optional
+// italic subtitle, right-aligned action).
+function Section({ title, subtitle, action, children }) {
   return (
-    <div style={{ padding: 18, borderRadius: 12, background: 'var(--bg-card)', border: '1px solid var(--border)', marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-        <div>
-          <h3 style={{ fontSize: 13, fontWeight: 700, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{title}</h3>
-          {subtitle && <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '4px 0 0', fontStyle: 'italic' }}>{subtitle}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Field({ label, saving, children }) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
-        {saving && <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Saving…</span>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function AddButton({ onClick, label }) {
-  return (
-    <button onClick={onClick} style={{
-      padding: '6px 12px', borderRadius: 7, border: '1px solid var(--border)',
-      background: 'var(--bg-primary)', color: 'var(--text-primary)',
-      fontSize: 12, fontWeight: 600, cursor: 'pointer',
-    }}>{label}</button>
+    <Card style={{ marginBottom: 14 }}>
+      <Card.Header title={title} extra={action} />
+      <Card.Body>
+        {subtitle && <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 12px', fontStyle: 'italic' }}>{subtitle}</p>}
+        {children}
+      </Card.Body>
+    </Card>
   );
 }
 
@@ -393,41 +349,30 @@ function Empty({ hint }) {
 function BulletListCard({ title, field, findings, setField, saveField, savingField }) {
   const list = findings[field] || [];
   return (
-    <Card title={title}
-      action={<AddButton onClick={() => setField(field, [...(findings[field] || []), ''])} label="+ Add" />}
+    <Section title={title}
+      action={
+        <Button variant="secondary" size="sm"
+          onClick={() => setField(field, [...(findings[field] || []), ''])}
+        >+ Add</Button>
+      }
     >
       {list.length === 0 && <Empty hint={`No ${title.toLowerCase()} yet — add one.`} />}
       {list.map((it, idx) => (
-        <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <input
+        <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+          <Input
             type="text"
             value={it || ''}
             onChange={(e) => updateAtIndex(setField, findings, field, idx, e.target.value)}
             onBlur={() => saveField(field)}
             placeholder={'Add a ' + title.toLowerCase().replace(/s$/, '')}
-            style={{ ...inputStyle, flex: 1 }}
+            style={{ flex: 1 }}
           />
-          <button
+          <IconButton danger
             onClick={() => removeAtIndex(setField, findings, field, idx, (arr) => saveField(field, arr))}
-            style={removeBtnStyle} title="Remove">×</button>
+            title="Remove" aria-label="Remove">×</IconButton>
         </div>
       ))}
       {savingField === field && <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4 }}>Saving…</div>}
-    </Card>
-  );
-}
-
-function Stat({ label, value, accent }) {
-  return (
-    <div style={{
-      padding: '10px 12px', borderRadius: 8,
-      background: 'var(--bg-primary)', border: '1px solid var(--border)',
-    }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{
-        fontSize: 18, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace',
-        color: accent ? '#F59E0B' : 'var(--text-primary)',
-      }}>£{Math.round(value || 0).toLocaleString('en-GB')}</div>
-    </div>
+    </Section>
   );
 }

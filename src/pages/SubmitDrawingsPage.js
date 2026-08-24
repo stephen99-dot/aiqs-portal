@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
-
-const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
-const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
-const BOQ_20_PACK_LINK = 'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
 import TermsTick from '../components/TermsTick';
+import {
+  Button, IconButton, Card, Banner, Badge, PageHeader,
+  Field, Input, Select, Textarea, Modal,
+} from '../ui';
+
+const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
+const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
+const BOQ_20_PACK_LINK = 'https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l';
 
 const PROJECT_TYPES = [
   'Residential Extension',
@@ -46,8 +49,30 @@ function fmtSize(b) {
   return (b / 1048576).toFixed(1) + ' MB';
 }
 
+// One-off top-up pack card + its buy button, shown inside the top-up modal.
+function PackCard({ name, price, priceColor, tintBg, tintBorder, blurb, cta }) {
+  return (
+    <>
+      <div style={{
+        padding: '16px 18px 14px', borderRadius: 12,
+        background: tintBg, border: '1px solid ' + tintBorder,
+        marginBottom: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>{name}</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 800, color: priceColor, fontFamily: 'var(--font-display)' }}>{price}</div>
+        </div>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 4 }}>{blurb}</div>
+        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          Credits never expire. Use them whenever you like.
+        </div>
+      </div>
+      {cta}
+    </>
+  );
+}
+
 export default function SubmitDrawingsPage() {
-  const { t } = useTheme();
   const { user } = useAuth();
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
@@ -191,420 +216,342 @@ export default function SubmitDrawingsPage() {
     }
   }
 
+  const requiredMark = <span style={{ color: 'var(--accent)' }}>*</span>;
+
   return (
     <div style={{ padding: '32px 28px', maxWidth: 880, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          fontSize: 30, fontWeight: 700, color: t.text,
-          margin: '0 0 6px', letterSpacing: '-0.02em',
-        }}>
-          Submit Drawings for BOQ
-        </h1>
-        <p style={{ color: t.textMuted, fontSize: 14, margin: 0, lineHeight: 1.6 }}>
-          Upload your plans, elevations, and specs. We'll produce a professional Bill of Quantities and Findings Report — typically within 24 hours.
-        </p>
-      </div>
+      <PageHeader
+        title="Submit Drawings for BOQ"
+        subtitle="Upload your plans, elevations, and specs. We'll produce a professional Bill of Quantities and Findings Report — typically within 24 hours."
+      />
 
       {/* What happens next — sets the expectation that everything comes back here */}
-      <div style={{
-        display: 'flex', gap: 10, marginBottom: 22, flexWrap: 'wrap',
-      }}>
+      <div className="ui-grid" style={{ '--grid-min': '220px', gap: 10, marginBottom: 22 }}>
         {[
           ['1', 'You submit', 'Drawings go straight to our QS team — no email chains needed.'],
           ['2', 'Delivered to your portal', 'Your BOQ and Findings Report arrive under My Projects, typically within 24 hours.'],
           ['3', 'Make it yours', 'Amend the numbers and produce a Client Copy with your own logo and colour scheme, ready to send on.'],
         ].map(([n, title, desc]) => (
-          <div key={n} style={{
-            flex: '1 1 220px', display: 'flex', gap: 10, alignItems: 'flex-start',
-            padding: '12px 14px', borderRadius: 12,
-            background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadowSm,
-          }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              background: 'rgba(245,158,11,0.12)', color: '#F59E0B',
-              fontSize: 11.5, fontWeight: 800,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>{n}</div>
-            <div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: t.text, marginBottom: 2 }}>{title}</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted, lineHeight: 1.5 }}>{desc}</div>
-            </div>
-          </div>
+          <Card key={n}>
+            <Card.Body style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 14px' }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--accent-glow)', color: 'var(--accent)',
+                fontSize: '0.72rem', fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{n}</div>
+              <div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>{title}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{desc}</div>
+              </div>
+            </Card.Body>
+          </Card>
         ))}
       </div>
 
       {/* Credit banner */}
       {credits && (
-        <div style={{
+        <Banner tone={noCredits ? 'danger' : 'accent'} style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '12px 18px', marginBottom: 22, borderRadius: 12,
-          background: noCredits
-            ? 'linear-gradient(135deg, rgba(239,68,68,0.06), rgba(239,68,68,0.03))'
-            : 'rgba(245,158,11,0.06)',
-          border: '1px solid ' + (noCredits ? 'rgba(239,68,68,0.25)' : 'rgba(245,158,11,0.2)'),
+          padding: '12px 18px', marginBottom: 22,
         }}>
-          <ZapIcon size={16} color={noCredits ? '#EF4444' : '#F59E0B'} />
-          <div style={{ flex: 1, fontSize: 13.5, color: t.text }}>
+          <ZapIcon size={16} color={noCredits ? 'var(--danger)' : 'var(--accent)'} />
+          <div style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
             {credits.is_admin ? (
               <strong>Admin — unlimited submissions</strong>
             ) : noCredits ? (
-              <span>You have <strong style={{ color: '#EF4444' }}>0 BOQ credits</strong> remaining. Top up to keep submitting.</span>
+              <span>You have <strong style={{ color: 'var(--danger)' }}>0 BOQ credits</strong> remaining. Top up to keep submitting.</span>
             ) : (
-              <span><strong style={{ color: t.text }}>{credits.free_credits} BOQ credit{credits.free_credits === 1 ? '' : 's'}</strong> remaining {credits.total_projects > 0 ? '(used ' + credits.total_projects + ')' : ''}</span>
+              <span><strong style={{ color: 'var(--text-primary)' }}>{credits.free_credits} BOQ credit{credits.free_credits === 1 ? '' : 's'}</strong> remaining {credits.total_projects > 0 ? '(used ' + credits.total_projects + ')' : ''}</span>
             )}
           </div>
-        </div>
+        </Banner>
       )}
 
-      <form onSubmit={handleSubmit} style={{
-        background: t.card, border: '1px solid ' + t.border, boxShadow: t.shadow,
-        borderRadius: 16, padding: '28px 26px',
-      }}>
+      <form onSubmit={handleSubmit}>
+        <Card>
+          <Card.Body style={{ padding: '28px 26px' }}>
 
-        {/* Project Type */}
-        <label style={{ display: 'block', marginBottom: 18 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
-            Project Type <span style={{ color: '#F59E0B' }}>*</span>
-          </div>
-          <select
-            value={projectType}
-            onChange={e => setProjectType(e.target.value)}
-            disabled={submitting}
-            style={{
-              width: '100%', padding: '11px 14px', borderRadius: 9,
-              background: t.surface, color: t.text,
-              border: '1px solid ' + t.border, fontSize: 14,
-              outline: 'none', cursor: 'pointer',
-            }}
-          >
-            <option value="">Select a project type…</option>
-            {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </label>
+            {/* Project Type */}
+            <Field label={<>Project Type {requiredMark}</>} style={{ marginBottom: 18 }}>
+              <Select
+                value={projectType}
+                onChange={e => setProjectType(e.target.value)}
+                disabled={submitting}
+              >
+                <option value="">Select a project type…</option>
+                {PROJECT_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+              </Select>
+            </Field>
 
-        {/* Site Address */}
-        <label style={{ display: 'block', marginBottom: 18 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
-            Site Address <span style={{ color: '#F59E0B' }}>*</span>
-          </div>
-          <input
-            type="text"
-            value={siteAddress}
-            onChange={e => setSiteAddress(e.target.value)}
-            disabled={submitting}
-            placeholder="e.g. 14 Mill Lane, Harrogate, HG1 2AB"
-            style={{
-              width: '100%', padding: '11px 14px', borderRadius: 9,
-              background: t.surface, color: t.text,
-              border: '1px solid ' + t.border, fontSize: 14,
-              outline: 'none', boxSizing: 'border-box',
-            }}
-          />
-        </label>
+            {/* Site Address */}
+            <Field label={<>Site Address {requiredMark}</>} style={{ marginBottom: 18 }}>
+              <Input
+                type="text"
+                value={siteAddress}
+                onChange={e => setSiteAddress(e.target.value)}
+                disabled={submitting}
+                placeholder="e.g. 14 Mill Lane, Harrogate, HG1 2AB"
+              />
+            </Field>
 
-        {/* Drawings / Files */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em' }}>
-            Drawings &amp; Documents <span style={{ color: '#F59E0B' }}>*</span>
-          </div>
+            {/* Drawings / Files */}
+            <div style={{ marginBottom: 18 }}>
+              <div className="ui-field__label" style={{ display: 'block', marginBottom: 6 }}>
+                Drawings &amp; Documents {requiredMark}
+              </div>
 
-          {/* Recreate the EXACT pattern that worked in the user's console diagnostic:
-              create a fresh <input>, append to body, click it, read files from the change
-              event, then remove it. No React refs, no portals, no styled inputs. */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-            padding: '14px 16px', borderRadius: 12,
-            background: t.surface, border: '1px solid ' + t.border,
-            marginBottom: 8,
-          }}>
-            <PaperclipIcon size={18} color="#F59E0B" />
+              {/* Recreate the EXACT pattern that worked in the user's console diagnostic:
+                  create a fresh <input>, append to body, click it, read files from the change
+                  event, then remove it. No React refs, no portals, no styled inputs. */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                padding: '14px 16px', borderRadius: 12,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                marginBottom: 8,
+              }}>
+                <PaperclipIcon size={18} color="var(--accent)" />
+                <Button
+                  onClick={() => {
+                    const inp = document.createElement('input');
+                    inp.type = 'file';
+                    inp.multiple = true;
+                    inp.style.position = 'fixed';
+                    inp.style.left = '0';
+                    inp.style.top = '0';
+                    inp.onchange = (e) => {
+                      const fl = e.target.files;
+                      if (fl && fl.length) addFiles(fl);
+                      setTimeout(() => inp.remove(), 0);
+                    };
+                    document.body.appendChild(inp);
+                    inp.click();
+                  }}
+                >
+                  Choose files
+                </Button>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                  PDF, DWG, images, Word, Excel
+                </span>
+              </div>
+
+              {/* Drag-and-drop area — separate sibling, no nested input */}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  addFiles(e.dataTransfer.files);
+                }}
+                style={{
+                  borderRadius: 12,
+                  border: '2px dashed ' + (dragOver ? 'var(--accent)' : 'var(--border)'),
+                  background: dragOver ? 'var(--accent-glow)' : 'transparent',
+                  padding: '18px 18px',
+                  textAlign: 'center',
+                  transition: 'background 0.15s, border-color 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                }}
+              >
+                <UploadIcon size={16} color="var(--accent)" />
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  …or drag &amp; drop drawings here
+                </span>
+              </div>
+
+              {files.length > 0 && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {files.map((f, i) => {
+                    const Icon = getFileIcon(f.name);
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 12px', borderRadius: 9,
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                      }}>
+                        <div style={{
+                          width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                          background: 'var(--accent-glow)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <Icon size={14} color="var(--accent)" />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{fmtSize(f.size)}</div>
+                        </div>
+                        <IconButton onClick={() => removeFile(i)} aria-label="Remove file" title="Remove file">
+                          <XIcon size={14} color="currentColor" />
+                        </IconButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Project details */}
+            <div style={{ marginBottom: 18 }}>
+              <div className="ui-field__label" style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6,
+              }}>
+                <span>Project Details {requiredMark}</span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: message.trim().length >= MIN_SUBMIT_CHARS ? 'var(--success)' : 'var(--text-muted)',
+                }}>
+                  {message.trim().length}
+                </span>
+              </div>
+              {/* Animated multi-coloured gradient border around the textarea — a
+                  deliberate bespoke effect, kept inline. */}
+              <div style={{
+                padding: enhancing ? 3 : 2,
+                borderRadius: 12,
+                background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981, #F59E0B)',
+                backgroundSize: '300% 300%',
+                animation: enhancing ? 'aiqs-rainbow 3s linear infinite' : 'aiqs-rainbow 12s linear infinite',
+              }}>
+                <Textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  disabled={submitting || enhancing}
+                  rows={6}
+                  placeholder="Describe your project: rooms, dimensions, materials, specifications, location, anything on the drawings. The more detail you add, the more accurate your BOQ will be."
+                  style={{
+                    display: 'block',
+                    border: 'none', boxShadow: 'none', borderRadius: 10,
+                    background: 'var(--bg-secondary)',
+                    padding: '12px 14px', minHeight: 120,
+                  }}
+                />
+              </div>
+              {enhanceError && (
+                <div style={{ marginTop: 6, fontSize: '0.76rem', color: 'var(--danger)' }}>
+                  {enhanceError}
+                </div>
+              )}
+            </div>
+
+            {/* AI Enhance — prominent, sits above Submit Enquiry. Bespoke rainbow
+                gradient CTA with its own progress feedback, deliberately kept inline. */}
             <button
               type="button"
-              onClick={() => {
-                const inp = document.createElement('input');
-                inp.type = 'file';
-                inp.multiple = true;
-                inp.style.position = 'fixed';
-                inp.style.left = '0';
-                inp.style.top = '0';
-                inp.onchange = (e) => {
-                  const fl = e.target.files;
-                  if (fl && fl.length) addFiles(fl);
-                  setTimeout(() => inp.remove(), 0);
-                };
-                document.body.appendChild(inp);
-                inp.click();
-              }}
+              onClick={enhanceWriting}
+              disabled={enhancing || submitting || message.trim().length < 10}
+              title="Polish your description with AI — grammar, punctuation and structure only. Adds no new project information."
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7,
-                padding: '10px 22px', borderRadius: 9,
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                color: '#0A0F1C',
-                fontWeight: 700, fontSize: 13.5,
-                border: 'none', cursor: 'pointer',
-                boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
+                position: 'relative',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                width: '100%', padding: '14px 22px', borderRadius: 12,
+                background: enhancing
+                  ? 'linear-gradient(120deg, #4338CA, #7C3AED, #DB2777, #EA580C)'
+                  : 'linear-gradient(120deg, #6366F1, #8B5CF6, #EC4899, #F59E0B)',
+                backgroundSize: enhancing ? '300% 100%' : '200% 100%',
+                animation: enhancing ? 'aiqs-rainbow 2.5s linear infinite' : 'none',
+                color: '#FFFFFF',
+                fontWeight: 700, fontSize: '0.92rem', border: 'none',
+                cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
+                opacity: (submitting || message.trim().length < 10) && !enhancing ? 0.45 : 1,
+                boxShadow: enhancing
+                  ? '0 4px 24px rgba(139,92,246,0.35), 0 0 0 1px rgba(255,255,255,0.12) inset'
+                  : '0 2px 14px rgba(139,92,246,0.25)',
+                textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                overflow: 'hidden',
+                marginBottom: 12,
+                transition: 'box-shadow 0.2s, opacity 0.2s',
               }}
             >
-              Choose files
-            </button>
-            <span style={{ fontSize: 11.5, color: t.textMuted, marginLeft: 'auto' }}>
-              PDF, DWG, images, Word, Excel
-            </span>
-          </div>
-
-          {/* Drag-and-drop area — separate sibling, no nested input */}
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={e => {
-              e.preventDefault();
-              setDragOver(false);
-              addFiles(e.dataTransfer.files);
-            }}
-            style={{
-              borderRadius: 12,
-              border: '2px dashed ' + (dragOver ? '#F59E0B' : t.border),
-              background: dragOver ? 'rgba(245,158,11,0.08)' : 'transparent',
-              padding: '18px 18px',
-              textAlign: 'center',
-              transition: 'background 0.15s, border-color 0.15s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            }}
-          >
-            <UploadIcon size={16} color="#F59E0B" />
-            <span style={{ fontSize: 13, color: t.textMuted }}>
-              …or drag &amp; drop drawings here
-            </span>
-          </div>
-
-          {files.length > 0 && (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {files.map((f, i) => {
-                const Icon = getFileIcon(f.name);
-                return (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 12px', borderRadius: 9,
-                    background: t.surface, border: '1px solid ' + t.border,
+              {enhancing ? (
+                <>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    border: '2.5px solid rgba(255,255,255,0.3)',
+                    borderTopColor: '#FFFFFF',
+                    animation: 'spin 0.6s linear infinite',
+                    flexShrink: 0,
+                  }} />
+                  <span>Polishing your brief…</span>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.78rem', fontWeight: 600,
+                    background: 'rgba(0,0,0,0.25)',
+                    padding: '3px 9px', borderRadius: 999,
+                    marginLeft: 4,
+                  }}>
+                    {enhanceRemaining > 0
+                      ? '~' + enhanceRemaining + 's left'
+                      : enhanceElapsed + 's elapsed'}
+                  </span>
+                  {/* progress bar */}
+                  <div style={{
+                    position: 'absolute', left: 0, right: 0, bottom: 0,
+                    height: 3, background: 'rgba(0,0,0,0.2)',
                   }}>
                     <div style={{
-                      width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                      background: 'rgba(245,158,11,0.08)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Icon size={14} color="#F59E0B" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: t.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
-                      <div style={{ fontSize: 11, color: t.textMuted, fontFamily: 'JetBrains Mono, monospace' }}>{fmtSize(f.size)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        padding: 5, borderRadius: 6, color: t.textMuted,
-                        display: 'flex',
-                      }}
-                      aria-label="Remove file"
-                    >
-                      <XIcon size={14} color={t.textMuted} />
-                    </button>
+                      height: '100%',
+                      width: Math.min(100, (enhanceElapsed / ENHANCE_ESTIMATE_S) * 100) + '%',
+                      background: '#FFFFFF',
+                      transition: 'width 0.25s linear',
+                    }} />
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                </>
+              ) : (
+                <>
+                  <SparklesIcon size={17} color="#FFFFFF" />
+                  <span>Enhance my writing with AI</span>
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: 600,
+                    background: 'rgba(255,255,255,0.18)',
+                    padding: '3px 8px', borderRadius: 999,
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                  }}>
+                    Free
+                  </span>
+                </>
+              )}
+            </button>
 
-        {/* Project details */}
-        <div style={{ marginBottom: 18 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontSize: 12.5, fontWeight: 600, color: t.textMuted, marginBottom: 6, letterSpacing: '0.02em',
-          }}>
-            <span>Project Details <span style={{ color: '#F59E0B' }}>*</span></span>
-            <span style={{
-              fontFamily: 'JetBrains Mono, monospace',
-              color: message.trim().length >= MIN_SUBMIT_CHARS ? '#10B981' : t.textMuted,
-            }}>
-              {message.trim().length}
-            </span>
-          </div>
-          {/* Animated multi-coloured gradient border around the textarea */}
-          <div style={{
-            padding: enhancing ? 3 : 2,
-            borderRadius: 12,
-            background: 'linear-gradient(120deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6, #10B981, #F59E0B)',
-            backgroundSize: '300% 300%',
-            animation: enhancing ? 'aiqs-rainbow 3s linear infinite' : 'aiqs-rainbow 12s linear infinite',
-          }}>
-            <textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              disabled={submitting || enhancing}
-              rows={6}
-              placeholder="Describe your project: rooms, dimensions, materials, specifications, location, anything on the drawings. The more detail you add, the more accurate your BOQ will be."
-              style={{
-                display: 'block',
-                width: '100%', padding: '12px 14px', borderRadius: 10,
-                background: t.surface, color: t.text,
-                border: 'none', fontSize: 14,
-                outline: 'none', resize: 'vertical', minHeight: 120,
-                fontFamily: 'inherit', lineHeight: 1.6,
-                boxSizing: 'border-box',
-              }}
-            />
-          </div>
-          {enhanceError && (
-            <div style={{
-              marginTop: 6, fontSize: 12, color: '#F87171',
-            }}>
-              {enhanceError}
-            </div>
-          )}
-        </div>
+            <TermsTick checked={termsAccepted} onChange={setTermsAccepted} />
 
-        {/* AI Enhance — prominent, sits above Submit Enquiry */}
-        <button
-          type="button"
-          onClick={enhanceWriting}
-          disabled={enhancing || submitting || message.trim().length < 10}
-          title="Polish your description with AI — grammar, punctuation and structure only. Adds no new project information."
-          style={{
-            position: 'relative',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-            width: '100%', padding: '14px 22px', borderRadius: 12,
-            background: enhancing
-              ? 'linear-gradient(120deg, #4338CA, #7C3AED, #DB2777, #EA580C)'
-              : 'linear-gradient(120deg, #6366F1, #8B5CF6, #EC4899, #F59E0B)',
-            backgroundSize: enhancing ? '300% 100%' : '200% 100%',
-            animation: enhancing ? 'aiqs-rainbow 2.5s linear infinite' : 'none',
-            color: '#FFFFFF',
-            fontWeight: 700, fontSize: 14.5, border: 'none',
-            cursor: (enhancing || submitting || message.trim().length < 10) ? 'not-allowed' : 'pointer',
-            opacity: (submitting || message.trim().length < 10) && !enhancing ? 0.45 : 1,
-            boxShadow: enhancing
-              ? '0 4px 24px rgba(139,92,246,0.35), 0 0 0 1px rgba(255,255,255,0.12) inset'
-              : '0 2px 14px rgba(139,92,246,0.25)',
-            textShadow: '0 1px 2px rgba(0,0,0,0.2)',
-            overflow: 'hidden',
-            marginBottom: 12,
-            transition: 'box-shadow 0.2s, opacity 0.2s',
-          }}
-        >
-          {enhancing ? (
-            <>
-              <div style={{
-                width: 16, height: 16, borderRadius: '50%',
-                border: '2.5px solid rgba(255,255,255,0.3)',
-                borderTopColor: '#FFFFFF',
-                animation: 'spin 0.6s linear infinite',
-                flexShrink: 0,
-              }} />
-              <span>Polishing your brief…</span>
-              <span style={{
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 12.5, fontWeight: 600,
-                background: 'rgba(0,0,0,0.25)',
-                padding: '3px 9px', borderRadius: 999,
-                marginLeft: 4,
+            {/* Submit */}
+            <Button type="submit" size="lg" full disabled={!canSubmit || noCredits}>
+              {submitting ? (
+                <>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    border: '2.5px solid rgba(10,15,28,0.2)',
+                    borderTopColor: '#0A0F1C',
+                    animation: 'spin 0.6s linear infinite',
+                  }} />
+                  {progressLabel || 'Submitting…'}
+                </>
+              ) : (
+                <>Submit Enquiry <ArrowRightIcon size={15} color="currentColor" /></>
+              )}
+            </Button>
+
+            {status && (
+              <Banner tone={status.type === 'success' ? 'success' : 'danger'} style={{
+                marginTop: 14, marginBottom: 0,
+                padding: '12px 16px',
+                color: status.type === 'success' ? 'var(--success)' : 'var(--danger)',
+                fontSize: '0.85rem', lineHeight: 1.6,
               }}>
-                {enhanceRemaining > 0
-                  ? '~' + enhanceRemaining + 's left'
-                  : enhanceElapsed + 's elapsed'}
-              </span>
-              {/* progress bar */}
-              <div style={{
-                position: 'absolute', left: 0, right: 0, bottom: 0,
-                height: 3, background: 'rgba(0,0,0,0.2)',
-              }}>
-                <div style={{
-                  height: '100%',
-                  width: Math.min(100, (enhanceElapsed / ENHANCE_ESTIMATE_S) * 100) + '%',
-                  background: '#FFFFFF',
-                  transition: 'width 0.25s linear',
-                }} />
-              </div>
-            </>
-          ) : (
-            <>
-              <SparklesIcon size={17} color="#FFFFFF" />
-              <span>Enhance my writing with AI</span>
-              <span style={{
-                fontSize: 11, fontWeight: 600,
-                background: 'rgba(255,255,255,0.18)',
-                padding: '3px 8px', borderRadius: 999,
-                letterSpacing: '0.04em', textTransform: 'uppercase',
-              }}>
-                Free
-              </span>
-            </>
-          )}
-        </button>
-
-        <TermsTick checked={termsAccepted} onChange={setTermsAccepted} />
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={!canSubmit || noCredits}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            width: '100%', padding: '14px 28px', borderRadius: 10,
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            color: '#0A0F1C',
-            fontWeight: 700, fontSize: 15, border: 'none',
-            cursor: (!canSubmit || noCredits) ? 'not-allowed' : 'pointer',
-            opacity: (!canSubmit || noCredits) ? 0.5 : 1,
-            boxShadow: '0 2px 16px rgba(245,158,11,0.2)',
-            transition: 'transform 0.15s',
-          }}
-        >
-          {submitting ? (
-            <>
-              <div style={{
-                width: 16, height: 16, borderRadius: '50%',
-                border: '2.5px solid rgba(10,15,28,0.2)',
-                borderTopColor: '#0A0F1C',
-                animation: 'spin 0.6s linear infinite',
-              }} />
-              {progressLabel || 'Submitting…'}
-            </>
-          ) : (
-            <>Submit Enquiry <ArrowRightIcon size={15} color="#0A0F1C" /></>
-          )}
-        </button>
-
-        {status && (
-          <div style={{
-            marginTop: 14, padding: '12px 16px', borderRadius: 10,
-            background: status.type === 'success' ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
-            border: '1px solid ' + (status.type === 'success' ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'),
-            color: status.type === 'success' ? '#10B981' : '#F87171',
-            fontSize: 13.5, lineHeight: 1.6,
-          }}>
-            {status.msg}
-          </div>
-        )}
+                {status.msg}
+              </Banner>
+            )}
+          </Card.Body>
+        </Card>
       </form>
 
       {/* Blocking submission overlay — keeps the user on the page during the upload
-          so they can't accidentally click back, and gives them lots of feedback. */}
+          so they can't accidentally click back, and gives them lots of feedback.
+          No onClose on purpose: it must not be dismissible. */}
       {submitting && (
-        <div className="modal-overlay" style={{
-          zIndex: 9999,
-          background: 'rgba(10,15,28,0.55)',
-          backdropFilter: 'blur(4px)',
-        }}>
-          <div className="modal-card" style={{
-            background: t.card, border: '1px solid ' + t.border,
-            padding: '28px 28px 22px',
-            boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
-            textAlign: 'center',
-          }}>
+        <Modal maxWidth={440}>
+          <div style={{ textAlign: 'center', padding: '8px 0 2px' }}>
             <div style={{
               width: 56, height: 56, borderRadius: '50%', margin: '0 auto 14px',
               background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.18))',
@@ -614,18 +561,18 @@ export default function SubmitDrawingsPage() {
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
                 border: '3px solid rgba(245,158,11,0.25)',
-                borderTopColor: '#F59E0B',
+                borderTopColor: 'var(--accent)',
                 animation: 'spin 0.7s linear infinite',
               }} />
             </div>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: t.text, marginBottom: 6 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', color: 'var(--text-primary)', marginBottom: 6 }}>
               Submitting your drawings
             </div>
-            <div style={{ fontSize: 13.5, color: t.textMuted, marginBottom: 18, lineHeight: 1.55 }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.55 }}>
               {progressLabel || 'Uploading…'}
             </div>
             <div style={{
-              width: '100%', height: 6, borderRadius: 6, background: t.surface, overflow: 'hidden',
+              width: '100%', height: 6, borderRadius: 6, background: 'var(--surface-hover)', overflow: 'hidden',
               marginBottom: 10,
             }}>
               <div style={{
@@ -635,199 +582,84 @@ export default function SubmitDrawingsPage() {
                 transition: 'width 0.25s linear',
               }} />
             </div>
-            <div style={{ fontSize: 12, color: t.textMuted, fontFamily: 'JetBrains Mono, monospace' }}>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
               {submitElapsed}s elapsed · please don't close this tab
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Sticky 'buy 5 BOQs' offer — shown automatically on no credits, dismissible
-          but always reachable via the floating button at bottom-right. */}
+      {/* Top-up offer — shown automatically on no credits, dismissible but always
+          reachable via the floating button at bottom-right. */}
       {showTopUpModal && (
-        <div className="modal-overlay" style={{
-          zIndex: 9998,
-          background: 'rgba(10,15,28,0.55)',
-          backdropFilter: 'blur(4px)',
-        }}>
-          <div className="modal-card" style={{
-            position: 'relative',
-            background: t.card, border: '1px solid ' + t.border,
-            borderRadius: 18, padding: '32px 30px 26px',
-            boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
-          }}>
-            <button
-              type="button"
-              onClick={() => setShowTopUpModal(false)}
-              aria-label="Close"
-              style={{
-                position: 'absolute', top: 12, right: 12,
-                background: 'none', border: 'none', cursor: 'pointer',
-                padding: 6, borderRadius: 7, color: t.textMuted,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <XIcon size={16} color={t.textMuted} />
-            </button>
-
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 11px', borderRadius: 999,
-              background: 'rgba(245,158,11,0.1)', color: '#F59E0B',
-              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-              marginBottom: 14,
-            }}>
-              <ZapIcon size={11} color="#F59E0B" /> One-off top-up
-            </div>
-
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: 26, fontWeight: 700, color: t.text, lineHeight: 1.2, marginBottom: 8 }}>
-              Need more BOQs?
-            </div>
-            <div style={{ fontSize: 14, color: t.textMuted, lineHeight: 1.55, marginBottom: 18 }}>
-              You're out of BOQ credits. Top up with a one-off pack — no subscription, no commitment.
-            </div>
-
-            <div style={{
-              padding: '18px 18px 16px', borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))',
-              border: '1px solid rgba(245,158,11,0.25)',
-              marginBottom: 18,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>
-                  5 BOQ pack
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#F59E0B', fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                  £349
-                </div>
-              </div>
-              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
-                That's just <strong style={{ color: t.text }}>£69.80 per BOQ</strong> — saves you £401 vs. PAYG.
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>
-                Credits never expire. Use them whenever you like.
-              </div>
-            </div>
-
-            <a
-              href={withUserRef(BOQ_5_PACK_LINK, user)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', padding: '13px 22px', borderRadius: 11,
-                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                color: '#0A0F1C',
-                fontWeight: 700, fontSize: 14.5,
-                textDecoration: 'none',
-                boxShadow: '0 4px 18px rgba(245,158,11,0.35)',
-              }}
-            >
-              <ZapIcon size={15} color="#0A0F1C" />
-              Buy 5 BOQs — £349
-              <ArrowRightIcon size={15} color="#0A0F1C" />
-            </a>
-
-            <div style={{
-              marginTop: 14,
-              padding: '18px 18px 16px', borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))',
-              border: '1px solid rgba(124,58,237,0.25)',
-              marginBottom: 14,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>
-                  10 BOQ pack
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#A78BFA', fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                  £580
-                </div>
-              </div>
-              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
-                Just <strong style={{ color: t.text }}>£58 per BOQ</strong> — saves you £920 vs. PAYG.
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>
-                Credits never expire. Use them whenever you like.
-              </div>
-            </div>
-
-            <a
-              href={withUserRef(BOQ_10_PACK_LINK, user)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', padding: '13px 22px', borderRadius: 11,
-                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                color: '#fff',
-                fontWeight: 700, fontSize: 14.5,
-                textDecoration: 'none',
-                boxShadow: '0 4px 18px rgba(124,58,237,0.35)',
-              }}
-            >
-              <ZapIcon size={15} color="#fff" />
-              Buy 10 BOQs — £580
-              <ArrowRightIcon size={15} color="#fff" />
-            </a>
-
-            <div style={{
-              marginTop: 14,
-              padding: '18px 18px 16px', borderRadius: 12,
-              background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))',
-              border: '1px solid rgba(16,185,129,0.25)',
-              marginBottom: 14,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 10, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: t.text }}>
-                  20 BOQ pack
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#10B981', fontFamily: "'DM Serif Display', Georgia, serif" }}>
-                  £980
-                </div>
-              </div>
-              <div style={{ fontSize: 12.5, color: t.textMuted, marginBottom: 4 }}>
-                Best value — just <strong style={{ color: t.text }}>£49 per BOQ</strong>, saves you £2,020 vs. PAYG.
-              </div>
-              <div style={{ fontSize: 12, color: t.textMuted }}>
-                Credits never expire. Use them whenever you like.
-              </div>
-            </div>
-
-            <a
-              href={withUserRef(BOQ_20_PACK_LINK, user)}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', padding: '13px 22px', borderRadius: 11,
-                background: 'linear-gradient(135deg, #10B981, #059669)',
-                color: '#fff',
-                fontWeight: 700, fontSize: 14.5,
-                textDecoration: 'none',
-                boxShadow: '0 4px 18px rgba(16,185,129,0.35)',
-              }}
-            >
-              <ZapIcon size={15} color="#fff" />
-              Buy 20 BOQs — £980
-              <ArrowRightIcon size={15} color="#fff" />
-            </a>
-
-            <button
-              type="button"
-              onClick={() => setShowTopUpModal(false)}
-              style={{
-                marginTop: 10, width: '100%', padding: '9px 14px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 12, color: t.textMuted,
-              }}
-            >
-              Maybe later
-            </button>
+        <Modal title="Need more BOQs?" onClose={() => setShowTopUpModal(false)}>
+          <Badge tone="accent" size="sm" pill style={{ marginBottom: 12 }}>
+            <ZapIcon size={11} color="currentColor" /> One-off top-up
+          </Badge>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 18 }}>
+            You're out of BOQ credits. Top up with a one-off pack — no subscription, no commitment.
           </div>
-        </div>
+
+          <PackCard
+            name="5 BOQ pack" price="£349" priceColor="var(--accent)"
+            tintBg="linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))"
+            tintBorder="rgba(245,158,11,0.25)"
+            blurb={<>That's just <strong style={{ color: 'var(--text-primary)' }}>£69.80 per BOQ</strong> — saves you £401 vs. PAYG.</>}
+            cta={
+              <Button href={withUserRef(BOQ_5_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full>
+                <ZapIcon size={15} color="currentColor" />
+                Buy 5 BOQs — £349
+                <ArrowRightIcon size={15} color="currentColor" />
+              </Button>
+            }
+          />
+
+          <div style={{ marginTop: 14 }}>
+            <PackCard
+              name="10 BOQ pack" price="£580" priceColor="var(--violet)"
+              tintBg="linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))"
+              tintBorder="rgba(124,58,237,0.25)"
+              blurb={<>Just <strong style={{ color: 'var(--text-primary)' }}>£58 per BOQ</strong> — saves you £920 vs. PAYG.</>}
+              cta={
+                <Button
+                  href={withUserRef(BOQ_10_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full
+                  style={{ background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', color: '#fff', boxShadow: '0 4px 18px rgba(124,58,237,0.35)' }}
+                >
+                  <ZapIcon size={15} color="currentColor" />
+                  Buy 10 BOQs — £580
+                  <ArrowRightIcon size={15} color="currentColor" />
+                </Button>
+              }
+            />
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <PackCard
+              name="20 BOQ pack" price="£980" priceColor="var(--success)"
+              tintBg="linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))"
+              tintBorder="rgba(16,185,129,0.25)"
+              blurb={<>Best value — just <strong style={{ color: 'var(--text-primary)' }}>£49 per BOQ</strong>, saves you £2,020 vs. PAYG.</>}
+              cta={
+                <Button
+                  href={withUserRef(BOQ_20_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full
+                  style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#fff', boxShadow: '0 4px 18px rgba(16,185,129,0.35)' }}
+                >
+                  <ZapIcon size={15} color="currentColor" />
+                  Buy 20 BOQs — £980
+                  <ArrowRightIcon size={15} color="currentColor" />
+                </Button>
+              }
+            />
+          </div>
+
+          <Button variant="ghost" size="sm" full style={{ marginTop: 12 }} onClick={() => setShowTopUpModal(false)}>
+            Maybe later
+          </Button>
+        </Modal>
       )}
 
-      {/* Persistent floating offer — always reachable when credits are out */}
+      {/* Persistent floating offer — always reachable when credits are out.
+          Bespoke pulsing pill, deliberately kept inline. */}
       {noCredits && !showTopUpModal && !submitting && (
         <button
           type="button"
@@ -838,7 +670,7 @@ export default function SubmitDrawingsPage() {
             padding: '12px 18px', borderRadius: 999,
             background: 'linear-gradient(135deg, #F59E0B, #D97706)',
             color: '#0A0F1C',
-            fontWeight: 700, fontSize: 13.5,
+            fontWeight: 700, fontSize: '0.85rem',
             border: 'none', cursor: 'pointer',
             boxShadow: '0 6px 24px rgba(245,158,11,0.45)',
             animation: 'aiqs-pulse 2.4s ease-in-out infinite',
