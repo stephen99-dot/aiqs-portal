@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
+import {
+  Button, IconButton, Card, Banner, Badge, StatusBadge,
+  Input, PageHeader, Stat, EmptyState, SkeletonRows, ProgressBar, useToast,
+} from '../ui';
 import {
   FolderIcon, ClockIcon, PipelineIcon, CheckCircleIcon,
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
@@ -21,7 +24,30 @@ const STRIPE = {
   // Everyone now buys extras at the flat £150 single-BOQ price.
 };
 
-function UsageBar({ usage, t, user }) {
+// The bundle buy-links, rendered identically wherever they appear (PAYG bar,
+// at-limit prompt). One primary action; bundles as quiet secondaries.
+function BuyBoqButtons({ user, compact = false }) {
+  const size = compact ? 'sm' : 'sm';
+  const ext = { target: '_blank', rel: 'noopener noreferrer' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <Button size={size} href={withUserRef(STRIPE.starter_payg, user)} {...ext}>
+        <ZapIcon size={11} color="currentColor" /> £150 per BOQ
+      </Button>
+      <Button size={size} variant="soft" href={withUserRef(STRIPE.boq_5_pack, user)} {...ext}>
+        5 BOQs — £349
+      </Button>
+      <Button size={size} variant="secondary" href={withUserRef(STRIPE.boq_10_pack, user)} {...ext}>
+        10 BOQs — £580
+      </Button>
+      <Button size={size} variant="secondary" href={withUserRef(STRIPE.boq_20_pack, user)} {...ext}>
+        20 BOQs — £980
+      </Button>
+    </div>
+  );
+}
+
+function UsageBar({ usage, user }) {
   if (!usage) return null;
   // Pull BOQ-specific fields from /usage. Fall back to legacy quota/used/remaining
   // (which were really project counts) only if the new fields aren't present yet.
@@ -33,245 +59,122 @@ function UsageBar({ usage, t, user }) {
 
   if (isPayg) {
     return (
-      <div data-tour="usage-bar" style={{
-        background: t.card, border: `1px solid ${t.border}`,
-        borderRadius: 12, padding: '16px 20px',
-        marginBottom: 20, boxShadow: t.shadowSm,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 6,
-            background: t.warningBg, color: t.warning,
-            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-          }}>
-            <ZapIcon size={12} color={t.warning} /> Pay As You Go
-          </span>
-          <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · £150 per BOQ
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* £150 per BOQ button */}
-          <a href={withUserRef(STRIPE.starter_payg, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '6px 12px', borderRadius: 7,
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            fontSize: 12, fontWeight: 700, color: '#0A0F1C', textDecoration: 'none',
-            boxShadow: '0 2px 8px rgba(245,158,11,0.25)',
-          }}>
-            <ZapIcon size={11} color="#0A0F1C" /> £150 per BOQ
-          </a>
-          <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '6px 12px', borderRadius: 7,
-            background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)',
-            fontSize: 12, fontWeight: 600, color: t.accent, textDecoration: 'none',
-          }}>
-            <StarIcon size={11} color={t.accent} /> 5 BOQs — £349
-          </a>
-          <a href={withUserRef(STRIPE.boq_10_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '6px 12px', borderRadius: 7,
-            background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)',
-            fontSize: 12, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
-          }}>
-            <CrownIcon size={11} color="#A78BFA" /> 10 BOQs — £580
-          </a>
-          <a href={withUserRef(STRIPE.boq_20_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '6px 12px', borderRadius: 7,
-            background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)',
-            fontSize: 12, fontWeight: 600, color: '#10B981', textDecoration: 'none',
-          }}>
-            <CrownIcon size={11} color="#10B981" /> 20 BOQs — £980
-          </a>
-        </div>
-      </div>
+      <Card data-tour="usage-bar" style={{ marginBottom: 16 }}>
+        <Card.Body style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '14px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Badge tone="warning" size="sm"><ZapIcon size={11} color="currentColor" /> Pay As You Go</Badge>
+            <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · £150 per BOQ
+            </span>
+          </div>
+          <BuyBoqButtons user={user} compact />
+        </Card.Body>
+      </Card>
     );
   }
 
   const pct = quota > 0 ? Math.min(100, (used / quota) * 100) : 0;
-  const barColor = atLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#10B981';
+  const planTone = plan === 'premium' ? 'violet' : 'accent';
   const PlanIcon = plan === 'premium' ? CrownIcon : StarIcon;
-  const planIconColor = plan === 'premium' ? '#A78BFA' : t.accentLight;
-  const planBg = plan === 'premium' ? 'rgba(124,58,237,0.1)' : t.accentGlow;
 
   return (
-    <div data-tour="usage-bar" style={{
-      background: t.card, border: `1px solid ${atLimit ? 'rgba(239,68,68,0.25)' : t.border}`,
-      borderRadius: 12, padding: '16px 20px', marginBottom: 20, boxShadow: t.shadowSm,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <Card data-tour="usage-bar" style={{ marginBottom: 16, borderColor: atLimit ? 'var(--danger)' : undefined }}>
+      <Card.Body style={{ padding: '14px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Badge tone={planTone} size="sm"><PlanIcon size={11} color="currentColor" /> {planLabel}</Badge>
+            <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{used}</strong> of <strong style={{ color: 'var(--text-primary)' }}>{quota}</strong> BOQs used
+            </span>
+          </div>
           <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 6,
-            background: planBg, color: planIconColor,
-            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: '0.78rem', fontWeight: 600,
+            color: atLimit ? 'var(--danger)' : remaining <= 2 ? 'var(--warning)' : 'var(--text-muted)',
           }}>
-            <PlanIcon size={12} color={planIconColor} /> {planLabel}
-          </span>
-          <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{used}</strong> of <strong style={{ color: t.text }}>{quota}</strong> BOQs used
+            {atLimit ? <><BanIcon size={12} color="currentColor" /> Limit reached</> : `${remaining} remaining`}
           </span>
         </div>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 11.5, fontWeight: 600,
-          color: atLimit ? '#EF4444' : remaining <= 2 ? '#F59E0B' : t.textMuted,
-        }}>
-          {atLimit ? <><BanIcon size={12} color="#EF4444" /> Limit reached</> : `${remaining} remaining`}
-        </span>
-      </div>
-      <div style={{ width: '100%', height: 5, borderRadius: 5, background: t.surfaceHover, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: barColor, transition: 'width 0.5s ease' }} />
-      </div>
+        <ProgressBar value={pct} tone="auto" />
 
-      {atLimit && (
-        <div style={{
-          marginTop: 12, padding: '14px 16px',
-          background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.1)',
-          borderRadius: 10,
-        }}>
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 2 }}>
+        {atLimit && (
+          <div style={{
+            marginTop: 12, padding: '12px 14px', borderRadius: 10,
+            background: 'var(--danger-bg)', border: '1px solid color-mix(in srgb, var(--danger) 15%, transparent)',
+          }}>
+            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
               You've used all your BOQ credits
             </div>
-            <div style={{ fontSize: 11.5, color: t.textMuted }}>Buy more BOQs to continue</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 10 }}>Buy more BOQs to continue</div>
+            <BuyBoqButtons user={user} compact />
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-              padding: '7px 14px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-              color: '#0A0F1C', fontSize: 12, fontWeight: 700,
-              textDecoration: 'none', whiteSpace: 'nowrap',
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-            }}>
-              <StarIcon size={12} color="#0A0F1C" /> Buy 5 BOQs — £349
-            </a>
-            <a href={withUserRef(STRIPE.boq_10_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-              padding: '7px 14px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-              color: '#fff', fontSize: 12, fontWeight: 600,
-              textDecoration: 'none', whiteSpace: 'nowrap',
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-            }}>
-              <CrownIcon size={12} color="#fff" /> Buy 10 BOQs — £580
-            </a>
-            <a href={withUserRef(STRIPE.boq_20_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-              padding: '7px 14px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #10B981, #059669)',
-              color: '#fff', fontSize: 12, fontWeight: 600,
-              textDecoration: 'none', whiteSpace: 'nowrap',
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-            }}>
-              <CrownIcon size={12} color="#fff" /> Buy 20 BOQs — £980
-            </a>
-            <a
-              href={withUserRef(STRIPE.starter_payg, user)}
-              target="_blank" rel="noopener noreferrer"
-              style={{
-                padding: '7px 14px', borderRadius: 7,
-                background: t.surfaceHover, border: `1px solid ${t.border}`,
-                color: t.text, fontSize: 12, fontWeight: 600,
-                textDecoration: 'none', whiteSpace: 'nowrap',
-              }}
-            >
-              Buy Extra BOQ — £150
-            </a>
-          </div>
-        </div>
-      )}
+        )}
 
-      {!atLimit && remaining <= 2 && remaining > 0 && (
-        <div style={{
-          marginTop: 10, fontSize: 12, color: '#F59E0B',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
-        }}>
-          <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
-          <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
-            fontSize: 11.5, fontWeight: 600, color: '#A78BFA', textDecoration: 'none',
-            display: 'inline-flex', alignItems: 'center', gap: 3,
+        {!atLimit && remaining <= 2 && remaining > 0 && (
+          <div style={{
+            marginTop: 10, fontSize: '0.8rem', color: 'var(--warning)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
           }}>
-            Save with a 5-BOQ bundle — £349 <ArrowRightIcon size={11} color="#A78BFA" />
-          </a>
-        </div>
-      )}
-    </div>
+            <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
+            <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+            }}>
+              Save with a 5-BOQ bundle — £349 <ArrowRightIcon size={11} color="currentColor" />
+            </a>
+          </div>
+        )}
+      </Card.Body>
+    </Card>
   );
 }
 
-function MessageUsageBar({ usage, t }) {
+function MessageUsageBar({ usage }) {
   if (!usage || usage.messagesLimit == null) return null;
-  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit, plan, planLabel } = usage;
+  const { messagesUsed = 0, messagesLimit = 0, messagesRemaining = 0, messagesAtLimit } = usage;
   if (messagesLimit <= 0) return null;
 
   const pct = messagesLimit > 0 ? Math.min(100, (messagesUsed / messagesLimit) * 100) : 0;
-  const barColor = messagesAtLimit ? '#EF4444' : pct >= 80 ? '#F59E0B' : '#3B82F6';
-  const PlanIcon = plan === 'premium' ? CrownIcon : StarIcon;
-  const planIconColor = plan === 'premium' ? '#A78BFA' : t.accentLight;
-  const planBg = plan === 'premium' ? 'rgba(124,58,237,0.1)' : t.accentGlow;
 
   return (
-    <div style={{
-      background: t.card, border: `1px solid ${messagesAtLimit ? 'rgba(239,68,68,0.25)' : t.border}`,
-      borderRadius: 12, padding: '16px 20px', marginBottom: 20, boxShadow: t.shadowSm,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <Card style={{ marginBottom: 16, borderColor: messagesAtLimit ? 'var(--danger)' : undefined }}>
+      <Card.Body style={{ padding: '14px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Badge tone="info" size="sm"><ChatIcon size={11} color="currentColor" /> Messages</Badge>
+            <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{messagesUsed}</strong> of <strong style={{ color: 'var(--text-primary)' }}>{messagesLimit}</strong> messages used
+            </span>
+          </div>
           <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 6,
-            background: planBg, color: planIconColor,
-            fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: '0.78rem', fontWeight: 600,
+            color: messagesAtLimit ? 'var(--danger)' : messagesRemaining <= 5 ? 'var(--warning)' : 'var(--text-muted)',
           }}>
-            <ChatIcon size={12} color={planIconColor} /> Messages
-          </span>
-          <span style={{ fontSize: 12.5, color: t.textSecondary }}>
-            <strong style={{ color: t.text }}>{messagesUsed}</strong> of <strong style={{ color: t.text }}>{messagesLimit}</strong> messages used
+            {messagesAtLimit ? <><BanIcon size={12} color="currentColor" /> Limit reached</> : `${messagesRemaining} remaining`}
           </span>
         </div>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          fontSize: 11.5, fontWeight: 600,
-          color: messagesAtLimit ? '#EF4444' : messagesRemaining <= 5 ? '#F59E0B' : t.textMuted,
-        }}>
-          {messagesAtLimit ? <><BanIcon size={12} color="#EF4444" /> Limit reached</> : `${messagesRemaining} remaining`}
-        </span>
-      </div>
-      <div style={{ width: '100%', height: 5, borderRadius: 5, background: t.surfaceHover, overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: barColor, transition: 'width 0.5s ease' }} />
-      </div>
-      {messagesAtLimit && (
-        <div style={{
-          marginTop: 10, fontSize: 12.5, color: '#EF4444',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          You've used all {messagesLimit} messages — contact us to top up your balance.
-        </div>
-      )}
-      {!messagesAtLimit && messagesRemaining <= 5 && messagesRemaining > 0 && (
-        <div style={{ marginTop: 10, fontSize: 12, color: '#F59E0B' }}>
-          Only {messagesRemaining} message{messagesRemaining !== 1 ? 's' : ''} left
-        </div>
-      )}
-    </div>
+        <ProgressBar value={pct} tone="auto" />
+        {messagesAtLimit && (
+          <div style={{ marginTop: 10, fontSize: '0.82rem', color: 'var(--danger)' }}>
+            You've used all {messagesLimit} messages — contact us to top up your balance.
+          </div>
+        )}
+        {!messagesAtLimit && messagesRemaining <= 5 && messagesRemaining > 0 && (
+          <div style={{ marginTop: 10, fontSize: '0.8rem', color: 'var(--warning)' }}>
+            Only {messagesRemaining} message{messagesRemaining !== 1 ? 's' : ''} left
+          </div>
+        )}
+      </Card.Body>
+    </Card>
   );
 }
 
 // Submissions the QS team hasn't delivered yet — closes the loop between
 // "I uploaded my drawings" and the finished project appearing below.
-function SubmissionsTracker({ submissions, t }) {
+function SubmissionsTracker({ submissions }) {
   const pending = (submissions || []).filter(s => s.status !== 'delivered').slice(0, 5);
   if (pending.length === 0) return null;
-
-  const STAGE = {
-    received:    { label: 'With our QS team', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-    in_progress: { label: 'Being priced',     color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
-  };
 
   function fmtDate(raw) {
     if (!raw) return '';
@@ -280,47 +183,38 @@ function SubmissionsTracker({ submissions, t }) {
   }
 
   return (
-    <div style={{
-      background: t.card, border: `1px solid ${t.border}`,
-      borderRadius: 12, padding: '16px 20px', marginBottom: 20, boxShadow: t.shadowSm,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <ClockIcon size={14} color="#F59E0B" />
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Drawings with our QS team</span>
-      </div>
-      <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 12 }}>
-        Your BOQ and Findings Report will appear under Your Projects below — typically within 24 hours.
-        Once delivered, open the project to amend numbers and produce a Client Copy with your own logo and colours.
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {pending.map(s => {
-          const stage = STAGE[s.status] || STAGE.received;
-          return (
+    <Card style={{ marginBottom: 16 }}>
+      <Card.Body style={{ padding: '14px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <ClockIcon size={14} color="var(--warning)" />
+          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>Drawings with our QS team</span>
+        </div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+          Your BOQ and Findings Report will appear under Your Projects below — typically within 24 hours.
+          Once delivered, open the project to amend numbers and produce a Client Copy with your own logo and colours.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {pending.map(s => (
             <div key={s.id} style={{
               display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-              padding: '9px 12px', borderRadius: 8, background: t.surfaceHover,
+              padding: '9px 12px', borderRadius: 8, background: 'var(--surface-hover)',
             }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: t.text }}>
+              <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {s.project_type || 'Project'}
               </span>
-              <span style={{ fontSize: 11.5, color: t.textMuted, flex: 1 }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flex: 1 }}>
                 {s.file_count} file{s.file_count !== 1 ? 's' : ''}{fmtDate(s.created_at) ? ` · sent ${fmtDate(s.created_at)}` : ''}
               </span>
-              <span style={{
-                fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 6,
-                color: stage.color, background: stage.bg, whiteSpace: 'nowrap',
-              }}>
-                {stage.label}
-              </span>
+              <StatusBadge status={s.status === 'in_progress' ? 'in_progress' : 'received'} />
             </div>
-          );
-        })}
-      </div>
-    </div>
+          ))}
+        </div>
+      </Card.Body>
+    </Card>
   );
 }
 
-function GettingStarted({ projects, t }) {
+function GettingStarted({ projects }) {
   const steps = [
     { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
     { key: 'submit', label: 'Submit your drawings — our QS team takes it from there', done: projects.length > 0, icon: UploadIcon },
@@ -333,89 +227,54 @@ function GettingStarted({ projects, t }) {
   const pct = (completedCount / steps.length) * 100;
 
   return (
-    <div style={{
-      background: t.card, border: `1px solid ${t.border}`,
-      borderRadius: 12, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowSm,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div>
-          <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text, marginBottom: 1 }}>Getting Started</div>
-          <div style={{ fontSize: 11.5, color: t.textMuted }}>{completedCount} of {steps.length} complete</div>
-        </div>
-        <button onClick={() => { setDismissed(true); try { localStorage.setItem('aiqs_checklist_dismissed', 'true'); } catch {} }} style={{
-          background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-          textDecoration: 'underline', textUnderlineOffset: 3,
-        }}>Dismiss</button>
-      </div>
-      <div style={{ width: '100%', height: 3, borderRadius: 3, background: t.surfaceHover, overflow: 'hidden', marginBottom: 14 }}>
-        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 3, background: 'linear-gradient(135deg, #F59E0B, #D97706)', transition: 'width 0.5s ease' }} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {steps.map(s => (
-          <div key={s.key} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '9px 10px', borderRadius: 8,
-            background: s.done ? 'rgba(16,185,129,0.03)' : t.surfaceHover,
-            border: `1px solid ${s.done ? 'rgba(16,185,129,0.08)' : 'transparent'}`,
-            opacity: s.done ? 0.65 : 1,
-          }}>
-            <div style={{
-              width: 26, height: 26, borderRadius: 7,
-              background: s.done ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {s.done ? <CheckCircleIcon size={13} color="#10B981" /> : <s.icon size={13} color="#F59E0B" />}
-            </div>
-            <span style={{
-              fontSize: 12.5, fontWeight: 500,
-              color: s.done ? t.textMuted : t.text,
-              textDecoration: s.done ? 'line-through' : 'none',
-            }}>{s.label}</span>
+    <Card style={{ marginBottom: 16 }}>
+      <Card.Body style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 1 }}>Getting Started</div>
+            <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{completedCount} of {steps.length} complete</div>
           </div>
-        ))}
-      </div>
-      {projects.length === 0 && (
-        <Link to="/chat" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          marginTop: 12, padding: '9px 18px', borderRadius: 8,
-          background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-          color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
-          boxShadow: '0 2px 10px rgba(245,158,11,0.18)',
-        }}>
-          Start Your First Project <ArrowRightIcon size={13} color="#0A0F1C" />
-        </Link>
-      )}
-    </div>
+          <Button variant="ghost" size="sm" onClick={() => { setDismissed(true); try { localStorage.setItem('aiqs_checklist_dismissed', 'true'); } catch {} }}>
+            Dismiss
+          </Button>
+        </div>
+        <ProgressBar value={pct} tone="gradient" height={3} style={{ marginBottom: 14 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {steps.map(s => (
+            <div key={s.key} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 10px', borderRadius: 8,
+              background: s.done ? 'var(--success-bg)' : 'var(--surface-hover)',
+              opacity: s.done ? 0.65 : 1,
+            }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                background: s.done ? 'var(--success-bg)' : 'var(--accent-glow)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {s.done ? <CheckCircleIcon size={13} color="var(--success)" /> : <s.icon size={13} color="var(--accent)" />}
+              </div>
+              <span style={{
+                fontSize: '0.84rem', fontWeight: 500,
+                color: s.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                textDecoration: s.done ? 'line-through' : 'none',
+              }}>{s.label}</span>
+            </div>
+          ))}
+        </div>
+        {projects.length === 0 && (
+          <Button to="/chat" full style={{ marginTop: 12 }}>
+            Start Your First Project <ArrowRightIcon size={13} color="currentColor" />
+          </Button>
+        )}
+      </Card.Body>
+    </Card>
   );
 }
-
-function StatCard({ icon: Icon, iconColor, iconBg, value, label, t, accent }) {
-  return (
-    <div className={`stat-card ${accent ? 'accent' : ''}`}>
-      <div style={{
-        width: 34, height: 34, borderRadius: 9, background: iconBg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6,
-      }}>
-        <Icon size={16} color={iconColor} />
-      </div>
-      <div className="stat-value">{value}</div>
-      <div className="stat-label">{label}</div>
-    </div>
-  );
-}
-
-const STATUS_MAP = {
-  submitted:        { label: 'Submitted',        color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
-  completed:        { label: 'Completed',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  delivered:        { label: 'Delivered',        color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
-  in_progress:      { label: 'In Progress',      color: '#A855F7', bg: 'rgba(168,85,247,0.1)' },
-  awaiting_payment: { label: 'Awaiting Payment', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-  in_review:        { label: 'In Review',        color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
-};
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { t } = useTheme();
+  const toast = useToast();
   const [projects, setProjects] = useState([]);
   const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -490,8 +349,9 @@ export default function DashboardPage() {
     try {
       await apiFetch(`/projects/${projectId}`, { method: 'DELETE' });
       setProjects(prev => prev.filter(p => p.id !== projectId));
+      toast.success('Project deleted');
     } catch (err) {
-      alert(err?.message ? `Couldn't delete project: ${err.message}` : 'Failed to delete project. Please try again.');
+      toast.error(err?.message ? `Couldn't delete project: ${err.message}` : 'Failed to delete project. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -510,7 +370,7 @@ export default function DashboardPage() {
       setProjects(prev => prev.map(p => p.id === projectId ? { ...p, title } : p));
       setEditingId(null);
     } catch (err) {
-      alert(err?.message ? `Couldn't rename project: ${err.message}` : 'Failed to rename project. Please try again.');
+      toast.error(err?.message ? `Couldn't rename project: ${err.message}` : 'Failed to rename project. Please try again.');
     } finally {
       setRenamingId(null);
     }
@@ -554,181 +414,130 @@ export default function DashboardPage() {
 
       {/* Persistent AI profile prompt — shows until user completes or skips */}
       {needsOnboarding && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(217,119,6,0.04))',
-          border: '1px solid rgba(245,158,11,0.25)',
-          borderRadius: 12, padding: '18px 22px', marginBottom: 20, boxShadow: t.shadowSm,
-          borderLeft: '3px solid #F59E0B',
-        }}>
+        <Banner tone="accent" style={{ padding: '16px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 240 }}>
               <div style={{
                 width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-                background: 'rgba(245,158,11,0.15)',
+                background: 'var(--accent-glow)', color: 'var(--accent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 20,
               }}><BrainIcon size={20} /></div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 3 }}>
+                <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3 }}>
                   Teach the AI how you work — 2 minutes
                 </div>
-                <div style={{ fontSize: 12.5, color: t.textSecondary, lineHeight: 1.5 }}>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                   Tell us your trade, answer a few quick questions and add your logo. Our team tunes your account and every estimate prices from your rates, not generic figures.
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button onClick={dismissOnboardingBanner} style={{
-                background: 'none', border: 'none', color: t.textMuted, fontSize: 12, cursor: 'pointer',
-                padding: '8px 12px', borderRadius: 8, fontFamily: 'inherit',
-              }}>
-                Not now
-              </button>
-              <Link to="/onboarding" style={{
-                padding: '9px 18px', borderRadius: 8,
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                color: '#0A0F1C', textDecoration: 'none',
-                fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
-              }}>
-                Start onboarding
-              </Link>
+              <Button variant="ghost" size="sm" onClick={dismissOnboardingBanner}>Not now</Button>
+              <Button to="/onboarding">Start onboarding</Button>
             </div>
           </div>
-        </div>
+        </Banner>
       )}
 
       {showWhatsNew && (
-        <div style={{
-          background: t.card, border: `1px solid rgba(245,158,11,0.2)`,
-          borderRadius: 12, padding: '18px 20px', marginBottom: 20, boxShadow: t.shadowSm,
-          borderLeft: '3px solid #F59E0B',
-        }}>
+        <Banner tone="accent">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ZapIcon size={14} color="#F59E0B" /> What's New
+              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ZapIcon size={14} color="var(--accent)" /> What's New
               </div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: t.textSecondary, lineHeight: 1.8 }}>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
                 <li>
-                  <strong style={{ color: t.text }}>Submit Drawings is now the main way to get a BOQ</strong> — our QS team prices your job and delivers it straight back to this portal, typically within 24 hours.{' '}
-                  <Link to="/submit-drawings" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Submit drawings →</Link>
+                  <strong style={{ color: 'var(--text-primary)' }}>Submit Drawings is now the main way to get a BOQ</strong> — our QS team prices your job and delivers it straight back to this portal, typically within 24 hours.{' '}
+                  <Link to="/submit-drawings" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Submit drawings →</Link>
                 </li>
-                <li><strong style={{ color: t.text }}>AI Chat is in a testing phase</strong> — feel free to explore it, but use Submit Drawings when you need numbers you can rely on</li>
-                <li><strong style={{ color: t.text }}>Client Copy with your logo</strong> — open any delivered project to amend the numbers and download a branded copy to send to your client</li>
+                <li><strong style={{ color: 'var(--text-primary)' }}>AI Chat is in a testing phase</strong> — feel free to explore it, but use Submit Drawings when you need numbers you can rely on</li>
+                <li><strong style={{ color: 'var(--text-primary)' }}>Client Copy with your logo</strong> — open any delivered project to amend the numbers and download a branded copy to send to your client</li>
                 <li>
-                  <strong style={{ color: t.text }}>Your branding</strong> — upload your logo and pick your colours once, and every document wears them.{' '}
-                  <Link to="/branding" style={{ color: '#F59E0B', textDecoration: 'none', fontWeight: 600 }}>Set up branding →</Link>
+                  <strong style={{ color: 'var(--text-primary)' }}>Your branding</strong> — upload your logo and pick your colours once, and every document wears them.{' '}
+                  <Link to="/branding" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Set up branding →</Link>
                 </li>
               </ul>
             </div>
-            <button onClick={() => {
+            <Button variant="ghost" size="sm" onClick={() => {
               setShowWhatsNew(false);
               try { localStorage.setItem(`aiqs_whats_new_v5_${user?.id || 'default'}`, 'true'); } catch {}
-            }} style={{
-              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
-            }}>Dismiss</button>
+            }}>Dismiss</Button>
           </div>
-        </div>
+        </Banner>
       )}
 
       {adminMessages.length > 0 && adminMessages.map(msg => (
-        <div key={msg.id} style={{
-          background: t.card, border: '1px solid rgba(37,99,235,0.25)',
-          borderRadius: 12, padding: '16px 20px', marginBottom: 16, boxShadow: t.shadowSm,
-          borderLeft: '3px solid #2563EB',
-        }}>
+        <Banner key={msg.id} tone="info">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
               <div style={{
                 width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                background: 'rgba(37,99,235,0.08)',
+                background: 'var(--info-bg)', color: 'var(--info)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 marginTop: 1,
               }}>
-                <ChatIcon size={14} color="#2563EB" />
+                <ChatIcon size={14} color="currentColor" />
               </div>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Message from AI QS</div>
-                <div style={{ fontSize: 13.5, color: t.text, lineHeight: 1.5 }}>{msg.message}</div>
+                <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--info)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>Message from AI QS</div>
+                <div style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{msg.message}</div>
               </div>
             </div>
-            <button onClick={() => dismissMessage(msg.id)} style={{
-              background: 'none', border: 'none', color: t.textMuted, fontSize: 11, cursor: 'pointer',
-              textDecoration: 'underline', textUnderlineOffset: 3, whiteSpace: 'nowrap', marginTop: 2,
-            }}>Dismiss</button>
+            <Button variant="ghost" size="sm" onClick={() => dismissMessage(msg.id)}>Dismiss</Button>
           </div>
-        </div>
+        </Banner>
       ))}
 
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Welcome back, {firstName}</h1>
-          <p className="page-subtitle">Here's an overview of your projects</p>
-        </div>
-        <Link to="/submit-drawings" className="btn-primary" data-tour="submit-cta">
-          <UploadIcon size={15} color="#0A0F1C" />
-          Submit Drawings
-        </Link>
-      </div>
+      <PageHeader
+        title={`Welcome back, ${firstName}`}
+        subtitle="Here's an overview of your projects"
+        actions={
+          <Button to="/submit-drawings" data-tour="submit-cta">
+            <UploadIcon size={15} color="currentColor" />
+            Submit Drawings
+          </Button>
+        }
+      />
 
-      <UsageBar usage={usage} t={t} user={user} />
-      <MessageUsageBar usage={usage} t={t} />
-      <GettingStarted projects={projectList} t={t} />
-      <SubmissionsTracker submissions={submissions} t={t} />
+      <UsageBar usage={usage} user={user} />
+      <MessageUsageBar usage={usage} />
+      <GettingStarted projects={projectList} />
+      <SubmissionsTracker submissions={submissions} />
 
       <div className="stats-row" data-tour="stats">
-        <StatCard icon={FolderIcon} iconColor={t.accentLight} iconBg={t.accentGlow}
-          value={projectList.length} label="Total Projects" t={t} />
-        <StatCard icon={ClockIcon} iconColor="#F59E0B" iconBg="rgba(245,158,11,0.06)"
-          value={projectList.filter(p => p.status === 'submitted' || p.status === 'in_review').length} label="In Queue" t={t} />
-        <StatCard icon={PipelineIcon} iconColor="#A855F7" iconBg="rgba(168,85,247,0.06)"
-          value={projectList.filter(p => p.status === 'in_progress').length} label="In Progress" t={t} />
-        <StatCard icon={CheckCircleIcon} iconColor="#10B981" iconBg="rgba(16,185,129,0.06)"
-          value={projectList.filter(p => p.status === 'completed' || p.status === 'delivered').length} label="Completed" t={t} accent />
+        <Stat icon={FolderIcon} tone="accent"
+          value={projectList.length} label="Total Projects" />
+        <Stat icon={ClockIcon} tone="warning"
+          value={projectList.filter(p => p.status === 'submitted' || p.status === 'in_review').length} label="In Queue" />
+        <Stat icon={PipelineIcon} tone="violet"
+          value={projectList.filter(p => p.status === 'in_progress').length} label="In Progress" />
+        <Stat icon={CheckCircleIcon} tone="success" accent
+          value={projectList.filter(p => p.status === 'completed' || p.status === 'delivered').length} label="Completed" />
       </div>
 
-      <div className="section-card" data-tour="projects-list">
-        <div className="section-card-header">
-          <h2>Your Projects</h2>
-          {projectList.length > 0 && (
-            <span style={{ fontSize: 12, color: t.textMuted }}>{projectList.length} total</span>
-          )}
-        </div>
+      <Card data-tour="projects-list">
+        <Card.Header
+          title="Your Projects"
+          extra={projectList.length > 0 ? `${projectList.length} total` : null}
+        />
 
         {loading ? (
-          <div className="empty-state">
-            <div className="loading-spinner" />
-            <p>Loading your projects...</p>
-          </div>
+          <SkeletonRows rows={4} />
         ) : projectList.length === 0 ? (
-          <div className="empty-state">
-            <div style={{
-              width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
-              background: 'rgba(245,158,11,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <FolderIcon size={24} color="#F59E0B" />
-            </div>
-            <h3>No projects yet</h3>
-            <p>Submit your drawings and our QS team will deliver your BOQ and Findings Report right here — typically within 24 hours.</p>
-            <Link to="/submit-drawings" className="btn-primary" style={{ marginTop: 16 }}>
-              Submit Your Drawings
-            </Link>
-          </div>
+          <EmptyState
+            icon={FolderIcon}
+            title="No projects yet"
+            body="Submit your drawings and our QS team will deliver your BOQ and Findings Report right here — typically within 24 hours."
+            action={<Button to="/submit-drawings">Submit Your Drawings</Button>}
+          />
         ) : (
-          <div className="projects-list">
-            {projectList.map(project => {
-              const st = STATUS_MAP[project.status] || STATUS_MAP.submitted;
-              return (
-                <div
-                  key={project.id}
-                  className="project-row"
-                  style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '100%', overflow: 'hidden', gap: 10 }}
-                >
-                  {editingId === project.id ? (
+          <div>
+            {projectList.map(project => (
+              <div key={project.id} className="ui-row">
+                {editingId === project.id ? (
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
+                    <Input
                       type="text"
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
@@ -737,113 +546,61 @@ export default function DashboardPage() {
                         if (e.key === 'Escape') setEditingId(null);
                       }}
                       autoFocus
-                      style={{
-                        flex: 1, minWidth: 0, padding: '8px 10px', borderRadius: 8,
-                        border: '1px solid var(--border)', background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, outline: 'none',
-                      }}
+                      style={{ flex: 1, minWidth: 0, fontWeight: 600 }}
                     />
-                    <button
+                    <Button size="sm"
                       onClick={() => handleRenameProject(project.id)}
                       disabled={renamingId === project.id || !editTitle.trim()}
-                      className="btn-primary"
-                      style={{ padding: '7px 14px', fontSize: 12, flexShrink: 0 }}
-                    >{renamingId === project.id ? 'Saving…' : 'Save'}</button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      style={{
-                        background: 'none', border: '1px solid var(--border)', borderRadius: 7,
-                        padding: '7px 12px', fontSize: 12, color: t.textMuted, cursor: 'pointer', flexShrink: 0,
-                      }}
-                    >Cancel</button>
+                    >{renamingId === project.id ? 'Saving…' : 'Save'}</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
                   </div>
-                  ) : (
-                  <Link
-                    to={`/project/${project.id}`}
-                    style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
-                  >
-                    <div className="project-info" style={{ minWidth: 0, flex: 1 }}>
-                      <div className="project-title" style={{
-                        fontFamily: 'var(--font-body)', fontSize: 15, fontWeight: 700,
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      }}>{project.title}</div>
-                      <div className="project-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                ) : (
+                  <>
+                    <Link to={`/project/${project.id}`} className="ui-row__main" style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div className="ui-row__title" style={{ fontSize: '0.95rem', fontWeight: 700 }}>{project.title}</div>
+                      <div className="ui-row__meta">
                         {project.item_count > 0 && <span>{project.item_count} items</span>}
                         {project.total_value > 0 && (
-                          <span style={{ marginLeft: 8 }}>
+                          <span>
                             {project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}
                           </span>
                         )}
-                        {project.project_type && (
-                          <span style={{ marginLeft: 8, opacity: 0.6 }}>{project.project_type}</span>
-                        )}
+                        {project.project_type && <span style={{ opacity: 0.7 }}>{project.project_type}</span>}
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    </Link>
+                    <div className="ui-row__side">
                       {project.deliverableCount > 0 && (
-                        <span title="Files from your QS are ready to download" style={{
-                          padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700,
-                          color: '#10B981', background: 'rgba(16,185,129,0.12)',
-                          border: '1px solid rgba(16,185,129,0.3)', whiteSpace: 'nowrap',
-                        }}>
+                        <Badge tone="success" outlined title="Files from your QS are ready to download">
                           {project.deliverableCount} doc{project.deliverableCount === 1 ? '' : 's'} ready
-                        </span>
+                        </Badge>
                       )}
-                      <span style={{
-                        padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600,
-                        color: st.color, background: st.bg, whiteSpace: 'nowrap',
-                      }}>
-                        {st.label}
-                      </span>
-                      <span className="project-date" style={{ whiteSpace: 'nowrap' }}>
+                      <StatusBadge status={project.status} />
+                      <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                         {new Date(project.created_at).toLocaleDateString('en-GB', {
                           day: 'numeric', month: 'short', year: 'numeric',
                         })}
                       </span>
+                      <IconButton
+                        onClick={() => { setEditingId(project.id); setEditTitle(project.title || ''); }}
+                        title="Rename project" aria-label="Rename project"
+                      >
+                        <EditIcon size={14} />
+                      </IconButton>
+                      <IconButton danger
+                        onClick={() => handleDeleteProject(project.id)}
+                        disabled={deletingId === project.id}
+                        title="Delete project" aria-label="Delete project"
+                      >
+                        ✕
+                      </IconButton>
                     </div>
-                  </Link>
-                  )}
-                  {editingId !== project.id && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setEditingId(project.id);
-                      setEditTitle(project.title || '');
-                    }}
-                    title="Rename project"
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: t.textMuted, padding: '2px 6px', borderRadius: 5,
-                      opacity: 0.5, lineHeight: 1, flexShrink: 0,
-                    }}
-                  >
-                    <EditIcon size={14} />
-                  </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDeleteProject(project.id);
-                    }}
-                    disabled={deletingId === project.id}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      color: t.textMuted, fontSize: 16, padding: '2px 6px',
-                      borderRadius: 5, opacity: deletingId === project.id ? 0.4 : 0.5,
-                      lineHeight: 1, flexShrink: 0, marginLeft: 8,
-                    }}
-                    title="Delete project"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, BrowserRouter, useParams } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { ToastProvider } from './ui';
 import Layout from './components/Layout';
 
 // Pages
@@ -178,7 +179,9 @@ export default function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <AppInner />
+        <ToastProvider>
+          <AppInner />
+        </ToastProvider>
       </ThemeProvider>
     </AuthProvider>
   );
