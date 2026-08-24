@@ -232,3 +232,20 @@ test('resolveRate is total on garbage input — it never throws', () => {
     assert.ok(r.basis, 'a basis is always reported');
   }
 });
+
+test('the commercial ceiling applies on non-domestic work in both implementations', () => {
+  // 45 m2 of curtain walling at GBP 1,240/m2 is an ordinary commercial rate and
+  // must survive; the same rate on a house is above the domestic ceiling and is
+  // clipped to it. The pricer and the resolver have to agree on both answers.
+  const params = {
+    itemKey: 'x_cw',
+    description: 'Curtain walling to entrance elevation, structural glazing',
+    unit: 'm2', qty: 45, assumedRate: 1240, locFactor: 1,
+  };
+  const comm = resolveRate({ ...params, nonResidential: true });
+  const dom = resolveRate({ ...params, nonResidential: false });
+  assert.strictEqual(comm.rate, 1240, 'a commercial facade rate is not clipped');
+  assert.strictEqual(comm.basis, 'ai_estimated');
+  assert.strictEqual(dom.rate, 800, 'the same rate on a house clips to the domestic ceiling');
+  assert.strictEqual(dom.basis, 'ceiling_clipped');
+});

@@ -4276,6 +4276,18 @@ function runQsPasses(pricedResult, lockedTakeoff, resubmission, qsOpts = {}) {
   } catch (e) { console.error('[QS pass] credibility:', e.message); }
 
   try {
+    const { assessCoverage } = require('./coverageGate');
+    passes.coverage = assessCoverage(pricedResult, {
+      lockedTakeoff: takeoff,
+      lockedItems: takeoff.items,
+      projectTitle: takeoff.description || takeoff.project_type || '',
+    });
+    if (passes.coverage.blocking) {
+      console.error('[QS pass] coverage gate: ' + passes.coverage.verdict + ' — ' + (passes.coverage.reasons[0] || ''));
+    }
+  } catch (e) { console.error('[QS pass] coverage:', e.message); }
+
+  try {
     const { scanDeferrals } = require('./qualifications');
     const text = [takeoff.brief, takeoff.notes, takeoff.description]
       .filter(Boolean).join('\n');

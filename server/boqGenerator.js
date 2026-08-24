@@ -332,6 +332,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       else if (rs === 'base_library') srcLabel = 'Standard';
       else if (rs === 'ai_estimated') srcLabel = 'AI estimate';
       else if (rs === 'ceiling_clipped') srcLabel = 'Capped';
+      else if (rs === 'stated_sum') srcLabel = 'Stated sum';
       else if (rs === 'fallback_estimated' || rs === 'fallback_corrected') srcLabel = 'Estimate';
 
       var dataRow = ws.getRow(row);

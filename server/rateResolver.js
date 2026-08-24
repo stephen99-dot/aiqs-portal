@@ -36,6 +36,7 @@ const {
   BASE_RATES,
   unitFamily,
   ceilingFor,
+  statedSumInDescription,
   estimateFallbackRate,
 } = require('./deterministicPricer');
 
@@ -49,6 +50,7 @@ const BASIS_TO_RATE_SOURCE = {
   fallback:         'fallback_estimated',
   fallback_clipped: 'fallback_corrected',
   ceiling_clipped: 'ceiling_clipped',
+  stated_sum: 'stated_sum',
 };
 
 // Confidence per basis. Coarse on purpose: it is a label for how much the number rests
@@ -62,6 +64,7 @@ const BASIS_CONFIDENCE = {
   fallback:         0.20,
   fallback_clipped: 0.15,
   ceiling_clipped: 0.15,
+  stated_sum: 1.0,
 };
 
 function round2(n) {
@@ -92,6 +95,10 @@ function resolveRate(p = {}) {
     itemKey, description = '', unit = '', qty = 1,
     locFactor = 1, overrideRate, clientRate, assumedRate,
     region = null, projectType = null,
+    // Non-domestic work uses the commercial ceiling table. Threaded through
+    // rather than re-detected here: the pricer classifies the building once, and
+    // two classifiers would eventually disagree on the same job.
+    nonResidential = false,
   } = p;
 
   const item = { key: itemKey, description, unit, qty, assumed_rate: assumedRate };
@@ -181,7 +188,7 @@ function resolveRate(p = {}) {
 
   // Unit ceiling. The last line of defence against a physically impossible rate
   // arriving from any source, including a client rate for a key with no base rate.
-  const ceiling = ceilingFor(unit);
+  const ceiling = ceilingFor(unit, { commercial: nonResidential });
   if (ceiling) {
     const ceilingLocal = ceiling * locFactor;
     if (rate > ceilingLocal) {
@@ -197,11 +204,26 @@ function resolveRate(p = {}) {
     }
   }
 
+  // A stated provisional / prime-cost sum overrides the ladder and skips both the
+  // location factor and the ceiling. Kept in step with deterministicPricer.js.
+  const statedSum = statedSumInDescription(description || itemKey);
+  if (statedSum != null && (Number(qty) || 1) === 1 && basis !== 'override' && basis !== 'client_verified') {
+    rate = statedSum;
+    basis = 'stated_sum';
+    provenance.push({ source_type: 'stated_in_documents', value: statedSum, weight: 1.0 });
+  }
+
   // An AI-assumed rate that looks like a total rather than a per-unit price.
+  // Kept in step with the same guard in deterministicPricer.js — see the comment
+  // there for why non-domestic work needs a different trigger and a different
+  // reference rate (45 m2 of curtain walling at an ordinary GBP 1,240/m2 is a
+  // GBP 56k line, and the domestic keyword ladder answers GBP 45/m2 for it).
   if (basis === 'ai_estimated' && qty > 1) {
     const itemTotal = qty * rate;
-    if (itemTotal > 50000 && rate > 500) {
-      const expected = estimateFallbackRate(item) * locFactor;
+    if (itemTotal > (nonResidential ? 250000 : 50000) && rate > 500) {
+      const expected = (nonResidential
+        ? (ceilingFor(unit, { commercial: true }) || estimateFallbackRate(item))
+        : estimateFallbackRate(item)) * locFactor;
       if (rate > expected * 5) {
         warnings.push(`Rate for '${itemKey}' looks too high (${Math.round(itemTotal)} total) — using fallback`);
         rate = expected;

@@ -254,6 +254,47 @@ function buildDeliverySummary(priced, recalc, opts = {}) {
     };
   }
 
+  // Coverage (coverageGate.js). The one pass allowed to withhold the headline.
+  // Everything else here raises a question beside the numbers; this one can say
+  // the numbers should not be presented as a bill at all — because the library
+  // does not cover this building, or because a cap rewrote every rate in it to
+  // hit a target. A figure nobody can support is not improved by being shown
+  // with a caveat underneath it.
+  if (passes.coverage) {
+    const c = passes.coverage;
+    qs.coverage = {
+      verdict: c.verdict,
+      buildingClass: c.building_class,
+      valueCoveragePct: c.coverage.value_coverage_pct,
+      estimatedPct: c.coverage.estimated_pct,
+      lineCoveragePct: c.coverage.line_coverage_pct,
+      packages: c.packages,
+      unpricedAllowances: c.unpriced_allowances,
+      reasons: c.reasons,
+      statement: c.statement,
+      remedy: c.remedy,
+    };
+    if (c.verdict === 'decline') {
+      headline = null;
+      statusLine = c.statement;
+      needsCheck.unshift({
+        id: 'coverage_decline',
+        title: 'This should not go out as a bill of quantities',
+        detail: c.reasons.join(' '),
+        why: c.remedy.length
+          ? `What would make it issuable: ${c.remedy.join(' ')}`
+          : 'A bill that cannot be supported reads as a price and gets relied on.',
+      });
+    } else if (c.verdict === 'qualify') {
+      needsCheck.unshift({
+        id: 'coverage_qualify',
+        title: `Budget estimate, not a tender bill — ${c.coverage.value_coverage_pct}% of the value is on a library or evidenced rate`,
+        detail: c.reasons.join(' '),
+        why: c.remedy.length ? `What would firm it up: ${c.remedy.join(' ')}` : 'The reader cannot tell an estimated rate from a researched one unless it is stated.',
+      });
+    }
+  }
+
   if (passes.deferrals && passes.deferrals.total > 0) {
     qs.deferrals = {
       total: passes.deferrals.total, byKind: passes.deferrals.byKind,

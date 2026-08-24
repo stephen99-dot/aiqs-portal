@@ -200,6 +200,72 @@ export default function DeliverySummary({ delivery }) {
         </Card>
       )}
 
+      {/* ── Coverage. Where the money actually rests, and whether this is a bill
+             at all. On a `decline` verdict the headline above is withheld, so
+             this card carries the whole answer. ── */}
+      {qs && qs.coverage && qs.coverage.verdict !== 'issue' && (
+        <Card>
+          <Card.Header
+            title={qs.coverage.verdict === 'decline' ? 'Not issuable as a bill of quantities' : 'Budget estimate — stated limitations'}
+            extra={(
+              <Badge tone={qs.coverage.verdict === 'decline' ? 'danger' : 'warning'} size="sm">
+                {qs.coverage.valueCoveragePct}% supported
+              </Badge>
+            )}
+          />
+          <Card.Body>
+            <div style={{ fontSize: '0.86rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              {qs.coverage.statement}
+            </div>
+
+            <div className="ui-row" style={{ marginTop: 10, gap: 18, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Building <strong style={{ color: 'var(--text-primary)' }}>
+                  {qs.coverage.buildingClass.klass === 'non_residential'
+                    ? (qs.coverage.buildingClass.sector || 'non-residential')
+                    : qs.coverage.buildingClass.klass}
+                </strong>
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Estimated <strong style={{ color: 'var(--text-primary)' }}>{qs.coverage.estimatedPct}%</strong> of value
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Library-matched <strong style={{ color: 'var(--text-primary)' }}>{qs.coverage.lineCoveragePct}%</strong> of lines
+              </div>
+            </div>
+
+            {qs.coverage.packages.filter((p) => p.unevidenced_value > 0).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 5 }}>
+                  Packages carrying estimated rates
+                </div>
+                {qs.coverage.packages.filter((p) => p.unevidenced_value > 0).slice(0, 6).map((p, i) => (
+                  <div key={i} className="ui-row" style={{ alignItems: 'baseline' }}>
+                    <div className="ui-row__main" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', whiteSpace: 'normal' }}>
+                      {p.package}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                      {p.value_pct}% of the bill
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {qs.coverage.remedy.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: '0.74rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 5 }}>
+                  What would make this issuable
+                </div>
+                {qs.coverage.remedy.map((r, i) => (
+                  <div key={i} style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55, paddingLeft: 10, borderLeft: '2px solid var(--border-accent)', marginBottom: 4, whiteSpace: 'normal' }}>{r}</div>
+                ))}
+              </div>
+            )}
+          </Card.Body>
+        </Card>
+      )}
+
       {/* ── Deferral count (§5.2) — the argument for a provisional-sum schedule. ── */}
       {qs && qs.deferrals && (
         <Card>
