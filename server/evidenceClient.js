@@ -10,7 +10,12 @@
  * evidence layer must degrade the confidence of a takeoff, never break the
  * portal — and it must never silently substitute a guess for a measurement.
  */
-const EVIDENCE_URL = process.env.EVIDENCE_URL || 'http://127.0.0.1:8021';
+// Default derived from the same EVIDENCE_HOST/EVIDENCE_PORT the supervisor
+// spawns with, so moving the port moves BOTH ends. EVIDENCE_URL still wins,
+// for pointing at a sidecar someone runs themselves.
+const EVIDENCE_HOST = process.env.EVIDENCE_HOST || '127.0.0.1';
+const EVIDENCE_PORT = Number(process.env.EVIDENCE_PORT) || 8021;
+const EVIDENCE_URL = process.env.EVIDENCE_URL || `http://${EVIDENCE_HOST}:${EVIDENCE_PORT}`;
 const TIMEOUT_MS = Number(process.env.EVIDENCE_TIMEOUT_MS) || 20000;
 
 async function call(endpoint, body) {

@@ -133,6 +133,19 @@ app.use('/api/builder3d', require('./builder3dRoutes'));
 // applications and draft a headed intro letter. Locked to a single account
 // (the router gates itself with authMiddleware + an email allowlist).
 app.use('/api/planning-leads', require('./planningLeadsRoutes'));
+// Health endpoint. Registered BEFORE the SPA catch-all, or it would be served
+// index.html and report healthy no matter what state the server was in.
+// Also reports whether the evidence layer came up, which is how you verify a
+// deploy turned it on.
+app.get('/api/health', async function (req, res) {
+  let evidence = 'off';
+  try {
+    const { isAvailable } = require('./evidenceClient');
+    evidence = (await isAvailable()) ? 'ready' : 'off';
+  } catch (e) { evidence = 'off'; }
+  res.json({ ok: true, evidence, uptime_s: Math.round(process.uptime()) });
+});
+
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
@@ -149,4 +162,9 @@ require('./creditNotifications').start();
 // Planning Leads — start the slow background harvester that fills the local
 // planning-application store one area at a time, so scans never hit PlanIt live.
 require('./planningData').startHarvester();
+// Evidence sidecar — runs inside this container so it shares the uploads disk.
+// Always optional: if Python or PyMuPDF is missing it logs one line and the
+// portal carries on, with takeoffs reported as visual-only.
+try { require('./evidenceSupervisor').start(); } catch (e) { console.error('[Evidence] supervisor failed to start:', e.message); }
+
 app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
