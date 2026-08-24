@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
+import { Button, Card, Banner, Field, Input, Textarea, PageHeader, Skeleton, SkeletonCard } from '../ui';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -171,207 +172,210 @@ export default function BrandingPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', fontSize: 13.5, color: 'var(--text-muted)' }}>
-        Loading branding…
+      <div className="page" style={{ maxWidth: 1280 }}>
+        <Skeleton width={160} height={26} style={{ marginBottom: 8 }} />
+        <Skeleton width={380} height={12} style={{ marginBottom: 24 }} />
+        <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(360px, 460px)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <SkeletonCard height={120} />
+            <SkeletonCard height={120} />
+          </div>
+          <SkeletonCard height={320} />
+        </div>
       </div>
     );
   }
 
   if (!branding) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: '#EF4444' }}>
+      <div style={{ padding: 40, textAlign: 'center', color: 'var(--danger)' }}>
         {error || 'Could not load branding.'}
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '24px 28px 60px', maxWidth: 1280, margin: '0 auto' }}>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
-        }}>
-          Branding
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
-          Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate.
-        </p>
-      </div>
+    <div className="page" style={{ maxWidth: 1280, paddingBottom: 60 }}>
+      <PageHeader
+        title="Branding"
+        subtitle="Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate."
+      />
 
       {error && (
-        <div style={{
-          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-          color: '#EF4444', fontSize: 13,
-        }}>{error}</div>
+        <Banner tone="danger" style={{ marginBottom: 12 }}>
+          <span style={{ color: 'var(--danger)', fontSize: '0.84rem' }}>{error}</span>
+        </Banner>
       )}
       {statusMsg && (
-        <div style={{
-          padding: '8px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
-          color: '#10B981', fontSize: 12.5, fontWeight: 600,
-        }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}</div>
+        <Banner tone="success" style={{ marginBottom: 12 }}>
+          <span style={{ color: 'var(--success)', fontSize: '0.8rem', fontWeight: 600 }}>
+            <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {statusMsg}
+          </span>
+        </Banner>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 460px) 1fr', gap: 18, alignItems: 'flex-start' }}>
+      <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(360px, 460px)', gap: 18 }}>
         {/* Settings */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Logo */}
-          <Card title="Logo">
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: 14, borderRadius: 10,
-              background: 'var(--bg-input)', border: '1px solid var(--border)',
-            }}>
+          <Card>
+            <Card.Header title="Logo" />
+            <Card.Body>
               <div style={{
-                width: 80, height: 80, borderRadius: 9, flexShrink: 0,
-                background: '#fff', border: '1px solid var(--border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                overflow: 'hidden',
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: 14, borderRadius: 10,
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
               }}>
-                {logoUrl ? (
-                  <img src={logoUrl} alt="Your logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No logo</span>
-                )}
-              </div>
-              <div style={{ flex: 1 }}>
-                <button
-                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                  disabled={uploading}
-                  style={{
-                    padding: '8px 14px', borderRadius: 8, border: 'none',
-                    background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                    color: '#0A0F1C', fontWeight: 700, fontSize: 13,
-                    cursor: uploading ? 'wait' : 'pointer', marginRight: 8,
-                  }}
-                >{uploading ? 'Uploading…' : (logoUrl ? 'Replace' : 'Upload')}</button>
-                {logoUrl && (
-                  <button
-                    onClick={deleteLogo}
-                    disabled={uploading}
-                    style={{
-                      padding: '8px 12px', borderRadius: 8,
-                      background: 'transparent', color: 'var(--text-muted)',
-                      border: '1px solid var(--border)', fontSize: 12.5, cursor: 'pointer',
-                    }}
-                  >Remove</button>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".png,.jpg,.jpeg,.webp,.svg,image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) uploadLogo(f); e.target.value = ''; }}
-                />
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                  PNG, JPG, WebP or SVG. Square or landscape works best — max 5MB.
+                <div style={{
+                  width: 80, height: 80, borderRadius: 9, flexShrink: 0,
+                  background: '#fff', border: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="Your logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>No logo</span>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Button
+                      size="sm"
+                      onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                      disabled={uploading}
+                    >{uploading ? 'Uploading…' : (logoUrl ? 'Replace' : 'Upload')}</Button>
+                    {logoUrl && (
+                      <Button size="sm" variant="secondary" onClick={deleteLogo} disabled={uploading}>
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp,.svg,image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) uploadLogo(f); e.target.value = ''; }}
+                  />
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                    PNG, JPG, WebP or SVG. Square or landscape works best — max 5MB.
+                  </div>
                 </div>
               </div>
-            </div>
+            </Card.Body>
           </Card>
 
           {/* Colours */}
-          <Card title="Brand colours">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <ColourField
-                label="Primary"
-                hint="Section headers, totals"
-                value={branding.primary_colour}
-                onChange={(v) => setField('primary_colour', v)}
-                onSave={() => saveField('primary_colour')}
-                saving={savingField === 'primary_colour'}
-              />
-              <ColourField
-                label="Accent"
-                hint="Highlights, totals callout"
-                value={branding.accent_colour}
-                onChange={(v) => setField('accent_colour', v)}
-                onSave={() => saveField('accent_colour')}
-                saving={savingField === 'accent_colour'}
-              />
-            </div>
+          <Card>
+            <Card.Header title="Brand colours" />
+            <Card.Body>
+              <div className="ui-grid" style={{ '--grid-min': '150px' }}>
+                <ColourField
+                  label="Primary"
+                  hint="Section headers, totals"
+                  value={branding.primary_colour}
+                  onChange={(v) => setField('primary_colour', v)}
+                  onSave={() => saveField('primary_colour')}
+                  saving={savingField === 'primary_colour'}
+                />
+                <ColourField
+                  label="Accent"
+                  hint="Highlights, totals callout"
+                  value={branding.accent_colour}
+                  onChange={(v) => setField('accent_colour', v)}
+                  onSave={() => saveField('accent_colour')}
+                  saving={savingField === 'accent_colour'}
+                />
+              </div>
+            </Card.Body>
           </Card>
 
           {/* Company info */}
-          <Card title="Company details">
-            <Field label="Company name">
-              <input
-                type="text"
-                value={branding.company_name || ''}
-                onChange={(e) => setField('company_name', e.target.value)}
-                onBlur={() => saveField('company_name')}
-                placeholder="e.g. Smith & Co. Construction"
-                style={inputStyle}
-              />
-            </Field>
-            <Field label="Address (shown on cover sheet)">
-              <textarea
-                rows={3}
-                value={branding.company_address || ''}
-                onChange={(e) => setField('company_address', e.target.value)}
-                onBlur={() => saveField('company_address')}
-                placeholder="Street, town, county, postcode"
-                style={{ ...inputStyle, resize: 'vertical', minHeight: 64, fontFamily: 'inherit' }}
-              />
-            </Field>
-            <Field label="Footer line (shown on every page)">
-              <input
-                type="text"
-                value={branding.footer_text || ''}
-                onChange={(e) => setField('footer_text', e.target.value)}
-                onBlur={() => saveField('footer_text')}
-                placeholder="e.g. www.smithco.uk · 020 1234 5678"
-                style={inputStyle}
-              />
-            </Field>
-            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              Fields save automatically when you click outside the box.
-            </div>
+          <Card>
+            <Card.Header title="Company details" />
+            <Card.Body>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Field label="Company name">
+                  <Input
+                    type="text"
+                    value={branding.company_name || ''}
+                    onChange={(e) => setField('company_name', e.target.value)}
+                    onBlur={() => saveField('company_name')}
+                    placeholder="e.g. Smith & Co. Construction"
+                  />
+                </Field>
+                <Field label="Address (shown on cover sheet)">
+                  <Textarea
+                    rows={3}
+                    value={branding.company_address || ''}
+                    onChange={(e) => setField('company_address', e.target.value)}
+                    onBlur={() => saveField('company_address')}
+                    placeholder="Street, town, county, postcode"
+                    style={{ minHeight: 64 }}
+                  />
+                </Field>
+                <Field label="Footer line (shown on every page)">
+                  <Input
+                    type="text"
+                    value={branding.footer_text || ''}
+                    onChange={(e) => setField('footer_text', e.target.value)}
+                    onBlur={() => saveField('footer_text')}
+                    placeholder="e.g. www.smithco.uk · 020 1234 5678"
+                  />
+                </Field>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  Fields save automatically when you click outside the box.
+                </div>
+              </div>
+            </Card.Body>
           </Card>
 
           {/* Template */}
-          <Card title="Document template">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {TEMPLATES.map((t) => {
-                const active = branding.template === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => { setField('template', t.key); saveField('template', t.key); }}
-                    style={{
-                      padding: '12px 14px', borderRadius: 10, textAlign: 'left',
-                      background: active ? 'rgba(245,158,11,0.08)' : 'var(--bg-input)',
-                      border: '1px solid ' + (active ? '#F59E0B' : 'var(--border)'),
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                      <span style={{ fontWeight: 700, fontSize: 13.5 }}>{t.label}</span>
-                      {active && <span style={{ fontSize: 11, color: '#F59E0B', fontWeight: 700 }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Selected</span>}
-                    </div>
-                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>{t.desc}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <Card>
+            <Card.Header title="Document template" />
+            <Card.Body>
+              <div className="ui-grid" style={{ '--grid-min': '150px', gap: 8 }}>
+                {TEMPLATES.map((t) => {
+                  const active = branding.template === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => { setField('template', t.key); saveField('template', t.key); }}
+                      style={{
+                        padding: '12px 14px', borderRadius: 10, textAlign: 'left',
+                        background: active ? 'var(--accent-glow)' : 'var(--bg-input)',
+                        border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                        cursor: 'pointer', fontFamily: 'var(--font-body)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-primary)' }}>{t.label}</span>
+                        {active && <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700 }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Selected</span>}
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{t.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card.Body>
           </Card>
 
         </div>
 
         {/* Live document preview */}
-        <div style={{
+        <Card style={{
           position: 'sticky', top: 12,
-          padding: 18, borderRadius: 12,
-          background: 'var(--bg-card)', border: '1px solid var(--border)',
           maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
         }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            Live preview · Cover sheet
-          </div>
-          <DocPreview branding={branding} logoUrl={logoUrl} />
-        </div>
+          <Card.Body style={{ padding: 18 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              Live preview · Cover sheet
+            </div>
+            <DocPreview branding={branding} logoUrl={logoUrl} />
+          </Card.Body>
+        </Card>
       </div>
     </div>
   );
@@ -379,38 +383,9 @@ export default function BrandingPage() {
 
 // ─── Sub-components ────────────────────────────────────────────────────────
 
-const inputStyle = {
-  width: '100%', padding: '8px 12px', borderRadius: 8,
-  background: 'var(--bg-input)', color: 'var(--text-primary)',
-  border: '1px solid var(--border)', fontSize: 13, outline: 'none',
-  boxSizing: 'border-box',
-};
-
-function Card({ title, children }) {
-  return (
-    <div style={{
-      padding: 18, borderRadius: 12,
-      background: 'var(--bg-card)', border: '1px solid var(--border)',
-    }}>
-      <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{label}</div>
-      {children}
-    </div>
-  );
-}
-
 function ColourField({ label, hint, value, onChange, onSave, saving }) {
   return (
-    <div>
-      <div style={{ fontSize: 11.5, fontWeight: 600, marginBottom: 5 }}>{label}</div>
+    <Field label={label} hint={saving ? 'Saving…' : hint}>
       <div style={{ display: 'flex', gap: 6 }}>
         <input
           type="color"
@@ -418,24 +393,21 @@ function ColourField({ label, hint, value, onChange, onSave, saving }) {
           onChange={(e) => onChange(e.target.value)}
           onBlur={onSave}
           style={{
-            width: 42, height: 36, borderRadius: 7, padding: 0,
-            border: '1px solid var(--border)', cursor: 'pointer',
+            width: 42, height: 36, borderRadius: 7, padding: 0, flexShrink: 0,
+            border: '1px solid var(--border-input)', cursor: 'pointer',
             background: 'transparent',
           }}
         />
-        <input
+        <Input
           type="text"
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onSave}
           placeholder="#1B2A4A"
-          style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}
+          style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.76rem' }}
         />
       </div>
-      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>
-        {saving ? 'Saving…' : hint}
-      </div>
-    </div>
+    </Field>
   );
 }
 
@@ -493,7 +465,7 @@ function DocPreview({ branding, logoUrl }) {
         </div>
       </div>
 
-      <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
         <div>
           <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total value</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: primary, fontFamily: 'JetBrains Mono, monospace' }}>£141,520</div>

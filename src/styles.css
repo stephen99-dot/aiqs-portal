@@ -506,26 +506,9 @@ body {
   .stat-label { font-size: 0.66rem; }
   .form-row { grid-template-columns: 1fr; }
 
-  /* Collapse the inline "sidebar + content" two-column layouts to a single
-     stacked column. These are written as inline styles across the pages, so we
-     match on the serialized style attribute. auto-fit/minmax grids already
-     reflow on their own and are intentionally left alone. */
-  [style*="grid-template-columns: 1fr 320px"],
-  [style*="grid-template-columns: 1fr 340px"],
-  [style*="grid-template-columns: 1fr 360px"],
-  [style*="grid-template-columns: 1fr 150px"],
-  [style*="grid-template-columns: 320px 1fr"],
-  [style*="grid-template-columns: 160px 1fr 80px"],
-  [style*="grid-template-columns: minmax(0, 1fr) minmax(0, 380px)"],
-  [style*="grid-template-columns: minmax(280px, 380px) 1fr"],
-  [style*="grid-template-columns: minmax(320px, 360px) 1fr"],
-  [style*="grid-template-columns: minmax(360px, 460px) 1fr"],
-  [style*="grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr)"],
-  [style*="grid-template-columns: 1.25fr 0.75fr"],
-  [style*="grid-template-columns: 1.6fr 0.7fr 1fr"],
-  [style*="grid-template-columns: 100px 1fr 160px 60px 90px 90px"] {
-    grid-template-columns: 1fr !important;
-  }
+  /* (The old [style*="grid-template-columns…"] hacks that rescued inline
+     two-column grids on mobile are gone — pages use .ui-split / .ui-grid
+     from ui.css now, which reflow on their own.) */
 
   .section-card-header { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; }
   .card-body { padding: 14px; }
@@ -540,38 +523,6 @@ body {
   .auth-header h1 { font-size: 1.35rem; }
   .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
   .form-actions { flex-direction: column; }
-
-  /* Hide non-essential table columns on mobile */
-  .hide-mobile { display: none !important; }
-
-  /* Projects table: show only project name + value on mobile */
-  .projects-table-header,
-  .projects-table-row {
-    grid-template-columns: 1fr 100px !important;
-    padding: 10px 14px !important;
-  }
-
-  /* MyRates table: show only name + value on mobile */
-  .rates-table-header,
-  .rates-table-row {
-    grid-template-columns: 1fr 80px !important;
-    padding: 8px 14px !important;
-  }
-  .rates-table-row, .projects-table-row { min-height: 44px; align-items: center; }
-
-  /* Admin tables: horizontal scroll wrapper */
-  .admin-table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* General table overflow prevention */
-  .table-responsive {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -14px;
-    padding: 0 14px;
-  }
 
   /* Keep the whole app from scrolling sideways. Individual wide elements
      (tables, code blocks) opt back into their own horizontal scroll. */

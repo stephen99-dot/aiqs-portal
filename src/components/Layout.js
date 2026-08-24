@@ -246,7 +246,7 @@ export default function Layout() {
                 <NavLink
                   key={item.path}
                   to={item.path}
-                  end={item.path === '/dashboard'}
+                  end={item.path === '/dashboard' || item.path === '/admin'}
                   data-tour={item.path === '/submit-drawings' ? 'submit-drawings' : item.path === '/chat' ? 'chat-nav' : undefined}
                   className={({ isActive }) => `ui-nav-item${isActive ? ' ui-nav-item--active' : ''}`}
                   onClick={(e) => {

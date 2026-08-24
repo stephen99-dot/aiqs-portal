@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
-import { BuildingIcon, BoltIcon, ClipboardIcon, PickaxeIcon, BrickIcon, PlankIcon, HomeIcon, BucketIcon, CubeIcon, ZapIcon, WrenchIcon, ThermometerIcon, PaletteIcon, FryingPanIcon, DropletIcon, BurstIcon, PackageIcon, BrainIcon, FileTextIcon, XIcon, CheckCircleIcon, XCircleIcon, RulerIcon, LightbulbIcon } from '../components/Icons';
+import {
+  Button, IconButton, Card, Banner, Badge, Stat,
+  Input, Select, Field, PageHeader, EmptyState, Skeleton, SkeletonRows, useToast,
+} from '../ui';
+import { BuildingIcon, BoltIcon, ClipboardIcon, PickaxeIcon, BrickIcon, PlankIcon, HomeIcon, BucketIcon, CubeIcon, ZapIcon, WrenchIcon, ThermometerIcon, PaletteIcon, FryingPanIcon, DropletIcon, BurstIcon, PackageIcon, FileTextIcon, XIcon, CheckCircleIcon, XCircleIcon, RulerIcon, LightbulbIcon } from '../components/Icons';
 
 const CATEGORY_OPTIONS = [
   { value: 'structural_steel', label: 'Structural Steel' },
@@ -30,17 +33,17 @@ const CAT_ICONS = { structural_steel:BuildingIcon, architectural_metalwork:BoltI
 function getCatLabel(cat) { const f = CATEGORY_OPTIONS.find(c => c.value === cat); return f ? f.label : cat.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
 function getCatIcon(cat) { return CAT_ICONS[cat] || PackageIcon; }
 
-function confidenceBadge(conf, isDark) {
-  if (conf >= 0.85) return { text:'Verified', bg:isDark?'rgba(16,185,129,0.15)':'rgba(16,185,129,0.1)', color:isDark?'#34D399':'#059669', border:isDark?'rgba(16,185,129,0.3)':'rgba(16,185,129,0.2)' };
-  if (conf >= 0.7) return { text:'Emerging', bg:isDark?'rgba(245,158,11,0.15)':'rgba(245,158,11,0.1)', color:isDark?'#FBBF24':'#D97706', border:isDark?'rgba(245,158,11,0.3)':'rgba(245,158,11,0.2)' };
-  return { text:'New', bg:isDark?'rgba(148,163,184,0.15)':'rgba(148,163,184,0.1)', color:isDark?'#94A3B8':'#64748B', border:isDark?'rgba(148,163,184,0.3)':'rgba(148,163,184,0.2)' };
+// Confidence chips map onto the kit's semantic Badge tones.
+function confidenceBadge(conf) {
+  if (conf >= 0.85) return { text: 'Verified', tone: 'success' };
+  if (conf >= 0.7) return { text: 'Emerging', tone: 'warning' };
+  return { text: 'New', tone: 'neutral' };
 }
 
 export default function MyRatesPage() {
-  const { t, mode } = useTheme();
-  const isDark = mode === 'dark';
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const toast = useToast();
 
   const [rates, setRates] = useState([]);
   const [stats, setStats] = useState(null);
@@ -96,7 +99,7 @@ export default function MyRatesPage() {
       });
       setEditingId(null);
       loadRates();
-    } catch (e) { alert('Failed to save.'); }
+    } catch (e) { toast.error('Failed to save.'); }
   };
 
   const handleAdd = async () => {
@@ -118,7 +121,7 @@ export default function MyRatesPage() {
 
   const handleDelete = async (rate) => {
     if (!window.confirm('Delete "'+rate.display_name+'"?')) return;
-    try { await apiFetch('/my-rates/'+rate.id, { method:'DELETE' }); loadRates(); } catch(e) { alert('Failed to delete.'); }
+    try { await apiFetch('/my-rates/'+rate.id, { method:'DELETE' }); loadRates(); } catch(e) { toast.error('Failed to delete.'); }
   };
 
   const handleImport = async (e) => {
@@ -142,108 +145,110 @@ export default function MyRatesPage() {
   const categories = Object.keys(grouped).sort();
   const toggleCat = (cat) => setExpandedCats(prev => ({...prev, [cat]:!prev[cat]}));
 
-  const c = {
-    cardBg:isDark?'#0D1117':'#FFFFFF', cardBorder:isDark?'#1E293B':'#E2E8F0',
-    rowHover:isDark?'rgba(37,99,235,0.06)':'rgba(37,99,235,0.03)',
-    text:isDark?'#F1F5F9':'#1E293B', textSec:isDark?'#94A3B8':'#64748B',
-    textMut:isDark?'#64748B':'#94A3B8', accent:'#2563EB',
-    inputBg:isDark?'#0D1117':'#F8FAFC', inputBorder:isDark?'#1E293B':'#E2E8F0',
-    catBg:isDark?'#111827':'#F1F5F9', catBorder:isDark?'#1E293B':'#E2E8F0', danger:'#EF4444',
-  };
-  const inputStyle = { padding:'8px 12px', background:c.inputBg, border:'1px solid '+c.inputBorder, borderRadius:'8px', color:c.text, fontSize:'13px', outline:'none', width:'100%' };
-
-  if (loading) return <div style={{padding:'40px',textAlign:'center',color:c.textSec}}><div style={{marginBottom:'12px'}}><BrainIcon size={32} /></div>Loading your rate library...</div>;
+  if (loading) {
+    return (
+      <div className="page">
+        <Skeleton width={220} height={24} style={{ marginBottom: 8 }} />
+        <Skeleton width={320} height={12} style={{ marginBottom: 24 }} />
+        <Card><SkeletonRows rows={6} /></Card>
+      </div>
+    );
+  }
 
   return (
-    <div style={{padding:'24px',maxWidth:'1000px',margin:'0 auto'}}>
-      <div style={{marginBottom:'24px'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'12px'}}>
-          <div>
-            <h1 style={{fontSize:'22px',fontWeight:700,color:c.text,margin:0}}><BrainIcon size={20} style={{ verticalAlign:'middle', marginRight:6 }} />My Rate Library</h1>
-            <p style={{fontSize:'13px',color:c.textSec,margin:'4px 0 0'}}>{isAdmin?'Master rate library — defaults for all projects.':'Your trained rates — used automatically by the AI QS.'}</p>
-          </div>
-          {stats && stats.total > 0 && (
-            <div style={{display:'flex',gap:'12px',flexWrap:'wrap'}}>
-              <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'10px',padding:'10px 16px',textAlign:'center'}}>
-                <div style={{fontSize:'20px',fontWeight:700,color:c.accent}}>{stats.total}</div>
-                <div style={{fontSize:'11px',color:c.textMut,marginTop:'2px'}}>Trained Rates</div>
-              </div>
-              <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'10px',padding:'10px 16px',textAlign:'center'}}>
-                <div style={{fontSize:'20px',fontWeight:700,color:stats.avg_confidence>=0.85?(isDark?'#34D399':'#059669'):(isDark?'#FBBF24':'#D97706')}}>{Math.round((stats.avg_confidence||0)*100)}%</div>
-                <div style={{fontSize:'11px',color:c.textMut,marginTop:'2px'}}>Avg Confidence</div>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="page">
+      <PageHeader
+        title="My Rate Library"
+        subtitle={isAdmin ? 'Master rate library — defaults for all projects.' : 'Your trained rates — used automatically by the AI QS.'}
+        actions={stats && stats.total > 0 ? (
+          <>
+            <Stat value={stats.total} label="Trained Rates" accent />
+            <Stat value={`${Math.round((stats.avg_confidence || 0) * 100)}%`} label="Avg Confidence" />
+          </>
+        ) : null}
+      />
 
-        {/* Actions row */}
-        <div style={{marginTop:'16px',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
-          <input type="text" placeholder="Search rates..." value={search} onChange={e=>setSearch(e.target.value)} style={{...inputStyle,maxWidth:'260px',flex:'1 1 200px'}} />
-          <button onClick={()=>{setShowAddForm(!showAddForm);setAddError('');}} style={{padding:'8px 16px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>+ Add Rate</button>
-          <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleImport} style={{display:'none'}} />
-          <button onClick={()=>fileInputRef.current?.click()} disabled={importing} style={{padding:'8px 16px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:importing?'wait':'pointer',opacity:importing?0.6:1,display:'inline-flex',alignItems:'center',gap:6}}>
-            {importing?'Importing...':<><FileTextIcon size={14} /> Import from Excel</>}
-          </button>
-        </div>
-
-        {/* Import result */}
-        {importResult && (
-          <div style={{marginTop:'12px',padding:'12px 16px',borderRadius:'8px',background:importResult.error?(isDark?'rgba(239,68,68,0.1)':'rgba(239,68,68,0.05)'):(isDark?'rgba(16,185,129,0.1)':'rgba(16,185,129,0.05)'),border:'1px solid '+(importResult.error?(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'):(isDark?'rgba(16,185,129,0.3)':'rgba(16,185,129,0.2)')),display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div style={{fontSize:'13px',color:importResult.error?c.danger:(isDark?'#34D399':'#059669'),display:'flex',alignItems:'center',gap:6}}>
-              {importResult.error ? <><XCircleIcon size={16} /> {importResult.error}</> : <><CheckCircleIcon size={16} /> Imported {importResult.imported} rates{importResult.skipped>0?' ('+importResult.skipped+' skipped)':''}</>}
-            </div>
-            <button onClick={()=>setImportResult(null)} style={{background:'none',border:'none',color:c.textMut,cursor:'pointer',display:'inline-flex',alignItems:'center'}}><XIcon size={16} /></button>
-          </div>
-        )}
-
-        {/* Add form */}
-        {showAddForm && (
-          <div style={{marginTop:'12px',padding:'16px 20px',background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'10px'}}>
-            <div style={{fontSize:'14px',fontWeight:600,color:c.text,marginBottom:'12px'}}>Add New Rate</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}}>
-              <div>
-                <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Category</label>
-                <select value={addForm.category} onChange={e=>setAddForm(f=>({...f,category:e.target.value}))} style={{...inputStyle,cursor:'pointer'}}>
-                  {CATEGORY_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Rate Name</label>
-                <input placeholder="e.g. Labour Rate" value={addForm.display_name} onChange={e=>setAddForm(f=>({...f,display_name:e.target.value}))} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Value</label>
-                <input type="number" inputMode="decimal" placeholder="e.g. 52" value={addForm.value} onChange={e=>setAddForm(f=>({...f,value:e.target.value}))} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Unit</label>
-                <input placeholder="e.g. /hr, /T, /m2, /day" value={addForm.unit} onChange={e=>setAddForm(f=>({...f,unit:e.target.value}))} style={inputStyle} />
-              </div>
-              <div style={{gridColumn:'1/-1'}}>
-                <label style={{fontSize:'11px',color:c.textMut,marginBottom:'4px',display:'block'}}>Note (optional)</label>
-                <input placeholder="Any notes..." value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} style={inputStyle} />
-              </div>
-            </div>
-            {addError && <div style={{marginTop:'8px',fontSize:'12px',color:c.danger}}>{addError}</div>}
-            <div style={{marginTop:'12px',display:'flex',gap:'8px'}}>
-              <button onClick={handleAdd} style={{padding:'8px 20px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>Save Rate</button>
-              <button onClick={()=>setShowAddForm(false)} style={{padding:'8px 16px',background:'transparent',color:c.textSec,border:'1px solid '+c.cardBorder,borderRadius:'8px',fontSize:'13px',cursor:'pointer'}}>Cancel</button>
-            </div>
-          </div>
-        )}
+      {/* Actions row */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Input
+          type="text" placeholder="Search rates..."
+          value={search} onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 260, flex: '1 1 200px', width: 'auto' }}
+        />
+        <Button onClick={() => { setShowAddForm(!showAddForm); setAddError(''); }}>+ Add Rate</Button>
+        <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleImport} style={{ display: 'none' }} />
+        <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+          {importing ? 'Importing...' : <><FileTextIcon size={14} /> Import from Excel</>}
+        </Button>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <Banner tone={importResult.error ? 'danger' : 'success'}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: 6,
+              color: importResult.error ? 'var(--danger)' : 'var(--success)',
+            }}>
+              {importResult.error
+                ? <><XCircleIcon size={16} /> {importResult.error}</>
+                : <><CheckCircleIcon size={16} /> Imported {importResult.imported} rates{importResult.skipped > 0 ? ' (' + importResult.skipped + ' skipped)' : ''}</>}
+            </div>
+            <IconButton onClick={() => setImportResult(null)} title="Dismiss" aria-label="Dismiss"><XIcon size={16} /></IconButton>
+          </div>
+        </Banner>
+      )}
+
+      {/* Add form */}
+      {showAddForm && (
+        <Card style={{ marginBottom: 16 }}>
+          <Card.Header title="Add New Rate" />
+          <Card.Body>
+            <div className="ui-grid" style={{ '--grid-min': '200px' }}>
+              <Field label="Category">
+                <Select value={addForm.category} onChange={e => setAddForm(f => ({ ...f, category: e.target.value }))}>
+                  {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Rate Name">
+                <Input placeholder="e.g. Labour Rate" value={addForm.display_name} onChange={e => setAddForm(f => ({ ...f, display_name: e.target.value }))} />
+              </Field>
+              <Field label="Value">
+                <Input type="number" inputMode="decimal" placeholder="e.g. 52" value={addForm.value} onChange={e => setAddForm(f => ({ ...f, value: e.target.value }))} />
+              </Field>
+              <Field label="Unit">
+                <Input placeholder="e.g. /hr, /T, /m2, /day" value={addForm.unit} onChange={e => setAddForm(f => ({ ...f, unit: e.target.value }))} />
+              </Field>
+              <Field label="Note (optional)" style={{ gridColumn: '1/-1' }}>
+                <Input placeholder="Any notes..." value={addForm.note} onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))} />
+              </Field>
+            </div>
+            {addError && <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--danger)' }}>{addError}</div>}
+            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+              <Button onClick={handleAdd} busyLabel="Saving…">Save Rate</Button>
+              <Button variant="secondary" onClick={() => setShowAddForm(false)}>Cancel</Button>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
 
       {/* Empty state */}
       {rates.length === 0 && !showAddForm && (
-        <div style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',padding:'48px 24px',textAlign:'center'}}>
-          <div style={{marginBottom:'16px'}}><RulerIcon size={48} /></div>
-          <h3 style={{color:c.text,fontSize:'16px',fontWeight:600,margin:'0 0 8px'}}>No rates yet</h3>
-          <p style={{color:c.textSec,fontSize:'13px',maxWidth:'420px',margin:'0 auto 20px'}}>Add rates manually, import from Excel, or correct rates in chat.</p>
-          <div style={{display:'flex',gap:'10px',justifyContent:'center'}}>
-            <button onClick={()=>setShowAddForm(true)} style={{padding:'10px 20px',background:c.accent,color:'#fff',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer'}}>+ Add Your First Rate</button>
-            <button onClick={()=>fileInputRef.current?.click()} style={{padding:'10px 20px',background:'transparent',color:c.accent,border:'1px solid '+c.accent,borderRadius:'8px',fontSize:'13px',fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:6}}><FileTextIcon size={14} /> Import from Excel</button>
-          </div>
-        </div>
+        <Card>
+          <EmptyState
+            icon={RulerIcon}
+            title="No rates yet"
+            body="Add rates manually, import from Excel, or correct rates in chat."
+            action={
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Button onClick={() => setShowAddForm(true)}>+ Add Your First Rate</Button>
+                <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                  <FileTextIcon size={14} /> Import from Excel
+                </Button>
+              </div>
+            }
+          />
+        </Card>
       )}
 
       {/* Rate categories */}
@@ -251,83 +256,94 @@ export default function MyRatesPage() {
         const catRates = grouped[cat];
         const isExpanded = expandedCats[cat];
         const avgConf = catRates.reduce((s,r)=>s+(r.confidence||0),0)/catRates.length;
+        const CatIcon = getCatIcon(cat);
+        const avgBadge = confidenceBadge(avgConf);
         return (
-          <div key={cat} style={{background:c.cardBg,border:'1px solid '+c.cardBorder,borderRadius:'12px',marginBottom:'12px',overflow:'hidden'}}>
-            <div onClick={()=>toggleCat(cat)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 20px',cursor:'pointer',background:c.catBg,borderBottom:isExpanded?'1px solid '+c.catBorder:'none'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                {(()=>{const Ico=getCatIcon(cat);return <Ico size={18} />;})()}
-                <span style={{fontSize:'14px',fontWeight:600,color:c.text}}>{getCatLabel(cat)}</span>
-                <span style={{fontSize:'12px',color:c.textMut,background:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.04)',borderRadius:'10px',padding:'2px 8px'}}>{catRates.length} rate{catRates.length!==1?'s':''}</span>
+          <Card key={cat} style={{ marginBottom: 12 }}>
+            <div
+              onClick={() => toggleCat(cat)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                padding: '13px 20px', cursor: 'pointer',
+                background: 'var(--surface-hover)',
+                borderBottom: isExpanded ? '1px solid var(--border)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <CatIcon size={18} />
+                <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{getCatLabel(cat)}</span>
+                <Badge tone="neutral" pill>{catRates.length} rate{catRates.length !== 1 ? 's' : ''}</Badge>
               </div>
-              <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                {(()=>{const b=confidenceBadge(avgConf,isDark);return <span style={{fontSize:'11px',fontWeight:600,color:b.color,background:b.bg,border:'1px solid '+b.border,borderRadius:'10px',padding:'2px 8px'}}>{b.text}</span>;})()}
-                <span style={{fontSize:'16px',color:c.textMut,transform:isExpanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block'}}>▼</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <Badge tone={avgBadge.tone} pill>{avgBadge.text}</Badge>
+                <span style={{
+                  fontSize: '1rem', color: 'var(--text-muted)', display: 'inline-block',
+                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s',
+                }}>▼</span>
               </div>
             </div>
             {isExpanded && (
-              <div>
-                <div className="rates-table-header" style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'8px 20px',fontSize:'11px',fontWeight:600,color:c.textMut,textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid '+c.catBorder}}>
-                  <div>Rate</div><div style={{textAlign:'right'}}>Value</div><div style={{textAlign:'center'}} className="hide-mobile">Unit</div><div style={{textAlign:'center'}} className="hide-mobile">Confidence</div><div style={{textAlign:'center'}} className="hide-mobile">Actions</div>
-                </div>
-                {catRates.map(rate=>{
-                  const isEditing = editingId===rate.id;
-                  const badge = confidenceBadge(rate.confidence,isDark);
+              <Card.Body flush>
+                {catRates.map(rate => {
+                  const isEditing = editingId === rate.id;
+                  const badge = confidenceBadge(rate.confidence);
                   return (
-                    <div key={rate.id} className="rates-table-row" style={{display:'grid',gridTemplateColumns:'1fr 100px 80px 90px 100px',padding:'10px 20px',alignItems:'center',borderBottom:'1px solid '+(isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.04)'),transition:'background 0.1s'}} onMouseEnter={e=>e.currentTarget.style.background=c.rowHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <div>
-                        <div style={{fontSize:'13px',fontWeight:500,color:c.text}}>{rate.display_name}</div>
-                        {rate.client_note && <div style={{fontSize:'11px',color:c.textMut,marginTop:'2px'}}>{rate.client_note}</div>}
+                    <div key={rate.id} className="ui-row">
+                      <div className="ui-row__main">
+                        <div className="ui-row__title" style={{ fontSize: '0.84rem', fontWeight: 500 }}>{rate.display_name}</div>
+                        {rate.client_note && <div className="ui-row__meta">{rate.client_note}</div>}
                       </div>
-                      <div style={{textAlign:'right'}}>
-                        {isEditing ? (
-                          <input type="number" inputMode="decimal" value={editValue} onChange={e=>setEditValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleSave(rate);if(e.key==='Escape')setEditingId(null);}} autoFocus style={{width:'80px',padding:'4px 8px',textAlign:'right',background:c.inputBg,border:'1px solid '+c.accent,borderRadius:'6px',color:c.text,fontSize:'13px',outline:'none'}} />
-                        ) : (
-                          <span style={{fontSize:'13px',fontWeight:600,color:c.text,fontFamily:'monospace'}}>{typeof rate.value==='number'?rate.value.toLocaleString('en-GB'):rate.value}</span>
-                        )}
-                      </div>
-                      <div style={{textAlign:'center',fontSize:'12px',color:c.textSec}} className="hide-mobile">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editUnit}
-                            onChange={e => setEditUnit(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleSave(rate); if (e.key === 'Escape') setEditingId(null); }}
-                            placeholder="£/m2"
-                            style={{ width: 64, padding: '4px 6px', textAlign: 'center', background: c.inputBg, border: '1px solid ' + c.accent, borderRadius: 6, color: c.text, fontSize: 12, outline: 'none' }}
-                          />
-                        ) : rate.unit}
-                      </div>
-                      <div style={{textAlign:'center'}} className="hide-mobile"><span style={{fontSize:'10px',fontWeight:600,color:badge.color,background:badge.bg,border:'1px solid '+badge.border,borderRadius:'8px',padding:'2px 6px'}}>{badge.text}</span></div>
-                      <div style={{textAlign:'center',display:'flex',gap:'4px',justifyContent:'center'}} className="hide-mobile">
+                      <div className="ui-row__side">
                         {isEditing ? (
                           <>
-                            <button onClick={()=>handleSave(rate)} style={{background:isDark?'rgba(16,185,129,0.15)':'rgba(16,185,129,0.1)',border:'none',borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:isDark?'#34D399':'#059669',cursor:'pointer',fontWeight:600}}>Save</button>
-                            <button onClick={()=>setEditingId(null)} style={{background:'transparent',border:'none',padding:'4px 8px',fontSize:'11px',color:c.textMut,cursor:'pointer'}}>Cancel</button>
+                            <Input
+                              type="number" inputMode="decimal" value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSave(rate); if (e.key === 'Escape') setEditingId(null); }}
+                              autoFocus
+                              style={{ width: 90, textAlign: 'right' }}
+                            />
+                            <Input
+                              type="text" value={editUnit}
+                              onChange={e => setEditUnit(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSave(rate); if (e.key === 'Escape') setEditingId(null); }}
+                              placeholder="£/m2"
+                              style={{ width: 72, textAlign: 'center' }}
+                            />
+                            <Button size="sm" onClick={() => handleSave(rate)} busyLabel="Saving…">Save</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
                           </>
                         ) : (
                           <>
-                            <button onClick={()=>{setEditingId(rate.id);setEditValue(String(rate.value));setEditUnit(rate.unit||'');}} style={{background:'transparent',border:'1px solid '+c.cardBorder,borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.textSec,cursor:'pointer'}}>Edit</button>
-                            <button onClick={()=>handleDelete(rate)} style={{background:'transparent',border:'1px solid '+(isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.2)'),borderRadius:'6px',padding:'4px 8px',fontSize:'11px',color:c.danger,cursor:'pointer',display:'inline-flex',alignItems:'center'}}><XIcon size={14} /></button>
+                            <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono, monospace)' }}>
+                              {typeof rate.value === 'number' ? rate.value.toLocaleString('en-GB') : rate.value}
+                            </span>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', minWidth: 36 }}>{rate.unit}</span>
+                            <Badge tone={badge.tone}>{badge.text}</Badge>
+                            <Button size="sm" variant="secondary" onClick={() => { setEditingId(rate.id); setEditValue(String(rate.value)); setEditUnit(rate.unit || ''); }}>Edit</Button>
+                            <IconButton danger onClick={() => handleDelete(rate)} title="Delete rate" aria-label="Delete rate"><XIcon size={14} /></IconButton>
                           </>
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </div>
+              </Card.Body>
             )}
-          </div>
+          </Card>
         );
       })}
 
       {rates.length > 0 && (
-        <div style={{marginTop:'20px',padding:'16px 20px',background:isDark?'rgba(37,99,235,0.06)':'rgba(37,99,235,0.03)',border:'1px solid '+(isDark?'rgba(37,99,235,0.15)':'rgba(37,99,235,0.1)'),borderRadius:'10px'}}>
-          <div style={{fontSize:'13px',color:c.text,fontWeight:500,marginBottom:'6px'}}><LightbulbIcon size={16} style={{ verticalAlign:'middle', marginRight:6 }} />How rate training works</div>
-          <div style={{fontSize:'12px',color:c.textSec,lineHeight:'1.6'}}>The AI QS uses your trained rates instead of generic UK averages. Add rates manually, import from Excel, or correct rates in chat. The more you use it, the higher the confidence.</div>
-        </div>
+        <Banner tone="info" style={{ marginTop: 20 }}>
+          <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 500, marginBottom: 6 }}>
+            <LightbulbIcon size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />How rate training works
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>The AI QS uses your trained rates instead of generic UK averages. Add rates manually, import from Excel, or correct rates in chat. The more you use it, the higher the confidence.</div>
+        </Banner>
       )}
-      <div style={{marginTop:'12px',padding:'12px 16px',background:isDark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.015)',borderRadius:'8px'}}>
-        <div style={{fontSize:'12px',color:c.textMut}}><strong style={{color:c.textSec}}>Excel import format:</strong> Columns: Description/Name, Rate/Value, Unit (optional), Category (optional). Headers auto-detected.</div>
+      <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--surface-hover)', borderRadius: 8 }}>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}><strong style={{ color: 'var(--text-secondary)' }}>Excel import format:</strong> Columns: Description/Name, Rate/Value, Unit (optional), Category (optional). Headers auto-detected.</div>
       </div>
     </div>
   );

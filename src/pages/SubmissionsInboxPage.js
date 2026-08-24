@@ -4,6 +4,20 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 import { CheckIcon, AlertTriangleIcon } from '../components/Icons';
+import {
+  Button, Card, Banner, Input, Select, Textarea, Field,
+  PageHeader, EmptyState, SkeletonRows, Modal,
+} from '../ui';
+
+// Small uppercase section label used throughout the detail pane.
+const sectionLabel = {
+  fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+  textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+};
+const codeChip = {
+  fontFamily: 'var(--font-mono)', background: 'var(--bg-primary)',
+  padding: '1px 4px', borderRadius: 3,
+};
 
 /**
  * Admin-only inbox of all customer drawing submissions. Replaces the
@@ -218,11 +232,14 @@ export default function SubmissionsInboxPage() {
   if (!isAdmin) {
     return (
       <div className="page" style={{ padding: '40px 28px' }}>
-        <div className="empty-state">
-          <h3>Admin only</h3>
-          <p style={{ color: 'var(--text-muted)' }}>This page is for admins.</p>
-          <Link to="/dashboard" className="btn-secondary" style={{ marginTop: 16 }}>Back to dashboard</Link>
-        </div>
+        <Card>
+          <EmptyState
+            icon={AlertTriangleIcon}
+            title="Admin only"
+            body="This page is for admins."
+            action={<Button variant="secondary" to="/dashboard">Back to dashboard</Button>}
+          />
+        </Card>
       </div>
     );
   }
@@ -233,153 +250,95 @@ export default function SubmissionsInboxPage() {
     <div style={{ padding: '24px 28px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Add-job modal — create a job for a customer without a submission */}
       {showAddJob && (
-        <div
-          onClick={() => !creatingJob && setShowAddJob(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-            padding: '6vh 16px', overflowY: 'auto',
-          }}
+        <Modal
+          title="Add a job manually"
+          onClose={() => { if (!creatingJob) setShowAddJob(false); }}
         >
-          <form
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={submitManualJob}
-            style={{
-              width: '100%', maxWidth: 520,
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 14, padding: 22,
-              boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <h2 style={{ fontSize: 19, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Add a job manually</h2>
-              <button type="button" onClick={() => setShowAddJob(false)} aria-label="Close"
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
-            </div>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+          <form onSubmit={submitManualJob}>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
               Creates the job in the customer's portal right away. You can then send priced
               documents to them just like a submitted job.
             </p>
 
             {addJobError && (
-              <div style={{
-                padding: '9px 12px', marginBottom: 12, borderRadius: 8,
-                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-                color: '#EF4444', fontSize: 12.5,
-              }}>{addJobError}</div>
+              <Banner tone="danger" style={{ padding: '9px 12px', marginBottom: 14, color: 'var(--danger)', fontSize: '0.82rem' }}>
+                {addJobError}
+              </Banner>
             )}
 
-            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Customer *</label>
-            <select
-              value={jobDraft.user_id}
-              onChange={(e) => setJobDraft((d) => ({ ...d, user_id: e.target.value }))}
-              required
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                fontSize: 13.5, outline: 'none',
-              }}
-            >
-              <option value="">Select a customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {(c.full_name || c.email)}{c.company ? ' · ' + c.company : ''}{c.full_name && c.email ? ' (' + c.email + ')' : ''}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Customer *">
+                <Select
+                  value={jobDraft.user_id}
+                  onChange={(e) => setJobDraft((d) => ({ ...d, user_id: e.target.value }))}
+                  required
+                >
+                  <option value="">Select a customer…</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {(c.full_name || c.email)}{c.company ? ' · ' + c.company : ''}{c.full_name && c.email ? ' (' + c.email + ')' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Site address / job title</label>
-            <input
-              type="text"
-              value={jobDraft.site_address}
-              onChange={(e) => setJobDraft((d) => ({ ...d, site_address: e.target.value }))}
-              placeholder="e.g. 14 Oak Lane, Leeds"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                fontSize: 13.5, outline: 'none',
-              }}
-            />
+              <Field label="Site address / job title">
+                <Input
+                  type="text"
+                  value={jobDraft.site_address}
+                  onChange={(e) => setJobDraft((d) => ({ ...d, site_address: e.target.value }))}
+                  placeholder="e.g. 14 Oak Lane, Leeds"
+                />
+              </Field>
 
-            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Job type</label>
-            <input
-              type="text"
-              value={jobDraft.project_type}
-              onChange={(e) => setJobDraft((d) => ({ ...d, project_type: e.target.value }))}
-              placeholder="e.g. Extension, New build, Refurbishment"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 14,
-                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                fontSize: 13.5, outline: 'none',
-              }}
-            />
+              <Field label="Job type">
+                <Input
+                  type="text"
+                  value={jobDraft.project_type}
+                  onChange={(e) => setJobDraft((d) => ({ ...d, project_type: e.target.value }))}
+                  placeholder="e.g. Extension, New build, Refurbishment"
+                />
+              </Field>
 
-            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 5 }}>Brief / notes (optional)</label>
-            <textarea
-              value={jobDraft.message}
-              onChange={(e) => setJobDraft((d) => ({ ...d, message: e.target.value }))}
-              rows={3}
-              placeholder="Anything worth recording about this job."
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 9, marginBottom: 18,
-                background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-                fontSize: 13.5, outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
-              }}
-            />
+              <Field label="Brief / notes (optional)">
+                <Textarea
+                  value={jobDraft.message}
+                  onChange={(e) => setJobDraft((d) => ({ ...d, message: e.target.value }))}
+                  rows={3}
+                  placeholder="Anything worth recording about this job."
+                />
+              </Field>
+            </div>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowAddJob(false)} disabled={creatingJob}
-                style={{ padding: '10px 16px', borderRadius: 9, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+              <Button variant="secondary" onClick={() => setShowAddJob(false)} disabled={creatingJob}>
                 Cancel
-              </button>
-              <button type="submit" disabled={creatingJob}
-                style={{
-                  padding: '10px 18px', borderRadius: 9, border: 'none',
-                  background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                  color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
-                  cursor: creatingJob ? 'wait' : 'pointer',
-                }}>
+              </Button>
+              <Button type="submit" disabled={creatingJob}>
                 {creatingJob ? 'Creating…' : 'Create job'}
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{
-            fontFamily: "'DM Serif Display', Georgia, serif",
-            fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.02em',
-          }}>
-            Submissions Inbox
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0' }}>
+      <PageHeader
+        title="Submissions Inbox"
+        subtitle={
+          <>
             Every drawing submission from the portal — full briefs, files, and your private notes.
             {unactionedCount > 0 && (
-              <span style={{ marginLeft: 10, color: '#F59E0B', fontWeight: 600 }}>
+              <span style={{ marginLeft: 10, color: 'var(--warning)', fontWeight: 600 }}>
                 {unactionedCount} unactioned
               </span>
             )}
-          </p>
-        </div>
-        <button
-          onClick={openAddJob}
-          style={{
-            flexShrink: 0,
-            padding: '10px 16px', borderRadius: 9, border: 'none',
-            background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-            color: '#0A0F1C', fontWeight: 700, fontSize: 13.5, cursor: 'pointer',
-            boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
-          }}
-        >
-          + Add job manually
-        </button>
-      </div>
+          </>
+        }
+        actions={<Button onClick={openAddJob}>+ Add job manually</Button>}
+      />
 
-      {/* Toolbar */}
+      {/* Toolbar — segmented filter (no kit tab primitive) + search */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 9, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
           {[
@@ -392,8 +351,9 @@ export default function SubmissionsInboxPage() {
               onClick={() => setFilter(tab.key)}
               style={{
                 padding: '6px 12px', borderRadius: 6, fontSize: 12.5, fontWeight: 600,
-                background: filter === tab.key ? '#F59E0B' : 'transparent',
-                color: filter === tab.key ? '#0A0F1C' : 'var(--text-muted)',
+                fontFamily: 'var(--font-body)',
+                background: filter === tab.key ? 'var(--accent)' : 'transparent',
+                color: filter === tab.key ? 'var(--accent-text)' : 'var(--text-muted)',
                 border: 'none', cursor: 'pointer',
               }}
             >
@@ -401,40 +361,28 @@ export default function SubmissionsInboxPage() {
             </button>
           ))}
         </div>
-        <input
+        <Input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, email, project, message…"
-          style={{
-            flex: 1, minWidth: 240,
-            padding: '8px 12px', borderRadius: 8,
-            background: 'var(--bg-card)', color: 'var(--text-primary)',
-            border: '1px solid var(--border)', fontSize: 13, outline: 'none',
-          }}
+          style={{ flex: 1, minWidth: 240 }}
         />
       </div>
 
       {error && (
-        <div style={{
-          padding: '10px 14px', marginBottom: 12, borderRadius: 8,
-          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
-          color: '#EF4444', fontSize: 13,
-        }}>{error}</div>
+        <Banner tone="danger" style={{ padding: '10px 14px', marginBottom: 12, color: 'var(--danger)', fontSize: '0.82rem' }}>
+          {error}
+        </Banner>
       )}
 
-      {/* Split pane */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) 1fr', gap: 16, alignItems: 'flex-start' }}>
+      {/* Split pane — list left, detail right; stacks under 900px */}
+      <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(280px, 380px)' }}>
         {/* List */}
-        <div style={{
-          maxHeight: 'calc(100vh - 220px)', overflowY: 'auto',
-          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)',
-        }}>
-          {loading && <div style={{ padding: 18, fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>}
+        <Card style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
+          {loading && <SkeletonRows rows={5} />}
           {!loading && filtered.length === 0 && (
-            <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
-              No submissions match.
-            </div>
+            <EmptyState title="No submissions match" />
           )}
           {filtered.map((s) => {
             const active = s.id === selectedId;
@@ -457,8 +405,9 @@ export default function SubmissionsInboxPage() {
                 style={{
                   display: 'block', textAlign: 'left',
                   width: '100%', padding: '12px 14px',
-                  background: active ? 'rgba(245,158,11,0.08)' : 'transparent',
-                  borderLeft: active ? '3px solid #F59E0B' : '3px solid transparent',
+                  fontFamily: 'var(--font-body)',
+                  background: active ? 'var(--accent-glow)' : 'transparent',
+                  borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
                   borderTop: 'none', borderRight: 'none',
                   borderBottom: '1px solid var(--border)',
                   cursor: 'pointer',
@@ -467,7 +416,7 @@ export default function SubmissionsInboxPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                   <div style={{
                     width: 7, height: 7, borderRadius: 999, flexShrink: 0,
-                    background: s.actioned_at ? '#10B981' : '#F59E0B',
+                    background: s.actioned_at ? 'var(--success)' : 'var(--warning)',
                   }} />
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {title}
@@ -489,19 +438,14 @@ export default function SubmissionsInboxPage() {
               </button>
             );
           })}
-        </div>
+        </Card>
 
         {/* Detail */}
-        <div style={{
-          padding: 22, minHeight: 360,
-          borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg-card)',
-        }}>
+        <Card style={{ minHeight: 360 }}>
           {!selected ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13.5 }}>
-              Pick a submission on the left to read the full brief.
-            </div>
+            <EmptyState title="Nothing selected" body="Pick a submission on the left to read the full brief." />
           ) : (
-            <div>
+            <Card.Body>
               {/* Customer */}
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap' }}>
                 <div>
@@ -516,42 +460,38 @@ export default function SubmissionsInboxPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {selected.project_id && (
-                    <Link
-                      to={`/project/${selected.project_id}`}
-                      style={{
-                        padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
-                        background: 'rgba(59,130,246,0.12)', color: '#3B82F6',
-                        border: '1px solid rgba(59,130,246,0.3)',
-                        textDecoration: 'none',
-                      }}
-                    >Open project →</Link>
+                    <Button size="sm" variant="secondary" to={`/project/${selected.project_id}`}>
+                      Open project →
+                    </Button>
                   )}
-                  <button
+                  <Button
+                    size="sm"
+                    variant={selected.actioned_at ? 'secondary' : 'primary'}
                     onClick={() => toggleActioned(selected)}
                     disabled={savingId === selected.id}
-                    style={{
-                      padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
-                      background: selected.actioned_at ? 'rgba(16,185,129,0.12)' : '#F59E0B',
-                      color: selected.actioned_at ? '#10B981' : '#0A0F1C',
-                      border: selected.actioned_at ? '1px solid rgba(16,185,129,0.4)' : 'none',
-                      cursor: savingId === selected.id ? 'wait' : 'pointer',
-                    }}
+                    style={selected.actioned_at ? {
+                      background: 'var(--success-bg)', color: 'var(--success)',
+                      borderColor: 'color-mix(in srgb, var(--success) 40%, transparent)',
+                    } : undefined}
                   >
-                    {selected.actioned_at ? <><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Done</> : 'Mark as actioned'}
-                  </button>
+                    {selected.actioned_at ? <><CheckIcon size={14} /> Done</> : 'Mark as actioned'}
+                  </Button>
                 </div>
               </div>
 
               {/* Status banner — shows save confirmation or error from the last action */}
               {statusMsg && (
                 <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
                   padding: '8px 12px', borderRadius: 7, marginBottom: 12,
-                  background: statusMsg.kind === 'ok' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                  border: '1px solid ' + (statusMsg.kind === 'ok' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'),
-                  color: statusMsg.kind === 'ok' ? '#10B981' : '#EF4444',
+                  background: statusMsg.kind === 'ok' ? 'var(--success-bg)' : 'var(--danger-bg)',
+                  border: '1px solid ' + (statusMsg.kind === 'ok'
+                    ? 'color-mix(in srgb, var(--success) 30%, transparent)'
+                    : 'color-mix(in srgb, var(--danger) 30%, transparent)'),
+                  color: statusMsg.kind === 'ok' ? 'var(--success)' : 'var(--danger)',
                   fontSize: 12.5, fontWeight: 600,
                 }}>
-                  {statusMsg.kind === 'ok' ? <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> : <AlertTriangleIcon size={14} style={{ verticalAlign: 'middle' }} />} {statusMsg.text}
+                  {statusMsg.kind === 'ok' ? <CheckIcon size={14} /> : <AlertTriangleIcon size={14} />} {statusMsg.text}
                 </div>
               )}
 
@@ -566,17 +506,15 @@ export default function SubmissionsInboxPage() {
                 <span><span style={{ color: 'var(--text-muted)' }}>Site</span>{' '}<strong>{selected.site_address || '—'}</strong></span>
                 <span><span style={{ color: 'var(--text-muted)' }}>Type</span>{' '}<strong>{selected.project_type || '—'}</strong></span>
                 <span><span style={{ color: 'var(--text-muted)' }}>Files</span>{' '}<strong>{selected.file_count}</strong></span>
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', opacity: 0.6 }}>{selected.submission_id}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', opacity: 0.6 }}>{selected.submission_id}</span>
                 {selected.actioned_at && (
-                  <span style={{ color: '#10B981' }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {selected.actioned_by} · {new Date(selected.actioned_at).toLocaleDateString('en-GB')}</span>
+                  <span style={{ color: 'var(--success)' }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> {selected.actioned_by} · {new Date(selected.actioned_at).toLocaleDateString('en-GB')}</span>
                 )}
               </div>
 
               {/* Full message */}
               <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Full brief
-                </div>
+                <div style={sectionLabel}>Full brief</div>
                 <div style={{
                   padding: '14px 16px', borderRadius: 10,
                   background: 'var(--bg-primary)', border: '1px solid var(--border)',
@@ -592,37 +530,20 @@ export default function SubmissionsInboxPage() {
                   not stored locally, so we keep the Drive folder URL here for one-click
                   access from this inbox. */}
               <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Google Drive folder
-                </div>
+                <div style={sectionLabel}>Google Drive folder</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
-                  <input
+                  <Input
                     type="url"
                     value={driveDraft}
                     onChange={(e) => setDriveDraft(e.target.value)}
                     onBlur={saveDriveLink}
                     placeholder="https://drive.google.com/drive/folders/…  (paste here, saves on blur)"
-                    style={{
-                      flex: 1, minWidth: 280,
-                      padding: '10px 14px', borderRadius: 9,
-                      background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                      border: '1px solid var(--border)', fontSize: 13,
-                      outline: 'none', fontFamily: 'inherit',
-                    }}
+                    style={{ flex: 1, minWidth: 280 }}
                   />
                   {selected.drive_link ? (
-                    <a
-                      href={selected.drive_link}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        padding: '10px 16px', borderRadius: 9,
-                        background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-                        color: '#fff', fontSize: 13, fontWeight: 700,
-                        textDecoration: 'none',
-                        boxShadow: '0 2px 8px rgba(59,130,246,0.25)',
-                      }}
-                    >Open in Drive ↗</a>
+                    <Button variant="soft" href={selected.drive_link} target="_blank" rel="noopener noreferrer">
+                      Open in Drive ↗
+                    </Button>
                   ) : (
                     <span style={{
                       display: 'inline-flex', alignItems: 'center',
@@ -631,7 +552,7 @@ export default function SubmissionsInboxPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic', lineHeight: 1.5 }}>
-                  Add a Pipedream HTTP step that POSTs <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg-primary)', padding: '1px 4px', borderRadius: 3 }}>{'{ submission_id, drive_link, secret }'}</code> to <code style={{ fontFamily: 'JetBrains Mono, monospace', background: 'var(--bg-primary)', padding: '1px 4px', borderRadius: 3 }}>/api/submissions/webhook/drive-link</code> after upload — the link will appear here automatically. Or paste it manually for now (saves on blur).
+                  Add a Pipedream HTTP step that POSTs <code style={codeChip}>{'{ submission_id, drive_link, secret }'}</code> to <code style={codeChip}>/api/submissions/webhook/drive-link</code> after upload — the link will appear here automatically. Or paste it manually for now (saves on blur).
                 </div>
               </div>
 
@@ -643,13 +564,13 @@ export default function SubmissionsInboxPage() {
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                   marginBottom: 6,
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                  <div style={{ ...sectionLabel, marginBottom: 0 }}>
                     Send priced documents to {selected.user_name || 'customer'}
                   </div>
                   {selected.project_id && (
                     <Link
                       to={`/project/${selected.project_id}`}
-                      style={{ fontSize: 11.5, fontWeight: 700, color: '#3B82F6', textDecoration: 'none' }}
+                      style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--info)', textDecoration: 'none' }}
                     >Open job →</Link>
                   )}
                 </div>
@@ -657,26 +578,20 @@ export default function SubmissionsInboxPage() {
                 {!selected.project_id ? (
                   <div style={{
                     padding: 16, borderRadius: 10,
-                    background: 'rgba(245,158,11,0.06)', border: '1px dashed rgba(245,158,11,0.4)',
+                    background: 'var(--accent-glow)', border: '1px dashed var(--border-accent)',
                     textAlign: 'center',
                   }}>
                     <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
                       No job exists for this submission yet. Create one to send priced BOQs, drawings, or supplier quotes to{' '}
                       <strong>{selected.user_name || selected.user_email}</strong>.
                     </p>
-                    <button
+                    <Button
                       onClick={createJobFromSubmission}
                       disabled={creatingProject}
-                      style={{
-                        padding: '10px 18px', borderRadius: 9, border: 'none',
-                        background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                        color: '#0A0F1C', fontWeight: 700, fontSize: 13.5,
-                        cursor: creatingProject ? 'wait' : 'pointer',
-                        boxShadow: '0 2px 10px rgba(245,158,11,0.25)',
-                      }}
+                      busyLabel="Creating job…"
                     >
                       {creatingProject ? 'Creating job…' : 'Create job & start upload'}
-                    </button>
+                    </Button>
                     <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
                       The job will appear in the customer's portal immediately. Status: In progress.
                     </div>
@@ -689,16 +604,14 @@ export default function SubmissionsInboxPage() {
               {/* Files */}
               {Array.isArray(selected.file_names) && selected.file_names.length > 0 && (
                 <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                    Files ({selected.file_names.length})
-                  </div>
+                  <div style={sectionLabel}>Files ({selected.file_names.length})</div>
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {selected.file_names.map((name, i) => {
                       const baseStyle = {
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '9px 12px', borderRadius: 7,
                         background: 'var(--bg-primary)', border: '1px solid var(--border)',
-                        fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: 12.5, fontFamily: 'var(--font-mono)',
                         color: 'var(--text-primary)', wordBreak: 'break-all',
                         textDecoration: 'none',
                       };
@@ -707,11 +620,11 @@ export default function SubmissionsInboxPage() {
                           <li key={i}>
                             <a href={selected.drive_link} target="_blank" rel="noopener noreferrer"
                               style={{ ...baseStyle, cursor: 'pointer' }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(59,130,246,0.06)'; e.currentTarget.style.borderColor = 'rgba(59,130,246,0.35)'; }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--info-bg)'; e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--info) 35%, transparent)'; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
                             >
                               <span style={{ flex: 1 }}>{name}</span>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', fontFamily: 'system-ui' }}>Open in Drive ↗</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--info)', fontFamily: 'var(--font-body)' }}>Open in Drive ↗</span>
                             </a>
                           </li>
                         );
@@ -719,7 +632,7 @@ export default function SubmissionsInboxPage() {
                       return (
                         <li key={i} style={baseStyle}>
                           <span style={{ flex: 1 }}>{name}</span>
-                          <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'system-ui', fontStyle: 'italic' }}>Add Drive link to open</span>
+                          <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontStyle: 'italic' }}>Add Drive link to open</span>
                         </li>
                       );
                     })}
@@ -729,32 +642,23 @@ export default function SubmissionsInboxPage() {
 
               {/* Admin private notes */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Private notes (admin only)
-                </div>
-                <textarea
+                <div style={sectionLabel}>Private notes (admin only)</div>
+                <Textarea
                   value={notesDraft}
                   onChange={(e) => setNotesDraft(e.target.value)}
                   onBlur={saveNotes}
                   rows={4}
                   placeholder="Notes on this job — not visible to the customer."
-                  style={{
-                    width: '100%', padding: '11px 14px', borderRadius: 9,
-                    background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                    border: '1px solid var(--border)', fontSize: 13,
-                    outline: 'none', resize: 'vertical', minHeight: 90,
-                    fontFamily: 'inherit', lineHeight: 1.55,
-                    boxSizing: 'border-box',
-                  }}
+                  style={{ minHeight: 90 }}
                 />
                 <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
                   Saved when you click outside the box.
                   {savingId === selected.id ? ' · Saving…' : ''}
                 </div>
               </div>
-            </div>
+            </Card.Body>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

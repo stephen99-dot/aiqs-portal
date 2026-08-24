@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, getToken } from '../utils/api';
-import { CheckIcon, XIcon } from '../components/Icons';
-import useIsMobile from '../utils/useIsMobile';
-import AsyncButton from '../components/AsyncButton';
+import { CheckIcon, XIcon, FileTextIcon } from '../components/Icons';
+import {
+  Button, Card, Badge, PageHeader, EmptyState, Banner, Modal,
+  Input, Textarea, Field, Skeleton, SkeletonCard,
+} from '../ui';
 
-const STATUS_COLOURS = {
-  draft:    { bg: 'rgba(245,158,11,0.12)', color: '#F59E0B', label: 'Draft' },
-  approved: { bg: 'rgba(16,185,129,0.12)', color: '#10B981', label: 'Approved' },
-  rejected: { bg: 'rgba(239,68,68,0.12)',  color: '#EF4444', label: 'Rejected' },
+const STATUS_META = {
+  draft:    { tone: 'neutral', label: 'Draft' },
+  approved: { tone: 'success', label: 'Approved' },
+  rejected: { tone: 'danger',  label: 'Rejected' },
 };
 
 function fmt(val, currency = 'GBP') {
@@ -18,7 +20,6 @@ function fmt(val, currency = 'GBP') {
 
 export default function VariationsPage() {
   const { id: projectId } = useParams();
-  const isMobile = useIsMobile();
   const [project, setProject]       = useState(null);
   const [variations, setVariations] = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -139,63 +140,82 @@ export default function VariationsPage() {
   }
 
   if (loading) return (
-    <div className="page"><div className="empty-state"><div className="loading-spinner" /><p>Loading variations...</p></div></div>
+    <div className="page">
+      <Skeleton width={160} height={14} style={{ marginBottom: 12 }} />
+      <Skeleton width={260} height={28} style={{ marginBottom: 8 }} />
+      <Skeleton width={320} height={13} style={{ marginBottom: 24 }} />
+      <div className="ui-split ui-split--side-first" style={{ '--split-side': '320px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <SkeletonCard height={200} />
+      </div>
+    </div>
   );
 
-  const s = selected ? STATUS_COLOURS[selected.status] || STATUS_COLOURS.draft : null;
+  const s = selected ? STATUS_META[selected.status] || STATUS_META.draft : null;
 
   return (
     <div className="page">
       {/* Header */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div>
-          <Link to={`/project/${projectId}`} className="back-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14, opacity: 0.7, textDecoration: 'none' }}>
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
-            {project?.title || 'Back to Project'}
-          </Link>
-          <h1 className="page-title">Variation Orders</h1>
-          <p className="page-subtitle">Manage contract variations and change orders</p>
-        </div>
-        <button className="btn-primary" onClick={() => { setShowForm(true); setSelected(null); setError(''); }}>
-          + New Variation
-        </button>
-      </div>
+      <Link to={`/project/${projectId}`} className="back-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 14, opacity: 0.7, textDecoration: 'none' }}>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
+        {project?.title || 'Back to Project'}
+      </Link>
+      <PageHeader
+        title="Variation Orders"
+        subtitle="Manage contract variations and change orders"
+        actions={
+          <Button onClick={() => { setShowForm(true); setSelected(null); setError(''); }}>
+            + New Variation
+          </Button>
+        }
+      />
 
-      {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, color: '#EF4444', fontSize: 14 }}>{error}</div>}
+      {error && <Banner tone="danger" style={{ color: 'var(--danger)', fontSize: 14 }}>{error}</Banner>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="ui-split ui-split--side-first" style={{ '--split-side': '320px' }}>
 
         {/* LEFT — VO list */}
         <div>
           {variations.length === 0 && !showForm && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
-              <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
-              <p style={{ opacity: 0.6, marginBottom: 16, fontSize: 14 }}>No variations raised yet</p>
-              <button className="btn-primary" style={{ fontSize: 13 }} onClick={() => setShowForm(true)}>Raise First Variation</button>
-            </div>
+            <Card>
+              <EmptyState
+                icon={FileTextIcon}
+                title="No variations raised yet"
+                action={<Button size="sm" onClick={() => setShowForm(true)}>Raise First Variation</Button>}
+              />
+            </Card>
           )}
 
           {variations.map(v => {
-            const sc = STATUS_COLOURS[v.status] || STATUS_COLOURS.draft;
+            const sc = STATUS_META[v.status] || STATUS_META.draft;
             const isActive = selected?.id === v.id;
             return (
-              <div key={v.id}
+              <Card key={v.id}
                 onClick={() => { setSelected(v); setShowForm(false); }}
-                style={{ background: isActive ? 'var(--primary-bg)' : 'var(--bg-card)', border: `1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 10, padding: '14px 16px', marginBottom: 10, cursor: 'pointer', transition: 'all 0.15s' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)' }}>{v.vo_number}</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: sc.bg, color: sc.color }}>{sc.label}</span>
-                </div>
-                <p style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, lineHeight: 1.3 }}>{v.title}</p>
-                <p style={{ fontSize: 12, opacity: 0.6 }}>{new Date(v.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                <div style={{ marginTop: 8, display: 'flex', gap: 12 }}>
-                  {v.additions > 0 && <span style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>+{fmt(v.additions, v.currency)}</span>}
-                  {v.omissions > 0 && <span style={{ fontSize: 12, color: '#EF4444', fontWeight: 600 }}>−{fmt(v.omissions, v.currency)}</span>}
-                  <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 'auto', color: (v.net_change || 0) >= 0 ? '#EF4444' : '#10B981' }}>
-                    Net: {(v.net_change || 0) >= 0 ? '+' : '−'}{fmt(v.net_change, v.currency)}
-                  </span>
-                </div>
-              </div>
+                style={{
+                  marginBottom: 10, cursor: 'pointer',
+                  borderColor: isActive ? 'var(--accent)' : undefined,
+                  background: isActive ? 'var(--accent-glow)' : undefined,
+                }}>
+                <Card.Body style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent)' }}>{v.vo_number}</span>
+                    <Badge tone={sc.tone} pill>{sc.label}</Badge>
+                  </div>
+                  <p style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, lineHeight: 1.3, color: 'var(--text-primary)' }}>{v.title}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(v.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 12 }}>
+                    {v.additions > 0 && <span style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>+{fmt(v.additions, v.currency)}</span>}
+                    {v.omissions > 0 && <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 600 }}>−{fmt(v.omissions, v.currency)}</span>}
+                    <span style={{ fontSize: 12, fontWeight: 700, marginLeft: 'auto', color: (v.net_change || 0) >= 0 ? 'var(--danger)' : 'var(--success)' }}>
+                      Net: {(v.net_change || 0) >= 0 ? '+' : '−'}{fmt(v.net_change, v.currency)}
+                    </span>
+                  </div>
+                </Card.Body>
+              </Card>
             );
           })}
         </div>
@@ -205,199 +225,202 @@ export default function VariationsPage() {
 
           {/* NEW VARIATION FORM */}
           {showForm && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Raise New Variation</h2>
-              <p style={{ fontSize: 13, opacity: 0.6, marginBottom: 24 }}>Describe the change. Attach revised drawings if available — the AI will analyse the delta and estimate costs.</p>
+            <Card>
+              <Card.Header title="Raise New Variation" />
+              <Card.Body>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 20px' }}>Describe the change. Attach revised drawings if available — the AI will analyse the delta and estimate costs.</p>
 
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Variation Title *</label>
-                <input
-                  className="input"
-                  placeholder="e.g. Additional storey to rear extension"
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  style={{ width: '100%' }}
-                />
-              </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+                  <Field label="Variation Title *">
+                    <Input
+                      placeholder="e.g. Additional storey to rear extension"
+                      value={form.title}
+                      onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                    />
+                  </Field>
 
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Description of Change *</label>
-                <textarea
-                  className="input"
-                  placeholder="Describe what has changed from the original scope. Include any specification changes, additions, or omissions..."
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  rows={5}
-                  style={{ width: '100%', resize: 'vertical' }}
-                />
-              </div>
+                  <Field label="Description of Change *">
+                    <Textarea
+                      placeholder="Describe what has changed from the original scope. Include any specification changes, additions, or omissions..."
+                      value={form.description}
+                      onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                      rows={5}
+                    />
+                  </Field>
 
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Revised Drawings (optional)</label>
-                <div
-                  onClick={() => fileRef.current.click()}
-                  style={{ border: '2px dashed var(--border)', borderRadius: 8, padding: '16px 20px', cursor: 'pointer', textAlign: 'center', fontSize: 13, opacity: 0.7 }}>
-                  {files.length > 0
-                    ? files.map(f => f.name).join(', ')
-                    : 'Click to upload PDFs or images (max 5 files)'}
+                  <div className="ui-field">
+                    <span className="ui-field__label">Revised Drawings (optional)</span>
+                    <div
+                      onClick={() => fileRef.current.click()}
+                      style={{ border: '2px dashed var(--border)', borderRadius: 8, padding: '16px 20px', cursor: 'pointer', textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>
+                      {files.length > 0
+                        ? files.map(f => f.name).join(', ')
+                        : 'Click to upload PDFs or images (max 5 files)'}
+                    </div>
+                    <input ref={fileRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }}
+                      onChange={e => setFiles(Array.from(e.target.files).slice(0, 5))} />
+                  </div>
                 </div>
-                <input ref={fileRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }}
-                  onChange={e => setFiles(Array.from(e.target.files).slice(0, 5))} />
-              </div>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn-primary" onClick={handleCreate} disabled={creating} style={{ flex: 1 }}>
-                  {creating ? 'Analysing...' : 'Submit Variation for Analysis'}
-                </button>
-                <button className="btn-secondary" onClick={() => setShowForm(false)} disabled={creating}>Cancel</button>
-              </div>
-
-              {creating && (
-                <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(var(--primary-rgb),0.08)', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div className="loading-spinner" style={{ width: 16, height: 16 }} />
-                  AI is analysing the variation and estimating costs...
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <Button onClick={handleCreate} busyLabel="Analysing..." disabled={creating} style={{ flex: 1 }}>
+                    Submit Variation for Analysis
+                  </Button>
+                  <Button variant="secondary" onClick={() => setShowForm(false)} disabled={creating}>Cancel</Button>
                 </div>
-              )}
-            </div>
+
+                {creating && (
+                  <div style={{ marginTop: 16, padding: '12px 16px', background: 'var(--accent-glow)', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)' }}>
+                    <div className="loading-spinner" style={{ width: 16, height: 16 }} />
+                    AI is analysing the variation and estimating costs...
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
           )}
 
           {/* VO DETAIL */}
           {selected && !showForm && (() => {
             const analysis = parseAnalysis(selected);
             return (
-              <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 28 }}>
+              <Card>
+                <Card.Body>
 
-                {/* VO Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Variation Order</div>
-                    <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>{selected.vo_number}</h2>
-                    <p style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{selected.title}</p>
+                  {/* VO Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Variation Order</div>
+                      <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>{selected.vo_number}</h2>
+                      <p style={{ fontSize: 15, fontWeight: 600, marginTop: 4, color: 'var(--text-primary)' }}>{selected.title}</p>
+                    </div>
+                    <Badge tone={s.tone} pill>{s.label}</Badge>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: s.bg, color: s.color }}>{s.label}</span>
-                </div>
 
-                {/* Description */}
-                <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '14px 16px', marginBottom: 20, fontSize: 14, lineHeight: 1.6 }}>
-                  {selected.description}
-                </div>
+                  {/* Description */}
+                  <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '14px 16px', marginBottom: 20, fontSize: 14, lineHeight: 1.6 }}>
+                    {selected.description}
+                  </div>
 
-                {/* Scope Changes */}
-                {analysis?.scope_changes?.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, marginBottom: 10 }}>Scope Changes</h3>
-                    {analysis.scope_changes.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-primary)' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, flexShrink: 0, background: c.type === 'addition' ? 'rgba(16,185,129,0.15)' : c.type === 'omission' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)', color: c.type === 'addition' ? '#10B981' : c.type === 'omission' ? '#EF4444' : '#F59E0B' }}>
-                          {c.type?.toUpperCase()}
-                        </span>
-                        <div style={{ flex: 1 }}>
-                          <span style={{ fontWeight: 600, fontSize: 14 }}>{c.item}</span>
-                          <span style={{ fontSize: 13, opacity: 0.7, marginLeft: 8 }}>{c.detail}</span>
+                  {/* Scope Changes */}
+                  {analysis?.scope_changes?.length > 0 && (
+                    <div style={{ marginBottom: 20 }}>
+                      <h3 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)', marginBottom: 10 }}>Scope Changes</h3>
+                      {analysis.scope_changes.map((c, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-primary)' }}>
+                          <Badge
+                            tone={c.type === 'addition' ? 'success' : c.type === 'omission' ? 'danger' : 'warning'}
+                            pill style={{ flexShrink: 0 }}>
+                            {c.type?.toUpperCase()}
+                          </Badge>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 600, fontSize: 14 }}>{c.item}</span>
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 8 }}>{c.detail}</span>
+                          </div>
+                          {c.cost > 0 && <span style={{ fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{fmt(c.cost, selected.currency)}</span>}
                         </div>
-                        {c.cost > 0 && <span style={{ fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{fmt(c.cost, selected.currency)}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Financial Summary */}
-                <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20 }}>
-                  <div style={{ background: 'var(--bg-primary)', padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>Financial Summary</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1, background: 'var(--border)' }}>
-                    {[
-                      { label: 'Additions', value: '+' + fmt(selected.additions, selected.currency), color: '#10B981' },
-                      { label: 'Omissions', value: '−' + fmt(selected.omissions, selected.currency), color: '#EF4444' },
-                      { label: 'Net Change', value: (selected.net_change >= 0 ? '+' : '−') + fmt(selected.net_change, selected.currency), color: selected.net_change >= 0 ? '#EF4444' : '#10B981' },
-                    ].map(item => (
-                      <div key={item.label} style={{ background: 'var(--bg-card)', padding: '14px 16px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4, textTransform: 'uppercase' }}>{item.label}</div>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Assumptions */}
-                {analysis?.assumptions?.length > 0 && (
-                  <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', marginBottom: 8 }}>ASSUMPTIONS</div>
-                    {analysis.assumptions.map((a, i) => <p key={i} style={{ fontSize: 13, margin: '0 0 4px 0' }}>• {a}</p>)}
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {selected.vo_doc_filename && (
-                    <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => handleDownload(selected.vo_doc_filename)}>
-                      ↓ Download VO Document
-                    </button>
-                  )}
-                  {selected.status === 'draft' && (
-                    <>
-                      <AsyncButton className="btn-primary" style={{ fontSize: 13, background: '#10B981', borderColor: '#10B981' }}
-                        busyLabel="Approving…"
-                        onClick={() => { if (window.confirm('Approve this variation? This cannot be undone from here.')) return handleApprove(selected.id); }}>
-                        <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approve Variation
-                      </AsyncButton>
-                      <button className="btn-secondary" style={{ fontSize: 13, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)' }}
-                        onClick={() => { setRejectModal(selected.id); setRejectReason(''); }}>
-                        <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Reject
-                      </button>
-                    </>
-                  )}
-                  {selected.status === 'approved' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                        <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
-                      </div>
-                      {!selected.revised_boq_filename ? (
-                        <button
-                          className="btn-primary"
-                          style={{ fontSize: 13 }}
-                          disabled={generatingBoq}
-                          onClick={() => handleGenerateRevisedBoq(selected.id)}>
-                          {generatingBoq ? 'Generating Revised BOQ...' : 'Generate Revised BOQ'}
-                        </button>
-                      ) : (
-                        <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => handleDownload(selected.revised_boq_filename)}>
-                          ↓ Download Revised BOQ (Excel)
-                        </button>
-                      )}
+                      ))}
                     </div>
                   )}
-                  {selected.status === 'rejected' && (
-                    <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#EF4444', fontSize: 13 }}>
-                      <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Rejected{selected.rejection_reason ? ` — ${selected.rejection_reason}` : ''}
+
+                  {/* Financial Summary */}
+                  <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20 }}>
+                    <div style={{ background: 'var(--bg-primary)', padding: '8px 16px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--text-muted)' }}>Financial Summary</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 1, background: 'var(--border)' }}>
+                      {[
+                        { label: 'Additions', value: '+' + fmt(selected.additions, selected.currency), color: 'var(--success)' },
+                        { label: 'Omissions', value: '−' + fmt(selected.omissions, selected.currency), color: 'var(--danger)' },
+                        { label: 'Net Change', value: (selected.net_change >= 0 ? '+' : '−') + fmt(selected.net_change, selected.currency), color: selected.net_change >= 0 ? 'var(--danger)' : 'var(--success)' },
+                      ].map(item => (
+                        <div key={item.label} style={{ background: 'var(--bg-card)', padding: '14px 16px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase' }}>{item.label}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: item.color }}>{item.value}</div>
+                        </div>
+                      ))}
                     </div>
+                  </div>
+
+                  {/* Assumptions */}
+                  {analysis?.assumptions?.length > 0 && (
+                    <Banner tone="accent" style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 8 }}>ASSUMPTIONS</div>
+                      {analysis.assumptions.map((a, i) => <p key={i} style={{ fontSize: 13, margin: '0 0 4px 0' }}>• {a}</p>)}
+                    </Banner>
                   )}
-                </div>
-              </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {selected.vo_doc_filename && (
+                      <Button variant="secondary" size="sm" onClick={() => handleDownload(selected.vo_doc_filename)}>
+                        ↓ Download VO Document
+                      </Button>
+                    )}
+                    {selected.status === 'draft' && (
+                      <>
+                        <Button size="sm"
+                          busyLabel="Approving…"
+                          onClick={() => { if (window.confirm('Approve this variation? This cannot be undone from here.')) return handleApprove(selected.id); }}>
+                          <CheckIcon size={14} color="currentColor" /> Approve Variation
+                        </Button>
+                        <Button variant="danger" size="sm"
+                          onClick={() => { setRejectModal(selected.id); setRejectReason(''); }}>
+                          <XIcon size={14} color="currentColor" /> Reject
+                        </Button>
+                      </>
+                    )}
+                    {selected.status === 'approved' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--success-bg)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}>
+                          <CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Approved {selected.approved_at ? `on ${new Date(selected.approved_at).toLocaleDateString('en-GB')}` : ''}
+                        </div>
+                        {!selected.revised_boq_filename ? (
+                          <Button size="sm"
+                            disabled={generatingBoq}
+                            onClick={() => handleGenerateRevisedBoq(selected.id)}>
+                            {generatingBoq ? 'Generating Revised BOQ...' : 'Generate Revised BOQ'}
+                          </Button>
+                        ) : (
+                          <Button variant="secondary" size="sm" onClick={() => handleDownload(selected.revised_boq_filename)}>
+                            ↓ Download Revised BOQ (Excel)
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {selected.status === 'rejected' && (
+                      <div style={{ padding: '8px 14px', borderRadius: 8, background: 'var(--danger-bg)', color: 'var(--danger)', fontSize: 13 }}>
+                        <XIcon size={14} style={{ verticalAlign: 'middle' }} /> Rejected{selected.rejection_reason ? ` — ${selected.rejection_reason}` : ''}
+                      </div>
+                    )}
+                  </div>
+                </Card.Body>
+              </Card>
             );
           })()}
 
           {/* Empty right panel */}
           {!showForm && !selected && variations.length > 0 && (
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 48, textAlign: 'center', opacity: 0.5 }}>
-              <p>Select a variation to view details</p>
-            </div>
+            <Card>
+              <EmptyState body="Select a variation to view details" />
+            </Card>
           )}
         </div>
       </div>
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div className="modal-overlay" style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="modal-card" style={{ background: 'var(--bg-card)', padding: 28, width: 420, maxWidth: '90vw' }}>
-            <h3 style={{ marginBottom: 12 }}>Reject Variation</h3>
-            <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>Provide a reason for rejection (optional):</p>
-            <textarea className="input" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Scope not agreed, awaiting revised drawings..." style={{ width: '100%', marginBottom: 16, resize: 'vertical' }} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-secondary" style={{ color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', flex: 1 }} onClick={handleReject} disabled={rejecting}>{rejecting ? 'Rejecting…' : 'Confirm Rejection'}</button>
-              <button className="btn-secondary" onClick={() => setRejectModal(null)} disabled={rejecting}>Cancel</button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          title="Reject Variation"
+          maxWidth={420}
+          onClose={() => { if (!rejecting) setRejectModal(null); }}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setRejectModal(null)} disabled={rejecting}>Cancel</Button>
+              <Button variant="danger" onClick={handleReject} busyLabel="Rejecting…" disabled={rejecting}>Confirm Rejection</Button>
+            </>
+          }
+        >
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 16px' }}>Provide a reason for rejection (optional):</p>
+          <Textarea rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Scope not agreed, awaiting revised drawings..." />
+        </Modal>
       )}
     </div>
   );

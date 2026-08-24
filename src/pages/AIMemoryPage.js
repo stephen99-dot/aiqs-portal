@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
+import {
+  Button, IconButton, Card, Banner, Badge, Stat,
+  Input, Textarea, Field, PageHeader, EmptyState, Skeleton, SkeletonCard, useToast,
+} from '../ui';
 import {
   RulerIcon, CoinsIcon, ShopIcon, ClipboardIcon, MapPinIcon, WrenchIcon,
   ChatIcon, SettingsIcon, BanIcon, ClientsIcon, BuildingIcon, BarChartIcon,
@@ -24,9 +27,17 @@ const CATEGORY_LABELS = {
   commercial: { label: 'Commercial Terms', emoji: BarChartIcon, desc: 'Payment, contract, and commercial info' },
 };
 
+// Tinted row used for memories / facts / insights lists. `strong` rows (from
+// onboarding, or reinforced insights) get the success tint.
+const rowStyle = (strong) => ({
+  display: 'flex', alignItems: 'flex-start', gap: 10,
+  padding: '10px 14px', borderRadius: 8,
+  background: strong ? 'var(--success-bg)' : 'var(--surface-hover)',
+  border: '1px solid ' + (strong ? 'color-mix(in srgb, var(--success) 30%, transparent)' : 'transparent'),
+});
+
 export default function AIMemoryPage() {
-  const { t, mode } = useTheme();
-  const isDark = mode === 'dark';
+  const toast = useToast();
   const [insights, setInsights] = useState([]);
   const [memories, setMemories] = useState([]);
   const [onboardingStatus, setOnboardingStatus] = useState(null);
@@ -78,7 +89,7 @@ export default function AIMemoryPage() {
     try {
       await apiFetch('/entities/' + ent.id, { method: 'DELETE' });
       setEntities(prev => prev.filter(e => e.id !== ent.id));
-    } catch (err) { alert('Failed to delete'); }
+    } catch (err) { toast.error('Failed to delete'); }
   }
 
   async function handleRenameEntity(ent) {
@@ -89,7 +100,7 @@ export default function AIMemoryPage() {
         method: 'PUT', body: JSON.stringify({ name: name.trim() }),
       });
       setEntities(prev => prev.map(e => (e.id === ent.id ? { ...e, ...res.entity } : e)));
-    } catch (err) { alert('Failed to rename'); }
+    } catch (err) { toast.error('Failed to rename'); }
   }
 
   // Facts expire rather than delete, so what the system used to believe stays on record
@@ -100,7 +111,7 @@ export default function AIMemoryPage() {
       setEntities(prev => prev.map(e =>
         e.id === entityId ? { ...e, facts: e.facts.filter(f => f.id !== factId) } : e
       ));
-    } catch (err) { alert('Failed to remove'); }
+    } catch (err) { toast.error('Failed to remove'); }
   }
 
   async function handleAddFact(entityId) {
@@ -114,12 +125,12 @@ export default function AIMemoryPage() {
         e.id === entityId ? { ...e, facts: [res.fact, ...(e.facts || [])] } : e
       ));
       setNewFactText('');
-    } catch (err) { alert('Failed to add'); }
+    } catch (err) { toast.error('Failed to add'); }
   }
 
   async function handleMergeEntity(ent) {
     const others = entities.filter(e => e.id !== ent.id && e.kind === ent.kind);
-    if (others.length === 0) return alert(`No other ${ent.kind.replace(/_/g, ' ')} records to merge into.`);
+    if (others.length === 0) { toast.show(`No other ${ent.kind.replace(/_/g, ' ')} records to merge into.`); return; }
     const choice = window.prompt(
       `Merge "${ent.display_name}" into which record?\n\n`
       + others.map((e, i) => `${i + 1}. ${e.display_name}`).join('\n')
@@ -132,7 +143,7 @@ export default function AIMemoryPage() {
         method: 'POST', body: JSON.stringify({ into: others[idx].id }),
       });
       await loadData();
-    } catch (err) { alert('Failed to merge'); }
+    } catch (err) { toast.error('Failed to merge'); }
   }
 
   async function handleDelete(id) {
@@ -140,7 +151,7 @@ export default function AIMemoryPage() {
     try {
       await apiFetch('/my-insights/' + id, { method: 'DELETE' });
       setInsights(prev => prev.filter(i => i.id !== id));
-    } catch (err) { alert('Failed to delete'); }
+    } catch (err) { toast.error('Failed to delete'); }
   }
 
   async function handleDeleteMemory(id) {
@@ -148,22 +159,22 @@ export default function AIMemoryPage() {
     try {
       await apiFetch('/memories/' + id, { method: 'DELETE' });
       setMemories(prev => prev.filter(m => m.id !== id));
-    } catch (err) { alert('Failed to delete'); }
+    } catch (err) { toast.error('Failed to delete'); }
   }
 
   async function handleAddMemory() {
     const content = newMemoryText.trim();
-    if (content.length < 5) { alert('Memory text is too short.'); return; }
+    if (content.length < 5) { toast.error('Memory text is too short.'); return; }
     try {
       const res = await apiFetch('/memories', { method: 'POST', body: JSON.stringify({ content }) });
       if (res.skipped) {
-        alert('A similar memory already exists.');
+        toast.show('A similar memory already exists.');
       } else if (res.memory) {
         setMemories(p => [res.memory, ...p]);
         setNewMemoryText('');
         setAddingMemory(false);
       }
-    } catch (err) { alert(err.message || 'Failed to save memory'); }
+    } catch (err) { toast.error(err.message || 'Failed to save memory'); }
   }
 
   async function handleSavePrefs() {
@@ -176,13 +187,13 @@ export default function AIMemoryPage() {
       setPrefs({ ohp_pct: res.ohp_pct ?? 0, contingency_pct: res.contingency_pct ?? 0 });
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 2500);
-    } catch (err) { alert(err.message || 'Failed to save'); }
+    } catch (err) { toast.error(err.message || 'Failed to save'); }
     setPrefsSaving(false);
   }
 
   async function handleSaveEdit(id) {
     const content = editingText.trim();
-    if (content.length < 5) { alert('Memory text is too short.'); return; }
+    if (content.length < 5) { toast.error('Memory text is too short.'); return; }
     try {
       const res = await apiFetch('/memories/' + id, { method: 'PUT', body: JSON.stringify({ content }) });
       if (res.memory) {
@@ -190,7 +201,7 @@ export default function AIMemoryPage() {
       }
       setEditingMemoryId(null);
       setEditingText('');
-    } catch (err) { alert(err.message || 'Failed to update'); }
+    } catch (err) { toast.error(err.message || 'Failed to update'); }
   }
 
   // Group insights by category
@@ -200,25 +211,17 @@ export default function AIMemoryPage() {
     grouped[ins.category].push(ins);
   }
 
-  const colors = {
-    bg: isDark ? '#0A0F1C' : '#F8FAFC',
-    card: isDark ? '#111827' : '#FFFFFF',
-    cardBorder: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    text: isDark ? '#E2E8F0' : '#1E293B',
-    textMuted: isDark ? '#94A3B8' : '#64748B',
-    accent: '#F59E0B',
-    accentBg: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.06)',
-    accentBorder: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.12)',
-    strong: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)',
-    strongBorder: isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)',
-    strongText: '#10B981',
-    deleteHover: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.08)',
-  };
-
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: colors.textMuted }}>
-        Loading AI Memory...
+      <div className="page" style={{ maxWidth: 900 }}>
+        <Skeleton width={160} height={24} style={{ marginBottom: 8 }} />
+        <Skeleton width={420} height={12} style={{ marginBottom: 24 }} />
+        <div className="ui-grid" style={{ '--grid-min': '180px', marginBottom: 24 }}>
+          <SkeletonCard height={70} />
+          <SkeletonCard height={70} />
+          <SkeletonCard height={70} />
+        </div>
+        <SkeletonCard height={140} />
       </div>
     );
   }
@@ -226,488 +229,311 @@ export default function AIMemoryPage() {
   const totalLearnings = (stats?.total || 0) + (rateStats?.total || 0) + (memories?.length || 0);
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 900, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: colors.text, margin: 0, letterSpacing: '-0.02em' }}>
-          AI Memory
-        </h1>
-        <p style={{ fontSize: 14, color: colors.textMuted, marginTop: 6, lineHeight: 1.5 }}>
-          Everything the AI QS has learned about how you work. This builds automatically from your conversations and makes every estimate more accurate over time.
-        </p>
-      </div>
+    <div className="page" style={{ maxWidth: 900 }}>
+      <PageHeader
+        title="AI Memory"
+        subtitle="Everything the AI QS has learned about how you work. This builds automatically from your conversations and makes every estimate more accurate over time."
+      />
 
       {/* Stats cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
-        <div style={{
-          padding: '18px 20px', borderRadius: 10,
-          background: colors.card, border: '1px solid ' + colors.cardBorder,
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 700, color: colors.accent, letterSpacing: '-0.02em' }}>
-            {totalLearnings}
-          </div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, fontWeight: 500 }}>
-            Total Learnings
-          </div>
-        </div>
-        <div style={{
-          padding: '18px 20px', borderRadius: 10,
-          background: colors.card, border: '1px solid ' + colors.cardBorder,
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 700, color: colors.text, letterSpacing: '-0.02em' }}>
-            {rateStats?.total || 0}
-          </div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, fontWeight: 500 }}>
-            Trained Rates
-          </div>
-        </div>
-        <div style={{
-          padding: '18px 20px', borderRadius: 10,
-          background: colors.card, border: '1px solid ' + colors.cardBorder,
-        }}>
-          <div style={{ fontSize: 28, fontWeight: 700, color: colors.text, letterSpacing: '-0.02em' }}>
-            {stats?.total || 0}
-          </div>
-          <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, fontWeight: 500 }}>
-            Client Insights
-          </div>
-        </div>
+      <div className="ui-grid" style={{ '--grid-min': '180px', marginBottom: 24 }}>
+        <Stat value={totalLearnings} label="Total Learnings" accent />
+        <Stat value={rateStats?.total || 0} label="Trained Rates" />
+        <Stat value={stats?.total || 0} label="Client Insights" />
       </div>
 
       {/* Onboarding CTA — only shown when not completed */}
       {onboardingStatus && !onboardingStatus.completed_at && (
-        <div style={{
-          padding: '16px 20px', borderRadius: 10, marginBottom: 16,
-          background: colors.accentBg, border: '1px solid ' + colors.accentBorder,
-          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: colors.accent, marginBottom: 4 }}>
-              Teach the AI how you work — 2 minutes
+        <Banner tone="accent">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 4 }}>
+                Teach the AI how you work — 2 minutes
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
+                Three short steps — your trade, a few qualifying questions, and anything you want to add — and every estimate after this will price from your rates and preferences.
+              </div>
             </div>
-            <div style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.55 }}>
-              Three short steps — your trade, a few qualifying questions, and anything you want to add — and every estimate after this will price from your rates and preferences.
-            </div>
+            <Button to="/onboarding">Start onboarding</Button>
           </div>
-          <Link to="/onboarding" style={{
-            padding: '9px 16px', borderRadius: 8,
-            background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-            color: '#0A0F1C', textDecoration: 'none',
-            fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-          }}>
-            Start onboarding
-          </Link>
-        </div>
+        </Banner>
       )}
       {onboardingStatus && onboardingStatus.completed_at && (
         <div style={{ marginBottom: 16, textAlign: 'right' }}>
-          <Link to="/onboarding" style={{ fontSize: 12, color: colors.accent, textDecoration: 'none', fontWeight: 600 }}>
+          <Link to="/onboarding" style={{ fontSize: '0.78rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
             Update your profile →
           </Link>
         </div>
       )}
 
       {/* How it works */}
-      <div style={{
-        padding: '16px 20px', borderRadius: 10, marginBottom: 28,
-        background: colors.accentBg, border: '1px solid ' + colors.accentBorder,
-      }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: colors.accent, marginBottom: 6 }}>
+      <Banner tone="accent" style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--accent)', marginBottom: 6 }}>
           How AI Memory Works
         </div>
-        <div style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>
+        <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
           Every time you chat with the AI QS, it picks up on your preferences, rates, suppliers, and working patterns.
           These get stored here and automatically applied to all your future projects.
           The more you use it, the more tailored your estimates become.
           You can remove anything here that you don't want the AI to remember.
         </div>
-      </div>
+      </Banner>
 
       {/* Pricing margins — the per-user BOQ markup setting */}
       {prefs && (
-        <div style={{
-          padding: '18px 20px', borderRadius: 10, marginBottom: 20,
-          background: colors.card, border: '1px solid ' + colors.cardBorder,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <PoundIcon size={18} />
-            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Pricing margins</div>
-          </div>
-          <div style={{ fontSize: 12.5, color: colors.textMuted, lineHeight: 1.6, marginBottom: 14 }}>
-            Leave both at 0 and your BOQ totals are the all-in price — every rate already
-            includes the builder's overhead and profit, like a real quote. Set a percentage
-            here to add a visible Contingency and/or Overheads &amp; Profit line on top of
-            every BOQ instead.
-          </div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
-              Contingency %
-              <input
-                type="number" inputMode="decimal" min="0" max="100" step="0.5"
-                value={prefs.contingency_pct}
-                onChange={e => setPrefs(p => ({ ...p, contingency_pct: e.target.value }))}
-                style={{
-                  display: 'block', marginTop: 5, width: 110, padding: '9px 10px', borderRadius: 8,
-                  border: '1px solid ' + colors.cardBorder, background: colors.bg, color: colors.text, fontSize: 14,
-                }}
-              />
-            </label>
-            <label style={{ fontSize: 12, color: colors.textMuted, fontWeight: 600 }}>
-              Overheads &amp; profit %
-              <input
-                type="number" inputMode="decimal" min="0" max="100" step="0.5"
-                value={prefs.ohp_pct}
-                onChange={e => setPrefs(p => ({ ...p, ohp_pct: e.target.value }))}
-                style={{
-                  display: 'block', marginTop: 5, width: 110, padding: '9px 10px', borderRadius: 8,
-                  border: '1px solid ' + colors.cardBorder, background: colors.bg, color: colors.text, fontSize: 14,
-                }}
-              />
-            </label>
-            <button
-              onClick={handleSavePrefs}
-              disabled={prefsSaving}
-              style={{
-                padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)', color: '#0A0F1C',
-                fontSize: 13, fontWeight: 700, minHeight: 40,
-              }}
-            >
-              {prefsSaving ? 'Saving…' : prefsSaved ? 'Saved ✓' : 'Save margins'}
-            </button>
-          </div>
-          {(Number(prefs.contingency_pct) > 0 || Number(prefs.ohp_pct) > 0) && (
-            <div style={{ fontSize: 12, color: colors.accent, marginTop: 10 }}>
-              Every new BOQ will show {Number(prefs.contingency_pct) > 0 ? `Contingency (${prefs.contingency_pct}%)` : ''}
-              {Number(prefs.contingency_pct) > 0 && Number(prefs.ohp_pct) > 0 ? ' and ' : ''}
-              {Number(prefs.ohp_pct) > 0 ? `Overheads & Profit (${prefs.ohp_pct}%)` : ''} on top of the priced items.
+        <Card style={{ marginBottom: 20 }}>
+          <Card.Header title={<><PoundIcon size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />Pricing margins</>} />
+          <Card.Body>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14 }}>
+              Leave both at 0 and your BOQ totals are the all-in price — every rate already
+              includes the builder's overhead and profit, like a real quote. Set a percentage
+              here to add a visible Contingency and/or Overheads &amp; Profit line on top of
+              every BOQ instead.
             </div>
-          )}
-        </div>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Field label="Contingency %" style={{ width: 110 }}>
+                <Input
+                  type="number" inputMode="decimal" min="0" max="100" step="0.5"
+                  value={prefs.contingency_pct}
+                  onChange={e => setPrefs(p => ({ ...p, contingency_pct: e.target.value }))}
+                />
+              </Field>
+              <Field label="Overheads & profit %" style={{ width: 150 }}>
+                <Input
+                  type="number" inputMode="decimal" min="0" max="100" step="0.5"
+                  value={prefs.ohp_pct}
+                  onChange={e => setPrefs(p => ({ ...p, ohp_pct: e.target.value }))}
+                />
+              </Field>
+              <Button onClick={handleSavePrefs} disabled={prefsSaving} busyLabel="Saving…">
+                {prefsSaved ? 'Saved ✓' : 'Save margins'}
+              </Button>
+            </div>
+            {(Number(prefs.contingency_pct) > 0 || Number(prefs.ohp_pct) > 0) && (
+              <div style={{ fontSize: '0.78rem', color: 'var(--accent)', marginTop: 10 }}>
+                Every new BOQ will show {Number(prefs.contingency_pct) > 0 ? `Contingency (${prefs.contingency_pct}%)` : ''}
+                {Number(prefs.contingency_pct) > 0 && Number(prefs.ohp_pct) > 0 ? ' and ' : ''}
+                {Number(prefs.ohp_pct) > 0 ? `Overheads & Profit (${prefs.ohp_pct}%)` : ''} on top of the priced items.
+              </div>
+            )}
+          </Card.Body>
+        </Card>
       )}
 
       {/* User memories section */}
-      <div style={{
-        padding: '18px 20px', borderRadius: 10, marginBottom: 20,
-        background: colors.card, border: '1px solid ' + colors.cardBorder,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <BrainIcon size={18} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Memories</div>
-            <div style={{ fontSize: 12, color: colors.textMuted }}>
-              Facts and preferences you've confirmed, plus anything the AI has remembered from your chats.
+      <Card style={{ marginBottom: 20 }}>
+        <Card.Header
+          title={<><BrainIcon size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />Memories</>}
+          extra={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge tone="accent" pill>{memories.length}</Badge>
+              <Button size="sm" variant={addingMemory ? 'ghost' : 'soft'} onClick={() => setAddingMemory(v => !v)}>
+                {addingMemory ? 'Cancel' : '+ Add memory'}
+              </Button>
             </div>
+          }
+        />
+        <Card.Body>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+            Facts and preferences you've confirmed, plus anything the AI has remembered from your chats.
           </div>
-          <div style={{
-            fontSize: 11, fontWeight: 600,
-            padding: '2px 8px', borderRadius: 10,
-            background: colors.accentBg, color: colors.accent,
-          }}>
-            {memories.length}
-          </div>
-          <button
-            onClick={() => setAddingMemory(v => !v)}
-            style={{
-              padding: '6px 12px', borderRadius: 7,
-              background: addingMemory ? 'transparent' : colors.accentBg,
-              border: '1px solid ' + colors.accentBorder,
-              color: colors.accent, fontSize: 12, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            {addingMemory ? 'Cancel' : '+ Add memory'}
-          </button>
-        </div>
 
-        {addingMemory && (
-          <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
-            <textarea
-              value={newMemoryText}
-              onChange={e => setNewMemoryText(e.target.value)}
-              placeholder="e.g. I always exclude asbestos surveys from refurb quotes."
-              rows={2}
-              style={{
-                flex: 1, padding: '8px 11px', borderRadius: 7,
-                background: isDark ? '#0F1520' : '#F8FAFC',
-                border: '1px solid ' + colors.cardBorder,
-                color: colors.text, fontSize: 13, outline: 'none', resize: 'vertical',
-                fontFamily: 'inherit',
-              }}
-            />
-            <button
-              onClick={handleAddMemory}
-              style={{
-                padding: '8px 14px', borderRadius: 7,
-                background: 'linear-gradient(135deg,#F59E0B,#D97706)',
-                border: 'none', color: '#0A0F1C', fontSize: 12.5, fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-              }}
-            >
-              Save
-            </button>
-          </div>
-        )}
-
-        {memories.length === 0 ? (
-          <div style={{ padding: '18px 8px', fontSize: 12.5, color: colors.textMuted, textAlign: 'center' }}>
-            No memories yet. Complete onboarding or chat with the AI — durable preferences will appear here automatically.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {memories.map(m => {
-              const isEditing = editingMemoryId === m.id;
-              const sourceLabel = m.source === 'onboarding' ? 'Onboarding' :
-                m.source === 'user' ? 'Added by you' :
-                m.source === 'chat' ? 'From chat' :
-                m.source === 'auto' ? 'Learned automatically' : m.source;
-              return (
-                <div key={m.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10,
-                  padding: '10px 14px', borderRadius: 8,
-                  background: m.source === 'onboarding' ? colors.strong : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'),
-                  border: '1px solid ' + (m.source === 'onboarding' ? colors.strongBorder : 'transparent'),
-                }}>
-                  <div style={{ flex: 1 }}>
-                    {isEditing ? (
-                      <textarea
-                        value={editingText}
-                        onChange={e => setEditingText(e.target.value)}
-                        rows={2}
-                        style={{
-                          width: '100%', padding: '6px 9px', borderRadius: 6,
-                          background: isDark ? '#0F1520' : '#FFFFFF',
-                          border: '1px solid ' + colors.cardBorder,
-                          color: colors.text, fontSize: 13, resize: 'vertical',
-                          fontFamily: 'inherit',
-                        }}
-                      />
-                    ) : (
-                      <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.5 }}>{m.content}</div>
-                    )}
-                    <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {m.category && <span>{m.category.replace(/_/g, ' ')}</span>}
-                      <span>· {sourceLabel}</span>
-                      {m.use_count > 0 && <span>· used {m.use_count}×</span>}
-                      <span>· {new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {isEditing ? (
-                      <>
-                        <button
-                          onClick={() => handleSaveEdit(m.id)}
-                          title="Save"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, padding: '2px 6px', fontWeight: 700 }}
-                        ><CheckIcon size={14} /></button>
-                        <button
-                          onClick={() => { setEditingMemoryId(null); setEditingText(''); }}
-                          title="Cancel"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 16, padding: '2px 6px' }}
-                        >×</button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => { setEditingMemoryId(m.id); setEditingText(m.content); }}
-                          title="Edit"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 13, padding: '2px 6px', opacity: 0.6 }}
-                          onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = colors.accent; }}
-                          onMouseLeave={e => { e.target.style.opacity = '0.6'; e.target.style.color = colors.textMuted; }}
-                        ><EditIcon size={13} /></button>
-                        <button
-                          onClick={() => handleDeleteMemory(m.id)}
-                          title="Forget"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 16, padding: '2px 6px', opacity: 0.5 }}
-                          onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = '#EF4444'; }}
-                          onMouseLeave={e => { e.target.style.opacity = '0.5'; e.target.style.color = colors.textMuted; }}
-                        >×</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* People and firms — the entity graph */}
-      <div style={{
-        padding: '18px 20px', borderRadius: 10, marginBottom: 20,
-        background: colors.card, border: '1px solid ' + colors.cardBorder,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <BrainIcon size={18} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>People &amp; firms</div>
-            <div style={{ fontSize: 12, color: colors.textMuted }}>
-              Who's on your jobs — clients, subbies, architects, suppliers. The assistant uses this to
-              recall who someone is and what happened last time. Nothing here changes a price.
+          {addingMemory && (
+            <div style={{ marginBottom: 14, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <Textarea
+                value={newMemoryText}
+                onChange={e => setNewMemoryText(e.target.value)}
+                placeholder="e.g. I always exclude asbestos surveys from refurb quotes."
+                rows={2}
+                style={{ flex: 1, minHeight: 0 }}
+              />
+              <Button onClick={handleAddMemory} busyLabel="Saving…">Save</Button>
             </div>
-          </div>
-          <div style={{
-            fontSize: 11, fontWeight: 600,
-            padding: '2px 8px', borderRadius: 10,
-            background: colors.accentBg, color: colors.accent,
-          }}>
-            {entities.length}
-          </div>
-        </div>
+          )}
 
-        {entities.length === 0 ? (
-          <div style={{ padding: '18px 8px', fontSize: 12.5, color: colors.textMuted, textAlign: 'center' }}>
-            Nobody recorded yet. Your saved clients appear here automatically, and the assistant will
-            ask before adding anyone it hears about in a chat.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {entities.map(ent => {
-              const isOpen = expandedEntityId === ent.id;
-              const kindLabel = ent.kind.replace(/_/g, ' ');
-              const jobCount = new Set((ent.events || []).filter(e => e.job_id).map(e => e.job_id)).size;
-              return (
-                <div key={ent.id} style={{
-                  padding: '10px 14px', borderRadius: 8,
-                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  border: '1px solid ' + (isOpen ? colors.accentBorder : 'transparent'),
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          {memories.length === 0 ? (
+            <div style={{ padding: '18px 8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              No memories yet. Complete onboarding or chat with the AI — durable preferences will appear here automatically.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {memories.map(m => {
+                const isEditing = editingMemoryId === m.id;
+                const sourceLabel = m.source === 'onboarding' ? 'Onboarding' :
+                  m.source === 'user' ? 'Added by you' :
+                  m.source === 'chat' ? 'From chat' :
+                  m.source === 'auto' ? 'Learned automatically' : m.source;
+                return (
+                  <div key={m.id} style={rowStyle(m.source === 'onboarding')}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: colors.text, fontWeight: 600 }}>
-                        {ent.display_name}
-                      </div>
-                      <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ textTransform: 'capitalize' }}>{kindLabel}</span>
-                        {jobCount > 0 && <span>· {jobCount} job{jobCount === 1 ? '' : 's'}</span>}
-                        {(ent.facts || []).length > 0 && <span>· {ent.facts.length} thing{ent.facts.length === 1 ? '' : 's'} remembered</span>}
-                        {ent.source === 'estimator_clients' && <span>· From your clients</span>}
+                      {isEditing ? (
+                        <Textarea
+                          value={editingText}
+                          onChange={e => setEditingText(e.target.value)}
+                          rows={2}
+                          style={{ minHeight: 0 }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{m.content}</div>
+                      )}
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {m.category && <span>{m.category.replace(/_/g, ' ')}</span>}
+                        <span>· {sourceLabel}</span>
+                        {m.use_count > 0 && <span>· used {m.use_count}×</span>}
+                        <span>· {new Date(m.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        onClick={() => { setExpandedEntityId(isOpen ? null : ent.id); setNewFactText(''); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.accent, padding: '2px 6px', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
-                      >
-                        {isOpen ? 'Close' : 'Details'}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntity(ent)}
-                        title="Delete this person or firm and everything remembered about them"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, padding: '2px 6px', fontSize: 12, fontFamily: 'inherit' }}
-                      >
-                        Delete
-                      </button>
+                      {isEditing ? (
+                        <>
+                          <IconButton onClick={() => handleSaveEdit(m.id)} title="Save" aria-label="Save memory"><CheckIcon size={14} /></IconButton>
+                          <IconButton onClick={() => { setEditingMemoryId(null); setEditingText(''); }} title="Cancel" aria-label="Cancel edit"><XIcon size={14} /></IconButton>
+                        </>
+                      ) : (
+                        <>
+                          <IconButton onClick={() => { setEditingMemoryId(m.id); setEditingText(m.content); }} title="Edit" aria-label="Edit memory"><EditIcon size={13} /></IconButton>
+                          <IconButton danger onClick={() => handleDeleteMemory(m.id)} title="Forget" aria-label="Forget memory"><XIcon size={14} /></IconButton>
+                        </>
+                      )}
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </Card.Body>
+      </Card>
 
-                  {isOpen && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid ' + colors.cardBorder }}>
-                      {(ent.facts || []).length === 0 ? (
-                        <div style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
-                          Nothing remembered about them yet.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                          {ent.facts.map(f => (
-                            <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                              <div style={{ flex: 1, fontSize: 12.5, color: colors.text, lineHeight: 1.5 }}>{f.content}</div>
-                              <button
-                                onClick={() => handleForgetFact(ent.id, f.id)}
-                                title="Stop using this. It stays on record but is no longer given to the assistant."
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11, padding: '0 4px', fontFamily: 'inherit' }}
-                              >
-                                Forget
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+      {/* People and firms — the entity graph */}
+      <Card style={{ marginBottom: 20 }}>
+        <Card.Header
+          title={<><BrainIcon size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />People &amp; firms</>}
+          extra={<Badge tone="accent" pill>{entities.length}</Badge>}
+        />
+        <Card.Body>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+            Who's on your jobs — clients, subbies, architects, suppliers. The assistant uses this to
+            recall who someone is and what happened last time. Nothing here changes a price.
+          </div>
 
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                        <input
-                          value={newFactText}
-                          onChange={e => setNewFactText(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAddFact(ent.id); }}
-                          placeholder="e.g. Always wants the kitchen priced as a PC sum"
-                          style={{
-                            flex: 1, padding: '7px 10px', borderRadius: 6,
-                            background: isDark ? '#0F1520' : '#FFFFFF',
-                            border: '1px solid ' + colors.cardBorder,
-                            color: colors.text, fontSize: 12.5, outline: 'none', fontFamily: 'inherit',
-                          }}
-                        />
-                        <button
-                          onClick={() => handleAddFact(ent.id)}
-                          style={{
-                            padding: '7px 12px', borderRadius: 6,
-                            background: colors.accentBg, border: '1px solid ' + colors.accentBorder,
-                            color: colors.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                          }}
-                        >
-                          Add
-                        </button>
+          {entities.length === 0 ? (
+            <div style={{ padding: '18px 8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              Nobody recorded yet. Your saved clients appear here automatically, and the assistant will
+              ask before adding anyone it hears about in a chat.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {entities.map(ent => {
+                const isOpen = expandedEntityId === ent.id;
+                const kindLabel = ent.kind.replace(/_/g, ' ');
+                const jobCount = new Set((ent.events || []).filter(e => e.job_id).map(e => e.job_id)).size;
+                return (
+                  <div key={ent.id} style={{
+                    padding: '10px 14px', borderRadius: 8,
+                    background: 'var(--surface-hover)',
+                    border: '1px solid ' + (isOpen ? 'var(--border-accent)' : 'transparent'),
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                          {ent.display_name}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          <span style={{ textTransform: 'capitalize' }}>{kindLabel}</span>
+                          {jobCount > 0 && <span>· {jobCount} job{jobCount === 1 ? '' : 's'}</span>}
+                          {(ent.facts || []).length > 0 && <span>· {ent.facts.length} thing{ent.facts.length === 1 ? '' : 's'} remembered</span>}
+                          {ent.source === 'estimator_clients' && <span>· From your clients</span>}
+                        </div>
                       </div>
-
-                      <div style={{ display: 'flex', gap: 12 }}>
-                        <button
-                          onClick={() => handleRenameEntity(ent)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11.5, padding: 0, fontFamily: 'inherit' }}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <Button size="sm" variant="ghost" onClick={() => { setExpandedEntityId(isOpen ? null : ent.id); setNewFactText(''); }}>
+                          {isOpen ? 'Close' : 'Details'}
+                        </Button>
+                        <Button size="sm" variant="ghost"
+                          onClick={() => handleDeleteEntity(ent)}
+                          title="Delete this person or firm and everything remembered about them"
                         >
-                          Rename
-                        </button>
-                        <button
-                          onClick={() => handleMergeEntity(ent)}
-                          title="Same person or firm recorded twice? Merge them."
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: 11.5, padding: 0, fontFamily: 'inherit' }}
-                        >
-                          Merge into another
-                        </button>
+                          Delete
+                        </Button>
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                    {isOpen && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                        {(ent.facts || []).length === 0 ? (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 10 }}>
+                            Nothing remembered about them yet.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                            {ent.facts.map(f => (
+                              <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <div style={{ flex: 1, fontSize: '0.8rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{f.content}</div>
+                                <Button size="sm" variant="ghost"
+                                  onClick={() => handleForgetFact(ent.id, f.id)}
+                                  title="Stop using this. It stays on record but is no longer given to the assistant."
+                                >
+                                  Forget
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                          <Input
+                            value={newFactText}
+                            onChange={e => setNewFactText(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleAddFact(ent.id); }}
+                            placeholder="e.g. Always wants the kitchen priced as a PC sum"
+                            style={{ flex: 1 }}
+                          />
+                          <Button variant="soft" onClick={() => handleAddFact(ent.id)}>Add</Button>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <Button size="sm" variant="ghost" onClick={() => handleRenameEntity(ent)}>Rename</Button>
+                          <Button size="sm" variant="ghost"
+                            onClick={() => handleMergeEntity(ent)}
+                            title="Same person or firm recorded twice? Merge them."
+                          >
+                            Merge into another
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card.Body>
+      </Card>
 
       {/* Insights by category */}
       {Object.keys(grouped).length === 0 && (rateStats?.total || 0) === 0 && (memories?.length || 0) === 0 ? (
-        <div style={{
-          padding: '48px 24px', borderRadius: 12, textAlign: 'center',
-          background: colors.card, border: '1px solid ' + colors.cardBorder,
-        }}>
-          <div style={{ marginBottom: 12 }}><BrainIcon size={36} /></div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: colors.text, marginBottom: 8 }}>
-            No memories yet
-          </div>
-          <div style={{ fontSize: 13, color: colors.textMuted, maxWidth: 400, margin: '0 auto', lineHeight: 1.5 }}>
-            Start chatting with the AI QS about your projects. As you provide rates, preferences, and feedback, the system will learn and remember them here.
-          </div>
-        </div>
+        <Card>
+          <EmptyState
+            icon={BrainIcon}
+            title="No memories yet"
+            body="Start chatting with the AI QS about your projects. As you provide rates, preferences, and feedback, the system will learn and remember them here."
+          />
+        </Card>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Rates summary card */}
           {rateStats && rateStats.total > 0 && (
-            <div style={{
-              padding: '18px 20px', borderRadius: 10,
-              background: colors.card, border: '1px solid ' + colors.cardBorder,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <PoundIcon size={18} />
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>Trained Rates</div>
-                  <div style={{ fontSize: 12, color: colors.textMuted }}>
-                    {rateStats.total} rates learned, avg confidence {Math.round((rateStats.avg_confidence || 0) * 100)}%
-                  </div>
+            <Card>
+              <Card.Header
+                title={<><PoundIcon size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />Trained Rates</>}
+                extra={`${rateStats.total} rates learned, avg confidence ${Math.round((rateStats.avg_confidence || 0) * 100)}%`}
+              />
+              <Card.Body>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  View and manage your rates on the My Rates page. These are automatically applied to every estimate.
                 </div>
-              </div>
-              <div style={{ fontSize: 12, color: colors.textMuted }}>
-                View and manage your rates on the My Rates page. These are automatically applied to every estimate.
-              </div>
-            </div>
+              </Card.Body>
+            </Card>
           )}
 
           {/* Insight categories */}
@@ -715,66 +541,42 @@ export default function AIMemoryPage() {
             const catInfo = CATEGORY_LABELS[category] || { label: category, emoji: EditIcon, desc: '' };
             const CatIcon = catInfo.emoji;
             return (
-              <div key={category} style={{
-                padding: '18px 20px', borderRadius: 10,
-                background: colors.card, border: '1px solid ' + colors.cardBorder,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  {CatIcon && <CatIcon size={18} />}
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{catInfo.label}</div>
-                    {catInfo.desc && <div style={{ fontSize: 12, color: colors.textMuted }}>{catInfo.desc}</div>}
-                  </div>
-                  <div style={{
-                    marginLeft: 'auto', fontSize: 11, fontWeight: 600,
-                    padding: '2px 8px', borderRadius: 10,
-                    background: colors.accentBg, color: colors.accent,
-                  }}>
-                    {items.length}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {items.map(ins => (
-                    <div key={ins.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 14px', borderRadius: 8,
-                      background: ins.times_reinforced >= 3 ? colors.strong : (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'),
-                      border: '1px solid ' + (ins.times_reinforced >= 3 ? colors.strongBorder : 'transparent'),
-                    }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, color: colors.text, lineHeight: 1.4 }}>
-                          {ins.insight}
+              <Card key={category}>
+                <Card.Header
+                  title={<>{CatIcon && <CatIcon size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />}{catInfo.label}</>}
+                  extra={<Badge tone="accent" pill>{items.length}</Badge>}
+                />
+                <Card.Body>
+                  {catInfo.desc && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>{catInfo.desc}</div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {items.map(ins => (
+                      <div key={ins.id} style={{ ...rowStyle(ins.times_reinforced >= 3), alignItems: 'center' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                            {ins.insight}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4, display: 'flex', gap: 12 }}>
+                            {ins.times_reinforced >= 3 && (
+                              <span style={{ color: 'var(--success)', fontWeight: 600 }}>
+                                Strong ({ins.times_reinforced}x confirmed)
+                              </span>
+                            )}
+                            {ins.times_reinforced > 1 && ins.times_reinforced < 3 && (
+                              <span>Mentioned {ins.times_reinforced}x</span>
+                            )}
+                            <span>{new Date(ins.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 4, display: 'flex', gap: 12 }}>
-                          {ins.times_reinforced >= 3 && (
-                            <span style={{ color: colors.strongText, fontWeight: 600 }}>
-                              Strong ({ins.times_reinforced}x confirmed)
-                            </span>
-                          )}
-                          {ins.times_reinforced > 1 && ins.times_reinforced < 3 && (
-                            <span>Mentioned {ins.times_reinforced}x</span>
-                          )}
-                          <span>{new Date(ins.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                        </div>
+                        <IconButton danger onClick={() => handleDelete(ins.id)} title="Remove from memory" aria-label="Remove from memory">
+                          <XIcon size={14} />
+                        </IconButton>
                       </div>
-                      <button
-                        onClick={() => handleDelete(ins.id)}
-                        title="Remove from memory"
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: colors.textMuted, fontSize: 16, padding: '4px 8px',
-                          borderRadius: 6, transition: 'all 0.15s',
-                          opacity: 0.5,
-                        }}
-                        onMouseEnter={e => { e.target.style.opacity = '1'; e.target.style.color = '#EF4444'; }}
-                        onMouseLeave={e => { e.target.style.opacity = '0.5'; e.target.style.color = colors.textMuted; }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    ))}
+                  </div>
+                </Card.Body>
+              </Card>
             );
           })}
         </div>

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
-import { useAuth } from '../context/AuthContext';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 import { ClipboardIcon } from '../components/Icons';
+import {
+  Button, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast,
+} from '../ui';
 
 // SVG icons for document types
 const ExcelIcon = ({ size = 28 }) => (
@@ -21,20 +23,29 @@ const WordIcon = ({ size = 28 }) => (
   </svg>
 );
 
-const STATUS_MAP = {
-  submitted: { label: 'Submitted', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)', desc: 'Your project has been received. We\'ll begin review shortly.' },
-  in_review: { label: 'In Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', desc: 'We\'re reviewing your drawings and project brief.' },
-  in_progress: { label: 'In Progress', color: '#A855F7', bg: 'rgba(168,85,247,0.1)', desc: 'Your BOQ is being prepared. We\'ll notify you when it\'s ready.' },
-  completed: { label: 'Completed', color: '#10B981', bg: 'rgba(16,185,129,0.1)', desc: 'Your BOQ pack is complete and ready for download.' },
-  delivered: { label: 'Delivered', color: '#10B981', bg: 'rgba(16,185,129,0.15)', desc: 'Your BOQ pack has been delivered.' },
+const DownloadArrow = () => (
+  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+);
+
+// What each lifecycle state means for the customer. Labels/tones come from
+// the kit's shared status map (StatusBadge); this only adds the description.
+const STATUS_DESC = {
+  submitted: "Your project has been received. We'll begin review shortly.",
+  in_review: "We're reviewing your drawings and project brief.",
+  in_progress: "Your BOQ is being prepared. We'll notify you when it's ready.",
+  completed: 'Your BOQ pack is complete and ready for download.',
+  delivered: 'Your BOQ pack has been delivered.',
+};
+const STEP_LABELS = {
+  submitted: 'Submitted', in_review: 'In Review', in_progress: 'In Progress',
+  completed: 'Completed', delivered: 'Delivered',
 };
 
 const STEPS = ['submitted', 'in_review', 'in_progress', 'completed', 'delivered'];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
-  const { user } = useAuth();
-  // Variations are an Office in a Box feature
+  const toast = useToast();
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null);
@@ -52,7 +63,7 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleDownload(filename, label) {
+  async function handleDownload(filename) {
     setDownloading(filename);
     try {
       const token = localStorage.getItem('aiqs_token');
@@ -70,7 +81,7 @@ export default function ProjectDetailPage() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Download failed — the file may have expired. Please regenerate from the chat.');
+      toast.error('Download failed — the file may have expired. Please regenerate from the chat.');
     } finally {
       setDownloading(null);
     }
@@ -84,7 +95,23 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <div className="page">
-        <div className="empty-state"><div className="loading-spinner" /><p>Loading project...</p></div>
+        <div style={{ marginBottom: 24 }}>
+          <Skeleton width={90} height={11} style={{ marginBottom: 12 }} />
+          <Skeleton width="45%" height={26} style={{ marginBottom: 8 }} />
+          <Skeleton width="30%" height={12} />
+        </div>
+        <Card style={{ marginBottom: 18 }}>
+          <Card.Body>
+            <Skeleton width="100%" height={64} style={{ marginBottom: 14 }} />
+            <Skeleton width="60%" height={12} style={{ margin: '0 auto' }} />
+          </Card.Body>
+        </Card>
+        <Card>
+          <Card.Body>
+            <Skeleton width="100%" height={56} style={{ marginBottom: 10 }} />
+            <Skeleton width="100%" height={56} />
+          </Card.Body>
+        </Card>
       </div>
     );
   }
@@ -92,53 +119,43 @@ export default function ProjectDetailPage() {
   if (!project) {
     return (
       <div className="page">
-        <div className="empty-state">
-          <h3>Project not found</h3>
-          <Link to="/dashboard" className="btn-secondary" style={{ marginTop: 16 }}>Back to Dashboard</Link>
-        </div>
+        <EmptyState
+          title="Project not found"
+          body="It may have been deleted, or the link is out of date."
+          action={<Button variant="secondary" to="/dashboard">Back to Dashboard</Button>}
+        />
       </div>
     );
   }
 
-  const status = STATUS_MAP[project.status] || STATUS_MAP.submitted;
   const currentStep = STEPS.indexOf(project.status);
   const hasDocuments = project.boq_filename || project.findings_filename;
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div>
-          <Link to="/dashboard" className="back-link">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M11 17l-5-5m0 0l5-5m-5 5h12"/></svg>
-            All Projects
-          </Link>
-          <h1 className="page-title">{project.title}</h1>
-          <p className="page-subtitle">
-            {project.project_type}
-            {project.location ? ` · ${project.location}` : ''}
-            {' · '}
-            {new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
-            <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
-          </Link>
-          <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
-            {status.label}
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        back={{ to: '/dashboard', label: 'All Projects' }}
+        title={project.title}
+        subtitle={
+          `${project.project_type}${project.location ? ` · ${project.location}` : ''} · ` +
+          new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+        }
+        actions={
+          <>
+            <Button variant="secondary" size="sm" to={`/project/${id}/variations`}>
+              <ClipboardIcon size={15} style={{ verticalAlign: 'middle' }} /> Variations
+            </Button>
+            <StatusBadge status={project.status} />
+          </>
+        }
+      />
 
       {/* Progress tracker */}
-      <div className="section-card">
-        <div className="section-card-header">
-          <h2>Progress</h2>
-        </div>
-        <div className="card-body">
+      <Card style={{ marginBottom: 18 }}>
+        <Card.Header title="Progress" />
+        <Card.Body>
           <div className="progress-track">
             {STEPS.map((step, i) => {
-              const s = STATUS_MAP[step];
               const isActive = i <= currentStep;
               const isCurrent = i === currentStep;
               return (
@@ -150,62 +167,59 @@ export default function ProjectDetailPage() {
                       <span>{i + 1}</span>
                     )}
                   </div>
-                  <div className="step-label">{s.label}</div>
+                  <div className="step-label">{STEP_LABELS[step]}</div>
                 </div>
               );
             })}
           </div>
-          <p className="progress-desc">{status.desc}</p>
-        </div>
-      </div>
+          <p className="progress-desc">{STATUS_DESC[project.status] || STATUS_DESC.submitted}</p>
+        </Card.Body>
+      </Card>
 
       {/* Project description */}
       {project.description && (
-        <div className="section-card">
-          <div className="section-card-header">
-            <h2>Project Brief</h2>
-          </div>
-          <div className="card-body">
+        <Card style={{ marginBottom: 18 }}>
+          <Card.Header title="Project Brief" />
+          <Card.Body>
             <p className="project-description">{project.description}</p>
-          </div>
-        </div>
+          </Card.Body>
+        </Card>
       )}
 
       {/* Deliverables — files the QS sends back into the customer's portal */}
       <DeliverablesPanel projectId={id} project={project} />
 
       {/* Documents */}
-      <div className="section-card">
-        <div className="section-card-header">
-          <h2>Documents</h2>
-        </div>
-        <div className="card-body">
+      <Card style={{ marginBottom: 18 }}>
+        <Card.Header title="Documents" />
+        <Card.Body>
           {hasDocuments ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
               {/* Summary bar */}
               {(project.total_value > 0 || project.item_count > 0) && (
                 <div style={{
-                  display: 'flex', gap: 24, padding: '12px 16px',
-                  background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)',
+                  display: 'flex', gap: 24, padding: '12px 16px', flexWrap: 'wrap',
+                  background: 'var(--success-bg)',
+                  border: '1px solid color-mix(in srgb, var(--success) 20%, transparent)',
                   borderRadius: 10, marginBottom: 4,
                 }}>
                   {project.total_value > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Project Value</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#10B981' }}>{formatCurrency(project.total_value, project.currency)}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 2 }}>Project Value</div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(project.total_value, project.currency)}</div>
                     </div>
                   )}
                   {project.item_count > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Line Items</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{project.item_count}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 2 }}>Line Items</div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>{project.item_count}</div>
                     </div>
                   )}
                   {project.project_type && (
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Type</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{project.project_type}</div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 2 }}>Type</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>{project.project_type}</div>
                     </div>
                   )}
                 </div>
@@ -214,37 +228,22 @@ export default function ProjectDetailPage() {
               {/* BOQ Excel */}
               {project.boq_filename && (
                 <button
-                  onClick={() => handleDownload(project.boq_filename, 'BOQ')}
+                  className="ui-tile"
+                  onClick={() => handleDownload(project.boq_filename)}
                   disabled={downloading === project.boq_filename}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
-                    background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)',
-                    textAlign: 'left', width: '100%',
-                    opacity: downloading === project.boq_filename ? 0.6 : 1,
-                    transition: 'all 0.15s',
+                    '--tile-bg': 'var(--success-bg)',
+                    '--tile-bg-hover': 'color-mix(in srgb, var(--success) 16%, transparent)',
+                    '--tile-border': 'color-mix(in srgb, var(--success) 25%, transparent)',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.12)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.06)'}
                 >
                   <ExcelIcon />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-                      Bill of Quantities (Excel)
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {project.boq_filename}
-                    </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="ui-tile__title">Bill of Quantities (Excel)</div>
+                    <div className="ui-tile__meta">{project.boq_filename}</div>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#10B981', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {downloading === project.boq_filename ? (
-                      'Downloading...'
-                    ) : (
-                      <>
-                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                        Download
-                      </>
-                    )}
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {downloading === project.boq_filename ? 'Downloading...' : <><DownloadArrow /> Download</>}
                   </div>
                 </button>
               )}
@@ -252,119 +251,86 @@ export default function ProjectDetailPage() {
               {/* Findings Report Word doc */}
               {project.findings_filename && (
                 <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => handleDownload(project.findings_filename, 'Findings Report')}
-                  disabled={downloading === project.findings_filename}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '14px 18px', borderRadius: 10, cursor: 'pointer',
-                    background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
-                    textAlign: 'left', flex: 1,
-                    opacity: downloading === project.findings_filename ? 0.6 : 1,
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.12)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.06)'}
-                >
-                  <WordIcon />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
-                      Findings Report (Word)
+                  <button
+                    className="ui-tile"
+                    onClick={() => handleDownload(project.findings_filename)}
+                    disabled={downloading === project.findings_filename}
+                    style={{
+                      flex: 1, width: 'auto',
+                      '--tile-bg': 'var(--info-bg)',
+                      '--tile-bg-hover': 'color-mix(in srgb, var(--info) 16%, transparent)',
+                      '--tile-border': 'color-mix(in srgb, var(--info) 25%, transparent)',
+                    }}
+                  >
+                    <WordIcon />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="ui-tile__title">Findings Report (Word)</div>
+                      <div className="ui-tile__meta">{project.findings_filename}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {project.findings_filename}
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--info)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {downloading === project.findings_filename ? 'Downloading...' : <><DownloadArrow /> Download</>}
                     </div>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#3B82F6', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {downloading === project.findings_filename ? (
-                      'Downloading...'
-                    ) : (
-                      <>
-                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                        Download
-                      </>
-                    )}
-                  </div>
-                </button>
-                <Link
-                  to={`/project/${id}/findings`}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '0 16px', borderRadius: 10,
-                    background: 'rgba(59,130,246,0.12)',
-                    border: '1px solid rgba(59,130,246,0.3)',
-                    textDecoration: 'none', color: '#3B82F6',
-                    fontWeight: 700, fontSize: 12.5,
-                  }}
-                >Edit ↗</Link>
+                  </button>
+                  <Link
+                    to={`/project/${id}/findings`}
+                    className="ui-tile"
+                    style={{
+                      width: 'auto', padding: '0 16px', alignSelf: 'stretch',
+                      color: 'var(--info)', fontWeight: 700, fontSize: '0.8rem',
+                      '--tile-bg': 'color-mix(in srgb, var(--info) 14%, transparent)',
+                      '--tile-bg-hover': 'color-mix(in srgb, var(--info) 22%, transparent)',
+                      '--tile-border': 'color-mix(in srgb, var(--info) 30%, transparent)',
+                    }}
+                  >Edit ↗</Link>
                 </div>
               )}
 
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'center' }}>
                 Need to tweak content? Use <strong>Edit</strong> beside the Findings Report or open the Builder Pack to edit the BOQ line items.
               </p>
 
-              {/* Builder Pack — full workspace (trade rollup, schedules, client copy) lives on its own page now. */}
+              {/* Builder Pack — full workspace (trade rollup, schedules, client copy) lives on its own page. */}
               {project.boq_filename && (
                 <Link
                   to={`/project/${id}/builder-pack`}
+                  className="ui-tile"
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '14px 18px', borderRadius: 10,
-                    background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(168,85,247,0.06))',
-                    border: '1px solid rgba(245,158,11,0.3)',
-                    textDecoration: 'none', textAlign: 'left',
+                    '--tile-bg': 'var(--accent-glow)',
+                    '--tile-bg-hover': 'color-mix(in srgb, var(--accent) 18%, transparent)',
+                    '--tile-border': 'var(--border-accent)',
                   }}
                 >
                   <div style={{
                     width: 34, height: 34, borderRadius: 8, flexShrink: 0,
-                    background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-                    color: '#0A0F1C', fontWeight: 800, fontSize: 13,
+                    background: 'var(--gradient-amber)',
+                    color: '#0A0F1C', fontWeight: 800, fontSize: '0.82rem',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>BP</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
+                      <span className="ui-tile__title" style={{ marginBottom: 0 }}>
                         Amend numbers & generate your Client Copy
                       </span>
-                      <span style={{
-                        fontSize: 9.5, fontWeight: 800, letterSpacing: '0.06em',
-                        padding: '2px 7px', borderRadius: 4,
-                        background: 'rgba(245,158,11,0.12)', color: '#F59E0B',
-                        border: '1px solid rgba(245,158,11,0.3)',
-                        textTransform: 'uppercase',
-                      }}>New</span>
+                      <Badge tone="accent" size="sm" outlined>New</Badge>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div className="ui-tile__meta">
                       Adjust quantities and rates, add your margin, and download a branded copy with your logo — plus trade rollup and materials & labour schedules.
                     </div>
                   </div>
-                  <span style={{ color: '#F59E0B', fontSize: 18, fontWeight: 700 }}>→</span>
+                  <span style={{ color: 'var(--accent)', fontSize: 18, fontWeight: 700 }}>→</span>
                 </Link>
               )}
 
             </div>
           ) : (
-            <div style={{ padding: '32px 0', textAlign: 'center' }}>
-              <div style={{ marginBottom: 12 }}><svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="var(--text-muted)" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div>
-              <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>
-                No documents generated yet. Open the chat for this project and say "generate documents" to create your BOQ and Findings Report.
-              </p>
-              <Link
-                to="/chat"
-                style={{
-                  display: 'inline-block', marginTop: 16, padding: '10px 20px',
-                  background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)',
-                  borderRadius: 8, color: '#F59E0B', fontSize: 13, fontWeight: 600,
-                  textDecoration: 'none',
-                }}
-              >
-                Go to Chat →
-              </Link>
-            </div>
+            <EmptyState
+              title="No documents yet"
+              body='Open the chat for this project and say "generate documents" to create your BOQ and Findings Report.'
+              action={<Button variant="soft" to="/chat">Go to Chat →</Button>}
+            />
           )}
-        </div>
-      </div>
+        </Card.Body>
+      </Card>
 
     </div>
   );
