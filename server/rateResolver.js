@@ -48,6 +48,7 @@ const BASIS_TO_RATE_SOURCE = {
   ai_estimated:     'ai_estimated',
   fallback:         'fallback_estimated',
   fallback_clipped: 'fallback_corrected',
+  ceiling_clipped: 'ceiling_clipped',
 };
 
 // Confidence per basis. Coarse on purpose: it is a label for how much the number rests
@@ -60,6 +61,7 @@ const BASIS_CONFIDENCE = {
   ai_estimated:     0.30,
   fallback:         0.20,
   fallback_clipped: 0.15,
+  ceiling_clipped: 0.15,
 };
 
 function round2(n) {
@@ -183,10 +185,15 @@ function resolveRate(p = {}) {
   if (ceiling) {
     const ceilingLocal = ceiling * locFactor;
     if (rate > ceilingLocal) {
+      // Clip TO THE CEILING. Kept byte-for-byte in step with the same guard in
+      // deterministicPricer.js — the parity test asserts the two agree. See the
+      // comment there for why replacing the rate with estimateFallbackRate()
+      // was wrong (it cut real lines by up to 428x).
       const fallback = estimateFallbackRate(item) * locFactor;
-      warnings.push(`Rate for '${itemKey}' exceeds the per-unit ceiling — clipped. Source was ${basis}.`);
-      rate = fallback;
-      basis = 'fallback_clipped';
+      const clipped = Math.min(ceilingLocal, Math.max(fallback, ceilingLocal));
+      warnings.push(`Rate for '${itemKey}' exceeds the per-unit ceiling — clipped to the ceiling. Source was ${basis}.`);
+      rate = clipped;
+      basis = 'ceiling_clipped';
     }
   }
 

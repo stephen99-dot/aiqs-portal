@@ -172,12 +172,12 @@ test('the unit ceiling clips an impossible rate, isolated from the AI cap', () =
   for (const region of ['Manchester', 'Dublin', 'London SW1A 1AA']) {
     const a = compare(viaAssumedRate, region);
     assertParity(a, `unit ceiling via assumed_rate @ "${region}"`);
-    assert.strictEqual(a[0].resolverSource, 'fallback_corrected',
-      'a rate over the unit ceiling must be reported as corrected');
+    assert.strictEqual(a[0].resolverSource, 'ceiling_clipped',
+      'a rate over the unit ceiling must be reported as clipped to the ceiling');
 
     const b = compare(viaClientRate, region, { unknown_cladding_b: 4000 });
     assertParity(b, `unit ceiling via client rate @ "${region}"`);
-    assert.strictEqual(b[0].resolverSource, 'fallback_corrected',
+    assert.strictEqual(b[0].resolverSource, 'ceiling_clipped',
       'the ceiling must clip a client rate too — the ratio check cannot see this path');
   }
 });

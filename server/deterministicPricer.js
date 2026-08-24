@@ -1491,6 +1491,7 @@ const RATE_SOURCE_TIER = {
   ai_estimated:       'estimated',   // model-supplied assumed_rate
   fallback_estimated: 'estimated',   // estimateFallbackRate() keyword ladder
   fallback_corrected: 'estimated',   // a guess, then clipped to a unit ceiling
+  ceiling_clipped: 'estimated',      // a rate above the unit ceiling, clipped to it
 };
 
 /**
@@ -1621,6 +1622,9 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
 
   const pricedItems = [];
   const warnings = [];
+  // Lines whose priced rate is a BOUND rather than a measurement — a human
+  // must settle them before the bill is signed.
+  const reviewFlags = [];
 
   // Detect project type to control which auto-corrections apply
   const projectType = options.project_type || detectProjectType(lockedItems);
@@ -1726,10 +1730,29 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       const ceilingLocal = unitCeilingGbp * locFactor;  // convert to target currency
       if (rate > ceilingLocal) {
         const cs = currency === 'EUR' ? '€' : '£';
+        // CLIP TO THE CEILING — never to estimateFallbackRate(). The fallback is
+        // a generic guess unrelated to the ceiling, and swapping it in silently
+        // destroyed real bills: garage construction at £17,250/m was replaced
+        // with £40.25/m (a 428x cut), a roof strip-out at £2,530/m2 with
+        // £74.75/m2, and on one line the "fallback" (£3,680/t) was itself ABOVE
+        // the ceiling it was meant to enforce — so the clip did not even hold
+        // its own invariant. The ceiling is the highest defensible rate for the
+        // unit, so that is what a rate above it becomes.
         const fallback = estimateFallbackRate(item) * locFactor;
-        warnings.push(`Rate for '${item.key}' (${cs}${Math.round(rate * 100) / 100}/${item.unit}) exceeds per-unit ceiling ${cs}${Math.round(ceilingLocal)} — clipped to fallback ${cs}${Math.round(fallback * 100) / 100}. Source was ${rateSource}.`);
-        rate = fallback;
-        rateSource = 'fallback_corrected';
+        const originalRate = rate;
+        const clipped = Math.min(ceilingLocal, Math.max(fallback, ceilingLocal));
+        warnings.push(`Rate for '${item.key}' (${cs}${Math.round(rate * 100) / 100}/${item.unit}) exceeds the per-unit ceiling — clipped to ${cs}${Math.round(clipped * 100) / 100}/${item.unit}. Source was ${rateSource}. VERIFY: a rate this far above the ceiling usually means the unit is wrong (a lump sum billed per m/m2), not that the rate is wrong.`);
+        rate = clipped;
+        rateSource = 'ceiling_clipped';
+        // Surface it as a review flag, not just a log line — a clipped rate is
+        // an unresolved question about the takeoff, and the number now in the
+        // bill is a bound, not a measurement.
+        reviewFlags.push({
+            key: item.key, unit: item.unit, qty: item.qty,
+            originalRate: Math.round(originalRate * 100) / 100,
+            ceiling: Math.round(ceilingLocal * 100) / 100,
+          reason: 'rate_above_unit_ceiling',
+        });
       }
     }
 
@@ -1986,6 +2009,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     location: locationInfo,
     project_type: projectType,
     warnings,
+    review_flags: reviewFlags,
     corrections: crossResult.corrections,
     item_count: pricedItems.length,
     priced_at: new Date().toISOString(),
