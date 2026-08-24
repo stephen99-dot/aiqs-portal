@@ -272,6 +272,61 @@ function GettingStarted({ projects }) {
   );
 }
 
+// The dashboard's job is to answer "what needs me right now?" — one row per
+// project with an action waiting on the user, each a single click to the
+// place the action happens. Renders nothing when the user is all caught up.
+function NeedsAttention({ projects }) {
+  const items = [];
+  for (const p of projects) {
+    if (p.deliverableCount > 0) {
+      items.push({
+        key: `docs-${p.id}`, to: `/project/${p.id}`,
+        icon: DownloadIcon, tone: 'success',
+        title: `${p.deliverableCount} document${p.deliverableCount === 1 ? '' : 's'} ready to download`,
+        meta: p.title,
+      });
+    } else if (p.status === 'awaiting_payment') {
+      items.push({
+        key: `pay-${p.id}`, to: `/project/${p.id}`,
+        icon: ClockIcon, tone: 'warning',
+        title: 'Payment needed before pricing starts',
+        meta: p.title,
+      });
+    }
+  }
+  if (items.length === 0) return null;
+
+  const TONE = {
+    success: { color: 'var(--success)', bg: 'var(--success-bg)' },
+    warning: { color: 'var(--warning)', bg: 'var(--warning-bg)' },
+  };
+
+  return (
+    <Card style={{ marginBottom: 16, borderColor: 'var(--border-accent)' }}>
+      <Card.Header title="Needs your attention" extra={`${items.length} item${items.length === 1 ? '' : 's'}`} />
+      {items.slice(0, 5).map(item => {
+        const tv = TONE[item.tone] || TONE.warning;
+        return (
+          <Link key={item.key} to={item.to} className="ui-row">
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              background: tv.bg, color: tv.color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <item.icon size={14} color="currentColor" />
+            </div>
+            <div className="ui-row__main">
+              <div className="ui-row__title">{item.title}</div>
+              <div className="ui-row__meta">{item.meta}</div>
+            </div>
+            <ArrowRightIcon size={14} color="var(--text-muted)" />
+          </Link>
+        );
+      })}
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const toast = useToast();
@@ -500,6 +555,7 @@ export default function DashboardPage() {
         }
       />
 
+      <NeedsAttention projects={projectList} />
       <UsageBar usage={usage} user={user} />
       <MessageUsageBar usage={usage} />
       <GettingStarted projects={projectList} />

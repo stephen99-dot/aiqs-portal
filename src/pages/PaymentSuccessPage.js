@@ -32,7 +32,7 @@ export default function PaymentSuccessPage() {
       if (fresh && fresh.hasEstimator) { setStatus('office'); return; }
       await new Promise(r => setTimeout(r, 2000));
     }
-    // Paid but not yet confirmed — show success anyway; verify runs again on /office.
+    // Paid but not yet confirmed — show success anyway.
     setStatus('office');
   }
 
@@ -98,19 +98,19 @@ export default function PaymentSuccessPage() {
           <>
             <div style={{ marginBottom: 16 }}><CheckCircleIcon size={56} /></div>
             <h2 style={{ fontSize: 24, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
-              Welcome to Office in a Box!
+              Payment received!
             </h2>
             <p style={{ fontSize: 14, color: t.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
-              Your trial is live and your account is unlocked. Speak your first job
-              and a priced, branded quote comes straight back.
+              Your subscription is live on your account. Head to your dashboard —
+              and look out for AI Trades Pilot, where this product now lives.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
-              <Link to="/office" style={{
+              <Link to="/dashboard" style={{
                 padding: '12px 24px', borderRadius: 10,
                 background: 'linear-gradient(135deg, #F59E0B, #D97706)',
                 color: '#0A0F1C', fontSize: 14, fontWeight: 700, textDecoration: 'none',
               }}>
-                Open Office in a Box
+                Go to Dashboard
               </Link>
             </div>
           </>

@@ -1,9 +1,15 @@
 # Candidates for removal
 
 Pages/components that look like dead code or sit awkwardly against `PORTAL_SPEC.md`'s
-two-persona rule (builder/customer and QS admin). **Nothing here has been removed** —
-this is a list for a separate decision. Phase 1 already removed the novelty theme
-skins and the unrouted Notetaker page.
+two-persona rule (builder/customer and QS admin). Phase 1 removed the novelty theme
+skins and the unrouted Notetaker page. **Phase 2 (UI improvements branch) removed the
+entire Office in a Box add-on** — all of its pages, components, routes and nav — plus
+the dead code listed below (ChangePasswordPage, GoogleSuccessPage, ProjectsPage,
+ProjectManagerPage, the unrouted pages/AdminNotifications duplicate, chat-styles.css)
+and PipelinePage. Old OiB bookmarks redirect to /ai-trades-pilot. The public
+quote/invoice token pages (/q/:token, /i/:token) were kept so links already sent to
+builders' clients still resolve. Server-side OiB routes are untouched for now —
+removing them is a separate backend decision.
 
 ## Dead code (not routed / not imported anywhere)
 

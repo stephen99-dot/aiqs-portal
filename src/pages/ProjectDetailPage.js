@@ -35,7 +35,6 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   // Variations are an Office in a Box feature
-  const hasOiB = !!user?.hasEstimator || user?.role === 'admin';
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null);
@@ -122,11 +121,9 @@ export default function ProjectDetailPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {hasOiB && (
-            <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
-              <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
-            </Link>
-          )}
+          <Link to={`/project/${id}/variations`} className="btn-secondary" style={{ fontSize: 13 }}>
+            <ClipboardIcon size={16} style={{ verticalAlign: 'middle' }} /> Variations
+          </Link>
           <span className="status-badge large" style={{ color: status.color, background: status.bg }}>
             {status.label}
           </span>
