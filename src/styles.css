@@ -21,6 +21,29 @@
   --border-input: #D6DCE5;
   --danger: #DC2626;
   --success: #16A34A;
+  /* Static light-theme fallbacks for the full token set — ThemeContext
+     overwrites all of these from theme/tokens.js (the source of truth). */
+  --surface-hover: #F5F8FC;
+  --sidebar: #FFFFFF;
+  --sidebar-border: #E3E8EF;
+  --border-light: #D6DCE5;
+  --text-dim: #C2CAD6;
+  --accent-glow: rgba(217,119,6,0.10);
+  --accent-text: #FFFFFF;
+  --success-bg: rgba(22,163,74,0.10);
+  --warning: #D97706;
+  --warning-bg: rgba(217,119,6,0.10);
+  --danger-bg: rgba(220,38,38,0.08);
+  --info: #2563EB;
+  --info-bg: rgba(37,99,235,0.08);
+  --violet: #7C3AED;
+  --violet-bg: rgba(124,58,237,0.08);
+  --gold: #B8860B;
+  --gold-bg: rgba(184,134,11,0.08);
+  --shadow: 0 6px 24px rgba(15,23,42,0.08);
+  --shadow-sm: 0 2px 8px rgba(15,23,42,0.05);
+  --nav-hover: rgba(0,0,0,0.03);
+  --nav-active: rgba(0,0,0,0.045);
   --gradient-amber: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
   --radius: 12px;
   --radius-lg: 16px;
@@ -63,19 +86,6 @@ body {
 .form-field textarea, .sidebar-panel, .mobile-header-bar, .loading-screen,
 .empty-state, .drop-zone {
   transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
-}
-
-/* --- SIDEBAR HOVER STATES --- */
-.sidebar-nav-item:hover {
-  background: rgba(255,255,255,0.04) !important;
-}
-.sidebar-btn:hover {
-  border-color: rgba(255,255,255,0.12) !important;
-  background: rgba(255,255,255,0.06) !important;
-}
-.sidebar-logout-btn:hover {
-  color: #EF4444 !important;
-  background: rgba(239,68,68,0.06) !important;
 }
 
 /* --- LOADING SCREEN --- */

@@ -8,117 +8,45 @@ import {
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, PoundIcon, HomeIcon, BrainIcon,
 } from './Icons';
+import { Badge } from '../ui';
 import { canUsePlanningLeads } from '../utils/featureFlags';
 import NotificationBell from './NotificationBell';
 import OfficeTour from './OfficeTour';
 import SurveyPopup from './SurveyPopup';
 import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
-// Office in a Box — expandable parent containing the add-on workflow pages.
-// Clicking the header toggles expand/collapse; clicking a child navigates.
-function OfficeGroup({ item, t, mode, expanded, onToggle, isAnyActive, setMobileOpen, location }) {
+// Nav groups ("Office in a Box", "Settings") — expandable parents containing
+// workflow pages. Clicking the header toggles expand/collapse; clicking a
+// child navigates. All hover/active/focus states live in ui.css.
+function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, location }) {
   return (
     <div>
       <button
         onClick={onToggle}
         data-tour={item.tour}
-        style={{
-          width: '100%',
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '9px 12px', borderRadius: 8,
-          fontSize: 13, fontWeight: isAnyActive ? 600 : 500,
-          letterSpacing: '-0.01em',
-          color: isAnyActive ? t.text : t.textMuted,
-          background: isAnyActive
-            ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
-            : 'transparent',
-          transition: 'all 0.15s ease',
-          position: 'relative',
-          cursor: 'pointer',
-          border: 'none',
-          textAlign: 'left',
-        }}
-        onMouseEnter={e => { if (!isAnyActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-        onMouseLeave={e => { if (!isAnyActive) e.currentTarget.style.background = 'transparent'; }}
+        className={`ui-nav-item${isAnyActive ? ' ui-nav-item--active' : ''}`}
       >
-        {isAnyActive && (
-          <div style={{
-            position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-            width: 3, height: 16, borderRadius: '0 3px 3px 0',
-            background: '#F59E0B',
-          }} />
-        )}
-        <item.Icon size={16} color={isAnyActive ? '#F59E0B' : t.textMuted} />
-        <span style={{ flex: 1 }}>{item.label}</span>
-        {item.badge && (
-          <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            background: 'rgba(245,158,11,0.15)',
-            color: '#F59E0B',
-            border: '1px solid rgba(245,158,11,0.3)',
-            borderRadius: 5,
-            padding: '1px 5px',
-            lineHeight: 1.5,
-            marginRight: 4,
-          }}>
-            {item.badge}
-          </span>
-        )}
-        <span style={{
-          color: t.textMuted,
-          fontSize: 10,
-          transition: 'transform 0.18s ease',
-          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-        }}>▶</span>
+        {isAnyActive && <div className="ui-nav-item__bar" />}
+        <item.Icon size={16} color={isAnyActive ? 'var(--accent-bright)' : 'currentColor'} />
+        <span className="ui-nav-item__label">{item.label}</span>
+        {item.badge && <Badge tone="accent" size="sm" outlined>{item.badge}</Badge>}
+        <span className={`ui-nav-caret${expanded ? ' ui-nav-caret--open' : ''}`}>▶</span>
       </button>
       {expanded && (
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: 1,
-          marginLeft: 14, marginTop: 2, marginBottom: 4,
-          paddingLeft: 12, borderLeft: '1px solid ' + t.border,
-        }}>
+        <div className="ui-nav-sub">
           {item.children.map(c => {
             const isChildActive = location.pathname === c.path || location.pathname.startsWith(c.path + '/');
             return (
               <NavLink
                 key={c.path}
                 to={c.path}
-                style={{ textDecoration: 'none' }}
+                data-tour={'nav-' + (c.path === '/office' ? 'today' : c.path.replace('/', ''))}
+                className={`ui-nav-subitem${isChildActive ? ' ui-nav-subitem--active' : ''}`}
                 onClick={() => setMobileOpen(false)}
               >
-                <div data-tour={'nav-' + (c.path === '/office' ? 'today' : c.path.replace('/', ''))} style={{
-                  padding: '7px 10px',
-                  borderRadius: 6,
-                  fontSize: 12.5,
-                  fontWeight: isChildActive ? 600 : 500,
-                  color: isChildActive ? t.text : t.textMuted,
-                  background: isChildActive
-                    ? (mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)')
-                    : 'transparent',
-                  transition: 'all 0.15s ease',
-                  cursor: 'pointer',
-                  position: 'relative',
-                }}
-                  onMouseEnter={e => { if (!isChildActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.018)'; }}
-                  onMouseLeave={e => { if (!isChildActive) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {isChildActive && (
-                    <div style={{
-                      position: 'absolute', left: -13, top: '50%', transform: 'translateY(-50%)',
-                      width: 5, height: 5, borderRadius: '50%',
-                      background: '#F59E0B',
-                    }} />
-                  )}
-                  <span>{c.label}</span>
-                  {c.badge && (
-                    <span style={{
-                      marginLeft: 8, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em',
-                      textTransform: 'uppercase', background: 'rgba(245,158,11,0.15)', color: '#F59E0B',
-                      border: '1px solid rgba(245,158,11,0.3)', borderRadius: 5, padding: '1px 4px',
-                    }}>{c.badge}</span>
-                  )}
-                </div>
+                {isChildActive && <span className="ui-nav-subitem__dot" />}
+                <span>{c.label}</span>
+                {c.badge && <Badge tone="accent" size="sm" outlined>{c.badge}</Badge>}
               </NavLink>
             );
           })}
@@ -277,17 +205,13 @@ export default function Layout() {
       }}>
         <button
           onClick={() => setMobileOpen(o => !o)}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            padding: 8, borderRadius: 8, color: t.text,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            WebkitTapHighlightColor: 'transparent',
-          }}
+          className="ui-icon-btn"
+          style={{ width: 40, height: 40, color: t.text }}
           aria-label="Toggle menu"
         >
           {mobileOpen
-            ? <XIcon size={22} color={t.text} />
-            : <MenuIcon size={22} color={t.text} />}
+            ? <XIcon size={22} color="currentColor" />
+            : <MenuIcon size={22} color="currentColor" />}
         </button>
         <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '0.01em', whiteSpace: 'nowrap' }}>
           <span style={{ color: t.text }}>AI</span>
@@ -315,7 +239,7 @@ export default function Layout() {
         style={{
           position: 'fixed', top: 0, left: 0, bottom: 0, width: 'var(--sidebar-width)',
           background: sidebarBg,
-          borderRight: `1px solid ${t.border}`,
+          borderRight: `1px solid ${t.sidebarBorder}`,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
           zIndex: 200, overflowY: 'auto',
           transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1)',
@@ -340,7 +264,7 @@ export default function Layout() {
               </div>
               <div style={{
                 fontSize: 9, fontWeight: 600, letterSpacing: '0.18em',
-                color: isAdmin ? (t.gold || '#D4A853') : t.textMuted,
+                color: isAdmin ? t.gold : t.textMuted,
                 textTransform: 'uppercase', marginTop: 3, whiteSpace: 'nowrap',
               }}>
                 {isAdmin ? 'Admin Portal' : 'Client Portal'}
@@ -355,11 +279,9 @@ export default function Layout() {
               if (item.group) {
                 const isOffice = item.group === 'office';
                 return (
-                  <OfficeGroup
+                  <NavGroup
                     key={item.group}
                     item={item}
-                    t={t}
-                    mode={mode}
                     expanded={isOffice ? officeExpanded : settingsExpanded}
                     onToggle={() => (isOffice ? setOfficeExpanded(v => !v) : setSettingsExpanded(v => !v))}
                     isAnyActive={isOffice ? isOfficeRouteActive : isSettingsRouteActive}
@@ -374,7 +296,7 @@ export default function Layout() {
                   to={item.path}
                   end={item.path === '/dashboard'}
                   data-tour={item.path === '/submit-drawings' ? 'submit-drawings' : item.path === '/chat' ? 'chat-nav' : undefined}
-                  style={{ textDecoration: 'none' }}
+                  className={({ isActive }) => `ui-nav-item${isActive ? ' ui-nav-item--active' : ''}`}
                   onClick={(e) => {
                     if (window.__aiqs_chat_sending) {
                       e.preventDefault();
@@ -385,47 +307,12 @@ export default function Layout() {
                   }}
                 >
                   {({ isActive }) => (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '9px 12px', borderRadius: 8,
-                      fontSize: 13, fontWeight: isActive ? 600 : 500,
-                      letterSpacing: '-0.01em',
-                      color: isActive ? t.text : t.textMuted,
-                      background: isActive
-                        ? (mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)')
-                        : 'transparent',
-                      transition: 'all 0.15s ease',
-                      position: 'relative',
-                      cursor: 'pointer',
-                    }}
-                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'; }}
-                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      {isActive && (
-                        <div style={{
-                          position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                          width: 3, height: 16, borderRadius: '0 3px 3px 0',
-                          background: t.accent,
-                        }} />
-                      )}
-                      <item.Icon size={16} color={isActive ? t.accent : t.textMuted} />
-                      <span style={{ flex: 1 }}>{item.label}</span>
-                      {/* "New" badge */}
-                      {item.badge && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          background: 'rgba(245,158,11,0.15)',
-                          color: '#F59E0B',
-                          border: '1px solid rgba(245,158,11,0.3)',
-                          borderRadius: 5,
-                          padding: '1px 5px',
-                          lineHeight: 1.5,
-                        }}>
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
+                    <>
+                      {isActive && <div className="ui-nav-item__bar" />}
+                      <item.Icon size={16} color={isActive ? 'var(--accent-bright)' : 'currentColor'} />
+                      <span className="ui-nav-item__label">{item.label}</span>
+                      {item.badge && <Badge tone="accent" size="sm" outlined>{item.badge}</Badge>}
+                    </>
                   )}
                 </NavLink>
               );
@@ -434,7 +321,7 @@ export default function Layout() {
         </div>
 
         {/* Bottom section */}
-        <div style={{ padding: '12px 12px 20px', borderTop: `1px solid ${t.border}` }}>
+        <div style={{ padding: '12px 12px 20px', borderTop: `1px solid ${t.sidebarBorder}` }}>
 
           {/* User info */}
           <div style={{
@@ -443,9 +330,9 @@ export default function Layout() {
           }}>
             <div style={{
               width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-              background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+              background: t.gradientAccent,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, color: 'white',
+              fontSize: 12, fontWeight: 700, color: '#0A0F1C',
             }}>
               {(user?.fullName || user?.email || 'U')[0].toUpperCase()}
             </div>
@@ -466,34 +353,15 @@ export default function Layout() {
           </div>
 
           {/* Light/dark toggle */}
-          <button onClick={toggle} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            width: '100%', padding: '8px 12px', borderRadius: 8,
-            background: 'transparent', border: 'none',
-            fontSize: 12.5, fontWeight: 500, color: t.textMuted,
-            cursor: 'pointer', transition: 'all 0.15s',
-            marginBottom: 2,
-          }}
-            onMouseEnter={e => e.currentTarget.style.background = mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
+          <button onClick={toggle} className="ui-nav-item" style={{ marginBottom: 2 }}>
             {mode === 'dark'
-              ? <SunIcon size={15} color={t.textMuted} />
-              : <MoonIcon size={15} color={t.textMuted} />}
+              ? <SunIcon size={15} color="currentColor" />
+              : <MoonIcon size={15} color="currentColor" />}
             {mode === 'dark' ? 'Light mode' : 'Dark mode'}
           </button>
 
           {/* Logout */}
-          <button onClick={handleLogout} style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            width: '100%', padding: '8px 12px', borderRadius: 8,
-            background: 'transparent', border: 'none',
-            fontSize: 12.5, fontWeight: 500, color: t.textMuted,
-            cursor: 'pointer', transition: 'all 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.color = '#EF4444'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = t.textMuted; }}
-          >
+          <button onClick={handleLogout} className="ui-nav-item ui-nav-item--logout">
             <LogOutIcon size={15} color="currentColor" />
             Sign out
           </button>
