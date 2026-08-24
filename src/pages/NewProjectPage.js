@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
@@ -9,6 +8,10 @@ import {
   UploadIcon, XIcon, CreditCardIcon, ChatIcon,
   FileTextIcon, FileSpreadsheetIcon, FileImageIcon, FileArchiveIcon, PaperclipIcon,
 } from '../components/Icons';
+import {
+  Button, IconButton, Card, Banner, PageHeader,
+  Field, Input, Select, Textarea, Modal, ProgressBar,
+} from '../ui';
 
 const PROJECT_TYPES = [
   'Residential Extension',
@@ -39,189 +42,129 @@ function getFileIcon(name) {
   return map[ext] || PaperclipIcon;
 }
 
-function LimitReachedModal({ usage, t, user, onClose }) {
-
+// One buy-more option row inside the limit modal: icon chip, label, price pill.
+// The gradient price pills are bespoke brand accents, deliberately kept inline.
+function OfferRow({ href, icon, iconBg, tintBg, tintBorder, title, subtitle, price, priceBg, priceColor }) {
   return (
-    <div className="modal-overlay" style={{
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-    }} onClick={onClose}>
-      <div className="modal-card" style={{
-        background: t.card, border: `1px solid ${t.border}`,
-        padding: '32px 28px',
-        boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
-            background: 'rgba(239,68,68,0.06)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <BanIcon size={24} color="#EF4444" />
-          </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: t.text, margin: '0 0 6px', fontFamily: "'DM Serif Display', Georgia, serif" }}>Monthly Limit Reached</h2>
-          <p style={{ fontSize: 13, color: t.textMuted, margin: 0, lineHeight: 1.6 }}>
-            You've used all <strong style={{ color: t.text }}>{usage.quota}</strong> projects
-            included in your <strong style={{ color: t.text }}>{usage.planLabel}</strong> plan this month.
-          </p>
-        </div>
-
-        <div style={{ background: t.surfaceHover, borderRadius: 9, padding: '12px 16px', marginBottom: 22 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
-            <span style={{ fontSize: 11.5, color: t.textMuted }}>Usage this month</span>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: '#EF4444' }}>{usage.used} / {usage.quota}</span>
-          </div>
-          <div style={{ width: '100%', height: 6, borderRadius: 5, background: t.border }}>
-            <div style={{ width: '100%', height: '100%', borderRadius: 5, background: '#EF4444' }} />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
-
-          {/* Buy Extra Project — always shown */}
-          <a
-            href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)}
-            target="_blank" rel="noopener noreferrer"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '14px 16px', borderRadius: 10,
-              background: 'rgba(16,185,129,0.04)',
-              border: '1px solid rgba(16,185,129,0.15)',
-              textDecoration: 'none', transition: 'all 0.12s',
-            }}
-          >
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(16,185,129,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <ZapIcon size={18} color="#10B981" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Buy Extra Project</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>One-off project — processed within 2 hours</div>
-            </div>
-            <span style={{
-              padding: '5px 12px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #10B981, #059669)',
-              color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-            }}>
-              £150
-            </span>
-          </a>
-
-          {/* 5-BOQ bundle */}
-          <a href={withUserRef(BOQ_5_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '14px 16px', borderRadius: 10,
-            background: 'rgba(245,158,11,0.04)',
-            border: '1px solid rgba(245,158,11,0.15)',
-            textDecoration: 'none', transition: 'all 0.12s',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(245,158,11,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <StarIcon size={18} color="#F59E0B" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>5 BOQ Bundle</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>Just £69.80 per BOQ — credits never expire</div>
-            </div>
-            <span style={{
-              padding: '5px 12px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #F59E0B, #D97706)',
-              color: '#0A0F1C', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-            }}>£349</span>
-          </a>
-
-          {/* 10-BOQ bundle */}
-          <a href={withUserRef(BOQ_10_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '14px 16px', borderRadius: 10,
-            background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.03))',
-            border: '1px solid rgba(124,58,237,0.15)',
-            textDecoration: 'none', transition: 'all 0.12s',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(124,58,237,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <CrownIcon size={18} color="#A855F7" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>10 BOQ Bundle</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>Just £58 per BOQ — credits never expire</div>
-            </div>
-            <span style={{
-              padding: '5px 12px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-              color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-            }}>£580</span>
-          </a>
-
-          {/* 20-BOQ bundle */}
-          <a href={withUserRef(BOQ_20_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '14px 16px', borderRadius: 10,
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.06), rgba(16,185,129,0.03))',
-            border: '1px solid rgba(16,185,129,0.15)',
-            textDecoration: 'none', transition: 'all 0.12s',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(16,185,129,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <CrownIcon size={18} color="#10B981" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>20 BOQ Bundle</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>Best value — just £49 per BOQ, credits never expire</div>
-            </div>
-            <span style={{
-              padding: '5px 12px', borderRadius: 7,
-              background: 'linear-gradient(135deg, #10B981, #059669)',
-              color: '#fff', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-            }}>£980</span>
-          </a>
-
-          {/* Contact */}
-          <a href="mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects" style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '14px 16px', borderRadius: 10,
-            background: 'transparent',
-            border: `1px solid ${t.border}`,
-            textDecoration: 'none', transition: 'all 0.12s',
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: t.surfaceHover,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}>
-              <ChatIcon size={18} color={t.textMuted} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: t.text }}>Need a Custom Arrangement?</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>Get in touch — we'll sort something out</div>
-            </div>
-          </a>
-        </div>
-
-        <button onClick={onClose} style={{
-          width: '100%', padding: '10px 18px', borderRadius: 8,
-          background: 'transparent', border: `1px solid ${t.border}`,
-          color: t.textSecondary, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-        }}>Go Back to Dashboard</button>
+    <a
+      href={href}
+      target={href.startsWith('mailto:') ? undefined : '_blank'}
+      rel={href.startsWith('mailto:') ? undefined : 'noopener noreferrer'}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 16px', borderRadius: 10,
+        background: tintBg,
+        border: '1px solid ' + tintBorder,
+        textDecoration: 'none', transition: 'all 0.12s',
+      }}
+    >
+      <div style={{
+        width: 38, height: 38, borderRadius: 10,
+        background: iconBg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        {icon}
       </div>
-    </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{subtitle}</div>
+      </div>
+      {price && (
+        <span style={{
+          padding: '5px 12px', borderRadius: 7,
+          background: priceBg, color: priceColor,
+          fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap',
+        }}>{price}</span>
+      )}
+    </a>
+  );
+}
+
+function LimitReachedModal({ usage, user, onClose }) {
+  return (
+    <Modal title="Monthly Limit Reached" onClose={onClose}>
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px',
+          background: 'var(--danger-bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <BanIcon size={24} color="var(--danger)" />
+        </div>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.6 }}>
+          You've used all <strong style={{ color: 'var(--text-primary)' }}>{usage.quota}</strong> projects
+          included in your <strong style={{ color: 'var(--text-primary)' }}>{usage.planLabel}</strong> plan this month.
+        </p>
+      </div>
+
+      <div style={{ background: 'var(--surface-hover)', borderRadius: 9, padding: '12px 16px', marginBottom: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Usage this month</span>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--danger)' }}>{usage.used} / {usage.quota}</span>
+        </div>
+        <ProgressBar value={100} tone="danger" height={6} />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
+        {/* Buy Extra Project — always shown */}
+        <OfferRow
+          href={withUserRef(STRIPE_PAYG_LINK, user)}
+          icon={<ZapIcon size={18} color="#10B981" />}
+          iconBg="rgba(16,185,129,0.08)"
+          tintBg="rgba(16,185,129,0.04)" tintBorder="rgba(16,185,129,0.15)"
+          title="Buy Extra Project" subtitle="One-off project — processed within 2 hours"
+          price="£150" priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
+        />
+
+        {/* 5-BOQ bundle */}
+        <OfferRow
+          href={withUserRef(BOQ_5_PACK_LINK, user)}
+          icon={<StarIcon size={18} color="#F59E0B" />}
+          iconBg="rgba(245,158,11,0.08)"
+          tintBg="rgba(245,158,11,0.04)" tintBorder="rgba(245,158,11,0.15)"
+          title="5 BOQ Bundle" subtitle="Just £69.80 per BOQ — credits never expire"
+          price="£349" priceBg="linear-gradient(135deg, #F59E0B, #D97706)" priceColor="#0A0F1C"
+        />
+
+        {/* 10-BOQ bundle */}
+        <OfferRow
+          href={withUserRef(BOQ_10_PACK_LINK, user)}
+          icon={<CrownIcon size={18} color="#A855F7" />}
+          iconBg="rgba(124,58,237,0.08)"
+          tintBg="linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.03))"
+          tintBorder="rgba(124,58,237,0.15)"
+          title="10 BOQ Bundle" subtitle="Just £58 per BOQ — credits never expire"
+          price="£580" priceBg="linear-gradient(135deg, #7C3AED, #6D28D9)" priceColor="#fff"
+        />
+
+        {/* 20-BOQ bundle */}
+        <OfferRow
+          href={withUserRef(BOQ_20_PACK_LINK, user)}
+          icon={<CrownIcon size={18} color="#10B981" />}
+          iconBg="rgba(16,185,129,0.08)"
+          tintBg="linear-gradient(135deg, rgba(16,185,129,0.06), rgba(16,185,129,0.03))"
+          tintBorder="rgba(16,185,129,0.15)"
+          title="20 BOQ Bundle" subtitle="Best value — just £49 per BOQ, credits never expire"
+          price="£980" priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
+        />
+
+        {/* Contact */}
+        <OfferRow
+          href="mailto:hello@crmwizardai.com?subject=AI%20QS%20-%20Extra%20Projects"
+          icon={<ChatIcon size={18} color="var(--text-muted)" />}
+          iconBg="var(--surface-hover)"
+          tintBg="transparent" tintBorder="var(--border)"
+          title="Need a Custom Arrangement?" subtitle="Get in touch — we'll sort something out"
+        />
+      </div>
+
+      <Button variant="secondary" full onClick={onClose}>Go Back to Dashboard</Button>
+    </Modal>
   );
 }
 
 export default function NewProjectPage() {
   const navigate = useNavigate();
-  const { t } = useTheme();
   const { user } = useAuth();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState({ title: '', projectType: '', location: '', description: '' });
@@ -301,91 +244,89 @@ export default function NewProjectPage() {
   return (
     <div className="page">
       {showLimitModal && usage && (
-        <LimitReachedModal usage={usage} t={t} user={user} onClose={() => { setShowLimitModal(false); if (usage.atLimit) navigate('/dashboard'); }} />
+        <LimitReachedModal usage={usage} user={user} onClose={() => { setShowLimitModal(false); if (usage.atLimit) navigate('/dashboard'); }} />
       )}
 
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">New Project</h1>
-          <p className="page-subtitle">Upload your drawings and tell us about the job</p>
-        </div>
-      </div>
+      <PageHeader
+        title="New Project"
+        subtitle="Upload your drawings and tell us about the job"
+      />
 
       {isPayg && (
-        <div style={{
-          background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.15)',
-          borderRadius: 10, padding: '14px 18px', marginBottom: 18,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+        <Banner tone="accent" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12, padding: '14px 18px', marginBottom: 18,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 34, height: 34, borderRadius: 9,
-              background: 'rgba(245,158,11,0.08)',
+              background: 'var(--accent-glow)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <CreditCardIcon size={16} color="#F59E0B" />
+              <CreditCardIcon size={16} color="var(--accent)" />
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: t.text }}>Pay As You Go — £150 per project</div>
-              <div style={{ fontSize: 11.5, color: t.textMuted }}>You'll be taken to Stripe to pay after submitting</div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>Pay As You Go — £150 per project</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>You'll be taken to Stripe to pay after submitting</div>
             </div>
           </div>
-        </div>
+        </Banner>
       )}
 
       {usage && !usage.isPayg && !usage.atLimit && (
-        <div style={{
-          background: t.card, border: `1px solid ${t.border}`, borderRadius: 9,
-          padding: '10px 16px', marginBottom: 18, fontSize: 12.5, color: t.textSecondary,
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <UploadIcon size={14} color={t.textMuted} />
-          <span>
-            <strong style={{ color: t.text }}>{usage.used}</strong> of <strong style={{ color: t.text }}>{usage.quota}</strong> projects used
-            — <strong style={{ color: usage.remaining <= 2 ? '#F59E0B' : '#10B981' }}>{usage.remaining} remaining</strong>
-          </span>
-        </div>
+        <Card style={{ marginBottom: 18 }}>
+          <Card.Body style={{
+            padding: '10px 16px', fontSize: '0.8rem', color: 'var(--text-secondary)',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <UploadIcon size={14} color="var(--text-muted)" />
+            <span>
+              <strong style={{ color: 'var(--text-primary)' }}>{usage.used}</strong> of <strong style={{ color: 'var(--text-primary)' }}>{usage.quota}</strong> projects used
+              — <strong style={{ color: usage.remaining <= 2 ? 'var(--warning)' : 'var(--success)' }}>{usage.remaining} remaining</strong>
+            </span>
+          </Card.Body>
+        </Card>
       )}
 
       <form onSubmit={handleSubmit}>
-        {error && <div className="form-error">{error}</div>}
+        {error && (
+          <Banner tone="danger" style={{ color: 'var(--danger)', fontSize: '0.86rem' }}>
+            {error}
+          </Banner>
+        )}
 
-        <div className="section-card">
-          <div className="section-card-header"><h2>Project Details</h2></div>
-          <div className="card-body">
-            <div className="form-row">
-              <div className="form-field">
-                <label>Project Title *</label>
-                <input type="text" value={form.title} onChange={e => updateField('title', e.target.value)}
+        <Card style={{ marginBottom: 16 }}>
+          <Card.Header title="Project Details" />
+          <Card.Body>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <Field label="Project Title *" style={{ flex: '1 1 240px' }}>
+                <Input type="text" value={form.title} onChange={e => updateField('title', e.target.value)}
                   placeholder="e.g. Two-storey rear extension — 14 Oak Lane" required />
-              </div>
-              <div className="form-field">
-                <label>Project Type *</label>
-                <select value={form.projectType} onChange={e => updateField('projectType', e.target.value)} required>
+              </Field>
+              <Field label="Project Type *" style={{ flex: '1 1 240px' }}>
+                <Select value={form.projectType} onChange={e => updateField('projectType', e.target.value)} required>
                   <option value="">Select type...</option>
                   {PROJECT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
-            <div className="form-field" style={{ marginTop: 14 }}>
-              <label>Location</label>
-              <input type="text" value={form.location} onChange={e => updateField('location', e.target.value)}
+            <Field label="Location" style={{ marginTop: 14 }}>
+              <Input type="text" value={form.location} onChange={e => updateField('location', e.target.value)}
                 placeholder="e.g. Cardiff, South Wales" />
-            </div>
-            <div className="form-field" style={{ marginTop: 14 }}>
-              <label>Project Brief / Notes</label>
-              <textarea value={form.description} onChange={e => updateField('description', e.target.value)}
+            </Field>
+            <Field label="Project Brief / Notes" style={{ marginTop: 14 }}>
+              <Textarea value={form.description} onChange={e => updateField('description', e.target.value)}
                 placeholder="Tell us about the project — scope, spec requirements, anything we should know." rows={5} />
-            </div>
-          </div>
-        </div>
+            </Field>
+          </Card.Body>
+        </Card>
 
-        <div className="section-card">
-          <div className="section-card-header">
-            <h2>Upload Drawings</h2>
-            <span className="header-hint">PDF, DWG, DXF, images, Excel, Word, ZIP — up to 50MB each</span>
-          </div>
-          <div className="card-body">
+        <Card style={{ marginBottom: 16 }}>
+          <Card.Header
+            title="Upload Drawings"
+            extra="PDF, DWG, DXF, images, Excel, Word, ZIP — up to 50MB each"
+          />
+          <Card.Body>
             <div className={`drop-zone ${dragActive ? 'active' : ''}`}
               onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}>
@@ -405,39 +346,39 @@ export default function NewProjectPage() {
                     <div key={i} className="file-item">
                       <div style={{
                         width: 30, height: 30, borderRadius: 7,
-                        background: t.surfaceHover,
+                        background: 'var(--surface-hover)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                       }}>
-                        <IconComp size={14} color={t.textMuted} />
+                        <IconComp size={14} color="var(--text-muted)" />
                       </div>
                       <div className="file-info">
                         <div className="file-name">{file.name}</div>
                         <div className="file-size">{formatFileSize(file.size)}</div>
                       </div>
-                      <button type="button" className="file-remove" onClick={() => removeFile(i)}>
+                      <IconButton onClick={() => removeFile(i)} aria-label="Remove file" title="Remove file">
                         <XIcon size={14} />
-                      </button>
+                      </IconButton>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
-        </div>
+          </Card.Body>
+        </Card>
 
         <div className="form-actions">
-          <button type="button" className="btn-secondary" onClick={() => navigate('/dashboard')}>Cancel</button>
-          <button type="submit" className="btn-primary" disabled={submitting || (usage && usage.atLimit)}>
+          <Button variant="secondary" onClick={() => navigate('/dashboard')}>Cancel</Button>
+          <Button type="submit" disabled={submitting || (usage && usage.atLimit)}>
             {submitting ? (
               <><span className="loading-spinner small" />{isPayg ? 'Saving...' : 'Uploading...'}</>
             ) : usage && usage.atLimit ? (
-              <><BanIcon size={14} color="#0A0F1C" /> Limit Reached</>
+              <><BanIcon size={14} color="currentColor" /> Limit Reached</>
             ) : isPayg ? (
-              <>Submit & Pay £150 <ArrowRightIcon size={14} color="#0A0F1C" /></>
+              <>Submit & Pay £150 <ArrowRightIcon size={14} color="currentColor" /></>
             ) : (
-              <>Submit Project <ArrowRightIcon size={14} color="#0A0F1C" /></>
+              <>Submit Project <ArrowRightIcon size={14} color="currentColor" /></>
             )}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
