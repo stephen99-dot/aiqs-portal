@@ -551,9 +551,58 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   .demo-step-desc { display: none; }
   .demo-connector { display: none; }
 }
-@keyframes waPulse { 0%,100% { transform:scale(1); opacity:.6; } 50% { transform:scale(1.3); opacity:0; } }
-#wa-panel.open { display:flex !important; }
-@media (max-width:420px) { #wa-panel { right:-16px; left:-280px; width:auto; } }
+/* ── AI chat widget ──────────────────────────────────────────────────────── */
+.aiqs-chat { position: fixed; bottom: calc(24px + var(--aiqs-lift, 0px)); right: 24px; z-index: 100001; font-family: var(--font-body); }
+.aiqs-chat-launcher { display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; border: none; border-radius: 50%; background: var(--gradient-amber); color: var(--on-accent); cursor: pointer; box-shadow: 0 6px 24px rgba(245,158,11,0.4); position: relative; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.aiqs-chat-launcher:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(245,158,11,0.5); }
+.aiqs-chat-launcher svg { width: 28px; height: 28px; pointer-events: none; }
+.aiqs-chat-launcher .icon-close { display: none; }
+.aiqs-chat.open .aiqs-chat-launcher .icon-chat { display: none; }
+.aiqs-chat.open .aiqs-chat-launcher .icon-close { display: block; }
+.aiqs-chat-pulse { position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--accent); animation: aiqsPulse 2.4s ease-in-out infinite; pointer-events: none; }
+.aiqs-chat.open .aiqs-chat-pulse { display: none; }
+@keyframes aiqsPulse { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.28); opacity: 0; } }
+.aiqs-chat-panel { position: absolute; bottom: 76px; right: 0; width: 380px; max-width: calc(100vw - 32px); height: 560px; max-height: calc(100vh - 140px); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; opacity: 0; visibility: hidden; transform: translateY(12px) scale(0.98); transform-origin: bottom right; transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s; }
+.aiqs-chat.open .aiqs-chat-panel { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+.aiqs-chat-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: var(--gradient-amber); color: var(--on-accent); flex-shrink: 0; }
+.aiqs-chat-head-avatar { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.aiqs-chat-head-avatar svg { width: 22px; height: 22px; }
+.aiqs-chat-head-title { font-weight: 700; font-size: 0.98rem; line-height: 1.3; }
+.aiqs-chat-head-sub { font-size: 0.75rem; opacity: 0.85; display: flex; align-items: center; gap: 6px; }
+.aiqs-chat-head-sub::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #10B981; flex-shrink: 0; }
+.aiqs-chat-close { margin-left: auto; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(255,255,255,0.2); color: var(--on-accent); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.aiqs-chat-close svg { width: 16px; height: 16px; }
+.aiqs-chat-log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.aiqs-msg { display: flex; gap: 9px; max-width: 92%; }
+.aiqs-msg.you { align-self: flex-end; flex-direction: row-reverse; }
+.aiqs-msg-avatar { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; letter-spacing: -0.02em; flex-shrink: 0; font-family: var(--font-mono); }
+.aiqs-msg.ai .aiqs-msg-avatar { background: rgba(245,158,11,0.14); color: var(--accent); }
+.aiqs-msg.you .aiqs-msg-avatar { background: rgba(59,130,246,0.14); color: #3B82F6; }
+.aiqs-msg-bubble { padding: 10px 14px; border-radius: 12px; font-size: 0.87rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aiqs-msg.ai .aiqs-msg-bubble { background: var(--surface-subtle); border: 1px solid var(--border); border-bottom-left-radius: 4px; color: var(--text-secondary); }
+.aiqs-msg.you .aiqs-msg-bubble { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.18); border-bottom-right-radius: 4px; color: var(--text-primary); }
+.aiqs-typing { display: flex; gap: 4px; padding: 4px 2px; }
+.aiqs-typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0.3; animation: aiqsBlink 1.4s ease infinite; }
+.aiqs-typing span:nth-child(2) { animation-delay: 0.2s; }
+.aiqs-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes aiqsBlink { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.3); } }
+.aiqs-chat-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 12px; flex-shrink: 0; }
+.aiqs-chip { padding: 7px 13px; border-radius: 100px; border: 1px solid var(--border-accent); background: rgba(245,158,11,0.07); color: var(--accent); font-family: var(--font-body); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 0.2s ease; }
+.aiqs-chip:hover { background: rgba(245,158,11,0.16); }
+.aiqs-chat-form { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.aiqs-chat-form input { flex: 1; min-width: 0; padding: 11px 15px; border-radius: 100px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text-primary); font-family: var(--font-body); font-size: 0.87rem; outline: none; }
+.aiqs-chat-form input::placeholder { color: var(--text-muted); }
+.aiqs-chat-form input:focus { border-color: var(--border-accent); }
+.aiqs-chat-send { width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--gradient-amber); color: var(--on-accent); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s ease; }
+.aiqs-chat-send svg { width: 16px; height: 16px; }
+.aiqs-chat-send:disabled { opacity: 0.45; cursor: default; }
+.aiqs-chat-foot { padding: 0 14px 12px; text-align: center; flex-shrink: 0; }
+.aiqs-chat-foot a { color: var(--text-muted); font-size: 0.7rem; text-decoration: none; }
+.aiqs-chat-foot a:hover { color: var(--accent); }
+@media (max-width: 480px) {
+  .aiqs-chat { bottom: calc(16px + var(--aiqs-lift, 0px)); right: 16px; }
+  .aiqs-chat-panel { position: fixed; bottom: calc(88px + var(--aiqs-lift, 0px)); right: 16px; left: 16px; width: auto; max-width: none; height: auto; top: 76px; }
+}
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
@@ -1029,69 +1078,43 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   </div>
 </div>
 
-<!-- WHATSAPP WIDGET -->
-<div id="wa-widget" style="position:fixed;bottom:24px;right:24px;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <div id="wa-panel" style="display:none;position:absolute;bottom:72px;right:0;width:360px;max-height:520px;background:#131B2E;border:1px solid #1C2A44;border-radius:20px;box-shadow:0 16px 48px rgba(0,0,0,0.3);flex-direction:column;overflow:hidden">
-    <div style="background:#25D366;padding:18px 20px;display:flex;align-items:center;gap:12px">
-      <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+<!-- AI CHAT WIDGET — talks to /api/public/site-chat on the portal -->
+<div class="aiqs-chat" id="aiqsChat">
+  <div class="aiqs-chat-panel" id="aiqsChatPanel" role="dialog" aria-modal="false" aria-label="Chat with the AI QS assistant" aria-hidden="true">
+    <div class="aiqs-chat-head">
+      <div class="aiqs-chat-head-avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z"/></svg>
       </div>
-      <div style="flex:1">
-        <div style="font-size:16px;font-weight:700;color:#FFF">AI QS</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.8);display:flex;align-items:center;gap:4px">
-          <span style="width:6px;height:6px;border-radius:50%;background:#FFF;display:inline-block"></span>
-          Usually replies within 1 hour
-        </div>
+      <div>
+        <div class="aiqs-chat-head-title">AI QS Assistant</div>
+        <div class="aiqs-chat-head-sub">Answers in seconds</div>
       </div>
-      <div onclick="toggleWaPanel()" style="background:rgba(255,255,255,0.2);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </div>
+      <button type="button" class="aiqs-chat-close" id="aiqsChatClose" aria-label="Close chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <div style="flex:1;padding:16px;overflow-y:auto;background:#0A0F1C">
-      <div style="background:#1C2A44;border-radius:4px 12px 12px 12px;padding:12px 16px;margin-bottom:16px;max-width:85%">
-        <p style="margin:0;font-size:14px;color:#E8EDF5;line-height:1.5">Hey! 👋</p>
-        <p style="margin:8px 0 0;font-size:14px;color:#94A3B8;line-height:1.5">How can I help? Pick a quick action below or type your own message.</p>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div onclick="aiqsGo('/send-drawings.html')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#2563EB'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Get a Quote</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="waQuick('Hi, I have a question about my Bill of Quantities. Can we discuss?')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#8B5CF6'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Question About My BOQ</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="aiqsGo('/send-drawings.html')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#F59E0B'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Send My Drawings</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="waQuick('Hi, I have an urgent request regarding a project. Are you available?')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#EF4444'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Urgent Request</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
+    <div class="aiqs-chat-log" id="aiqsChatLog" role="log" aria-live="polite" aria-atomic="false"></div>
+    <div class="aiqs-chat-chips" id="aiqsChatChips">
+      <button type="button" class="aiqs-chip">What do I actually get?</button>
+      <button type="button" class="aiqs-chip">How much does it cost?</button>
+      <button type="button" class="aiqs-chip">Is my first job really free?</button>
+      <button type="button" class="aiqs-chip">What drawings do you need?</button>
     </div>
-    <div style="padding:12px 16px;border-top:1px solid #1C2A44;background:#131B2E;display:flex;gap:8px;align-items:center">
-      <input id="wa-input" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter')waSend()" style="flex:1;padding:10px 14px;border-radius:20px;border:1px solid #1C2A44;background:#0D1320;color:#E8EDF5;font-size:14px;outline:none;font-family:-apple-system,sans-serif">
-      <div onclick="waSend()" style="width:40px;height:40px;border-radius:50%;background:#25D366;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </div>
-    </div>
-    <div style="padding:8px 16px 12px;text-align:center;border-top:1px solid #0D1320">
-      <a href="tel:+447446901398" style="font-size:11px;color:#3B4D66;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        +44 7446 901 398 &#183; Prefer a call? Tap to ring
-      </a>
+    <form class="aiqs-chat-form" id="aiqsChatForm" autocomplete="off">
+      <input type="text" id="aiqsChatInput" placeholder="Ask about your project..." aria-label="Your message" maxlength="2000">
+      <button type="submit" class="aiqs-chat-send" id="aiqsChatSend" aria-label="Send message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </form>
+    <div class="aiqs-chat-foot">
+      <a href="/send-drawings.html">Ready to go? Send your drawings &#8594;</a>
     </div>
   </div>
-  <div id="wa-btn" style="width:60px;height:60px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(37,211,102,0.45);touch-action:none;user-select:none;cursor:pointer;position:relative">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="white" style="pointer-events:none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-    <span id="wa-pulse" style="position:absolute;inset:-4px;border-radius:50%;border:2px solid #25D366;animation:waPulse 2s ease-in-out infinite;pointer-events:none"></span>
-  </div>
+  <button type="button" class="aiqs-chat-launcher" id="aiqsChatLauncher" aria-label="Chat with the AI QS assistant" aria-expanded="false" aria-controls="aiqsChatPanel">
+    <svg class="icon-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <span class="aiqs-chat-pulse" aria-hidden="true"></span>
+  </button>
 </div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
@@ -1131,13 +1154,6 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 });
 var AIQS_REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 function aiqsTrack(name, custom) { try { if (window.AIQS_CAPI) window.AIQS_CAPI.fire(name, {}, custom || {}); } catch (e) {} }
-function aiqsGo(url) { aiqsTrack('Lead', { content_name: 'Send Drawings (chat widget)' }); window.location.href = url; }
-var waOpen = false;
-function toggleWaPanel() { waOpen = !waOpen; var p = document.getElementById('wa-panel'); var pulse = document.getElementById('wa-pulse');
-  if (waOpen) { p.classList.add('open'); if (pulse) pulse.style.display = 'none'; } else { p.classList.remove('open'); } }
-function waQuick(msg) { aiqsTrack('Contact', { content_name: 'WhatsApp quick action' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); toggleWaPanel(); }
-function waSend() { var input = document.getElementById('wa-input'); var msg = input.value.trim();
-  if (msg) { aiqsTrack('Contact', { content_name: 'WhatsApp message' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); input.value = ''; toggleWaPanel(); } }
 (function() {
   var canvas = document.createElement('canvas'); canvas.id = 'confetti-canvas';
   canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999999';
@@ -1165,8 +1181,156 @@ function waSend() { var input = document.getElementById('wa-input'); var msg = i
       btn.addEventListener('click', function(e) { var rect = btn.getBoundingClientRect(); burst(rect.left + rect.width / 2, rect.top + rect.height / 2); }); });
   }
 })();
-document.getElementById('wa-btn').addEventListener('click', function(e) { if (!e.target.closest('#wa-panel')) toggleWaPanel(); });
-var signupShown = false; function showSignupPopup() { if (signupShown) return; signupShown = true; }
+// ── AI chat widget ─────────────────────────────────────────────────────────
+// Replaces the old WhatsApp hand-off. The visitor asks a question here and the
+// portal answers it (server/siteChatRoutes.js). Everything degrades: if the API
+// is unreachable the assistant still points at Send Drawings and the email.
+(function () {
+  var API = 'https://aiqs-portal.onrender.com/api/public/site-chat';
+  var GREETING = "Hi — I'm the AI QS assistant. Ask me anything about pricing, turnaround, or what you get back.\n\nYour first job is on us, so it costs nothing to try.";
+  var OFFLINE = 'Sorry — I could not reach the assistant just then. Send your drawings through the Send Drawings page and we will come straight back to you, or email hello@crmwizardai.com.';
+
+  var root = document.getElementById('aiqsChat');
+  var panel = document.getElementById('aiqsChatPanel');
+  var launcher = document.getElementById('aiqsChatLauncher');
+  var closeBtn = document.getElementById('aiqsChatClose');
+  var log = document.getElementById('aiqsChatLog');
+  var chips = document.getElementById('aiqsChatChips');
+  var form = document.getElementById('aiqsChatForm');
+  var input = document.getElementById('aiqsChatInput');
+  var sendBtn = document.getElementById('aiqsChatSend');
+  if (!root || !panel || !launcher || !log || !form || !input) return;
+
+  // What we post back to the API. The server re-sanitises it either way, but
+  // keeping it bounded here saves the round trip on a long session.
+  var history = [];
+  var busy = false;
+  var open = false;
+  var greeted = false;
+  var trackedFirstMessage = false;
+
+  function bubble(who, text) {
+    var msg = document.createElement('div');
+    msg.className = 'aiqs-msg ' + who;
+    var avatar = document.createElement('div');
+    avatar.className = 'aiqs-msg-avatar';
+    avatar.textContent = who === 'ai' ? 'QS' : 'You';
+    var body = document.createElement('div');
+    body.className = 'aiqs-msg-bubble';
+    body.textContent = text;              // textContent, never innerHTML
+    msg.appendChild(avatar);
+    msg.appendChild(body);
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+    return msg;
+  }
+
+  function showTyping() {
+    var msg = document.createElement('div');
+    msg.className = 'aiqs-msg ai';
+    msg.id = 'aiqsTyping';
+    msg.innerHTML = '<div class="aiqs-msg-avatar">QS</div><div class="aiqs-msg-bubble">'
+      + '<div class="aiqs-typing"><span></span><span></span><span></span></div></div>';
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+  }
+  function hideTyping() {
+    var el = document.getElementById('aiqsTyping');
+    if (el) el.remove();
+  }
+
+  function setBusy(state) {
+    busy = state;
+    sendBtn.disabled = state;
+    input.disabled = state;
+  }
+
+  function greet() {
+    if (greeted) return;
+    greeted = true;
+    bubble('ai', GREETING);
+    history.push({ role: 'assistant', content: GREETING });
+  }
+
+  function setOpen(state) {
+    open = state;
+    root.classList.toggle('open', state);
+    panel.setAttribute('aria-hidden', state ? 'false' : 'true');
+    launcher.setAttribute('aria-expanded', state ? 'true' : 'false');
+    if (state) {
+      greet();
+      aiqsTrack('Contact', { content_name: 'Site chat opened' });
+      setTimeout(function () { input.focus(); }, 220);
+    } else {
+      launcher.focus();
+    }
+  }
+
+  async function ask(question) {
+    if (busy || !question) return;
+    bubble('you', question);
+    history.push({ role: 'user', content: question });
+    if (chips) chips.style.display = 'none';
+    if (!trackedFirstMessage) {
+      trackedFirstMessage = true;
+      aiqsTrack('Contact', { content_name: 'Site chat message' });
+    }
+    setBusy(true);
+    showTyping();
+
+    var reply = OFFLINE;
+    try {
+      var resp = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history.slice(-16) })
+      });
+      var data = await resp.json();
+      if (resp.ok && data && data.reply) reply = data.reply;
+    } catch (e) { /* keep the offline reply */ }
+
+    hideTyping();
+    bubble('ai', reply);
+    history.push({ role: 'assistant', content: reply });
+    setBusy(false);
+    input.focus();
+  }
+
+  // On a narrow screen the cookie banner lands on top of the launcher, so a
+  // first-time visitor cannot open the chat at all. Lift the whole widget clear
+  // of it for as long as the banner is up.
+  var banner = document.getElementById('cookie-banner');
+  function clearOfBanner() {
+    var lift = (banner && banner.classList.contains('show') && window.innerWidth <= 640)
+      ? Math.round(banner.getBoundingClientRect().height) + 16
+      : 0;
+    root.style.setProperty('--aiqs-lift', lift + 'px');
+  }
+  if (banner && window.MutationObserver) {
+    new MutationObserver(clearOfBanner).observe(banner, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', clearOfBanner);
+    clearOfBanner();
+  }
+
+  launcher.addEventListener('click', function () { setOpen(!open); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && open) setOpen(false); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var q = input.value.trim();
+    if (!q) return;
+    input.value = '';
+    ask(q);
+  });
+
+  if (chips) {
+    chips.addEventListener('click', function (e) {
+      var chip = e.target.closest('.aiqs-chip');
+      if (chip) ask(chip.textContent.trim());
+    });
+  }
+})();
 
 // ---- Conversion tracking (consent-gated via AIQS_CAPI.fire) ----
 document.addEventListener('click', function(e) {
