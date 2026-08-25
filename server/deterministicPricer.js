@@ -426,14 +426,177 @@ const BASE_RATES = {
   'builders_work_internal_duct':       { rate: 750,  unit: 'Item',labour: 0.80, materials: 0.20, description: 'Allow for all necessary builders\' work in connection with internal duct runs; including cutting/forming penetrations through internal partitions, ceilings or structural elements as required; making good all disturbed surfaces; provisional sum' },
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMMERCIAL / NON-DOMESTIC RATES
+//
+// The library above is a domestic library. Everything in it — a bathroom, an
+// en-suite, a bi-fold door, a Velux — describes a house. When a 470 m2 sports
+// pavilion came through with commercial ventilation, a cafe kitchen, changing
+// rooms and accessible WCs, not one line matched a key, so all 114 rates were
+// invented by estimateFallbackRate()'s keyword ladder and by the model, and
+// then rescaled to a domestic cost-per-m2 envelope. The bill reconciled and was
+// fiction.
+//
+// These are UK all-in rates (labour + materials + plant, delivered and fixed)
+// for mid-range non-domestic work at a national baseline, before the location
+// factor. They exclude preliminaries percentages, overheads & profit and VAT,
+// which the summary adds. They are a LIBRARY BASELINE, not a quotation: for
+// specialist packages (curtain walling, VRF, sprinklers) a subcontract quote
+// beats this rate every time, and the coverage gate says so on the bill.
+// ═══════════════════════════════════════════════════════════════════════
+const COMMERCIAL_RATES = {
+  // ── Preliminaries and site establishment ──
+  'comm_site_setup':                   { rate: 8500,  unit: 'Item', labour: 0.45, materials: 0.55, description: 'Commercial site establishment: hoarding, gates, signage, temporary services connections, setting out' },
+  'comm_site_management_week':         { rate: 1850,  unit: 'wk',   labour: 1.00, materials: 0.00, description: 'Site management and supervision: site agent plus working foreman, per week of contract programme' },
+  'comm_welfare_cabins_week':          { rate: 340,   unit: 'wk',   labour: 0.10, materials: 0.90, description: 'Welfare: canteen, drying room, WC and site office cabins including servicing, per week' },
+  'comm_cdm_hs_management':            { rate: 6500,  unit: 'Item', labour: 0.90, materials: 0.10, description: 'CDM principal contractor duties: H&S management, RAMS, temporary works coordination, F10' },
+  'comm_insurances_contract_works':    { rate: 4200,  unit: 'Item', labour: 0.00, materials: 1.00, description: 'Contract works and public liability insurances for the duration of the contract' },
+  'comm_temporary_protection':         { rate: 3800,  unit: 'Item', labour: 0.70, materials: 0.30, description: 'Temporary protection and segregation to retained premises in occupation during the works' },
+  'comm_scaffold_commercial':          { rate: 28,    unit: 'm2',   labour: 0.60, materials: 0.40, description: 'Independent tied scaffold to commercial facade, measured on elevation area; erect, hire 12 weeks, dismantle' },
+  'comm_om_manuals_as_built':          { rate: 3200,  unit: 'Item', labour: 0.95, materials: 0.05, description: 'As-installed record drawings, O&M manuals and Building Regulations handover documentation' },
+  'comm_builders_clean':               { rate: 6.5,   unit: 'm2',   labour: 0.85, materials: 0.15, description: 'Builders clean and sparkle clean on completion, measured over gross internal floor area' },
+
+  // ── Demolition and enabling ──
+  'comm_demolition_structure':         { rate: 85,    unit: 'm2',   labour: 0.55, materials: 0.45, description: 'Demolition of single-storey commercial structure to slab level including arisings off site, measured on footprint' },
+  'comm_soft_strip_commercial':        { rate: 42,    unit: 'm2',   labour: 0.75, materials: 0.25, description: 'Soft strip of non-domestic interior: finishes, fittings, services and partitions, measured on floor area' },
+  'comm_asbestos_removal_licensed':    { rate: 95,    unit: 'm2',   labour: 0.70, materials: 0.30, description: 'Licensed asbestos removal under full enclosure including air testing and consignment, measured on treated area' },
+
+  // ── Substructure ──
+  'comm_pad_foundation_rc':            { rate: 420,   unit: 'm3',   labour: 0.40, materials: 0.60, description: 'Reinforced concrete pad foundation to engineer design including excavation, formwork, reinforcement and disposal' },
+  'comm_ground_beam_rc':               { rate: 385,   unit: 'm',    labour: 0.42, materials: 0.58, description: 'Reinforced concrete ground beam including excavation, formwork, reinforcement, concrete and backfill' },
+  'comm_piling_cfa_300':               { rate: 78,    unit: 'm',    labour: 0.30, materials: 0.70, description: 'CFA piling 300mm diameter including mobilisation apportioned, reinforcement cage, and pile trimming' },
+  'comm_slab_power_floated_200mm':     { rate: 145,   unit: 'm2',   labour: 0.35, materials: 0.65, description: '200mm reinforced power-floated ground-bearing slab on hardcore and DPM including mesh and joints' },
+
+  // ── Frame and structure ──
+  'comm_structural_steel_erected':     { rate: 3450,  unit: 't',    labour: 0.30, materials: 0.70, description: 'Structural steelwork to engineer design: fabricate, shop-prime, deliver and erect including connections and holding-down bolts' },
+  'comm_steel_fire_protection_60min':  { rate: 34,    unit: 'm2',   labour: 0.55, materials: 0.45, description: 'Intumescent fire protection to structural steel, 60 minute rating, measured on steel surface area' },
+  'comm_metal_deck_composite_slab':    { rate: 165,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Composite metal deck floor with mesh reinforcement, concrete topping, edge trim and through-deck studs' },
+  'comm_precast_concrete_stair':       { rate: 4800,  unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'Precast concrete stair flight and half landing delivered and craned into position, including bearings' },
+
+  // ── Envelope ──
+  'comm_curtain_walling':              { rate: 780,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Polyester powder-coated aluminium curtain walling, thermally broken, double-glazed, including opening vents and cills' },
+  'comm_structural_glazing':           { rate: 1250,  unit: 'm2',   labour: 0.30, materials: 0.70, description: 'Structural silicone glazed facade with minimal sightlines, thermally broken, including specialist design and installation' },
+  'comm_shopfront_glazing':            { rate: 620,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Commercial shopfront glazing in aluminium framing including entrance doors and closers' },
+  'comm_aluminium_window_commercial':  { rate: 720,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Commercial-grade polyester powder-coated aluminium windows and doors, double glazed, including ironmongery and trickle vents' },
+  'comm_composite_cladding_panel':     { rate: 185,   unit: 'm2',   labour: 0.40, materials: 0.60, description: 'Insulated composite cladding panel system on rails including flashings, trims and fixings' },
+  'comm_rainscreen_cladding':          { rate: 265,   unit: 'm2',   labour: 0.45, materials: 0.55, description: 'Ventilated rainscreen cladding on helping-hand carrier system including insulation, breather membrane and cavity barriers' },
+  'comm_brickwork_facing_commercial':  { rate: 175,   unit: 'm2',   labour: 0.55, materials: 0.45, description: 'Facing brickwork outer skin to commercial building including stainless ties, movement joints, cavity trays and scaffolding attendance' },
+  'comm_blockwork_dense_140':          { rate: 105,   unit: 'm2',   labour: 0.55, materials: 0.45, description: '140mm dense concrete blockwork inner leaf or partition laid in gauged mortar including bed joint reinforcement' },
+  'comm_single_ply_roof_commercial':   { rate: 135,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Mechanically fixed single-ply membrane warm roof on insulation and vapour control layer including upstands and outlets' },
+  'comm_roof_insulation_commercial':   { rate: 48,    unit: 'm2',   labour: 0.30, materials: 0.70, description: 'Tapered PIR roof insulation to falls including vapour control layer, laid to commercial roof deck' },
+  'comm_rooflight_polycarbonate':      { rate: 385,   unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Multiwall polycarbonate or GRP rooflight including kerbs, flashings and non-fragile classification' },
+  'comm_industrial_door_sectional':    { rate: 4200,  unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'Insulated sectional overhead door, electrically operated, including tracks, motor, safety edge and commissioning' },
+  'comm_doorset_commercial_fd30':      { rate: 1250,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'FD30S certified commercial doorset with frame, intumescent seals, vision panel and hardwood lippings' },
+  'comm_doorset_commercial_fd60':      { rate: 1650,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'FD60S certified commercial doorset with frame, intumescent seals, vision panel and hardwood lippings' },
+  'comm_ironmongery_commercial_set':   { rate: 380,   unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Commercial ironmongery set per leaf to schedule: hinges, closer, lever furniture, lock and signage' },
+
+  // ── Internal fabric and finishes ──
+  'comm_metsec_partition_boarded':     { rate: 105,   unit: 'm2',   labour: 0.55, materials: 0.45, description: 'Metal stud partition boarded both sides, taped and jointed, including insulation and head deflection detail' },
+  'comm_partition_fire_60min':         { rate: 135,   unit: 'm2',   labour: 0.55, materials: 0.45, description: '60 minute fire-rated partition, twin-layer boarded both sides, including fire stopping at head and abutments' },
+  'comm_suspended_ceiling_grid_tile':  { rate: 46,    unit: 'm2',   labour: 0.50, materials: 0.50, description: 'Exposed grid suspended ceiling with mineral fibre tiles including hangers, perimeter trim and tile cutting to services' },
+  'comm_mf_ceiling_plasterboard':      { rate: 62,    unit: 'm2',   labour: 0.55, materials: 0.45, description: 'MF suspended plasterboard ceiling, taped, jointed and skimmed, including access hatches' },
+  'comm_raised_access_floor':          { rate: 78,    unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Medium-grade raised access floor on adjustable pedestals including cutting to perimeter and service outlets' },
+  'comm_hygienic_wall_panel':          { rate: 88,    unit: 'm2',   labour: 0.45, materials: 0.55, description: 'Hygienic PVC wall panelling to wet and food-preparation areas including trims, capping and sealed joints' },
+  'comm_ips_panel_system':             { rate: 620,   unit: 'm',    labour: 0.40, materials: 0.60, description: 'IPS duct panel system to sanitary installations including access panels, framing and fixings, measured per metre of run' },
+  'comm_toilet_cubicle_hpl':           { rate: 780,   unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'HPL toilet or changing cubicle including pilasters, door, ironmongery and headrail' },
+  'comm_shower_cubicle_commercial':    { rate: 950,   unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Commercial shower cubicle with HPL panels, curtain rail or door, and slip-resistant base' },
+  'comm_vinyl_safety_flooring':        { rate: 52,    unit: 'm2',   labour: 0.50, materials: 0.50, description: 'Slip-resistant safety vinyl flooring, welded seams, coved skirting, on latex smoothing compound' },
+  'comm_carpet_tile_commercial':       { rate: 38,    unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Heavy-contract carpet tiles on tackifier including door bars and perimeter trim' },
+  'comm_resin_floor_screed':           { rate: 72,    unit: 'm2',   labour: 0.45, materials: 0.55, description: 'Resin floor screed to kitchen or plant areas including primer, coving and anti-slip aggregate' },
+  'comm_decoration_commercial':        { rate: 12,    unit: 'm2',   labour: 0.75, materials: 0.25, description: 'Contract emulsion decoration, mist coat and two finish coats to plastered or boarded surfaces' },
+  'comm_locker_bank':                  { rate: 165,   unit: 'Nr',   labour: 0.15, materials: 0.85, description: 'Laminate changing-room locker per compartment including plinth, bench fixing and locks' },
+  'comm_bench_changing_room':          { rate: 210,   unit: 'm',    labour: 0.30, materials: 0.70, description: 'Changing room bench with slatted seat, hooks and wall or pedestal support, measured per metre' },
+  'comm_balustrade_stainless':         { rate: 480,   unit: 'm',    labour: 0.35, materials: 0.65, description: 'Stainless steel balustrade with infill to Part K including base fixings and handrail' },
+  'comm_handrail_commercial':          { rate: 145,   unit: 'm',    labour: 0.40, materials: 0.60, description: 'Wall-mounted commercial handrail including brackets, returns and contrasting finish to Part M' },
+
+  // ── Sanitary ──
+  'comm_wc_suite_commercial':          { rate: 620,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Commercial back-to-wall WC suite with concealed cistern, seat and flush plate, connected and tested' },
+  'comm_wc_accessible_docm':           { rate: 2400,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Doc M accessible WC pack: WC, basin, grab rails, alarm, mirror and dispensers, installed to Part M' },
+  'comm_wash_basin_commercial':        { rate: 480,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Commercial wash basin or vanity bowl with sensor or lever tap, trap and supports, connected and tested' },
+  'comm_shower_commercial':            { rate: 890,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Commercial thermostatic shower valve and head with drainage connection, connected, tested and commissioned' },
+  'comm_cleaners_sink':                { rate: 520,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Cleaners sink with grating, bucket rest, tiled or panelled splashback and bib taps' },
+  'comm_sanitary_accessories_set':     { rate: 340,   unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Sanitary accessories per position: mirror, soap and towel dispensers, waste bin and coat hook' },
+
+  // ── Mechanical ──
+  'comm_ahu_heat_recovery':            { rate: 24000, unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'Packaged heat-recovery air handling unit supplied, positioned, connected, commissioned and balanced' },
+  'comm_ventilation_ductwork':         { rate: 145,   unit: 'm',    labour: 0.45, materials: 0.55, description: 'Galvanised ventilation ductwork including supports, fire dampers, grilles, insulation and commissioning' },
+  'comm_vrf_outdoor_unit':             { rate: 9500,  unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'VRF or VRV outdoor condensing unit including anti-vibration mounts, refrigerant charge and commissioning' },
+  'comm_vrf_indoor_unit':              { rate: 2400,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'VRF indoor fan coil or cassette unit including pipework connection, condensate drain and controls' },
+  'comm_ashp_commercial':              { rate: 18500, unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'Commercial air source heat pump including buffer vessel, pipework connections, controls and commissioning' },
+  'comm_radiant_panel_heater':         { rate: 780,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Ceiling or wall mounted radiant or fan-infrared panel heater including fixings, wiring and controls' },
+  'comm_lthw_pipework':                { rate: 95,    unit: 'm',    labour: 0.50, materials: 0.50, description: 'LTHW heating pipework in steel or press-fit copper including insulation, supports, valves and testing' },
+  'comm_hot_cold_water_installation':  { rate: 68,    unit: 'm2',   labour: 0.45, materials: 0.55, description: 'Hot and cold water services distribution including cylinders, boosters, insulation and chlorination, measured over floor area served' },
+  'comm_extract_canopy_kitchen':       { rate: 6800,  unit: 'Nr',   labour: 0.25, materials: 0.75, description: 'Stainless steel commercial kitchen extract canopy with filters, fan, ductwork to atmosphere and fire suppression interface' },
+  'comm_kitchen_fitout_commercial':    { rate: 2400,  unit: 'm2',   labour: 0.25, materials: 0.75, description: 'Commercial catering kitchen fit-out: stainless units, worktops, sinks and servery, measured over kitchen floor area' },
+  'comm_bwic_mande':                   { rate: 18,    unit: 'm2',   labour: 0.80, materials: 0.20, description: 'Builders work in connection with mechanical and electrical services: holes, chases, plinths and fire stopping, over floor area' },
+
+  // ── Electrical and life safety ──
+  'comm_electrical_installation':      { rate: 145,   unit: 'm2',   labour: 0.50, materials: 0.50, description: 'Commercial electrical installation: containment, small power, final circuits, earthing and testing, over floor area' },
+  'comm_distribution_board_tpn':       { rate: 3200,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Three-phase TP&N distribution board with MCBs and RCBOs, installed, labelled, tested and certified' },
+  'comm_led_lighting_commercial':      { rate: 165,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Commercial LED luminaire including driver, suspension or recessing, wiring and controls interface' },
+  'comm_emergency_lighting':           { rate: 185,   unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'Maintained or non-maintained emergency luminaire with 3 hour battery, including testing and log book' },
+  'comm_fire_alarm_l1':                { rate: 42,    unit: 'm2',   labour: 0.45, materials: 0.55, description: 'Addressable L1 fire alarm and detection system including panel, devices, cause and effect and certification, over floor area' },
+  'comm_data_outlet_cat6':             { rate: 165,   unit: 'Nr',   labour: 0.40, materials: 0.60, description: 'Cat 6 structured cabling outlet including containment, patching, labelling and Fluke test result' },
+  'comm_pv_array_installed':           { rate: 1150,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Roof-mounted photovoltaic array per kWp installed including mounting system, DC and AC cabling, inverter and G99 commissioning' },
+  'comm_sprinkler_installation':       { rate: 42,    unit: 'm2',   labour: 0.40, materials: 0.60, description: 'Sprinkler installation to LPC rules including pipework, heads, valve set and hydraulic calculations, over protected area' },
+  'comm_dry_riser':                    { rate: 285,   unit: 'm',    labour: 0.40, materials: 0.60, description: 'Dry riser main including landing valves, inlet breeching, cabinets and pressure testing' },
+  'comm_mansafe_fall_restraint':       { rate: 165,   unit: 'm',    labour: 0.40, materials: 0.60, description: 'Roof fall-restraint mansafe line including posts, energy absorbers, anchor testing and certification' },
+
+  // ── External works ──
+  'comm_tarmac_road_construction':     { rate: 88,    unit: 'm2',   labour: 0.30, materials: 0.70, description: 'Adoptable-standard tarmac road construction: sub-base, binder and wearing course on prepared formation' },
+  'comm_tarmac_footpath':              { rate: 62,    unit: 'm2',   labour: 0.35, materials: 0.65, description: 'Tarmac footpath or apron: sub-base, binder and wearing course including edgings to both sides' },
+  'comm_car_park_line_marking':        { rate: 6.5,   unit: 'm2',   labour: 0.60, materials: 0.40, description: 'Thermoplastic car park line marking, bay markings, hatching and accessible bay symbols' },
+  'comm_kerb_precast':                 { rate: 58,    unit: 'm',    labour: 0.55, materials: 0.45, description: 'Precast concrete kerb on concrete bed and haunching including radius and dropper units' },
+  'comm_fencing_palisade':             { rate: 135,   unit: 'm',    labour: 0.40, materials: 0.60, description: 'Galvanised steel palisade security fencing 2.4m high including posts set in concrete' },
+  'comm_fencing_mesh_2400':            { rate: 95,    unit: 'm',    labour: 0.40, materials: 0.60, description: 'Welded mesh security fencing 2.4m high on posts set in concrete including all fittings' },
+  'comm_gate_vehicle_commercial':      { rate: 3800,  unit: 'Nr',   labour: 0.30, materials: 0.70, description: 'Vehicle gate to match fencing including posts, hinges, drop bolts and locking' },
+  'comm_drainage_commercial_225':      { rate: 195,   unit: 'm',    labour: 0.45, materials: 0.55, description: '225mm below-ground drainage in trench including granular bed and surround, backfill and CCTV survey' },
+  'comm_attenuation_crate_system':     { rate: 420,   unit: 'm3',   labour: 0.35, materials: 0.65, description: 'Geocellular stormwater attenuation crate system including geotextile wrap, excavation, backfill and flow control' },
+  'comm_external_lighting_column':     { rate: 2200,  unit: 'Nr',   labour: 0.35, materials: 0.65, description: 'External lighting column with LED head including foundation, ducting, cabling and commissioning' },
+  'comm_soft_landscaping_commercial':  { rate: 38,    unit: 'm2',   labour: 0.55, materials: 0.45, description: 'Soft landscaping to commercial site: topsoil, cultivation, seeding or turf and 12 month maintenance' },
+};
+
+// Merged so every existing BASE_RATES lookup, the crib sheet and the parity
+// test see one table. Commercial keys are prefixed `comm_` so a domestic job can
+// never collide with one by accident.
+Object.assign(BASE_RATES, COMMERCIAL_RATES);
+
 /**
  * Estimate a fallback rate when no base rate or AI estimate exists.
  * Uses the item's unit and description keywords to pick a sensible market rate.
  * This ensures we NEVER price something at £0.
  */
+/**
+ * A provisional or prime-cost sum is not something to estimate — it is a figure
+ * somebody has already stated. Pull it out of the description when it is there.
+ *
+ * Wolfe Pavilion carried thirteen provisional sums the bill said totalled
+ * exactly GBP 75,000; they reached the workbook at GBP 38,375 because nothing
+ * read the stated figures. Handles "P.Sum 7 - GBP 5,000", "provisional sum of
+ * 12,500", "fixed sum GBP 3.5k".
+ */
+function statedSumInDescription(description) {
+  const d = String(description || '');
+  if (!/provisional|p\.?\s?sum|prime cost|\bpc sum\b|fixed sum|allow(?:ance)? of/i.test(d)) return null;
+  // Money with a currency symbol, or a bare figure following the sum wording.
+  const m = d.match(/[£€]\s*([\d,]+(?:\.\d{1,2})?)\s*(k\b)?/i)
+    || d.match(/(?:sum|allowance)\s+(?:of\s+)?([\d,]+(?:\.\d{1,2})?)\s*(k\b)?/i);
+  if (!m) return null;
+  let v = parseFloat(String(m[1]).replace(/,/g, ''));
+  if (!Number.isFinite(v) || v <= 0) return null;
+  if (m[2]) v *= 1000;
+  // A "sum" under GBP 50 is a reference number, not money ("P.Sum 7").
+  return v >= 50 ? v : null;
+}
+
 function estimateFallbackRate(item) {
   const desc = (item.description || item.key || '').toLowerCase();
   const unit = (item.unit || '').toLowerCase();
+
+  // A stated sum beats every guess below it, whatever the unit.
+  const stated = statedSumInDescription(item.description || item.key);
+  if (stated != null && (Number(item.qty) || 1) === 1) return stated;
   // Per-item / lump sum items — estimate by description keywords
   if (unit === 'item' || unit === 'nr' || unit === 'no' || unit === 'nr.' || unit === 'each') {
     if (desc.includes('strip out') && desc.includes('roof'))       return 2200;
@@ -505,7 +668,12 @@ function estimateFallbackRate(item) {
     if (desc.includes('gate') && desc.includes('metal'))           return 650;
     if (desc.includes('gate'))                                      return 450;
     if (desc.includes('landscap'))                                  return 2500;
-    if (desc.includes('provisional'))                               return 1;
+    // Never GBP 1. That was a convention for "the quantity column carries the
+    // sum", and the quantity guard that caps a currency-looking Item qty to 1
+    // turns a GBP 75,000 provisional sum into GBP 1 with no warning anywhere.
+    // With no stated figure this is an unpriced allowance, and the coverage gate
+    // reports it as one rather than the bill absorbing a silent zero.
+    if (desc.includes('provisional') || desc.includes('p.sum') || desc.includes('prime cost')) return 2500;
     if (desc.includes('sundries') || desc.includes('allowance'))   return 500;
     // Small fittings and accessories — low-value per-Nr items
     if (desc.includes('weep vent') || desc.includes('weep hole'))  return 3;
@@ -1310,6 +1478,122 @@ function detectProjectType(items) {
   return 'general';
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// BUILDING CLASS DETECTION
+//
+// Separate from detectProjectType() on purpose. That function answers "what
+// shape of work is this?" (extension / refurb / new build) and drives the rate
+// ladder. This one answers a different and, as it turns out, more dangerous
+// question: "is this building the kind of building the rate library was built
+// for?"
+//
+// It exists because of a delivered bill. A 470 m2 sports-club pavilion —
+// commercial ventilation, a cafe kitchen, changing rooms, IPS panelling,
+// accessible WCs — was priced as a domestic extension. detectProjectType()
+// returned 'general', the cost/m2 cap read the 250 m2 slab line as the floor
+// area, and the residential ceiling of GBP 2,800/m2 rescaled EVERY rate in the
+// bill by 0.3198 so the total would land on 250 x 2,800 = GBP 700,000. The
+// client received a bill in which not one of 114 rates was the rate anyone had
+// worked out, and the arithmetic reconciled perfectly.
+//
+// The residential caps are correct for residential work and catastrophic
+// outside it, so they must not fire on a building the library does not cover.
+// Pure function, no requires (locked by a test).
+// ═══════════════════════════════════════════════════════════════════════
+
+// Building TYPE words. A pavilion, a school or a ward is not a house, whatever
+// else the takeoff says.
+// Ordered most specific first, because the FIRST match names the sector. A bar,
+// a cafe and a function room are rooms inside other buildings at least as often
+// as they are the building — a cricket pavilion with a bar in it is sports work,
+// not hospitality, and calling it hospitality is a worse answer than none.
+const NON_RESIDENTIAL_BUILDING = [
+  ['sports', /\bpavilion\b|\bclubhouse\b|\bclub house\b|\bsports\b|\bchanging room|\bleisure centre\b|\bgymnasium\b|\bcricket club\b|\bfootball club\b|\brugby club\b|\btennis club\b|\bbowls club\b/],
+  ['school', /\bschool\b|\bclassroom\b|\bcollege\b|\buniversity\b|\bnursery\b|\bcampus\b/],
+  ['healthcare', /\bhospital\b|\bclinic\b|\bsurgery\b|\bcare home\b|\bhealthcare\b|\bward\b|\bdental\b/],
+  ['community', /\bcommunity (?:centre|center|hall)\b|\bvillage hall\b|\bchurch\b|\bchapel\b|\bmosque\b|\bsynagogue\b|\blibrary\b|\bmuseum\b|\bscout hut\b/],
+  ['office', /\boffices?\b|\bretail\b|\bshopfit|\bwarehouse\b|\bindustrial\b|\bfactory\b/],
+  ['hospitality', /\bhotel\b|\brestaurant\b|\bpublic house\b|\bcaf[eé]\b|\bbar\b(?!\s*(?:reinforc|mesh|chair))|\bfunction room\b/],
+];
+
+// Building ELEMENTS that effectively never appear in a domestic job. These
+// carry more weight than a stray type word because they are measured items:
+// somebody took them off a real commercial drawing.
+const NON_RESIDENTIAL_ELEMENT = [
+  ['ips_panelling', /\bips\b.*panel|panel.*\bips\b|hygienic (?:wall )?(?:panel|clad)|altro.*(?:whiterock|wall)/],
+  ['cubicles', /toilet cubicle|shower cubicle|changing cubicle|\bcubicles?\b/],
+  ['doc_m', /\bdoc\s*m\b|doc-m pack|accessible wc|disabled wc|ambulant/],
+  ['commercial_glazing', /curtain wall|\bshopfront\b|commercial (?:glazing|window|door)|structural glazing/],
+  ['commercial_hvac', /\bhrvu\b|\bahu\b|air handling unit|heat[- ]recovery unit|\bvrf\b|\bvrv\b|fan coil|extract canopy|kitchen canopy/],
+  ['life_safety', /\bdry riser\b|\bwet riser\b|\bsprinkler\b|smoke (?:vent|extract)|\bl1\b fire alarm|mansafe|fall restraint|refuge point/],
+  ['commercial_fitout', /\blockers?\b|vanity trough|raised access floor|suspended ceiling grid|ironmongery schedule|\bvending\b|servery|commercial kitchen/],
+  ['commercial_power', /three[- ]phase|\btp&n\b|\bmccb\b|distribution board.*\bdb\d|\bups\b|generator set/],
+];
+
+// Weak markers. "Commercial" appears in domestic specifications often enough
+// ("commercial-grade ironmongery") that it can corroborate a classification but
+// must never make one on its own, and must never name the sector — a pavilion
+// labelled 'office' because one line said "commercial" is a worse answer than
+// no label at all.
+const WEAK_NON_RESIDENTIAL = /\bcommercial\b|\bnon[- ]domestic\b|\bemployer'?s requirements\b|\bmain contractor\b/;
+
+// Words that pull the other way — an unambiguously domestic takeoff.
+const RESIDENTIAL_SIGNAL = /\ben[- ]?suite\b|\bloft conversion\b|\bdormer\b|\bbungalow\b|\bsemi[- ]detached\b|\bterraced? house\b|\bdetached (?:house|dwelling)\b|\bdwelling\b|\bhomeowner\b|\bfamily home\b|\bmaster bedroom\b/;
+
+/**
+ * Classify the building a takeoff describes.
+ *
+ * Deliberately biased toward NOT claiming residential. 'unknown' preserves the
+ * historic behaviour (residential caps apply); only a positive non-residential
+ * finding switches them off. That way this can never quietly disable a guard on
+ * the domestic work the library was built for.
+ *
+ * @param {Array}  items           locked takeoff items
+ * @param {string} projectTypeStr  free-text project type / job title
+ * @returns {{klass:string, sector:string|null, confidence:string, signals:string[], residential:boolean}}
+ */
+function detectBuildingClass(items, projectTypeStr) {
+  const corpus = [
+    String(projectTypeStr || ''),
+    ...(Array.isArray(items) ? items : []).map((i) => (i && (i.description || i.key)) || ''),
+  ].join(' \n ').toLowerCase();
+
+  const signals = [];
+  let sector = null;
+  for (const [name, re] of NON_RESIDENTIAL_BUILDING) {
+    if (re.test(corpus)) { signals.push('building:' + name); if (!sector) sector = name; }
+  }
+  for (const [name, re] of NON_RESIDENTIAL_ELEMENT) {
+    if (re.test(corpus)) signals.push('element:' + name);
+  }
+  if (WEAK_NON_RESIDENTIAL.test(corpus)) signals.push('weak:non_domestic_wording');
+  const residential = RESIDENTIAL_SIGNAL.test(corpus);
+
+  // One stray word is not a building. "cafe" in a schedule of finishes, or a
+  // "bar" that turns out to be reinforcement, must not reclassify a house.
+  // Two independent signals, or one measured commercial element, is enough.
+  const elementHits = signals.filter((s) => s.startsWith('element:')).length;
+  const buildingHits = signals.filter((s) => s.startsWith('building:')).length;
+  const strong = elementHits >= 1 || buildingHits >= 2;
+
+  if (!signals.length) {
+    return { klass: residential ? 'residential' : 'unknown', sector: null, confidence: residential ? 'medium' : 'low', signals: [], residential };
+  }
+  if (!strong) {
+    // A single weak type word. Say so rather than deciding either way — the
+    // caller treats 'unknown' as "residential rules still apply".
+    return { klass: 'unknown', sector, confidence: 'low', signals, residential };
+  }
+  return {
+    klass: 'non_residential',
+    sector,
+    confidence: (buildingHits >= 1 && elementHits >= 1) ? 'high' : 'medium',
+    signals,
+    residential,
+  };
+}
+
 /**
  * Price a set of locked quantities deterministically.
  * @param {Array} lockedItems - Array of { key, description, unit, qty, override_rate? }
@@ -1356,9 +1640,33 @@ const RATE_CEILINGS_GBP = {
   t:   2500,
   tonne: 2500,
 };
-function ceilingFor(unit) {
+// Non-residential ceilings. The domestic table is not a defensible bound on a
+// commercial building: curtain walling runs GBP 900-1,400/m2, hygienic wall
+// panelling GBP 120-180/m2, structural steel GBP 3,000-4,500/t erected. Clipping
+// commercial glazing at the domestic GBP 800/m2 is not a safety net — it is a
+// 40% understatement presented as a corrected rate.
+const RATE_CEILINGS_COMMERCIAL_GBP = {
+  m:   1200,
+  lm:  1200,
+  'm¹': 1200,
+  m2:  1800,   // curtain walling / structural glazing
+  'm²': 1800,
+  sqm: 1800,
+  m3:  900,
+  'm³': 900,
+  kg:  30,
+  t:   5000,
+  tonne: 5000,
+};
+
+/**
+ * Upper bound for a unit. `opts.commercial` switches to the non-residential
+ * table; omit it and behaviour is exactly as before.
+ */
+function ceilingFor(unit, opts) {
   const u = (unit || '').toLowerCase();
-  return RATE_CEILINGS_GBP[u] || null;  // unknown units (Item, Nr, ea) — no ceiling
+  const table = (opts && opts.commercial) ? RATE_CEILINGS_COMMERCIAL_GBP : RATE_CEILINGS_GBP;
+  return table[u] || null;  // unknown units (Item, Nr, ea) — no ceiling
 }
 
 /**
@@ -1442,6 +1750,7 @@ function createShadowComparer(resolveRate, ctx) {
           assumedRate: item.assumed_rate,
           region: ctx.region,
           projectType: ctx.projectType,
+          nonResidential: ctx.nonResidential === true,
         });
         // Half a penny of tolerance: both sides round to 2dp, so exact float equality
         // would flag rounding noise as a divergence.
@@ -1492,6 +1801,7 @@ const RATE_SOURCE_TIER = {
   fallback_estimated: 'estimated',   // estimateFallbackRate() keyword ladder
   fallback_corrected: 'estimated',   // a guess, then clipped to a unit ceiling
   ceiling_clipped: 'estimated',      // a rate above the unit ceiling, clipped to it
+  stated_sum:         'evidenced',   // a provisional/prime-cost sum stated in the documents
 };
 
 /**
@@ -1629,6 +1939,21 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // Detect project type to control which auto-corrections apply
   const projectType = options.project_type || detectProjectType(lockedItems);
 
+  // What KIND OF BUILDING is this? Every quantity auto-correction and every
+  // cost cap below was calibrated on domestic work, and each one rewrites the
+  // bill silently. Outside residential they are not conservative — they are
+  // wrong by a factor of three, which is how a 470 m2 sports pavilion left here
+  // as a GBP 700,000 bill with all 114 rates rescaled to fit a domestic
+  // GBP 2,800/m2 ceiling. `unknown` keeps the historic behaviour; only a
+  // positive non-residential finding stands them down.
+  const buildingClass = options.building_class && options.building_class.klass
+    ? options.building_class
+    : detectBuildingClass(lockedItems, `${projectType || ''} ${options.project_title || ''} ${location || ''}`);
+  const isNonResidential = buildingClass.klass === 'non_residential';
+  // Every cap that rewrote a rate or a quantity, recorded. Nothing here is
+  // allowed to happen silently again.
+  const capEvents = [];
+
   // Optional shadow comparison against an injected rate resolver. Absent by default, in
   // which case this function behaves exactly as it did before — no extra work, and no
   // change in output shape beyond an omitted `shadow` key. Declared after projectType so
@@ -1638,6 +1963,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     try {
       shadow = createShadowComparer(options.resolveRate, {
         locFactor, clientRates, region: locationInfo.label, projectType,
+        nonResidential: isNonResidential,
       });
     } catch (e) {
       console.error('[Pricer] could not start shadow comparison:', e.message);
@@ -1647,7 +1973,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // Cross-validate quantities for all residential project types
   // (extensions, refurbishments, general) — skip only for infrastructure/commercial
   let crossResult = { warnings: [], corrections: [] };
-  const skipCrossValidation = projectType === 'infrastructure' || projectType === 'commercial';
+  const skipCrossValidation = projectType === 'infrastructure' || projectType === 'commercial' || isNonResidential;
+  if (isNonResidential && !(projectType === 'infrastructure' || projectType === 'commercial')) {
+    warnings.push(`Residential quantity auto-corrections were NOT applied: this reads as ${buildingClass.sector || 'non-residential'} work (${buildingClass.signals.slice(0, 4).join(', ')}). Those corrections assume domestic room counts and floor areas.`);
+    capEvents.push({ cap: 'residential_quantity_corrections', action: 'suppressed', reason: 'non_residential_building', signals: buildingClass.signals });
+  }
   if (!skipCrossValidation) {
     crossResult = crossValidateQuantities(lockedItems, projectType, { floor_area: options.floor_area });
   }
@@ -1665,6 +1995,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
     let rate, rateSource;
+    // A sum the tender documents state is not a rate to be derived — it is a
+    // figure to be carried. Read it here so it can override whatever the ladder
+    // below arrives at, and so it never gets the location factor: a GBP 50,000
+    // provisional sum is GBP 50,000 in Cheshire and GBP 50,000 in Chelsea.
+    const statedSum = statedSumInDescription(item.description || item.key);
+    const carriesStatedSum = statedSum != null && (Number(item.qty) || 1) === 1;
     if (item.override_rate && item.override_rate > 0) {
       rate = item.override_rate;
       rateSource = 'override';
@@ -1720,12 +2056,19 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate ${currSym}${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
     }
 
+    // A stated sum overrides anything the ladder derived, and skips the location
+    // factor and the ceiling below: it is not our number to adjust.
+    if (carriesStatedSum && rateSource !== 'override' && rateSource !== 'client_verified') {
+      rate = statedSum;
+      rateSource = 'stated_sum';
+    }
+
     // ───── Unit ceiling check — applies to ALL rate paths ─────
     // Catches cases the BASE_RATES vs clientRates ratio check can't, namely
     // when a bad clientRate or AI assumed_rate exists for a key with NO
     // corresponding BASE_RATE (e.g. `extend_private_drain_100mm_wavin` at
     // €3,600/m which is physically impossible for a linear drainage run).
-    const unitCeilingGbp = ceilingFor(item.unit);
+    const unitCeilingGbp = rateSource === 'stated_sum' ? null : ceilingFor(item.unit, { commercial: isNonResidential });
     if (unitCeilingGbp) {
       const ceilingLocal = unitCeilingGbp * locFactor;  // convert to target currency
       if (rate > ceilingLocal) {
@@ -1759,9 +2102,19 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     // Sanity check: if AI assumed_rate looks like a total cost rather than a per-unit rate, cap it
     if (rateSource === 'ai_estimated' && item.qty > 1) {
       const itemTotal = item.qty * rate;
-      // If a single line item exceeds £50k with AI-estimated rate, the rate is likely wrong
-      if (itemTotal > 50000 && rate > 500) {
-        const expectedRate = estimateFallbackRate(item) * locFactor;
+      // If a single line item exceeds £50k with AI-estimated rate, the rate is likely wrong.
+      // On non-domestic work a £50k line is ordinary — 45 m² of curtain walling at a
+      // perfectly normal £1,240/m² is £56k — and the reference this guard compares
+      // against is the DOMESTIC keyword ladder, which answers £45/m² for it. Left
+      // as-is the guard turns every commercial facade, M&E and steel package into a
+      // domestic rate. Above the domestic band, use the unit ceiling as the reference
+      // instead: it is the highest defensible rate for the unit, so a rate above five
+      // times THAT really is a total masquerading as a rate.
+      const aiCapLineValue = isNonResidential ? 250000 : 50000;
+      if (itemTotal > aiCapLineValue && rate > 500) {
+        const expectedRate = (isNonResidential
+          ? (ceilingFor(item.unit, { commercial: true }) || estimateFallbackRate(item))
+          : estimateFallbackRate(item)) * locFactor;
         if (rate > expectedRate * 5) {
           const cSym = currency === 'EUR' ? '€' : '£';
           warnings.push(`Rate for '${item.key}' looks too high (${cSym}${Math.round(rate)}/${item.unit || 'Item'} × ${item.qty} = ${cSym}${Math.round(itemTotal).toLocaleString()}). Using fallback rate ${cSym}${Math.round(expectedRate * 100) / 100}/${item.unit || 'Item'} instead.`);
@@ -1829,6 +2182,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   }));
 
   let constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
+  // The total as PRICED, before any cap rescales it. Reported alongside the
+  // final figure so a capped bill can never present a rescaled total as though
+  // it were the priced one — that gap is exactly the "conflicting numbers"
+  // the chat and the workbook used to disagree by.
+  const preCapConstructionTotal = constructionTotal;
 
   // ═══════════════════════════════════════════════════════════════════════
   // SECTION-LEVEL COST CAPS — catch over-pricing in individual sections
@@ -1853,7 +2211,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // For a 90m² extension those caps are ~3× too tight.
   const extFloorArea = options.floor_area || 0;
   const scaleFactor = extFloorArea > 40 ? Math.min(extFloorArea / 40, 3.0) : 1.0;
-  if ((isSingleStoreyExt || isTwoStoreyExt) && !hasPremiumIndicators) {
+  if ((isSingleStoreyExt || isTwoStoreyExt) && !hasPremiumIndicators && !isNonResidential) {
     const cs = currency === 'EUR' ? '€' : '£';
     const sectionCaps = {
       'roof':        { max: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 14000 :  9000) * scaleFactor) },
@@ -1867,6 +2225,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         if (secLower.includes(capKey)) {
           if (sec.subtotal > max) {
             const scale = target / sec.subtotal;
+            capEvents.push({ cap: 'section_cap', action: 'rescaled', section: sec.name, from: Math.round(sec.subtotal), to: target, scale: Math.round(scale * 10000) / 10000, lines: sec.items.length });
             warnings.push(`Section "${sec.name}" was ${cs}${Math.round(sec.subtotal).toLocaleString()} — exceeds ${cs}${max.toLocaleString()} max for ${isSingleStoreyExt ? 'single' : 'two'} storey extension${scaleFactor > 1 ? ' (scaled for ' + extFloorArea + 'm² floor area)' : ''}. Scaled to ${cs}${target.toLocaleString()}.`);
             for (const item of sec.items) {
               item.rate = Math.round(item.rate * scale * 100) / 100;
@@ -1889,6 +2248,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // the extension footprint — NOT the total project scope. Use options.floor_area if available
   const slabItems = pricedItems.filter(i => i.key === 'concrete_slab_150mm' || i.key === 'concrete_slab_100mm');
   const slabArea = slabItems.reduce((s, i) => s + i.qty, 0);
+  // Where the floor area came from matters more than the number. A slab line is
+  // the footprint of NEW ground-bearing slab, not the building's GIA — on the
+  // pavilion the two differed by 220 m2 and the cap divided by the wrong one.
+  // Only an area the caller actually supplied is trusted for a cap that rewrites
+  // every rate in the bill.
+  const floorAreaSource = options.floor_area ? 'supplied' : (slabArea > 0 ? 'slab_proxy' : 'none');
   const estimatedFloorArea = options.floor_area || slabArea;
   if (estimatedFloorArea > 0) {
     const costPerM2 = constructionTotal / estimatedFloorArea;
@@ -1904,7 +2269,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     const capIsCombinedResidential = !capIsFullHouseRefurb
       && (pTypeStr.includes('loft') || pTypeStr.includes('refurb') || pTypeStr.includes('conversion'))
       && (projectType === 'residential_extension' || pTypeStr.includes('extension'));
-    const capIsResidential = (projectType === 'residential_extension' || projectType === 'general' || capIsCombinedResidential) && !capIsHMO && !capIsInfra;
+    const capIsResidential = (projectType === 'residential_extension' || projectType === 'general' || capIsCombinedResidential)
+      && !capIsHMO && !capIsInfra && !isNonResidential;
+    if (isNonResidential) {
+      capEvents.push({ cap: 'cost_per_m2', action: 'suppressed', reason: 'non_residential_building', sector: buildingClass.sector, signals: buildingClass.signals });
+      warnings.push(`Residential cost/m2 cap NOT applied: this reads as ${buildingClass.sector || 'non-residential'} work. The GBP 2,000-3,500/m2 envelope is a house envelope; applying it here would rescale every rate in the bill to fit a building type this is not.`);
+    }
 
     let maxCostPerM2, targetCostPerM2, typicalRange, projectLabel;
     if (capIsNewBuild) {
@@ -1915,16 +2285,33 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     } else if (capIsCombinedResidential) {
       // Extension + loft/conversion: higher complexity but still residential — cap at £4,000/m²
       maxCostPerM2 = 4000; targetCostPerM2 = 3000; typicalRange = '£2,500-4,000'; projectLabel = 'extension + loft/conversion projects';
-    } else if (capIsHMO || capIsInfra) {
-      maxCostPerM2 = 999999; targetCostPerM2 = 999999; typicalRange = 'variable'; projectLabel = 'HMO/infrastructure';
+    } else if (capIsHMO || capIsInfra || isNonResidential) {
+      // No domestic envelope exists for these. The final `else` below used to
+      // catch them and hand back the GBP 3,500/m2 extension figure whatever the
+      // building was — the bucket logic said "not residential" and the number it
+      // returned was the residential one anyway. That is the branch the pavilion
+      // fell down.
+      maxCostPerM2 = 999999; targetCostPerM2 = 999999; typicalRange = 'variable'; projectLabel = 'non-domestic / HMO / infrastructure';
     } else {
       // Simple residential extensions
       maxCostPerM2 = 3500; targetCostPerM2 = 2800; typicalRange = '£2,000-3,500'; projectLabel = 'extensions';
     }
 
-    if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999) {
+    // A cap that rewrites every rate in the bill may only run on a floor area
+    // somebody actually gave us. The slab line is a proxy, and on the pavilion
+    // it was the wrong one by 220 m2 — GIA 470, slab 250, cap 250 x 2,800 =
+    // GBP 700,000, and 114 rates were multiplied by 0.3198 to reach it. On a
+    // proxy area the breach is reported and left for a human to settle.
+    if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999 && floorAreaSource === 'slab_proxy') {
+      const cs = currency === 'EUR' ? '€' : '£';
+      warnings.push(`COST CHECK (not applied): construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m2 against a ${cs}${maxCostPerM2}/m2 envelope for ${projectLabel}, but the ${estimatedFloorArea.toFixed(0)} m2 floor area is inferred from the slab line, not measured. No rates were changed. Confirm the gross internal floor area — if the bill really is over the envelope the quantities need review, not a rescale.`);
+      capEvents.push({ cap: 'cost_per_m2', action: 'reported_only', reason: 'floor_area_is_slab_proxy', cost_per_m2: Math.round(costPerM2), envelope: maxCostPerM2, floor_area: estimatedFloorArea });
+      reviewFlags.push({ reason: 'cost_per_m2_over_envelope_unverified_area', cost_per_m2: Math.round(costPerM2), envelope: maxCostPerM2, floor_area: estimatedFloorArea, floor_area_source: 'slab_proxy' });
+    } else if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999) {
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
       const cs = currency === 'EUR' ? '€' : '£';
+      capEvents.push({ cap: 'cost_per_m2', action: 'rescaled', from: Math.round(constructionTotal), to: Math.round(targetCostPerM2 * estimatedFloorArea), scale: Math.round(scaleFactor * 10000) / 10000, lines: pricedItems.length, floor_area: estimatedFloorArea, floor_area_source: floorAreaSource });
+      reviewFlags.push({ reason: 'every_rate_rescaled_by_cost_cap', scale: Math.round(scaleFactor * 10000) / 10000, lines: pricedItems.length });
       warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}${maxCostPerM2}/m² cap. Typical ${projectLabel} cost ${typicalRange}/m². All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
 
       // Scale down every item total proportionally
@@ -1957,7 +2344,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // Skipped entirely when the project has premium / heritage indicators —
   // those legitimately exceed normal extension economics.
   // ═══════════════════════════════════════════════════════════════════════
-  if (!hasPremiumIndicators && (isSingleStoreyExt || isTwoStoreyExt) && extFloorArea > 0) {
+  if (!hasPremiumIndicators && (isSingleStoreyExt || isTwoStoreyExt) && extFloorArea > 0 && !isNonResidential) {
     // Max £/m² for extension construction before we consider the pricer to
     // have gone off the rails. Cost/m² cap above already handles the softer
     // typical-range check; this is the hard ceiling.
@@ -1968,6 +2355,8 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     if (constructionTotal > absoluteMax) {
       const scale = absoluteTarget / constructionTotal;
       const cs = currency === 'EUR' ? '€' : '£';
+      capEvents.push({ cap: 'absolute_total', action: 'rescaled', from: Math.round(constructionTotal), to: Math.round(absoluteTarget), scale: Math.round(scale * 10000) / 10000, lines: pricedItems.length, floor_area: extFloorArea });
+      reviewFlags.push({ reason: 'every_rate_rescaled_by_total_cap', scale: Math.round(scale * 10000) / 10000, lines: pricedItems.length });
       warnings.push(`TOTAL CAP: ${isSingleStoreyExt ? 'Single' : 'Two'} storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} (${cs}${Math.round(constructionTotal / extFloorArea)}/m² over ${extFloorArea}m²) — exceeds ${cs}${maxPerM2}/m² ceiling. Scaled to ~${cs}${Math.round(absoluteTarget).toLocaleString()}.`);
       for (const item of pricedItems) {
         item.rate = Math.round(item.rate * scale * 100) / 100;
@@ -1992,6 +2381,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     sections: sectionTotals,
     summary: {
       construction_total: Math.round(constructionTotal * 100) / 100,
+      // What the bill came to before any cap touched it. Equal to
+      // construction_total whenever nothing was rescaled.
+      pre_cap_construction_total: Math.round(preCapConstructionTotal * 100) / 100,
+      rates_rescaled_by_cap: capEvents.some((e) => e.action === 'rescaled'),
       contingency_pct,
       contingency: Math.round(contingency * 100) / 100,
       net_total: Math.round(netTotal * 100) / 100,
@@ -2008,8 +2401,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     },
     location: locationInfo,
     project_type: projectType,
+    building_class: buildingClass,
     warnings,
     review_flags: reviewFlags,
+    // Every cap that rewrote a rate or a quantity, and every cap that stood
+    // itself down. A rescale is never allowed to be invisible again.
+    cap_events: capEvents,
     corrections: crossResult.corrections,
     item_count: pricedItems.length,
     priced_at: new Date().toISOString(),
@@ -2063,5 +2460,5 @@ function getBaseRate(key) {
   return BASE_RATES[key] || null;
 }
 
-module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet,
+module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet, detectBuildingClass, RATE_CEILINGS_COMMERCIAL_GBP, statedSumInDescription,
   estimateFallbackRate, ceilingFor, RATE_CEILINGS_GBP, GBP_TO_EUR };
