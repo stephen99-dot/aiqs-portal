@@ -603,6 +603,33 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   .aiqs-chat { bottom: calc(16px + var(--aiqs-lift, 0px)); right: 16px; }
   .aiqs-chat-panel { position: fixed; bottom: calc(88px + var(--aiqs-lift, 0px)); right: 16px; left: 16px; width: auto; max-width: none; height: auto; top: 76px; }
 }
+/* ── Free first job popup ────────────────────────────────────────────────── */
+.aiqs-offer { position: fixed; inset: 0; z-index: 100002; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(3,7,18,0.72); backdrop-filter: blur(4px); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s; }
+.aiqs-offer.show { opacity: 1; visibility: visible; }
+.aiqs-offer-card { position: relative; width: 100%; max-width: 460px; max-height: calc(100vh - 48px); overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: var(--radius-lg); box-shadow: 0 30px 80px rgba(0,0,0,0.5); padding: 40px 36px 32px; text-align: center; transform: translateY(16px) scale(0.97); transition: transform 0.3s ease; }
+.aiqs-offer.show .aiqs-offer-card { transform: translateY(0) scale(1); }
+.aiqs-offer-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--gradient-amber); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.aiqs-offer-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--surface-subtle); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.aiqs-offer-close:hover { color: var(--text-primary); }
+.aiqs-offer-close svg { width: 15px; height: 15px; }
+.aiqs-offer-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 100px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.28); color: #10B981; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+.aiqs-offer-card h2 { font-family: var(--font-display); font-size: 2rem; line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 14px; }
+.aiqs-offer-card h2 em { font-style: italic; color: var(--accent); }
+.aiqs-offer-card p { color: var(--text-secondary); font-size: 0.94rem; line-height: 1.7; margin-bottom: 22px; }
+.aiqs-offer-list { list-style: none; text-align: left; margin: 0 auto 26px; max-width: 320px; }
+.aiqs-offer-list li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; font-size: 0.87rem; color: var(--text-secondary); }
+.aiqs-offer-list li::before { content: '\2713'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+.aiqs-offer-cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 16px 28px; border-radius: 10px; background: var(--gradient-amber); color: var(--on-accent); font-weight: 700; font-size: 1rem; text-decoration: none; box-shadow: 0 2px 20px rgba(245,158,11,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.aiqs-offer-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(245,158,11,0.4); }
+.aiqs-offer-cta svg { width: 18px; height: 18px; }
+.aiqs-offer-dismiss { display: block; margin: 14px auto 0; background: none; border: none; color: var(--text-muted); font-family: var(--font-body); font-size: 0.82rem; cursor: pointer; text-decoration: underline; }
+.aiqs-offer-dismiss:hover { color: var(--text-secondary); }
+.aiqs-offer-fine { margin: 16px 0 0; font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; }
+@media (max-width: 480px) {
+  .aiqs-offer { padding: 16px; }
+  .aiqs-offer-card { padding: 34px 22px 26px; }
+  .aiqs-offer-card h2 { font-size: 1.6rem; }
+}
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
@@ -1078,6 +1105,27 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   </div>
 </div>
 
+<!-- FREE FIRST JOB POPUP -->
+<div class="aiqs-offer" id="aiqsOffer" role="dialog" aria-modal="true" aria-labelledby="aiqsOfferTitle" aria-hidden="true">
+  <div class="aiqs-offer-card">
+    <button type="button" class="aiqs-offer-close" id="aiqsOfferClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="aiqs-offer-badge">First job free</div>
+    <h2 id="aiqsOfferTitle">Your first BOQ is <em>on us</em></h2>
+    <p>Send us one set of drawings and we'll price the job free &#8212; the full pack, not a sample. No card, no subscription, no catch.</p>
+    <ul class="aiqs-offer-list">
+      <li>Full Excel Bill of Quantities</li>
+      <li>Word findings report</li>
+      <li>Current UK &amp; Ireland market rates</li>
+      <li>Back to you the same day</li>
+    </ul>
+    <a href="/send-drawings.html?offer=free-first-boq" class="aiqs-offer-cta" id="aiqsOfferCta">Claim My Free BOQ <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></a>
+    <button type="button" class="aiqs-offer-dismiss" id="aiqsOfferDismiss">No thanks, I'm just looking</button>
+    <p class="aiqs-offer-fine">One free BOQ per new customer. We'll confirm scope before we start.</p>
+  </div>
+</div>
+
 <!-- AI CHAT WIDGET — talks to /api/public/site-chat on the portal -->
 <div class="aiqs-chat" id="aiqsChat">
   <div class="aiqs-chat-panel" id="aiqsChatPanel" role="dialog" aria-modal="false" aria-label="Chat with the AI QS assistant" aria-hidden="true">
@@ -1421,6 +1469,102 @@ document.addEventListener('click', function(e) {
     await sleep(9000);
     if (AIQS_REDUCE_MOTION) return;
     if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; } }
+})();
+// ── Free first job popup ───────────────────────────────────────────────────
+// Shown once per visitor: after they have read a little, or on exit intent,
+// whichever comes first. The choice is remembered in localStorage so it never
+// nags. Never fires on top of the cookie banner or while the chat is open.
+(function () {
+  var KEY = 'aiqs_offer_seen';
+  var DELAY_MS = 30000;
+  var SCROLL_TRIGGER = 0.35;
+
+  var modal = document.getElementById('aiqsOffer');
+  var card = modal && modal.querySelector('.aiqs-offer-card');
+  var closeBtn = document.getElementById('aiqsOfferClose');
+  var dismissBtn = document.getElementById('aiqsOfferDismiss');
+  var cta = document.getElementById('aiqsOfferCta');
+  if (!modal || !card) return;
+
+  var shown = false, done = false, lastFocus = null;
+
+  function seen() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
+  function remember() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+
+  // Not while the cookie banner still needs an answer, and not over an open chat.
+  function blocked() {
+    var banner = document.getElementById('cookie-banner');
+    if (banner && banner.classList.contains('show')) return true;
+    var chat = document.getElementById('aiqsChat');
+    if (chat && chat.classList.contains('open')) return true;
+    return false;
+  }
+
+  function open() {
+    if (shown || done || seen() || blocked()) return;
+    shown = true;
+    lastFocus = document.activeElement;
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    if (cta) cta.focus();
+    aiqsTrack('ViewContent', { content_name: 'Free first BOQ offer' });
+  }
+
+  function close(reason) {
+    if (!shown) return;
+    shown = false; done = true;
+    remember();
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    if (reason === 'dismiss') aiqsTrack('ViewContent', { content_name: 'Free first BOQ offer dismissed' });
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', function () { close('dismiss'); });
+  if (dismissBtn) dismissBtn.addEventListener('click', function () { close('dismiss'); });
+  modal.addEventListener('click', function (e) { if (e.target === modal) close('dismiss'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && shown) close('dismiss'); });
+
+  // Taking the offer counts as taking it — remember it and let the link run.
+  if (cta) {
+    cta.addEventListener('click', function () {
+      remember(); done = true;
+      document.body.style.overflow = '';
+      aiqsTrack('Lead', { content_name: 'Free first BOQ claimed' });
+    });
+  }
+
+  // Keep tab focus inside the dialog while it is up.
+  modal.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab' || !shown) return;
+    var focusable = card.querySelectorAll('a[href], button');
+    if (!focusable.length) return;
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  if (seen()) return;
+
+  setTimeout(open, DELAY_MS);
+
+  // Read a third of the page and you are interested enough to be asked.
+  var onScroll = function () {
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max > 0 && window.scrollY / max >= SCROLL_TRIGGER) {
+      window.removeEventListener('scroll', onScroll);
+      open();
+    }
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  // Exit intent — pointer leaving towards the tab bar. Desktop only; on a phone
+  // there is no such gesture, and the timer covers it.
+  document.addEventListener('mouseout', function (e) {
+    if (!e.relatedTarget && e.clientY <= 0) open();
+  });
 })();
 </script>
 <script src="/assets/theme.js" defer></script>
