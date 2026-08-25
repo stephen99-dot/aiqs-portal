@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="en" class="no-js">
 <head>
+<!-- Theme (light/dark): applied before paint to avoid a flash of the wrong theme -->
+<script>
+(function () {
+  try {
+    var stored = localStorage.getItem('aiqs_theme');
+    var theme = (stored === 'light' || stored === 'dark')
+      ? stored
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
+<meta name="theme-color" content="#0A0F1C" id="metaThemeColor">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -187,6 +202,8 @@
   --font-body: 'Instrument Sans', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
+/* Theme tokens, light palette and the .theme-toggle button now live in
+   the shared /assets/theme.css (linked just after this <style> block). */
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html { scroll-behavior: smooth; font-size: 16px; }
 body { font-family: var(--font-body); background: var(--bg-primary); color: var(--text-primary); line-height: 1.7; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -194,8 +211,8 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 100px; background: rgba(245,158,11,0.1); border: 1px solid var(--border-accent); color: var(--accent); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #10B981; animation: pulse-dot 2s infinite; }
 @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
-.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 200; padding: 16px 0; background: rgba(10,15,28,0.8); backdrop-filter: blur(20px) saturate(1.4); border-bottom: 1px solid var(--border); transition: all 0.3s ease; }
-.nav.scrolled { padding: 10px 0; background: rgba(10,15,28,0.95); }
+.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 200; padding: 16px 0; background: var(--nav-bg); backdrop-filter: blur(20px) saturate(1.4); border-bottom: 1px solid var(--border); transition: background 0.3s ease, padding 0.3s ease; }
+.nav.scrolled { padding: 10px 0; background: var(--nav-bg-scrolled); }
 .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; }
 .nav-logo { display: flex; align-items: center; text-decoration: none; }
 .nav-logo .logo-svg { height: 48px; width: auto; transition: opacity 0.2s; }
@@ -203,7 +220,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .nav-links { display: flex; align-items: center; gap: 32px; }
 .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
 .nav-links a:hover { color: #F59E0B !important; }
-.nav-cta { padding: 10px 22px !important; background: var(--gradient-amber) !important; color: var(--bg-primary) !important; border-radius: 8px; font-weight: 600 !important; transition: transform 0.2s, box-shadow 0.2s !important; }
+.nav-cta { padding: 10px 22px !important; background: var(--gradient-amber) !important; color: var(--on-accent) !important; border-radius: 8px; font-weight: 600 !important; transition: transform 0.2s, box-shadow 0.2s !important; }
 .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(245,158,11,0.3); }
 .nav-send { color: #F59E0B !important; font-weight: 600 !important; }
 .mobile-toggle { display: none; background: none; border: none; color: var(--text-primary); cursor: pointer; padding: 12px; position: relative; z-index: 200; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -222,7 +239,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(245,158,11,0.35); }
 .btn-primary svg { width: 18px; height: 18px; }
 .btn-secondary { display: inline-flex; align-items: center; gap: 10px; padding: 16px 32px; border-radius: 10px; background: transparent; color: var(--text-primary); font-weight: 600; font-size: 1rem; text-decoration: none; border: 1px solid var(--border); cursor: pointer; transition: all 0.25s ease; }
-.btn-secondary:hover { border-color: var(--text-muted); background: rgba(255,255,255,0.03); }
+.btn-secondary:hover { border-color: var(--text-muted); background: var(--surface-subtle); }
 .hero-proof { display: flex; align-items: center; gap: 20px; padding-top: 32px; border-top: 1px solid var(--border); }
 .hero-proof-stat { text-align: center; }
 .hero-proof-stat .num { font-family: var(--font-display); font-size: 1.8rem; color: var(--text-primary); display: block; }
@@ -285,7 +302,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .demo-dot:nth-child(1) { background: #EF4444; opacity: 0.7; }
 .demo-dot:nth-child(2) { background: #F59E0B; opacity: 0.7; }
 .demo-dot:nth-child(3) { background: #10B981; opacity: 0.7; }
-.demo-url { flex: 1; margin-left: 10px; padding: 6px 14px; border-radius: 6px; background: rgba(255,255,255,0.04); font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); }
+.demo-url { flex: 1; margin-left: 10px; padding: 6px 14px; border-radius: 6px; background: var(--surface-subtle); font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); }
 .demo-body { display: flex; min-height: 460px; }
 .demo-sidebar { width: 190px; padding: 18px 12px; border-right: 1px solid var(--border); flex-shrink: 0; }
 .demo-sidebar-brand { font-family: var(--font-display); font-size: 14px; color: var(--accent); padding: 0 8px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
@@ -304,7 +321,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .demo-msg.ai .demo-avatar { background: rgba(245,158,11,0.12); color: var(--accent); }
 .demo-bubble { padding: 11px 15px; border-radius: 12px; font-size: 12.5px; line-height: 1.55; }
 .demo-msg.user .demo-bubble { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.12); border-bottom-right-radius: 4px; }
-.demo-msg.ai .demo-bubble { background: rgba(255,255,255,0.025); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.demo-msg.ai .demo-bubble { background: var(--surface-subtle); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .demo-upload { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.1); margin-top: 6px; }
 .demo-upload-icon { width: 34px; height: 34px; border-radius: 8px; background: rgba(59,130,246,0.1); display: flex; align-items: center; justify-content: center; }
 .demo-upload-icon svg { width: 16px; height: 16px; color: #3B82F6; }
@@ -333,11 +350,11 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .demo-timeskip { display: flex; align-items: center; gap: 10px; align-self: stretch; max-width: 100%; margin: 2px 0; }
 .demo-timeskip::before, .demo-timeskip::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .demo-timeskip span { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
-.demo-input-bar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; margin-top: 14px; border-radius: 10px; background: rgba(255,255,255,0.025); border: 1px solid var(--border); }
+.demo-input-bar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; margin-top: 14px; border-radius: 10px; background: var(--surface-subtle); border: 1px solid var(--border); }
 .demo-input-bar input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: var(--font-body); font-size: 12.5px; }
 .demo-input-bar input::placeholder { color: var(--text-muted); }
 .demo-send { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.demo-send svg { width: 14px; height: 14px; color: var(--bg-primary); }
+.demo-send svg { width: 14px; height: 14px; color: var(--on-accent); }
 .demo-steps { display: flex; justify-content: center; margin-top: 48px; position: relative; }
 .demo-step { display: flex; flex-direction: column; align-items: center; width: 180px; position: relative; z-index: 1; }
 .demo-step-num { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; font-family: var(--font-mono); background: var(--bg-card); border: 2px solid var(--border); color: var(--text-muted); transition: all 0.6s ease; z-index: 2; position: relative; }
@@ -400,7 +417,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .testimonial-stars { color: var(--accent); margin-bottom: 16px; font-size: 0.9rem; letter-spacing: 2px; }
 .testimonial-card blockquote { font-size: 0.92rem; color: var(--text-secondary); line-height: 1.75; margin-bottom: 20px; font-style: italic; }
 .testimonial-author { display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
-.testimonial-avatar { width: 40px; height: 40px; border-radius: 10px; background: var(--gradient-amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--bg-primary); font-size: 0.85rem; }
+.testimonial-avatar { width: 40px; height: 40px; border-radius: 10px; background: var(--gradient-amber); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--on-accent); font-size: 0.85rem; }
 .testimonial-name { font-weight: 600; font-size: 0.88rem; }
 .testimonial-role { font-size: 0.78rem; color: var(--text-muted); }
 .pricing { padding: 100px 0; }
@@ -411,9 +428,9 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .pricing-grid.three-col { grid-template-columns: repeat(3, 1fr); max-width: 1080px; margin: 0 auto; gap: 24px; }
 .pricing-card { padding: 32px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); display: flex; flex-direction: column; transition: all 0.3s ease; }
 .pricing-card.featured { border-color: var(--accent); position: relative; box-shadow: 0 0 40px rgba(245,158,11,0.1); }
-.pricing-card.featured::before { content: '\2605 MOST POPULAR \2605'; position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 5px 16px; background: var(--gradient-amber); color: var(--bg-primary); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 6px; white-space: nowrap; }
+.pricing-card.featured::before { content: '\2605 MOST POPULAR \2605'; position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 5px 16px; background: var(--gradient-amber); color: var(--on-accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 6px; white-space: nowrap; }
 .pricing-card.popular { border-color: var(--accent); position: relative; box-shadow: 0 0 40px rgba(245,158,11,0.1); }
-.pricing-card.popular .pricing-badge { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 5px 16px; background: var(--gradient-amber); color: var(--bg-primary); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 6px; white-space: nowrap; }
+.pricing-card.popular .pricing-badge { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 5px 16px; background: var(--gradient-amber); color: var(--on-accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 6px; white-space: nowrap; }
 .pricing-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-glow); }
 .pricing-tier { font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
 .pricing-card h3 { font-family: var(--font-display); font-size: 1.25rem; margin-bottom: 6px; }
@@ -483,16 +500,16 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
     display: flex !important; flex-direction: column;
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
     width: 100vw; height: 100vh; height: 100dvh;
-    background: #0A0F1C;
+    background: var(--menu-bg);
     padding: 90px 32px 40px; gap: 0;
     z-index: 199;
     align-items: stretch; justify-content: flex-start;
     overflow-y: auto;
   }
   .nav-links.open a {
-    font-size: 1.05rem; color: #94A3B8;
+    font-size: 1.05rem; color: var(--text-secondary);
     padding: 16px 0; border-radius: 0;
-    border: none; border-bottom: 1px solid rgba(255,255,255,0.06);
+    border: none; border-bottom: 1px solid var(--border);
     background: transparent;
     text-align: left; font-weight: 500;
     transition: color 0.15s; display: block;
@@ -534,9 +551,85 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   .demo-step-desc { display: none; }
   .demo-connector { display: none; }
 }
-@keyframes waPulse { 0%,100% { transform:scale(1); opacity:.6; } 50% { transform:scale(1.3); opacity:0; } }
-#wa-panel.open { display:flex !important; }
-@media (max-width:420px) { #wa-panel { right:-16px; left:-280px; width:auto; } }
+/* ── AI chat widget ──────────────────────────────────────────────────────── */
+.aiqs-chat { position: fixed; bottom: calc(24px + var(--aiqs-lift, 0px)); right: 24px; z-index: 100001; font-family: var(--font-body); }
+.aiqs-chat-launcher { display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; border: none; border-radius: 50%; background: var(--gradient-amber); color: var(--on-accent); cursor: pointer; box-shadow: 0 6px 24px rgba(245,158,11,0.4); position: relative; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.aiqs-chat-launcher:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(245,158,11,0.5); }
+.aiqs-chat-launcher svg { width: 28px; height: 28px; pointer-events: none; }
+.aiqs-chat-launcher .icon-close { display: none; }
+.aiqs-chat.open .aiqs-chat-launcher .icon-chat { display: none; }
+.aiqs-chat.open .aiqs-chat-launcher .icon-close { display: block; }
+.aiqs-chat-pulse { position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--accent); animation: aiqsPulse 2.4s ease-in-out infinite; pointer-events: none; }
+.aiqs-chat.open .aiqs-chat-pulse { display: none; }
+@keyframes aiqsPulse { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.28); opacity: 0; } }
+.aiqs-chat-panel { position: absolute; bottom: 76px; right: 0; width: 380px; max-width: calc(100vw - 32px); height: 560px; max-height: calc(100vh - 140px); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; opacity: 0; visibility: hidden; transform: translateY(12px) scale(0.98); transform-origin: bottom right; transition: opacity 0.22s ease, transform 0.22s ease, visibility 0.22s; }
+.aiqs-chat.open .aiqs-chat-panel { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+.aiqs-chat-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: var(--gradient-amber); color: var(--on-accent); flex-shrink: 0; }
+.aiqs-chat-head-avatar { width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.aiqs-chat-head-avatar svg { width: 22px; height: 22px; }
+.aiqs-chat-head-title { font-weight: 700; font-size: 0.98rem; line-height: 1.3; }
+.aiqs-chat-head-sub { font-size: 0.75rem; opacity: 0.85; display: flex; align-items: center; gap: 6px; }
+.aiqs-chat-head-sub::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #10B981; flex-shrink: 0; }
+.aiqs-chat-close { margin-left: auto; width: 32px; height: 32px; border: none; border-radius: 50%; background: rgba(255,255,255,0.2); color: var(--on-accent); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.aiqs-chat-close svg { width: 16px; height: 16px; }
+.aiqs-chat-log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.aiqs-msg { display: flex; gap: 9px; max-width: 92%; }
+.aiqs-msg.you { align-self: flex-end; flex-direction: row-reverse; }
+.aiqs-msg-avatar { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; letter-spacing: -0.02em; flex-shrink: 0; font-family: var(--font-mono); }
+.aiqs-msg.ai .aiqs-msg-avatar { background: rgba(245,158,11,0.14); color: var(--accent); }
+.aiqs-msg.you .aiqs-msg-avatar { background: rgba(59,130,246,0.14); color: #3B82F6; }
+.aiqs-msg-bubble { padding: 10px 14px; border-radius: 12px; font-size: 0.87rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aiqs-msg.ai .aiqs-msg-bubble { background: var(--surface-subtle); border: 1px solid var(--border); border-bottom-left-radius: 4px; color: var(--text-secondary); }
+.aiqs-msg.you .aiqs-msg-bubble { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.18); border-bottom-right-radius: 4px; color: var(--text-primary); }
+.aiqs-typing { display: flex; gap: 4px; padding: 4px 2px; }
+.aiqs-typing span { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0.3; animation: aiqsBlink 1.4s ease infinite; }
+.aiqs-typing span:nth-child(2) { animation-delay: 0.2s; }
+.aiqs-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes aiqsBlink { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.3); } }
+.aiqs-chat-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 12px; flex-shrink: 0; }
+.aiqs-chip { padding: 7px 13px; border-radius: 100px; border: 1px solid var(--border-accent); background: rgba(245,158,11,0.07); color: var(--accent); font-family: var(--font-body); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: background 0.2s ease; }
+.aiqs-chip:hover { background: rgba(245,158,11,0.16); }
+.aiqs-chat-form { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.aiqs-chat-form input { flex: 1; min-width: 0; padding: 11px 15px; border-radius: 100px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--text-primary); font-family: var(--font-body); font-size: 0.87rem; outline: none; }
+.aiqs-chat-form input::placeholder { color: var(--text-muted); }
+.aiqs-chat-form input:focus { border-color: var(--border-accent); }
+.aiqs-chat-send { width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--gradient-amber); color: var(--on-accent); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s ease; }
+.aiqs-chat-send svg { width: 16px; height: 16px; }
+.aiqs-chat-send:disabled { opacity: 0.45; cursor: default; }
+.aiqs-chat-foot { padding: 0 14px 12px; text-align: center; flex-shrink: 0; }
+.aiqs-chat-foot a { color: var(--text-muted); font-size: 0.7rem; text-decoration: none; }
+.aiqs-chat-foot a:hover { color: var(--accent); }
+@media (max-width: 480px) {
+  .aiqs-chat { bottom: calc(16px + var(--aiqs-lift, 0px)); right: 16px; }
+  .aiqs-chat-panel { position: fixed; bottom: calc(88px + var(--aiqs-lift, 0px)); right: 16px; left: 16px; width: auto; max-width: none; height: auto; top: 76px; }
+}
+/* ── Free first job popup ────────────────────────────────────────────────── */
+.aiqs-offer { position: fixed; inset: 0; z-index: 100002; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(3,7,18,0.72); backdrop-filter: blur(4px); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s; }
+.aiqs-offer.show { opacity: 1; visibility: visible; }
+.aiqs-offer-card { position: relative; width: 100%; max-width: 460px; max-height: calc(100vh - 48px); overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border-accent); border-radius: var(--radius-lg); box-shadow: 0 30px 80px rgba(0,0,0,0.5); padding: 40px 36px 32px; text-align: center; transform: translateY(16px) scale(0.97); transition: transform 0.3s ease; }
+.aiqs-offer.show .aiqs-offer-card { transform: translateY(0) scale(1); }
+.aiqs-offer-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--gradient-amber); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.aiqs-offer-close { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--surface-subtle); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.aiqs-offer-close:hover { color: var(--text-primary); }
+.aiqs-offer-close svg { width: 15px; height: 15px; }
+.aiqs-offer-badge { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 100px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.28); color: #10B981; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+.aiqs-offer-card h2 { font-family: var(--font-display); font-size: 2rem; line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 14px; }
+.aiqs-offer-card h2 em { font-style: italic; color: var(--accent); }
+.aiqs-offer-card p { color: var(--text-secondary); font-size: 0.94rem; line-height: 1.7; margin-bottom: 22px; }
+.aiqs-offer-list { list-style: none; text-align: left; margin: 0 auto 26px; max-width: 320px; }
+.aiqs-offer-list li { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; font-size: 0.87rem; color: var(--text-secondary); }
+.aiqs-offer-list li::before { content: '\2713'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+.aiqs-offer-cta { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 16px 28px; border-radius: 10px; background: var(--gradient-amber); color: var(--on-accent); font-weight: 700; font-size: 1rem; text-decoration: none; box-shadow: 0 2px 20px rgba(245,158,11,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.aiqs-offer-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(245,158,11,0.4); }
+.aiqs-offer-cta svg { width: 18px; height: 18px; }
+.aiqs-offer-dismiss { display: block; margin: 14px auto 0; background: none; border: none; color: var(--text-muted); font-family: var(--font-body); font-size: 0.82rem; cursor: pointer; text-decoration: underline; }
+.aiqs-offer-dismiss:hover { color: var(--text-secondary); }
+.aiqs-offer-fine { margin: 16px 0 0; font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; }
+@media (max-width: 480px) {
+  .aiqs-offer { padding: 16px; }
+  .aiqs-offer-card { padding: 34px 22px 26px; }
+  .aiqs-offer-card h2 { font-size: 1.6rem; }
+}
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
@@ -551,11 +644,12 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
 .cookie-banner-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .cookie-btn { padding: 9px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; border: none; font-family: var(--font-body); transition: transform 0.15s ease; }
 .cookie-btn:hover { transform: translateY(-1px); }
-.cookie-btn.accept { background: var(--gradient-amber); color: var(--bg-primary); }
+.cookie-btn.accept { background: var(--gradient-amber); color: var(--on-accent); }
 .cookie-btn.decline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
 .footer-legal { color: var(--text-muted); font-size: 0.75rem; line-height: 1.6; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 @media (max-width:480px) { .cookie-banner { left: 12px; right: 12px; bottom: 12px; padding: 16px; } }
 </style>
+<link rel="stylesheet" href="/assets/theme.css">
 </head>
 <body>
 
@@ -564,7 +658,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   <div class="nav-inner">
     <a href="#" class="nav-logo" aria-label="AI QS Home">
       <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
-        <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+        <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="currentColor">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
         <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
       </svg>
     </a>
@@ -574,13 +668,19 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       <a href="#deliverables">Deliverables</a>
       <a href="#pricing">Pricing</a>
       <a href="/blog/">Blog</a>
-      <a href="https://www.aitradespilot.com" target="_blank" rel="noopener">AI Trades Pilot</a>
+      <a href="https://aitradespilot.com/" target="_blank" rel="noopener">AI Trades Pilot</a>
       <a href="#faq">FAQ</a>
       <a href="https://aiqs-portal.onrender.com" class="nav-cta" target="_blank" rel="noopener">Login Portal &#8594;</a>
     </div>
-    <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
-      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
+    <div class="nav-tools">
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme" title="Switch theme">
+        <svg class="icon-sun" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg class="icon-moon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+      <button class="mobile-toggle" id="mobileToggle" aria-label="Menu">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
   </div>
 </nav>
 
@@ -742,19 +842,137 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   </div>
 </section>
 
-<section class="testimonials" id="testimonials">
-  <div class="container">
-    <div class="testimonials-header">
-      <div class="section-label">Testimonials</div>
-      <h2 class="section-title">What Our Clients Say</h2>
-      <p class="section-sub">Real feedback from builders, contractors and QS professionals across the UK and Ireland.</p>
+<!-- GOOGLE REVIEWS SECTION -->
+<section id="g-reviews">
+  <h2 class="grv-title">What our clients say</h2>
+
+  <div class="grv-wrap">
+    <div id="grv-track">
+
+      <div class="grv-card">
+        <div class="grv-head">
+          <div>
+            <div class="grv-name">Glasgow Stone Contracts</div>
+            <div class="grv-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          </div>
+          <svg class="grv-g" width="34" height="34" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </div>
+        <p class="grv-text">Turned around a full BOQ for a two-storey extension in under 2 hours. The Excel was clean, rates were spot on, and my client was impressed with the findings report. Brilliant service.</p>
+      </div>
+
+      <div class="grv-card">
+        <div class="grv-head">
+          <div>
+            <div class="grv-name">Harry</div>
+            <div class="grv-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          </div>
+          <svg class="grv-g" width="34" height="34" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </div>
+        <p class="grv-text">I use AI QS for overflow work when my own pipeline is backed up. The quality is consistent and the turnaround means I never have to turn a client away. It's like having an extra pair of hands.</p>
+      </div>
+
+      <div class="grv-card">
+        <div class="grv-head">
+          <div>
+            <div class="grv-name">Cairns Building Contractor</div>
+            <div class="grv-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          </div>
+          <svg class="grv-g" width="34" height="34" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </div>
+        <p class="grv-text">We needed steelwork priced quickly for a commercial fit-out. Got a detailed BOQ with fabrication rates, installation costs, the lot. Saved us at least a week versus going through a traditional QS.</p>
+      </div>
+
+      <div class="grv-card">
+        <div class="grv-head">
+          <div>
+            <div class="grv-name">IRE Co Services</div>
+            <div class="grv-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          </div>
+          <svg class="grv-g" width="34" height="34" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        </div>
+        <p class="grv-text">We were pricing a conversion off a partial drawing set and expected to be told to come back when we had more. Instead we got a priced BOQ plus a findings report that flagged three things our architect hadn't picked up. Saved us a change order before we'd even broken ground.</p>
+      </div>
+
     </div>
-    <div class="testimonial-grid">
-      <div class="testimonial-card fade-in"><div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div><blockquote>"Turned around a full BOQ for a two-storey extension in under 2 hours. The Excel was clean, rates were spot on, and my client was impressed with the findings report. Brilliant service."</blockquote><div class="testimonial-author"><div class="testimonial-avatar">PC</div><div><div class="testimonial-name">Glasgow Stone Contracts</div><div class="testimonial-role">Building Contractor, Glasgow</div></div></div></div>
-      <div class="testimonial-card fade-in"><div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div><blockquote>"I use AI QS for overflow work when my own pipeline is backed up. The quality is consistent and the turnaround means I never have to turn a client away. It's like having an extra pair of hands."</blockquote><div class="testimonial-author"><div class="testimonial-avatar">H</div><div><div class="testimonial-name">Harry</div><div class="testimonial-role">Quantity Surveyor, London</div></div></div></div>
-      <div class="testimonial-card fade-in"><div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div><blockquote>"We needed steelwork priced quickly for a commercial fit-out. Got a detailed BOQ with fabrication rates, installation costs, the lot. Saved us at least a week versus going through a traditional QS."</blockquote><div class="testimonial-author"><div class="testimonial-avatar">BES</div><div><div class="testimonial-name">Cairns Building Contractor</div><div class="testimonial-role">Commercial Contractors</div></div></div></div>
+
+    <div class="grv-arrows">
+      <div class="grv-arrow" onclick="grvScroll(-1)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+      <div class="grv-arrow" onclick="grvScroll(1)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+
+    <div class="grv-summary">
+      <span style="font-weight:500">5.00</span>
+      <span class="grv-stars" style="font-size:1.15rem">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+      <span>Based on <a href="https://www.google.com/search?q=AI+QS+reviews" target="_blank" rel="noopener">4 reviews by Google</a>.</span>
     </div>
   </div>
+
+  <style>
+    #g-reviews {
+      /* light (default) */
+      --grv-bg: #FFFFFF;
+      --grv-card: #F6F6F6;
+      --grv-border: #EEEEEE;
+      --grv-title: #202124;
+      --grv-name: #202124;
+      --grv-text: #3C4043;
+      --grv-summary: #202124;
+      --grv-arrow-bg: #111111;
+      --grv-arrow-fg: #FFFFFF;
+      padding: 80px 0;
+      background: var(--grv-bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    /* dark mode — follows the visitor's system setting… */
+    @media (prefers-color-scheme: dark) {
+      html:not(.light):not([data-theme="light"]) #g-reviews {
+        --grv-bg: #0A0F1C; --grv-card: #131B2E; --grv-border: #1C2A44;
+        --grv-title: #F1F5F9; --grv-name: #E8EDF5; --grv-text: #94A3B8;
+        --grv-summary: #E8EDF5; --grv-arrow-bg: #1C2A44; --grv-arrow-fg: #FFFFFF;
+      }
+    }
+    /* …and common site dark-mode toggles (class/attribute on <html> or <body>) */
+    html.dark #g-reviews, body.dark #g-reviews,
+    html.dark-mode #g-reviews, body.dark-mode #g-reviews,
+    [data-theme="dark"] #g-reviews {
+      --grv-bg: #0A0F1C; --grv-card: #131B2E; --grv-border: #1C2A44;
+      --grv-title: #F1F5F9; --grv-name: #E8EDF5; --grv-text: #94A3B8;
+      --grv-summary: #E8EDF5; --grv-arrow-bg: #1C2A44; --grv-arrow-fg: #FFFFFF;
+    }
+
+    #g-reviews .grv-title { text-align: center; font-size: 2rem; font-weight: 600; color: var(--grv-title); margin: 0 0 40px; }
+    #g-reviews .grv-wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+    #grv-track { display: flex; gap: 24px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -ms-overflow-style: none; scrollbar-width: none; padding-bottom: 4px; }
+    #grv-track::-webkit-scrollbar { display: none; }
+    #g-reviews .grv-card { flex: 0 0 calc((100% - 48px)/3); min-width: 280px; scroll-snap-align: start; background: var(--grv-card); border: 1px solid var(--grv-border); border-radius: 14px; padding: 24px 26px; box-sizing: border-box; }
+    #g-reviews .grv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    #g-reviews .grv-name { font-size: 1.15rem; font-weight: 700; color: var(--grv-name); }
+    #g-reviews .grv-stars { color: #FBBC05; font-size: 1.2rem; letter-spacing: 3px; margin-top: 4px; }
+    #g-reviews .grv-g { flex-shrink: 0; margin-top: 2px; }
+    #g-reviews .grv-text { margin: 16px 0 0; font-size: 0.92rem; color: var(--grv-text); line-height: 1.6; }
+    #g-reviews .grv-arrows { display: flex; justify-content: center; gap: 14px; margin-top: 28px; }
+    #g-reviews .grv-arrow { width: 38px; height: 38px; border-radius: 50%; background: var(--grv-arrow-bg); color: var(--grv-arrow-fg); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    #g-reviews .grv-summary { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 22px; font-size: 0.95rem; color: var(--grv-summary); flex-wrap: wrap; }
+    #g-reviews .grv-summary .grv-stars { margin-top: 0; }
+    #g-reviews .grv-summary a { color: #EA4335; text-decoration: none; }
+    @media (max-width: 900px) { #g-reviews .grv-card { flex: 0 0 88%; } }
+  </style>
+  <script>
+    function grvScroll(dir) {
+      var t = document.getElementById('grv-track');
+      var card = t.querySelector('.grv-card');
+      var step = (card ? card.getBoundingClientRect().width : 320) + 24;
+      var max = t.scrollWidth - t.clientWidth;
+      var next = t.scrollLeft + dir * step;
+      if (dir > 0 && t.scrollLeft >= max - 4) next = 0;
+      if (dir < 0 && t.scrollLeft <= 4) next = max;
+      t.scrollTo({ left: next, behavior: 'smooth' });
+    }
+  </script>
 </section>
 
 <!-- PRICING -->
@@ -860,7 +1078,7 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
       <div class="footer-brand">
         <a href="#" class="nav-logo" aria-label="AI QS Home">
           <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
-            <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="#F8FAFC">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+            <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="currentColor">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
             <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
           </svg>
         </a>
@@ -887,69 +1105,64 @@ body { font-family: var(--font-body); background: var(--bg-primary); color: var(
   </div>
 </div>
 
-<!-- WHATSAPP WIDGET -->
-<div id="wa-widget" style="position:fixed;bottom:24px;right:24px;z-index:99999;font-family:-apple-system,BlinkMacSystemFont,sans-serif">
-  <div id="wa-panel" style="display:none;position:absolute;bottom:72px;right:0;width:360px;max-height:520px;background:#131B2E;border:1px solid #1C2A44;border-radius:20px;box-shadow:0 16px 48px rgba(0,0,0,0.3);flex-direction:column;overflow:hidden">
-    <div style="background:#25D366;padding:18px 20px;display:flex;align-items:center;gap:12px">
-      <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+<!-- FREE FIRST JOB POPUP -->
+<div class="aiqs-offer" id="aiqsOffer" role="dialog" aria-modal="true" aria-labelledby="aiqsOfferTitle" aria-hidden="true">
+  <div class="aiqs-offer-card">
+    <button type="button" class="aiqs-offer-close" id="aiqsOfferClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="aiqs-offer-badge">First job free</div>
+    <h2 id="aiqsOfferTitle">Your first BOQ is <em>on us</em></h2>
+    <p>Send us one set of drawings and we'll price the job free &#8212; the full pack, not a sample. No card, no subscription, no catch.</p>
+    <ul class="aiqs-offer-list">
+      <li>Full Excel Bill of Quantities</li>
+      <li>Word findings report</li>
+      <li>Current UK &amp; Ireland market rates</li>
+      <li>Back to you the same day</li>
+    </ul>
+    <a href="/send-drawings.html?offer=free-first-boq" class="aiqs-offer-cta" id="aiqsOfferCta">Claim My Free BOQ <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></a>
+    <button type="button" class="aiqs-offer-dismiss" id="aiqsOfferDismiss">No thanks, I'm just looking</button>
+    <p class="aiqs-offer-fine">One free BOQ per new customer. We'll confirm scope before we start.</p>
+  </div>
+</div>
+
+<!-- AI CHAT WIDGET — talks to /api/public/site-chat on the portal -->
+<div class="aiqs-chat" id="aiqsChat">
+  <div class="aiqs-chat-panel" id="aiqsChatPanel" role="dialog" aria-modal="false" aria-label="Chat with the AI QS assistant" aria-hidden="true">
+    <div class="aiqs-chat-head">
+      <div class="aiqs-chat-head-avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 001.3 1.3L21 12l-5.8 1.9a2 2 0 00-1.3 1.3L12 21l-1.9-5.8a2 2 0 00-1.3-1.3L3 12l5.8-1.9a2 2 0 001.3-1.3L12 3z"/></svg>
       </div>
-      <div style="flex:1">
-        <div style="font-size:16px;font-weight:700;color:#FFF">AI QS</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.8);display:flex;align-items:center;gap:4px">
-          <span style="width:6px;height:6px;border-radius:50%;background:#FFF;display:inline-block"></span>
-          Usually replies within 1 hour
-        </div>
+      <div>
+        <div class="aiqs-chat-head-title">AI QS Assistant</div>
+        <div class="aiqs-chat-head-sub">Answers in seconds</div>
       </div>
-      <div onclick="toggleWaPanel()" style="background:rgba(255,255,255,0.2);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </div>
+      <button type="button" class="aiqs-chat-close" id="aiqsChatClose" aria-label="Close chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <div style="flex:1;padding:16px;overflow-y:auto;background:#0A0F1C">
-      <div style="background:#1C2A44;border-radius:4px 12px 12px 12px;padding:12px 16px;margin-bottom:16px;max-width:85%">
-        <p style="margin:0;font-size:14px;color:#E8EDF5;line-height:1.5">Hey! 👋</p>
-        <p style="margin:8px 0 0;font-size:14px;color:#94A3B8;line-height:1.5">How can I help? Pick a quick action below or type your own message.</p>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div onclick="aiqsGo('/send-drawings.html')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#2563EB'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(37,99,235,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Get a Quote</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="waQuick('Hi, I have a question about my Bill of Quantities. Can we discuss?')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#8B5CF6'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Question About My BOQ</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="aiqsGo('/send-drawings.html')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#F59E0B'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Send My Drawings</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div onclick="waQuick('Hi, I have an urgent request regarding a project. Are you available?')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:#131B2E;border:1px solid #1C2A44;cursor:pointer;text-align:left" onmouseover="this.style.borderColor='#EF4444'" onmouseout="this.style.borderColor='#1C2A44'">
-          <div style="width:36px;height:36px;border-radius:10px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10"/></svg></div>
-          <span style="font-size:14px;font-weight:600;color:#E8EDF5;flex:1">Urgent Request</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
+    <div class="aiqs-chat-log" id="aiqsChatLog" role="log" aria-live="polite" aria-atomic="false"></div>
+    <div class="aiqs-chat-chips" id="aiqsChatChips">
+      <button type="button" class="aiqs-chip">What do I actually get?</button>
+      <button type="button" class="aiqs-chip">How much does it cost?</button>
+      <button type="button" class="aiqs-chip">Is my first job really free?</button>
+      <button type="button" class="aiqs-chip">What drawings do you need?</button>
     </div>
-    <div style="padding:12px 16px;border-top:1px solid #1C2A44;background:#131B2E;display:flex;gap:8px;align-items:center">
-      <input id="wa-input" type="text" placeholder="Type a message..." onkeydown="if(event.key==='Enter')waSend()" style="flex:1;padding:10px 14px;border-radius:20px;border:1px solid #1C2A44;background:#0D1320;color:#E8EDF5;font-size:14px;outline:none;font-family:-apple-system,sans-serif">
-      <div onclick="waSend()" style="width:40px;height:40px;border-radius:50%;background:#25D366;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </div>
-    </div>
-    <div style="padding:8px 16px 12px;text-align:center;border-top:1px solid #0D1320">
-      <a href="tel:+447446901398" style="font-size:11px;color:#3B4D66;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B4D66" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        +44 7446 901 398 &#183; Prefer a call? Tap to ring
-      </a>
+    <form class="aiqs-chat-form" id="aiqsChatForm" autocomplete="off">
+      <input type="text" id="aiqsChatInput" placeholder="Ask about your project..." aria-label="Your message" maxlength="2000">
+      <button type="submit" class="aiqs-chat-send" id="aiqsChatSend" aria-label="Send message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </form>
+    <div class="aiqs-chat-foot">
+      <a href="/send-drawings.html">Ready to go? Send your drawings &#8594;</a>
     </div>
   </div>
-  <div id="wa-btn" style="width:60px;height:60px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(37,211,102,0.45);touch-action:none;user-select:none;cursor:pointer;position:relative">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="white" style="pointer-events:none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-    <span id="wa-pulse" style="position:absolute;inset:-4px;border-radius:50%;border:2px solid #25D366;animation:waPulse 2s ease-in-out infinite;pointer-events:none"></span>
-  </div>
+  <button type="button" class="aiqs-chat-launcher" id="aiqsChatLauncher" aria-label="Chat with the AI QS assistant" aria-expanded="false" aria-controls="aiqsChatPanel">
+    <svg class="icon-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <span class="aiqs-chat-pulse" aria-hidden="true"></span>
+  </button>
 </div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
@@ -989,13 +1202,6 @@ document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
 });
 var AIQS_REDUCE_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 function aiqsTrack(name, custom) { try { if (window.AIQS_CAPI) window.AIQS_CAPI.fire(name, {}, custom || {}); } catch (e) {} }
-function aiqsGo(url) { aiqsTrack('Lead', { content_name: 'Send Drawings (chat widget)' }); window.location.href = url; }
-var waOpen = false;
-function toggleWaPanel() { waOpen = !waOpen; var p = document.getElementById('wa-panel'); var pulse = document.getElementById('wa-pulse');
-  if (waOpen) { p.classList.add('open'); if (pulse) pulse.style.display = 'none'; } else { p.classList.remove('open'); } }
-function waQuick(msg) { aiqsTrack('Contact', { content_name: 'WhatsApp quick action' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); toggleWaPanel(); }
-function waSend() { var input = document.getElementById('wa-input'); var msg = input.value.trim();
-  if (msg) { aiqsTrack('Contact', { content_name: 'WhatsApp message' }); window.open('https://wa.me/447446901398?text=' + encodeURIComponent(msg), '_blank'); input.value = ''; toggleWaPanel(); } }
 (function() {
   var canvas = document.createElement('canvas'); canvas.id = 'confetti-canvas';
   canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999999';
@@ -1023,8 +1229,156 @@ function waSend() { var input = document.getElementById('wa-input'); var msg = i
       btn.addEventListener('click', function(e) { var rect = btn.getBoundingClientRect(); burst(rect.left + rect.width / 2, rect.top + rect.height / 2); }); });
   }
 })();
-document.getElementById('wa-btn').addEventListener('click', function(e) { if (!e.target.closest('#wa-panel')) toggleWaPanel(); });
-var signupShown = false; function showSignupPopup() { if (signupShown) return; signupShown = true; }
+// ── AI chat widget ─────────────────────────────────────────────────────────
+// Replaces the old WhatsApp hand-off. The visitor asks a question here and the
+// portal answers it (server/siteChatRoutes.js). Everything degrades: if the API
+// is unreachable the assistant still points at Send Drawings and the email.
+(function () {
+  var API = 'https://aiqs-portal.onrender.com/api/public/site-chat';
+  var GREETING = "Hi — I'm the AI QS assistant. Ask me anything about pricing, turnaround, or what you get back.\n\nYour first job is on us, so it costs nothing to try.";
+  var OFFLINE = 'Sorry — I could not reach the assistant just then. Send your drawings through the Send Drawings page and we will come straight back to you, or email hello@crmwizardai.com.';
+
+  var root = document.getElementById('aiqsChat');
+  var panel = document.getElementById('aiqsChatPanel');
+  var launcher = document.getElementById('aiqsChatLauncher');
+  var closeBtn = document.getElementById('aiqsChatClose');
+  var log = document.getElementById('aiqsChatLog');
+  var chips = document.getElementById('aiqsChatChips');
+  var form = document.getElementById('aiqsChatForm');
+  var input = document.getElementById('aiqsChatInput');
+  var sendBtn = document.getElementById('aiqsChatSend');
+  if (!root || !panel || !launcher || !log || !form || !input) return;
+
+  // What we post back to the API. The server re-sanitises it either way, but
+  // keeping it bounded here saves the round trip on a long session.
+  var history = [];
+  var busy = false;
+  var open = false;
+  var greeted = false;
+  var trackedFirstMessage = false;
+
+  function bubble(who, text) {
+    var msg = document.createElement('div');
+    msg.className = 'aiqs-msg ' + who;
+    var avatar = document.createElement('div');
+    avatar.className = 'aiqs-msg-avatar';
+    avatar.textContent = who === 'ai' ? 'QS' : 'You';
+    var body = document.createElement('div');
+    body.className = 'aiqs-msg-bubble';
+    body.textContent = text;              // textContent, never innerHTML
+    msg.appendChild(avatar);
+    msg.appendChild(body);
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+    return msg;
+  }
+
+  function showTyping() {
+    var msg = document.createElement('div');
+    msg.className = 'aiqs-msg ai';
+    msg.id = 'aiqsTyping';
+    msg.innerHTML = '<div class="aiqs-msg-avatar">QS</div><div class="aiqs-msg-bubble">'
+      + '<div class="aiqs-typing"><span></span><span></span><span></span></div></div>';
+    log.appendChild(msg);
+    log.scrollTop = log.scrollHeight;
+  }
+  function hideTyping() {
+    var el = document.getElementById('aiqsTyping');
+    if (el) el.remove();
+  }
+
+  function setBusy(state) {
+    busy = state;
+    sendBtn.disabled = state;
+    input.disabled = state;
+  }
+
+  function greet() {
+    if (greeted) return;
+    greeted = true;
+    bubble('ai', GREETING);
+    history.push({ role: 'assistant', content: GREETING });
+  }
+
+  function setOpen(state) {
+    open = state;
+    root.classList.toggle('open', state);
+    panel.setAttribute('aria-hidden', state ? 'false' : 'true');
+    launcher.setAttribute('aria-expanded', state ? 'true' : 'false');
+    if (state) {
+      greet();
+      aiqsTrack('Contact', { content_name: 'Site chat opened' });
+      setTimeout(function () { input.focus(); }, 220);
+    } else {
+      launcher.focus();
+    }
+  }
+
+  async function ask(question) {
+    if (busy || !question) return;
+    bubble('you', question);
+    history.push({ role: 'user', content: question });
+    if (chips) chips.style.display = 'none';
+    if (!trackedFirstMessage) {
+      trackedFirstMessage = true;
+      aiqsTrack('Contact', { content_name: 'Site chat message' });
+    }
+    setBusy(true);
+    showTyping();
+
+    var reply = OFFLINE;
+    try {
+      var resp = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history.slice(-16) })
+      });
+      var data = await resp.json();
+      if (resp.ok && data && data.reply) reply = data.reply;
+    } catch (e) { /* keep the offline reply */ }
+
+    hideTyping();
+    bubble('ai', reply);
+    history.push({ role: 'assistant', content: reply });
+    setBusy(false);
+    input.focus();
+  }
+
+  // On a narrow screen the cookie banner lands on top of the launcher, so a
+  // first-time visitor cannot open the chat at all. Lift the whole widget clear
+  // of it for as long as the banner is up.
+  var banner = document.getElementById('cookie-banner');
+  function clearOfBanner() {
+    var lift = (banner && banner.classList.contains('show') && window.innerWidth <= 640)
+      ? Math.round(banner.getBoundingClientRect().height) + 16
+      : 0;
+    root.style.setProperty('--aiqs-lift', lift + 'px');
+  }
+  if (banner && window.MutationObserver) {
+    new MutationObserver(clearOfBanner).observe(banner, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', clearOfBanner);
+    clearOfBanner();
+  }
+
+  launcher.addEventListener('click', function () { setOpen(!open); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && open) setOpen(false); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var q = input.value.trim();
+    if (!q) return;
+    input.value = '';
+    ask(q);
+  });
+
+  if (chips) {
+    chips.addEventListener('click', function (e) {
+      var chip = e.target.closest('.aiqs-chip');
+      if (chip) ask(chip.textContent.trim());
+    });
+  }
+})();
 
 // ---- Conversion tracking (consent-gated via AIQS_CAPI.fire) ----
 document.addEventListener('click', function(e) {
@@ -1116,6 +1470,103 @@ document.addEventListener('click', function(e) {
     if (AIQS_REDUCE_MOTION) return;
     if (stageVisible && !document.hidden) { runDemo(); } else { pendingRestart = true; } }
 })();
+// ── Free first job popup ───────────────────────────────────────────────────
+// Shown once per visitor: after they have read a little, or on exit intent,
+// whichever comes first. The choice is remembered in localStorage so it never
+// nags. Never fires on top of the cookie banner or while the chat is open.
+(function () {
+  var KEY = 'aiqs_offer_seen';
+  var DELAY_MS = 30000;
+  var SCROLL_TRIGGER = 0.35;
+
+  var modal = document.getElementById('aiqsOffer');
+  var card = modal && modal.querySelector('.aiqs-offer-card');
+  var closeBtn = document.getElementById('aiqsOfferClose');
+  var dismissBtn = document.getElementById('aiqsOfferDismiss');
+  var cta = document.getElementById('aiqsOfferCta');
+  if (!modal || !card) return;
+
+  var shown = false, done = false, lastFocus = null;
+
+  function seen() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
+  function remember() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+
+  // Not while the cookie banner still needs an answer, and not over an open chat.
+  function blocked() {
+    var banner = document.getElementById('cookie-banner');
+    if (banner && banner.classList.contains('show')) return true;
+    var chat = document.getElementById('aiqsChat');
+    if (chat && chat.classList.contains('open')) return true;
+    return false;
+  }
+
+  function open() {
+    if (shown || done || seen() || blocked()) return;
+    shown = true;
+    lastFocus = document.activeElement;
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    if (cta) cta.focus();
+    aiqsTrack('ViewContent', { content_name: 'Free first BOQ offer' });
+  }
+
+  function close(reason) {
+    if (!shown) return;
+    shown = false; done = true;
+    remember();
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+    if (reason === 'dismiss') aiqsTrack('ViewContent', { content_name: 'Free first BOQ offer dismissed' });
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', function () { close('dismiss'); });
+  if (dismissBtn) dismissBtn.addEventListener('click', function () { close('dismiss'); });
+  modal.addEventListener('click', function (e) { if (e.target === modal) close('dismiss'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && shown) close('dismiss'); });
+
+  // Taking the offer counts as taking it — remember it and let the link run.
+  if (cta) {
+    cta.addEventListener('click', function () {
+      remember(); done = true;
+      document.body.style.overflow = '';
+      aiqsTrack('Lead', { content_name: 'Free first BOQ claimed' });
+    });
+  }
+
+  // Keep tab focus inside the dialog while it is up.
+  modal.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab' || !shown) return;
+    var focusable = card.querySelectorAll('a[href], button');
+    if (!focusable.length) return;
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  if (seen()) return;
+
+  setTimeout(open, DELAY_MS);
+
+  // Read a third of the page and you are interested enough to be asked.
+  var onScroll = function () {
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max > 0 && window.scrollY / max >= SCROLL_TRIGGER) {
+      window.removeEventListener('scroll', onScroll);
+      open();
+    }
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  // Exit intent — pointer leaving towards the tab bar. Desktop only; on a phone
+  // there is no such gesture, and the timer covers it.
+  document.addEventListener('mouseout', function (e) {
+    if (!e.relatedTarget && e.clientY <= 0) open();
+  });
+})();
 </script>
+<script src="/assets/theme.js" defer></script>
 </body>
 </html>

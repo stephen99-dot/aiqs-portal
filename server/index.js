@@ -106,6 +106,10 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 // A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
 // links), rate-limited inside the router.
 app.use('/api/public/quotes', quotePublicRoutes);
+// The chat widget on the marketing site (theaiqs.co.uk). Unauthenticated by
+// design — a stranger asking a question before they sign up — and rate-limited
+// per IP inside the router.
+app.use('/api/public', require('./siteChatRoutes'));
 // A2: public invoice view (/i/<token>) — same posture.
 app.use('/api/public/invoices', invoicePublicRoutes);
 // B4: photos on jobs.
