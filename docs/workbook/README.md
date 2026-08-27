@@ -3,11 +3,18 @@
 A 24-sheet slideshow that teaches someone (typically a VA working on an owner's
 behalf) how to get their own login and how to submit drawings for a BOQ.
 
-- `index.html` — the workbook. Self-contained: open it in any browser, no server,
-  no network. Arrow keys move between sheets, `C` opens the contents, `Ctrl`/`Cmd`+`P`
-  prints it as a paper workbook (one sheet per page).
+- `index.html` — the workbook. Fully self-contained: screenshots and fonts are
+  inlined, so it opens in any browser with no server and no network. Arrow keys
+  move between sheets, `C` opens the contents, `Ctrl`/`Cmd`+`P` prints it.
+- `AI-QS-Portal-Workbook.pdf` — the same 24 sheets as A4 landscape, one sheet per
+  page. This is the copy to email to someone.
 - `screenshots/` — the same screenshots as standalone WebP files, for reuse in
   training emails, PDFs or a help centre.
+
+To regenerate the PDF after editing `index.html`, print it from Chromium at A4
+landscape with backgrounds on and 12mm/14mm margins. The print stylesheet steps
+the type and image sizes down a notch so every sheet lands on a single page —
+if you add content to a sheet, re-check that it still fits.
 
 ## What it covers
 
