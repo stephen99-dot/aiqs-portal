@@ -1223,13 +1223,17 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
       if (existing) {
         quoteId = existing.id;
         quoteNumber = existing.quote_number;
+        // project_type is refreshed too: a type corrected on the project (the
+        // "Other" every submission defaults to) must reach the client's live
+        // link on the next share, not only on a brand-new quote.
         db.prepare(
-          'UPDATE quotes SET project_name = ?, currency = ?, net_total = ?, ohp_pct = 0, ohp_amount = 0, '
+          'UPDATE quotes SET project_name = ?, project_type = ?, currency = ?, net_total = ?, ohp_pct = 0, ohp_amount = 0, '
           + 'contingency_pct = ?, contingency_amount = ?, vat_pct = ?, vat_amount = ?, grand_total = ?, '
           + 'client_name = COALESCE(?, client_name), client_email = COALESCE(?, client_email), '
           + 'updated_at = CURRENT_TIMESTAMP WHERE id = ?'
         ).run(
-          documentTitleForProject(project), project.currency === 'EUR' ? 'EUR' : 'GBP',
+          documentTitleForProject(project), project.project_type || null,
+          project.currency === 'EUR' ? 'EUR' : 'GBP',
           round2(net), contingencyPct, round2(cont), vatPct, round2(vatAmount), round2(grand),
           clientName, clientEmail, quoteId
         );

@@ -3,8 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 import { ClipboardIcon } from '../components/Icons';
+import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 import {
-  Button, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast,
+  Button, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast, Input,
 } from '../ui';
 
 // SVG icons for document types
@@ -49,6 +50,9 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null);
+  const [editingType, setEditingType] = useState(false);
+  const [typeDraft, setTypeDraft] = useState('');
+  const [savingType, setSavingType] = useState(false);
 
   useEffect(() => { loadProject(); }, [id]); // eslint-disable-line
 
@@ -60,6 +64,28 @@ export default function ProjectDetailPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // The project type is captured at submission and often lands as "Other" —
+  // it prints on the client copy and on the quote / estimate, so it stays
+  // editable here for as long as the project exists.
+  async function saveProjectType() {
+    const next = typeDraft.trim();
+    if (next === (project.project_type || '')) { setEditingType(false); return; }
+    setSavingType(true);
+    try {
+      const updated = await apiFetch(`/projects/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ project_type: next }),
+      });
+      setProject((p) => ({ ...p, ...updated }));
+      setEditingType(false);
+      toast.success('Project type updated. Re-share the client copy to update a link your client already has.');
+    } catch (err) {
+      toast.error(err.message || 'Could not save the project type');
+    } finally {
+      setSavingType(false);
     }
   }
 
@@ -137,8 +163,11 @@ export default function ProjectDetailPage() {
         back={{ to: '/dashboard', label: 'All Projects' }}
         title={project.title}
         subtitle={
-          `${project.project_type}${project.location ? ` · ${project.location}` : ''} · ` +
-          new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+          [
+            project.project_type,
+            project.location,
+            new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+          ].filter(Boolean).join(' · ')
         }
         actions={
           <>
@@ -173,6 +202,49 @@ export default function ProjectDetailPage() {
             })}
           </div>
           <p className="progress-desc">{STATUS_DESC[project.status] || STATUS_DESC.submitted}</p>
+        </Card.Body>
+      </Card>
+
+      {/* Project type — editable: submissions often arrive as "Other" */}
+      <Card style={{ marginBottom: 18 }}>
+        <Card.Header title="Project type" />
+        <Card.Body>
+          {editingType ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Input
+                type="text"
+                list="project-type-suggestions"
+                autoFocus
+                value={typeDraft}
+                onChange={(e) => setTypeDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveProjectType(); if (e.key === 'Escape') setEditingType(false); }}
+                placeholder="e.g. Single-storey extension"
+                style={{ flex: '1 1 220px', minWidth: 0 }}
+              />
+              <datalist id="project-type-suggestions">
+                {PROJECT_TYPE_SUGGESTIONS.map((o) => <option key={o} value={o} />)}
+              </datalist>
+              <Button size="sm" onClick={saveProjectType} disabled={savingType}>
+                {savingType ? 'Saving…' : 'Save'}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setEditingType(false)} disabled={savingType}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {project.project_type || 'Not set'}
+              </span>
+              <Button size="sm" variant="secondary"
+                onClick={() => { setTypeDraft(project.project_type || ''); setEditingType(true); }}>
+                Edit
+              </Button>
+            </div>
+          )}
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 8 }}>
+            Shown on the client copy and on the quote / estimate you share.
+          </div>
         </Card.Body>
       </Card>
 

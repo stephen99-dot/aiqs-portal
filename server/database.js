@@ -617,6 +617,7 @@ db.exec(`
     company_address  TEXT,
     footer_text      TEXT,
     template         TEXT DEFAULT 'modern',
+    document_label   TEXT DEFAULT 'quote',   -- 'quote' | 'estimate' (see documentLabel.js)
     created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -994,6 +995,11 @@ const migrations = [
   // Idempotency for the push: the Xero InvoiceID we created, so we never send
   // the same invoice twice.
   { column: 'xero_invoice_id',    table: 'invoices', sql: "ALTER TABLE invoices ADD COLUMN xero_invoice_id TEXT" },
+  // Document wording — 'quote' (default) or 'estimate'. A quote and an estimate
+  // are different promises, so the builder chooses the word their client-facing
+  // documents use; it is resolved at render time (see documentLabel.js) so the
+  // switch re-words documents that have already been sent.
+  { column: 'document_label', table: 'user_branding', sql: "ALTER TABLE user_branding ADD COLUMN document_label TEXT DEFAULT 'quote'" },
 ];
 
 for (const { column, table, sql } of migrations) {

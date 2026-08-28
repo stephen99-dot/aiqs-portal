@@ -11,6 +11,7 @@
 const path = require('path');
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
+const { docLabel } = require('./documentLabel');
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const brandingDir = path.join(DATA_DIR, 'branding');
@@ -33,8 +34,11 @@ function fmtMoney(n, code) {
 // photos = optional [{ path, caption }] attached site photos (B4).
 function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
   const cc = q.currency || 'GBP';
+  // "Quote" or "Estimate" — the builder's branding setting, read at render time
+  // so a document already with the client re-words itself when they switch.
+  const L = docLabel(branding);
 
-  const filename = (q.quote_number || 'quote') + '.pdf';
+  const filename = (q.quote_number || L.noun) + '.pdf';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
 
@@ -62,10 +66,10 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
   doc.fillColor('#ffffff')
     .font('Helvetica-Bold').fontSize(20)
     // One line, ellipsised — a long company name must not wrap out of the band.
-    .text(branding.company_name || userInfo?.company || userInfo?.full_name || 'Quotation', titleX, 28,
+    .text(branding.company_name || userInfo?.company || userInfo?.full_name || L.Formal, titleX, 28,
       { width: doc.page.width - titleX - 40, height: 24, ellipsis: true });
   doc.font('Helvetica').fontSize(9)
-    .text('Quote ' + (q.quote_number || ''), titleX, 56)
+    .text(L.Noun + ' ' + (q.quote_number || ''), titleX, 56)
     .text(new Date(q.created_at || Date.now()).toLocaleDateString('en-GB'), titleX, 70);
 
   // Accepted banner — the signed audit record travels with the document.
@@ -81,7 +85,7 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
   // contact block at x=360) and its wrapped height is MEASURED — every line
   // below starts after it instead of being stamped over it at a fixed Y.
   const TITLE_W = 305;
-  const titleText = q.project_name || 'Quotation';
+  const titleText = q.project_name || L.Formal;
   doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14)
     .text(titleText, 40, 110 + bannerOffset, { width: TITLE_W });
   let metaY = 110 + bannerOffset + doc.heightOfString(titleText, { width: TITLE_W }) + 6;
@@ -284,7 +288,7 @@ function streamQuotePdf(res, q, lines, branding, userInfo, photos) {
   // Footer
   const footY = doc.page.height - 50;
   doc.font('Helvetica').fontSize(8).fillColor('#666666')
-    .text(branding.footer_text || 'This quotation is valid for 30 days from the date above. Prices exclude VAT unless stated.', 40, footY, { width: 515, align: 'center' });
+    .text(branding.footer_text || ('This ' + L.formal + ' is valid for 30 days from the date above. Prices exclude VAT unless stated.'), 40, footY, { width: 515, align: 'center' });
 
   doc.end();
 }
