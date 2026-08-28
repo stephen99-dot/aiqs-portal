@@ -33,6 +33,7 @@ const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware, requireEstimator, requireEstimatorPassword } = require('./auth');
 const { streamQuotePdf } = require('./quotePdf');
+const { docLabel } = require('./documentLabel');
 const { computeFinancials } = require('./lib/money');
 const mailer = require('./mailer');
 
@@ -815,19 +816,20 @@ router.post('/quotes/:id/send', async (req, res) => {
     const branding = getBranding(req.user.id);
     const userInfo = getUserDisplay(req.user.id);
     const companyName = branding.company_name || userInfo?.company || userInfo?.full_name || 'your builder';
+    const L = docLabel(branding);
     const link = mailer.BASE_URL + '/q/' + token;
     const mail = await mailer.sendMail({
       userId: req.user.id,
       type: 'quote_send',
       to: clientEmail,
-      subject: 'Quote ' + (q.quote_number || '') + ' from ' + companyName,
-      heading: 'Your quote' + (q.project_name ? ' — ' + q.project_name : ''),
+      subject: L.Noun + ' ' + (q.quote_number || '') + ' from ' + companyName,
+      heading: 'Your ' + L.noun + (q.project_name ? ' — ' + q.project_name : ''),
       paragraphs: [
-        companyName + ' has sent you a quote' + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
+        companyName + ' has sent you ' + (L.noun === 'estimate' ? 'an ' : 'a ') + L.noun + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
         'Total: ' + fmtMoney(q.grand_total, q.currency) + '.',
         'Tap the button to see the full price breakdown, download the PDF, ask a question, or accept it online.',
       ],
-      ctaText: 'View and accept your quote',
+      ctaText: 'View and accept your ' + L.noun,
       ctaUrl: link,
     });
 

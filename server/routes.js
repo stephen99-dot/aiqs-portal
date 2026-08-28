@@ -1636,6 +1636,41 @@ router.get('/projects/:id', authMiddleware, (req, res) => {
   });
 });
 
+// PATCH /api/projects/:id — edit the project's own details after submission.
+// The project type entered at submission (often just "Other") is what every
+// downstream document prints — the Client Copy, the quote/estimate PDF and its
+// public acceptance page — so the owner needs to be able to correct it without
+// re-submitting the job. Only these plain text fields are editable here; the
+// priced content lives elsewhere.
+router.patch('/projects/:id', authMiddleware, (req, res) => {
+  try {
+    const project = req.user.role === 'admin'
+      ? db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id)
+      : db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const updates = [];
+    const params = [];
+    for (const field of ['title', 'project_type', 'location', 'description']) {
+      if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+      const raw = req.body[field];
+      const value = raw == null ? '' : String(raw).trim().slice(0, field === 'description' ? 5000 : 200);
+      // The title is what the documents are headed with — never blank it.
+      if (field === 'title' && !value) return res.status(400).json({ error: 'Project title cannot be empty' });
+      updates.push(field + ' = ?');
+      params.push(value || null);
+    }
+    if (updates.length === 0) return res.json(project);
+
+    params.push(project.id);
+    db.prepare('UPDATE projects SET ' + updates.join(', ') + ', updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(...params);
+    res.json(db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id));
+  } catch (err) {
+    console.error('Update project error:', err);
+    res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
 router.post('/projects', authMiddleware, upload.array('drawings', 10), (req, res) => {
   try {
     const { title, projectType, description, location } = req.body;

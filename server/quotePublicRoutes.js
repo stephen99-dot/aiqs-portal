@@ -27,6 +27,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { streamQuotePdf } = require('./quotePdf');
+const { docLabel } = require('./documentLabel');
 const { rateLimit, clientIp } = require('./publicRateLimit');
 const mailer = require('./mailer');
 
@@ -91,7 +92,12 @@ function getUserDisplay(userId) {
 // Public-facing serialiser — internal pricing fields (margins, labour/materials
 // splits, AI flags, the builder's raw job description) are stripped on purpose.
 function publicShape(q, lines, branding, user) {
+  const L = docLabel(branding);
   return {
+    // The word this document calls itself — 'quote' or 'estimate'. The page
+    // reads it rather than hard-coding, so the builder's branding setting
+    // re-words a link the client already has.
+    doc_label: { noun: L.noun, Noun: L.Noun, formal: L.formal, Formal: L.Formal },
     quote_number: q.quote_number,
     project_name: q.project_name,
     project_type: q.project_type,
@@ -149,7 +155,7 @@ router.get('/:token/logo', (req, res) => {
 router.get('/:token/pdf', (req, res) => {
   try {
     const q = findByToken(req.params.token);
-    if (!q) return res.status(404).json({ error: 'This quote link is invalid or has been revoked.' });
+    if (!q) return res.status(404).json({ error: 'This link is invalid or has been revoked.' });
     const lines = getQuoteLines(q.id);
     const branding = getBranding(q.user_id);
     const userInfo = getUserDisplay(q.user_id);
@@ -164,7 +170,7 @@ router.get('/:token/pdf', (req, res) => {
 router.get('/:token', (req, res) => {
   try {
     const q = findByToken(req.params.token);
-    if (!q) return res.status(404).json({ error: 'This quote link is invalid or has been revoked.' });
+    if (!q) return res.status(404).json({ error: 'This link is invalid or has been revoked.' });
     const lines = getQuoteLines(q.id);
     const branding = getBranding(q.user_id);
     const user = getUserDisplay(q.user_id);
@@ -181,8 +187,11 @@ router.get('/:token', (req, res) => {
 router.post('/:token/accept', postLimit, (req, res) => {
   try {
     const q = findByToken(req.params.token);
-    if (!q) return res.status(404).json({ error: 'This quote link is invalid or has been revoked.' });
-    if (q.status === 'accepted') return res.status(409).json({ error: 'This quote has already been accepted.' });
+    if (!q) return res.status(404).json({ error: 'This link is invalid or has been revoked.' });
+    if (q.status === 'accepted') {
+      const L = docLabel(getBranding(q.user_id));
+      return res.status(409).json({ error: 'This ' + L.noun + ' has already been accepted.' });
+    }
 
     const b = req.body || {};
     const name = String(b.name || '').trim().slice(0, 200);
@@ -195,6 +204,7 @@ router.post('/:token/accept', postLimit, (req, res) => {
     const ua = (req.headers['user-agent'] || '').toString().slice(0, 500) || null;
 
     let jobId = q.job_id || null;
+    const L = docLabel(getBranding(q.user_id));
     const txn = db.transaction(() => {
       db.prepare(
         'UPDATE quotes SET status=?, locked=1, acceptance_name=?, acceptance_email=?, '
@@ -211,11 +221,11 @@ router.post('/:token/accept', postLimit, (req, res) => {
           + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).run(
           jobId, q.user_id,
-          (q.project_name || 'Job from quote').slice(0, 200),
+          (q.project_name || ('Job from ' + L.noun)).slice(0, 200),
           q.client_name || name,
           q.project_type || null,
           'planned',
-          'Created automatically when quote ' + (q.quote_number || '') + ' was accepted.'
+          'Created automatically when ' + L.noun + ' ' + (q.quote_number || '') + ' was accepted.'
         );
         db.prepare('UPDATE quotes SET job_id = ? WHERE id = ?').run(jobId, q.id);
 
@@ -233,14 +243,14 @@ router.post('/:token/accept', postLimit, (req, res) => {
           jobId, q.user_id,
           round2(plannedLabour), round2(plannedMaterials),
           num(q.margin_pct), num(q.grand_total),
-          'Seeded from accepted quote ' + (q.quote_number || '') + '.'
+          'Seeded from accepted ' + L.noun + ' ' + (q.quote_number || '') + '.'
         );
       }
 
       // In-app notification for the builder (notification bell).
       db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(
         uuidv4(), q.user_id,
-        name + ' accepted your quote for ' + fmtMoney(q.grand_total, q.currency)
+        name + ' accepted your ' + L.noun + ' for ' + fmtMoney(q.grand_total, q.currency)
         + (q.quote_number ? ' (' + q.quote_number + ')' : '')
         + '. The job is now in Finance.'
       );
@@ -254,12 +264,12 @@ router.post('/:token/accept', postLimit, (req, res) => {
       platform: true,
       type: 'quote_accepted',
       to: owner?.email,
-      subject: name + ' accepted your quote for ' + fmtMoney(q.grand_total, q.currency),
-      heading: 'Good news — your quote was accepted',
+      subject: name + ' accepted your ' + L.noun + ' for ' + fmtMoney(q.grand_total, q.currency),
+      heading: 'Good news — your ' + L.noun + ' was accepted',
       paragraphs: [
-        name + ' accepted quote ' + (q.quote_number || '') + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
+        name + ' accepted ' + L.noun + ' ' + (q.quote_number || '') + (q.project_name ? ' for "' + q.project_name + '"' : '') + '.',
         'Total: ' + fmtMoney(q.grand_total, q.currency) + '. Signed: ' + signature + '.',
-        'The job has been created in Finance with the budget filled in from the quote.',
+        'The job has been created in Finance with the budget filled in from the ' + L.noun + '.',
       ],
       ctaText: 'Open the job',
       ctaUrl: mailer.BASE_URL + '/finance/jobs/' + jobId,
@@ -277,7 +287,7 @@ router.post('/:token/accept', postLimit, (req, res) => {
 router.post('/:token/question', postLimit, (req, res) => {
   try {
     const q = findByToken(req.params.token);
-    if (!q) return res.status(404).json({ error: 'This quote link is invalid or has been revoked.' });
+    if (!q) return res.status(404).json({ error: 'This link is invalid or has been revoked.' });
 
     const b = req.body || {};
     const name = String(b.name || '').trim().slice(0, 200);
@@ -286,6 +296,7 @@ router.post('/:token/question', postLimit, (req, res) => {
     if (!name) return res.status(400).json({ error: 'Please enter your name.' });
     if (!message) return res.status(400).json({ error: 'Please type your question.' });
 
+    const L = docLabel(getBranding(q.user_id));
     const txn = db.transaction(() => {
       db.prepare(
         'INSERT INTO quote_messages (id, quote_id, user_id, sender_name, sender_email, message) VALUES (?, ?, ?, ?, ?, ?)'
@@ -294,7 +305,7 @@ router.post('/:token/question', postLimit, (req, res) => {
       const preview = message.length > 140 ? message.slice(0, 140) + '…' : message;
       db.prepare('INSERT INTO user_messages (id, user_id, message) VALUES (?, ?, ?)').run(
         uuidv4(), q.user_id,
-        name + ' asked a question about quote ' + (q.quote_number || '') + ': "' + preview + '"'
+        name + ' asked a question about ' + L.noun + ' ' + (q.quote_number || '') + ': "' + preview + '"'
       );
     });
     txn();
@@ -307,14 +318,14 @@ router.post('/:token/question', postLimit, (req, res) => {
       type: 'quote_question',
       to: owner?.email,
       replyTo: email || undefined,
-      subject: name + ' has a question about quote ' + (q.quote_number || ''),
-      heading: 'Question about your quote',
+      subject: name + ' has a question about ' + L.noun + ' ' + (q.quote_number || ''),
+      heading: 'Question about your ' + L.noun,
       paragraphs: [
-        name + (email ? ' (' + email + ')' : '') + ' asked about quote ' + (q.quote_number || '') + ':',
+        name + (email ? ' (' + email + ')' : '') + ' asked about ' + L.noun + ' ' + (q.quote_number || '') + ':',
         '"' + message + '"',
         'Reply to this email to answer them directly.',
       ],
-      ctaText: 'Open the quote',
+      ctaText: 'Open the ' + L.noun,
       ctaUrl: mailer.BASE_URL + '/estimator/quote/' + q.id,
     }).catch(() => {});
 

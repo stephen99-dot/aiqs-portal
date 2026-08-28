@@ -5,6 +5,8 @@ import useIsMobile from '../utils/useIsMobile';
 import { useTheme } from '../context/ThemeContext';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AssistantDrawer from '../components/AssistantDrawer';
+import { docLabel } from '../utils/docLabel';
+import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 
 /**
  * Builder Pack page — full-width workspace for turning a priced BOQ into the
@@ -144,6 +146,7 @@ export default function BuilderPackPage() {
   const [downloading, setDownloading] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [share, setShare] = useState(null); // { url } — public /q/<token> link for the client
+  const [savingType, setSavingType] = useState(false);
   const { t } = useTheme();
   const [openSectionIds, setOpenSectionIds] = useState({}); // { '1': true }
 
@@ -276,6 +279,9 @@ export default function BuilderPackPage() {
   }, [id]);
 
   const sym = (project && project.currency === 'EUR') ? '€' : '£';
+  // "Quote" or "Estimate" — the builder's Branding setting, so this page uses
+  // the same word their client will see on the document and the shared link.
+  const label = docLabel(branding);
 
   // ─── Edit helpers ────────────────────────────────────────────────────────
   const updateItem = useCallback((sIdx, iIdx, patch) => {
@@ -493,6 +499,23 @@ export default function BuilderPackPage() {
       await streamBlob(resp);
     } catch (err) { setError(err.message); }
     finally { setDownloading(false); }
+  }
+
+  // The project type printed on the client's documents. Submissions default to
+  // "Other", so it's editable right here where the client copy is produced —
+  // saved on the project, which every later download / re-share reads from.
+  async function saveProjectType(value) {
+    const next = String(value || '').trim();
+    if (next === ((project && project.project_type) || '')) return;
+    setSavingType(true); setError('');
+    try {
+      const updated = await apiFetch(`/projects/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ project_type: next }),
+      });
+      setProject((p) => ({ ...p, ...updated }));
+    } catch (err) { setError(err.message); }
+    finally { setSavingType(false); }
   }
 
   // Share the client copy the same way AI Trades Pilot sends a quote: turn the
@@ -863,6 +886,9 @@ export default function BuilderPackPage() {
                 provisionalSum={provisionalSum} setProvisionalSum={setProvisionalSum}
                 perTradeOhp={perTradeOhp} setPerTradeOhp={setPerTradeOhp}
                 sections={sections} sym={sym}
+                projectType={(project && project.project_type) || ''}
+                onSaveProjectType={saveProjectType} savingType={savingType}
+                label={label}
                 onDownload={downloadClientCopy} downloading={downloading}
                 onShare={shareWithClient} sharing={sharing}
                 disabled={clientRows.length === 0}
@@ -1035,7 +1061,8 @@ export default function BuilderPackPage() {
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
-                    branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
+                    branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''}
+                    projectType={project ? project.project_type : ''} />
               }
             </div>
           </div>
@@ -1046,8 +1073,8 @@ export default function BuilderPackPage() {
         <ShareLinkModal
           t={t}
           url={share.url}
-          title="Send the quote to your client"
-          message="Here’s your quote — you can view and accept it here:"
+          title={'Send the ' + label.noun + ' to your client'}
+          message={'Here’s your ' + label.noun + ' — you can view and accept it here:'}
           onClose={() => setShare(null)}
         />
       )}
@@ -1327,8 +1354,12 @@ function ClientControls({
   dayRateOn, setDayRateOn, dayRate, setDayRate,
   provisionalSum, setProvisionalSum,
   perTradeOhp, setPerTradeOhp, sections, sym,
+  projectType, onSaveProjectType, savingType, label,
   onDownload, downloading, onShare, sharing, disabled, isDirty, onReset, sourceSeeded,
 }) {
+  // Local copy so typing stays smooth; the project is saved on blur.
+  const [typeDraft, setTypeDraft] = useState(projectType || '');
+  useEffect(() => { setTypeDraft(projectType || ''); }, [projectType]);
   return (
     <>
       <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px' }}>Client copy controls</h3>
@@ -1339,6 +1370,26 @@ function ClientControls({
           : ' At 0 the copy matches your delivered BOQ like-for-like — just rebranded.'}
       </p>
       <ResetRow isDirty={isDirty} onReset={onReset} />
+
+      <Field label={'Project type (shown on the ' + label.noun + ')'}>
+        <input
+          type="text"
+          list="project-type-suggestions"
+          value={typeDraft}
+          onChange={(e) => setTypeDraft(e.target.value)}
+          onBlur={() => onSaveProjectType(typeDraft)}
+          placeholder="e.g. Single-storey extension"
+          style={inputStyle}
+        />
+        <datalist id="project-type-suggestions">
+          {PROJECT_TYPE_SUGGESTIONS.map((o) => <option key={o} value={o} />)}
+        </datalist>
+        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+          {savingType
+            ? 'Saving…'
+            : 'Prints as "Project type" on the ' + label.noun + '. Saves when you click outside the box — re-share to update a link your client already has.'}
+        </div>
+      </Field>
 
       <Slider label="Overhead" value={defaultOhp} onChange={setDefaultOhp} max={40} hint="% on net — baked into rates (overridable per trade below)" />
       <Slider label="Profit" value={profit} onChange={setProfit} max={40} hint="% on net + overhead — compounds with overhead" />
@@ -1459,8 +1510,8 @@ function ClientControls({
         {sharing ? 'Preparing link…' : 'Share with client'}
       </button>
       <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-        Creates a private link your client can open on their phone — branded quote
-        page with the figures above, PDF download, ask-a-question, and accept
+        Creates a private link your client can open on their phone — branded {label.noun}
+        {' '}page with the figures above, PDF download, ask-a-question, and accept
         online with a typed signature. Re-share after edits to refresh the same link.
       </p>
     </>
@@ -1617,7 +1668,7 @@ function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sy
   );
 }
 
-function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, branding, logoUrl, projectName }) {
+function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, branding, logoUrl, projectName, projectType }) {
   const primary = (branding && branding.primary_colour) || '#1B2A4A';
   const accent  = (branding && branding.accent_colour)  || '#A855F7';
   const company = branding && branding.company_name;
@@ -1656,6 +1707,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, b
             <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, marginTop: 2, color: '#fff' }}>
               {projectName || 'Project'}
             </div>
+            {projectType && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{projectType}</div>}
             {company && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>Issued by {company}</div>}
           </div>
           <div style={{ textAlign: 'right' }}>

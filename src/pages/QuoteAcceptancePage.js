@@ -121,7 +121,7 @@ export default function QuoteAcceptancePage() {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: 16 }}>
         <div style={{ maxWidth: 420, padding: 32, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, textAlign: 'center', color: '#111827' }}>
           <div style={{ marginBottom: 8 }}><LinkIcon size={32} /></div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>This quote link isn't working</h2>
+          <h2 style={{ margin: 0, fontSize: 20 }}>This link isn't working</h2>
           <p style={{ color: '#64748B', fontSize: 14, marginTop: 12 }}>
             {error || 'Ask whoever sent it to send you a fresh link.'}
           </p>
@@ -134,6 +134,9 @@ export default function QuoteAcceptancePage() {
   const cc = data.currency || 'GBP';
   const company = data.company || {};
   const accepted = data.status === 'accepted';
+  // What the builder calls this document — "quote" or "estimate". Sent with the
+  // payload (their branding setting), so the page never hard-codes the word.
+  const doc = data.doc_label || { noun: 'quote', Noun: 'Quote', formal: 'quotation', Formal: 'Quotation' };
 
   // Group lines by section, preserving order.
   const sections = [];
@@ -159,7 +162,7 @@ export default function QuoteAcceptancePage() {
         {company.has_logo && (
           <img src={base + '/logo'} alt="" style={{ height: 40, maxWidth: 120, objectFit: 'contain', background: '#fff', borderRadius: 6, padding: 2 }} />
         )}
-        <div style={{ color: '#fff', fontWeight: 700, fontSize: 17, minWidth: 0, overflowWrap: 'anywhere' }}>{company.name || 'Quotation'}</div>
+        <div style={{ color: '#fff', fontWeight: 700, fontSize: 17, minWidth: 0, overflowWrap: 'anywhere' }}>{company.name || doc.Formal}</div>
       </div>
 
       <div style={{ maxWidth: 560, margin: '0 auto', padding: '16px 16px 0' }}>
@@ -169,7 +172,7 @@ export default function QuoteAcceptancePage() {
             <span style={{ color: c.success, flexShrink: 0, marginTop: 2 }}><CheckCircleIcon size={22} /></span>
             <div>
               <div style={{ fontWeight: 700, color: '#065F46' }}>
-                {justAccepted ? 'Done — this quote is accepted' : 'This quote has been accepted'}
+                {justAccepted ? 'Done — this ' + doc.noun + ' is accepted' : 'This ' + doc.noun + ' has been accepted'}
               </div>
               <div style={{ color: '#065F46', fontSize: 14, marginTop: 4 }}>
                 {justAccepted
@@ -188,7 +191,8 @@ export default function QuoteAcceptancePage() {
 
         {/* Quote header */}
         <div style={{ background: c.card, border: '1px solid ' + c.border, borderRadius: 12, padding: 18, marginBottom: 16 }}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{data.project_name || 'Quotation'}</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{data.project_name || doc.Formal}</div>
+          {data.project_type && <div style={{ color: c.textSecondary, fontSize: 14, marginTop: 4 }}>{data.project_type}</div>}
           {data.client_name && <div style={{ color: c.textSecondary, fontSize: 14, marginTop: 4 }}>Prepared for {data.client_name}</div>}
           <div style={{ color: c.textMuted, fontSize: 13, marginTop: 6 }}>
             {data.quote_number}{data.created_at ? ' · ' + new Date(data.created_at).toLocaleDateString('en-GB') : ''}
@@ -254,7 +258,7 @@ export default function QuoteAcceptancePage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 48,
             borderRadius: 10, border: '1px solid ' + c.border, background: c.card, color: c.text,
             fontSize: 15, fontWeight: 600, textDecoration: 'none',
-          }}>Download this quote (PDF)</a>
+          }}>Download this {doc.noun} (PDF)</a>
           {!accepted && (
             <button onClick={() => { setAskOpen(o => !o); setError(''); setQSent(false); }} style={{
               minHeight: 48, borderRadius: 10, border: '1px solid ' + c.border, background: c.card,
@@ -282,7 +286,7 @@ export default function QuoteAcceptancePage() {
 
         {/* Builder footer */}
         <div style={{ textAlign: 'center', color: c.textMuted, fontSize: 12, padding: '8px 0 24px' }}>
-          {company.footer_text || (company.name ? 'Quotation from ' + company.name : '')}
+          {company.footer_text || (company.name ? doc.Formal + ' from ' + company.name : '')}
           {company.address ? <div style={{ marginTop: 4, whiteSpace: 'pre-line' }}>{company.address}</div> : null}
         </div>
       </div>
@@ -297,7 +301,7 @@ export default function QuoteAcceptancePage() {
             display: 'block', width: '100%', maxWidth: 560, margin: '0 auto', minHeight: 52,
             borderRadius: 12, border: 'none', background: c.success, color: '#fff',
             fontSize: 17, fontWeight: 700, cursor: 'pointer',
-          }}>Accept this quote — {fmt(data.grand_total, cc)}</button>
+          }}>Accept this {doc.noun} — {fmt(data.grand_total, cc)}</button>
         </div>
       )}
 
@@ -311,7 +315,7 @@ export default function QuoteAcceptancePage() {
             background: c.card, width: '100%', maxWidth: 560, borderRadius: '16px 16px 0 0',
             padding: '20px 20px calc(24px + env(safe-area-inset-bottom))', boxSizing: 'border-box',
           }}>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>Accept this quote</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>Accept this {doc.noun}</div>
             <div style={{ color: c.textSecondary, fontSize: 14, marginTop: 4 }}>
               Typing your name below counts as your signature. {company.name || 'The builder'} will be told straight away.
             </div>
@@ -326,7 +330,7 @@ export default function QuoteAcceptancePage() {
               width: '100%', minHeight: 52, marginTop: 16, borderRadius: 12, border: 'none',
               background: c.success, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer',
               opacity: submitting ? 0.6 : 1,
-            }}>{submitting ? 'One moment…' : 'Yes — accept this quote'}</button>
+            }}>{submitting ? 'One moment…' : 'Yes — accept this ' + doc.noun}</button>
             <button type="button" onClick={() => setSheetOpen(false)} style={{
               width: '100%', minHeight: 44, marginTop: 8, borderRadius: 12, border: 'none',
               background: 'transparent', color: c.textSecondary, fontSize: 14, cursor: 'pointer',

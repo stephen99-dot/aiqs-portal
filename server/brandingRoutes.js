@@ -18,6 +18,7 @@ const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
+const { DOCUMENT_LABELS } = require('./documentLabel');
 
 const router = express.Router();
 
@@ -125,7 +126,7 @@ router.patch('/branding', authMiddleware, (req, res) => {
 
     const updates = [];
     const params = [];
-    const fields = ['primary_colour', 'accent_colour', 'company_name', 'company_address', 'footer_text', 'template'];
+    const fields = ['primary_colour', 'accent_colour', 'company_name', 'company_address', 'footer_text', 'template', 'document_label'];
     for (const f of fields) {
       if (!Object.prototype.hasOwnProperty.call(req.body, f)) continue;
       const v = req.body[f];
@@ -135,7 +136,13 @@ router.patch('/branding', authMiddleware, (req, res) => {
       if (f === 'template' && v && !VALID_TEMPLATES.includes(v)) {
         return res.status(400).json({ error: 'template must be one of ' + VALID_TEMPLATES.join(', ') });
       }
+      // The word every client-facing document uses — never free text, or the
+      // PDF and the acceptance page would print whatever was posted.
+      if (f === 'document_label' && v && !DOCUMENT_LABELS.includes(String(v).toLowerCase())) {
+        return res.status(400).json({ error: 'document_label must be one of ' + DOCUMENT_LABELS.join(', ') });
+      }
       updates.push(f + ' = ?');
+      if (f === 'document_label') { params.push(v ? String(v).toLowerCase() : 'quote'); continue; }
       params.push(v == null || v === '' ? null : String(v));
     }
 

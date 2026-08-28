@@ -18,6 +18,14 @@ const TEMPLATES = [
   { key: 'minimalist',   label: 'Minimalist',   desc: 'No chrome — pure typography.' },
 ];
 
+// A quote and an estimate are different promises to a client, so the builder
+// chooses the word. It's applied at render time — switching it re-words the
+// PDF and the acceptance page of documents already sent.
+const DOCUMENT_LABELS = [
+  { key: 'quote',    label: 'Quote',    desc: 'A fixed price. "Quote Q-1234", "Accept this quote".' },
+  { key: 'estimate', label: 'Estimate', desc: 'A best guess, not fixed. "Estimate Q-1234", "Accept this estimate".' },
+];
+
 const DEFAULT_BRANDING = {
   primary_colour: '#1B2A4A',
   accent_colour: '#F59E0B',
@@ -25,6 +33,7 @@ const DEFAULT_BRANDING = {
   company_address: '',
   footer_text: '',
   template: 'modern',
+  document_label: 'quote',
 };
 
 export default function BrandingPage() {
@@ -327,6 +336,42 @@ export default function BrandingPage() {
                 <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                   Fields save automatically when you click outside the box.
                 </div>
+              </div>
+            </Card.Body>
+          </Card>
+
+          {/* Wording — quote vs estimate */}
+          <Card>
+            <Card.Header title="Document wording" />
+            <Card.Body>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                The word your client-facing documents use for themselves — on the PDF,
+                the acceptance page you share, and the emails that carry the link.
+                Changing it re-words documents you've already sent.
+              </p>
+              <div className="ui-grid" style={{ '--grid-min': '150px', gap: 8 }}>
+                {DOCUMENT_LABELS.map((d) => {
+                  const active = (branding.document_label || 'quote') === d.key;
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      onClick={() => { setField('document_label', d.key); saveField('document_label', d.key); }}
+                      style={{
+                        padding: '12px 14px', borderRadius: 10, textAlign: 'left',
+                        background: active ? 'var(--accent-glow)' : 'var(--bg-input)',
+                        border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                        cursor: 'pointer', fontFamily: 'var(--font-body)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.84rem', color: 'var(--text-primary)' }}>{d.label}</span>
+                        {active && <span style={{ fontSize: '0.7rem', color: 'var(--accent)', fontWeight: 700 }}><CheckIcon size={14} style={{ verticalAlign: 'middle' }} /> Selected</span>}
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{d.desc}</span>
+                    </button>
+                  );
+                })}
               </div>
             </Card.Body>
           </Card>
