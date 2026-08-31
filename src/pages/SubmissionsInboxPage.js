@@ -67,6 +67,32 @@ function waitingLabel(days) {
  *
  * Split-pane: queue on the left, the job and its full history on the right.
  */
+// Step a YYYY-MM-DD day key without going near the local timezone — midday
+// UTC is far enough from either midnight that a DST change cannot roll it into
+// the wrong date.
+function shiftDay(day, delta) {
+  const d = new Date(day + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function dayLabel(day, today) {
+  if (!day) return '';
+  if (day === today) return 'Today';
+  if (today && day === shiftDay(today, -1)) return 'Yesterday';
+  return new Date(day + 'T12:00:00Z').toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  });
+}
+
+// Names in the office are email addresses. The local part is what people
+// actually call each other, and it is what fits in a table cell.
+function personName(actor) {
+  if (!actor) return '—';
+  const at = actor.indexOf('@');
+  return at > 0 ? actor.slice(0, at) : actor;
+}
+
 export default function SubmissionsInboxPage() {
   const { user } = useAuth();
   const [submissions, setSubmissions] = useState([]);
@@ -90,6 +116,15 @@ export default function SubmissionsInboxPage() {
   const [noteDraft, setNoteDraft] = useState('');
   const [addingNote, setAddingNote] = useState(false);
   // Manual "Add job" — log an email or phone enquiry into the same queue.
+  // Day sheet — what got done, and by whom. Its own fetch: the queue reloads on
+  // every stage change, and re-pulling a fortnight of history each time would
+  // be waste.
+  const [daySheet, setDaySheet] = useState(null);
+  const [daySheetDate, setDaySheetDate] = useState('');
+  const [daySheetLoading, setDaySheetLoading] = useState(false);
+  const [daySheetError, setDaySheetError] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
+
   const [showAddJob, setShowAddJob] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
@@ -115,6 +150,23 @@ export default function SubmissionsInboxPage() {
     if (data.summary) setSummary(data.summary);
     if (data.turnaround_days) setTurnaroundDays(data.turnaround_days);
   }, []);
+
+  const loadDaySheet = useCallback((date) => {
+    setDaySheetLoading(true);
+    setDaySheetError('');
+    apiFetch('/submissions/admin/day-sheet?days=14' + (date ? '&date=' + date : ''))
+      .then((data) => {
+        setDaySheet(data);
+        setDaySheetDate(data.date);
+      })
+      .catch((err) => setDaySheetError(err.message || 'Could not load the day sheet'))
+      .finally(() => setDaySheetLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    loadDaySheet('');
+  }, [isAdmin, loadDaySheet]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -209,6 +261,11 @@ export default function SubmissionsInboxPage() {
         await refreshList();
       }
       loadEvents(id);
+      // A stage move is the day sheet's raw material — delivering a job should
+      // show up in today's figures without a page reload.
+      if (body && (body.stage || Object.prototype.hasOwnProperty.call(body, 'actioned'))) {
+        loadDaySheet(daySheetDate);
+      }
       if (okMsg) setStatusMsg({ kind: 'ok', text: okMsg });
     } catch (err) {
       const msg = err && err.message ? err.message : 'Save failed';
@@ -318,6 +375,8 @@ export default function SubmissionsInboxPage() {
       });
       if (data && data.submission) {
         await refreshList();
+        // Logging an email job is work — count it straight away.
+        loadDaySheet(daySheetDate);
         setSelectedId(data.submission.id);
         // Hand-logged jobs now start at the front of the queue like any other,
         // so the default Open view is where it lands — no need to switch away.
@@ -605,6 +664,122 @@ export default function SubmissionsInboxPage() {
             value={summary.unassigned} label="Nobody assigned" />
         </div>
       )}
+
+      {/* ── Day sheet ─────────────────────────────────────────────────────────
+          The tiles above are what is outstanding. This is what got done, which
+          you cannot read off a queue: a delivered job leaves the list and takes
+          its evidence with it. Per person, because "how many did we get out"
+          and "how many did she get out" are different questions. */}
+      <Card style={{ marginBottom: 16 }}>
+        <Card.Header title="What we got done">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <Button size="sm" variant="secondary" aria-label="Previous day"
+              onClick={() => loadDaySheet(shiftDay(daySheetDate, -1))}
+              disabled={daySheetLoading || !daySheetDate}>‹</Button>
+            <Input
+              type="date"
+              value={daySheetDate}
+              max={daySheet ? daySheet.today : undefined}
+              onChange={(e) => e.target.value && loadDaySheet(e.target.value)}
+              aria-label="Day to report on"
+              style={{ width: 158, padding: '5px 8px', fontSize: '0.8rem' }}
+            />
+            <Button size="sm" variant="secondary" aria-label="Next day"
+              onClick={() => loadDaySheet(shiftDay(daySheetDate, 1))}
+              disabled={daySheetLoading || !daySheetDate || (daySheet && daySheetDate >= daySheet.today)}>›</Button>
+            <Button size="sm" variant="secondary"
+              onClick={() => loadDaySheet('')}
+              disabled={daySheetLoading || (daySheet && daySheetDate === daySheet.today)}>Today</Button>
+          </div>
+        </Card.Header>
+        <Card.Body>
+          {daySheetError && (
+            <div style={{ fontSize: '0.82rem', color: 'var(--danger)' }}>{daySheetError}</div>
+          )}
+          {!daySheetError && !daySheet && (
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Loading…</div>
+          )}
+          {!daySheetError && daySheet && (
+            <>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+                <strong style={{ color: 'var(--text-primary)' }}>{dayLabel(daySheetDate, daySheet.today)}</strong>
+                {' — '}
+                <strong style={{ color: 'var(--text-primary)' }}>{daySheet.sheet.delivered}</strong> delivered,
+                {' '}<strong style={{ color: 'var(--text-primary)' }}>{daySheet.sheet.logged}</strong> logged by hand,
+                {' '}<strong style={{ color: 'var(--text-primary)' }}>{daySheet.sheet.arrived}</strong> in through the portal,
+                {' '}{daySheet.sheet.moved} stage move{daySheet.sheet.moved === 1 ? '' : 's'}.
+              </div>
+
+              {daySheet.sheet.people.length === 0 ? (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  Nothing recorded against anybody on this day.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <th style={{ padding: '6px 10px 6px 0' }}>Who</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'right' }}>Delivered</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'right' }}>Logged</th>
+                        <th style={{ padding: '6px 10px', textAlign: 'right' }}>Moved on</th>
+                        <th style={{ padding: '6px 0 6px 10px', textAlign: 'right' }}>Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {daySheet.sheet.people.map((p) => (
+                        <tr key={p.actor} style={{ borderTop: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 10px 8px 0', fontWeight: 600, color: 'var(--text-primary)' }}
+                            title={p.actor}>{personName(p.actor)}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: p.delivered ? 'var(--success)' : 'var(--text-muted)' }}>{p.delivered}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{p.logged}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{p.moved}</td>
+                          <td style={{ padding: '8px 0 8px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{p.notes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <button type="button"
+                onClick={() => setShowHistory(v => !v)}
+                style={{ marginTop: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  color: 'var(--accent)', fontSize: '0.78rem', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                {showHistory ? 'Hide the last 14 days' : 'Show the last 14 days'}
+              </button>
+
+              {showHistory && (
+                <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <th style={{ padding: '5px 10px 5px 0' }}>Day</th>
+                        <th style={{ padding: '5px 10px', textAlign: 'right' }}>Delivered</th>
+                        <th style={{ padding: '5px 10px', textAlign: 'right' }}>Logged</th>
+                        <th style={{ padding: '5px 0 5px 10px', textAlign: 'right' }}>Came in</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...daySheet.history].reverse().map((d) => (
+                        <tr key={d.date}
+                          style={{ borderTop: '1px solid var(--border)', cursor: 'pointer',
+                            background: d.date === daySheetDate ? 'var(--accent-glow)' : 'transparent' }}
+                          onClick={() => loadDaySheet(d.date)}>
+                          <td style={{ padding: '6px 10px 6px 0' }}>{dayLabel(d.date, daySheet.today)}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: d.delivered ? 'var(--success)' : 'var(--text-muted)' }}>{d.delivered}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{d.logged}</td>
+                          <td style={{ padding: '6px 0 6px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{d.arrived}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </Card.Body>
+      </Card>
 
       {/* Toolbar — segmented filter + search */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>

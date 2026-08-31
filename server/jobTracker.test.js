@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { decorate, summarise, daysBetween, parseTs } = require('./jobTracker');
+const { decorate, summarise, daysBetween, parseTs, dayKey, daySheet, daySeries } = require('./jobTracker');
 const { defaultDueAt, isOpen, isParked, isValidStage, isValidSource } = require('./jobStages');
 
 const NOW = new Date('2026-08-31T12:00:00Z');
@@ -119,4 +119,102 @@ test('stage and source vocabularies reject anything unrecognised', () => {
   assert.ok(isOpen('on_hold'));
   assert.ok(!isOpen('delivered'));
   assert.ok(isParked('on_hold'));
+});
+
+
+// ─── Day sheet ───────────────────────────────────────────────────────────────
+
+const DAY = '2026-08-31';
+
+function ev(overrides = {}) {
+  return {
+    submission_id: 'j1',
+    event_type: 'stage',
+    actor: 'ella@theaiqs.co.uk',
+    created_at: '2026-08-31T10:00:00Z',
+    ...overrides,
+  };
+}
+
+test('a day runs midnight to midnight in office time, not UTC', () => {
+  // 23:30 London on the 31st is 22:30 UTC — same day either way.
+  assert.strictEqual(dayKey('2026-08-31T22:30:00Z'), '2026-08-31');
+  // 00:30 London on 1 Sept is 23:30 UTC on 31 Aug. Counted in UTC this lands
+  // on the wrong day, which is how late-evening work goes missing.
+  assert.strictEqual(dayKey('2026-08-31T23:30:00Z'), '2026-09-01');
+});
+
+test('jobs typed in by hand are credited to whoever logged them', () => {
+  const jobs = [
+    { id: 'j1', source: 'email', created_at: '2026-08-31T09:00:00Z' },
+    { id: 'j2', source: 'phone', created_at: '2026-08-31T09:30:00Z' },
+  ];
+  const events = [
+    ev({ submission_id: 'j1', event_type: 'created' }),
+    ev({ submission_id: 'j2', event_type: 'created' }),
+  ];
+  const sheet = daySheet({ jobs, events, day: DAY });
+  assert.strictEqual(sheet.logged, 2);
+  assert.strictEqual(sheet.people[0].actor, 'ella@theaiqs.co.uk');
+  assert.strictEqual(sheet.people[0].logged, 2);
+});
+
+test('portal submissions count as arrivals, not as somebody\'s work', () => {
+  const jobs = [{ id: 'j1', source: 'portal', created_at: '2026-08-31T09:00:00Z' }];
+  const events = [ev({ event_type: 'created', actor: 'customer@builder.co.uk' })];
+  const sheet = daySheet({ jobs, events, day: DAY });
+  assert.strictEqual(sheet.arrived, 1);
+  assert.strictEqual(sheet.logged, 0);
+  // The customer did that typing — they must not appear in the office's figures.
+  assert.strictEqual(sheet.people.length, 0);
+});
+
+test('deliveries are counted from the stamp on the job, not the event wording', () => {
+  const jobs = [
+    { id: 'j1', source: 'portal', created_at: '2026-08-20T09:00:00Z',
+      delivered_at: '2026-08-31T16:00:00Z', delivered_by: 'ella@theaiqs.co.uk' },
+    { id: 'j2', source: 'email', created_at: '2026-08-20T09:00:00Z',
+      delivered_at: '2026-08-30T16:00:00Z', delivered_by: 'ella@theaiqs.co.uk' },
+  ];
+  const sheet = daySheet({ jobs, events: [], day: DAY });
+  assert.strictEqual(sheet.delivered, 1, 'yesterday\'s delivery is not today\'s');
+  assert.strictEqual(sheet.people[0].delivered, 1);
+});
+
+test('stage moves and notes are attributed per person', () => {
+  const events = [
+    ev({ actor: 'ella@theaiqs.co.uk' }),
+    ev({ actor: 'ella@theaiqs.co.uk' }),
+    ev({ actor: 'sam@theaiqs.co.uk' }),
+    ev({ actor: 'sam@theaiqs.co.uk', event_type: 'note' }),
+    ev({ actor: 'ella@theaiqs.co.uk', created_at: '2026-08-29T10:00:00Z' }), // another day
+  ];
+  const sheet = daySheet({ jobs: [], events, day: DAY });
+  assert.strictEqual(sheet.moved, 3);
+  assert.strictEqual(sheet.notes, 1);
+  const ella = sheet.people.find(p => p.actor.startsWith('ella'));
+  assert.strictEqual(ella.moved, 2);
+});
+
+test('work with no actor recorded is reported, not silently dropped', () => {
+  const sheet = daySheet({ jobs: [], events: [ev({ actor: null })], day: DAY });
+  assert.strictEqual(sheet.moved, 1);
+  assert.strictEqual(sheet.people[0].actor, '(unattributed)');
+});
+
+test('a quiet day reports zeroes rather than an empty object', () => {
+  const sheet = daySheet({ jobs: [], events: [], day: DAY });
+  assert.deepStrictEqual(
+    [sheet.arrived, sheet.logged, sheet.delivered, sheet.moved, sheet.people.length],
+    [0, 0, 0, 0, 0]
+  );
+});
+
+test('the history series ends on the requested day and runs oldest first', () => {
+  const jobs = [{ id: 'j1', source: 'portal', created_at: '2026-08-29T09:00:00Z',
+                  delivered_at: '2026-08-31T09:00:00Z', delivered_by: 'ella@theaiqs.co.uk' }];
+  const series = daySeries({ jobs, events: [], endDay: DAY, days: 3 });
+  assert.deepStrictEqual(series.map(d => d.date), ['2026-08-29', '2026-08-30', '2026-08-31']);
+  assert.strictEqual(series[0].arrived, 1);
+  assert.strictEqual(series[2].delivered, 1);
 });

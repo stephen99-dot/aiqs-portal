@@ -91,6 +91,40 @@ Click any stage tab to see exactly which jobs sit there. Open a job and the
 History pane shows everything that has happened to it, in order, with who did
 it — no need to ask.
 
+## What we got done — the day sheet
+
+The tiles answer *what is outstanding*. They cannot answer *what did we get
+through*, because a delivered job leaves the queue and takes its evidence with
+it. The **What we got done** panel, directly under the tiles, is the other
+half — one day at a time, broken down by person.
+
+Four figures per person, for the selected day:
+
+| Column | Counts |
+| --- | --- |
+| **Delivered** | Jobs moved to Delivered that day. The output number. |
+| **Logged** | Email and phone enquiries typed into the queue that day. This is real work and it used to be invisible. |
+| **Moved on** | Stage changes made that day — the sign a job is being worked, not just finished. |
+| **Notes** | History entries added. Chasing a customer leaves a trace here. |
+
+Portal submissions are counted separately as **came in through the portal** and
+credited to nobody: the customer did that typing, so putting it in somebody's
+column would flatter the figures.
+
+Step back a day at a time with the arrows, jump to any date with the picker, or
+open **Show the last 14 days** for the trend and click any row to go to it.
+
+A day runs midnight to midnight **London time**, not UTC — through BST those
+differ by an hour, and counting in UTC pushes late-evening work onto the next
+day. Set `OFFICE_TIMEZONE` if the office is somewhere else.
+
+**Deliveries are stamped on the job**, not inferred from the wording of an
+event, so renaming a stage can never change a historical count. Jobs delivered
+before this existed were backfilled from their stage events where one exists
+and from the pick-up date otherwise — so figures before that migration are an
+approximation, and exact from there forward. Moving a job back out of Delivered
+clears the stamp: it did not go out after all.
+
 ## Turnaround target
 
 Every job gets a target date set automatically: **3 days from when the enquiry
@@ -103,8 +137,8 @@ late, which is why every job gets one.
 | File | Does |
 | --- | --- |
 | `server/jobStages.js` | The stage and source vocabularies, and the turnaround rule. Single source of truth. |
-| `server/jobTracker.js` | The event trail, the waiting/overdue maths, and the queue summary. |
-| `server/jobTracker.test.js` | Covers the ageing and summary maths, including the timezone trap in SQLite timestamps. |
+| `server/jobTracker.js` | The event trail, the waiting/overdue maths, the queue summary, and the day sheet. |
+| `server/jobTracker.test.js` | Covers the ageing, summary and day-sheet maths, including the timezone trap in SQLite timestamps. |
 | `server/submissionRoutes.js` | The API: intake, stage moves, hand-overs, history. |
 | `src/pages/SubmissionsInboxPage.js` | The Job Queue page. |
 

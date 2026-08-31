@@ -133,4 +133,128 @@ function summarise(rows, now = new Date()) {
   };
 }
 
-module.exports = { logEvent, listEvents, decorate, summarise, daysBetween, parseTs };
+
+// ─── Day sheet ───────────────────────────────────────────────────────────────
+
+// The office is in the UK, so a day runs midnight-to-midnight London time, not
+// UTC. Through BST those differ by an hour: a job delivered at half past eleven
+// on Monday night is Tuesday in UTC, and would be counted against the wrong
+// day — and against the wrong week at a weekend. Overridable for anyone
+// running the office from another timezone.
+const OFFICE_TZ = process.env.OFFICE_TIMEZONE || 'Europe/London';
+
+// 'YYYY-MM-DD' for a timestamp, in office time. en-CA formats as ISO, which is
+// why it is used here rather than en-GB.
+function dayKey(value, tz = OFFICE_TZ) {
+  const d = parseTs(value);
+  if (!d) return null;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+  } catch (err) {
+    // An unknown timezone must not take the report down — fall back to UTC.
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function blankTally() {
+  return { logged: 0, moved: 0, delivered: 0, notes: 0 };
+}
+
+/**
+ * What the office actually got done on one day, and who did it.
+ *
+ * Answers the two questions a day sheet is for: how much work went out, and
+ * how much of it was each person's. Jobs typed in by hand from an email or a
+ * phone call count as work — they are somebody's ten minutes — so they are
+ * attributed to whoever logged them, while portal submissions are counted as
+ * arrivals and credited to nobody, because the customer did that typing.
+ *
+ * Pure, so the arithmetic is testable without a database or waiting for a day
+ * to pass. The caller supplies the rows.
+ *
+ * @param {object}   input
+ * @param {Array}    input.jobs   drawing_submissions rows
+ * @param {Array}    input.events submission_events rows
+ * @param {string}   input.day    'YYYY-MM-DD' in office time
+ * @param {string}   [input.tz]   IANA timezone the day is measured in
+ */
+function daySheet({ jobs = [], events = [], day, tz = OFFICE_TZ }) {
+  const people = new Map();
+  const tally = (actor) => {
+    const key = (actor || '').trim() || '(unattributed)';
+    if (!people.has(key)) people.set(key, { actor: key, ...blankTally() });
+    return people.get(key);
+  };
+
+  // Who logged each hand-added job: the 'created' event carries the actor.
+  const loggedBy = new Map();
+  for (const e of events) {
+    if (e.event_type === 'created') loggedBy.set(e.submission_id, e.actor);
+  }
+
+  let arrived = 0;      // came in through the portal — nobody typed these
+  let loggedTotal = 0;  // typed in by somebody from an email or a phone call
+  const bySource = {};
+
+  for (const job of jobs) {
+    if (dayKey(job.created_at, tz) === day) {
+      const source = job.source || 'portal';
+      bySource[source] = (bySource[source] || 0) + 1;
+      if (source === 'portal') {
+        arrived += 1;
+      } else {
+        loggedTotal += 1;
+        tally(loggedBy.get(job.id) || job.owner).logged += 1;
+      }
+    }
+    // Delivery is read from the stamp on the row, not from event wording.
+    if (job.delivered_at && dayKey(job.delivered_at, tz) === day) {
+      tally(job.delivered_by || job.owner).delivered += 1;
+    }
+  }
+
+  for (const e of events) {
+    if (dayKey(e.created_at, tz) !== day) continue;
+    if (e.event_type === 'stage') tally(e.actor).moved += 1;
+    else if (e.event_type === 'note') tally(e.actor).notes += 1;
+  }
+
+  const rows = [...people.values()]
+    .filter(p => p.logged || p.moved || p.delivered || p.notes)
+    .sort((a, b) => (b.delivered - a.delivered) || (b.logged - a.logged) || (b.moved - a.moved)
+      || a.actor.localeCompare(b.actor));
+
+  return {
+    date: day,
+    arrived,                       // portal submissions that landed
+    logged: loggedTotal,           // email/phone jobs somebody typed in
+    in_total: arrived + loggedTotal,
+    delivered: rows.reduce((n, p) => n + p.delivered, 0),
+    moved: rows.reduce((n, p) => n + p.moved, 0),
+    notes: rows.reduce((n, p) => n + p.notes, 0),
+    by_source: bySource,
+    people: rows,
+  };
+}
+
+/**
+ * The last `days` day sheets, oldest first — the trend behind today's figure.
+ * One pass over the same rows per day; the volumes here are small enough that
+ * this is cheaper than a query each.
+ */
+function daySeries({ jobs = [], events = [], endDay, days = 7, tz = OFFICE_TZ }) {
+  const end = new Date(endDay + 'T12:00:00Z');
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end.getTime() - i * MS_PER_DAY);
+    out.push(daySheet({ jobs, events, day: dayKey(d, tz), tz }));
+  }
+  return out;
+}
+
+module.exports = {
+  logEvent, listEvents, decorate, summarise, daysBetween, parseTs,
+  dayKey, daySheet, daySeries, OFFICE_TZ,
+};

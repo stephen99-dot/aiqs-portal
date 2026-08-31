@@ -18,7 +18,7 @@ const {
   STAGES, SOURCES, DEFAULT_STAGE, DEFAULT_TURNAROUND_DAYS,
   isValidStage, isValidSource, stageLabel, defaultDueAt,
 } = require('./jobStages');
-const { logEvent, listEvents, decorate, summarise } = require('./jobTracker');
+const { logEvent, listEvents, decorate, summarise, daySheet, daySeries, dayKey, OFFICE_TZ } = require('./jobTracker');
 
 const router = express.Router();
 
@@ -559,6 +559,73 @@ function listOwners() {
 // date, edit notes, link it to a project. Every change that matters to "who did
 // what, when" is written to the event trail as well as the row, because the row
 // only ever holds the latest value.
+// GET /api/submissions/admin/day-sheet — what got done, by day and by person.
+//
+// The queue answers "what is outstanding". This answers "what did we get
+// through", which is the other half and the one you cannot reconstruct from a
+// list of open jobs: a delivered job leaves the queue and takes its evidence
+// with it. Jobs typed in by hand from an email count as work here, because
+// they are, and they were invisible in every count before the source column.
+//
+// ?date=YYYY-MM-DD  the day to report on (office time), default today
+// ?days=N           how many days of history to return alongside it (1-90)
+router.get('/admin/day-sheet', (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+
+    const today = dayKey(new Date());
+    const raw = String(req.query.date || '').trim();
+    if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+    }
+    const day = raw || today;
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 14));
+
+    // Pull a window wide enough for the trend, plus a margin either side so a
+    // job delivered near midnight is not clipped by the timezone shift.
+    const windowStart = new Date(new Date(day + 'T12:00:00Z').getTime() - (days + 1) * 86400000)
+      .toISOString().slice(0, 10);
+    const windowEnd = new Date(new Date(day + 'T12:00:00Z').getTime() + 86400000)
+      .toISOString().slice(0, 10);
+
+    const jobs = db.prepare(`
+      SELECT id, source, stage, owner, created_at, received_at, delivered_at, delivered_by
+        FROM drawing_submissions
+       WHERE date(created_at)   BETWEEN ? AND ?
+          OR date(delivered_at) BETWEEN ? AND ?
+    `).all(windowStart, windowEnd, windowStart, windowEnd);
+
+    const events = db.prepare(`
+      SELECT submission_id, event_type, actor, created_at
+        FROM submission_events
+       WHERE date(created_at) BETWEEN ? AND ?
+    `).all(windowStart, windowEnd);
+
+    // 'created' events can predate the window when a job is delivered inside
+    // it, and they are what attributes a hand-logged job to a person.
+    const createdEvents = db.prepare(`
+      SELECT submission_id, event_type, actor, created_at
+        FROM submission_events
+       WHERE event_type = 'created'
+    `).all();
+
+    const allEvents = events.concat(
+      createdEvents.filter(c => !events.some(e => e.submission_id === c.submission_id && e.event_type === 'created'))
+    );
+
+    res.json({
+      date: day,
+      today,
+      timezone: OFFICE_TZ,
+      sheet: daySheet({ jobs, events: allEvents, day }),
+      history: daySeries({ jobs, events: allEvents, endDay: day, days }),
+    });
+  } catch (err) {
+    console.error('[Submissions] Day sheet error:', err);
+    res.status(500).json({ error: 'Could not build the day sheet' });
+  }
+});
+
 router.patch('/admin/:id', (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
@@ -593,6 +660,17 @@ router.patch('/admin/:id', (req, res) => {
           updates.push('actioned_at = CURRENT_TIMESTAMP', 'actioned_by = ?');
           params.push(actor);
         }
+        // Stamp the delivery the moment it happens, so the day sheet counts
+        // what went out on a given day rather than inferring it from the
+        // wording of an event. Moving a job back OUT of delivered clears it —
+        // it did not go out after all, and leaving the stamp would keep it in
+        // a day's total forever.
+        if (stage === 'delivered') {
+          updates.push('delivered_at = CURRENT_TIMESTAMP', 'delivered_by = ?');
+          params.push(actor);
+        } else if (existing.stage === 'delivered') {
+          updates.push('delivered_at = NULL', 'delivered_by = NULL');
+        }
         // Moving a job forward with nobody on it leaves work that looks busy but
         // has no owner, so whoever moves it takes it unless it is already taken.
         if (stage !== 'new' && !existing.owner) {
@@ -618,8 +696,11 @@ router.patch('/admin/:id', (req, res) => {
       if (req.body.actioned) {
         updates.push('actioned_at = CURRENT_TIMESTAMP', 'actioned_by = ?');
         params.push(actor);
+        updates.push('delivered_at = CURRENT_TIMESTAMP', 'delivered_by = ?');
+        params.push(actor);
       } else {
         updates.push('actioned_at = NULL', 'actioned_by = NULL');
+        updates.push('delivered_at = NULL', 'delivered_by = NULL');
       }
     }
 
