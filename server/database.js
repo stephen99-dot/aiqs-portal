@@ -917,6 +917,14 @@ const migrations = [
   // hand days later. Every waiting-time figure is measured from this.
   { column: 'received_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN received_at DATETIME" },
   { column: 'due_at',      table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN due_at DATETIME" },
+  // When the job actually went out, and who sent it. actioned_at records when
+  // somebody first PICKED IT UP, which is a different day for anything that
+  // takes more than an afternoon — so neither it nor updated_at can answer
+  // "how many did we get out on Tuesday". Without these the only record of a
+  // delivery is the wording of a stage event, and counting work by parsing
+  // display labels breaks the day a label is reworded.
+  { column: 'delivered_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN delivered_at DATETIME" },
+  { column: 'delivered_by', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN delivered_by TEXT" },
   // Estimator add-on capability flag
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
   // Office in a Box add-on: the Stripe subscription that pays for has_estimator.
@@ -1088,6 +1096,26 @@ try {
   `);
   // Whoever ticked it is the closest thing to an owner we have on old rows.
   db.exec("UPDATE drawing_submissions SET owner = actioned_by WHERE owner IS NULL AND actioned_by IS NOT NULL");
+  // Delivery date for jobs already delivered before the column existed. The
+  // stage event that moved it is the accurate answer where one exists; the
+  // pick-up date is the fallback. Both are approximations of history, so the
+  // day sheet only claims to be exact from here forward.
+  db.exec(`
+    UPDATE drawing_submissions
+       SET delivered_at = COALESCE(
+             (SELECT MAX(e.created_at) FROM submission_events e
+               WHERE e.submission_id = drawing_submissions.id
+                 AND e.event_type = 'stage'
+                 AND e.detail LIKE '%Delivered'),
+             actioned_at
+           )
+     WHERE delivered_at IS NULL AND stage = 'delivered'
+  `);
+  db.exec(`
+    UPDATE drawing_submissions
+       SET delivered_by = COALESCE(owner, actioned_by)
+     WHERE delivered_by IS NULL AND delivered_at IS NOT NULL
+  `);
 } catch (err) {
   console.log('Job tracking backfill:', err.message);
 }
