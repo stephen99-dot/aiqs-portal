@@ -38,11 +38,8 @@ const MAX_FILE_MB = 100;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const MAX_FILES = 20;
 
-function formatSize(bytes) {
-  if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-  if (bytes >= 1024 * 1024) return Math.round(bytes / (1024 * 1024)) + ' MB';
-  return Math.max(1, Math.round(bytes / 1024)) + ' KB';
-}
+// Where a customer sends drawings too big for the portal to accept.
+const OVERSIZE_EMAIL = 'hello@theaiqs.com';
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
@@ -60,6 +57,36 @@ function fmtSize(b) {
   if (b < 1024) return b + ' B';
   if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
+}
+
+// "That file is too big" — shown the moment an oversized file is added, and
+// again if they try to submit anyway. Names the offending files and their
+// sizes, and hands over a pre-addressed email so sending it manually is one
+// click rather than a hunt for the address.
+function oversizeMessage(oversized, siteAddress) {
+  const subject = 'Large drawings for BOQ' + (siteAddress.trim() ? ' — ' + siteAddress.trim() : '');
+  const body = 'Hi,\n\nMy drawings are too big to upload through the portal, so here they are attached.\n\n'
+    + (siteAddress.trim() ? 'Site address: ' + siteAddress.trim() + '\n' : '')
+    + 'Files:\n' + oversized.map(f => '  - ' + f.name + ' (' + fmtSize(f.size) + ')').join('\n')
+    + '\n\nThanks';
+  const href = 'mailto:' + OVERSIZE_EMAIL
+    + '?subject=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  return (
+    <>
+      <strong>
+        {oversized.length === 1 ? 'That file is too big' : 'Those files are too big'} — the portal accepts up to {MAX_FILE_MB} MB per file.
+      </strong>
+      <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+        {oversized.map((f, i) => <div key={i}>{f.name} — {fmtSize(f.size)}</div>)}
+      </div>
+      <div style={{ marginTop: 8, color: 'var(--text-secondary)' }}>
+        Please email {oversized.length === 1 ? 'it' : 'them'} to us instead and we'll take it from there —{' '}
+        <a href={href} style={{ color: 'var(--accent)', fontWeight: 700 }}>{OVERSIZE_EMAIL}</a>.
+        {' '}Remove {oversized.length === 1 ? 'it' : 'them'} from the list above to submit the rest.
+      </div>
+    </>
+  );
 }
 
 // One-off top-up pack card + its buy button, shown inside the top-up modal.
@@ -112,11 +139,17 @@ export default function SubmitDrawingsPage() {
     apiFetch('/credits').then(setCredits).catch(() => {});
   }, []);
 
-  const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting;
+  const oversizedFiles = files.filter(f => f.size > MAX_FILE_BYTES);
+  const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting && oversizedFiles.length === 0 && files.length <= MAX_FILES;
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
-    setFiles(prev => [...prev, ...Array.from(newFiles || [])]);
+    const incoming = Array.from(newFiles || []);
+    setFiles(prev => [...prev, ...incoming]);
+    // Say it straight away rather than letting them fill in the whole form and
+    // hit Submit first.
+    const tooBig = incoming.filter(f => f.size > MAX_FILE_BYTES);
+    if (tooBig.length > 0) setStatus({ type: 'error', msg: oversizeMessage(tooBig, siteAddress) });
   }
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
@@ -196,13 +229,8 @@ export default function SubmitDrawingsPage() {
     if (files.length > MAX_FILES) {
       return setStatus({ type: 'error', msg: 'Too many files — please send at most ' + MAX_FILES + ' per submission. Zip the rest together, or split this into two submissions.' });
     }
-    const oversized = files.filter(f => f.size > MAX_FILE_BYTES);
-    if (oversized.length > 0) {
-      return setStatus({
-        type: 'error',
-        msg: oversized.map(f => f.name + ' (' + formatSize(f.size) + ')').join(', ')
-          + ' — over the ' + MAX_FILE_MB + ' MB limit per file. Please compress it, split it, or paste a download link in the project details instead.',
-      });
+    if (oversizedFiles.length > 0) {
+      return setStatus({ type: 'error', msg: oversizeMessage(oversizedFiles, siteAddress) });
     }
 
     setSubmitting(true);
@@ -358,8 +386,10 @@ export default function SubmitDrawingsPage() {
                 >
                   Choose files
                 </Button>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto', textAlign: 'right' }}>
                   PDF, DWG, images, Word, Excel
+                  <br />
+                  Up to {MAX_FILE_MB} MB per file, {MAX_FILES} files
                 </span>
               </div>
 
@@ -392,22 +422,26 @@ export default function SubmitDrawingsPage() {
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {files.map((f, i) => {
                     const Icon = getFileIcon(f.name);
+                    const tooBig = f.size > MAX_FILE_BYTES;
                     return (
                       <div key={i} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '9px 12px', borderRadius: 9,
-                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid ' + (tooBig ? 'var(--danger)' : 'var(--border)'),
                       }}>
                         <div style={{
                           width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                          background: 'var(--accent-glow)',
+                          background: tooBig ? 'var(--danger-bg)' : 'var(--accent-glow)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          <Icon size={14} color="var(--accent)" />
+                          <Icon size={14} color={tooBig ? 'var(--danger)' : 'var(--accent)'} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{fmtSize(f.size)}</div>
+                          <div style={{ fontSize: '0.7rem', color: tooBig ? 'var(--danger)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {fmtSize(f.size)}{tooBig ? ' · too big — email this one to ' + OVERSIZE_EMAIL : ''}
+                          </div>
                         </div>
                         <IconButton onClick={() => removeFile(i)} aria-label="Remove file" title="Remove file">
                           <XIcon size={14} color="currentColor" />

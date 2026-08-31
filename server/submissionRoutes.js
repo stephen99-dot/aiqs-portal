@@ -29,6 +29,10 @@ const TERMS_VERSION = '2026-06-18';
 const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
 const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';
 
+// Where a customer sends drawings too big for the portal to accept. Mirrored in
+// src/pages/SubmitDrawingsPage.js.
+const OVERSIZE_EMAIL = process.env.OVERSIZE_UPLOAD_EMAIL || 'hello@theaiqs.com';
+
 const MAX_FILE_MB = 100;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024; // 100 MB per file
 const MAX_FILES = 20;
@@ -144,7 +148,7 @@ function uploadFiles(req, res, next) {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         status = 413;
-        message = 'A file is too large — the maximum size is ' + MAX_FILE_MB + ' MB per file. Please compress the ZIP, split it into smaller files, or share a download link in the project details.';
+        message = 'That file is too big — the portal accepts up to ' + MAX_FILE_MB + ' MB per file. Please email it to us instead and we will take it from there: ' + OVERSIZE_EMAIL + '.';
       } else if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
         status = 400;
         message = 'Too many files — please upload at most ' + MAX_FILES + ' files per submission.';
