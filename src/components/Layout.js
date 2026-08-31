@@ -11,7 +11,6 @@ import {
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
 import SurveyPopup from './SurveyPopup';
-import SuitabilitySurveyPopup from './SuitabilitySurveyPopup';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -63,7 +62,6 @@ export default function Layout() {
   // null = new-product prompt still deciding whether to show; true = it's
   // showing this session (so the feedback survey stays out of the way);
   // false = nothing to show, the feedback survey may run.
-  const [suitabilityShowing, setSuitabilityShowing] = useState(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -349,16 +347,8 @@ export default function Layout() {
         </nav>
       )}
 
-      {/* New-product prompt — "We have a new product. Would you like to see
-          it?" A Yes leads into the suitability survey that tailors an AI
-          Trades Pilot package + free-trial invite. Replaced the old What's
-          New popup ad. */}
-      {!isAdmin && <SuitabilitySurveyPopup onDecided={setSuitabilityShowing} />}
-
-      {/* Feedback survey — every non-admin user, once. Only runs in sessions
-          where the new-product prompt isn't showing, so the two popups never
-          stack. */}
-      {!isAdmin && suitabilityShowing === false && <SurveyPopup />}
+      {/* Feedback survey — every non-admin user, once. */}
+      {!isAdmin && <SurveyPopup />}
     </div>
   );
 }
