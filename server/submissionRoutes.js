@@ -14,6 +14,11 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
+const {
+  STAGES, SOURCES, DEFAULT_STAGE, DEFAULT_TURNAROUND_DAYS,
+  isValidStage, isValidSource, stageLabel, defaultDueAt,
+} = require('./jobStages');
+const { logEvent, listEvents, decorate, summarise } = require('./jobTracker');
 
 const router = express.Router();
 
@@ -250,12 +255,19 @@ router.post('/', uploadFiles, async (req, res) => {
       } catch (e) { console.error('[Submissions] credit notification error:', e.message); }
     }
 
+    // A portal submission arrives the moment it is posted, so received_at is
+    // now and the turnaround clock starts here. It lands at the front of the
+    // pipeline with nobody assigned — it is real outstanding work until
+    // somebody in the office picks it up.
+    const rowId = uuidv4();
+    const receivedAt = new Date().toISOString();
     db.prepare(`
       INSERT INTO drawing_submissions
-        (id, user_id, submission_id, project_type, site_address, message, file_count, file_names, pipedream_status, credits_remaining_after, terms_accepted_at, terms_version)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, user_id, submission_id, project_type, site_address, message, file_count, file_names, pipedream_status, credits_remaining_after, terms_accepted_at, terms_version,
+         stage, source, received_at, due_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'portal', ?, ?)
     `).run(
-      uuidv4(),
+      rowId,
       user.id,
       submissionId,
       projectType,
@@ -265,9 +277,19 @@ router.post('/', uploadFiles, async (req, res) => {
       JSON.stringify(files.map(f => f.originalname)),
       pipedreamStatus,
       creditsRemaining,
-      new Date().toISOString(),
-      TERMS_VERSION
+      receivedAt,
+      TERMS_VERSION,
+      DEFAULT_STAGE,
+      receivedAt,
+      defaultDueAt(receivedAt)
     );
+
+    logEvent({
+      submission_id: rowId,
+      event_type: 'created',
+      detail: `Submitted through the portal — ${files.length} file${files.length === 1 ? '' : 's'}`,
+      actor: user.email || user.id,
+    });
 
     res.json({
       success: true,
@@ -286,6 +308,7 @@ router.get('/', (req, res) => {
     const rows = db.prepare(`
       SELECT s.id, s.submission_id, s.project_type, s.site_address, s.file_count, s.file_names,
              s.credits_remaining_after, s.created_at, s.actioned_at, s.project_id,
+             s.stage, s.received_at,
              p.status AS project_status, p.title AS project_title
       FROM drawing_submissions s
       LEFT JOIN projects p ON p.id = s.project_id
@@ -294,10 +317,14 @@ router.get('/', (req, res) => {
       LIMIT 50
     `).all(req.user.id);
 
-    // Collapse the admin-side state into three customer-facing stages:
+    // Collapse the internal stage into the three the customer sees:
     // received (with our QS team) → in_progress (being priced) → delivered.
+    // The office's stages are our business; the customer only needs to know
+    // whether we have started and whether it has gone out.
     function clientStatus(r) {
+      if (r.stage === 'delivered') return 'delivered';
       if (r.project_status === 'delivered' || r.project_status === 'completed') return 'delivered';
+      if (r.stage && r.stage !== 'new') return 'in_progress';
       if (r.project_id || r.actioned_at) return 'in_progress';
       return 'received';
     }
@@ -320,24 +347,41 @@ router.get('/admin/all', (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
 
+    // Ordered by received_at, not created_at: an email enquiry logged today but
+    // received last week belongs at the top of the queue, where it has been
+    // waiting, not at the point somebody got round to typing it in.
     const rows = db.prepare(`
       SELECT s.id, s.submission_id, s.project_type, s.site_address, s.message, s.file_count, s.file_names,
              s.pipedream_status, s.credits_remaining_after, s.created_at,
              s.actioned_at, s.actioned_by, s.admin_notes, s.project_id, s.drive_link,
+             s.stage, s.owner, s.source, s.received_at, s.due_at,
              u.id AS user_id,
              u.full_name AS user_name, u.email AS user_email,
              u.company AS user_company, u.phone AS user_phone
       FROM drawing_submissions s
       JOIN users u ON u.id = s.user_id
-      ORDER BY s.created_at DESC
+      ORDER BY COALESCE(s.received_at, s.created_at) DESC
       LIMIT 500
     `).all();
 
+    const submissions = rows.map(r => decorate({
+      ...r,
+      file_names: r.file_names ? JSON.parse(r.file_names) : [],
+    }));
+
     res.json({
-      submissions: rows.map(r => ({
-        ...r,
-        file_names: r.file_names ? JSON.parse(r.file_names) : [],
-      })),
+      submissions,
+      // The stage and source vocabularies travel with the data so the inbox
+      // renders from the server's definition rather than keeping a second copy
+      // that drifts the first time a stage is renamed.
+      stages: STAGES,
+      sources: SOURCES,
+      turnaround_days: DEFAULT_TURNAROUND_DAYS,
+      summary: summarise(rows),
+      // Who a job can be handed to: everyone with admin access, plus any owner
+      // already recorded on a job (so a hand-over survives that person's
+      // account being changed or removed).
+      owners: listOwners(),
     });
   } catch (err) {
     console.error('[Submissions] Admin list error:', err);
@@ -345,43 +389,201 @@ router.get('/admin/all', (req, res) => {
   }
 });
 
-// Admin: update a submission — toggle actioned state, edit notes, link to a project
+// Fetch one submission with its customer and tracking figures attached, in the
+// shape the inbox expects back from every write.
+function loadSubmission(id) {
+  const row = db.prepare(`
+    SELECT s.*, u.full_name AS user_name, u.email AS user_email,
+           u.company AS user_company, u.phone AS user_phone
+    FROM drawing_submissions s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.id = ?
+  `).get(id);
+  if (!row) return null;
+  if (row.file_names) {
+    try { row.file_names = JSON.parse(row.file_names); } catch (e) { row.file_names = []; }
+  }
+  return decorate(row);
+}
+
+// Everyone a job can be handed to. Admins are the people who can open the
+// inbox at all; owners already recorded on jobs are unioned in so a hand-over
+// still reads correctly after somebody's account changes.
+function listOwners() {
+  try {
+    const admins = db.prepare(
+      "SELECT email, full_name FROM users WHERE role = 'admin' AND email IS NOT NULL"
+    ).all();
+    const seen = new Map();
+    for (const a of admins) seen.set(a.email, a.full_name || a.email);
+    const used = db.prepare(
+      "SELECT DISTINCT owner FROM drawing_submissions WHERE owner IS NOT NULL AND owner != ''"
+    ).all();
+    for (const u of used) if (!seen.has(u.owner)) seen.set(u.owner, u.owner);
+    return [...seen.entries()]
+      .map(([email, name]) => ({ email, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) {
+    console.error('[Submissions] Failed to list owners:', err.message);
+    return [];
+  }
+}
+
+// Admin: update a submission — move its stage, hand it to someone, set a target
+// date, edit notes, link it to a project. Every change that matters to "who did
+// what, when" is written to the event trail as well as the row, because the row
+// only ever holds the latest value.
 router.patch('/admin/:id', (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
 
-    const existing = db.prepare('SELECT id FROM drawing_submissions WHERE id = ?').get(req.params.id);
+    const existing = db.prepare('SELECT * FROM drawing_submissions WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Submission not found' });
 
+    const actor = req.user.email || req.user.id;
     const updates = [];
     const params = [];
+    const events = [];
+    const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k);
 
-    if (Object.prototype.hasOwnProperty.call(req.body, 'actioned')) {
-      if (req.body.actioned) {
-        updates.push('actioned_at = CURRENT_TIMESTAMP');
-        updates.push('actioned_by = ?');
-        params.push(req.user.email || req.user.id);
-      } else {
-        updates.push('actioned_at = NULL');
-        updates.push('actioned_by = NULL');
+    // Stage. Moving a job off 'new' is what "somebody has picked this up" means,
+    // so actioned_at is kept in step with it rather than being a separate thing
+    // to remember to tick — the two could otherwise disagree.
+    if (has('stage')) {
+      const stage = String(req.body.stage || '').trim();
+      if (!isValidStage(stage)) {
+        return res.status(400).json({ error: 'Unknown stage: ' + stage });
+      }
+      if (stage !== existing.stage) {
+        updates.push('stage = ?');
+        params.push(stage);
+        events.push({
+          event_type: 'stage',
+          detail: `${stageLabel(existing.stage || 'new')} → ${stageLabel(stage)}`,
+        });
+        if (stage === 'new') {
+          updates.push('actioned_at = NULL', 'actioned_by = NULL');
+        } else if (!existing.actioned_at) {
+          updates.push('actioned_at = CURRENT_TIMESTAMP', 'actioned_by = ?');
+          params.push(actor);
+        }
+        // Moving a job forward with nobody on it leaves work that looks busy but
+        // has no owner, so whoever moves it takes it unless it is already taken.
+        if (stage !== 'new' && !existing.owner) {
+          updates.push('owner = ?');
+          params.push(actor);
+          events.push({ event_type: 'owner', detail: 'Picked up by ' + actor });
+        }
       }
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'admin_notes')) {
-      updates.push('admin_notes = ?');
-      params.push(req.body.admin_notes || null);
+
+    // Legacy tick, still sent by older clients: done means delivered, untick
+    // means back to the front of the queue.
+    if (has('actioned') && !has('stage')) {
+      const stage = req.body.actioned ? 'delivered' : 'new';
+      if (stage !== existing.stage) {
+        updates.push('stage = ?');
+        params.push(stage);
+        events.push({
+          event_type: 'stage',
+          detail: `${stageLabel(existing.stage || 'new')} → ${stageLabel(stage)}`,
+        });
+      }
+      if (req.body.actioned) {
+        updates.push('actioned_at = CURRENT_TIMESTAMP', 'actioned_by = ?');
+        params.push(actor);
+      } else {
+        updates.push('actioned_at = NULL', 'actioned_by = NULL');
+      }
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'project_id')) {
+
+    if (has('owner')) {
+      const owner = (req.body.owner || '').trim() || null;
+      if (owner !== (existing.owner || null)) {
+        updates.push('owner = ?');
+        params.push(owner);
+        events.push({
+          event_type: 'owner',
+          detail: owner ? 'Assigned to ' + owner : 'Unassigned',
+        });
+      }
+    }
+
+    if (has('due_at')) {
+      const raw = (req.body.due_at || '').trim();
+      let dueAt = null;
+      if (raw) {
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ error: 'Target date is not a valid date' });
+        }
+        dueAt = parsed.toISOString();
+      }
+      if (dueAt !== (existing.due_at || null)) {
+        updates.push('due_at = ?');
+        params.push(dueAt);
+        events.push({
+          event_type: 'due',
+          detail: dueAt ? 'Target date set to ' + dueAt.slice(0, 10) : 'Target date cleared',
+        });
+      }
+    }
+
+    // When the enquiry actually arrived. Correctable, because a job logged by
+    // hand is often typed in days after the email landed and the waiting time
+    // every report shows is measured from this.
+    if (has('received_at')) {
+      const raw = (req.body.received_at || '').trim();
+      if (!raw) return res.status(400).json({ error: 'Received date cannot be blank' });
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'Received date is not a valid date' });
+      }
+      const receivedAt = parsed.toISOString();
+      if (receivedAt !== (existing.received_at || null)) {
+        updates.push('received_at = ?');
+        params.push(receivedAt);
+        events.push({ event_type: 'received', detail: 'Enquiry arrived ' + receivedAt.slice(0, 10) });
+      }
+    }
+
+    if (has('source')) {
+      const source = String(req.body.source || '').trim();
+      if (!isValidSource(source)) {
+        return res.status(400).json({ error: 'Unknown source: ' + source });
+      }
+      if (source !== existing.source) {
+        updates.push('source = ?');
+        params.push(source);
+        events.push({ event_type: 'source', detail: 'Came in via ' + source });
+      }
+    }
+
+    if (has('admin_notes')) {
+      const notes = req.body.admin_notes || null;
+      if (notes !== (existing.admin_notes || null)) {
+        updates.push('admin_notes = ?');
+        params.push(notes);
+        events.push({ event_type: 'note', detail: 'Notes updated' });
+      }
+    }
+
+    if (has('project_id')) {
       updates.push('project_id = ?');
       params.push(req.body.project_id || null);
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'drive_link')) {
+
+    if (has('drive_link')) {
       const link = (req.body.drive_link || '').trim();
       // Bare-bones URL sanity check so we don't store junk
       if (link && !/^https?:\/\//i.test(link)) {
         return res.status(400).json({ error: 'Drive link must start with http:// or https://' });
       }
-      updates.push('drive_link = ?');
-      params.push(link || null);
+      if (link !== (existing.drive_link || '')) {
+        updates.push('drive_link = ?');
+        params.push(link || null);
+        events.push({ event_type: 'drive', detail: link ? 'Drive folder linked' : 'Drive link removed' });
+      }
     }
 
     if (updates.length === 0) return res.json({ ok: true, unchanged: true });
@@ -389,21 +591,45 @@ router.patch('/admin/:id', (req, res) => {
     params.push(req.params.id);
     db.prepare(`UPDATE drawing_submissions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
-    const updated = db.prepare(`
-      SELECT s.*, u.full_name AS user_name, u.email AS user_email,
-             u.company AS user_company, u.phone AS user_phone
-      FROM drawing_submissions s
-      JOIN users u ON u.id = s.user_id
-      WHERE s.id = ?
-    `).get(req.params.id);
-    if (updated && updated.file_names) {
-      try { updated.file_names = JSON.parse(updated.file_names); } catch (e) { updated.file_names = []; }
-    }
-    res.json({ ok: true, submission: updated });
+    for (const e of events) logEvent({ submission_id: req.params.id, actor, ...e });
+
+    res.json({ ok: true, submission: loadSubmission(req.params.id) });
   } catch (err) {
     console.error('[Submissions] Admin update error:', err);
     res.status(500).json({ error: 'Failed to update submission' });
   }
+});
+
+// Admin: add a note straight to the event trail. Distinct from admin_notes,
+// which is the current state of play and gets overwritten — these are dated,
+// attributed and permanent, so a job can be handed over without losing its
+// history.
+router.post('/admin/:id/note', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const existing = db.prepare('SELECT id FROM drawing_submissions WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Submission not found' });
+    const text = ((req.body && req.body.text) || '').trim();
+    if (!text) return res.status(400).json({ error: 'Write something first' });
+    if (text.length > 2000) return res.status(400).json({ error: 'Note is too long (max 2000 characters)' });
+    logEvent({
+      submission_id: req.params.id,
+      event_type: 'note',
+      detail: text,
+      actor: req.user.email || req.user.id,
+    });
+    res.json({ ok: true, events: listEvents(req.params.id) });
+  } catch (err) {
+    console.error('[Submissions] note error:', err);
+    res.status(500).json({ error: 'Failed to add note' });
+  }
+});
+
+// Admin: the history of one job — every stage move, hand-over and note, newest
+// first.
+router.get('/admin/:id/events', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  res.json({ events: listEvents(req.params.id) });
 });
 
 // Admin: turn a submission into a project (so deliverables can be uploaded
@@ -451,6 +677,13 @@ router.post('/admin/:id/create-project', (req, res) => {
 
     db.prepare('UPDATE drawing_submissions SET project_id = ? WHERE id = ?').run(projectId, sub.id);
 
+    logEvent({
+      submission_id: sub.id,
+      event_type: 'project',
+      detail: 'Job created in the customer\'s portal: ' + title,
+      actor: req.user.email || req.user.id,
+    });
+
     res.json({ ok: true, project_id: projectId, created: true });
   } catch (err) {
     console.error('[Submissions] create-project error:', err);
@@ -480,6 +713,38 @@ router.post('/admin/manual-job', (req, res) => {
       || siteAddress
       || (projectType + ' — ' + new Date().toLocaleDateString('en-GB'));
 
+    // How it reached us. A job typed in by hand is nearly always an email or
+    // phone enquiry, so 'email' is the default rather than 'manual'.
+    const source = isValidSource(req.body.source) ? req.body.source : 'email';
+
+    // When the ENQUIRY arrived — not when it was typed in. Without this every
+    // email job reports a waiting time starting the moment somebody got round
+    // to logging it, which is exactly the figure that hides a backlog.
+    let receivedAt = new Date().toISOString();
+    if (req.body.received_at) {
+      const parsed = new Date(req.body.received_at);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'Received date is not a valid date' });
+      }
+      receivedAt = parsed.toISOString();
+    }
+
+    // An email job is real outstanding work, so it starts at the front of the
+    // pipeline like any other. It used to be written straight to "actioned",
+    // which meant it never appeared in anybody's queue.
+    const stage = isValidStage(req.body.stage) ? req.body.stage : DEFAULT_STAGE;
+
+    let dueAt = defaultDueAt(receivedAt);
+    if (req.body.due_at) {
+      const parsed = new Date(req.body.due_at);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'Target date is not a valid date' });
+      }
+      dueAt = parsed.toISOString();
+    }
+
+    const owner = (req.body.owner || '').trim() || (req.user.email || req.user.id);
+
     const projectId = uuidv4();
     db.prepare(`
       INSERT INTO projects (id, user_id, title, project_type, description, location, status, source)
@@ -494,23 +759,21 @@ router.post('/admin/manual-job', (req, res) => {
     db.prepare(`
       INSERT INTO drawing_submissions
         (id, user_id, submission_id, project_type, site_address, message, file_count, file_names,
-         pipedream_status, project_id, actioned_at, actioned_by)
-      VALUES (?, ?, ?, ?, ?, ?, 0, '[]', 'manual', ?, CURRENT_TIMESTAMP, ?)
+         pipedream_status, project_id, stage, owner, source, received_at, due_at, actioned_at, actioned_by)
+      VALUES (?, ?, ?, ?, ?, ?, 0, '[]', 'manual', ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(rowId, customer.id, submissionId, projectType, siteAddress || null, message || null,
-           projectId, req.user.email || req.user.id);
+           projectId, stage, owner, source, receivedAt, dueAt,
+           stage === 'new' ? null : new Date().toISOString(),
+           stage === 'new' ? null : (req.user.email || req.user.id));
 
-    const submission = db.prepare(`
-      SELECT s.*, u.full_name AS user_name, u.email AS user_email,
-             u.company AS user_company, u.phone AS user_phone
-      FROM drawing_submissions s
-      JOIN users u ON u.id = s.user_id
-      WHERE s.id = ?
-    `).get(rowId);
-    if (submission && submission.file_names) {
-      try { submission.file_names = JSON.parse(submission.file_names); } catch (e) { submission.file_names = []; }
-    }
+    logEvent({
+      submission_id: rowId,
+      event_type: 'created',
+      detail: `Logged by hand — ${source} enquiry received ${receivedAt.slice(0, 10)}`,
+      actor: req.user.email || req.user.id,
+    });
 
-    res.json({ ok: true, project_id: projectId, submission });
+    res.json({ ok: true, project_id: projectId, submission: loadSubmission(rowId) });
   } catch (err) {
     console.error('[Submissions] manual-job error:', err);
     res.status(500).json({ error: 'Failed to create job: ' + err.message });
@@ -550,6 +813,17 @@ function driveLinkWebhookHandler(req, res) {
     ).run(driveLink, submissionId, submissionId);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'No matching submission for ' + submissionId });
+    }
+    const row = db.prepare(
+      'SELECT id FROM drawing_submissions WHERE submission_id = ? OR id = ?'
+    ).get(submissionId, submissionId);
+    if (row) {
+      logEvent({
+        submission_id: row.id,
+        event_type: 'drive',
+        detail: 'Drive folder linked automatically after upload',
+        actor: 'pipedream',
+      });
     }
     res.json({ ok: true, updated: result.changes });
   } catch (err) {

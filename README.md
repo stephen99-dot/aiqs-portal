@@ -9,6 +9,13 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
 - **Auth:** JWT tokens + bcrypt
 - **Uploads:** Multer (local file storage)
 
+## Job tracking
+
+Every job — portal submission or email enquiry — sits in one queue at one of
+seven stages, with an owner, the date the enquiry actually arrived, a target
+date and a permanent history. See **[JOB_TRACKING.md](JOB_TRACKING.md)** for
+what each stage means, the daily routine, and how to read the queue.
+
 ## Deployed on Render
 
 ### Environment Variables

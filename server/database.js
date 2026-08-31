@@ -896,6 +896,27 @@ const migrations = [
   // stored locally — so we keep a per-submission Drive URL the admin can paste
   // once, and the inbox surfaces "Open in Drive" links.
   { column: 'drive_link',  table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN drive_link TEXT" },
+  // ── Job tracking ──────────────────────────────────────────────────────────
+  // The inbox used to be binary: a job was either untouched or "actioned".
+  // That could not answer either question the office actually asks — where is
+  // this job up to, and who is holding it — so a submission now carries a
+  // stage, an owner, and a target date. See server/jobStages.js.
+  //
+  // stage and source are added WITHOUT a DEFAULT on purpose. SQLite fills every
+  // existing row with the default at ALTER time, which would stamp 'new' over
+  // jobs that were finished months ago and relabel every hand-added job as a
+  // portal submission — and leave the backfill below nothing to correct,
+  // because no row would be NULL. Left null, the backfill can tell "never set"
+  // from "set", and every insert names both columns explicitly.
+  { column: 'stage',       table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN stage TEXT" },
+  { column: 'owner',       table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN owner TEXT" },
+  // How the job reached us. Email/phone enquiries are logged by hand, so they
+  // need to be distinguishable from portal submissions in the queue.
+  { column: 'source',      table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN source TEXT" },
+  // When the ENQUIRY arrived, which is not created_at for a job typed in by
+  // hand days later. Every waiting-time figure is measured from this.
+  { column: 'received_at', table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN received_at DATETIME" },
+  { column: 'due_at',      table: 'drawing_submissions', sql: "ALTER TABLE drawing_submissions ADD COLUMN due_at DATETIME" },
   // Estimator add-on capability flag
   { column: 'has_estimator', table: 'users', sql: "ALTER TABLE users ADD COLUMN has_estimator INTEGER DEFAULT 0" },
   // Office in a Box add-on: the Stripe subscription that pays for has_estimator.
@@ -1021,6 +1042,54 @@ try {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_public_token ON invoices(public_token)');
 } catch (err) {
   console.log('Public token indexes:', err.message);
+}
+
+// Per-job event trail for the submissions inbox. admin_notes is a single field
+// that gets overwritten, so it can say what someone thinks NOW but never what
+// happened, or when, or who did it. This table is append-only: every stage
+// move, hand-over and note lands here and nothing is ever edited out of it.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS submission_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      submission_id TEXT NOT NULL,          -- drawing_submissions.id
+      event_type TEXT NOT NULL,             -- created | stage | owner | note | due | drive | project
+      detail TEXT,
+      actor TEXT,                           -- email of whoever did it
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_submission_events_sub
+      ON submission_events(submission_id, created_at);
+  `);
+} catch (err) {
+  console.log('submission_events table:', err.message);
+}
+
+// Backfill the tracking columns for submissions that predate them. Each step
+// only touches NULL values, so it is idempotent and never overwrites a stage
+// or date somebody has since set by hand.
+try {
+  // Waiting time is measured from received_at. For existing rows the row was
+  // written the moment the drawings landed, so created_at is the truth.
+  db.exec('UPDATE drawing_submissions SET received_at = created_at WHERE received_at IS NULL');
+  // pipedream_status 'manual' marked the hand-added jobs before there was a
+  // source column; everything else came in through the portal form.
+  db.exec(`
+    UPDATE drawing_submissions
+       SET source = CASE WHEN pipedream_status = 'manual' THEN 'manual' ELSE 'portal' END
+     WHERE source IS NULL
+  `);
+  // Ticked = the work was finished and sent, which is the delivered stage.
+  // Untouched rows start at the front of the pipeline.
+  db.exec(`
+    UPDATE drawing_submissions
+       SET stage = CASE WHEN actioned_at IS NOT NULL THEN 'delivered' ELSE 'new' END
+     WHERE stage IS NULL
+  `);
+  // Whoever ticked it is the closest thing to an owner we have on old rows.
+  db.exec("UPDATE drawing_submissions SET owner = actioned_by WHERE owner IS NULL AND actioned_by IS NOT NULL");
+} catch (err) {
+  console.log('Job tracking backfill:', err.message);
 }
 
 // Authorized sign-in emails — extra email addresses (colleagues, team members)
