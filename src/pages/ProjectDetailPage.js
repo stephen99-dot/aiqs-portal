@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../utils/api';
 import DeliverablesPanel from '../components/DeliverablesPanel';
-import { ClipboardIcon } from '../components/Icons';
+import { ClipboardIcon, EditIcon } from '../components/Icons';
 import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 import {
-  Button, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast, Input,
+  Button, IconButton, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast, Input,
 } from '../ui';
 
 // SVG icons for document types
@@ -44,6 +44,10 @@ const STEP_LABELS = {
 
 const STEPS = ['submitted', 'in_review', 'in_progress', 'completed', 'delivered'];
 
+function sameText(a, b) {
+  return (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const toast = useToast();
@@ -53,6 +57,9 @@ export default function ProjectDetailPage() {
   const [editingType, setEditingType] = useState(false);
   const [typeDraft, setTypeDraft] = useState('');
   const [savingType, setSavingType] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   useEffect(() => { loadProject(); }, [id]); // eslint-disable-line
 
@@ -87,6 +94,35 @@ export default function ProjectDetailPage() {
     } finally {
       setSavingType(false);
     }
+  }
+
+  // Titles are generated from whatever was typed at submission, so they often
+  // arrive as the site address or a long description. Anyone who owns the
+  // project can rename it — here as well as on the dashboard list, because
+  // this is the page you are looking at when you notice the title is wrong.
+  async function saveTitle() {
+    const next = titleDraft.trim();
+    if (!next) { toast.error('Please give the project a name'); return; }
+    if (next === (project.title || '')) { setEditingTitle(false); return; }
+    setSavingTitle(true);
+    try {
+      const updated = await apiFetch(`/projects/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title: next }),
+      });
+      setProject((p) => ({ ...p, ...updated }));
+      setEditingTitle(false);
+      toast.success('Project renamed');
+    } catch (err) {
+      toast.error(err.message || 'Could not rename the project');
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
+  function startRename() {
+    setTitleDraft(project.title || '');
+    setEditingTitle(true);
   }
 
   async function handleDownload(filename) {
@@ -161,11 +197,38 @@ export default function ProjectDetailPage() {
     <div className="page">
       <PageHeader
         back={{ to: '/dashboard', label: 'All Projects' }}
-        title={project.title}
+        title={editingTitle ? (
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Input
+              type="text"
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
+              maxLength={200}
+              aria-label="Project name"
+              style={{ flex: '1 1 320px', minWidth: 0, fontSize: '1rem', fontWeight: 700 }}
+            />
+            <Button size="sm" onClick={saveTitle} disabled={savingTitle || !titleDraft.trim()}>
+              {savingTitle ? 'Saving…' : 'Save'}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setEditingTitle(false)} disabled={savingTitle}>
+              Cancel
+            </Button>
+          </span>
+        ) : project.title}
+        titleExtra={editingTitle ? null : (
+          <IconButton onClick={startRename} title="Rename project" aria-label="Rename project"
+            style={{ marginLeft: 8, verticalAlign: 'middle' }}>
+            <EditIcon size={15} />
+          </IconButton>
+        )}
         subtitle={
           [
             project.project_type,
-            project.location,
+            // Titles generated at submission are often just the site address,
+            // in which case repeating it here says nothing.
+            sameText(project.location, project.title) ? null : project.location,
             new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
           ].filter(Boolean).join(' · ')
         }
