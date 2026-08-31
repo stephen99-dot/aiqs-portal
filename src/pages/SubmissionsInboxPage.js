@@ -92,6 +92,8 @@ export default function SubmissionsInboxPage() {
   // Manual "Add job" — log an email or phone enquiry into the same queue.
   const [showAddJob, setShowAddJob] = useState(false);
   const [customers, setCustomers] = useState([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [jobDraft, setJobDraft] = useState(null);
   const [creatingJob, setCreatingJob] = useState(false);
   const [addJobError, setAddJobError] = useState('');
@@ -289,14 +291,17 @@ export default function SubmissionsInboxPage() {
       received_at: new Date().toISOString().slice(0, 10),
     });
     setShowAddJob(true);
+    setCustomerSearch('');
     if (customers.length === 0) {
+      setCustomersLoading(true);
       apiFetch('/admin/users')
         .then((d) => {
           const list = (d.users || d || []).filter((u) => u.role !== 'admin');
           list.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
           setCustomers(list);
         })
-        .catch((e) => setAddJobError(e.message || 'Could not load customers'));
+        .catch((e) => setAddJobError(e.message || 'Could not load customers'))
+        .finally(() => setCustomersLoading(false));
     }
   }
 
@@ -370,6 +375,21 @@ export default function SubmissionsInboxPage() {
 
   const selectedStage = selected ? (stageByKey[selected.stage] || stageByKey.new || FALLBACK_STAGES[0]) : null;
 
+  // Customer picker for the Log-a-job modal. A dropdown of every account is
+  // unusable once the list is long, so it is a search over name, company and
+  // email instead — the three things somebody has to hand when an enquiry
+  // comes in by email.
+  const chosenCustomer = jobDraft
+    ? customers.find((c) => c.id === jobDraft.user_id) || null
+    : null;
+  const customerMatches = (() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return customers;
+    return customers.filter((c) =>
+      [c.full_name, c.email, c.company, c.phone].filter(Boolean).join(' ').toLowerCase().includes(q)
+    );
+  })();
+
   return (
     <div style={{ padding: '24px 28px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Add-job modal — log an email or phone enquiry into the same queue */}
@@ -391,20 +411,105 @@ export default function SubmissionsInboxPage() {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <Field label="Customer *">
-                <Select
-                  value={jobDraft.user_id}
-                  onChange={(e) => setJobDraft((d) => ({ ...d, user_id: e.target.value }))}
-                  required
-                >
-                  <option value="">Select a customer…</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {(c.full_name || c.email)}{c.company ? ' · ' + c.company : ''}{c.full_name && c.email ? ' (' + c.email + ')' : ''}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <div className="ui-field">
+                <span className="ui-field__label">Customer *</span>
+                {chosenCustomer ? (
+                  // Chosen — collapse to the one name, so the rest of the form
+                  // is not buried under a list.
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px', borderRadius: 8,
+                    background: 'var(--accent-glow)', border: '1px solid var(--border-accent)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {chosenCustomer.full_name || chosenCustomer.email}
+                        {chosenCustomer.company ? <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · {chosenCustomer.company}</span> : null}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {chosenCustomer.email}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setJobDraft((d) => ({ ...d, user_id: '' })); setCustomerSearch(''); }}
+                    >
+                      Change
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      type="search"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter takes the top match — the common case is typing
+                        // enough of a name to leave exactly one.
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (customerMatches.length > 0) {
+                            setJobDraft((d) => ({ ...d, user_id: customerMatches[0].id }));
+                          }
+                        }
+                      }}
+                      placeholder={customersLoading ? 'Loading customers…' : 'Search by name, company or email…'}
+                      autoFocus
+                      disabled={customersLoading}
+                    />
+                    <div style={{
+                      marginTop: 6, maxHeight: 210, overflowY: 'auto',
+                      border: '1px solid var(--border)', borderRadius: 8,
+                      background: 'var(--bg-primary)',
+                    }}>
+                      {customersLoading && (
+                        <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+                          Loading customers…
+                        </div>
+                      )}
+                      {!customersLoading && customerMatches.length === 0 && (
+                        <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                          {customers.length === 0
+                            ? 'No customers on the account yet.'
+                            : <>No customer matches “{customerSearch.trim()}”. They may need an account first.</>}
+                        </div>
+                      )}
+                      {!customersLoading && customerMatches.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setJobDraft((d) => ({ ...d, user_id: c.id }))}
+                          style={{
+                            display: 'block', width: '100%', textAlign: 'left',
+                            padding: '9px 12px', border: 'none',
+                            borderBottom: '1px solid var(--border)',
+                            background: 'transparent', cursor: 'pointer',
+                            fontFamily: 'var(--font-body)',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {c.full_name || c.email}
+                            {c.company ? <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · {c.company}</span> : null}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {c.email}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {!customersLoading && customers.length > 0 && (
+                      <span className="ui-field__hint">
+                        {customerSearch.trim()
+                          ? customerMatches.length + ' of ' + customers.length + ' customers'
+                          : customers.length + ' customers — start typing to narrow it down'}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <Field label="Came in by" style={{ flex: 1, minWidth: 150 }}>

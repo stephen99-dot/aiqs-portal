@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap, Mail } from 'lucide-react';
 import { KeyIcon } from '../components/Icons';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
@@ -45,6 +46,23 @@ function AddUserModal({ isOpen, onClose, onUserAdded, isDark }) {
           {[{k:'fullName',l:'Full Name',r:true,p:'Paul Richards'},{k:'email',l:'Email',r:true,t:'email',p:'paul@company.com'},{k:'company',l:'Company',p:'Penn Contracting'},{k:'phone',l:'Phone',p:'+44 7xxx xxx xxx'}].map(({k,l,r,t,p}) => (
             <div key={k}><label style={lbl}>{l}{r&&<span style={{color:'#EF4444'}}> *</span>}</label><input type={t||'text'} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} required={r} placeholder={p} style={inp} /></div>
           ))}
+          {/* Account type. The API has always accepted a role here; there was
+              simply no way to set one, so staff had to be promoted by editing
+              the database. Admin is all-or-nothing, hence the warning. */}
+          <div>
+            <label style={lbl}>Account Type</label>
+            <select value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} style={inp}>
+              <option value="client">Client — submits jobs, sees their own projects</option>
+              <option value="admin">Admin — full access, including the job queue</option>
+            </select>
+            {form.role === 'admin' && (
+              <div style={{marginTop:8,padding:'9px 12px',borderRadius:8,background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',color:'#F59E0B',fontSize:11.5,lineHeight:1.5}}>
+                Admins can see every customer, change plans and credits, reset passwords,
+                delete accounts and generate a login link for anyone. Only for people you
+                trust with the whole business.
+              </div>
+            )}
+          </div>
           <div style={{display:'flex',gap:10,marginTop:6}}>
             <button type="button" onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:'1px solid '+(isDark?'#1C2A44':'#E2E8F0'),background:'transparent',color:isDark?'#94A3B8':'#64748B',fontSize:13,fontWeight:600,cursor:'pointer'}}>Cancel</button>
             <button type="submit" disabled={loading} style={{flex:1,padding:11,borderRadius:10,border:'none',background:'#2563EB',color:'#FFF',fontSize:13,fontWeight:600,cursor:'pointer',opacity:loading?0.7:1}}>{loading?'Creating & Sending Invite...':'Create & Send Invite'}</button>
@@ -377,6 +395,7 @@ function AuthorizedEmailsCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn,
 }
 
 function UserActionPanel({ user, isDark, onUpdate, onClose }) {
+  const { user: me } = useAuth();
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
   const [msgCredits, setMsgCredits] = useState(user.message_credits || 0);
@@ -486,6 +505,21 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     onUpdate({ ...user, free_credits: 0, bonus_docs: 0, monthly_boq_quota: 0, boq_remaining: 0 });
     showSuccess('BOQ balance zeroed (free, bonus and monthly allowance all set to 0)');
   });
+
+  // Promote/demote. Consequential enough to confirm: admin is all-or-nothing
+  // in this portal, so the button is handing over the whole business.
+  const toggleRole = () => {
+    const next = user.role === 'admin' ? 'client' : 'admin';
+    const msg = next === 'admin'
+      ? `Make ${user.full_name || user.email} an admin?\n\nThey will be able to see every customer, change plans and credits, reset passwords, delete accounts and generate a login link for anyone.`
+      : `Remove admin access from ${user.full_name || user.email}?\n\nThey will lose the job queue and every admin page.`;
+    if (!window.confirm(msg)) return;
+    doAction('role', async () => {
+      await apiFetch('/admin/users/' + user.id + '/role', { method: 'PUT', body: JSON.stringify({ role: next }) });
+      onUpdate({ ...user, role: next });
+      showSuccess(next === 'admin' ? 'Now an admin — they get the job queue on next sign-in' : 'Admin access removed');
+    });
+  };
 
   const toggleSuspend = () => doAction('suspend', async () => {
     if (user.suspended) {
@@ -722,6 +756,24 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             </div>
           </div>
           )}
+
+          {/* Account type */}
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+            <div style={lbl}><Shield size={11} style={{ verticalAlign: 'middle', marginRight: 4, color: '#2563EB' }} />Account Type</div>
+            <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
+              {me && me.id === user.id
+                ? 'This is your own account — you cannot change your own role.'
+                : user.role === 'admin'
+                  ? 'Admin. Sees the job queue and every customer, and can change plans, credits, passwords and accounts.'
+                  : 'Client. Submits jobs and sees only their own projects.'}
+            </div>
+            <button onClick={toggleRole} disabled={!!loading || !!(me && me.id === user.id)}
+              style={user.role === 'admin'
+                ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: (me && me.id === user.id) ? 0.5 : 1 }
+                : { ...btn('#2563EB'), opacity: (me && me.id === user.id) ? 0.5 : 1 }}>
+              <Shield size={12} /> {user.role === 'admin' ? 'Remove admin access' : 'Make admin'}
+            </button>
+          </div>
 
           {/* Suspend */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
