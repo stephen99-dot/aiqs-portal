@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, apiUpload } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
@@ -31,6 +31,16 @@ const PROJECT_TYPES = [
 
 const MIN_SUBMIT_CHARS = 20;
 
+// Mirrors MAX_FILE_MB / MAX_FILES in server/submissionRoutes.js. Checking here
+// means an oversized file is refused instantly instead of after the user has
+// spent ten minutes uploading it only to be rejected at the far end.
+const MAX_FILE_MB = 100;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const MAX_FILES = 20;
+
+// Where a customer sends drawings too big for the portal to accept.
+const OVERSIZE_EMAIL = 'hello@theaiqs.com';
+
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
   const map = {
@@ -47,6 +57,36 @@ function fmtSize(b) {
   if (b < 1024) return b + ' B';
   if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
+}
+
+// "That file is too big" — shown the moment an oversized file is added, and
+// again if they try to submit anyway. Names the offending files and their
+// sizes, and hands over a pre-addressed email so sending it manually is one
+// click rather than a hunt for the address.
+function oversizeMessage(oversized, siteAddress) {
+  const subject = 'Large drawings for BOQ' + (siteAddress.trim() ? ' — ' + siteAddress.trim() : '');
+  const body = 'Hi,\n\nMy drawings are too big to upload through the portal, so here they are attached.\n\n'
+    + (siteAddress.trim() ? 'Site address: ' + siteAddress.trim() + '\n' : '')
+    + 'Files:\n' + oversized.map(f => '  - ' + f.name + ' (' + fmtSize(f.size) + ')').join('\n')
+    + '\n\nThanks';
+  const href = 'mailto:' + OVERSIZE_EMAIL
+    + '?subject=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  return (
+    <>
+      <strong>
+        {oversized.length === 1 ? 'That file is too big' : 'Those files are too big'} — the portal accepts up to {MAX_FILE_MB} MB per file.
+      </strong>
+      <div style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+        {oversized.map((f, i) => <div key={i}>{f.name} — {fmtSize(f.size)}</div>)}
+      </div>
+      <div style={{ marginTop: 8, color: 'var(--text-secondary)' }}>
+        Please email {oversized.length === 1 ? 'it' : 'them'} to us instead and we'll take it from there —{' '}
+        <a href={href} style={{ color: 'var(--accent)', fontWeight: 700 }}>{OVERSIZE_EMAIL}</a>.
+        {' '}Remove {oversized.length === 1 ? 'it' : 'them'} from the list above to submit the rest.
+      </div>
+    </>
+  );
 }
 
 // One-off top-up pack card + its buy button, shown inside the top-up modal.
@@ -88,6 +128,7 @@ export default function SubmitDrawingsPage() {
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceElapsed, setEnhanceElapsed] = useState(0);
   const [submitElapsed, setSubmitElapsed] = useState(0);
+  const [uploadPct, setUploadPct] = useState(null); // real bytes-sent %, null until known
   const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const ENHANCE_ESTIMATE_S = 9; // typical polish-mode latency
@@ -98,11 +139,17 @@ export default function SubmitDrawingsPage() {
     apiFetch('/credits').then(setCredits).catch(() => {});
   }, []);
 
-  const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting;
+  const oversizedFiles = files.filter(f => f.size > MAX_FILE_BYTES);
+  const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting && oversizedFiles.length === 0 && files.length <= MAX_FILES;
   const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
-    setFiles(prev => [...prev, ...Array.from(newFiles || [])]);
+    const incoming = Array.from(newFiles || []);
+    setFiles(prev => [...prev, ...incoming]);
+    // Say it straight away rather than letting them fill in the whole form and
+    // hit Submit first.
+    const tooBig = incoming.filter(f => f.size > MAX_FILE_BYTES);
+    if (tooBig.length > 0) setStatus({ type: 'error', msg: oversizeMessage(tooBig, siteAddress) });
   }
   function removeFile(idx) {
     setFiles(prev => prev.filter((_, i) => i !== idx));
@@ -177,16 +224,18 @@ export default function SubmitDrawingsPage() {
     }
     if (files.length === 0) return setStatus({ type: 'error', msg: 'Please upload at least one drawing or document.' });
 
-    setSubmitting(true);
-    setProgressLabel('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+    // Check the limits BEFORE uploading a byte. These used to be enforced only
+    // at the server, after the whole transfer had gone up.
+    if (files.length > MAX_FILES) {
+      return setStatus({ type: 'error', msg: 'Too many files — please send at most ' + MAX_FILES + ' per submission. Zip the rest together, or split this into two submissions.' });
+    }
+    if (oversizedFiles.length > 0) {
+      return setStatus({ type: 'error', msg: oversizeMessage(oversizedFiles, siteAddress) });
+    }
 
-    // Step the progress label so the user keeps seeing progress and doesn't
-    // assume it's hung. The actual API call drives completion.
-    const stepTimers = [
-      setTimeout(() => setProgressLabel('Sending to our QS team…'), 4000),
-      setTimeout(() => setProgressLabel('Almost there — finalising your submission…'), 12000),
-      setTimeout(() => setProgressLabel('Just a moment, large files take a little longer…'), 25000),
-    ];
+    setSubmitting(true);
+    setUploadPct(0);
+    setProgressLabel('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
 
     try {
       const fd = new FormData();
@@ -196,8 +245,15 @@ export default function SubmitDrawingsPage() {
       fd.append('terms_accepted', 'true');
       for (const f of files) fd.append('files', f, f.name);
 
-      const data = await apiFetch('/submissions', { method: 'POST', body: fd });
-      stepTimers.forEach(clearTimeout);
+      // Real byte-level progress, so a slow upload looks like a slow upload
+      // rather than a hang. Once the last byte is up, the server still has the
+      // submission to record — hence the second label.
+      const data = await apiUpload('/submissions', fd, {
+        onProgress: ({ percent }) => {
+          setUploadPct(percent);
+          if (percent !== null && percent >= 100) setProgressLabel('Upload complete — logging your submission…');
+        },
+      });
 
       setStatus({
         type: 'success',
@@ -208,11 +264,11 @@ export default function SubmitDrawingsPage() {
       setFiles([]);
       setCredits(c => c ? { ...c, free_credits: data.credits_remaining, can_submit: data.credits_remaining > 0 } : c);
     } catch (err) {
-      stepTimers.forEach(clearTimeout);
       setStatus({ type: 'error', msg: err.message || 'Submission failed — please try again.' });
     } finally {
       setSubmitting(false);
       setProgressLabel('');
+      setUploadPct(null);
     }
   }
 
@@ -330,8 +386,10 @@ export default function SubmitDrawingsPage() {
                 >
                   Choose files
                 </Button>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto', textAlign: 'right' }}>
                   PDF, DWG, images, Word, Excel
+                  <br />
+                  Up to {MAX_FILE_MB} MB per file, {MAX_FILES} files
                 </span>
               </div>
 
@@ -364,22 +422,26 @@ export default function SubmitDrawingsPage() {
                 <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {files.map((f, i) => {
                     const Icon = getFileIcon(f.name);
+                    const tooBig = f.size > MAX_FILE_BYTES;
                     return (
                       <div key={i} style={{
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '9px 12px', borderRadius: 9,
-                        background: 'var(--bg-secondary)', border: '1px solid var(--border)',
+                        background: 'var(--bg-secondary)',
+                        border: '1px solid ' + (tooBig ? 'var(--danger)' : 'var(--border)'),
                       }}>
                         <div style={{
                           width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                          background: 'var(--accent-glow)',
+                          background: tooBig ? 'var(--danger-bg)' : 'var(--accent-glow)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>
-                          <Icon size={14} color="var(--accent)" />
+                          <Icon size={14} color={tooBig ? 'var(--danger)' : 'var(--accent)'} />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{fmtSize(f.size)}</div>
+                          <div style={{ fontSize: '0.7rem', color: tooBig ? 'var(--danger)' : 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {fmtSize(f.size)}{tooBig ? ' · too big — email this one to ' + OVERSIZE_EMAIL : ''}
+                          </div>
                         </div>
                         <IconButton onClick={() => removeFile(i)} aria-label="Remove file" title="Remove file">
                           <XIcon size={14} color="currentColor" />
@@ -577,13 +639,18 @@ export default function SubmitDrawingsPage() {
             }}>
               <div style={{
                 height: '100%', borderRadius: 6,
-                width: Math.min(95, (submitElapsed / SUBMIT_ESTIMATE_S) * 95) + '%',
+                // Real bytes-sent percentage. The bar used to be driven purely
+                // by a clock against a 30s guess, so on a slow connection it
+                // sat at 95% for minutes and looked frozen.
+                width: (uploadPct === null
+                  ? Math.min(95, (submitElapsed / SUBMIT_ESTIMATE_S) * 95)
+                  : Math.max(2, uploadPct)) + '%',
                 background: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6)',
                 transition: 'width 0.25s linear',
               }} />
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {submitElapsed}s elapsed · please don't close this tab
+              {uploadPct === null ? '' : uploadPct + '% uploaded · '}{submitElapsed}s elapsed · please don't close this tab
             </div>
           </div>
         </Modal>

@@ -171,4 +171,23 @@ require('./planningData').startHarvester();
 // portal carries on, with takeoffs reported as visual-only.
 try { require('./evidenceSupervisor').start(); } catch (e) { console.error('[Evidence] supervisor failed to start:', e.message); }
 
-app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
+const server = app.listen(PORT, '0.0.0.0', function() { console.log('  AI QS Server running on port ' + PORT); });
+
+// ── Upload timeouts ──────────────────────────────────────────────────────────
+// Node 18+ defaults server.requestTimeout to 300s (5 minutes) — measured from
+// the first byte of the request to the last byte of the BODY, not from the
+// response. A builder on a site connection pushing a 100 MB drawing set at
+// ~3 Mbps needs ~4.5 minutes; at 2 Mbps, ~7. Node was destroying those sockets
+// mid-upload, so the browser saw a generic network failure with no message
+// after several minutes of apparent progress — "sometimes it works" being
+// exactly the difference between a fast office line and a slow site one.
+// 30 minutes covers the worst realistic case (a 20-file, 100 MB-a-file
+// submission on a poor link) while still capping a genuinely stuck socket.
+server.requestTimeout = 30 * 60 * 1000;
+// Headers must still arrive promptly — this guards slowloris without touching
+// body upload time. Must stay above keepAliveTimeout.
+server.headersTimeout = 65 * 1000;
+server.keepAliveTimeout = 61 * 1000;
+// No per-socket inactivity timeout: a large upload is one long write with no
+// inbound traffic, which some proxies would otherwise read as idle.
+server.setTimeout(0);
