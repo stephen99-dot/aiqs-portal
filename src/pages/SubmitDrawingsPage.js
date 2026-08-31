@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, apiUpload } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
@@ -30,6 +30,19 @@ const PROJECT_TYPES = [
 ];
 
 const MIN_SUBMIT_CHARS = 20;
+
+// Mirrors MAX_FILE_MB / MAX_FILES in server/submissionRoutes.js. Checking here
+// means an oversized file is refused instantly instead of after the user has
+// spent ten minutes uploading it only to be rejected at the far end.
+const MAX_FILE_MB = 100;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const MAX_FILES = 20;
+
+function formatSize(bytes) {
+  if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  if (bytes >= 1024 * 1024) return Math.round(bytes / (1024 * 1024)) + ' MB';
+  return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
@@ -88,6 +101,7 @@ export default function SubmitDrawingsPage() {
   const [enhanceError, setEnhanceError] = useState(null);
   const [enhanceElapsed, setEnhanceElapsed] = useState(0);
   const [submitElapsed, setSubmitElapsed] = useState(0);
+  const [uploadPct, setUploadPct] = useState(null); // real bytes-sent %, null until known
   const [showTopUpModal, setShowTopUpModal] = useState(false);
 
   const ENHANCE_ESTIMATE_S = 9; // typical polish-mode latency
@@ -177,16 +191,23 @@ export default function SubmitDrawingsPage() {
     }
     if (files.length === 0) return setStatus({ type: 'error', msg: 'Please upload at least one drawing or document.' });
 
-    setSubmitting(true);
-    setProgressLabel('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+    // Check the limits BEFORE uploading a byte. These used to be enforced only
+    // at the server, after the whole transfer had gone up.
+    if (files.length > MAX_FILES) {
+      return setStatus({ type: 'error', msg: 'Too many files — please send at most ' + MAX_FILES + ' per submission. Zip the rest together, or split this into two submissions.' });
+    }
+    const oversized = files.filter(f => f.size > MAX_FILE_BYTES);
+    if (oversized.length > 0) {
+      return setStatus({
+        type: 'error',
+        msg: oversized.map(f => f.name + ' (' + formatSize(f.size) + ')').join(', ')
+          + ' — over the ' + MAX_FILE_MB + ' MB limit per file. Please compress it, split it, or paste a download link in the project details instead.',
+      });
+    }
 
-    // Step the progress label so the user keeps seeing progress and doesn't
-    // assume it's hung. The actual API call drives completion.
-    const stepTimers = [
-      setTimeout(() => setProgressLabel('Sending to our QS team…'), 4000),
-      setTimeout(() => setProgressLabel('Almost there — finalising your submission…'), 12000),
-      setTimeout(() => setProgressLabel('Just a moment, large files take a little longer…'), 25000),
-    ];
+    setSubmitting(true);
+    setUploadPct(0);
+    setProgressLabel('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
 
     try {
       const fd = new FormData();
@@ -196,8 +217,15 @@ export default function SubmitDrawingsPage() {
       fd.append('terms_accepted', 'true');
       for (const f of files) fd.append('files', f, f.name);
 
-      const data = await apiFetch('/submissions', { method: 'POST', body: fd });
-      stepTimers.forEach(clearTimeout);
+      // Real byte-level progress, so a slow upload looks like a slow upload
+      // rather than a hang. Once the last byte is up, the server still has the
+      // submission to record — hence the second label.
+      const data = await apiUpload('/submissions', fd, {
+        onProgress: ({ percent }) => {
+          setUploadPct(percent);
+          if (percent !== null && percent >= 100) setProgressLabel('Upload complete — logging your submission…');
+        },
+      });
 
       setStatus({
         type: 'success',
@@ -208,11 +236,11 @@ export default function SubmitDrawingsPage() {
       setFiles([]);
       setCredits(c => c ? { ...c, free_credits: data.credits_remaining, can_submit: data.credits_remaining > 0 } : c);
     } catch (err) {
-      stepTimers.forEach(clearTimeout);
       setStatus({ type: 'error', msg: err.message || 'Submission failed — please try again.' });
     } finally {
       setSubmitting(false);
       setProgressLabel('');
+      setUploadPct(null);
     }
   }
 
@@ -577,13 +605,18 @@ export default function SubmitDrawingsPage() {
             }}>
               <div style={{
                 height: '100%', borderRadius: 6,
-                width: Math.min(95, (submitElapsed / SUBMIT_ESTIMATE_S) * 95) + '%',
+                // Real bytes-sent percentage. The bar used to be driven purely
+                // by a clock against a 30s guess, so on a slow connection it
+                // sat at 95% for minutes and looked frozen.
+                width: (uploadPct === null
+                  ? Math.min(95, (submitElapsed / SUBMIT_ESTIMATE_S) * 95)
+                  : Math.max(2, uploadPct)) + '%',
                 background: 'linear-gradient(90deg, #F59E0B, #EC4899, #8B5CF6, #3B82F6)',
                 transition: 'width 0.25s linear',
               }} />
             </div>
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {submitElapsed}s elapsed · please don't close this tab
+              {uploadPct === null ? '' : uploadPct + '% uploaded · '}{submitElapsed}s elapsed · please don't close this tab
             </div>
           </div>
         </Modal>

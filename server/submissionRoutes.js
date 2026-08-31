@@ -29,7 +29,8 @@ const TERMS_VERSION = '2026-06-18';
 const MAIN_WEBHOOK = process.env.PIPEDREAM_MAIN_WEBHOOK || 'https://eopd5lfexwf553m.m.pipedream.net';
 const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74gbaqvh.m.pipedream.net';
 
-const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per file
+const MAX_FILE_MB = 100;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024; // 100 MB per file
 const MAX_FILES = 20;
 
 // Buffer uploads to disk rather than RAM. With memory storage a single
@@ -41,16 +42,64 @@ const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', '
 const uploadsDir = path.join(DATA_DIR, 'submission-uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+// Sweep temp files left behind by a rejected or interrupted upload (a crash, a
+// deploy mid-POST, or — before the cleanup in uploadFiles below — every
+// oversized submission). They are pure waste: the durable copies live in
+// submission-store. Left unswept they quietly ate the 10 GB Render disk, and a
+// full disk makes every subsequent upload fail with an opaque write error.
+try {
+  const stale = fs.readdirSync(uploadsDir);
+  for (const f of stale) {
+    try { fs.unlinkSync(path.join(uploadsDir, f)); } catch (e) {}
+  }
+  if (stale.length) console.log('[Submissions] Purged ' + stale.length + ' stale temp upload(s)');
+} catch (e) { console.error('[Submissions] temp cleanup error:', e.message); }
+
 // Durable local copy of each submission's files, so a submission is never lost
 // when the external (Pipedream/Drive) forward fails. The submission row is
 // recorded regardless, so it always appears in the admin inbox.
 const submissionStoreDir = path.join(DATA_DIR, 'submission-store');
-function saveFilesLocally(files, submissionId) {
+
+// MOVE rather than copy. The temp dir and the store are both under DATA_DIR, so
+// a rename is a metadata operation — instant, and it halves the disk written per
+// submission. The previous copyFileSync read and re-wrote every byte
+// SYNCHRONOUSLY: on a 300 MB submission that pinned the single Node worker for
+// seconds at a time, freezing every other request on the instance (Render runs
+// us at WEB_CONCURRENCY=1). Falls back to an async copy if the rename can't be
+// done (e.g. the two paths ever land on different mounts).
+//
+// Mutates file.path to the stored location so the Pipedream forward reads from
+// the copy we are keeping, and there is only ever one copy of the bytes.
+function uniqueName(name, used) {
+  if (!used.has(name)) { used.add(name); return name; }
+  const ext = path.extname(name);
+  const stem = name.slice(0, name.length - ext.length);
+  for (let n = 2; ; n++) {
+    const candidate = stem + '-' + n + ext;
+    if (!used.has(candidate)) { used.add(candidate); return candidate; }
+  }
+}
+
+async function saveFilesLocally(files, submissionId) {
   const dir = path.join(submissionStoreDir, submissionId);
-  fs.mkdirSync(dir, { recursive: true });
+  await fs.promises.mkdir(dir, { recursive: true });
+  // Two uploaded files can sanitise to the same name (two "Drawing.pdf"s from
+  // different folders, or "plan 1.pdf" and "plan-1.pdf"). This is now the only
+  // copy of the bytes, so a collision would silently lose a drawing — number
+  // the duplicates instead.
+  const used = new Set();
   for (const f of files) {
-    const safe = (f.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_');
-    fs.copyFileSync(f.path, path.join(dir, safe));
+    const safe = uniqueName((f.originalname || 'file').replace(/[^a-zA-Z0-9._-]/g, '_'), used);
+    const dest = path.join(dir, safe);
+    try {
+      await fs.promises.rename(f.path, dest);
+    } catch (err) {
+      if (err.code !== 'EXDEV') throw err;
+      await fs.promises.copyFile(f.path, dest);
+      fs.unlink(f.path, () => {});
+    }
+    f.path = dest;
+    f.stored = true;
   }
 }
 
@@ -70,7 +119,8 @@ const upload = multer({
 function cleanupUploads(req) {
   if (!req.files || req.files.length === 0) return;
   for (const f of req.files) {
-    if (f && f.path) {
+    // Files moved into the durable store are the submission — leave them.
+    if (f && f.path && !f.stored) {
       fs.unlink(f.path, () => {});
     }
   }
@@ -80,22 +130,57 @@ function cleanupUploads(req) {
 // error (oversized file, too many files) bypasses the route's try/catch and
 // falls through to Express's default handler, which returns an opaque 500 —
 // exactly what a client uploading a large ZIP would hit.
+// How long we will keep draining a rejected upload before giving up and
+// replying anyway. See the comment in uploadFiles below.
+const DRAIN_TIMEOUT_MS = 60000;
+
 function uploadFiles(req, res, next) {
   upload.array('files', MAX_FILES)(req, res, (err) => {
     if (!err) return next();
     console.error('[Submissions] Upload error:', err.code || 'UNKNOWN', err.message);
+
+    let status = 500;
+    let message = 'Upload failed — please try again.';
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({
-          error: 'A file is too large — the maximum size is 100 MB per file. Please compress the ZIP, split it into smaller files, or share a download link in the project details.',
-        });
+        status = 413;
+        message = 'A file is too large — the maximum size is ' + MAX_FILE_MB + ' MB per file. Please compress the ZIP, split it into smaller files, or share a download link in the project details.';
+      } else if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+        status = 400;
+        message = 'Too many files — please upload at most ' + MAX_FILES + ' files per submission.';
+      } else {
+        status = 400;
+        message = 'Upload failed: ' + err.message;
       }
-      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
-        return res.status(400).json({ error: 'Too many files — please upload at most ' + MAX_FILES + ' files per submission.' });
-      }
-      return res.status(400).json({ error: 'Upload failed: ' + err.message });
     }
-    return res.status(500).json({ error: 'Upload failed — please try again.' });
+
+    // Multer stops reading the body the instant a limit trips, but the browser
+    // is still streaming the rest of the request. Replying right there closed
+    // the socket under an in-flight POST, so the browser reported a generic
+    // network error instead of the message above — and the client then retried
+    // the whole upload, which is a large part of the "it just takes ages and
+    // then fails" reports. Draining the remainder first (bandwidth we have
+    // already paid for) lets the real error land in the UI. Capped, so a
+    // client that stops sending can't hold the request open.
+    let replied = false;
+    const reply = () => {
+      if (replied) return;
+      replied = true;
+      clearTimeout(drainTimer);
+      // Multer may have written part of a file before the limit tripped. The
+      // route's res 'finish' cleanup never runs on this path, so without this
+      // every rejected upload left its partial files on the disk forever.
+      cleanupUploads(req);
+      if (!res.headersSent) res.status(status).json({ error: message });
+    };
+    const drainTimer = setTimeout(reply, DRAIN_TIMEOUT_MS);
+
+    if (req.readableEnded || req.complete) return reply();
+    req.unpipe();
+    req.on('end', reply);
+    req.on('close', reply);
+    req.on('error', reply);
+    req.resume();
   });
 }
 
@@ -159,6 +244,37 @@ async function forwardFiles(files, submissionId) {
   await Promise.all(workers);
 }
 
+async function postMainWebhook(payload) {
+  const resp = await fetch(MAIN_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) throw new Error('Pipedream main webhook failed: ' + resp.status);
+}
+
+// Run the Pipedream forward after the customer has already been told the
+// submission is in. Never throws — the worst case is a row left marked
+// 'failed: …', which the admin inbox already surfaces, with the files sitting
+// safely in the local store.
+function forwardInBackgroundTask(files, submissionId, payload, rowId) {
+  (async () => {
+    let status = 'ok';
+    try {
+      await forwardFiles(files, submissionId);
+      await postMainWebhook(payload);
+    } catch (err) {
+      console.error('[Submissions] Pipedream forward error (background):', err.message);
+      status = 'failed: ' + err.message;
+    }
+    try {
+      db.prepare('UPDATE drawing_submissions SET pipedream_status = ? WHERE id = ?').run(status, rowId);
+    } catch (err) {
+      console.error('[Submissions] could not record forward status:', err.message);
+    }
+  })();
+}
+
 router.post('/', uploadFiles, async (req, res) => {
   // Clean up the temp upload files once the response is sent, regardless of
   // which branch below returns (validation, credit check, error, or success).
@@ -198,44 +314,46 @@ router.post('/', uploadFiles, async (req, res) => {
     // Keep a durable local copy first so the submission is never lost, even if
     // the external forward below fails. Best-effort.
     let localSaved = false;
-    try { saveFilesLocally(files, submissionId); localSaved = true; }
+    try { await saveFilesLocally(files, submissionId); localSaved = true; }
     catch (e) { console.error('[Submissions] local save failed:', e.message); }
 
+    const payload = {
+      name: user.full_name,
+      email: user.email,
+      phone: user.phone || '',
+      company: user.company || '',
+      project_type: projectType,
+      site_address: siteAddress,
+      message,
+      submission_id: submissionId,
+      file_names: files.map(f => f.originalname),
+      file_count: files.length,
+      submitted_at: new Date().toISOString(),
+      source: 'aiqs-portal/submit-drawings',
+      portal_user_id: user.id,
+    };
+
+    // Forwarding to Pipedream re-uploads every byte a SECOND time, out to a
+    // third party. Blocking the response on it meant the customer's browser sat
+    // on the spinner for the upload PLUS the forward — roughly double the wait,
+    // and up to FORWARD_TIMEOUT_MS per file when Pipedream was slow. Once the
+    // files are in the durable local store the submission is safe and the
+    // inbox row is authoritative, so the forward runs in the background and
+    // stamps its result on the row when it finishes.
     let pipedreamStatus = 'ok';
     let forwarded = true;
-    try {
-      await forwardFiles(files, submissionId);
-
-      const payload = {
-        name: user.full_name,
-        email: user.email,
-        phone: user.phone || '',
-        company: user.company || '',
-        project_type: projectType,
-        site_address: siteAddress,
-        message,
-        submission_id: submissionId,
-        file_names: files.map(f => f.originalname),
-        file_count: files.length,
-        submitted_at: new Date().toISOString(),
-        source: 'aiqs-portal/submit-drawings',
-        portal_user_id: user.id,
-      };
-
-      const resp = await fetch(MAIN_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error('Pipedream main webhook failed: ' + resp.status);
-    } catch (err) {
-      // Don't lose the submission when the external forward fails — record it
-      // anyway (files are kept locally) so it appears in the inbox for the admin
-      // to action. Only hard-fail if we couldn't keep the files anywhere.
-      console.error('[Submissions] Pipedream forward error:', err.message);
-      pipedreamStatus = 'failed: ' + err.message;
-      forwarded = false;
-      if (!localSaved) {
+    let forwardInBackground = false;
+    if (localSaved) {
+      pipedreamStatus = 'pending';
+      forwardInBackground = true;
+    } else {
+      // Nothing on our disk — the forward is the only copy, so it has to
+      // succeed before we charge a credit and tell the customer it's in.
+      try {
+        await forwardFiles(files, submissionId);
+        await postMainWebhook(payload);
+      } catch (err) {
+        console.error('[Submissions] Pipedream forward error:', err.message);
         return res.status(502).json({ error: 'Could not save your submission. Please try again — no credit has been used.' });
       }
     }
@@ -290,6 +408,10 @@ router.post('/', uploadFiles, async (req, res) => {
       detail: `Submitted through the portal — ${files.length} file${files.length === 1 ? '' : 's'}`,
       actor: user.email || user.id,
     });
+
+    if (forwardInBackground) {
+      forwardInBackgroundTask(files, submissionId, payload, rowId);
+    }
 
     res.json({
       success: true,

@@ -32,6 +32,16 @@ const RETRYABLE_STATUS = new Set([502, 503, 504]);
 const MAX_RETRY_ATTEMPTS = 3;       // up to 3 retries after the first try
 const RETRY_BASE_MS = 600;          // backoff: ~0.6s, 1.2s, 2.4s (+ jitter)
 
+// File uploads are exempt from the retry loop. Re-sending a multipart body
+// means pushing every byte up the wire again: a 100 MB submission that hit one
+// hiccup was being uploaded up to FOUR times before the user saw an error,
+// which is most of "it takes ages and then won't do it". They are also POSTs
+// with side effects — a retry after a request that actually landed can charge a
+// second BOQ credit. One attempt, and a real error message.
+function isUpload(options) {
+  return typeof FormData !== 'undefined' && options.body instanceof FormData;
+}
+
 function sleep(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
@@ -55,6 +65,7 @@ async function apiFetch(endpoint, options = {}) {
   }
 
   // Retry loop for transient gateway errors during a deploy/restart window.
+  const maxRetries = isUpload(options) ? 0 : MAX_RETRY_ATTEMPTS;
   let res;
   for (let attempt = 0; ; attempt++) {
     try {
@@ -62,13 +73,18 @@ async function apiFetch(endpoint, options = {}) {
     } catch (networkErr) {
       // fetch rejects (TypeError) when the server is unreachable — e.g. the
       // connection is refused mid-restart. Retry the same way as a 502.
-      if (attempt < MAX_RETRY_ATTEMPTS) {
+      if (attempt < maxRetries) {
         await sleep(RETRY_BASE_MS * Math.pow(2, attempt) + Math.random() * 200);
         continue;
       }
+      if (maxRetries === 0) {
+        const err = new Error('The upload was interrupted — check your connection and try again. Large files over a slow connection can take several minutes.');
+        err.cause = networkErr;
+        throw err;
+      }
       throw networkErr;
     }
-    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRY_ATTEMPTS) {
+    if (RETRYABLE_STATUS.has(res.status) && attempt < maxRetries) {
       await sleep(RETRY_BASE_MS * Math.pow(2, attempt) + Math.random() * 200);
       continue;
     }
@@ -254,7 +270,79 @@ function streamChat(formData, callbacks = {}) {
   return controller;
 }
 
+/**
+ * Upload a FormData body with real progress reporting.
+ *
+ * fetch() cannot report how much of a request body has gone out, so an upload
+ * made with apiFetch shows the user nothing for however long it takes — which
+ * on a site connection with a 100 MB drawing set is several minutes of a
+ * spinner that looks identical to a hang. XMLHttpRequest still reports upload
+ * progress, so this uses it for the one job fetch can't do.
+ *
+ * @param {string} endpoint  API path, e.g. '/submissions'
+ * @param {FormData} formData
+ * @param {{ onProgress?: (p: {loaded:number,total:number,percent:number|null}) => void,
+ *           signal?: AbortSignal }} [options]
+ * @returns {Promise<object>} parsed JSON response
+ */
+function apiUpload(endpoint, formData, options = {}) {
+  const { onProgress, signal } = options;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API_BASE}${endpoint}`);
+    const token = getToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    // Content-Type is deliberately left unset — the browser adds it with the
+    // multipart boundary.
+
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (e) => {
+        onProgress({
+          loaded: e.loaded,
+          total: e.lengthComputable ? e.total : 0,
+          percent: e.lengthComputable ? Math.round((e.loaded / e.total) * 100) : null,
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (data) return resolve(data);
+        return reject(new Error('The server sent a response we could not read. Please check My Projects before submitting again.'));
+      }
+      // Don't bounce to /login mid-upload — that would throw away everything
+      // they typed. Tell them plainly instead; the next navigation will
+      // redirect as usual.
+      const message = xhr.status === 401
+        ? 'Your session expired while uploading. Please open the portal in a new tab, sign in again, then resend.'
+        : (data && data.error) || 'Upload failed (' + xhr.status + ')';
+      const err = new Error(message);
+      err.status = xhr.status;
+      err.data = data || {};
+      reject(err);
+    };
+    xhr.onerror = () => reject(new Error('The upload was interrupted — check your connection and try again. Large files over a slow connection can take several minutes.'));
+    xhr.ontimeout = () => reject(new Error('The upload timed out. Please try again, or send fewer files at once.'));
+    xhr.onabort = () => {
+      const err = new Error('Upload cancelled');
+      err.name = 'AbortError';
+      reject(err);
+    };
+    // No client-side timeout: the browser should wait as long as the transfer
+    // is actually progressing. xhr.timeout defaults to 0 (no limit).
+
+    if (signal) {
+      if (signal.aborted) return xhr.abort();
+      signal.addEventListener('abort', () => xhr.abort());
+    }
+
+    xhr.send(formData);
+  });
+}
+
 export {
-  apiFetch, getToken, setToken, clearToken, streamChat,
+  apiFetch, apiUpload, getToken, setToken, clearToken, streamChat,
   getEstimatorKey, setEstimatorKey, clearEstimatorKey,
 };
