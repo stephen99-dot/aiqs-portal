@@ -30,7 +30,6 @@ import VariationApprovalPage from './pages/VariationApprovalPage';
 import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
 import InvoicePublicPage from './pages/InvoicePublicPage';
 import Builder3DPage from './pages/Builder3DPage';
-import AiTradesPilotPage from './pages/AiTradesPilotPage';
 import BrandingPage from './pages/BrandingPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
@@ -99,24 +98,24 @@ function AppInner() {
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           {/* 3D Builder — admin-only preview (page self-guards on role). */}
           <Route path="/builder3d" element={<Builder3DPage />} />
-          <Route path="/ai-trades-pilot" element={<AiTradesPilotPage />} />
-          {/* Office in a Box is retired — its workflow moved to the AI Trades
-              Pilot product. Old bookmarks land on that page so users see
-              where the feature went. */}
-          <Route path="/office" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/jobs" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/money" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/clients" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/documents" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/tools" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/estimator" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/calculators" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/materials" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/pm" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/finance" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/invoices" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/office-in-a-box" element={<Navigate to="/ai-trades-pilot" replace />} />
-          <Route path="/office-demo" element={<Navigate to="/ai-trades-pilot" replace />} />
+          {/* Office in a Box is retired. Old bookmarks land on the dashboard
+              rather than anywhere that sells a second product — signing up
+              here and then again somewhere else is what confused people. */}
+          <Route path="/office" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/jobs" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/money" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/clients" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/documents" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/tools" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/estimator" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/calculators" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/materials" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/pm" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/finance" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/invoices" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/office-in-a-box" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/office-demo" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/ai-trades-pilot" element={<Navigate to="/dashboard" replace />} />
           <Route path="/branding" element={<BrandingPage />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
