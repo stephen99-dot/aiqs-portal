@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
-  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon, ZapIcon,
+  SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, BrainIcon,
 } from './Icons';
@@ -77,9 +77,7 @@ export default function Layout() {
   };
 
   // Personalisation pages live behind one Settings group so the main nav
-  // stays at five entries: the submit → track → deliver loop plus the
-  // AI Trades Pilot pointer (Office in a Box is retired — its workflow
-  // lives in that separate product now).
+  // stays short: the submit → track → deliver loop and nothing else.
   const settingsChildren = [
     { path: '/my-rates', label: 'My Rates' },
     { path: '/ai-memory', label: 'AI Memory' },
@@ -96,7 +94,6 @@ export default function Layout() {
     // No standalone Variations entry: OiB users raise them from the job page,
     // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
-    { path: '/ai-trades-pilot', label: 'AI Trades Pilot', Icon: ZapIcon, badge: 'New', clientOnly: true },
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
     { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
@@ -138,7 +135,7 @@ export default function Layout() {
       ];
   const bottomNavRoutes = [
     '/dashboard', '/submit-drawings', '/variations',
-    '/my-rates', '/ai-memory', '/branding', '/ai-trades-pilot',
+    '/my-rates', '/ai-memory', '/branding',
     '/admin', '/admin/users', '/admin/submissions',
   ];
   const showBottomNav = bottomNavRoutes.includes(location.pathname);

@@ -101,8 +101,8 @@ export default function PaymentSuccessPage() {
               Payment received!
             </h2>
             <p style={{ fontSize: 14, color: t.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
-              Your subscription is live on your account. Head to your dashboard —
-              and look out for AI Trades Pilot, where this product now lives.
+              Your subscription is live on your account. Head to your dashboard
+              to get started.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
               <Link to="/dashboard" style={{
