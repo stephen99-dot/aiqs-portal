@@ -664,9 +664,13 @@ export default function ChatPage() {
     if (overrideText == null) setInput('');
     setFiles([]); setSending(true);
 
-    // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits
+    // Truncate history to last 20 messages and cap each at 4000 chars to avoid exceeding field size limits.
+    // `ts` travels with each turn so the server can tell which turns belong to the
+    // job it is pricing now — one thread often runs across several jobs, and
+    // without it the header fields of an earlier job get lifted onto this bill.
     const history = baseMessages.filter(m => m.content).slice(-20).map(m => ({
       role: m.role,
+      ts: m.timestamp || null,
       content: typeof m.content === 'string' && m.content.length > 4000 ? m.content.slice(0, 4000) + '...' : m.content,
     }));
     const fd = new FormData();

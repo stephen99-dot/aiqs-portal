@@ -193,6 +193,52 @@ async function resolveOrPropose(db, { userId, name, kind, source = 'chat', trust
   };
 }
 
+/**
+ * Which of this builder's entities are on THIS job?
+ *
+ * The card block is headed "who is on this job", so it has to mean it. Handing the
+ * prompt every entity the builder has ever recorded asserts that last month's end
+ * client is on today's drawings — and the model believes it, because the block says
+ * so. That is how a bill for one job comes back addressed to another job's employer.
+ *
+ * The test is mention: an entity is on this job when its name appears in the live job
+ * context — this turn's message, the uploaded filenames, and the turns immediately
+ * around them. Same conservatism as resolveName: a lone trade word never identifies a
+ * firm, and short fragments match everything, so a name has to contribute at least one
+ * distinctive word of its own.
+ *
+ * @returns {string[]} entity ids, in the store's own order
+ */
+function selectJobEntities(db, { userId, context, kind = null, limit = 12 }) {
+  if (!userId) throw new Error('entityResolver.selectJobEntities: userId is required');
+  const words = new Set(entityStore.normaliseName(context).split(' ').filter(Boolean));
+  if (words.size === 0) return [];
+
+  const picked = [];
+  for (const e of entityStore.listEntities(db, { userId, kind })) {
+    if (e.merged_into) continue;
+    if (isMentionedIn(e.normalised_name, words)) picked.push(e.id);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
+
+/**
+ * Is this name mentioned in a bag of words taken from the conversation?
+ *
+ * Only the distinctive words of the name have to appear — "Mullan Groundworks" is
+ * mentioned by "Mullan", and "Mrs Hughes" by "Hughes" — because that is how people
+ * refer to a firm once it is on the job. What can never carry a mention on its own is
+ * a trade word ("groundworks" is what they do, not who they are) or a fragment shorter
+ * than four characters, both of which match almost any job.
+ */
+function isMentionedIn(normalisedName, words) {
+  const tokens = String(normalisedName || '').split(' ').filter(Boolean);
+  const distinctive = tokens.filter(t => t.length >= 4 && !TRADE_WORDS.has(t));
+  if (distinctive.length === 0) return false;
+  return distinctive.every(t => words.has(t));
+}
+
 /** The builder said no. Remember it so the same name is not raised again. */
 function decline(db, { userId, name }) {
   return entityStore.recordDecline(db, { userId, name });
@@ -264,6 +310,8 @@ module.exports = {
   resolveName,
   resolveOrPropose,
   decline,
+  selectJobEntities,
+  isMentionedIn,
   buildCards,
   formatCardsForPrompt,
   overlapRatio,

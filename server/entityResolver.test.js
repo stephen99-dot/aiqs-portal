@@ -175,6 +175,96 @@ test('an empty name is ignored rather than stored', async () => {
   assert.strictEqual(es.listEntities(db, { userId: 'u1' }).length, 0);
 });
 
+// ── who is on THIS job ────────────────────────────────────────────────────────
+// The card block asserts that the people on it are on the job in hand. Handing it
+// the builder's whole address book tells the model that last month's end client is
+// on today's drawings, and the model has no way to know better — that is how a bill
+// comes back headed with another job's employer.
+
+test('only the people named in the conversation are on the job', () => {
+  const db = freshDb();
+  const { hughes, kerr, mullan } = seed(db);
+  const ids = er.selectJobEntities(db, {
+    userId: 'u1',
+    context: 'Revised drawings for Mrs Hughes at The Mount — Kerr have reissued the elevations.',
+  });
+  assert.deepStrictEqual(ids.sort(), [hughes.id, kerr.id].sort());
+  assert.ok(!ids.includes(mullan.id), 'a firm nobody mentioned is not on this job');
+});
+
+test('a job nobody is named on gets no cards at all', () => {
+  const db = freshDb();
+  seed(db);
+  const ids = er.selectJobEntities(db, { userId: 'u1', context: 'Revised drawings for The Mount attached.' });
+  assert.deepStrictEqual(ids, []);
+  assert.strictEqual(er.formatCardsForPrompt(er.buildCards(db, { userId: 'u1', entityIds: ids })), '');
+});
+
+test('a firm is on the job when it is named the short way people name it', () => {
+  const db = freshDb();
+  const { mullan } = seed(db);
+  assert.deepStrictEqual(
+    er.selectJobEntities(db, { userId: 'u1', context: 'Mullan are back on site Monday' }),
+    [mullan.id]
+  );
+});
+
+test('a lone trade word does not put a firm on the job', () => {
+  const db = freshDb();
+  seed(db);
+  assert.deepStrictEqual(
+    er.selectJobEntities(db, { userId: 'u1', context: 'Price the groundworks and the architects fees' }),
+    [],
+    'naming a trade is not naming the firm that does it'
+  );
+});
+
+test('a short fragment of a name does not put a firm on the job', () => {
+  const db = freshDb();
+  seed(db);
+  assert.deepStrictEqual(er.selectJobEntities(db, { userId: 'u1', context: 'Ker ker ker' }), []);
+});
+
+test('selection never crosses builders', () => {
+  const db = freshDb();
+  seed(db, 'u1');
+  const other = seed(db, 'u2');
+  const ids = er.selectJobEntities(db, { userId: 'u2', context: 'Mrs Hughes at The Mount' });
+  assert.deepStrictEqual(ids, [other.hughes.id]);
+});
+
+test('an empty conversation selects nobody rather than everybody', () => {
+  const db = freshDb();
+  seed(db);
+  assert.deepStrictEqual(er.selectJobEntities(db, { userId: 'u1', context: '' }), []);
+  assert.deepStrictEqual(er.selectJobEntities(db, { userId: 'u1', context: null }), []);
+});
+
+test('selection is bounded, so one turn cannot carry an address book', () => {
+  const db = freshDb();
+  const names = [];
+  for (let i = 0; i < 20; i++) {
+    names.push(`Bramble${i} Homes`);
+    es.upsertEntity(db, { userId: 'u1', kind: 'end_client', displayName: `Bramble${i} Homes` });
+  }
+  const ids = er.selectJobEntities(db, { userId: 'u1', context: names.join(', '), limit: 12 });
+  assert.strictEqual(ids.length, 12);
+});
+
+test('a merged-away entity is never selected', () => {
+  const db = freshDb();
+  const { kerr } = seed(db);
+  const dupe = es.upsertEntity(db, { userId: 'u1', kind: 'architect', displayName: 'Kerr Architectural' }).entity;
+  es.mergeEntities(db, { userId: 'u1', fromId: dupe.id, intoId: kerr.id });
+  const ids = er.selectJobEntities(db, { userId: 'u1', context: 'Kerr Architectural have reissued' });
+  assert.ok(!ids.includes(dupe.id), 'the merged-away record must not come back as a second card');
+});
+
+test('selection requires a builder, like every other read', () => {
+  const db = freshDb();
+  assert.throws(() => er.selectJobEntities(db, { context: 'Mrs Hughes' }), /userId is required/);
+});
+
 // ── cards ─────────────────────────────────────────────────────────────────────
 
 test('cards carry the name, the history and the facts', () => {
@@ -276,6 +366,17 @@ test('entity cards are injected AFTER the cached prefix is captured', () => {
     + `capture at line ${captureLine}. Per-job content above that line is baked into the `
     + `cached prefix and breaks prompt caching on every job.`
   );
+});
+
+test('chat.js builds the cards from this job, not the whole address book', () => {
+  // The behaviour is covered above; this guards the wiring, because the mistake is
+  // invisible from the outside — the prompt still looks well-formed, it is just
+  // telling the model about people who are on a different job.
+  const cardsCall = CHAT_SRC.slice(0, CHAT_SRC.indexOf('entityResolver.formatCardsForPrompt('));
+  const lastSelect = cardsCall.lastIndexOf('selectJobEntities(');
+  const lastListAll = cardsCall.lastIndexOf('.listEntities(db, { userId })');
+  assert.ok(lastSelect > 0, 'entity cards must be built from entityResolver.selectJobEntities');
+  assert.ok(lastSelect > lastListAll, 'entity cards must not be built from every entity the builder has');
 });
 
 test('entity cards are appended, never spliced into the prefix', () => {

@@ -101,3 +101,24 @@ test('the same sheet twice in one pack is reported as a duplicate', () => {
   assert.strictEqual(r.duplicatesInPack.length, 2);
   assert.ok(r.duplicatesInPack.includes('sheet-01.pdf'));
 });
+
+// ── the guard is actually wired up ────────────────────────────────────────────
+// The check above is only worth anything if chat.js can run it. It declared
+// `resubmission` hundreds of lines BELOW the upload block that assigns it, so
+// every assignment hit the temporal dead zone, threw into the surrounding catch,
+// and the guard never fired once — on precisely the revised-drawings uploads it
+// exists to catch. Nothing about that is visible at runtime beyond one log line,
+// so it is asserted here against the source.
+test('chat.js declares the resubmission result before it fills it in', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, 'chat.js'), 'utf8');
+  const declared = src.indexOf('let resubmission = null;');
+  const assigned = src.indexOf('resubmission = ledger.checkResubmission(');
+  assert.ok(declared > 0 && assigned > 0, 'both the declaration and the check should exist');
+  assert.ok(
+    declared < assigned,
+    'chat.js assigns `resubmission` before declaring it — the assignment throws in the '
+    + 'temporal dead zone and the resubmission guard silently never runs'
+  );
+});

@@ -1917,10 +1917,27 @@ async function chatHandler(req, res) {
     }
 
     let messages = [];
-    if (history) { try { messages = JSON.parse(history).map(m => ({ role: m.role, content: m.content })); } catch(e){} }
+    // When each turn was sent, parallel to `messages` and kept OUT of it — the
+    // array itself goes to the model API, which rejects unknown keys. Used to
+    // work out which turns belong to the job being priced right now, in a thread
+    // that has carried several jobs (see extractBoqMeta.currentJobTurns).
+    let turnTimes = [];
+    if (history) {
+      try {
+        const parsed = JSON.parse(history);
+        messages = parsed.map(m => ({ role: m.role, content: m.content }));
+        turnTimes = parsed.map(m => m.ts || m.timestamp || null);
+      } catch(e){}
+    }
 
     const currentContent = [];
     let fileNames = [], zipNotes = [];
+    // Set when this upload matches a pack already priced for this user. Declared
+    // HERE because the check that fills it runs on the files below: it used to be
+    // declared further down the handler, so the assignment ran in the temporal dead
+    // zone, threw into its own catch, and the resubmission guard never once fired —
+    // silently, on exactly the revised-drawings uploads it exists to catch.
+    let resubmission = null;
 
     if (req.files && req.files.length > 0) {
       if (req.sseEmit) req.sseEmit({ type: 'progress', stage: 'upload', detail: `Processing ${req.files.length} file(s)...` });
@@ -2146,12 +2163,15 @@ ${summary}`);
     // change the cached prefix on every job and silently destroy prompt caching, with no
     // symptom other than the bill. entityResolver.test.js asserts this ordering against
     // the source of this file.
+    //
+    // Scoped to the people actually named on this job, never the builder's whole
+    // address book: the block asserts "who is on this job", and a card for last
+    // month's end client is read as a fact about today's drawings — which is how a
+    // bill comes back headed with another job's employer.
     try {
       if (entityResolver && entityStore) {
-        const entityIds = entityStore
-          .listEntities(db, { userId })
-          .filter(e => !e.merged_into)
-          .map(e => e.id);
+        const jobContext = [message || '', fileNames.join(' '), recentThreadText].join('\n');
+        const entityIds = entityResolver.selectJobEntities(db, { userId, context: jobContext });
         if (entityIds.length > 0) {
           systemPrompt += entityResolver.formatCardsForPrompt(
             entityResolver.buildCards(db, { userId, entityIds })
@@ -2489,8 +2509,6 @@ ${summary}`);
     // Set when the bill fails to reconcile: no document is issued, and the
     // chat reports both figures instead of a total the file does not contain.
     let reconcileFailed = false;
-    // Set when this upload matches a pack already priced for this user.
-    let resubmission = null;
     let paymentRequired = null;
     // Whether this BOQ generation is a revision of the last one (revisions are
     // free — they don't consume a credit). Set in the credit gate below and
@@ -3593,7 +3611,17 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           let _meta = [];
           try {
             if (extractBoqMeta) {
-              const briefText = [message || '', ...(Array.isArray(messages) ? messages.map(m => (typeof m.content === 'string' ? m.content : '')) : [])].join('\n');
+              // Only the turns that brief THIS job. One thread often carries
+              // several jobs, and these header fields are typed once at the top of
+              // whichever job was live then — scanning the whole thread stamps the
+              // previous job's Employer, CA and claim number on this bill. The
+              // current message goes LAST so a correction typed now wins.
+              const turns = (Array.isArray(messages) ? messages : []).map((m, i) => ({
+                text: typeof m.content === 'string' ? m.content : '',
+                ts: turnTimes[i] || null,
+              }));
+              const jobTurns = extractBoqMeta.currentJobTurns(turns, lockedTakeoff && lockedTakeoff.created_at);
+              const briefText = [...jobTurns.map(t => t.text), message || ''].join('\n');
               _meta = extractBoqMeta.extractContractMeta(briefText);
             }
           } catch (e) { /* metadata is optional — never block the BOQ */ }

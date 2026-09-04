@@ -260,6 +260,10 @@ export default function SubmitDrawingsPage() {
         msg: "Submitted! Your BOQ and Findings Report will be delivered to My Projects, typically within 24 hours. Once it arrives you can amend the numbers and produce a Client Copy with your own logo and colours. Submission ID: " + data.submission_id,
       });
       setProjectType('');
+      // The site address is cleared with everything else. Left standing it becomes
+      // the last job's address sitting pre-filled over the next job's submission,
+      // and the address is what the project is titled and known by.
+      setSiteAddress('');
       setMessage('');
       setFiles([]);
       setCredits(c => c ? { ...c, free_credits: data.credits_remaining, can_submit: data.credits_remaining > 0 } : c);

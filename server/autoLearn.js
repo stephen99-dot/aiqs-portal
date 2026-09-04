@@ -200,12 +200,43 @@ async function retrieveRelevantSummaries(db, { userId, query, excludeSessionId, 
       return { id: r.id, session_id: r.session_id, title: r.title, summary: r.summary, updated_at: r.updated_at, score };
     });
     scored.sort((a, b) => b.score - a.score);
-    const useful = scored.filter(s => s.score > 0.22);
-    return (useful.length ? useful : scored).slice(0, topK);
+    // Nothing above the bar means nothing to recall. A summary is JOB-shaped —
+    // client, site, scope — and formatSummariesForPrompt heads the block
+    // "relevant past conversations", so the best of an irrelevant set is read as
+    // continuity with the job in hand. Silence is the honest answer.
+    return scored.filter(s => s.score > 0.22).slice(0, topK);
   }
-  // Fallback: most recent conversations.
-  rows.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-  return rows.slice(0, topK).map(r => ({ id: r.id, session_id: r.session_id, title: r.title, summary: r.summary, updated_at: r.updated_at, score: 0 }));
+  // No embeddings configured. Recency is NOT a stand-in for relevance here: the
+  // three most recent conversations are the builder's last three jobs, and
+  // handing those over on a brand-new upload is how a bill for one job comes back
+  // headed with another job's client. Fall back to shared wording instead —
+  // weak, but it is at least about this job.
+  return lexicalMatches(rows, q, topK);
+}
+
+// Word overlap between the query and a summary, used only when embeddings are
+// unavailable. Deliberately hard to satisfy: short words are ignored, and one
+// shared word is never enough, because "drawings" and "extension" appear in
+// every job this portal has ever seen.
+function lexicalMatches(rows, query, topK) {
+  const wordsOf = (s) => new Set(
+    String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3)
+  );
+  const qWords = wordsOf(query);
+  if (qWords.size === 0) return [];
+
+  const scored = [];
+  for (const r of rows) {
+    const words = wordsOf(`${r.title || ''} ${r.summary || ''}`);
+    let hits = 0;
+    for (const w of qWords) if (words.has(w)) hits++;
+    const score = hits / qWords.size;
+    if (hits >= 2 && score >= 0.3) {
+      scored.push({ id: r.id, session_id: r.session_id, title: r.title, summary: r.summary, updated_at: r.updated_at, score });
+    }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topK);
 }
 
 function formatSummariesForPrompt(summaries) {

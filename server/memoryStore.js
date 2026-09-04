@@ -107,6 +107,38 @@ function isDuplicate(db, { userId, content }) {
   return false;
 }
 
+// Words that carry no signal about WHICH job is being discussed. Kept short and
+// generic — the trade vocabulary ("drawings", "extension") is handled by asking for
+// two terms in common rather than by listing every construction word in English.
+const STOPWORDS = new Set([
+  'about', 'after', 'again', 'also', 'been', 'before', 'could', 'does', 'from', 'have',
+  'here', 'into', 'just', 'like', 'make', 'more', 'much', 'need', 'only', 'over',
+  'please', 'should', 'some', 'such', 'than', 'that', 'them', 'then', 'there', 'these',
+  'they', 'this', 'those', 'very', 'want', 'what', 'when', 'where', 'which', 'will',
+  'with', 'would', 'your',
+]);
+
+// Crude plural fold, so "drawings" and "drawing" count as the same term. FTS5's
+// porter tokenizer already stems on its side; this is for the check we do on ours.
+function stem(w) {
+  return w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w;
+}
+
+/** The words in a query worth searching on, at most six of them. */
+function searchTerms(q) {
+  return String(q || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+    .slice(0, 6);
+}
+
+/** How many of those terms actually appear in a candidate memory. */
+function sharedTermCount(content, terms) {
+  const words = new Set(String(content || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).map(stem));
+  return terms.filter(t => words.has(stem(t))).length;
+}
+
 // Retrieve top-K memories most relevant to the query.
 // Uses embeddings when available, FTS5 as fallback, always capped at topK.
 async function retrieveRelevant(db, { userId, query, topK = 8 }) {
@@ -137,33 +169,43 @@ async function retrieveRelevant(db, { userId, query, topK = 8 }) {
       return { id: r.id, content: r.content, category: r.category, source: r.source, confidence: r.confidence, score };
     });
     scored.sort((a, b) => b.score - a.score);
-    // Keep memories with some signal (>0.25) to avoid injecting noise
-    const useful = scored.filter(s => s.score > 0.25);
-    return (useful.length > 0 ? useful : scored).slice(0, topK);
+    // Keep memories with some signal (>0.25) to avoid injecting noise. When
+    // nothing clears the bar, inject NOTHING: formatForPrompt heads this block
+    // "treat them as authoritative", so an unrelated job's details handed over
+    // as the best of a bad set are read as facts about the job in hand.
+    return scored.filter(s => s.score > 0.25).slice(0, topK);
   }
 
   // Fallback: FTS5 keyword search
   try {
-    const ftsQuery = q.split(/\s+/).filter(w => w.length > 2).map(w => w.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean).slice(0, 6).join(' OR ');
-    if (ftsQuery) {
+    const terms = searchTerms(q);
+    if (terms.length > 0) {
       const rows = db.prepare(
         `SELECT m.id, m.content, m.category, m.source, m.confidence, bm25(user_memories_fts) AS score
          FROM user_memories_fts
          JOIN user_memories m ON m.id = user_memories_fts.memory_id
          WHERE user_memories_fts MATCH ? AND m.user_id = ? AND m.is_active = 1
          ORDER BY score LIMIT ?`
-      ).all(ftsQuery, userId, topK);
-      if (rows.length > 0) {
+      ).all(terms.join(' OR '), userId, topK);
+      // The MATCH is an OR, so one word in common is a hit — and across a
+      // builder's jobs the word in common is "drawings". Ask for half the terms
+      // the turn gave us, up to two: a short pointed question ("what's my
+      // overheads figure") still lands, a long one has to agree on more than a
+      // single word of trade vocabulary.
+      const needed = Math.min(2, Math.ceil(terms.length / 2));
+      const relevant = rows.filter(r => sharedTermCount(r.content, terms) >= needed);
+      if (relevant.length > 0) {
         // bm25 returns negative scores (smaller = better); flip so higher is better
-        return rows.map(r => ({ ...r, score: -r.score }));
+        return relevant.map(r => ({ ...r, score: -r.score }));
       }
     }
   } catch (e) { /* FTS may not be set up; fall through */ }
 
-  // Final fallback: return recent memories
-  return all.slice(0, topK).map(r => ({
-    id: r.id, content: r.content, category: r.category, source: r.source, confidence: r.confidence, score: 0,
-  }));
+  // A query was asked and nothing matched it, semantically or by keyword: there is
+  // no evidence any memory bears on this turn. Recency is not relevance, and the
+  // most recent memories are the previous job's — returning them here is exactly
+  // how one job's client and site end up asserted on the next one's bill.
+  return [];
 }
 
 function markUsed(db, ids) {
