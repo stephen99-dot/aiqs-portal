@@ -12,6 +12,7 @@ const { callModel, MODELS, MAX_TOKENS, computeCost } = require('./anthropicClien
 const { runAgenticTakeoff, shouldUseAgenticTakeoff } = require('./agenticTakeoff');
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
+const revisionScope = require('./revisionScope');
 const messageCredits = require('./messageCredits');
 
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
@@ -2490,11 +2491,14 @@ ${summary}`);
     // ("price this up … give me a BOQ + findings report"). If documents are
     // requested but this session has no measured take-off yet, MEASURE first
     // instead of dead-ending on "I can't find the locked quantities".
+    // The job this session is pricing. Read once here and reused by the credit
+    // gate below, which has to know WHICH job a revision revises.
+    let sessionTakeoff = null;
     let sessionHasTakeoff = false;
     if (sessionId && benchmarkStore) {
       try {
-        const _t = benchmarkStore.getTakeoffBySession(db, sessionId);
-        sessionHasTakeoff = !!(_t && _t.items && _t.items.length > 0);
+        sessionTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId);
+        sessionHasTakeoff = !!(sessionTakeoff && sessionTakeoff.items && sessionTakeoff.items.length > 0);
       } catch (e) {}
     }
     if (wantsDocuments && !sessionHasTakeoff && (hasFiles || describesPricingProject)) {
@@ -3460,18 +3464,36 @@ CRITICAL RULES:
     if (wantsDocuments && req.user.role !== 'admin') {
       const dPlan = req.user.plan || 'starter';
 
-      // Is this a revision of the user's most recent BOQ? Revisions are free
-      // (one included per BOQ) and don't touch the credit balance.
-      const lastDoc = db.prepare("SELECT detail FROM usage_log WHERE user_id=? AND action='doc_generated' ORDER BY created_at DESC LIMIT 1").get(userId);
-      boqIsRevision = !!lastDoc && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
+      // Is this a revision of THIS job's BOQ? Revisions are free (one included per
+      // BOQ) and don't touch the credit balance.
+      //
+      // The job is the one being priced in this session, never "whatever this
+      // account generated last": that older test charged and blocked revisions
+      // against an unrelated job, so a builder uploading revised drawings was told
+      // the revision limit was reached for a project they had never mentioned. The
+      // original is looked for wherever it was produced — a job whose first BOQ was
+      // bought through Submit Drawings was promised its revision just the same.
+      // Re-read: Stage 1 may have measured this turn's drawings into a new
+      // take-off since the copy taken above, and it is the job named on the
+      // LATEST take-off that is being priced.
+      let gateTakeoff = sessionTakeoff;
+      try {
+        if (sessionId && benchmarkStore) gateTakeoff = benchmarkStore.getTakeoffBySession(db, sessionId) || sessionTakeoff;
+      } catch (e) { /* fall back to the copy read earlier in the turn */ }
+      const jobName = (gateTakeoff && (gateTakeoff.project_name || gateTakeoff.location)) || '';
+      const original = jobName ? revisionScope.findOriginalBoq(db, { userId, projectName: jobName }) : null;
+      boqIsRevision = !!original && /revis|redo|regenerat|update.*doc|fix.*rate/i.test(message || '');
 
       if (boqIsRevision) {
-        const projectRevisions = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision' AND detail=?").get(userId, lastDoc.detail).c;
+        const projectRevisions = revisionScope.countRevisions(db, { userId, projectName: jobName });
         if (projectRevisions >= 1) {
-          reply += '\n\nRevision limit reached for this project (1 revision included per BOQ).';
+          // Name the job. When this does get the wrong job the customer can see
+          // which one it means and say so, instead of being refused over an
+          // "original" they cannot place.
+          reply += `\n\nRevision limit reached for ${original.name} (1 revision included per BOQ).`;
           wantsDocuments = false;
         } else {
-          console.log('[Credits] Revision allowed — no credit charged');
+          console.log(`[Credits] Revision of ${original.name} (${original.source}) allowed — no credit charged`);
         }
       } else {
         const balance = boqCredits.getBoqBalance(userId);
