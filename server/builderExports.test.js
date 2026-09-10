@@ -11,12 +11,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-let ExcelJS, generateBOQExcel, parseBOQ;
+let ExcelJS, generateBOQExcel, parseBOQ, reconcileParsed, isTotalRowItem;
 let DEPS_OK = true;
 try {
   ExcelJS = require('exceljs');
   ({ generateBOQExcel } = require('./boqGenerator'));
-  ({ parseBOQ } = require('./builderExports'));
+  ({ parseBOQ, reconcileParsed, isTotalRowItem } = require('./builderExports'));
 } catch (e) {
   DEPS_OK = false;
 }
@@ -232,4 +232,121 @@ test('the reference recap alone does not create a provisional section', { skip: 
   const parsed = await genAndParse(inline);
   const provSections = (parsed.sections || []).filter((s) => s.provisional);
   assert.strictEqual(provSections.length, 0, 'reference recap must not be parsed as a PS section');
+});
+
+// Hand-built QS layout (the "client copy is double the BOQ" report): sections
+// closed by "Total — Preliminaries" / "Groundworks total" / "Carried to
+// summary", a collection-style heading carrying its own section total
+// ("3.0 ROOFING … 5,000"), a capitalised lump-sum line, and a closing
+// "TOTAL CONSTRUCTION COST (EXCL. VAT)" row. Every one of those rows used to
+// be read as a priced line, so the parsed bill came out at several times the
+// delivered figure.
+async function buildHandBuiltWorkbook(file) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  ws.addRow(['BILL OF QUANTITIES — 12 Example Road']);
+  ws.addRow([]);
+  ws.addRow(['Item', 'Description', 'Unit', 'Qty', 'Rate', 'Labour', 'Materials', 'Total']);
+  ws.addRow(['1.0', 'PRELIMINARIES']);
+  ws.addRow(['1.1', 'Site set-up and welfare', 'item', 1, 1200, 800, 400, 1200]);
+  ws.addRow(['1.2', 'Skips and waste removal', 'nr', 3, 300, 100, 800, 900]);
+  ws.addRow(['1.3', 'ALLOW FOR SCAFFOLDING TO REAR', '', '', '', '', '', 650]);
+  ws.addRow(['', 'Total — Preliminaries', '', '', '', 900, 1200, 2750]);
+  ws.addRow([]);
+  ws.addRow(['2.0', 'GROUNDWORKS']);
+  ws.addRow(['2.1', 'Excavate trench foundations', 'm3', 10, 85, 600, 250, 850]);
+  ws.addRow(['2.2', 'Concrete foundations C25', 'm3', 8, 190, 500, 1020, 1520]);
+  ws.addRow(['', 'Groundworks total', '', '', '', 1100, 1270, 2370]);
+  ws.addRow(['', 'Carried to summary', '', '', '', '', '', 2370]);
+  ws.addRow([]);
+  ws.addRow(['3.0', 'ROOFING', '', '', '', '', '', 5000]);
+  ws.addRow(['3.1', 'Strip and re-tile roof', 'm2', 50, 100, 3000, 2000, 5000]);
+  ws.addRow([]);
+  ws.addRow(['4.0', 'DECORATION']);
+  ws.addRow(['4.1', 'Two coats emulsion to walls', 'm2', 120, 8, 720, 240, 960]);
+  ws.addRow(['4.2', 'Total for decoration', '', '', '', '', '', 960]); // total row with a ref cell
+  ws.addRow([]);
+  // A collection page: every section total repeated, then the grand total.
+  ws.addRow(['', 'COLLECTION']);
+  ws.addRow(['1.0', 'PRELIMINARIES', '', '', '', '', '', 2750]);
+  ws.addRow(['2.0', 'GROUNDWORKS', '', '', '', '', '', 2370]);
+  ws.addRow(['3.0', 'ROOFING', '', '', '', '', '', 5000]);
+  ws.addRow(['4.0', 'DECORATION', '', '', '', '', '', 960]);
+  ws.addRow(['', 'TOTAL CONSTRUCTION COST (EXCL. VAT)', '', '', '', '', '', 11080]);
+  ws.addRow(['', 'VAT @ 20%', '', '', '', '', '', 2216]);
+  ws.addRow(['', 'TOTAL (INCL. VAT)', '', '', '', '', '', 13296]);
+  await wb.xlsx.writeFile(file);
+}
+
+test('hand-built total rows, carried headings and a closing grand total are not read as lines', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const file = path.join(os.tmpdir(), `boqhand-${process.pid}.xlsx`);
+  await buildHandBuiltWorkbook(file);
+  let parsed;
+  try {
+    parsed = await parseBOQ(file);
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+
+  assert.deepStrictEqual(
+    parsed.sections.map((s) => [s.number, s.title, s.items.length, s.subtotal.total]),
+    [
+      ['1.0', 'PRELIMINARIES', 3, 2750],
+      ['2.0', 'GROUNDWORKS', 2, 2370],
+      ['3.0', 'ROOFING', 1, 5000],
+      ['4.0', 'DECORATION', 1, 960],
+    ],
+    'each section keeps only its priced lines; the capitalised lump-sum line survives as a line; the collection page adds nothing'
+  );
+  assert.strictEqual(parsed.sections[0].items[2].description, 'ALLOW FOR SCAFFOLDING TO REAR');
+  assert.strictEqual(parsed.grand.total, 11080, 'grand total matches the delivered bill, nothing doubled');
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 11080, 'the printed ex-VAT total is captured');
+  assert.strictEqual(parsed.source_summary.vat_pct, 20);
+
+  const check = reconcileParsed(parsed);
+  assert.ok(check && check.ok, 'parsed lines reconcile to the printed total');
+});
+
+test('a section total row worded unexpectedly is dropped by reconciling to the printed sub-total', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  ws.addRow(['Item', 'Description', 'Unit', 'Qty', 'Rate', 'Labour', 'Materials', 'Total']);
+  ws.addRow(['1.0', 'PRELIMINARIES']);
+  ws.addRow(['1.1', 'Site set-up and welfare', 'item', 1, 1200, 800, 400, 1200]);
+  ws.addRow(['1.2', 'Skips and waste removal', 'nr', 3, 300, 100, 800, 900]);
+  ws.addRow(['', 'Preliminaries — amount carried', '', '', '', '', '', 2100]); // matched by CARRIED
+  ws.addRow(['', 'Sum of the above', '', '', '', '', '', 2100]);               // no recognised wording at all
+  ws.addRow(['', 'Sub-total — Preliminaries', '', '', '', '', '', 2100]);
+  ws.addRow(['', 'Net Construction Cost', '', '', '', '', '', 2100]);
+  const file = path.join(os.tmpdir(), `boqrec-${process.pid}.xlsx`);
+  await wb.xlsx.writeFile(file);
+  let parsed;
+  try {
+    parsed = await parseBOQ(file);
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+  assert.strictEqual(parsed.sections.length, 1);
+  assert.strictEqual(parsed.sections[0].items.length, 2, 'the unrecognised total row is dropped because the lines otherwise sum to double the printed sub-total');
+  assert.strictEqual(parsed.grand.total, 2100);
+  assert.strictEqual(parsed.source_summary.net_total, 2100);
+  assert.ok(reconcileParsed(parsed).ok);
+});
+
+test('a doubled parse is reported as not reconciling, and saved total-row lines are recognised', { skip: !DEPS_OK && 'exceljs not installed' }, () => {
+  const parsed = {
+    sections: [{ number: '1', title: 'PRELIMINARIES', items: [{}, {}], subtotal: { total: 4200 } }],
+    grand: { total: 4200 },
+    source_summary: { net_total: 2100 },
+  };
+  const check = reconcileParsed(parsed);
+  assert.strictEqual(check.ok, false);
+  assert.strictEqual(check.printed, 2100);
+  assert.strictEqual(check.parsed, 4200);
+
+  assert.ok(isTotalRowItem({ itemRef: '', description: 'Total — Preliminaries', unit: '', qty: 0, total: 2100 }));
+  assert.ok(isTotalRowItem({ itemRef: '', description: 'Carried to summary', unit: '', qty: '', total: 2370 }));
+  assert.ok(isTotalRowItem({ itemRef: '', description: 'TOTAL CONSTRUCTION COST (EXCL. VAT)', unit: '', qty: 0, total: 9470 }));
+  assert.ok(!isTotalRowItem({ itemRef: '1.4', description: 'Total station survey of site', unit: 'item', qty: 1, total: 450 }), 'a priced line that mentions "total" is kept');
+  assert.ok(!isTotalRowItem({ itemRef: '1.1', description: 'Site set-up and welfare', unit: 'item', qty: 1, total: 1200 }));
 });

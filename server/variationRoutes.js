@@ -7,7 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack, generateClientCopyPro } = require('./builderExports');
+const { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
 const { writeXlsxBuffer } = require('./docTemplates');
 const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
@@ -922,6 +922,10 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
         items: s.items, // full editable line items
       })),
       grand: parsed.grand,
+      // Do the parsed lines add up to the bill's own printed total? null when
+      // the source printed none. The page warns when they don't, so a total
+      // row read as a line can never inflate the client copy unnoticed.
+      reconciliation: reconcileParsed(parsed),
       // OH&P / contingency / VAT printed on the source BOQ — the client copy
       // UI seeds its controls from these so the default export reproduces the
       // delivered bottom line.
@@ -961,7 +965,28 @@ function savedStateForProject(project) {
   const saved = parseBuilderPackState(project.builder_pack_state);
   if (!saved) return null;
   if (saved._boq_source && project.boq_filename && saved._boq_source !== project.boq_filename) return null;
-  return saved;
+  return scrubTotalRows(saved);
+}
+
+// A working state saved while the parser still read the bill's total rows
+// ("Total — Preliminaries", "Carried to summary", "TOTAL CONSTRUCTION COST")
+// as priced lines carries those doubled figures forever — the state is served
+// over the fresh parse, so fixing the parser alone leaves the customer looking
+// at the same inflated client copy. Drop such lines on read; the user's own
+// edits to real lines are untouched.
+function scrubTotalRows(saved) {
+  if (!saved || !Array.isArray(saved.sections)) return saved;
+  let changed = false;
+  const sections = saved.sections.map((s) => {
+    if (!s || !Array.isArray(s.items)) return s;
+    const items = s.items.filter((it) => {
+      const drop = isTotalRowItem(it);
+      if (drop) changed = true;
+      return !drop;
+    });
+    return items.length === s.items.length ? s : { ...s, items };
+  });
+  return changed ? { ...saved, sections } : saved;
 }
 
 // GET /api/projects/:projectId/builder-pack-state
