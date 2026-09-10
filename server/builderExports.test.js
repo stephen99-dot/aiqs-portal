@@ -11,12 +11,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-let ExcelJS, generateBOQExcel, parseBOQ, reconcileParsed, isTotalRowItem;
+let ExcelJS, generateBOQExcel, parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem;
 let DEPS_OK = true;
 try {
   ExcelJS = require('exceljs');
   ({ generateBOQExcel } = require('./boqGenerator'));
-  ({ parseBOQ, reconcileParsed, isTotalRowItem } = require('./builderExports'));
+  ({ parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem } = require('./builderExports'));
 } catch (e) {
   DEPS_OK = false;
 }
@@ -349,4 +349,97 @@ test('a doubled parse is reported as not reconciling, and saved total-row lines 
   assert.ok(isTotalRowItem({ itemRef: '', description: 'TOTAL CONSTRUCTION COST (EXCL. VAT)', unit: '', qty: 0, total: 9470 }));
   assert.ok(!isTotalRowItem({ itemRef: '1.4', description: 'Total station survey of site', unit: 'item', qty: 1, total: 450 }), 'a priced line that mentions "total" is kept');
   assert.ok(!isTotalRowItem({ itemRef: '1.1', description: 'Site set-up and welfare', unit: 'item', qty: 1, total: 1200 }));
+});
+
+// The Kildowie delivery: a QS bill whose columns are "Ref | Description | Unit |
+// Quantity | Labour rate | Labour | Materials, plant and prov. sums | Total",
+// closed by a SUMMARY page, "NET DIRECT COST" and a cascade to the contract
+// sum — delivered in one batch with a "Labour breakdown" workbook (Ref | Item |
+// Unit | Quantity | Net labour £ | Man-days). The portal wired the labour
+// breakdown up as the project's BOQ and priced the client copy off man-days.
+async function buildKildowieStyleBill(file) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  ws.addRow(['MULL JOINERS']);
+  ws.addRow(['BILL OF QUANTITIES']);
+  ws.addRow([]);
+  ws.addRow(['Ref', 'Description', 'Unit', 'Quantity', 'Labour rate', 'Labour', 'Materials, plant\nand prov. sums', 'Total']);
+  ws.addRow(['SECTION 0  —  PRELIMINARIES']); ws.mergeCells('A5:H5');
+  ws.addRow(['0.1', 'Site establishment; welfare unit', 'wk', 17, null, { formula: 'IF(N(E6)=0,0,D6*E6)' }, 5100, { formula: 'F6+G6', result: 5100 }]);
+  ws.addRow(['0.2', 'Site management and supervision', 'wk', 17, 165.2, { formula: 'IF(N(E7)=0,0,D7*E7)', result: 2808.4 }, 0, { formula: 'F7+G7', result: 2808.4 }]);
+  ws.addRow(['Section 0 subtotal — net direct', '', '', '', '', 2808.4, 5100, 7908.4]); ws.mergeCells('A8:E8');
+  ws.addRow([]);
+  ws.addRow(['SECTION 1  —  DEMOLITION']); ws.mergeCells('A10:H10');
+  ws.addRow(['1.2', 'Take up existing front timber decking', 'm2', 28, 24, { formula: 'IF(N(E11)=0,0,D11*E11)', result: 672 }, 0, { formula: 'F11+G11', result: 672 }]);
+  ws.addRow(['1.5', 'Form new opening in the retained front wall', 'nr', 1, 780, { formula: 'IF(N(E12)=0,0,D12*E12)', result: 780 }, 460, { formula: 'F12+G12', result: 1240 }]);
+  ws.addRow(['Section 1 subtotal — net direct', '', '', '', '', 1452, 460, 1912]); ws.mergeCells('A13:E13');
+  ws.addRow([]);
+  ws.addRow(['SUMMARY']); ws.mergeCells('A15:H15');
+  ws.addRow(['Ref', 'Section', '', '', '', 'Labour', 'Materials, plant\nand prov. sums', 'Total']);
+  ws.addRow(['0', 'PRELIMINARIES', '', '', '', 2808.4, 5100, 7908.4]);
+  ws.addRow(['1', 'DEMOLITION', '', '', '', 1452, 460, 1912]);
+  ws.addRow(['NET DIRECT COST', '', '', '', '', 4260.4, 5560, 9820.4]); ws.mergeCells('A19:E19');
+  ws.addRow(['CASCADE TO CONTRACT SUM']); ws.mergeCells('A20:H20');
+  ws.addRow(['Labour cascaded  (labour ÷ divisor)', '', '', '', '', '', '', 5680.53]); ws.mergeCells('A21:E21');
+  ws.addRow(['Materials cascaded  (materials × pass-through)', '', '', '', '', '', '', 6116]); ws.mergeCells('A22:E22');
+  ws.addRow(['CONTRACT SUM  (excluding VAT)', '', '', '', '', '', '', 11796.53]); ws.mergeCells('A23:E23');
+  ws.addRow(['VAT at 20%', '', '', '', '', '', '', 2359.31]); ws.mergeCells('A24:E24');
+  ws.addRow(['TOTAL PAYABLE', '', '', '', '', '', '', 14155.84]); ws.mergeCells('A25:E25');
+  await wb.xlsx.writeFile(file);
+}
+
+async function buildLabourBreakdown(file) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Labour breakdown');
+  ws.addRow(['MULL JOINERS']);
+  ws.addRow(['Document', 'Labour breakdown']);
+  ws.addRow([]);
+  ws.addRow(['Ref', 'Item', 'Unit', 'Quantity', 'Net labour £', 'Man-days', 'Output per man-day']);
+  ws.addRow(['SECTION 0  —  PRELIMINARIES']); ws.mergeCells('A5:G5');
+  ws.addRow(['0.1', 'Site establishment; welfare unit', 'wk', 17, 0, { formula: 'E6/293.6' }]);
+  ws.addRow(['0.2', 'Site management and supervision', 'wk', 17, 2808.4, { formula: 'E7/293.6', result: 9.565 }, { formula: 'D7/F7', result: 1.777 }]);
+  ws.addRow(['Section 0 labour', '', '', '', 2808.4, 9.565]); ws.mergeCells('A8:D8');
+  const ml = wb.addWorksheet('Materials list');
+  ml.addRow(['Materials list']);
+  await wb.xlsx.writeFile(file);
+}
+
+test('a QS bill with a "Labour rate | Labour" split, SUMMARY page and NET DIRECT COST parses to its net direct cost', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const file = path.join(os.tmpdir(), `boqkdw-${process.pid}.xlsx`);
+  await buildKildowieStyleBill(file);
+  let parsed, sniff;
+  try {
+    parsed = await parseBOQ(file);
+    sniff = await sniffBOQ(file);
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+  assert.strictEqual(parsed.header_detected, true);
+  assert.deepStrictEqual(parsed.sections.map((s) => [s.items.length, s.subtotal.total]), [[2, 7908.4], [2, 1912]],
+    'the SUMMARY page, NET DIRECT COST and the cascade add no sections or lines');
+  assert.strictEqual(Math.round(parsed.grand.total * 100) / 100, 9820.4);
+  // Labour is read from the VALUE column, not the per-unit "Labour rate".
+  const s0 = parsed.sections[0];
+  assert.deepStrictEqual(s0.items.map((i) => [i.labour, i.materials]), [[0, 5100], [2808.4, 0]]);
+  assert.deepStrictEqual(parsed.sections[1].items.map((i) => [i.labour, i.materials]), [[672, 0], [780, 460]]);
+  assert.strictEqual(parsed.source_summary.net_total, 9820.4, 'NET DIRECT COST is the printed net total');
+  assert.ok(reconcileParsed(parsed).ok);
+  assert.ok(sniff.looks_like_boq && sniff.named_sheet);
+});
+
+test('a labour breakdown workbook is recognised as not a bill, and flagged rather than priced', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const file = path.join(os.tmpdir(), `labour-${process.pid}.xlsx`);
+  await buildLabourBreakdown(file);
+  let parsed, sniff;
+  try {
+    parsed = await parseBOQ(file);
+    sniff = await sniffBOQ(file);
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+  assert.strictEqual(sniff.looks_like_boq, false, 'no Description + Qty header on any sheet');
+  assert.strictEqual(parsed.header_detected, false);
+  const check = reconcileParsed(parsed);
+  assert.strictEqual(check.ok, false);
+  assert.strictEqual(check.reason, 'not_a_boq');
 });

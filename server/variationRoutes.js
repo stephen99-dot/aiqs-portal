@@ -7,7 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
+const { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
 const { writeXlsxBuffer } = require('./docTemplates');
 const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
@@ -660,8 +660,9 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
 
     // Read the original BOQ Excel and re-build with uplifted values using ExcelJS
     const ExcelJS = require('exceljs');
-    const originalPath = path.join(outputsDir, project.boq_filename);
-    if (!require('fs').existsSync(originalPath)) return res.status(404).json({ error: 'Original BOQ file not found on server' });
+    const boqFile = await resolveProjectBoq(project);
+    const originalPath = boqFile ? boqFile.filePath : '';
+    if (!originalPath || !require('fs').existsSync(originalPath)) return res.status(404).json({ error: 'Original BOQ file not found on server' });
 
     // Uplift multiplier: contingency & OH&P are both on construction total (additive),
     // then VAT applies to the combined sum — matches deterministicPricer.js formula
@@ -808,6 +809,49 @@ function documentTitleForProject(project) {
   }
 }
 
+// The bill behind a project's Builder Pack, self-healing. projects.boq_filename
+// used to be wired to the FIRST .xlsx of a delivery batch, so a labour
+// breakdown or materials list sent alongside the bill could shadow it (every
+// figure on the client copy then came from the wrong workbook). When the wired
+// file doesn't read as a bill but another delivered spreadsheet does, switch
+// to that one and persist it, so the fix reaches projects delivered before the
+// upload started choosing by content.
+//   → { filePath, filename } or null when the project has no bill yet.
+const boqCheckCache = new Map(); // filename → looks_like_boq (files are immutable once written)
+async function looksLikeBill(filename) {
+  if (boqCheckCache.has(filename)) return boqCheckCache.get(filename);
+  let ok = false;
+  try {
+    const fp = path.join(outputsDir, filename);
+    if (fs.existsSync(fp)) ok = !!(await sniffBOQ(fp)).looks_like_boq;
+  } catch (e) { ok = false; }
+  boqCheckCache.set(filename, ok);
+  return ok;
+}
+async function resolveProjectBoq(project) {
+  if (!project || !project.boq_filename) return null;
+  const current = project.boq_filename;
+  if (await looksLikeBill(current)) return { filePath: path.join(outputsDir, current), filename: current };
+  let rows = [];
+  try {
+    rows = db.prepare(
+      "SELECT filename, original_name FROM project_deliverables WHERE project_id = ? AND kind = 'boq' "
+      + "AND (filename LIKE '%.xlsx' OR filename LIKE '%.xls') ORDER BY is_latest DESC, version DESC, created_at DESC"
+    ).all(project.id);
+  } catch (e) { rows = []; }
+  for (const r of rows) {
+    if (r.filename === current) continue;
+    if (await looksLikeBill(r.filename)) {
+      console.warn('[BuilderPack] project ' + project.id + ': wired BOQ ' + current + ' is not a bill; switching to ' + r.filename + ' (' + (r.original_name || '') + ')');
+      try { db.prepare('UPDATE projects SET boq_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(r.filename, project.id); } catch (e) { /* keep serving */ }
+      project.boq_filename = r.filename;
+      return { filePath: path.join(outputsDir, r.filename), filename: r.filename };
+    }
+  }
+  // Nothing better delivered — serve what's wired; the parser flags it.
+  return { filePath: path.join(outputsDir, current), filename: current };
+}
+
 // Reshape an edited-sections payload from the client (description / qty / labour /
 // materials per item) into the parseBOQ() output. Recomputes per-item totals and
 // per-section subtotals from the edits so server output matches what the user saw
@@ -905,8 +949,9 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
     if (!project) return res.status(404).json({ error: 'Project not found' });
     if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet — your QS pack is still being prepared.' });
 
-    const filePath = path.join(outputsDir, project.boq_filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+    const boq = await resolveProjectBoq(project);
+    const filePath = boq ? boq.filePath : '';
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = await parseBOQ(filePath);
     res.json({
@@ -1045,8 +1090,9 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
     if (!project) return res.status(404).json({ error: 'Project not found' });
     if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
 
-    const filePath = path.join(outputsDir, project.boq_filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+    const boq = await resolveProjectBoq(project);
+    const filePath = boq ? boq.filePath : '';
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
 
@@ -1093,8 +1139,9 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     if (!project) return res.status(404).json({ error: 'Project not found' });
     if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
 
-    const filePath = path.join(outputsDir, project.boq_filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+    const boq = await resolveProjectBoq(project);
+    const filePath = boq ? boq.filePath : '';
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(project.user_id);
@@ -1161,8 +1208,9 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     if (!project) return res.status(404).json({ error: 'Project not found' });
     if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ available yet' });
 
-    const filePath = path.join(outputsDir, project.boq_filename);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
+    const boq = await resolveProjectBoq(project);
+    const filePath = boq ? boq.filePath : '';
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
     if (!parsed.sections.length) return res.status(400).json({ error: 'The BOQ has no priced line items.' });
