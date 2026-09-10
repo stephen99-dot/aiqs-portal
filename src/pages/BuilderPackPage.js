@@ -922,10 +922,20 @@ export default function BuilderPackPage() {
                   marginTop: 10, padding: '10px 14px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
                   background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.45)', color: 'var(--text-primary)',
                 }}>
-                  <strong>Check these figures before you share.</strong>{' '}
-                  The lines read from your BOQ add up to <strong>{fmt(sym, reconciliation.parsed, 2)}</strong>, but the BOQ's own
-                  {reconciliation.basis === 'net' ? ' net construction total' : ' total (excl. VAT)'} is <strong>{fmt(sym, reconciliation.printed, 2)}</strong>.
-                  {' '}A total or carried-forward row may have been read as a line — delete any line that repeats a section total, or send us the BOQ and we'll correct it.
+                  {reconciliation.reason === 'not_a_boq' ? (
+                    <>
+                      <strong>This file doesn't read as a bill of quantities.</strong>{' '}
+                      The spreadsheet wired to this project has no Item / Description / Qty / Total columns, so the figures below can't be trusted
+                      (it may be a labour breakdown or materials list delivered alongside the BOQ). Please contact us and we'll point the project at the right file.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Check these figures before you share.</strong>{' '}
+                      The lines read from your BOQ add up to <strong>{fmt(sym, reconciliation.parsed, 2)}</strong>, but the BOQ's own
+                      {reconciliation.basis === 'net' ? ' net construction total' : ' total (excl. VAT)'} is <strong>{fmt(sym, reconciliation.printed, 2)}</strong>.
+                      {' '}A total or carried-forward row may have been read as a line — delete any line that repeats a section total, or send us the BOQ and we'll correct it.
+                    </>
+                  )}
                 </div>
               )}
 

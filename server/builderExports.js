@@ -249,8 +249,15 @@ function buildColMap(headerRow, groupRow) {
   const materialGroup = groupCols((t) => t.startsWith('material'));
 
   // Prefer columns named outright; fall back to the banner-grouped value column.
-  let labour = find((t) => t.startsWith('labour') || t.startsWith('labor'));
-  let materials = find((t) => t.startsWith('material'));
+  // A bill that prints "Labour rate | Labour" (per-unit rate, then the line
+  // value) must read the VALUE column as labour — taking the first match
+  // handed the per-unit rate to every line's labour, which mis-split labour
+  // and materials on every measured item.
+  const isRate = (t) => /\brate\b/.test(t);
+  let labour = find((t) => (t.startsWith('labour') || t.startsWith('labor')) && !isRate(t))
+    || find((t) => t.startsWith('labour') || t.startsWith('labor'));
+  let materials = find((t) => t.startsWith('material') && !isRate(t))
+    || find((t) => t.startsWith('material'));
   if (labour == null) labour = valueInGroup(labourGroup);
   if (materials == null) materials = valueInGroup(materialGroup);
 
@@ -349,10 +356,61 @@ function parseSectionLabel(text, fallbackIdx) {
  * Parse a BOQ workbook and return the structured sections / items / totals.
  * Returns { sections: [{ number, title, items: [...], subtotal: { labour, materials, total } }], grand: { labour, materials, total } }
  */
+// Does this row read as the column-header row of a bill ("Item | Description |
+// Unit | Qty | Rate | … | Total")? Shared by the parser and the upload sniffer.
+function isHeaderRow(row) {
+  const joined = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((c) => cellText(row.getCell(c)).toLowerCase()).join(' | ');
+  return joined.includes('description') && (joined.includes('qty') || joined.includes('quantity'));
+}
+
+// Find the row number of the header row in a worksheet's top 30 rows, or null.
+function findHeaderRow(ws) {
+  let found = null;
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (found != null || rowNumber > 30) return;
+    if (isHeaderRow(row)) found = rowNumber;
+  });
+  return found;
+}
+
+// Pick the worksheet that carries the bill: a sheet named BOQ, else the first
+// sheet with a recognisable header row, else the first sheet. Returns
+// { ws, headerRow } — headerRow null when no header row was found anywhere,
+// which is the signature of a file that isn't a bill at all (a labour
+// breakdown, a materials list) and should be flagged rather than trusted.
+function pickBillSheet(wb) {
+  const named = wb.getWorksheet('BOQ');
+  if (named) return { ws: named, headerRow: findHeaderRow(named) };
+  for (const ws of wb.worksheets) {
+    const headerRow = findHeaderRow(ws);
+    if (headerRow != null) return { ws, headerRow };
+  }
+  return { ws: wb.worksheets[0] || null, headerRow: null };
+}
+
+/**
+ * Cheap look at an uploaded workbook: is this a bill of quantities? Used to
+ * choose which .xlsx in a delivery batch becomes the project's BOQ, so a
+ * labour breakdown or materials list uploaded alongside the bill can never
+ * be wired up in its place.
+ *   → { looks_like_boq, sheet, header_row, named_sheet }
+ */
+async function sniffBOQ(filePath) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(filePath);
+  const { ws, headerRow } = pickBillSheet(wb);
+  return {
+    looks_like_boq: headerRow != null,
+    sheet: ws ? ws.name : null,
+    header_row: headerRow,
+    named_sheet: !!wb.getWorksheet('BOQ'),
+  };
+}
+
 async function parseBOQ(filePath) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(filePath);
-  const ws = wb.getWorksheet('BOQ') || wb.worksheets[0];
+  const { ws, headerRow: detectedHeaderRow } = pickBillSheet(wb);
   if (!ws) throw new Error('BOQ worksheet not found');
 
   // Collect any row that has a merge anchored at column A, regardless of width.
@@ -376,8 +434,7 @@ async function parseBOQ(filePath) {
   let cols = { ...DEFAULT_COLS };
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber > 30) return;
-    const joined = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((c) => cellText(row.getCell(c)).toLowerCase()).join(' | ');
-    if (joined.includes('description') && (joined.includes('qty') || joined.includes('quantity'))) {
+    if (isHeaderRow(row)) {
       headerRow = rowNumber;
       // Pass the row directly above as the (optional) group banner — some BOQs
       // split labour/materials with a merged "LABOUR"/"MATERIAL" banner there.
@@ -486,7 +543,7 @@ async function parseBOQ(filePath) {
       // stop marker below, and returning here would leave the rows after it
       // being read as lines.
       if (sourceSummary.net_total == null &&
-          /^NET\s+(MEASURED|CONSTRUCTION|TOTAL|COST|WORKS|BUILD)/.test(upperLabel)) {
+          /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel)) {
         sourceSummary.net_total = numAt(row, cols.total);
       }
       // The printed ex-VAT grand total — the fallback check figure when the
@@ -539,7 +596,7 @@ async function parseBOQ(filePath) {
         if (p != null) sourceSummary.contingency_pct = p;
         return;
       }
-      if ((m = upperLabel.match(/^VAT\s*@?\s*([\d.]+)\s*%/))) {
+      if ((m = upperLabel.match(/^VAT\s*(?:@|AT)?\s*([\d.]+)\s*%/))) {
         sourceSummary.vat_pct = parseFloat(m[1]);
         return;
       }
@@ -633,7 +690,7 @@ async function parseBOQ(filePath) {
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
         upperLabel.startsWith('NET MEASURED') ||
-        upperLabel.startsWith('NET CONSTRUCTION COST') ||
+        upperLabel.startsWith('NET CONSTRUCTION COST') || upperLabel.startsWith('NET DIRECT COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('TOTAL CONSTRUCTION') || upperLabel.startsWith('TOTAL COST') ||
         upperLabel.startsWith('TOTAL (EXCL') || upperLabel.startsWith('TOTAL (EX') ||
@@ -815,7 +872,16 @@ async function parseBOQ(filePath) {
     { labour: 0, materials: 0, total: 0 }
   );
 
-  return { sections: cleaned, grand, source_summary: sourceSummary };
+  return {
+    sections: cleaned,
+    grand,
+    source_summary: sourceSummary,
+    // false when no header row was found on any sheet: the columns were
+    // guessed, and the figures should be treated as suspect (the file is
+    // probably not a bill at all).
+    header_detected: detectedHeaderRow != null,
+    sheet: ws.name,
+  };
 }
 
 /**
@@ -1553,6 +1619,12 @@ function reconcileParsed(parsed) {
   const prov = sum((s) => !!s.provisional);
   const within = (a, b) => Math.abs(a - b) <= Math.max(Math.abs(b) * 0.01, 5);
 
+  // No header row on any sheet: the columns were guessed, so nothing read
+  // from this file can be trusted — it is most likely not a bill at all.
+  if (parsed.header_detected === false) {
+    return { ok: false, reason: 'not_a_boq', printed: null, parsed: net + prov, basis: null };
+  }
+
   if (ss.net_total > 0) {
     const ok = within(net, ss.net_total) || within(net + prov, ss.net_total);
     return { ok, printed: ss.net_total, parsed: ok && within(net + prov, ss.net_total) && !within(net, ss.net_total) ? net + prov : net, basis: 'net' };
@@ -1573,4 +1645,4 @@ function reconcileParsed(parsed) {
   return null;
 }
 
-module.exports = { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed };
+module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed };

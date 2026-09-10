@@ -61,6 +61,33 @@ function normaliseKind(raw) {
   return k.replace(/[^a-z0-9]+/g, '_').slice(0, 32) || 'other';
 }
 
+// Which of a batch's spreadsheets is the bill? A QS sends the BOQ alongside a
+// materials list, a labour breakdown or a cost plan, all as .xlsx and all under
+// one "BOQ" kind. Taking the first .xlsx wired the labour breakdown up as the
+// project's BOQ, and the Builder Pack / Client Copy then re-priced the whole
+// job off man-days — a £217k bill came out at £2k. Look inside each candidate
+// and choose the one that reads as a bill: a sheet named BOQ first, then any
+// sheet with a recognisable header row (Description + Qty), with a filename
+// that says "boq"/"bill" breaking ties. A batch with no recognisable bill
+// falls back to the old behaviour (first .xlsx) so nothing is left unwired.
+async function pickBoqFromBatch(inserted) {
+  const candidates = inserted.filter((x) => x.kind === 'boq' && /\.xlsx?$/i.test(x.filename));
+  if (candidates.length <= 1) return candidates[0] || null;
+  let sniffBOQ;
+  try { ({ sniffBOQ } = require('./builderExports')); } catch (e) { return candidates[0]; }
+  const scored = [];
+  for (const c of candidates) {
+    let sniff = null;
+    try { sniff = await sniffBOQ(path.join(outputsDir, c.filename)); } catch (e) { sniff = null; }
+    const nameSaysBill = /\b(boq|bill|bq)\b|bill[_ -]?of[_ -]?quant/i.test(c.original_name || c.filename || '');
+    const score = (sniff && sniff.named_sheet ? 4 : 0) + (sniff && sniff.looks_like_boq ? 2 : 0) + (nameSaysBill ? 1 : 0);
+    scored.push({ c, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  if (scored[0].score === 0) return candidates[0];
+  return scored[0].c;
+}
+
 // Best-effort parser: pull the narrative out of an uploaded Findings Report
 // .docx so the customer can edit it. Splits the document on its section
 // headers (Project Description, Scope Summary, Key Findings, Assumptions,
@@ -251,7 +278,7 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
     // .xlsx wasn't the final file, which then hid the "Got a BOQ?" quote
     // starter from the customer even though the BOQ had been delivered.
     try {
-      const boqXlsx = inserted.find((x) => x.kind === 'boq' && /\.xlsx?$/i.test(x.filename));
+      const boqXlsx = await pickBoqFromBatch(inserted);
       if (boqXlsx) {
         db.prepare(
           'UPDATE projects SET boq_filename = ?, status = CASE WHEN status IN (?, ?) THEN ? ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
