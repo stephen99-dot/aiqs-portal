@@ -163,6 +163,9 @@ export default function BuilderPackPage() {
   const [contingency, setContingency] = useState(0);
   const [vat, setVat] = useState(0);
   const [sourceSeeded, setSourceSeeded] = useState(false);
+  // Server check of the parsed lines against the BOQ's own printed total —
+  // { ok, printed, parsed, basis } or null when the BOQ prints no total.
+  const [reconciliation, setReconciliation] = useState(null);
   const [perTradeOhp, setPerTradeOhp] = useState({});
   const [prelimsMode, setPrelimsMode] = useState('off');
   const [prelimsAmount, setPrelimsAmount] = useState(0);
@@ -217,6 +220,7 @@ export default function BuilderPackPage() {
         // own OH&P/contingency afterwards. VAT is kept as the source carried it.
         const ss = bd.source_summary || {};
         if (ss.vat_pct != null) setVat(ss.vat_pct);
+        setReconciliation(bd.reconciliation || null);
         // Provisional sums now arrive as their own itemised section (see seeded);
         // only fall back to the flat lump for older BOQs that weren't itemised.
         const hasProvSection = seeded.some((s) => s.provisional);
@@ -912,6 +916,18 @@ export default function BuilderPackPage() {
                     : 'Edit qty or the line total — the bill recomputes automatically. This BOQ is priced on a composite basis (one rate per line), so labour/materials aren’t shown separately.'}
                 </span>
               </div>
+
+              {reconciliation && !reconciliation.ok && (
+                <div style={{
+                  marginTop: 10, padding: '10px 14px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                  background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.45)', color: 'var(--text-primary)',
+                }}>
+                  <strong>Check these figures before you share.</strong>{' '}
+                  The lines read from your BOQ add up to <strong>{fmt(sym, reconciliation.parsed, 2)}</strong>, but the BOQ's own
+                  {reconciliation.basis === 'net' ? ' net construction total' : ' total (excl. VAT)'} is <strong>{fmt(sym, reconciliation.printed, 2)}</strong>.
+                  {' '}A total or carried-forward row may have been read as a line — delete any line that repeats a section total, or send us the BOQ and we'll correct it.
+                </div>
+              )}
 
               {sections.length === 0 && (
                 <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>

@@ -149,6 +149,45 @@ const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
 // The other common wording: "Section 1 total — PRELIMINARIES". Without this
 // the row is read as a priced line, exactly doubling every section.
 const SECTION_TOTAL_RE = /^SECTION\s+\S+\s+TOTALS?\b/;
+// Every other way a hand-built BOQ closes a section or a page: "Total —
+// Preliminaries", "Preliminaries total", "Total for section 2", "Carried to
+// summary", "Carried forward", "C/F", "Page total", "To collection". These rows
+// carry a money amount but no unit and no quantity — the shape of a total, not
+// of a priced line. Read as a line, each one exactly doubles its section (and a
+// closing "TOTAL CONSTRUCTION COST" row re-adds the whole bill), which is the
+// "client copy is double the BOQ" report. Only applied to rows with no
+// unit/qty, so a real item that merely mentions "total" is untouched.
+const TOTAL_ROW_RE = /\bTOTALS?\b|\bCARRIED\b|\bC\/F\b|\bB\/F\b|BROUGHT\s+FORWARD|TO\s+SUMMARY|TO\s+COLLECTION|\bCOLLECTION\b/;
+
+// Is this a total / carry-forward row rather than a priced line? `label` is
+// the row's ref + description text (upper-cased); `hasUnitOrQty` says whether
+// the row carries a unit or a positive quantity.
+function isTotalRowLabel(upperA, upperB, upperJoined, hasUnitOrQty) {
+  if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB) ||
+      SECTION_TOTAL_RE.test(upperA) || SECTION_TOTAL_RE.test(upperB)) return true;
+  return !hasUnitOrQty && TOTAL_ROW_RE.test(upperJoined);
+}
+
+// The same test for an already-parsed line (a saved Builder Pack state, or an
+// edited-sections payload): a line with no unit and no quantity whose
+// description reads like a total row. Used to scrub total rows out of working
+// state that was saved while the parser still read them as lines.
+function isTotalRowItem(item) {
+  if (!item) return false;
+  const desc = String(item.description || '').toUpperCase().trim();
+  const ref = String(item.itemRef || '').toUpperCase().trim();
+  const joined = (ref && desc && ref !== desc) ? ref + ' ' + desc : (ref || desc);
+  const unit = String(item.unit || '').trim();
+  const qty = parseFloat(item.qty) || 0;
+  const hasUnitOrQty = (!!unit && unit !== (ref || desc)) || qty > 0;
+  return isTotalRowLabel(ref, desc, joined, hasUnitOrQty);
+}
+
+// Values agree to within half a percent (or £1 on small figures) — the
+// tolerance used when reconciling parsed lines against a printed total.
+function closeTo(a, b) {
+  return Math.abs((a || 0) - (b || 0)) <= Math.max(Math.abs(b || 0) * 0.005, 1);
+}
 
 function looksLikeUnit(s) {
   const t = String(s || '').trim().toLowerCase();
@@ -267,13 +306,32 @@ function looksLikeSectionRow(row, mergedRows, cols) {
   // label-only. Non-zero, not positive: a credit line ("Deduct: deposit
   // already discharged… −3582.42") is numeric data too, and treating it as a
   // heading split its section in half.
+  //
+  // One exception: a collection-style heading that carries its own section
+  // total in the Total column ("3.0 ROOFING … 5,000") — an ALL-CAPS heading
+  // with a positive amount in Total and nothing in rate / qty / unit / labour /
+  // materials. Read as a line, it adds the whole section again. Returned as
+  // 'carried' so the caller can remember the amount and reconcile it against
+  // the lines beneath (a lump-sum line in capitals is put back as a line when
+  // they don't add up).
   const num = (c) => (c ? cellNumber(row.getCell(c)) : 0);
-  const hasNumbers = num(cols.rate) !== 0 || num(cols.labour) !== 0 || num(cols.materials) !== 0 || num(cols.total) !== 0;
-  if (hasNumbers) return false;
+  const total = num(cols.total);
+  const unitText = cols.unit ? cellText(row.getCell(cols.unit)).trim() : '';
+  const onlyTotal = total > 0 && num(cols.rate) === 0 && num(cols.labour) === 0 &&
+    num(cols.materials) === 0 && num(cols.qty) === 0 && (!unitText || unitText === a || unitText === b);
+  const hasNumbers = num(cols.rate) !== 0 || num(cols.labour) !== 0 || num(cols.materials) !== 0 || total !== 0;
+  if (hasNumbers && !onlyTotal) return false;
 
   // Pattern: "1.", "1.2", "A.", "Section 1", "TRADE" all-caps with letters
   const numberedPrefix = /^\s*(\d+(?:\.\d+)*)[.)]?\s+\S/.test(text);
   const allCapsHeading = /^[A-Z][A-Z0-9 &/(),.\-]{4,}$/.test(text); // e.g. "PRELIMINARIES", "GROUNDWORKS & SUBSTRUCTURE"
+  if (onlyTotal) {
+    // Only a capitalised title qualifies — "1.3 Allow for scaffolding  2,500"
+    // is a lump-sum line and stays one.
+    const title = text.replace(/^\s*(\d+(?:\.\d+)*)[.)]?\s+/, '');
+    const capsTitle = /[A-Z]{3,}/.test(title) && title === title.toUpperCase() && /^[A-Z0-9 &/(),.\-]+$/.test(title);
+    return capsTitle ? 'carried' : false;
+  }
   const fillCell = (c) => !!(c && row.getCell(c).fill && row.getCell(c).fill.fgColor &&
     row.getCell(c).fill.fgColor.argb && row.getCell(c).fill.fgColor.argb !== 'FFFFFFFF');
   const hasFill = fillCell(itemC) || fillCell(descC);
@@ -358,7 +416,10 @@ async function parseBOQ(filePath) {
   // Summary adders printed at the bottom of the source document (OH&P,
   // contingency, VAT). Captured so a client copy can default to the same
   // bottom line as the BOQ it came from.
-  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null };
+  // net_total: the net (pre-OH&P / contingency) construction total the source
+  // document prints — "Net Construction Cost", "NET MEASURED WORKS" — kept so
+  // the parsed lines can be checked against the bill's own bottom line.
+  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null, net_total: null, ex_vat_total: null };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber <= headerRow) return;
@@ -421,6 +482,20 @@ async function parseBOQ(filePath) {
         }
         return null;
       };
+      // The printed net total. No `return`: "NET MEASURED WORKS" is also a
+      // stop marker below, and returning here would leave the rows after it
+      // being read as lines.
+      if (sourceSummary.net_total == null &&
+          /^NET\s+(MEASURED|CONSTRUCTION|TOTAL|COST|WORKS|BUILD)/.test(upperLabel)) {
+        sourceSummary.net_total = numAt(row, cols.total);
+      }
+      // The printed ex-VAT grand total — the fallback check figure when the
+      // document prints no separate net line. Read here (before the stopped
+      // guard) because it usually sits below a collection / summary heading.
+      if (sourceSummary.ex_vat_total == null && !/\bINC(?:L|LUDING)?\b/.test(upperLabel) &&
+          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER))/.test(upperLabel)) {
+        sourceSummary.ex_vat_total = numAt(row, cols.total);
+      }
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
         const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
@@ -560,7 +635,13 @@ async function parseBOQ(filePath) {
         upperLabel.startsWith('NET MEASURED') ||
         upperLabel.startsWith('NET CONSTRUCTION COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
-        upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM')) {
+        upperLabel.startsWith('TOTAL CONSTRUCTION') || upperLabel.startsWith('TOTAL COST') ||
+        upperLabel.startsWith('TOTAL (EXCL') || upperLabel.startsWith('TOTAL (EX') ||
+        upperLabel.startsWith('CONTRACT SUM') || upperLabel.startsWith('TOTAL TENDER') ||
+        upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM') ||
+        // A collection / summary page heading: everything beneath it repeats
+        // the section totals, so it is read exactly like PROJECT SUMMARY.
+        (!hasUnitOrQty && /^(COLLECTION|SUMMARY|(?:FINAL|MAIN|GENERAL|BILL|TENDER|PRICE|COST)\s+SUMMARY)\b/.test(upperLabel))) {
       stopped = true;
       return;
     }
@@ -568,14 +649,17 @@ async function parseBOQ(filePath) {
     // Sub-total row (SUBTOTAL_RE / SECTION_TOTAL_RE, module scope). Without
     // catching the trailing "Section 1 subtotal" and "Section 1 total — …"
     // forms the row was read as a priced line, doubling the section total.
-    if (SUBTOTAL_RE.test(upperA) || SUBTOTAL_RE.test(upperB) ||
-        SECTION_TOTAL_RE.test(upperA) || SECTION_TOTAL_RE.test(upperB)) {
+    if (isTotalRowLabel(upperA, upperB, upperJoined, hasUnitOrQty)) {
       if (current) {
         current.subtotal = {
           labour: numAt(row, cols.labour),
           materials: numAt(row, cols.materials),
           total: numAt(row, cols.total),
         };
+        // The first total row after the lines is the section's own printed
+        // total; a later "Carried to summary" repeats it. Kept so the parsed
+        // lines can be reconciled against it below.
+        if (current.printed == null && numAt(row, cols.total) > 0) current.printed = numAt(row, cols.total);
       }
       return;
     }
@@ -584,16 +668,25 @@ async function parseBOQ(filePath) {
     // Join a heading split across the ref + description cells ("1" |
     // "PRELIMINARIES") so the number and the title both survive — reading only
     // the first cell left every trade named by its bare number.
-    if (looksLikeSectionRow(row, mergedRows, cols)) {
+    const headingKind = looksLikeSectionRow(row, mergedRows, cols);
+    if (headingKind) {
       const label = (a && b && a !== b) ? a + ' ' + b : (a || b);
       const { number, title } = parseSectionLabel(label, sections.length);
       // Avoid creating an empty section if we get two heading rows in a row
-      // before any items — just update the current pointer.
-      if (current && current.items.length === 0) {
+      // before any items — just update the current pointer. A heading that
+      // carries its own total always opens a fresh section, so the amount can
+      // be reconciled against exactly the lines beneath it.
+      if (current && current.items.length === 0 && headingKind !== 'carried' && current.carried == null) {
         current.number = number;
         current.title = title;
       } else {
         current = { number, title, items: [], subtotal: { labour: 0, materials: 0, total: 0 } };
+        if (headingKind === 'carried') {
+          current.carried = numAt(row, cols.total);
+          // What the row would have been as a line, should it turn out to be a
+          // lump-sum item rather than a heading.
+          current.carriedLine = { itemRef: a, description: b || a, unit: '', qty: 0, rate: 0, labour: 0, materials: 0, total: current.carried };
+        }
         sections.push(current);
       }
       return;
@@ -632,8 +725,41 @@ async function parseBOQ(filePath) {
     }
   });
 
+  // Settle headings that carried a total in their own row (see
+  // looksLikeSectionRow → 'carried'). The lines beneath decide what it was:
+  //   - they add up to it        → a collection-style heading; keep, drop the amount
+  //   - no lines, and it matches the previous section's lines
+  //                              → the previous section's total row; drop it
+  //   - anything else            → a capitalised lump-sum line; put it back as a
+  //                                line of the previous section, lines and all
+  const lineSum = (items) => items.reduce((acc, i) => acc + (i.total || ((i.labour || 0) + (i.materials || 0)) || (i.rate || 0) * (i.qty || 0)), 0);
+  const settled = [];
+  for (const s of sections) {
+    if (s.carried == null) { settled.push(s); continue; }
+    const prev = settled.length ? settled[settled.length - 1] : null;
+    const { carried, carriedLine } = s;
+    delete s.carried; delete s.carriedLine;
+    // A carried figure with no lines of its own that equals an earlier
+    // section's lines is that section's total row (or a collection-page line
+    // repeating it) — never a line in its own right.
+    const echoed = !s.items.length ? settled.find((sec) => !sec.provisional && sec.items.length && closeTo(lineSum(sec.items), carried)) : null;
+    if (s.items.length && closeTo(lineSum(s.items), carried)) {
+      settled.push(s);
+    } else if (echoed) {
+      if (echoed.printed == null) echoed.printed = carried;
+    } else if (prev && !prev.provisional) {
+      prev.items.push(carriedLine, ...s.items);
+      // A total row that closed the lump line belongs to the section it now sits in.
+      if (prev.printed == null && s.printed != null) prev.printed = s.printed;
+    } else {
+      s.number = '1'; s.title = 'GENERAL';
+      s.items.unshift(carriedLine);
+      settled.push(s);
+    }
+  }
+
   // Drop empty sections (a heading row with no items beneath it)
-  const cleaned = sections.filter((s) => s.items.length > 0);
+  const cleaned = settled.filter((s) => s.items.length > 0);
 
   // Normalise labour/materials to LINE totals. Two shapes exist in the wild:
   // the chat generator writes line totals (Total = Labour + Materials), while
@@ -662,6 +788,18 @@ async function parseBOQ(filePath) {
         it.total = lm !== 0 ? round2(lm) : round2((it.rate || 0) * (it.qty || 0));
       }
     }
+    // Reconcile against the section's own printed total. When the lines add
+    // up to exactly twice it and one line IS that total, that line is a total
+    // row worded in a way the detector above didn't recognise — drop it, so a
+    // new wording can never double a section silently.
+    if (s.printed > 0 && s.items.length > 1) {
+      const sum = s.items.reduce((a, i) => a + (i.total || 0), 0);
+      if (!closeTo(sum, s.printed)) {
+        const idx = s.items.findIndex((i) => closeTo(i.total, s.printed) && closeTo(sum - i.total, s.printed));
+        if (idx >= 0) s.items.splice(idx, 1);
+      }
+    }
+    delete s.printed;
     // Recompute subtotals from the normalised items so they always agree
     s.subtotal.labour = s.items.reduce((a, i) => a + (i.labour || 0), 0);
     s.subtotal.materials = s.items.reduce((a, i) => a + (i.materials || 0), 0);
@@ -1397,4 +1535,42 @@ async function generateClientCopyPro(parsed, opts = {}) {
   return Buffer.from(buffer);
 }
 
-module.exports = { parseBOQ, generateBuilderPack, generateClientCopyPro };
+/**
+ * Check the parsed lines against the bill's own printed bottom line. Returns
+ * null when the source printed no usable total; otherwise
+ *   { ok, printed, parsed, basis }   basis: 'net' | 'ex_vat'
+ * `ok` is true when the lines add up to the printed figure under any of the
+ * ways the source could have built it (with / without provisional sums, with
+ * the OH&P and contingency it printed). A parse that reads a total row as a
+ * line lands at roughly double and fails every candidate — exactly the case
+ * the Builder Pack page should warn about instead of quietly inflating.
+ */
+function reconcileParsed(parsed) {
+  if (!parsed || !parsed.sections) return null;
+  const ss = parsed.source_summary || {};
+  const sum = (pred) => parsed.sections.filter(pred).reduce((a, s) => a + ((s.subtotal && s.subtotal.total) || 0), 0);
+  const net = sum((s) => !s.provisional);
+  const prov = sum((s) => !!s.provisional);
+  const within = (a, b) => Math.abs(a - b) <= Math.max(Math.abs(b) * 0.01, 5);
+
+  if (ss.net_total > 0) {
+    const ok = within(net, ss.net_total) || within(net + prov, ss.net_total);
+    return { ok, printed: ss.net_total, parsed: ok && within(net + prov, ss.net_total) && !within(net, ss.net_total) ? net + prov : net, basis: 'net' };
+  }
+  if (ss.ex_vat_total > 0) {
+    const ohp = ss.ohp_pct != null ? ss.ohp_pct / 100
+      : ((1 + (ss.overhead_pct || 0) / 100) * (1 + (ss.profit_pct || 0) / 100) - 1);
+    const cont = (ss.contingency_pct || 0) / 100;
+    const lump = ss.provisional_sum > 0 ? ss.provisional_sum : 0;
+    const candidates = [];
+    for (const base of [net, net + prov]) {
+      candidates.push(base, base * (1 + ohp + cont), base * (1 + ohp) * (1 + cont));
+      candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump);
+    }
+    const ok = candidates.some((c) => within(c, ss.ex_vat_total));
+    return { ok, printed: ss.ex_vat_total, parsed: net + prov, basis: 'ex_vat' };
+  }
+  return null;
+}
+
+module.exports = { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed };
