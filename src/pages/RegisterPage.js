@@ -27,7 +27,12 @@ const GoogleIcon = () => (
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', company: '', phone: '' });
+  // A buyer who paid before signing up arrives from the "create your account"
+  // email with their address in the URL — pre-fill it so the credits match.
+  const [form, setForm] = useState(() => ({
+    fullName: '', password: '', company: '', phone: '',
+    email: new URLSearchParams(window.location.search).get('email') || '',
+  }));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [current, setCurrent] = useState(0);

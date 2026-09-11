@@ -14,6 +14,7 @@ const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
 const { getMessageBalance } = require('./messageCredits');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
+const { rateLimit } = require('./publicRateLimit');
 
 const router = express.Router();
 
@@ -518,26 +519,57 @@ function findDelegate(email) {
   } catch (e) { return null; }
 }
 
+// Every rejected login is logged with WHY, so "people can't log in" can be
+// answered from the logs instead of guessed at. The password is never logged.
+// The generic message is kept for the two cases where a specific one would
+// confirm whether an email has an account (unknown email, wrong password);
+// the others are accounts that genuinely have no password to type, where
+// "Invalid email or password" only sends people round in circles.
+function rejectLogin(res, email, reason, message, code) {
+  console.log(`[Login] rejected ${email}: ${reason}`);
+  const body = { error: message || 'Invalid email or password' };
+  if (code) body.code = code;
+  return res.status(401).json(body);
+}
+
 router.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+    const normEmail = String(email).trim().toLowerCase();
+    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(normEmail);
     let delegate = null;
     if (!user) {
       // Not a primary account — check the authorized sign-in emails.
-      delegate = findDelegate(email);
-      if (!delegate || !delegate.password_hash) return res.status(401).json({ error: 'Invalid email or password' });
+      delegate = findDelegate(normEmail);
+      if (!delegate) return rejectLogin(res, normEmail, 'no_account');
+      if (!delegate.password_hash) {
+        return rejectLogin(res, normEmail, 'delegate_no_password',
+          'This email hasn\'t set a password yet. Use "Forgot password?" below and we\'ll email you a new set-up link, or sign in with Google.', 'NO_PASSWORD');
+      }
       const delegateValid = await bcrypt.compare(password, delegate.password_hash);
-      if (!delegateValid) return res.status(401).json({ error: 'Invalid email or password' });
+      if (!delegateValid) return rejectLogin(res, normEmail, 'delegate_wrong_password');
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(delegate.user_id);
-      if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+      if (!user) return rejectLogin(res, normEmail, 'delegate_owner_missing');
       db.prepare('UPDATE authorized_emails SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(delegate.id);
     } else {
+      if (!user.password_hash) {
+        // Google sign-ups are stored with an empty hash — no password exists
+        // to compare against, so say so rather than "wrong password".
+        if (user.google_id) {
+          return rejectLogin(res, normEmail, 'google_only',
+            'This account signs in with Google. Use the "Continue with Google" button above.', 'GOOGLE_ONLY');
+        }
+        return rejectLogin(res, normEmail, 'no_password',
+          'This account doesn\'t have a password yet. Use "Forgot password?" below and we\'ll email you a sign-in link.', 'NO_PASSWORD');
+      }
       const valid = await bcrypt.compare(password, user.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+      if (!valid) return rejectLogin(res, normEmail, 'wrong_password');
     }
-    if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
+    if (user.suspended) {
+      console.log(`[Login] rejected ${normEmail}: suspended`);
+      return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
+    }
     // Claim any BOQ credits paid for under this email but not matched to an
     // account at webhook time (e.g. paid via Payment Link with a different email).
     claimPendingCredits(user);
@@ -575,6 +607,122 @@ router.put('/auth/change-password', authMiddleware, async (req, res) => {
   }
 });
 
+// ── Magic links ──────────────────────────────────────────────────────────────
+// One-shot sign-in tokens. The table has been created with two shapes over
+// time (database.js keys it by token; the older routes.js shape by id), so
+// the column every path relies on is guaranteed here and rows are always
+// addressed by token, which is unique in both.
+try { db.exec('ALTER TABLE magic_links ADD COLUMN id TEXT'); } catch (e) {}
+
+function issueMagicLink(userId, ttlMs) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  db.exec('CREATE TABLE IF NOT EXISTS magic_links (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+  // Sweep dead rows; live links for other purposes (e.g. a "project ready"
+  // link) are left alone.
+  db.prepare('DELETE FROM magic_links WHERE used = 1 OR expires_at < ?').run(new Date().toISOString());
+  db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, token, expiresAt);
+  const portalUrl = process.env.PORTAL_URL || PORTAL_BASE_URL;
+  return { token, expiresAt, url: `${portalUrl}/magic?token=${token}` };
+}
+
+function magicLinkEmailHtml({ firstName, intro, buttonLabel, url, expiryText }) {
+  return `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+      <div style="text-align:center;margin-bottom:32px;">
+        <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+        <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+      </div>
+      <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Hi ${firstName},</h2>
+      ${intro}
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${url}" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">${buttonLabel}</a>
+      </div>
+      <p style="font-size:13px;color:#94A3B8;line-height:1.5;">${expiryText}</p>
+      <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+      <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+    </div>
+  `;
+}
+
+// Self-service "Forgot password?". Always answers the same way whether or not
+// the email is known, so it can't be used to check who has an account. A
+// primary account gets a one-hour sign-in link (the magic page then asks
+// them to set a new password); an authorized sign-in email gets a fresh
+// set-your-password invite, since their password lives on their own row and
+// a magic link would sign them into the owner's account without one.
+const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
+router.post('/auth/forgot-password', forgotPasswordLimiter, async (req, res) => {
+  const generic = { success: true, message: 'If that email has an account, a sign-in link is on its way. Check your spam folder if it hasn\'t arrived in a few minutes.' };
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter the email address you signed up with' });
+
+    const user = db.prepare('SELECT id, email, full_name, google_id, password_hash, suspended FROM users WHERE email = ?').get(email);
+    if (user) {
+      if (user.suspended) {
+        console.log(`[ForgotPassword] ${email}: account suspended — no link sent`);
+        return res.json(generic);
+      }
+      const link = issueMagicLink(user.id, 60 * 60 * 1000);
+      const firstName = (user.full_name || 'there').split(' ')[0];
+      const googleNote = (user.google_id && !user.password_hash)
+        ? '<p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 8px;">This account was created with Google sign-in, so it never had a password. You can keep using <strong>Continue with Google</strong> on the login page, or use the link below to set a password as well.</p>'
+        : '';
+      const sent = await sendEmail({
+        to: user.email,
+        subject: 'Reset your AI QS Portal password',
+        html: magicLinkEmailHtml({
+          firstName,
+          intro: googleNote + '<p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 24px;">Click the button below to sign in without a password. Once you\'re in, you\'ll be asked to set a new one.</p>',
+          buttonLabel: 'Sign In & Set a New Password',
+          url: link.url,
+          expiryText: 'This link expires in 1 hour and can only be used once. If you didn\'t ask for it, you can ignore this email — your account is unchanged.',
+        }),
+      });
+      if (sent) console.log(`[ForgotPassword] ${email}: sign-in link emailed`);
+      else console.log(`[ForgotPassword] ${email}: email not sent — link: ${link.url}`);
+      return res.json(generic);
+    }
+
+    const delegate = findDelegate(email);
+    if (delegate) {
+      const owner = db.prepare('SELECT id, email, full_name, company FROM users WHERE id = ?').get(delegate.user_id);
+      if (!owner) {
+        console.log(`[ForgotPassword] ${email}: authorized email with no owner account — no link sent`);
+        return res.json(generic);
+      }
+      const inviteToken = crypto.randomBytes(32).toString('hex');
+      const inviteExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      db.prepare('UPDATE authorized_emails SET invite_token = ?, invite_expires_at = ? WHERE id = ?').run(inviteToken, inviteExpires, delegate.id);
+      const portalUrl = process.env.PORTAL_URL || PORTAL_BASE_URL;
+      const inviteUrl = `${portalUrl}/team-invite?token=${inviteToken}`;
+      const firstName = (delegate.full_name || 'there').split(' ')[0];
+      const ownerLabel = owner.company || owner.full_name || owner.email;
+      const sent = await sendEmail({
+        to: delegate.email,
+        subject: 'Reset your AI QS Portal password',
+        html: magicLinkEmailHtml({
+          firstName,
+          intro: `<p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 24px;">Your email (${delegate.email}) has access to <strong>${ownerLabel}</strong>'s account on the AI QS Portal. Click the button below to choose a new password — you'll be signed straight in afterwards.</p>`,
+          buttonLabel: 'Set a New Password',
+          url: inviteUrl,
+          expiryText: 'This link expires in 24 hours. If you didn\'t ask for it, you can ignore this email — your access is unchanged.',
+        }),
+      });
+      if (sent) console.log(`[ForgotPassword] ${email}: set-password link emailed (authorized email on ${owner.email})`);
+      else console.log(`[ForgotPassword] ${email}: email not sent — link: ${inviteUrl}`);
+      return res.json(generic);
+    }
+
+    console.log(`[ForgotPassword] ${email}: no account with that email — nothing sent`);
+    return res.json(generic);
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Could not send a sign-in link right now. Please try again in a minute.' });
+  }
+});
+
 router.get('/auth/magic', (req, res) => {
   try {
     const { token } = req.query;
@@ -584,7 +732,7 @@ router.get('/auth/magic', (req, res) => {
     if (!link) return res.status(400).json({ error: 'Invalid or expired magic link' });
     const now = new Date().toISOString();
     if (now > link.expires_at) return res.status(400).json({ error: 'Magic link has expired' });
-    db.prepare('UPDATE magic_links SET used = 1 WHERE id = ?').run(link.id);
+    db.prepare('UPDATE magic_links SET used = 1 WHERE token = ?').run(token);
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(link.user_id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.suspended) return res.status(403).json({ error: 'Your account has been suspended. Contact support for assistance.', suspended: true, reason: user.suspended_reason || null });
@@ -1383,14 +1531,7 @@ router.post('/admin/users/:id/magic-link', authMiddleware, adminMiddleware, asyn
   try {
     const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    db.exec('CREATE TABLE IF NOT EXISTS magic_links (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT NOT NULL UNIQUE, expires_at TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
-    // Clean up expired/used magic links for this user (keep table intact for other users)
-    db.prepare('DELETE FROM magic_links WHERE user_id = ? OR (used = 1) OR (expires_at < ?)').run(user.id, new Date().toISOString());
-    db.prepare('INSERT INTO magic_links (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), user.id, token, expiresAt);
-    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
-    const magicUrl = `${portalUrl}/magic?token=${token}`;
+    const magicUrl = issueMagicLink(user.id, 24 * 60 * 60 * 1000).url;
     const firstName = (user.full_name || 'there').split(' ')[0];
     const emailSent = await sendEmail({
       to: user.email,

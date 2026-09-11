@@ -147,7 +147,10 @@ export default function LoginPage() {
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" required autoFocus />
               </div>
               <div className="form-field">
-                <label>Password</label>
+                <div style={styles.labelRow}>
+                  <label>Password</label>
+                  <Link to={email ? `/forgot-password?email=${encodeURIComponent(email)}` : '/forgot-password'} style={styles.forgotLink}>Forgot password?</Link>
+                </div>
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
               </div>
               <button type="submit" className="btn-primary full-width" disabled={loading}>
@@ -188,6 +191,8 @@ const styles = {
   dotActive: { background: '#F5A623', width: 20, borderRadius: 3 },
   tagline: { color: 'rgba(255,255,255,0.25)', fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 },
   formWrap: { width: '100%', maxWidth: 380 },
+  labelRow: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  forgotLink: { fontSize: 12, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' },
   googleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '11px 14px', borderRadius: 10, border: '1.5px solid var(--border-input)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, textDecoration: 'none', width: '100%', boxSizing: 'border-box', transition: 'opacity 0.2s' },
   divider: { display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' },
   dividerLine: { flex: 1, height: 1, background: 'var(--border)' },
