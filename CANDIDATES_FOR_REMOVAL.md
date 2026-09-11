@@ -13,8 +13,14 @@ removing them is a separate backend decision.
 
 ## Dead code (not routed / not imported anywhere)
 
-- `src/pages/ChangePasswordPage.js` — no route in `App.js`, no importers; password change is not reachable in the UI.
-- `src/pages/GoogleSuccessPage.js` — no route; Google OAuth callback landing that nothing links to.
+- ~~`src/pages/ChangePasswordPage.js`~~ — **RESTORED, do not remove.** The login
+  page navigates to `/change-password` for accounts an admin has reset
+  (`forcePasswordChange`). "No importers" was true only because the route line
+  had already been dropped; the page is an entry point, not dead code.
+- ~~`src/pages/GoogleSuccessPage.js`~~ — **RESTORED, do not remove.** The server's
+  Google OAuth callback redirects the browser to `/auth/google/success?token=`;
+  nothing in `src/` links to it because the *server* does. Removing it broke
+  "Continue with Google" silently (bounced to /login with no message).
 - `src/pages/ProjectsPage.js` — no route; superseded by `DashboardPage` (My Projects).
 - `src/pages/ProjectManagerPage.js` — no route; old AI project-manager experiment, superseded by Office in a Box pages.
 - `src/pages/AdminNotifications.js` — unrouted duplicate; the live component is `src/components/AdminNotifications.js`.

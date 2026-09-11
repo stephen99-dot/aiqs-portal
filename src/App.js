@@ -8,6 +8,8 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import GoogleSuccessPage from './pages/GoogleSuccessPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import DashboardPage from './pages/DashboardPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
@@ -68,6 +70,13 @@ function AppInner() {
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+        {/* Google OAuth lands here (server redirect with ?token=) — NOT dead
+            code, even though nothing in src links to it. Outside GuestRoute
+            so a stale session can't intercept the fresh token. */}
+        <Route path="/auth/google/success" element={<GoogleSuccessPage />} />
+        {/* Admin-reset passwords: the login page sends forcePasswordChange
+            accounts here before the dashboard. */}
+        <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
