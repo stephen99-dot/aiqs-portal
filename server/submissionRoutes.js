@@ -18,7 +18,7 @@ const {
   STAGES, SOURCES, DEFAULT_STAGE, DEFAULT_TURNAROUND_DAYS,
   isValidStage, isValidSource, stageLabel, defaultDueAt,
 } = require('./jobStages');
-const { logEvent, listEvents, decorate, summarise, daySheet, daySeries, dayKey, OFFICE_TZ } = require('./jobTracker');
+const { logEvent, listEvents, decorate, summarise, daySheet, daySeries, dayKey, OFFICE_TZ, markStarted } = require('./jobTracker');
 
 const router = express.Router();
 
@@ -713,6 +713,12 @@ router.patch('/admin/:id', (req, res) => {
           event_type: 'owner',
           detail: owner ? 'Assigned to ' + owner : 'Unassigned',
         });
+        // Handing a New job to somebody is the job being picked up.
+        if (owner && !has('stage') && (existing.stage || 'new') === 'new') {
+          updates.push("stage = 'in_progress'", 'actioned_at = COALESCE(actioned_at, CURRENT_TIMESTAMP)', 'actioned_by = COALESCE(actioned_by, ?)');
+          params.push(actor);
+          events.push({ event_type: 'stage', detail: stageLabel('new') + ' → ' + stageLabel('in_progress') + ' (assigned)' });
+        }
       }
     }
 
@@ -811,6 +817,21 @@ router.patch('/admin/:id', (req, res) => {
 // which is the current state of play and gets overwritten — these are dated,
 // attributed and permanent, so a job can be handed over without losing its
 // history.
+// Admin: the drawings were opened (the Drive link was clicked). The first
+// touch on a New job moves it to In progress and hands it to whoever clicked —
+// nothing to remember, the queue just becomes truthful.
+router.post('/admin/:id/opened', (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  try {
+    const row = markStarted(req.params.id, req.user.email || req.user.id, 'opened the drawings');
+    if (!row) return res.status(404).json({ error: 'Submission not found' });
+    res.json({ ok: true, stage: row.stage, owner: row.owner });
+  } catch (err) {
+    console.error('[Submissions] opened error:', err);
+    res.status(500).json({ error: 'Failed to record' });
+  }
+});
+
 router.post('/admin/:id/note', (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
   try {
@@ -825,6 +846,8 @@ router.post('/admin/:id/note', (req, res) => {
       detail: text,
       actor: req.user.email || req.user.id,
     });
+    // Writing about a job is working on it.
+    markStarted(req.params.id, req.user.email || req.user.id, 'note added');
     res.json({ ok: true, events: listEvents(req.params.id) });
   } catch (err) {
     console.error('[Submissions] note error:', err);
@@ -890,6 +913,7 @@ router.post('/admin/:id/create-project', (req, res) => {
       detail: 'Job created in the customer\'s portal: ' + title,
       actor: req.user.email || req.user.id,
     });
+    markStarted(sub.id, req.user.email || req.user.id, 'job created in the portal');
 
     res.json({ ok: true, project_id: projectId, created: true });
   } catch (err) {

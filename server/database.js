@@ -1012,6 +1012,11 @@ const migrations = [
   // colour scheme, included/excluded lines) the user makes on the Builder Pack
   // screen, stored as JSON so they survive leaving and re-opening the screen.
   { column: 'builder_pack_state', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN builder_pack_state TEXT" },
+  // BOQ verification gate (boqVerify.js): JSON record of whether the lines
+  // read from the delivered bill reconcile to the total the bill prints. A
+  // bill that fails is locked — the Builder Pack / Client Copy show "being
+  // checked" instead of figures — until it is fixed or an admin overrides.
+  { column: 'boq_verification', table: 'projects', sql: "ALTER TABLE projects ADD COLUMN boq_verification TEXT" },
   // Native Xero connection — OAuth2 tokens for the builder's own Xero org, so
   // invoices push straight in (alongside the CSV export). Access tokens live
   // 30 min; the refresh token rotates on every refresh (see xeroClient.js).
@@ -1096,6 +1101,9 @@ try {
   `);
   // Whoever ticked it is the closest thing to an owner we have on old rows.
   db.exec("UPDATE drawing_submissions SET owner = actioned_by WHERE owner IS NULL AND actioned_by IS NOT NULL");
+  // The hand-set middle stages (checking / take-off / pricing / final check)
+  // folded into one automatic "in progress" — see server/jobStages.js.
+  db.exec("UPDATE drawing_submissions SET stage = 'in_progress' WHERE stage IN ('checking', 'takeoff', 'pricing', 'review')");
   // Delivery date for jobs already delivered before the column existed. The
   // stage event that moved it is the accurate answer where one exists; the
   // pick-up date is the fallback. Both are approximations of history, so the

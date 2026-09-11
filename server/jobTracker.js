@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const db = require('./database');
-const { STAGES, isOpen, isParked, stageLabel } = require('./jobStages');
+const { STAGES, isOpen, isParked, stageLabel, normaliseStage } = require('./jobStages');
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -48,6 +48,69 @@ function logEvent({ submission_id, event_type, detail, actor }) {
   }
 }
 
+// ── Automatic stage moves ─────────────────────────────────────────────────
+// The office works outside the portal, so stages nobody clicks are stages
+// nobody sets. These two are driven by things the portal can see happen.
+//
+// Find the row by internal id or public submission_id.
+function findSubmission(idOrKey) {
+  if (!idOrKey) return null;
+  return db.prepare('SELECT id, stage, owner, actioned_at, delivered_at FROM drawing_submissions WHERE id = ? OR submission_id = ?')
+    .get(idOrKey, idOrKey) || null;
+}
+
+// Somebody has started on this job: opened the drawings, created the
+// customer's project, wrote a note, took it on. New → In progress, and the
+// person who did it owns it unless somebody already does. A no-op on any job
+// that is already past New, so it can be called from every touch point.
+function markStarted(idOrKey, actor, reason) {
+  const row = findSubmission(idOrKey);
+  if (!row) return null;
+  const stage = normaliseStage(row.stage);
+  if (stage !== 'new') return row;
+  const owner = row.owner || actor || null;
+  db.prepare(`
+    UPDATE drawing_submissions
+       SET stage = 'in_progress',
+           actioned_at = COALESCE(actioned_at, CURRENT_TIMESTAMP),
+           actioned_by = COALESCE(actioned_by, ?),
+           owner = ?
+     WHERE id = ?
+  `).run(actor || null, owner, row.id);
+  logEvent({
+    submission_id: row.id, event_type: 'stage', actor,
+    detail: stageLabel(stage) + ' → ' + stageLabel('in_progress') + (reason ? ' (' + reason + ')' : ''),
+  });
+  if (!row.owner && owner) logEvent({ submission_id: row.id, event_type: 'owner', detail: 'Picked up by ' + owner, actor });
+  return { ...row, stage: 'in_progress', owner };
+}
+
+// The documents went out: the deliverables landed in the customer's project.
+// Anything → Delivered, stamped for the day sheet. No-op if already delivered.
+function markDelivered(idOrKey, actor, reason) {
+  const row = findSubmission(idOrKey);
+  if (!row) return null;
+  const stage = normaliseStage(row.stage);
+  if (stage === 'delivered') return row;
+  const owner = row.owner || actor || null;
+  db.prepare(`
+    UPDATE drawing_submissions
+       SET stage = 'delivered',
+           actioned_at = COALESCE(actioned_at, CURRENT_TIMESTAMP),
+           actioned_by = COALESCE(actioned_by, ?),
+           delivered_at = CURRENT_TIMESTAMP,
+           delivered_by = ?,
+           owner = ?
+     WHERE id = ?
+  `).run(actor || null, actor || null, owner, row.id);
+  logEvent({
+    submission_id: row.id, event_type: 'stage', actor,
+    detail: stageLabel(stage) + ' → ' + stageLabel('delivered') + (reason ? ' (' + reason + ')' : ''),
+  });
+  if (!row.owner && owner) logEvent({ submission_id: row.id, event_type: 'owner', detail: 'Picked up by ' + owner, actor });
+  return { ...row, stage: 'delivered', owner };
+}
+
 function listEvents(submissionId, limit = 200) {
   try {
     return db.prepare(`
@@ -77,7 +140,7 @@ function listEvents(submissionId, limit = 200) {
  */
 function decorate(row, now = new Date()) {
   if (!row) return row;
-  const stage = row.stage || 'new';
+  const stage = normaliseStage(row.stage);
   const dueAt = parseTs(row.due_at);
   const open = isOpen(stage);
   const parked = isParked(stage);
@@ -105,7 +168,7 @@ function summarise(rows, now = new Date()) {
   for (const stage of STAGES) byStage[stage.key] = 0;
   for (const r of decorated) {
     if (byStage[r.stage] === undefined) byStage[r.stage] = 0;
-    byStage[r.stage] += 1;
+    byStage[r.stage] += 1; // r.stage is already normalised by decorate()
   }
 
   const byOwner = {};
@@ -256,5 +319,4 @@ function daySeries({ jobs = [], events = [], endDay, days = 7, tz = OFFICE_TZ })
 
 module.exports = {
   logEvent, listEvents, decorate, summarise, daysBetween, parseTs,
-  dayKey, daySheet, daySeries, OFFICE_TZ,
-};
+  dayKey, daySheet, daySeries, OFFICE_TZ, markStarted, markDelivered };

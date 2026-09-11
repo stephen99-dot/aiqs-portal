@@ -24,21 +24,21 @@ question the office actually asks.
 
 ## Stages
 
-Defined once in `server/jobStages.js` and sent to the page with the data, so
-renaming a stage changes it everywhere. Each one is a thing somebody does:
+Defined once in `server/jobStages.js` and sent to the page with the data.
+There are four, and three of them set themselves:
 
-| Stage | Means |
-| --- | --- |
-| **New** | Arrived. Nobody has picked it up. |
-| **Checking drawings** | Confirming the drawings are readable, scaled and complete. Chase the customer here. |
-| **Take-off** | Quantities being measured. |
-| **Pricing** | Rates applied, BOQ built. |
-| **Final check** | Priced BOQ checked before it goes out. |
-| **Delivered** | Documents sent. Nothing left to do. |
-| **On hold** | Waiting on the customer. Still ours, but the clock is not on us. |
+| Stage | Means | Set by |
+| --- | --- | --- |
+| **New** | Arrived. Nobody has touched it. | Arrival. |
+| **In progress** | Being worked. | The first touch: opening the drawings from the queue, creating the customer's job, writing a note, or being assigned. Whoever touched it owns it unless somebody already does. |
+| **On hold** | Waiting on the customer. Still ours, but the clock is not on us. | **A person.** This is the one stage nobody can infer, so it is the one button. |
+| **Delivered** | Documents delivered. Nothing left to do. | Uploading the deliverables to the customer's project. "Mark delivered" exists for documents that went out some other way. |
 
-Moving a job off **New** marks it as picked up and assigns it to whoever moved
-it, unless somebody already owns it. Nothing extra to remember.
+The queue used to have four hand-set stages in the middle — checking
+drawings, take-off, pricing, final check. The work happens outside the portal,
+so nobody clicked them and every job sat in New until Done was pressed at the
+end, which made the middle of the board fiction. They are gone; old rows and
+old history entries that mention them read as In progress.
 
 ## For whoever is running jobs
 
@@ -61,9 +61,10 @@ Two fields matter:
 It then joins the same queue at the same stage as a portal submission. There is
 nowhere else to record it.
 
-**Move the stage as you go, not at the end.** One click. It is the only way the
-job is truthful between started and finished, and it is what lets somebody else
-pick the job up if you are off.
+**You do not move stages.** Opening the drawings from the queue is what starts
+the job, and uploading the documents is what finishes it — the board follows
+what you do. The one thing to remember is **On hold** when you are waiting on
+the customer.
 
 **Put anything worth remembering in History**, not just the working notes box.
 Working notes get overwritten; History is dated, attributed and permanent —
@@ -71,7 +72,7 @@ Working notes get overwritten; History is dated, attributed and permanent —
 what makes a hand-over possible without a phone call.
 
 **Use On hold when you are waiting on the customer** rather than leaving it in
-Take-off. On-hold jobs never show as late, because the delay is not ours.
+progress. On-hold jobs never show as late, because the delay is not ours.
 
 ## For the owner
 

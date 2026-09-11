@@ -104,7 +104,7 @@ export default function SubmissionsInboxPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState('open'); // open | mine | overdue | delivered | all | <stage key>
+  const [view, setView] = useState('open'); // open | mine | overdue | on_hold | delivered | all
   const [creatingProject, setCreatingProject] = useState(false);
   const [linkedProject, setLinkedProject] = useState(null);
   const [search, setSearch] = useState('');
@@ -276,6 +276,16 @@ export default function SubmissionsInboxPage() {
     }
   }
 
+  // The drawings were opened: the first touch on a New job moves it to In
+  // progress and hands it to whoever clicked. Fire-and-forget — the link
+  // opens regardless.
+  function recordOpened(s) {
+    if (!s || (s.stage || 'new') !== 'new') return;
+    apiFetch(`/submissions/admin/${s.id}/opened`, { method: 'POST', body: '{}' })
+      .then(() => { refreshList(); loadEvents(s.id); })
+      .catch(() => {});
+  }
+
   function moveToStage(s, stageKey) {
     if (!s || (s.stage || 'new') === stageKey) return;
     const label = (stageByKey[stageKey] && stageByKey[stageKey].label) || stageKey;
@@ -417,17 +427,15 @@ export default function SubmissionsInboxPage() {
   const overdueCount = submissions.filter((s) => s.overdue).length;
   const deliveredCount = submissions.length - openCount;
 
+  // Stages move on their own now (see "Where it is up to" below), so the bar
+  // is just the views somebody actually works from: what's open, what's mine,
+  // what's late, what's parked on the customer, what went out.
+  const onHoldCount = submissions.filter((s) => s.stage === 'on_hold').length;
   const tabs = [
     { key: 'open', label: 'Open', count: openCount },
     { key: 'mine', label: 'Mine', count: mineCount },
     { key: 'overdue', label: 'Late', count: overdueCount },
-    ...stages
-      .filter((st) => st.key !== 'delivered')
-      .map((st) => ({
-        key: st.key,
-        label: st.label,
-        count: submissions.filter((s) => (s.stage || 'new') === st.key).length,
-      })),
+    { key: 'on_hold', label: 'On hold', count: onHoldCount },
     { key: 'delivered', label: 'Delivered', count: deliveredCount },
     { key: 'all', label: 'All time', count: submissions.length },
   ];
@@ -939,39 +947,43 @@ export default function SubmissionsInboxPage() {
                 </div>
               )}
 
-              {/* Stage — one click per step, so recording progress costs nothing
-                  and the queue is truthful between "started" and "finished". */}
+              {/* Stage — set by what happens, not by clicking. New when it
+                  arrives; In progress the first time somebody opens the
+                  drawings, creates the job, writes a note or is assigned;
+                  Delivered when the documents are uploaded. On hold is the one
+                  thing only a person knows, so it is the one button. */}
               <div style={{ marginBottom: 18 }}>
                 <div style={sectionLabel}>Where it is up to</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                  {stages.map((st) => {
-                    const isCurrent = (selected.stage || 'new') === st.key;
-                    return (
-                      <button
-                        key={st.key}
-                        onClick={() => moveToStage(selected, st.key)}
-                        disabled={savingId === selected.id || isCurrent}
-                        title={st.hint}
-                        style={{
-                          padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-                          fontFamily: 'var(--font-body)',
-                          background: isCurrent ? 'var(--accent)' : 'var(--bg-primary)',
-                          color: isCurrent ? 'var(--accent-text)' : 'var(--text-secondary)',
-                          border: '1px solid ' + (isCurrent ? 'var(--accent)' : 'var(--border)'),
-                          cursor: isCurrent ? 'default' : 'pointer',
-                          opacity: savingId === selected.id && !isCurrent ? 0.5 : 1,
-                        }}
-                      >
-                        {st.label}
-                      </button>
-                    );
-                  })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {selectedStage && <Badge tone={selectedStage.tone || 'neutral'}>{selectedStage.label}</Badge>}
+                  <span style={{ flex: 1 }} />
+                  {(selected.stage || 'new') !== 'delivered' && (
+                    (selected.stage === 'on_hold') ? (
+                      <Button size="sm" variant="soft" disabled={savingId === selected.id} onClick={() => moveToStage(selected, 'in_progress')}>
+                        Take off hold
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="soft" disabled={savingId === selected.id} onClick={() => moveToStage(selected, 'on_hold')}>
+                        Put on hold
+                      </Button>
+                    )
+                  )}
+                  {(selected.stage || 'new') !== 'delivered' ? (
+                    <Button size="sm" disabled={savingId === selected.id} onClick={() => moveToStage(selected, 'delivered')}
+                      title="Only needed if the documents went out some other way — uploading them below marks the job delivered on its own.">
+                      Mark delivered
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="soft" disabled={savingId === selected.id} onClick={() => moveToStage(selected, 'in_progress')}>
+                      Reopen
+                    </Button>
+                  )}
                 </div>
-                {selectedStage && selectedStage.hint && (
-                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>
-                    {selectedStage.hint}
-                  </div>
-                )}
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.5, fontStyle: 'italic' }}>
+                  {selectedStage && selectedStage.hint}
+                  {(selected.stage || 'new') === 'new' && ' Opening the drawings, creating the job or adding a note moves it on and puts your name on it.'}
+                  {(selected.stage || 'new') === 'in_progress' && ' Uploading the documents below marks it delivered.'}
+                </div>
               </div>
 
               {/* Who has it and when it is due */}
@@ -1061,7 +1073,8 @@ export default function SubmissionsInboxPage() {
                     style={{ flex: 1, minWidth: 280 }}
                   />
                   {selected.drive_link ? (
-                    <Button variant="soft" href={selected.drive_link} target="_blank" rel="noopener noreferrer">
+                    <Button variant="soft" href={selected.drive_link} target="_blank" rel="noopener noreferrer"
+                      onClick={() => recordOpened(selected)}>
                       Open in Drive ↗
                     </Button>
                   ) : (
@@ -1139,6 +1152,7 @@ export default function SubmissionsInboxPage() {
                         return (
                           <li key={i}>
                             <a href={selected.drive_link} target="_blank" rel="noopener noreferrer"
+                              onClick={() => recordOpened(selected)}
                               style={{ ...baseStyle, cursor: 'pointer' }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--info-bg)'; e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--info) 35%, transparent)'; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-primary)'; e.currentTarget.style.borderColor = 'var(--border)'; }}

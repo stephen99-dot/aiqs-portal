@@ -38,7 +38,7 @@ test("SQLite's zone-less timestamps are read as UTC, not local time", () => {
 });
 
 test('a job past its target date and still ours is overdue', () => {
-  const row = job({ stage: 'pricing', due_at: '2026-08-29T12:00:00Z' });
+  const row = job({ stage: 'in_progress', due_at: '2026-08-29T12:00:00Z' });
   const d = decorate(row, NOW);
   assert.strictEqual(d.overdue, true);
   assert.strictEqual(d.days_until_due, -2);
@@ -55,18 +55,21 @@ test('an on-hold job is not overdue — we are the ones waiting', () => {
 });
 
 test('a job with no target date is not overdue', () => {
-  assert.strictEqual(decorate(job({ stage: 'pricing' }), NOW).overdue, false);
+  assert.strictEqual(decorate(job({ stage: 'in_progress' }), NOW).overdue, false);
 });
 
 test('every stage carries a human label for the trail to read back', () => {
-  assert.strictEqual(decorate(job({ stage: 'takeoff' }), NOW).stage_label, 'Take-off');
+  assert.strictEqual(decorate(job({ stage: 'in_progress' }), NOW).stage_label, 'In progress');
+  // A row still carrying a pre-automation stage reads as in progress.
+  assert.strictEqual(decorate(job({ stage: 'takeoff' }), NOW).stage, 'in_progress');
+  assert.strictEqual(decorate(job({ stage: 'takeoff' }), NOW).stage_label, 'In progress');
 });
 
 test('summary separates untouched work from work in flight', () => {
   const s = summarise([
     job({ id: 'a', stage: 'new' }),
     job({ id: 'b', stage: 'new' }),
-    job({ id: 'c', stage: 'takeoff', owner: 'va@example.com' }),
+    job({ id: 'c', stage: 'in_progress', owner: 'va@example.com' }),
     job({ id: 'd', stage: 'on_hold', owner: 'va@example.com' }),
     job({ id: 'e', stage: 'delivered', owner: 'va@example.com' }),
   ], NOW);
@@ -83,7 +86,7 @@ test('summary separates untouched work from work in flight', () => {
 test('summary counts unassigned open work, ignoring finished jobs', () => {
   const s = summarise([
     job({ id: 'a', stage: 'new', owner: null }),
-    job({ id: 'b', stage: 'pricing', owner: 'va@example.com' }),
+    job({ id: 'b', stage: 'in_progress', owner: 'va@example.com' }),
     job({ id: 'c', stage: 'delivered', owner: null }),
   ], NOW);
   assert.strictEqual(s.unassigned, 1);
@@ -112,7 +115,8 @@ test('the default target date is the turnaround measured from arrival', () => {
 });
 
 test('stage and source vocabularies reject anything unrecognised', () => {
-  assert.ok(isValidStage('pricing'));
+  assert.ok(isValidStage('in_progress'));
+  assert.ok(!isValidStage('pricing'), 'the hand-set middle stages are gone');
   assert.ok(!isValidStage('nearly-done'));
   assert.ok(isValidSource('email'));
   assert.ok(!isValidSource('carrier-pigeon'));

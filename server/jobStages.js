@@ -14,48 +14,38 @@ const STAGES = [
   {
     key: 'new',
     label: 'New',
-    hint: 'Arrived. Nobody has picked it up yet.',
+    hint: 'Arrived. Nobody has touched it yet.',
     tone: 'warning',
   },
   {
-    key: 'checking',
-    label: 'Checking drawings',
-    hint: 'Confirming the drawings are readable, scaled and complete — chase the customer here if anything is missing.',
+    key: 'in_progress',
+    label: 'In progress',
+    hint: 'Being worked. Set automatically the first time somebody opens the drawings, creates the job, adds a note or is assigned.',
     tone: 'info',
-  },
-  {
-    key: 'takeoff',
-    label: 'Take-off',
-    hint: 'Quantities being measured off the drawings.',
-    tone: 'info',
-  },
-  {
-    key: 'pricing',
-    label: 'Pricing',
-    hint: 'Rates applied and the BOQ built.',
-    tone: 'info',
-  },
-  {
-    key: 'review',
-    label: 'Final check',
-    hint: 'Priced BOQ checked before it goes to the customer.',
-    tone: 'accent',
-  },
-  {
-    key: 'delivered',
-    label: 'Delivered',
-    hint: 'Documents sent. Nothing left to do.',
-    tone: 'success',
-    terminal: true,
   },
   {
     key: 'on_hold',
     label: 'On hold',
-    hint: 'Waiting on the customer. Still ours, but the clock is not on us.',
+    hint: 'Waiting on the customer. Still ours, but the clock is not on us. The one stage that has to be set by hand.',
     tone: 'neutral',
     parked: true,
   },
+  {
+    key: 'delivered',
+    label: 'Delivered',
+    hint: 'Documents delivered. Set automatically when the deliverables are uploaded to the customer\'s project.',
+    tone: 'success',
+    terminal: true,
+  },
 ];
+
+// The stages the queue used to have before it moved to automatic tracking:
+// checking drawings, take-off, pricing and final check were each a thing
+// somebody was meant to click, and nobody did — the work happens outside the
+// portal, so a job sat in "New" until it was delivered. They all fold into
+// "in progress". Kept here so old rows and old event text still read.
+const LEGACY_STAGES = { checking: 'in_progress', takeoff: 'in_progress', pricing: 'in_progress', review: 'in_progress' };
+const LEGACY_LABELS = { checking: 'Checking drawings', takeoff: 'Take-off', pricing: 'Pricing', review: 'Final check' };
 
 const STAGE_KEYS = STAGES.map(s => s.key);
 const DEFAULT_STAGE = 'new';
@@ -82,13 +72,20 @@ function isValidStage(stage) {
   return STAGE_KEYS.includes(stage);
 }
 
+// Fold a stage read from an old row into the current vocabulary.
+function normaliseStage(stage) {
+  if (!stage) return DEFAULT_STAGE;
+  return LEGACY_STAGES[stage] || stage;
+}
+
 function isValidSource(source) {
   return SOURCE_KEYS.includes(source);
 }
 
 function stageLabel(stage) {
   const found = STAGES.find(s => s.key === stage);
-  return found ? found.label : stage;
+  if (found) return found.label;
+  return LEGACY_LABELS[stage] || stage;
 }
 
 // A job counts as open until it is delivered. On-hold jobs are open — they are
@@ -117,7 +114,9 @@ module.exports = {
   SOURCES,
   SOURCE_KEYS,
   DEFAULT_TURNAROUND_DAYS,
+  LEGACY_STAGES,
   isValidStage,
+  normaliseStage,
   isValidSource,
   isOpen,
   isParked,
