@@ -342,15 +342,26 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
       WHERE id = ?
     `).run(projectId);
 
-    // If the upload was tied to a submission, mark it actioned
-    if (submissionId) {
-      db.prepare(`
-        UPDATE drawing_submissions
-        SET actioned_at = COALESCE(actioned_at, CURRENT_TIMESTAMP),
-            actioned_by = COALESCE(actioned_by, ?),
-            project_id = COALESCE(project_id, ?)
-        WHERE submission_id = ? OR id = ?
-      `).run(req.user.email || req.user.id, projectId, submissionId, submissionId);
+    // The documents have gone out, so the job in the queue is Delivered — set
+    // here, automatically, rather than left for somebody to press Done later.
+    // Matched by the submission this upload was tied to, else by the project
+    // the documents landed in (the usual case when uploading from the
+    // project page).
+    try {
+      const { markDelivered } = require('./jobTracker');
+      const actor = req.user.email || req.user.id;
+      let subRow = null;
+      if (submissionId) {
+        db.prepare('UPDATE drawing_submissions SET project_id = COALESCE(project_id, ?) WHERE submission_id = ? OR id = ?')
+          .run(projectId, submissionId, submissionId);
+        subRow = markDelivered(submissionId, actor, 'documents uploaded');
+      }
+      if (!subRow) {
+        const linked = db.prepare('SELECT id FROM drawing_submissions WHERE project_id = ?').all(projectId);
+        for (const l of linked) markDelivered(l.id, actor, 'documents uploaded');
+      }
+    } catch (trackErr) {
+      console.error('[Deliverables] queue stage update error:', trackErr);
     }
 
     // Tell the customer their job has landed in the portal. Fire-and-forget —

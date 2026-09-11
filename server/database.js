@@ -1101,6 +1101,9 @@ try {
   `);
   // Whoever ticked it is the closest thing to an owner we have on old rows.
   db.exec("UPDATE drawing_submissions SET owner = actioned_by WHERE owner IS NULL AND actioned_by IS NOT NULL");
+  // The hand-set middle stages (checking / take-off / pricing / final check)
+  // folded into one automatic "in progress" — see server/jobStages.js.
+  db.exec("UPDATE drawing_submissions SET stage = 'in_progress' WHERE stage IN ('checking', 'takeoff', 'pricing', 'review')");
   // Delivery date for jobs already delivered before the column existed. The
   // stage event that moved it is the accurate answer where one exists; the
   // pick-up date is the fallback. Both are approximations of history, so the
