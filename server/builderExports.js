@@ -543,7 +543,8 @@ async function parseBOQ(filePath) {
       // stop marker below, and returning here would leave the rows after it
       // being read as lines.
       if (sourceSummary.net_total == null &&
-          /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel)) {
+          (/^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel) ||
+           /^TOTAL\s+MEASURED\s+WORKS?\b/.test(upperLabel))) {
         sourceSummary.net_total = numAt(row, cols.total);
       }
       // The printed ex-VAT grand total — the fallback check figure when the
@@ -689,7 +690,7 @@ async function parseBOQ(filePath) {
         upperLabel.includes('COST SUMMARY') ||
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
-        upperLabel.startsWith('NET MEASURED') ||
+        upperLabel.startsWith('NET MEASURED') || upperLabel.startsWith('TOTAL MEASURED') ||
         upperLabel.startsWith('NET CONSTRUCTION COST') || upperLabel.startsWith('NET DIRECT COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('TOTAL CONSTRUCTION') || upperLabel.startsWith('TOTAL COST') ||
@@ -1625,24 +1626,23 @@ function reconcileParsed(parsed) {
     return { ok: false, reason: 'not_a_boq', printed: null, parsed: net + prov, basis: null };
   }
 
-  if (ss.net_total > 0) {
-    const ok = within(net, ss.net_total) || within(net + prov, ss.net_total);
-    return { ok, printed: ss.net_total, parsed: ok && within(net + prov, ss.net_total) && !within(net, ss.net_total) ? net + prov : net, basis: 'net' };
+  // The ways a bill can have built its printed figure from the parsed lines:
+  // with or without the provisional sums, and with the OH&P / contingency it
+  // printed (one QS's "Net construction cost" is before OH&P, another's is
+  // after). A doubled parse matches none of them.
+  const ohp = ss.ohp_pct != null ? ss.ohp_pct / 100
+    : ((1 + (ss.overhead_pct || 0) / 100) * (1 + (ss.profit_pct || 0) / 100) - 1);
+  const cont = (ss.contingency_pct || 0) / 100;
+  const lump = ss.provisional_sum > 0 ? ss.provisional_sum : 0;
+  const candidates = [];
+  for (const base of [net, net + prov]) {
+    candidates.push(base, base * (1 + ohp), base * (1 + ohp + cont), base * (1 + ohp) * (1 + cont));
+    candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump);
   }
-  if (ss.ex_vat_total > 0) {
-    const ohp = ss.ohp_pct != null ? ss.ohp_pct / 100
-      : ((1 + (ss.overhead_pct || 0) / 100) * (1 + (ss.profit_pct || 0) / 100) - 1);
-    const cont = (ss.contingency_pct || 0) / 100;
-    const lump = ss.provisional_sum > 0 ? ss.provisional_sum : 0;
-    const candidates = [];
-    for (const base of [net, net + prov]) {
-      candidates.push(base, base * (1 + ohp + cont), base * (1 + ohp) * (1 + cont));
-      candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump);
-    }
-    const ok = candidates.some((c) => within(c, ss.ex_vat_total));
-    return { ok, printed: ss.ex_vat_total, parsed: net + prov, basis: 'ex_vat' };
-  }
-  return null;
+  const printed = ss.net_total > 0 ? ss.net_total : (ss.ex_vat_total > 0 ? ss.ex_vat_total : null);
+  if (printed == null) return null;
+  const ok = candidates.some((c) => within(c, printed));
+  return { ok, printed, parsed: net + prov, basis: ss.net_total > 0 ? 'net' : 'ex_vat' };
 }
 
 module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed };

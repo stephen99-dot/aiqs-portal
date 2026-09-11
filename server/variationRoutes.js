@@ -1019,10 +1019,19 @@ function savedStateForProject(project) {
 // over the fresh parse, so fixing the parser alone leaves the customer looking
 // at the same inflated client copy. Drop such lines on read; the user's own
 // edits to real lines are untouched.
+const SUMMARY_SECTION_RE = /^(?:\d+[.)]?\s*)?(?:SUMMARY|COLLECTION|COST SUMMARY|SUMMARY OF [A-Z ]+|COLLECTION (?:&|AND) SUMMARY)\s*$/i;
 function scrubTotalRows(saved) {
   if (!saved || !Array.isArray(saved.sections)) return saved;
   let changed = false;
-  const sections = saved.sections.map((s) => {
+  const sections = saved.sections.filter((s) => {
+    // The bill's own summary page, read as a trade whose "lines" repeat every
+    // section total (no unit, no quantity on any of them). Doubles the bill.
+    if (!s || !Array.isArray(s.items) || !SUMMARY_SECTION_RE.test(String(s.title || '').trim())) return true;
+    const lineShaped = s.items.some((it) => String(it.unit || '').trim() || (parseFloat(it.qty) || 0) > 0);
+    if (lineShaped) return true;
+    changed = true;
+    return false;
+  }).map((s) => {
     if (!s || !Array.isArray(s.items)) return s;
     const items = s.items.filter((it) => {
       const drop = isTotalRowItem(it);

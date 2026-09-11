@@ -443,3 +443,53 @@ test('a labour breakdown workbook is recognised as not a bill, and flagged rathe
   assert.strictEqual(check.ok, false);
   assert.strictEqual(check.reason, 'not_a_boq');
 });
+
+// The Henslowe Road delivery: sections closed by "Total, Section A" rows, a
+// SUMMARY page repeating every section, then "Total measured works",
+// "Overheads and profit" (17.5% in the Rate cell), "Net construction cost"
+// AFTER OH&P, contingency and VAT. The deployed parser read the total rows
+// and the whole summary page as lines: a £429,598 bill came out at £1.7m.
+test('"Total, Section X" rows, a SUMMARY page and a post-OH&P net line parse to the measured works and reconcile', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Bill of Quantities');
+  ws.addRow(['', '', '', 'PRICED BILL OF QUANTITIES']);
+  ws.addRow(['Item', 'Description', 'Unit', 'Quantity', 'Rate', 'Labour', 'Materials', 'Total']);
+  ws.addRow(['A    PRELIMINARIES']); ws.mergeCells('A3:H3');
+  ws.addRow(['A.01', 'Site establishment, hoarding', 'item', 1, 2610, 1850, 760, 2610]);
+  ws.addRow(['A.02', 'Temporary welfare accommodation', 'week', 36, 168, 6048, { formula: 'ROUND(D5*0,2)' }, 6048]);
+  ws.addRow(['', 'Total, Section A', '', '', '', 7898, 760, 8658]);
+  ws.addRow([]);
+  ws.addRow(['B    DEMOLITION']); ws.mergeCells('A8:H8');
+  ws.addRow(['B.01', 'Soft strip existing flats', 'm2', 100.11, 26, 2602.86, 0, 2602.86]);
+  ws.addRow(['', 'Total, Section B', '', '', '', 2602.86, 0, 2602.86]);
+  ws.addRow([]);
+  ws.addRow(['SUMMARY']); ws.mergeCells('A12:H12');
+  ws.addRow(['A', 'PRELIMINARIES', '', '', '', 7898, 760, 8658]);
+  ws.addRow(['B', 'DEMOLITION', '', '', '', 2602.86, 0, 2602.86]);
+  ws.addRow(['', 'Total measured works', '', '', '', 10500.86, 760, 11260.86]);
+  ws.addRow(['', 'Overheads and profit', '', '', 0.175, '', '', 1970.65]);
+  ws.addRow(['', 'Net construction cost', '', '', '', '', '', 13231.51]);
+  ws.addRow(['', 'Contingency', '', '', 0.05, '', '', 661.58]);
+  ws.addRow(['', 'Sub total before VAT', '', '', '', '', '', 13893.09]);
+  ws.addRow(['', 'Value added tax', '', '', 0.2, '', '', 2778.62]);
+  ws.addRow(['', 'CONTRACT SUM INCLUDING VAT', '', '', '', '', '', 16671.71]);
+  const file = path.join(os.tmpdir(), `boqhens-${process.pid}.xlsx`);
+  await wb.xlsx.writeFile(file);
+  let parsed;
+  try {
+    parsed = await parseBOQ(file);
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+  assert.deepStrictEqual(parsed.sections.map((s) => [s.title, s.items.length, Math.round(s.subtotal.total * 100) / 100]),
+    [['A    PRELIMINARIES', 2, 8658], ['B    DEMOLITION', 1, 2602.86]],
+    'total rows and the summary page are not lines, and SUMMARY is not a trade');
+  assert.strictEqual(Math.round(parsed.grand.total * 100) / 100, 11260.86);
+  assert.strictEqual(parsed.source_summary.net_total, 11260.86, '"Total measured works" is the printed net');
+  assert.strictEqual(parsed.source_summary.ohp_pct, 17.5);
+  assert.strictEqual(parsed.source_summary.contingency_pct, 5);
+  assert.ok(reconcileParsed(parsed).ok);
+  // The same bill read with only its post-OH&P "Net construction cost" still reconciles.
+  const alt = { ...parsed, source_summary: { ...parsed.source_summary, net_total: 13231.51 } };
+  assert.ok(reconcileParsed(alt).ok, 'a net line printed after OH&P is accepted as the lines × (1 + OH&P)');
+});
