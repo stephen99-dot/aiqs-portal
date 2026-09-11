@@ -87,6 +87,49 @@ function sendPurchaseEmail({ email, name, packageName, detailLines, amountTotal,
   }
 }
 
+// Paid with an email that has no portal account yet. The credits sit in
+// pending_credits and apply themselves the moment an account with this exact
+// email is created, so the one thing the buyer needs to know is: register
+// with this address — don't try to log in. Fire-and-forget like the above.
+function sendCreateAccountEmail({ email, name, credits, amountTotal, currency }) {
+  try {
+    const { sendEmail } = require('./routes'); // lazy — avoids any load-order tangle
+    if (!email || typeof sendEmail !== 'function') return;
+    const firstName = (name || 'there').split(' ')[0];
+    const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+    const registerUrl = `${portalUrl}/register?email=${encodeURIComponent(email)}`;
+    const sym = (currency || 'gbp').toLowerCase() === 'eur' ? '€' : '£';
+    const amountText = typeof amountTotal === 'number'
+      ? sym + (amountTotal / 100).toLocaleString('en-GB', { minimumFractionDigits: 2 })
+      : null;
+    const creditText = credits === 1 ? '1 BOQ credit' : `${credits} BOQ credits`;
+    sendEmail({
+      to: email,
+      subject: `Payment received — create your AI QS account to use your ${creditText}`,
+      html: `
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
+            <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
+          </div>
+          <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Thanks for your purchase, ${firstName}!</h2>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 12px;">We've received your payment${amountText ? ` of <strong>${amountText}</strong>` : ''} for <strong>${creditText}</strong>.</p>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 12px;">There isn't an AI QS Portal account under <strong>${email}</strong> yet, so there's one step left: create your account using this same email address and the credits will be on it the moment you sign up.</p>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">You don't have a password yet — the "Sign in" page won't work until you've created the account.</p>
+          <div style="text-align:center;margin:28px 0;">
+            <a href="${registerUrl}" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Create Your Account</a>
+          </div>
+          <p style="font-size:13px;color:#94A3B8;line-height:1.5;">Already have an account under a different email? Reply to this email and we'll move the credits across.</p>
+          <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
+          <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+        </div>
+      `,
+    }).catch(err => console.error('[Stripe] Create-account email failed:', err.message));
+  } catch (err) {
+    console.error('[Stripe] Create-account email failed:', err.message);
+  }
+}
+
 // Resolve the portal account for a checkout: account id (client_reference_id,
 // stamped by withUserRef) first — exact and reliable — then the email typed.
 function resolveCheckoutUser(session, email) {
@@ -426,6 +469,11 @@ function grantPackCredits(session, customerEmail) {
         email, credits, amountPence: session.amount_total, sessionId: session.id, status: 'user_not_found',
       });
     } catch (e) { /* never blocks the webhook */ }
+    // The buyer has paid but has nothing to log in to. Without this they get
+    // no email at all, go to the login page, and find their "password" is
+    // wrong — so tell them plainly to create the account under this email,
+    // which is what releases the credits.
+    sendCreateAccountEmail({ email, name: session.customer_details && session.customer_details.name, credits, amountTotal: session.amount_total, currency: session.currency });
     return;
   }
 
