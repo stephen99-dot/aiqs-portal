@@ -142,6 +142,7 @@ export default function BuilderPackPage() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [locked, setLocked] = useState(null); // { error, status } when the bill failed verification
   const [tab, setTab] = useState('builder');
   const [downloading, setDownloading] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -264,7 +265,14 @@ export default function BuilderPackPage() {
           }
         }
       })
-      .catch((err) => { if (!cancelled) setError(err.message || 'Failed to load BOQ'); })
+      .catch((err) => {
+        if (cancelled) return;
+        // 423: the bill failed verification (its lines don't add up to the
+        // total it prints, or it isn't a bill). The server has told the QS
+        // team; show that instead of figures nobody should trust.
+        if (err.status === 423 && err.data && err.data.locked) { setLocked(err.data); return; }
+        setError(err.message || 'Failed to load BOQ');
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [id]);
@@ -803,6 +811,22 @@ export default function BuilderPackPage() {
           background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
           color: '#EF4444', fontSize: 13,
         }}>{error}</div>
+      )}
+
+      {locked && (
+        <div style={{
+          padding: '22px 24px', marginBottom: 18, borderRadius: 12,
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.4)',
+          fontSize: 13.5, lineHeight: 1.6,
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Your Client Copy is being checked</div>
+          <p style={{ margin: 0 }}>
+            Before we let you amend and re-brand a bill, we check that every line we read from it adds up to the
+            total printed on the bill itself. This one didn't pass that check, so the figures are held back rather
+            than shown wrong. Our QS team has been notified and will release it shortly — your delivered BOQ and
+            findings report are unaffected and can still be downloaded from the project page.
+          </p>
+        </div>
       )}
 
       {/* Rate-library import offer */}

@@ -7,7 +7,9 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
+const { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
+const { resolveProjectBoq, ensureBoqVerified, boqGate, auditAll, readStored: readBoqVerification } = require('./boqVerify');
+const { adminMiddleware } = require('./auth');
 const { writeXlsxBuffer } = require('./docTemplates');
 const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
@@ -662,6 +664,8 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
     const ExcelJS = require('exceljs');
     const boqFile = await resolveProjectBoq(project);
     const originalPath = boqFile ? boqFile.filePath : '';
+    const lockedBill = await boqGate(project);
+    if (lockedBill) return res.status(423).json(lockedBill);
     if (!originalPath || !require('fs').existsSync(originalPath)) return res.status(404).json({ error: 'Original BOQ file not found on server' });
 
     // Uplift multiplier: contingency & OH&P are both on construction total (additive),
@@ -809,49 +813,6 @@ function documentTitleForProject(project) {
   }
 }
 
-// The bill behind a project's Builder Pack, self-healing. projects.boq_filename
-// used to be wired to the FIRST .xlsx of a delivery batch, so a labour
-// breakdown or materials list sent alongside the bill could shadow it (every
-// figure on the client copy then came from the wrong workbook). When the wired
-// file doesn't read as a bill but another delivered spreadsheet does, switch
-// to that one and persist it, so the fix reaches projects delivered before the
-// upload started choosing by content.
-//   → { filePath, filename } or null when the project has no bill yet.
-const boqCheckCache = new Map(); // filename → looks_like_boq (files are immutable once written)
-async function looksLikeBill(filename) {
-  if (boqCheckCache.has(filename)) return boqCheckCache.get(filename);
-  let ok = false;
-  try {
-    const fp = path.join(outputsDir, filename);
-    if (fs.existsSync(fp)) ok = !!(await sniffBOQ(fp)).looks_like_boq;
-  } catch (e) { ok = false; }
-  boqCheckCache.set(filename, ok);
-  return ok;
-}
-async function resolveProjectBoq(project) {
-  if (!project || !project.boq_filename) return null;
-  const current = project.boq_filename;
-  if (await looksLikeBill(current)) return { filePath: path.join(outputsDir, current), filename: current };
-  let rows = [];
-  try {
-    rows = db.prepare(
-      "SELECT filename, original_name FROM project_deliverables WHERE project_id = ? AND kind = 'boq' "
-      + "AND (filename LIKE '%.xlsx' OR filename LIKE '%.xls') ORDER BY is_latest DESC, version DESC, created_at DESC"
-    ).all(project.id);
-  } catch (e) { rows = []; }
-  for (const r of rows) {
-    if (r.filename === current) continue;
-    if (await looksLikeBill(r.filename)) {
-      console.warn('[BuilderPack] project ' + project.id + ': wired BOQ ' + current + ' is not a bill; switching to ' + r.filename + ' (' + (r.original_name || '') + ')');
-      try { db.prepare('UPDATE projects SET boq_filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(r.filename, project.id); } catch (e) { /* keep serving */ }
-      project.boq_filename = r.filename;
-      return { filePath: path.join(outputsDir, r.filename), filename: r.filename };
-    }
-  }
-  // Nothing better delivered — serve what's wired; the parser flags it.
-  return { filePath: path.join(outputsDir, current), filename: current };
-}
-
 // Reshape an edited-sections payload from the client (description / qty / labour /
 // materials per item) into the parseBOQ() output. Recomputes per-item totals and
 // per-section subtotals from the edits so server output matches what the user saw
@@ -951,6 +912,8 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
 
     const boq = await resolveProjectBoq(project);
     const filePath = boq ? boq.filePath : '';
+    const locked = await boqGate(project);
+    if (locked) return res.status(423).json(locked);
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = await parseBOQ(filePath);
@@ -971,6 +934,7 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       // the source printed none. The page warns when they don't, so a total
       // row read as a line can never inflate the client copy unnoticed.
       reconciliation: reconcileParsed(parsed),
+      verification: readBoqVerification(project),
       // OH&P / contingency / VAT printed on the source BOQ — the client copy
       // UI seeds its controls from these so the default export reproduces the
       // delivered bottom line.
@@ -1101,6 +1065,8 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
 
     const boq = await resolveProjectBoq(project);
     const filePath = boq ? boq.filePath : '';
+    const locked = await boqGate(project);
+    if (locked) return res.status(423).json(locked);
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
@@ -1150,6 +1116,8 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
 
     const boq = await resolveProjectBoq(project);
     const filePath = boq ? boq.filePath : '';
+    const locked = await boqGate(project);
+    if (locked) return res.status(423).json(locked);
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
@@ -1219,6 +1187,8 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
 
     const boq = await resolveProjectBoq(project);
     const filePath = boq ? boq.filePath : '';
+    const locked = await boqGate(project);
+    if (locked) return res.status(423).json(locked);
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = rebuildFromEdits(req.body.edited_sections) || await parseBOQ(filePath);
@@ -1360,6 +1330,52 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
   } catch (err) {
     console.error('[ClientQuote] error:', err);
     res.status(500).json({ error: 'Failed to prepare the client quote: ' + err.message });
+  }
+});
+
+// ── BOQ verification (admin) ────────────────────────────────────────────────
+// GET  /api/projects/:projectId/boq-verification   → the stored record (owner or admin)
+// POST /api/projects/:projectId/boq-verify          → re-run now (admin);
+//        body { override: true } unlocks a bill an admin has checked by hand.
+// GET  /api/admin/boq-audit?force=1                 → every wired bill, verified.
+router.get('/projects/:projectId/boq-verification', authMiddleware, async (req, res) => {
+  try {
+    const project = loadProjectForUser(req);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.json({ verification: null });
+    const v = await ensureBoqVerified(project);
+    res.json({ verification: v });
+  } catch (err) {
+    console.error('[BoqVerify] read error:', err);
+    res.status(500).json({ error: 'Could not read verification: ' + err.message });
+  }
+});
+
+router.post('/projects/:projectId/boq-verify', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.projectId);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.boq_filename) return res.status(400).json({ error: 'No BOQ on this project yet' });
+    const override = !!(req.body && req.body.override);
+    const v = await ensureBoqVerified(project, { force: !override, override, by: req.user.email || req.user.id });
+    res.json({ verification: v });
+  } catch (err) {
+    console.error('[BoqVerify] verify error:', err);
+    res.status(500).json({ error: 'Verification failed: ' + err.message });
+  }
+});
+
+router.get('/admin/boq-audit', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const rows = await auditAll({ force: req.query.force === '1' });
+    res.json({
+      total: rows.length,
+      failing: rows.filter((r) => !r.ok).length,
+      rows,
+    });
+  } catch (err) {
+    console.error('[BoqVerify] audit error:', err);
+    res.status(500).json({ error: 'Audit failed: ' + err.message });
   }
 });
 

@@ -493,6 +493,11 @@ router.post('/jobs/from-project', async (req, res) => {
     const filePath = path.join(DATA_DIR, 'outputs', boqFilename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server.' });
 
+    // Same gate as the Builder Pack: a bill that does not reconcile to its own
+    // printed total is not priced into a quote.
+    const locked = await require('./boqVerify').boqGate({ ...project, boq_filename: boqFilename });
+    if (locked) return res.status(423).json(locked);
+
     const parsed = await parseBOQ(filePath);
     if (!parsed.sections.length) return res.status(400).json({ error: 'Could not read any line items from the BOQ.' });
     const ss = parsed.source_summary || {};

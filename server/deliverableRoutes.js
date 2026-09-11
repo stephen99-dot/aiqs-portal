@@ -277,6 +277,7 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
     // Relying on inserted[last] silently dropped boq_filename whenever the
     // .xlsx wasn't the final file, which then hid the "Got a BOQ?" quote
     // starter from the customer even though the BOQ had been delivered.
+    let boqCheck = null;
     try {
       const boqXlsx = await pickBoqFromBatch(inserted);
       if (boqXlsx) {
@@ -304,6 +305,18 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
           }
         } catch (stateErr) {
           console.error('[Deliverables] builder-pack state reset error:', stateErr);
+        }
+        // Verify the bill NOW, before the customer can open it: the lines the
+        // parser reads must add up to the total the bill prints. A bill that
+        // fails is locked (the customer sees "being checked") and the admin is
+        // emailed the reason — the check result also comes back in this
+        // response so the uploader sees it immediately.
+        try {
+          const fresh = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+          boqCheck = await require('./boqVerify').ensureBoqVerified(fresh, { force: true });
+        } catch (verifyErr) {
+          console.error('[Deliverables] BOQ verification error:', verifyErr);
+          boqCheck = { ok: false, status: 'unreadable', message: 'Verification crashed: ' + verifyErr.message };
         }
       }
       const findingsDoc = inserted.find((x) => x.kind === 'findings' && /\.docx?$/i.test(x.filename));
@@ -385,7 +398,7 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
       console.error('[Deliverables] delivery email error:', mailErr.message);
     }
 
-    res.json({ ok: true, deliverables: inserted });
+    res.json({ ok: true, deliverables: inserted, boq_check: boqCheck });
   } catch (err) {
     console.error('[Deliverables] upload error:', err);
     res.status(500).json({ error: 'Upload failed: ' + err.message });

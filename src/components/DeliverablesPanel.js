@@ -69,6 +69,8 @@ export default function DeliverablesPanel({ projectId, project }) {
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadOk, setUploadOk] = useState('');
+  const [uploadWarn, setUploadWarn] = useState(''); // BOQ failed verification on upload
+  const [verifyTick, setVerifyTick] = useState(0);   // bumps to refresh the verification card
   const [dragOver, setDragOver] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
 
@@ -120,6 +122,7 @@ export default function DeliverablesPanel({ projectId, project }) {
     setUploading(true);
     setError('');
     setUploadOk('');
+    setUploadWarn('');
     try {
       const fd = new FormData();
       fd.append('kind', kind);
@@ -135,10 +138,21 @@ export default function DeliverablesPanel({ projectId, project }) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.error || 'Upload failed');
       }
+      const result = await resp.json().catch(() => ({}));
       setFiles([]);
       setNotes('');
       setUploadOk('Uploaded ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '. Customer can now download.');
+      // The bill is verified the moment it lands: its lines must add up to the
+      // total it prints. A failure locks the customer's Client Copy and is
+      // shown here so the uploader fixes it now, not after a complaint.
+      if (result.boq_check && !result.boq_check.ok) {
+        setUploadWarn('BOQ LOCKED (' + result.boq_check.status + '): ' + result.boq_check.message
+          + ' The customer will see "being checked" on the Builder Pack until this is fixed.');
+      } else if (result.boq_check && result.boq_check.ok) {
+        setUploadOk((prev) => prev + ' BOQ verified: ' + result.boq_check.message);
+      }
       load();
+      setVerifyTick((t) => t + 1);
     } catch (err) {
       setError(err.message || 'Upload failed');
     } finally {
@@ -287,6 +301,10 @@ export default function DeliverablesPanel({ projectId, project }) {
             workspace and needs a portal-readable BOQ on the project — uploading a
             BOQ deliverable (kind "BOQ", .xlsx) wires that up, so once it's present
             we surface a direct link here instead of making the user hunt for it. */}
+        {isAdmin && project && project.boq_filename && (
+          <BoqVerificationCard projectId={projectId} tick={verifyTick} />
+        )}
+
         {project && project.boq_filename && (
           <Link
             to={`/project/${projectId}/builder-pack`}
@@ -547,6 +565,12 @@ export default function DeliverablesPanel({ projectId, project }) {
             {uploadOk && (
               <div style={{ marginTop: 8, fontSize: 12, color: '#10B981' }}>{uploadOk}</div>
             )}
+            {uploadWarn && (
+              <div style={{
+                marginTop: 8, padding: '8px 12px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)', color: '#EF4444',
+              }}>{uploadWarn}</div>
+            )}
           </div>
         )}
 
@@ -674,6 +698,63 @@ export default function DeliverablesPanel({ projectId, project }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+
+// Admin-only: the verification gate's verdict on this project's bill, with
+// "Re-verify" (after a parser fix or a corrected upload) and "Unlock" (the
+// admin has checked the figures by hand and takes responsibility).
+function BoqVerificationCard({ projectId, tick }) {
+  const [v, setV] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const refresh = useCallback(() => {
+    apiFetch(`/projects/${projectId}/boq-verification`)
+      .then((d) => setV(d.verification || null))
+      .catch((e) => setErr(e.message));
+  }, [projectId]);
+  useEffect(() => { refresh(); }, [refresh, tick]);
+
+  async function run(override) {
+    if (override && !window.confirm('Unlock this BOQ without a passing check? The customer will see whatever the parser reads. Only do this after checking the figures by hand.')) return;
+    setBusy(true); setErr('');
+    try {
+      const d = await apiFetch(`/projects/${projectId}/boq-verify`, { method: 'POST', body: JSON.stringify({ override: !!override }) });
+      setV(d.verification || null);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  if (!v) return null;
+  const ok = !!v.ok;
+  const d = v.detail || {};
+  const money = (n) => (n == null ? '—' : '£' + Math.round(n).toLocaleString('en-GB'));
+  return (
+    <div style={{
+      padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontSize: 12.5, lineHeight: 1.5,
+      background: ok ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+      border: '1px solid ' + (ok ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.4)'),
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <strong style={{ color: ok ? '#10B981' : '#EF4444' }}>
+          {ok ? (v.status === 'overridden' ? 'BOQ unlocked by hand' : 'BOQ verified') : 'BOQ LOCKED — ' + v.status}
+        </strong>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {d.items != null && `${d.items} lines · read ${money(d.parsed_total)} · printed ${money(d.printed_total)}`}
+        </span>
+        <span style={{ flex: 1 }} />
+        <button type="button" disabled={busy} onClick={() => run(false)} style={{ fontSize: 11.5, padding: '4px 10px', borderRadius: 6, cursor: 'pointer' }}>
+          {busy ? 'Checking…' : 'Re-verify'}
+        </button>
+        {!ok && (
+          <button type="button" disabled={busy} onClick={() => run(true)} style={{ fontSize: 11.5, padding: '4px 10px', borderRadius: 6, cursor: 'pointer' }}>
+            Unlock anyway
+          </button>
+        )}
+      </div>
+      <div style={{ marginTop: 4, color: ok ? 'var(--text-muted)' : 'var(--text-primary)' }}>{v.message}</div>
+      {err && <div style={{ marginTop: 4, color: '#EF4444' }}>{err}</div>}
     </div>
   );
 }
