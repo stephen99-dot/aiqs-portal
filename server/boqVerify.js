@@ -33,6 +33,20 @@ const outputsDir = path.join(DATA_DIR, 'outputs');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'hello@crmwizardai.com';
 
 const round2 = (v) => Math.round((v || 0) * 100) / 100;
+const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Bump when the parser or the reconciliation changes. A stored verdict from
+// an older verifier is re-run on the next open, so a bill locked by a check
+// that has since been corrected unlocks itself after deploy — nobody has to
+// remember to press Re-verify on every affected project.
+const VERIFIER_VERSION = 3;
+
+function describePrinted(recon) {
+  if (!recon) return 'printed total';
+  if (recon.printed_label === 'net') return 'net total';
+  if (recon.printed_label === 'ex_vat') return 'ex-VAT total';
+  return '"' + recon.printed_label + '" line';
+}
 
 // Pure check of one workbook. No database, no side effects — unit-testable.
 //   → { ok, status, message, detail }
@@ -76,18 +90,23 @@ async function verifyBoqFile(filePath) {
   }
   detail.printed_total = round2(recon.printed);
   detail.basis = recon.basis;
+  detail.printed_all = (recon.printed_all || []).map((p) => ({ label: p.label, value: round2(p.value) }));
   if (!recon.ok) {
+    const others = detail.printed_all.map((p) => (p.label === 'net' ? 'net' : p.label === 'ex_vat' ? 'ex-VAT' : p.label) + ' ' + fmt(p.value)).join(', ');
     return {
       ok: false, status: 'mismatch', detail,
-      message: 'The ' + items + ' lines read from the bill add up to £' + detail.parsed_total.toLocaleString('en-GB')
-        + ' but the bill prints ' + (recon.basis === 'net' ? 'a net total' : 'an ex-VAT total') + ' of £'
-        + detail.printed_total.toLocaleString('en-GB') + '. A total row, summary page or unusual column layout is being misread.',
+      message: 'The ' + items + ' lines read from the bill add up to ' + fmt(detail.parsed_total)
+        + ', which matches none of the totals the bill prints (' + others + '), with or without the OH&P / contingency it states.'
+        + ' A total row, summary page or unusual column layout is being misread.',
     };
   }
+  const note = Math.abs(recon.printed - detail.parsed_total) > 5
+    ? ' (the lines total ' + fmt(detail.parsed_total) + '; the difference is the OH&P, contingency or preliminaries the bill states separately)'
+    : '';
   return {
     ok: true, status: 'verified', detail,
-    message: items + ' lines across ' + parsed.sections.length + ' sections reconcile to the bill\'s printed total of £'
-      + detail.printed_total.toLocaleString('en-GB') + '.',
+    message: items + ' lines across ' + parsed.sections.length + ' sections reconcile to the bill\'s printed '
+      + describePrinted(recon) + ' of ' + fmt(recon.printed) + note + '.',
   };
 }
 
@@ -195,10 +214,12 @@ async function ensureBoqVerified(project, opts = {}) {
     store(project, v);
     return v;
   }
-  if (!opts.force && stored && stored.filename === boq.filename && stored.status) return stored;
+  const fresh = stored && stored.filename === boq.filename && stored.status
+    && (stored.status === 'overridden' || stored.verifier === VERIFIER_VERSION);
+  if (!opts.force && fresh) return stored;
 
   const result = await verifyBoqFile(boq.filePath);
-  const v = { ...result, filename: boq.filename, checked_at: new Date().toISOString() };
+  const v = { ...result, filename: boq.filename, verifier: VERIFIER_VERSION, checked_at: new Date().toISOString() };
   if (!v.ok) {
     const alreadyAlerted = stored && stored.filename === boq.filename && stored.status === v.status && stored.alerted_at;
     if (alreadyAlerted) v.alerted_at = stored.alerted_at;

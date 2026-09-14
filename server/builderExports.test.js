@@ -493,3 +493,39 @@ test('"Total, Section X" rows, a SUMMARY page and a post-OH&P net line parse to 
   const alt = { ...parsed, source_summary: { ...parsed.source_summary, net_total: 13231.51 } };
   assert.ok(reconcileParsed(alt).ok, 'a net line printed after OH&P is accepted as the lines × (1 + OH&P)');
 });
+
+// The Tullamore package bill: a "Net measured works" line that EXCLUDES the
+// preliminaries section, which is then added back on the tender summary
+// ("Preliminaries", "Sub-total", "Overheads and profit @ 17%", "TENDER SUM").
+// The parse was right (the lines equal the summary's Sub-total) but the check
+// only compared against the net line and locked a good bill.
+test('a bill whose net line excludes preliminaries reconciles against the summary sub-total it also prints', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('SP BOQ');
+  ws.addRow(['Ref', 'Description', 'Unit', 'Quantity', 'Rate', 'Labour', 'Materials & Plant', 'Total']);
+  ws.addRow(['(22) INTERNAL WALLS']); ws.mergeCells('A2:H2');
+  ws.addRow(['81A', 'Partitions Type 1', 'm', 26, 46.98, 16.98, 30, 1221.48]);
+  ws.addRow(['', 'SUBTOTAL  —  (22) INTERNAL WALLS', '', '', '', '', '', 1221.48]);
+  ws.addRow(['PRELIMINARIES']); ws.mergeCells('A5:H5');
+  ws.addRow(['1.01', 'Contracts / package manager', 'item', 1, 12400, 12400, 0, 12400]);
+  ws.addRow(['', 'SUBTOTAL  —  PRELIMINARIES', '', '', '', '', '', 12400]);
+  ws.addRow(['TENDER SUMMARY']); ws.mergeCells('A8:H8');
+  ws.addRow(['Net measured works', '', '', '', '', '', '', 1221.48]); ws.mergeCells('A9:G9');
+  ws.addRow(['Preliminaries', '', '', '', '', '', '', 12400]); ws.mergeCells('A10:G10');
+  ws.addRow(['Sub-total', '', '', '', '', '', '', 13621.48]); ws.mergeCells('A11:G11');
+  ws.addRow(['Overheads and profit @ 17%', '', '', '', '', '', '', 2315.65]); ws.mergeCells('A12:G12');
+  ws.addRow(['TENDER SUM (exclusive of VAT)', '', '', '', '', '', '', 15937.13]); ws.mergeCells('A13:G13');
+  ws.addRow(['TOTAL CARRIED TO FORM OF TENDER', '', '', '', '', '', '', 15937.13]); ws.mergeCells('A14:G14');
+  const file = path.join(os.tmpdir(), `boqtul-${process.pid}.xlsx`);
+  await wb.xlsx.writeFile(file);
+  let parsed;
+  try { parsed = await parseBOQ(file); } finally { try { fs.unlinkSync(file); } catch (e) { /* ignore */ } }
+  assert.strictEqual(Math.round(parsed.grand.total * 100) / 100, 13621.48, 'lines = measured works + preliminaries');
+  assert.strictEqual(parsed.source_summary.net_total, 1221.48);
+  assert.strictEqual(parsed.source_summary.ohp_pct, 17);
+  const check = reconcileParsed(parsed);
+  assert.ok(check.ok, 'reconciles against one of the printed totals: ' + JSON.stringify(check));
+  // And a genuinely doubled parse still fails against every printed figure.
+  const doubled = { ...parsed, sections: parsed.sections.map((s) => ({ ...s, subtotal: { ...s.subtotal, total: s.subtotal.total * 2 } })) };
+  assert.strictEqual(reconcileParsed(doubled).ok, false);
+});
