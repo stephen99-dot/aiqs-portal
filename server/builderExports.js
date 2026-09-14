@@ -476,7 +476,7 @@ async function parseBOQ(filePath) {
   // net_total: the net (pre-OH&P / contingency) construction total the source
   // document prints — "Net Construction Cost", "NET MEASURED WORKS" — kept so
   // the parsed lines can be checked against the bill's own bottom line.
-  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null, net_total: null, ex_vat_total: null };
+  const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null, net_total: null, ex_vat_total: null, printed_totals: [] };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber <= headerRow) return;
@@ -539,6 +539,21 @@ async function parseBOQ(filePath) {
         }
         return null;
       };
+      // Every document-level total the bill prints, kept as a list: "Net
+      // measured works" (which may exclude preliminaries), the summary's
+      // "Sub-total", "Tender sum", "Contract sum"… A bill is reconciled
+      // against ALL of them — the lines need only add up to one of the
+      // figures the bill itself prints, under the OH&P/contingency it states.
+      // Bare "Sub-total"/"Total" rows only count once the summary has begun
+      // (stopped), so a section's own sub-total is never mistaken for one.
+      const docTotalLabel =
+        /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel) ||
+        /^TOTAL\s+MEASURED\s+WORKS?\b/.test(upperLabel) ||
+        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY))/.test(upperLabel) ||
+        (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|MEASURED\s+WORKS?)\b/.test(upperLabel));
+      if (docTotalLabel && !/\bINC(?:L|LUDING)?\b/.test(upperLabel)) {
+        sourceSummary.printed_totals.push({ label: (a || b).slice(0, 80), value: numAt(row, cols.total) });
+      }
       // The printed net total. No `return`: "NET MEASURED WORKS" is also a
       // stop marker below, and returning here would leave the rows after it
       // being read as lines.
@@ -1634,15 +1649,38 @@ function reconcileParsed(parsed) {
     : ((1 + (ss.overhead_pct || 0) / 100) * (1 + (ss.profit_pct || 0) / 100) - 1);
   const cont = (ss.contingency_pct || 0) / 100;
   const lump = ss.provisional_sum > 0 ? ss.provisional_sum : 0;
+  // Some bills print "Net measured works" EXCLUDING preliminaries and add
+  // them back on the summary; the lines include them. Try both.
+  const prelims = sum((s) => !s.provisional && /\bPRELIM/i.test(s.title || ''));
   const candidates = [];
-  for (const base of [net, net + prov]) {
+  for (const base of [net, net + prov, net - prelims, net - prelims + prov]) {
+    if (!(base > 0)) continue;
     candidates.push(base, base * (1 + ohp), base * (1 + ohp + cont), base * (1 + ohp) * (1 + cont));
     candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump);
   }
-  const printed = ss.net_total > 0 ? ss.net_total : (ss.ex_vat_total > 0 ? ss.ex_vat_total : null);
-  if (printed == null) return null;
-  const ok = candidates.some((c) => within(c, printed));
-  return { ok, printed, parsed: net + prov, basis: ss.net_total > 0 ? 'net' : 'ex_vat' };
+  // Every figure the bill prints at document level, de-duplicated.
+  const printedAll = [];
+  const seen = new Set();
+  const addPrinted = (label, value) => {
+    if (!(value > 0)) return;
+    const k = Math.round(value * 100);
+    if (seen.has(k)) return;
+    seen.add(k); printedAll.push({ label, value });
+  };
+  if (ss.net_total > 0) addPrinted('net', ss.net_total);
+  for (const pt of (ss.printed_totals || [])) addPrinted(pt.label, pt.value);
+  if (ss.ex_vat_total > 0) addPrinted('ex_vat', ss.ex_vat_total);
+  if (!printedAll.length) return null;
+
+  const parsedTotal = net + prov;
+  const hit = printedAll.find((pt) => candidates.some((c) => within(c, pt.value)));
+  if (hit) {
+    return { ok: true, printed: hit.value, printed_label: hit.label, parsed: parsedTotal, basis: hit.label === 'ex_vat' ? 'ex_vat' : 'net', printed_all: printedAll };
+  }
+  // Failed: report the printed figure nearest the lines, so the message
+  // reads "lines add up to X, bill prints Y" with the most relevant Y.
+  const nearest = printedAll.reduce((best, pt) => (best == null || Math.abs(pt.value - parsedTotal) < Math.abs(best.value - parsedTotal) ? pt : best), null);
+  return { ok: false, printed: nearest.value, printed_label: nearest.label, parsed: parsedTotal, basis: nearest.label === 'ex_vat' ? 'ex_vat' : 'net', printed_all: printedAll };
 }
 
 module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed };
