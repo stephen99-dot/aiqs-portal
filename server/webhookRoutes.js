@@ -81,7 +81,7 @@ async function sendWelcomeEmail({ email, fullName, password, magicLink, projectT
 
         <div style="background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.2); border-radius: 10px; padding: 18px; margin: 24px 0;">
           <p style="margin: 0; font-size: 14px; color: #60A5FA; font-weight: 600;">
-            🎁 You have 1 free project credit!
+            You have 1 free project credit
           </p>
           <p style="margin: 6px 0 0; font-size: 13px; color: #94A3B8;">
             Upload your next project directly through the portal — it's on us.
@@ -90,11 +90,11 @@ async function sendWelcomeEmail({ email, fullName, password, magicLink, projectT
 
         <div style="background: #111827; border: 1px solid #1C2A44; border-radius: 10px; padding: 18px; margin: 24px 0;">
           <p style="margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #5A6E87; text-transform: uppercase; letter-spacing: 0.05em;">What you can do</p>
-          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">💬 <strong>Chat with AI</strong> — upload drawings and get instant cost estimates</p>
-          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">📥 <strong>Download BOQs</strong> — get professional Excel & Word documents</p>
-          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">📋 <strong>Raise Variations</strong> — manage change orders from the project page</p>
-          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;">💰 <strong>My Rates</strong> — customise your pricing library, auto-applied to every estimate</p>
-          <p style="margin: 0; font-size: 14px; color: #E8EDF5;">📊 <strong>Track Usage</strong> — monitor your message and BOQ credits on the dashboard</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;"><strong>Download your documents</strong> — the BOQ and Findings Report are on the project page</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;"><strong>Make it your own</strong> — open the Client Copy, add your margin and put your logo on it</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;"><strong>Send it to your client</strong> — share a quote from the same figures</p>
+          <p style="margin: 0 0 6px; font-size: 14px; color: #E8EDF5;"><strong>Raise a variation</strong> — when the scope changes, from the project page</p>
+          <p style="margin: 0; font-size: 14px; color: #E8EDF5;"><strong>Submit your next drawings</strong> — our QS team prices each job, typically within 24 hours</p>
         </div>
 
         <p style="font-size: 14px; color: #5A6E87; line-height: 1.6; margin: 24px 0 0;">

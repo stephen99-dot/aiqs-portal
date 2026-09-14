@@ -134,33 +134,64 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
   });
 }
 
+// One row of the "how it works" list: a hosted PNG icon (rendered from the
+// SVG source in public/email-icons — see scripts/build-email-icons.js; email
+// clients cannot be trusted with SVG) beside a bold lead and a plain line.
+function welcomeRow(portalUrl, icon, lead, text, last) {
+  return `
+            <tr>
+              <td width="40" valign="top" style="padding-bottom:${last ? 0 : 18}px;">
+                <img src="${portalUrl}/email-icons/${icon}.png" width="40" height="40" alt="" style="display:block;width:40px;height:40px;border:0;" />
+              </td>
+              <td valign="top" style="padding-bottom:${last ? 0 : 18}px;padding-left:14px;font-size:14px;line-height:1.55;color:#1E293B;">
+                <strong style="color:#0F172A;">${lead}</strong><br/>${text}
+              </td>
+            </tr>`;
+}
+
+// The first email a new customer gets. It describes the service as it is:
+// they submit drawings, our QS team prices the job, the documents come back
+// to the portal, and they turn them into their own client-facing copy. It
+// does not point them at the chat, which is not how documents are produced,
+// and it does not promise credits the account has not been given.
 async function sendClientWelcomeEmail({ fullName, email }) {
   const firstName = (fullName || 'there').split(' ')[0];
   const portalUrl = process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com';
+  const rows = [
+    welcomeRow(portalUrl, 'upload', 'Submit your drawings',
+      'Upload your plans, elevations and specification (PDF, ZIP, images or CAD) and describe the job.'),
+    welcomeRow(portalUrl, 'priced', 'Our QS team prices it',
+      'You get a priced Bill of Quantities and a Findings Report, typically within 24 hours.'),
+    welcomeRow(portalUrl, 'portal', 'It lands in your portal',
+      'Every document is on the project page, ready to download, with a record of what was delivered and when.'),
+    welcomeRow(portalUrl, 'brand', 'Make it your own',
+      'Open the Client Copy: adjust figures, add your margin and put your logo on it.'),
+    welcomeRow(portalUrl, 'share', 'Send it to your client',
+      'Share a quote from the same figures, and raise a variation when the scope changes.'),
+    welcomeRow(portalUrl, 'rates', 'Keep your own rates',
+      'Build a rate library under Settings so your pricing carries across jobs.', true),
+  ].join('');
   await sendEmail({
     to: email,
-    subject: `Welcome to AI QS — Let's get your first BOQ`,
+    subject: 'Welcome to AI QS',
     html: `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
         <div style="text-align:center;margin-bottom:32px;">
           <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
           <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
         </div>
-        <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Welcome, ${firstName}!</h2>
-        <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">Your AI QS account is ready. Here's what you can do:</p>
-        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:18px;margin:0 0 24px;">
-          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>💬 Chat with AI</strong> — upload drawings and get instant cost estimates</p>
-          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>📥 Download BOQs</strong> — professional Excel &amp; Word documents</p>
-          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>📋 Raise Variations</strong> — manage change orders from the project page</p>
-          <p style="margin:0 0 6px;font-size:14px;color:#1E293B;"><strong>💰 My Rates</strong> — customise your pricing library</p>
-          <p style="margin:0;font-size:14px;color:#1E293B;"><strong>📊 Track Usage</strong> — monitor message &amp; BOQ credits on the dashboard</p>
+        <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Welcome, ${firstName}</h2>
+        <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">Your AI QS account is ready. Here is how it works:</p>
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:20px 18px;margin:0 0 24px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">${rows}
+          </table>
         </div>
         <div style="text-align:center;margin:28px 0;">
-          <a href="${portalUrl}/chat" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Start Your First Project</a>
+          <a href="${portalUrl}/submit-drawings" style="display:inline-block;padding:14px 36px;background:#F59E0B;color:#0F172A;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;">Submit your first drawings</a>
         </div>
-        <p style="font-size:13px;color:#94A3B8;line-height:1.5;">You're on the free trial with 2 project credits. Need more? Upgrade anytime from your dashboard.</p>
+        <p style="font-size:13px;color:#94A3B8;line-height:1.5;">Each BOQ uses one credit. Buy a single BOQ or a pack from your dashboard when you are ready to submit. If you have a question, reply to this email and a person will answer.</p>
         <hr style="border:none;border-top:1px solid #E2E8F0;margin:28px 0 16px;" />
-        <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Automated Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
+        <p style="font-size:11px;color:#CBD5E1;text-align:center;">AI QS — Quantity Surveying<br/><a href="https://theaiqs.co.uk" style="color:#94A3B8;">theaiqs.co.uk</a></p>
       </div>
     `,
   });
