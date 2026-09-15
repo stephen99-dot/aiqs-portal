@@ -7,11 +7,28 @@
   <div> containing "QS"), delete it, and paste ONE of the blocks below in
   its place.
 
-  Two variants — pick by the background the logo sits on:
+  Three variants — pick by the background the logo sits on:
     • LIGHT variant: for white/light page headers (dark navy "AI").
     • DARK variant: for dark navy headers/footers (near-white "AI").
-  Both match the homepage logo exactly.
+    • THEME-AWARE variant: for pages with the light/dark toggle (the homepage
+      nav, send-drawings.html) — "AI" uses currentColor so it follows the
+      page's text colour in both themes.
+  All match the homepage logo exactly.
+
+  The logo's font is Instrument Sans. Pages must load it or the wordmark
+  falls back to Arial — make sure this line is in the <head> (after the
+  fonts.googleapis.com preconnects):
+
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 -->
+
+<!-- ═══ THEME-AWARE variant (pages with the light/dark toggle) ═══ -->
+<a href="/" aria-label="AI QS Home" class="nav-logo" style="display:inline-flex;text-decoration:none;">
+  <svg class="logo-svg" width="160" height="40" viewBox="0 0 156 60" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI QS — Quantity Surveying">
+    <text x="2" y="36" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="0.5"><tspan fill="currentColor">AI</tspan><tspan fill="#F59E0B"> QS</tspan></text>
+    <text x="3" y="54" textLength="150" lengthAdjust="spacingAndGlyphs" font-family="'Instrument Sans', Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#94A3B8">QUANTITY SURVEYING</text>
+  </svg>
+</a>
 
 <!-- ═══ LIGHT background variant ═══ -->
 <a href="/" aria-label="AI QS Home" style="display:inline-flex;text-decoration:none;">
