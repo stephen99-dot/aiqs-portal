@@ -7,11 +7,10 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack, generateClientCopyPro, isTotalRowItem, reconcileParsed } = require('./builderExports');
+const { parseBOQ, generateBuilderPack, generateClientCopyProSafe, isTotalRowItem, reconcileParsed } = require('./builderExports');
 const { resolveProjectBoq, ensureBoqVerified, boqGate, auditAll, readStored: readBoqVerification } = require('./boqVerify');
 const { adminMiddleware } = require('./auth');
 const { writeXlsxBuffer } = require('./docTemplates');
-const AdmZip = require('adm-zip');
 const { getBrandingForUser } = require('./brandingRoutes');
 
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
@@ -872,35 +871,8 @@ function rebuildFromEdits(editedSections) {
   return { sections, grand };
 }
 
-// Belt-and-braces against the "Excel found a problem with some content" error:
-// every embedded image must be a real raster (PNG/JPEG/GIF). Anything else makes
-// Excel strip the worksheet that hosts it and warn the workbook is damaged.
-function mediaAllValid(buf) {
-  try {
-    const zip = new AdmZip(buf);
-    for (const e of zip.getEntries()) {
-      if (!/^xl\/media\//.test(e.entryName)) continue;
-      const b = e.getData();
-      const ok = b && b.length >= 4 && (
-        (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) || // PNG
-        (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) ||                   // JPEG
-        (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38)     // GIF
-      );
-      if (!ok) return false;
-    }
-    return true;
-  } catch (e) { return true; } // can't inspect → don't block the download
-}
-
-// Generate a client copy and guarantee it opens: if a logo slipped through that
-// Excel can't read, rebuild the document without the logo rather than ship a
-// file that triggers the repair dialog.
-async function generateClientCopyProSafe(parsed, opts) {
-  const buffer = await generateClientCopyPro(parsed, opts);
-  if (mediaAllValid(buffer) || !(opts.branding && opts.branding.logo_path)) return buffer;
-  console.warn('[ClientCopyPro] embedded logo was unreadable — regenerating without it so the file opens');
-  return generateClientCopyPro(parsed, { ...opts, branding: { ...opts.branding, logo_path: null } });
-}
+// generateClientCopyProSafe (the logo-validity guard around the client copy)
+// lives in builderExports.js next to the generator, with its regression test.
 
 // GET /api/projects/:projectId/builder-breakdown
 //   → { sections: [{ number, title, subtotal, item_count }], grand: {...} }
