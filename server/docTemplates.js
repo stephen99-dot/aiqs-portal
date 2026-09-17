@@ -63,6 +63,9 @@ async function resolveLogo(branding) {
         extension: 'png',
         naturalWidth: meta.width || 0,
         naturalHeight: meta.height || 0,
+        // A white/light logo vanishes on white paper, a dark one on a brand
+        // band. Knowing which it is lets a document give it a plate it shows on.
+        lightInk: await detectLightInk(sharpLib(buffer)),
       };
     } catch (e) { /* fall through to raw embed below */ }
   }
@@ -81,6 +84,25 @@ async function resolveLogo(branding) {
     }
   } catch (e) { /* unreadable file */ }
   return null;
+}
+
+// True when the logo's visible (opaque) pixels are mostly light — a white or
+// pale wordmark designed to sit on a dark background. Sampled from a small
+// thumbnail so it costs nothing. Fully transparent pixels are ignored; a logo
+// with a solid white background counts as light too, which is the right call
+// (it needs a white field, not a coloured one, to look intentional).
+async function detectLightInk(img) {
+  try {
+    const { data, info } = await img.resize({ width: 64, height: 64, fit: 'inside' })
+      .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let sum = 0, n = 0;
+    for (let i = 0; i + 3 < data.length; i += info.channels) {
+      if (data[i + 3] < 40) continue; // transparent — not ink
+      sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      n++;
+    }
+    return n > 0 && (sum / n) > 190;
+  } catch (e) { return false; }
 }
 
 // Identify a raster ExcelJS can embed from its magic number; null otherwise.
@@ -223,6 +245,35 @@ function luminanceOf(argb) {
 // hero copy is never near-invisible white on a light brand colour.
 function idealTextOn(argb) {
   return luminanceOf(argb) > 150 ? 'FF0F172A' : 'FFFFFFFF';
+}
+
+// Darken a hex colour towards black by pct (0–1). The counterpart of tintHex,
+// used so a pale accent (lime, gold) still reads when set as text on white.
+function shadeHex(hex, pct) {
+  if (typeof hex !== 'string') return null;
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return null;
+  const num = parseInt(h, 16);
+  const c = [(num >> 16) & 0xff, (num >> 8) & 0xff, num & 0xff].map((v) => Math.round(v * (1 - pct)));
+  return '#' + c.map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+
+// The accent as TEXT on white paper: darkened when it is too pale to read.
+function accentTextArgb(accentHex) {
+  const argb = hexToArgb(accentHex);
+  if (!argb) return 'FFB45309';
+  return luminanceOf(argb) > 150 ? hexToArgb(shadeHex(accentHex, 0.45)) : argb;
+}
+
+// Headline money figure size (points) by character count, so £9,760 and
+// £9,760,000.00 both fit the same block without wrapping.
+function heroFontSize(text) {
+  const len = String(text || '').length;
+  if (len <= 8) return 24;
+  if (len <= 10) return 22;
+  if (len <= 12) return 20;
+  if (len <= 14) return 18;
+  return 15;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -671,6 +722,11 @@ module.exports = {
   fixXlsxDpi,
   hexToArgb,
   tintHex,
+  shadeHex,
+  luminanceOf,
+  idealTextOn,
+  accentTextArgb,
+  heroFontSize,
   tryEmbedLogo,
   resolveLogo,
   embedResolvedLogo,
