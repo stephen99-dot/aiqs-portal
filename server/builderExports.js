@@ -1467,7 +1467,12 @@ async function generateClientCopyPro(parsed, opts = {}) {
       if (logo.lightInk) fillRange(r, 0, 2, docTpl.luminanceOf(PRIMARY) > 150 ? TEXT_DARK : PRIMARY);
       logoPlaced = docTpl.embedResolvedLogo(wb, ws, logo, { col: 0.08, row: r - 1 + 0.08 }, { maxWidth: 240, maxHeight: 58 });
     }
-  } catch (e) { /* logo is optional — never block the document */ }
+    if (branding.logo_path && !logoPlaced) {
+      // The branding row names a logo but it couldn't be embedded — usually the
+      // file is gone from disk (a redeploy without a persistent data dir).
+      console.warn('[ClientCopyPro] logo set but not embedded:', branding.logo_path, 'exists=' + fs.existsSync(branding.logo_path));
+    }
+  } catch (e) { console.warn('[ClientCopyPro] logo embed failed:', e.message); }
   if (!logoPlaced) {
     // No logo: the company name set as a wordmark, never an empty corner.
     const wm = ws.getCell('A' + r);
@@ -1598,8 +1603,12 @@ async function generateClientCopyPro(parsed, opts = {}) {
     ws.getRow(r).height = 4;
     r++;
   }
+  // Row of each trade in this list — filled with live formulas once the
+  // sub-total cells further down exist.
+  const moneyRows = [];
   preSections.forEach((x, i) => {
     const row = ws.getRow(r);
+    moneyRows.push(r);
     row.height = 16;
     const sw = row.getCell(1);
     sw.value = x.section.provisional ? 'PS' : String(x.section.number || i + 1);
@@ -1678,6 +1687,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     r++;
 
     let sectionTotal = 0;
+    const itemRowStart = r;
     for (const it of s.items) {
       const baseLineTotal = (it.labour || 0) + (it.materials || 0) || (it.total || 0);
       if (!s.provisional) originalNet += baseLineTotal;
@@ -1690,8 +1700,18 @@ async function generateClientCopyPro(parsed, opts = {}) {
       row.getCell(2).value = sanitizeXmlText(it.description);
       row.getCell(3).value = sanitizeXmlText(it.unit);
       row.getCell(4).value = it.qty;
-      row.getCell(5).value = Math.round(upliftedRate * 100) / 100;
-      row.getCell(6).value = upliftedTotal;
+      // The sheet stays live in Excel: a line total is qty × rate, so editing
+      // either re-flows through the sub-total, the summary and the headline.
+      // The rate keeps full precision (Excel shows 2 dp) so qty × rate lands
+      // exactly on the reconciled line total. A line with no quantity has
+      // nothing to multiply, so it keeps its value.
+      if (it.qty > 0) {
+        row.getCell(5).value = upliftedRate;
+        row.getCell(6).value = { formula: 'D' + r + '*E' + r, result: upliftedTotal };
+      } else {
+        row.getCell(5).value = Math.round(upliftedRate * 100) / 100;
+        row.getCell(6).value = upliftedTotal;
+      }
       for (let c = 1; c <= 6; c++) {
         row.getCell(c).border = allBorders;
         row.getCell(c).font = { name: 'Arial', size: 10 };
@@ -1705,10 +1725,13 @@ async function generateClientCopyPro(parsed, opts = {}) {
       r++;
     }
 
-    // Section subtotal
+    // Section subtotal — a live SUM over the section's line totals.
     const sub = ws.getRow(r);
     sub.getCell(2).value = 'Sub-total — ' + sanitizeXmlText(s.title);
-    sub.getCell(6).value = sectionTotal;
+    sub.getCell(6).value = r > itemRowStart
+      ? { formula: 'SUM(F' + itemRowStart + ':F' + (r - 1) + ')', result: sectionTotal }
+      : sectionTotal;
+    const subRow = r;
     for (let c = 1; c <= 6; c++) {
       if (f.subtotalFill !== style.WHITE) {
         sub.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.subtotalFill } };
@@ -1727,14 +1750,38 @@ async function generateClientCopyPro(parsed, opts = {}) {
     }
     r++;
     r++; // blank
-    sectionTotals.push({ section: s, total: sectionTotal });
+    sectionTotals.push({ section: s, total: sectionTotal, subRow });
   });
+
+  // "Where the money goes" now points at the sub-totals it summarises.
+  if (moneyRows.length === sectionTotals.length && moneyRows.length > 0) {
+    const first = moneyRows[0], last = moneyRows[moneyRows.length - 1];
+    const listTotal = sectionTotals.reduce((a, x) => a + x.total, 0);
+    sectionTotals.forEach((x, i) => {
+      const row = ws.getRow(moneyRows[i]);
+      row.getCell(6).value = { formula: 'F' + x.subRow, result: x.total };
+      row.getCell(4).value = { formula: 'IF(SUM(F' + first + ':F' + last + ')=0,0,F' + moneyRows[i] + '/SUM(F' + first + ':F' + last + '))', result: listTotal > 0 ? x.total / listTotal : 0 };
+    });
+  }
 
   // ── Summary block ──────────────────────────────────────────────────────
   // Net construction excludes provisional sections — those are shown on their
   // own summary line (exclusive of OH&P), matching the source tender.
+  // Each line is a live formula over the cells above it wherever the maths
+  // allows; the cached result is the exact figure so viewers that don't
+  // recalculate show the same numbers.
   const netConstruction = sectionTotals.filter((x) => !x.section.provisional).reduce((a, x) => a + x.total, 0);
   const provisionalFromSections = sectionTotals.filter((x) => x.section.provisional).reduce((a, x) => a + x.total, 0);
+  const refsOf = (pred) => sectionTotals.filter(pred).map((x) => 'F' + x.subRow);
+  const sumRefs = (refs, result) => (refs.length ? { formula: refs.length === 1 ? refs[0] : 'SUM(' + refs.join(',') + ')', result } : result);
+  // Contingency and prelims-% are charged on the pre-uplift net, which the
+  // client never sees. With one uplift across the board it is net ÷ factor,
+  // so those lines can stay live; per-trade overrides break that, so they
+  // print as values.
+  // Rounded line totals break that identity too, so rounding keeps them as values.
+  const uniformUplift = Object.keys(perTradeOhp).length === 0 && !rounding;
+  const upliftConst = Number(baseUpliftFactor.toFixed(10));
+  let netRow = null;
 
   const sumHdr = ws.getRow(r);
   sumHdr.height = 16;
@@ -1771,7 +1818,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // When OH&P is stripped (the faithful client-copy case) the rates are the
   // tendered net, so don't claim they include OH&P.
   const ohpApplied = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
-  addSummaryLine(ohpApplied ? 'Net construction cost (incl. trade OH&P)' : 'Net construction cost', netConstruction);
+  netRow = r;
+  addSummaryLine(ohpApplied ? 'Net construction cost (incl. trade OH&P)' : 'Net construction cost', sumRefs(refsOf((x) => !x.section.provisional), netConstruction));
+  const preUpliftNet = (pct) => (uniformUplift ? { formula: 'F' + netRow + '/' + upliftConst + '*' + pct + '/100', result: originalNet * (pct / 100) } : originalNet * (pct / 100));
 
   let runningTotal = netConstruction;
 
@@ -1780,13 +1829,12 @@ async function generateClientCopyPro(parsed, opts = {}) {
     runningTotal += prelimsAmount;
   }
   if (prelimsPct > 0) {
-    const v = originalNet * (prelimsPct / 100);
-    addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', v);
-    runningTotal += v;
+    addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', preUpliftNet(prelimsPct));
+    runningTotal += originalNet * (prelimsPct / 100);
   }
   const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
   if (provisionalDisplay > 0) {
-    addSummaryLine('Provisional sums (excl. OH&P)', provisionalDisplay);
+    addSummaryLine('Provisional sums (excl. OH&P)', hasProvSection ? sumRefs(refsOf((x) => x.section.provisional), provisionalDisplay) : provisionalDisplay);
     runningTotal += provisionalDisplay;
   }
   if (dayRate) {
@@ -1795,18 +1843,26 @@ async function generateClientCopyPro(parsed, opts = {}) {
     runningTotal += v;
   }
   if (contingency > 0) {
-    const v = originalNet * (contingency / 100);
-    addSummaryLine('Contingency (' + contingency + '% of net)', v);
-    runningTotal += v;
+    addSummaryLine('Contingency (' + contingency + '% of net)', preUpliftNet(contingency));
+    runningTotal += originalNet * (contingency / 100);
   }
 
   const exVat = runningTotal;
-  addSummaryLine('Total (excl. VAT)', exVat, { tone: vat > 0 ? 'total' : 'grand' });
+  const exVatRow = r;
+  addSummaryLine('Total (excl. VAT)', { formula: 'SUM(F' + netRow + ':F' + (r - 1) + ')', result: exVat }, { tone: vat > 0 ? 'total' : 'grand' });
+  let grandRow = exVatRow;
 
   if (vat > 0) {
     const vatVal = exVat * (vat / 100);
-    addSummaryLine('VAT @ ' + vat + '%', vatVal);
-    addSummaryLine('Total (incl. VAT)', exVat + vatVal, { tone: 'grand' });
+    const vatRow = r;
+    addSummaryLine('VAT @ ' + vat + '%', { formula: 'F' + exVatRow + '*' + vat + '/100', result: vatVal });
+    grandRow = r;
+    addSummaryLine('Total (incl. VAT)', { formula: 'F' + exVatRow + '+F' + vatRow, result: exVat + vatVal }, { tone: 'grand' });
+    // The masthead follows the summary: change a line, and the headline moves.
+    heroSub.value = {
+      formula: '"' + currency + '"&TEXT(F' + exVatRow + ',"#,##0.00")&" excl. VAT  ·  VAT @ ' + vat + '% ' + currency + '"&TEXT(F' + vatRow + ',"#,##0.00")',
+      result: heroSub.value,
+    };
   } else {
     const nv = ws.getRow(r++);
     ws.mergeCells('C' + (r - 1) + ':F' + (r - 1));
@@ -1814,6 +1870,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
     nv.getCell(3).font = { name: bodyFont, size: 9, italic: true, color: { argb: TEXT_MUTED } };
     nv.getCell(3).alignment = { horizontal: 'right', vertical: 'middle', indent: 1 };
   }
+  hero.value = { formula: 'F' + grandRow, result: heroValue };
+  // Recalculate on open so every viewer shows the formulas' live results.
+  wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true };
 
   // Footer note
   r++;
