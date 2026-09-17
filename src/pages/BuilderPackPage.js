@@ -5,6 +5,7 @@ import useIsMobile from '../utils/useIsMobile';
 import { useTheme } from '../context/ThemeContext';
 import ShareLinkModal from '../components/ShareLinkModal';
 import AssistantDrawer from '../components/AssistantDrawer';
+import ClientCopySheet from '../components/ClientCopySheet';
 import { docLabel } from '../utils/docLabel';
 import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 
@@ -1111,6 +1112,7 @@ export default function BuilderPackPage() {
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
+                    ohpApplied={ohpApplied}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''}
                     projectType={project ? project.project_type : ''} />
               }
@@ -1718,113 +1720,23 @@ function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sy
   );
 }
 
-function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, branding, logoUrl, projectName, projectType }) {
-  const primary = (branding && branding.primary_colour) || '#1B2A4A';
-  const accent  = (branding && branding.accent_colour)  || '#A855F7';
-  const company = branding && branding.company_name;
-
+// The client tab preview is the same component the Branding page previews
+// with sample figures, and it mirrors the XLSX layout line for line. The
+// client never sees an OH&P column — the margin is baked into the rates —
+// so the preview doesn't show one either.
+function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, ohpApplied, branding, logoUrl, projectName, projectType }) {
   return (
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        This is what your client will see. No margin shown separately.
+        This is what your client will see — the same layout as the sheet they download. Your margin is baked into the rates; nothing is shown separately.
       </p>
-
-      {/* Branded cover band */}
-      <div style={{
-        borderRadius: 10, overflow: 'hidden', marginBottom: 14,
-        background: '#fff', boxShadow: '0 4px 18px rgba(0,0,0,0.08)',
-      }}>
-        <div style={{
-          background: primary, color: '#fff',
-          padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14,
-          borderBottom: '4px solid ' + accent,
-        }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 8, flexShrink: 0,
-            background: '#fff', border: '1px solid rgba(0,0,0,0.06)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-          }}>
-            {logoUrl
-              ? <img src={logoUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-              : <span style={{ fontSize: 9, color: '#888' }}>No logo</span>
-            }
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Bill of Quantities · Client Copy
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.2, marginTop: 2, color: '#fff' }}>
-              {projectName || 'Project'}
-            </div>
-            {projectType && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>{projectType}</div>}
-            {company && <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>Issued by {company}</div>}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 9.5, opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Total ex-VAT</div>
-            <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: accent }}>
-              {fmt(sym, exVat)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ ...previewHeaderStyle, gridTemplateColumns: '32px 1fr 80px 110px', background: primary, color: '#fff' }}>
-          <div>#</div><div>Trade</div>
-          <div style={{ textAlign: 'right' }}>OH&P</div>
-          <div style={{ textAlign: 'right' }}>Sub-total</div>
-        </div>
-        {rows.map((s, i) => (
-          <div key={s.number + '-' + i} style={{ ...previewRowStyle, gridTemplateColumns: '32px 1fr 80px 110px' }}>
-            <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
-            <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items</span></div>
-            <div style={moneyCell(accent)}>{((num(s.uplift) - 1) * 100).toFixed(1)}%</div>
-            <div style={{ ...moneyCell(), fontWeight: 600 }}>{fmt(sym, s.subtotal)}</div>
-          </div>
-        ))}
-        </div>
-      </div>
-
-      <div style={{
-        marginTop: 16, borderRadius: 10, border: '1px solid var(--border)',
-        background: 'var(--bg-primary)', padding: '14px 16px',
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
-          Project summary
-        </div>
-        {summaryLines.map((l) => (
-          <div key={l.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>
-            <span style={{ color: 'var(--text-muted)' }}>{l.label}</span>
-            <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmt(sym, l.value)}</span>
-          </div>
-        ))}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', padding: '8px 0',
-          borderTop: '1px solid var(--border)', marginTop: 6,
-          fontWeight: 700, fontSize: 14,
-        }}>
-          <span>Total (excl. VAT)</span>
-          <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmt(sym, exVat)}</span>
-        </div>
-        {vat > 0 && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>
-              <span style={{ color: 'var(--text-muted)' }}>VAT @ {vat}%</span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmt(sym, vatVal)}</span>
-            </div>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', padding: '8px 0',
-              borderTop: '1px solid var(--border)', marginTop: 4,
-              fontWeight: 800, fontSize: 16, color: '#A855F7',
-            }}>
-              <span>Total (incl. VAT)</span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{fmt(sym, inclVat)}</span>
-            </div>
-          </>
-        )}
-      </div>
+      <ClientCopySheet
+        branding={branding} logoUrl={logoUrl}
+        projectName={projectName} projectType={projectType}
+        sym={sym} rows={rows} summaryLines={summaryLines}
+        exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat} ohpApplied={ohpApplied}
+      />
     </>
   );
 }

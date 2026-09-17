@@ -1338,20 +1338,30 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // twice.
   const hasProvSection = (parsed.sections || []).some((s) => s.provisional);
   let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0, preProvisional = 0;
+  // Per-section client totals, computed once here with the same maths as the
+  // item rows below, so the "where the money goes" block at the top of the
+  // sheet and the sub-totals further down can never disagree.
+  const preSections = [];
   for (const s of (parsed.sections || [])) {
     if (s.provisional) {
-      for (const it of (s.items || [])) { preProvisional += (parseFloat(it.total) || 0); preItemCount++; }
+      let t = 0;
+      for (const it of (s.items || [])) { t += (parseFloat(it.total) || 0); preItemCount++; }
+      preProvisional += t;
+      preSections.push({ section: s, total: t });
       continue;
     }
     const factor = upliftFactorForSection(s.number);
+    let t = 0;
     for (const it of (s.items || [])) {
       preLabour += (parseFloat(it.labour) || 0);
       preMaterials += (parseFloat(it.materials) || 0);
       const base = (parseFloat(it.labour) || 0) + (parseFloat(it.materials) || 0) || (parseFloat(it.total) || 0);
       preNetOriginal += base;
-      preNet += roundMoney(base * factor);
+      t += roundMoney(base * factor);
       preItemCount++;
     }
+    preNet += t;
+    preSections.push({ section: s, total: t });
   }
   const totalProvisional = preProvisional + (hasProvSection ? 0 : provisionalSum);
   let preExVat = preNet;
@@ -1383,43 +1393,241 @@ async function generateClientCopyPro(parsed, opts = {}) {
     }, style);
   }
 
-  // ── Client Copy detail sheet ─────────────────────────────────────────────
+  // ── Client Copy sheet ─────────────────────────────────────────────────────
+  // One worksheet, laid out so the client reads the answer first: a split
+  // masthead (logo and project on white, the total on the brand colour), who
+  // it is for and from, where the money goes by trade, then the itemised bill
+  // and the summary. Every size below follows the figures on the sheet.
   const ws = wb.addWorksheet('Client Copy', {
-    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.5, right: 0.5, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 } },
     views: [{ showGridLines: false }],
   });
 
+  const fmtMoney = (v) => (Math.round(v * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const heroIsIncl = vat > 0;
+  const heroValue = heroIsIncl ? preInclVat : preExVat;
+  const heroText = currency + fmtMoney(heroValue);
+
+  // Money column width follows the widest figure on the sheet (Excel prints
+  // ##### when a number outgrows its column). Rate is a little narrower.
+  const widestFigure = Math.max(
+    ...preSections.map((x) => fmtMoney(x.total).length),
+    fmtMoney(preExVat).length, fmtMoney(preInclVat).length, fmtMoney(preNet).length, 8,
+  );
+  const totalColW = Math.max(14, widestFigure + 3);
+  const rateColW = Math.max(12, totalColW - 2);
   ws.columns = [
     { key: 'item', width: 8 },
-    { key: 'desc', width: 56 },
+    { key: 'desc', width: 50 },
     { key: 'unit', width: 7 },
     { key: 'qty', width: 9 },
-    { key: 'rate', width: 12 },
-    { key: 'total', width: 14 },
+    { key: 'rate', width: rateColW },
+    { key: 'total', width: totalColW },
   ];
 
-  // Hero block (shared)
-  let r = docTpl.renderHeroBlock(ws, {
-    docKind: 'BILL OF QUANTITIES — CLIENT COPY',
-    projectName,
-    clientName,
-    extraMeta: branding.company_name ? 'Issued by ' + branding.company_name : '',
-  }, style, 'F');
+  const WHITE = style.WHITE;
+  const TEXT_DARK = style.TEXT_DARK;
+  const TEXT_MUTED = 'FF5B6470';
+  const HAIRLINE = 'FFE3E6EA';
+  const ON_PRIMARY = docTpl.idealTextOn(PRIMARY);
+  const ACCENT_TEXT = docTpl.accentTextArgb(style.accentHex);
+  const PRIMARY_TINT = style.PRIMARY_TINT;
+  const fillOf = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+  const hairBottom = { bottom: { style: 'thin', color: { argb: HAIRLINE } } };
+  const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const fillRange = (row, from, to, argb) => { for (let c = from; c <= to; c++) ws.getCell(cols[c] + row).fill = fillOf(argb); };
+  const issued = new Date().toLocaleDateString('en-GB');
+  const companyName = docTpl.cleanText(branding.company_name);
+  const companyAddress = docTpl.cleanText(branding.company_address);
+  const tidyProject = docTpl.stripTrailingDate(projectName);
+  const tidyClient = docTpl.tidyName(clientName);
 
-  // Logo — top-right of the hero band. The cover sheet is disabled, so the
-  // brand mark lives here on the single-sheet client copy. resolveLogo always
-  // returns a validated raster (or null), so this can't corrupt the workbook.
-  try {
-    const logoForHero = await docTpl.resolveLogo(branding);
-    if (logoForHero) {
-      docTpl.embedResolvedLogo(wb, ws, logoForHero, { col: 4.55, row: 0.15 }, { maxWidth: 115, maxHeight: 44 });
-    }
-  } catch (e) { /* logo is optional — never block the document */ }
-
+  // ── Masthead (rows 1–6) ──
+  let r = 1;
   ws.getRow(r).height = 6;
   r++;
 
-  // Header row
+  // Row 2: logo on white (left) · total label on the brand block (right)
+  const logoRow = r;
+  ws.getRow(r).height = 50;
+  ws.mergeCells('A' + r + ':C' + r);
+  ws.mergeCells('D' + r + ':F' + r);
+  fillRange(r, 3, 5, PRIMARY);
+  const lbl = ws.getCell('D' + r);
+  lbl.value = heroIsIncl ? 'TOTAL INCL. VAT' : 'TOTAL (EXCL. VAT)';
+  lbl.font = { name: headingFont, size: 9, bold: true, color: { argb: ON_PRIMARY } };
+  lbl.alignment = { horizontal: 'left', vertical: 'bottom', indent: 1 };
+  let logoPlaced = null;
+  try {
+    // The logo gets a field it shows on: white paper for a dark logo, a plate
+    // in the brand colour for a white one. It keeps its natural shape inside
+    // a wide box, so a wordmark is never squeezed into a square.
+    const logo = await docTpl.resolveLogo(branding);
+    if (logo) {
+      if (logo.lightInk) fillRange(r, 0, 2, docTpl.luminanceOf(PRIMARY) > 150 ? TEXT_DARK : PRIMARY);
+      logoPlaced = docTpl.embedResolvedLogo(wb, ws, logo, { col: 0.08, row: r - 1 + 0.08 }, { maxWidth: 240, maxHeight: 58 });
+    }
+  } catch (e) { /* logo is optional — never block the document */ }
+  if (!logoPlaced) {
+    // No logo: the company name set as a wordmark, never an empty corner.
+    const wm = ws.getCell('A' + r);
+    wm.value = companyName || 'Client copy';
+    wm.font = { name: headingFont, size: 16, bold: true, color: { argb: PRIMARY } };
+    wm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  }
+  r++;
+
+  // Row 3: eyebrow (left) · the headline figure (right)
+  ws.getRow(r).height = 36;
+  ws.mergeCells('A' + r + ':C' + r);
+  ws.mergeCells('D' + r + ':F' + r);
+  fillRange(r, 3, 5, PRIMARY);
+  const eyebrow = ws.getCell('A' + r);
+  eyebrow.value = 'BILL OF QUANTITIES  ·  CLIENT COPY';
+  eyebrow.font = { name: headingFont, size: 9, bold: true, color: { argb: ACCENT_TEXT } };
+  eyebrow.alignment = { horizontal: 'left', vertical: 'bottom', indent: 1 };
+  const hero = ws.getCell('D' + r);
+  hero.value = heroValue;
+  hero.numFmt = '"' + currency + '"#,##0.00';
+  hero.font = { name: headingFont, size: docTpl.heroFontSize(heroText), bold: true, color: { argb: ON_PRIMARY } };
+  hero.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+  r++;
+
+  // Row 4: project title (left) · ex-VAT / VAT line (right)
+  const titleSize = docTpl.titleSizeFor(tidyProject, 20);
+  ws.getRow(r).height = Math.max(24, titleSize + 10);
+  ws.mergeCells('A' + r + ':C' + r);
+  ws.mergeCells('D' + r + ':F' + r);
+  fillRange(r, 3, 5, PRIMARY);
+  const title = ws.getCell('A' + r);
+  title.value = tidyProject;
+  title.font = { name: headingFont, size: titleSize, bold: true, color: { argb: TEXT_DARK } };
+  title.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: false, shrinkToFit: true };
+  const heroSub = ws.getCell('D' + r);
+  heroSub.value = heroIsIncl
+    ? currency + fmtMoney(preExVat) + ' excl. VAT  ·  VAT @ ' + vat + '% ' + currency + fmtMoney(preInclVat - preExVat)
+    : 'VAT not applied to this copy';
+  heroSub.font = { name: bodyFont, size: 9, color: { argb: ON_PRIMARY } };
+  heroSub.alignment = { horizontal: 'left', vertical: 'top', indent: 1 };
+  r++;
+
+  // Row 5: prepared-for line (left) · brand block continues (right)
+  ws.getRow(r).height = 16;
+  ws.mergeCells('A' + r + ':C' + r);
+  ws.mergeCells('D' + r + ':F' + r);
+  fillRange(r, 3, 5, PRIMARY);
+  const prep = ws.getCell('A' + r);
+  prep.value = 'Prepared for ' + tidyClient + '   ·   ' + issued + (companyName ? '   ·   Issued by ' + companyName : '');
+  prep.font = { name: bodyFont, size: 10, color: { argb: TEXT_MUTED } };
+  prep.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: false, shrinkToFit: true };
+  r++;
+
+  // Row 6: accent bar under the brand block
+  ws.getRow(r).height = 5;
+  ws.mergeCells('D' + r + ':F' + r);
+  fillRange(r, 3, 5, ACCENT);
+  r++;
+  ws.getRow(r).height = 8;
+  r++;
+
+  // ── Who it is for and from (rows 8–10) ──
+  const metaLabel = (ref, text) => {
+    const c = ws.getCell(ref);
+    c.value = text;
+    c.font = { name: bodyFont, size: 8, bold: true, color: { argb: TEXT_MUTED } };
+    c.alignment = { horizontal: 'left', vertical: 'bottom', indent: 1 };
+  };
+  const metaValue = (ref, text, opt = {}) => {
+    const c = ws.getCell(ref);
+    c.value = text;
+    c.font = { name: bodyFont, size: opt.size || 11, bold: !!opt.bold, color: { argb: opt.muted ? TEXT_MUTED : TEXT_DARK } };
+    c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, wrapText: false, shrinkToFit: true };
+  };
+  ws.getRow(r).height = 14;
+  ws.mergeCells('A' + r + ':B' + r); ws.mergeCells('C' + r + ':E' + r);
+  metaLabel('A' + r, 'PREPARED FOR'); metaLabel('C' + r, 'PREPARED BY'); metaLabel('F' + r, 'ISSUED');
+  r++;
+  ws.getRow(r).height = 18;
+  ws.mergeCells('A' + r + ':B' + r); ws.mergeCells('C' + r + ':E' + r);
+  metaValue('A' + r, tidyClient, { bold: true });
+  metaValue('C' + r, companyName || 'The AI QS', { bold: true });
+  metaValue('F' + r, issued, { bold: true });
+  r++;
+  ws.getRow(r).height = 16;
+  ws.mergeCells('A' + r + ':B' + r); ws.mergeCells('C' + r + ':E' + r);
+  metaValue('A' + r, preItemCount + ' items in ' + preSections.length + (preSections.length === 1 ? ' trade' : ' trades'), { size: 9, muted: true });
+  metaValue('C' + r, companyAddress || docTpl.cleanText(branding.footer_text) || '', { size: 9, muted: true });
+  for (let c = 0; c < 6; c++) ws.getCell(cols[c] + r).border = hairBottom;
+  r++;
+  ws.getRow(r).height = 10;
+  r++;
+
+  // ── Where the money goes ──
+  const allSectionsTotal = preSections.reduce((a, x) => a + x.total, 0);
+  ws.getRow(r).height = 16;
+  ws.mergeCells('A' + r + ':C' + r); ws.mergeCells('D' + r + ':F' + r);
+  const wh = ws.getCell('A' + r);
+  wh.value = 'WHERE THE MONEY GOES';
+  wh.font = { name: headingFont, size: 9, bold: true, color: { argb: PRIMARY } };
+  wh.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  const ohpAppliedNote = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
+  const whNote = ws.getCell('D' + r);
+  whNote.value = ohpAppliedNote ? 'Rates include overheads & profit' : 'Rates as tendered';
+  whNote.font = { name: bodyFont, size: 9, color: { argb: TEXT_MUTED } };
+  whNote.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 };
+  r++;
+
+  // Cost-share bar: one merged cell of block characters, each trade's run
+  // coloured in a tint of the brand colour and sized to its share. Rich text
+  // is plain cell content, so it survives every viewer that opens the file.
+  const tintSteps = [0, 0.2, 0.4, 0.6, 0.75];
+  const tradeTint = (i) => docTpl.hexToArgb(docTpl.tintHex(style.primaryHex, tintSteps[i % tintSteps.length])) || PRIMARY;
+  if (allSectionsTotal > 0 && preSections.length > 0) {
+    const BAR_LEN = 96;
+    let counts = preSections.map((x) => Math.max(x.total > 0 ? 1 : 0, Math.round(x.total / allSectionsTotal * BAR_LEN)));
+    let over = counts.reduce((a, c) => a + c, 0) - BAR_LEN;
+    while (over > 0) { const i = counts.indexOf(Math.max(...counts)); counts[i]--; over--; }
+    const runs = [];
+    counts.forEach((c, i) => { if (c > 0) runs.push({ font: { name: 'Arial', size: 8, color: { argb: tradeTint(i) } }, text: '█'.repeat(c) }); });
+    ws.getRow(r).height = 13;
+    ws.mergeCells('A' + r + ':F' + r);
+    const bar = ws.getCell('A' + r);
+    bar.value = { richText: runs };
+    bar.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    r++;
+    ws.getRow(r).height = 4;
+    r++;
+  }
+  preSections.forEach((x, i) => {
+    const row = ws.getRow(r);
+    row.height = 16;
+    const sw = row.getCell(1);
+    sw.value = x.section.provisional ? 'PS' : String(x.section.number || i + 1);
+    sw.fill = fillOf(tradeTint(i));
+    sw.font = { name: bodyFont, size: 9, bold: true, color: { argb: docTpl.idealTextOn(tradeTint(i)) } };
+    sw.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.mergeCells('B' + r + ':C' + r);
+    const nm = row.getCell(2);
+    nm.value = sanitizeXmlText(x.section.title) + (x.section.provisional ? '  (provisional, excl. OH&P)' : '');
+    nm.font = { name: bodyFont, size: 10, color: { argb: TEXT_DARK } };
+    nm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+    const pc = row.getCell(4);
+    pc.value = allSectionsTotal > 0 ? x.total / allSectionsTotal : 0;
+    pc.numFmt = '0.0%';
+    pc.font = { name: bodyFont, size: 10, color: { argb: TEXT_MUTED } };
+    pc.alignment = { horizontal: 'right', vertical: 'middle' };
+    const am = row.getCell(6);
+    am.value = x.total;
+    am.numFmt = currFmt;
+    am.font = { name: bodyFont, size: 10, bold: true, color: { argb: TEXT_DARK } };
+    am.alignment = { horizontal: 'right', vertical: 'middle' };
+    for (let c = 1; c <= 6; c++) row.getCell(c).border = hairBottom;
+    r++;
+  });
+  ws.getRow(r).height = 14;
+  r++;
+
+  // ── Itemised bill ──
   const hdr = ws.getRow(r);
   hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
   for (let c = 1; c <= 6; c++) {
@@ -1440,9 +1648,6 @@ async function generateClientCopyPro(parsed, opts = {}) {
   hdr.height = 28;
   r++;
 
-  // Set sectionFill/subtotalFill to use flavour
-  const SECTION_BG = f.sectionFill;
-  const SUBTOTAL_BG = f.subtotalFill === style.WHITE ? PRIMARY : f.subtotalFill;
 
   // Per-section item rows. Each section has its own OH&P; line totals are
   // (labour + materials) × (1 + ohp/100), rounded as configured.
@@ -1532,28 +1737,34 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const provisionalFromSections = sectionTotals.filter((x) => x.section.provisional).reduce((a, x) => a + x.total, 0);
 
   const sumHdr = ws.getRow(r);
-  ws.mergeCells('A' + r + ':F' + r);
-  sumHdr.getCell(1).value = 'PROJECT SUMMARY';
-  sumHdr.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: PRIMARY } };
-  sumHdr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
-  sumHdr.getCell(1).border = allBorders;
+  sumHdr.height = 16;
+  ws.mergeCells('C' + r + ':F' + r);
+  sumHdr.getCell(3).value = 'PROJECT SUMMARY';
+  sumHdr.getCell(3).font = { name: headingFont, size: 9, bold: true, color: { argb: PRIMARY } };
+  sumHdr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  sumHdr.getCell(3).border = { bottom: { style: 'medium', color: { argb: PRIMARY } } };
   r++;
 
+  // Summary lines sit in the right-hand block (C:F) under the money column.
+  // `tone`: plain | total (tinted, brand text) | grand (brand fill, contrast text)
   function addSummaryLine(label, value, opt = {}) {
     const row = ws.getRow(r++);
-    row.getCell(2).value = label;
-    row.getCell(2).font = { name: 'Arial', size: 10, bold: !!opt.bold };
-    row.getCell(6).value = value;
-    row.getCell(6).numFmt = currFmt;
-    row.getCell(6).font = { name: 'Arial', size: 10, bold: !!opt.bold };
-    row.getCell(6).border = allBorders;
-    row.getCell(6).alignment = { horizontal: 'right' };
-    if (opt.fill) {
-      for (let c = 1; c <= 6; c++) {
-        row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
-        row.getCell(c).border = allBorders;
-      }
-    }
+    row.height = opt.tone === 'grand' ? 22 : 16;
+    ws.mergeCells('C' + (r - 1) + ':E' + (r - 1));
+    const tone = opt.tone || 'plain';
+    const textCol = tone === 'grand' ? ON_PRIMARY : tone === 'total' ? PRIMARY : TEXT_DARK;
+    const lc = row.getCell(3);
+    lc.value = label;
+    lc.font = { name: bodyFont, size: tone === 'grand' ? 11 : 10, bold: tone !== 'plain', color: { argb: tone === 'plain' ? 'FF3D4552' : textCol } };
+    lc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+    const vc = row.getCell(6);
+    vc.value = value; // full precision so the sheet reconciles to the penny; Excel shows 2 dp
+    vc.numFmt = tone === 'grand' ? '"' + currency + '"#,##0.00' : currFmt;
+    vc.font = { name: bodyFont, size: tone === 'grand' ? 12 : 10, bold: true, color: { argb: textCol } };
+    vc.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 };
+    if (tone === 'total') for (let c = 3; c <= 6; c++) row.getCell(c).fill = fillOf(PRIMARY_TINT);
+    if (tone === 'grand') for (let c = 3; c <= 6; c++) row.getCell(c).fill = fillOf(PRIMARY);
+    if (tone === 'plain') for (let c = 3; c <= 6; c++) row.getCell(c).border = hairBottom;
     return row;
   }
 
@@ -1590,26 +1801,34 @@ async function generateClientCopyPro(parsed, opts = {}) {
   }
 
   const exVat = runningTotal;
-  addSummaryLine('TOTAL (EXCL. VAT)', exVat, { bold: true, fill: true });
+  addSummaryLine('Total (excl. VAT)', exVat, { tone: vat > 0 ? 'total' : 'grand' });
 
   if (vat > 0) {
     const vatVal = exVat * (vat / 100);
     addSummaryLine('VAT @ ' + vat + '%', vatVal);
-    addSummaryLine('TOTAL (INCL. VAT)', exVat + vatVal, { bold: true, fill: true });
+    addSummaryLine('Total (incl. VAT)', exVat + vatVal, { tone: 'grand' });
+  } else {
+    const nv = ws.getRow(r++);
+    ws.mergeCells('C' + (r - 1) + ':F' + (r - 1));
+    nv.getCell(3).value = 'VAT not applied to this copy.';
+    nv.getCell(3).font = { name: bodyFont, size: 9, italic: true, color: { argb: TEXT_MUTED } };
+    nv.getCell(3).alignment = { horizontal: 'right', vertical: 'middle', indent: 1 };
   }
 
   // Footer note
   r++;
   const note = ws.getRow(r);
-  note.getCell(2).value = ohpApplied
+  ws.mergeCells('A' + r + ':F' + r);
+  note.getCell(1).alignment = { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true };
+  note.height = 26;
+  note.getCell(1).value = ohpApplied
     ? 'This document is prepared for client use. Rates are final and inclusive of overheads and profit'
       + (vat > 0 ? ', with VAT as shown' : '')
       + '. No contractor margin is shown separately.'
     : 'This document is prepared for client use. Rates are as tendered, exclusive of overheads, profit and contingency (to be agreed separately)'
       + (vat > 0 ? '. VAT is shown where applicable' : '') + '.';
-  note.getCell(2).font = { name: bodyFont, size: 9, italic: true, color: { argb: 'FF888888' } };
+  note.getCell(1).font = { name: bodyFont, size: 9, italic: true, color: { argb: TEXT_MUTED } };
 
-  ws.views = [{ state: 'frozen', ySplit: 4, activeCell: 'A5' }];
   const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
   ws.headerFooter.oddFooter = '&L' + footerLeft + ' — CLIENT COPY&RPage &P of &N';
 

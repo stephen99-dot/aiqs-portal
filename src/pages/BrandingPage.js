@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch, getToken } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
 import { Button, Card, Banner, Field, Input, Textarea, PageHeader, Skeleton, SkeletonCard } from '../ui';
+import ClientCopySheet from '../components/ClientCopySheet';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -416,7 +417,7 @@ export default function BrandingPage() {
         }}>
           <Card.Body style={{ padding: 18 }}>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-              Live preview · Cover sheet
+              Live preview · Client copy
             </div>
             <DocPreview branding={branding} logoUrl={logoUrl} />
           </Card.Body>
@@ -456,104 +457,35 @@ function ColourField({ label, hint, value, onChange, onSave, saving }) {
   );
 }
 
+// Sample figures for the preview — a typical single-storey extension. The
+// component is the same one the Builder Pack page renders with live figures,
+// so this preview IS the client copy the customer will download.
+const SAMPLE_ROWS = [
+  ['Preliminaries', 6840, 8], ['Demolition & strip-out', 3120, 6], ['Groundworks & foundations', 14600, 14],
+  ['Masonry & superstructure', 21450, 22], ['Roofing', 11980, 16], ['Windows & doors', 9300, 9],
+  ['Internal finishes', 12240, 24], ['Electrical', 6150, 18], ['Plumbing & heating', 7720, 15], ['Decoration', 3900, 10],
+].map(([title, subtotal, item_count], i) => ({ number: String(i + 1), title, subtotal, item_count, provisional: false }));
+const SAMPLE_NET = SAMPLE_ROWS.reduce((a, r) => a + r.subtotal, 0);
+const SAMPLE_PROVISIONAL = 2500;
+const SAMPLE_CONTINGENCY = SAMPLE_NET * 0.05;
+const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_PROVISIONAL + SAMPLE_CONTINGENCY;
+const SAMPLE_VAT = SAMPLE_EX_VAT * 0.2;
+const SAMPLE_SUMMARY = [
+  { key: 'net', label: 'Net construction (incl. overhead & profit)', value: SAMPLE_NET },
+  { key: 'provisional', label: 'Provisional sums (excl. OH&P)', value: SAMPLE_PROVISIONAL },
+  { key: 'contingency', label: 'Contingency (5% of net)', value: SAMPLE_CONTINGENCY },
+];
+
 function DocPreview({ branding, logoUrl }) {
-  const primary = branding.primary_colour || '#1B2A4A';
-  const accent = branding.accent_colour || '#F59E0B';
-  const company = branding.company_name || 'Your Company';
-  const tmpl = branding.template || 'modern';
-
-  // Slight visual variants per template — full fidelity comes from the XLSX/DOCX,
-  // this is just an indicator so the user can compare.
-  const variants = {
-    modern:       { headerBg: `linear-gradient(135deg, ${primary}, ${shade(primary, -12)})`, headerColor: '#fff', accentBar: accent, font: 'system-ui, sans-serif', heading: 'system-ui, sans-serif' },
-    professional: { headerBg: '#fff',     headerColor: '#000',  accentBar: '#000',  font: 'Georgia, serif',           heading: 'Georgia, serif' },
-    heritage:     { headerBg: '#F5EFE3',  headerColor: '#3A2E1F', accentBar: '#8C6F3D', font: 'Georgia, serif',         heading: "'Playfair Display', Georgia, serif" },
-    minimalist:   { headerBg: 'transparent', headerColor: '#111', accentBar: primary,  font: 'system-ui, sans-serif',   heading: 'system-ui, sans-serif' },
-  };
-  const v = variants[tmpl] || variants.modern;
-
   return (
-    <div style={{
-      borderRadius: 10, overflow: 'hidden',
-      background: '#fff', color: '#0A0F1C',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-      fontFamily: v.font,
-    }}>
-      <div style={{
-        background: v.headerBg, color: v.headerColor,
-        padding: '32px 28px 28px',
-        borderBottom: '4px solid ' + v.accentBar,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 9, flexShrink: 0,
-            background: '#fff', border: '1px solid rgba(0,0,0,0.05)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden',
-          }}>
-            {logoUrl ? (
-              <img src={logoUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-            ) : (
-              <span style={{ fontSize: 9, color: '#888' }}>No logo</span>
-            )}
-          </div>
-          <div>
-            <div style={{ fontSize: 12, opacity: 0.7, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{tmpl}</div>
-            <div style={{ fontFamily: v.heading, fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>{company}</div>
-          </div>
-        </div>
-        <div style={{ fontFamily: v.heading, fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.05 }}>
-          Bill of Quantities
-        </div>
-        <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-          Project: 14 Elm Mount Avenue · Single Storey Rear Extension
-        </div>
-      </div>
-
-      <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 20 }}>
-        <div>
-          <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total value</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: primary, fontFamily: 'JetBrains Mono, monospace' }}>£141,520</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Issued</div>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-        </div>
-      </div>
-
-      <div style={{ padding: '0 28px 24px' }}>
-        <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', gap: 1, background: '#eee' }}>
-          <div style={{ width: '52%', background: primary }} />
-          <div style={{ width: '48%', background: accent }} />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: '#666' }}>
-          <span><span style={{ color: primary, fontWeight: 800 }}>■</span> Labour 52%</span>
-          <span><span style={{ color: accent, fontWeight: 800 }}>■</span> Materials 48%</span>
-        </div>
-      </div>
-
-      {branding.footer_text && (
-        <div style={{
-          padding: '12px 28px', borderTop: '1px solid #eee',
-          fontSize: 11, color: '#666', textAlign: 'center',
-        }}>
-          {branding.footer_text}
-        </div>
-      )}
-    </div>
+    <ClientCopySheet
+      branding={branding} logoUrl={logoUrl}
+      projectName="Rear extension, 14 Elm Mount Avenue"
+      projectType="Single storey rear extension"
+      clientName="Mr & Mrs A. Okafor"
+      sym="£" rows={SAMPLE_ROWS} summaryLines={SAMPLE_SUMMARY}
+      exVat={SAMPLE_EX_VAT} vat={20} vatVal={SAMPLE_VAT} inclVat={SAMPLE_EX_VAT + SAMPLE_VAT}
+      ohpApplied
+    />
   );
-}
-
-// Helper: shade a hex colour by N% (positive = lighter, negative = darker).
-function shade(hex, percent) {
-  const c = hex.replace('#', '');
-  if (c.length !== 6) return hex;
-  const num = parseInt(c, 16);
-  let r = (num >> 16) + Math.round(2.55 * percent);
-  let g = ((num >> 8) & 0xff) + Math.round(2.55 * percent);
-  let b = (num & 0xff) + Math.round(2.55 * percent);
-  r = Math.max(0, Math.min(255, r));
-  g = Math.max(0, Math.min(255, g));
-  b = Math.max(0, Math.min(255, b));
-  return '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
