@@ -86,3 +86,31 @@ test('a missing file is reported, not thrown', { skip: !DEPS_OK && 'deps not ins
   const v = await verifyBoqFile(path.join(os.tmpdir(), 'does-not-exist.xlsx'));
   assert.strictEqual(v.status, 'missing');
 });
+
+// A bill written by a program can carry its sub-totals and summary as
+// formulas with NO cached value — exactly what this app's own generator did
+// until recently. A data-only read sees 0 for every one of them, so a bill
+// whose ten lines added up perfectly was locked as "no printed total" (G73
+// 5LR, Rutherglen). The parser now evaluates those formulas.
+test('a bill whose totals are uncached formulas still verifies', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    HEADER,
+    ['   1.   1. PRELIMINARIES'],
+    ['1.1', 'Site establishment and welfare', 'Item', 1, 2266, 1586.2, 679.8, 2266],
+    ['1.2', 'Independent access scaffold', 'm²', 180, 20, 2160, 1440, 3600],
+    ['', 'SUB-TOTAL — SECTION 1: 1. PRELIMINARIES', '', '', '', { formula: 'SUM(F3:F4)' }, { formula: 'SUM(G3:G4)' }, { formula: 'SUM(H3:H4)' }],
+    [],
+    ['   2.   2. EXTERNAL WALL'],
+    ['2.1', 'Rainscreen panels', 'm²', 180, 149.35, 13441.5, 13441.5, 26883],
+    ['', 'SUB-TOTAL — SECTION 2: 2. EXTERNAL WALL', '', '', '', { formula: 'SUM(F8:F8)' }, { formula: 'SUM(G8:G8)' }, { formula: 'SUM(H8:H8)' }],
+    [],
+    ['PROJECT SUMMARY'],
+    ['', 'Net Construction Cost', '', '', '', '', '', { formula: 'H5+H9' }],
+    ['', 'TOTAL CONSTRUCTION COST (EXCL. VAT)', '', '', '', '', '', { formula: 'H12' }],
+    ['', 'VAT @ 20%', '', '', '', '', '', { formula: 'H13*0.2' }],
+    ['', 'TOTAL CONSTRUCTION COST (INCL. VAT @ 20%)', '', '', '', '', '', { formula: 'H13+H14' }],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 32749);
+  assert.strictEqual(v.detail.printed_total, 32749);
+});

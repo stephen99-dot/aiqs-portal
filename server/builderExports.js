@@ -127,8 +127,123 @@ function cellNumber(cell) {
   if (cell == null) return 0;
   const v = cell.value;
   if (typeof v === 'number') return v;
-  if (typeof v === 'object' && v && typeof v.result === 'number') return v.result;
+  if (typeof v === 'object' && v) {
+    if (typeof v.result === 'number') return v.result;
+    // A formula with no cached value — see evalFormula below.
+    if (typeof v.formula === 'string' && v.result == null) {
+      const n = evalFormula(cell, v.formula);
+      if (Number.isFinite(n)) return n;
+    }
+  }
   return 0;
+}
+
+// ── Formulas without a cached value ─────────────────────────────────────────
+// A workbook written by a program stores its summary rows as formulas, and
+// unless the writer also cached a value ("=SUM(H16:H18)" with nothing beside
+// it) a data-only read sees 0. Our own generator wrote every sub-total and
+// every summary line that way until recently, so a delivered bill whose lines
+// add up perfectly read as printing NO total at all — and the verification
+// gate locked it (G73 5LR, Rutherglen: "no printed total", 10 lines, £56,150).
+//
+// Evaluate the small arithmetic those rows use — cell references, SUM over
+// ranges, + − × ÷ and brackets — reading referenced cells through cellNumber
+// so nested formulas resolve too. Anything outside that subset (other
+// functions, other sheets) evaluates to NaN and the cell reads 0, as before.
+const MAX_FORMULA_DEPTH = 40;
+function evalFormula(cell, formula, depth = 0) {
+  if (depth > MAX_FORMULA_DEPTH) return NaN;
+  const ws = cell && cell.worksheet;
+  if (!ws) return NaN;
+  const src = String(formula || '').replace(/^=/, '').replace(/\$/g, '').trim();
+  let i = 0;
+  const peek = () => src[i];
+  const skipWs = () => { while (i < src.length && /\s/.test(src[i])) i++; };
+  const refValue = (ref) => {
+    let c;
+    try { c = ws.getCell(ref.toUpperCase()); } catch (e) { return NaN; }
+    const v = c.value;
+    if (typeof v === 'number') return v;
+    if (v == null || v === '') return 0;
+    if (typeof v === 'object') {
+      if (typeof v.result === 'number') return v.result;
+      if (v.result != null && v.result !== '') { const n = parseFloat(v.result); return Number.isFinite(n) ? n : 0; }
+      if (typeof v.formula === 'string') return evalFormula(c, v.formula, depth + 1);
+      return 0;
+    }
+    const n = parseFloat(String(v).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const rangeSum = (a, b) => {
+    const pa = a.toUpperCase().match(/^([A-Z]{1,3})(\d+)$/), pb = b.toUpperCase().match(/^([A-Z]{1,3})(\d+)$/);
+    if (!pa || !pb) return NaN;
+    const colNum = (l) => l.split('').reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
+    const c1 = colNum(pa[1]), c2 = colNum(pb[1]), r1 = parseInt(pa[2], 10), r2 = parseInt(pb[2], 10);
+    if ((c2 - c1 + 1) * (r2 - r1 + 1) > 5000) return NaN;
+    let total = 0;
+    for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+      for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++) {
+        const v = refValue(ws.getCell(r, c).address);
+        if (!Number.isFinite(v)) return NaN;
+        total += v;
+      }
+    }
+    return total;
+  };
+  function parseExpr() {
+    let v = parseTerm();
+    for (;;) {
+      skipWs();
+      const op = peek();
+      if (op !== '+' && op !== '-') return v;
+      i++;
+      const rhs = parseTerm();
+      v = op === '+' ? v + rhs : v - rhs;
+    }
+  }
+  function parseTerm() {
+    let v = parseFactor();
+    for (;;) {
+      skipWs();
+      const op = peek();
+      if (op !== '*' && op !== '/') return v;
+      i++;
+      const rhs = parseFactor();
+      v = op === '*' ? v * rhs : (rhs === 0 ? NaN : v / rhs);
+    }
+  }
+  function parseFactor() {
+    skipWs();
+    const ch = peek();
+    if (ch === '(') { i++; const v = parseExpr(); skipWs(); if (peek() !== ')') return NaN; i++; return v; }
+    if (ch === '-') { i++; return -parseFactor(); }
+    if (ch === '+') { i++; return parseFactor(); }
+    const rest = src.slice(i);
+    let m;
+    if ((m = rest.match(/^(\d+(?:\.\d+)?|\.\d+)/))) { i += m[0].length; return parseFloat(m[0]); }
+    if ((m = rest.match(/^SUM\s*\(/i))) {
+      i += m[0].length;
+      let total = 0;
+      for (;;) {
+        skipWs();
+        const arg = src.slice(i).match(/^([A-Za-z]{1,3}\d+)\s*:\s*([A-Za-z]{1,3}\d+)/);
+        let v;
+        if (arg) { i += arg[0].length; v = rangeSum(arg[1], arg[2]); }
+        else v = parseExpr();
+        if (!Number.isFinite(v)) return NaN;
+        total += v;
+        skipWs();
+        if (peek() === ',') { i++; continue; }
+        if (peek() === ')') { i++; return total; }
+        return NaN;
+      }
+    }
+    if ((m = rest.match(/^[A-Za-z]{1,3}\d+/))) { i += m[0].length; return refValue(m[0]); }
+    return NaN; // another function, a sheet reference, text — not ours to guess
+  }
+  const value = parseExpr();
+  skipWs();
+  return i === src.length ? value : NaN;
 }
 
 // Short codes that legitimately live in the "Unit" column. Used to tell a real
@@ -349,7 +464,17 @@ function looksLikeSectionRow(row, mergedRows, cols) {
 
 function parseSectionLabel(text, fallbackIdx) {
   const m = text.match(/^\s*([\d]+(?:\.\d+)*)[.)]?\s+(.+)$/);
-  if (m) return { number: m[1], title: m[2].trim() };
+  if (m) {
+    const number = m[1];
+    let title = m[2].trim();
+    // "1.   1. PRELIMINARIES": a generator that prefixes the number onto a
+    // title that already carries it. The client copy then showed "1.
+    // PRELIMINARIES" beside a "1" badge. Strip the repeat, only when it is
+    // the same number ("1. 1.2 Drainage" is left alone).
+    const dup = title.match(/^(\d+(?:\.\d+)*)[.)]?\s+(.+)$/);
+    if (dup && dup[1] === number) title = dup[2].trim();
+    return { number, title };
+  }
   return { number: String(fallbackIdx + 1), title: text.trim() };
 }
 

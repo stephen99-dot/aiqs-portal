@@ -529,3 +529,44 @@ test('a bill whose net line excludes preliminaries reconciles against the summar
   const doubled = { ...parsed, sections: parsed.sections.map((s) => ({ ...s, subtotal: { ...s.subtotal, total: s.subtotal.total * 2 } })) };
   assert.strictEqual(reconcileParsed(doubled).ok, false);
 });
+
+// ── Formulas without a cached value ─────────────────────────────────────────
+async function parseRows(rows, sheet = 'BOQ') {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(sheet);
+  for (const r of rows) ws.addRow(r);
+  const file = path.join(os.tmpdir(), `parse-${process.pid}-${Math.random().toString(36).slice(2)}.xlsx`);
+  await wb.xlsx.writeFile(file);
+  try { return await parseBOQ(file); } finally { try { fs.unlinkSync(file); } catch (e) { /* ignore */ } }
+}
+const PLAIN_HEADER = ['Item', 'Description', 'Unit', 'Qty', 'Rate', 'Labour', 'Materials', 'Total'];
+
+test('a heading that repeats its own number ("1.   1. PRELIMINARIES") is titled once', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    PLAIN_HEADER,
+    ['   1.   1. PRELIMINARIES'],
+    ['1.1', 'Site set-up', 'item', 1, 1000, 800, 200, 1000],
+    ['   2.   2.1 Drainage'],
+    ['2.1', 'Pipe', 'm', 10, 10, 50, 50, 100],
+  ]);
+  assert.deepStrictEqual(parsed.sections.map((s) => [s.number, s.title]), [['1', 'PRELIMINARIES'], ['2', '2.1 Drainage']]);
+});
+
+test('sub-totals and summary lines held as uncached formulas are read, not zero', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    PLAIN_HEADER,
+    ['1', 'WORKS'],
+    ['1.1', 'A', 'nr', 2, 50, 60, 40, 100],
+    ['1.2', 'B', 'nr', 1, 200, 100, 100, 200],
+    ['', 'Sub-total — Works', '', '', '', { formula: 'SUM(F3:F4)' }, { formula: 'SUM(G3:G4)' }, { formula: 'SUM(H3:H4)' }],
+    ['', 'Net construction cost', '', '', '', '', '', { formula: '(H5)' }],
+    ['', 'Contingency @ 5%', '', '', '', '', '', { formula: 'H6*5/100' }],
+    ['', 'Total (excl. VAT)', '', '', '', '', '', { formula: 'H6+H7' }],
+  ]);
+  assert.strictEqual(parsed.sections.length, 1);
+  assert.strictEqual(parsed.sections[0].subtotal.total, 300, 'the sub-total formula evaluates');
+  assert.strictEqual(parsed.source_summary.net_total, 300);
+  assert.strictEqual(parsed.source_summary.contingency_pct, 5);
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 315);
+  assert.ok(reconcileParsed(parsed).ok);
+});
