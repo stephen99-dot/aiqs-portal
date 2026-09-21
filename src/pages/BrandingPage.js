@@ -471,8 +471,8 @@ const SAMPLE_CONTINGENCY = SAMPLE_NET * 0.05;
 const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_PROVISIONAL + SAMPLE_CONTINGENCY;
 const SAMPLE_VAT = SAMPLE_EX_VAT * 0.2;
 const SAMPLE_SUMMARY = [
-  { key: 'net', label: 'Net construction (incl. overhead & profit)', value: SAMPLE_NET },
-  { key: 'provisional', label: 'Provisional sums (excl. OH&P)', value: SAMPLE_PROVISIONAL },
+  { key: 'net', label: 'Net construction cost', value: SAMPLE_NET },
+  { key: 'provisional', label: 'Provisional sums', value: SAMPLE_PROVISIONAL },
   { key: 'contingency', label: 'Contingency (5% of net)', value: SAMPLE_CONTINGENCY },
 ];
 

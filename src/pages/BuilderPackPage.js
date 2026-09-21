@@ -417,7 +417,7 @@ export default function BuilderPackPage() {
 
   const ohpApplied = baseUplift > 1.0001 || Object.keys(perTradeOhp).length > 0;
   let runningTotal = netConstruction;
-  const summaryLines = [{ label: ohpApplied ? 'Net construction (incl. overhead & profit)' : 'Net construction', value: netConstruction, key: 'net' }];
+  const summaryLines = [{ label: 'Net construction cost', value: netConstruction, key: 'net' }];
   if (prelimsMode === 'flat' && prelimsAmount > 0) {
     summaryLines.push({ label: 'Preliminaries (flat)', value: prelimsAmount, key: 'prel-flat' });
     runningTotal += prelimsAmount;
@@ -439,7 +439,7 @@ export default function BuilderPackPage() {
   // (only one of the two is ever non-zero, so they never double up).
   const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : provisionalSum);
   if (provisionalTotal > 0) {
-    summaryLines.push({ label: 'Provisional sums (excl. OH&P)', value: provisionalTotal, key: 'provisional' });
+    summaryLines.push({ label: 'Provisional sums', value: provisionalTotal, key: 'provisional' });
     runningTotal += provisionalTotal;
   }
   if (contingency > 0) {

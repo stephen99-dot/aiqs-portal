@@ -1432,10 +1432,6 @@ async function generateClientCopyPro(parsed, opts = {}) {
     return baseUpliftFactor;
   }
   // The same uplift expressed as a percentage, for the section-header note only.
-  const baseCombinedPct = Math.round((baseUpliftFactor - 1) * 1e4) / 100;
-  function combinedPctForSection(sectionNumber) {
-    return Math.round((upliftFactorForSection(sectionNumber) - 1) * 1e4) / 100;
-  }
 
   // ── Branding via the shared style pack ───────────────────────────────────
   const docTpl = require('./docTemplates');
@@ -1703,7 +1699,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   wh.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
   const ohpAppliedNote = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
   const whNote = ws.getCell('D' + r);
-  whNote.value = ohpAppliedNote ? 'Rates include overheads & profit' : 'Rates as tendered';
+  whNote.value = ohpAppliedNote ? 'Rates are fixed and fully inclusive' : 'Rates as tendered';
   whNote.font = { name: bodyFont, size: 9, color: { argb: TEXT_MUTED } };
   whNote.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 };
   r++;
@@ -1743,7 +1739,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     sw.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.mergeCells('B' + r + ':C' + r);
     const nm = row.getCell(2);
-    nm.value = sanitizeXmlText(x.section.title) + (x.section.provisional ? '  (provisional, excl. OH&P)' : '');
+    nm.value = sanitizeXmlText(x.section.title) + (x.section.provisional && !/provisional/i.test(x.section.title) ? '  (provisional)' : '');
     nm.font = { name: bodyFont, size: 10, color: { argb: TEXT_DARK } };
     nm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
     const pc = row.getCell(4);
@@ -1791,15 +1787,13 @@ async function generateClientCopyPro(parsed, opts = {}) {
   parsed.sections.forEach((s, idx) => {
     // Provisional sums are carried verbatim, exclusive of OH&P — never uplifted.
     const sectionFactor = s.provisional ? 1 : upliftFactorForSection(s.number);
-    const sectionCombinedPct = s.provisional ? 0 : combinedPctForSection(s.number);
 
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
     sec.getCell(1).value = s.provisional
-      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + '   (excl. OH&P)'
-      : '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase() +
-        (Math.abs(sectionCombinedPct - baseCombinedPct) > 0.001 ? '   (uplift ' + sectionCombinedPct + '%)' : '');
+      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + (/provisional/i.test(s.title) ? '' : '   (provisional)')
+      : '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase();
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
       sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.sectionFill } };
@@ -1945,7 +1939,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // tendered net, so don't claim they include OH&P.
   const ohpApplied = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
   netRow = r;
-  addSummaryLine(ohpApplied ? 'Net construction cost (incl. trade OH&P)' : 'Net construction cost', sumRefs(refsOf((x) => !x.section.provisional), netConstruction));
+  addSummaryLine('Net construction cost', sumRefs(refsOf((x) => !x.section.provisional), netConstruction));
   const preUpliftNet = (pct) => (uniformUplift ? { formula: 'F' + netRow + '/' + upliftConst + '*' + pct + '/100', result: originalNet * (pct / 100) } : originalNet * (pct / 100));
 
   let runningTotal = netConstruction;
@@ -1960,7 +1954,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   }
   const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
   if (provisionalDisplay > 0) {
-    addSummaryLine('Provisional sums (excl. OH&P)', hasProvSection ? sumRefs(refsOf((x) => x.section.provisional), provisionalDisplay) : provisionalDisplay);
+    addSummaryLine('Provisional sums', hasProvSection ? sumRefs(refsOf((x) => x.section.provisional), provisionalDisplay) : provisionalDisplay);
     runningTotal += provisionalDisplay;
   }
   if (dayRate) {
@@ -2007,10 +2001,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
   note.getCell(1).alignment = { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true };
   note.height = 26;
   note.getCell(1).value = ohpApplied
-    ? 'This document is prepared for client use. Rates are final and inclusive of overheads and profit'
-      + (vat > 0 ? ', with VAT as shown' : '')
-      + '. No contractor margin is shown separately.'
-    : 'This document is prepared for client use. Rates are as tendered, exclusive of overheads, profit and contingency (to be agreed separately)'
+    ? 'This document is prepared for client use. Rates are fixed and fully inclusive'
+      + (vat > 0 ? ', with VAT as shown' : '') + '.'
+    : 'This document is prepared for client use. Rates are as tendered'
       + (vat > 0 ? '. VAT is shown where applicable' : '') + '.';
   note.getCell(1).font = { name: bodyFont, size: 9, italic: true, color: { argb: TEXT_MUTED } };
 
