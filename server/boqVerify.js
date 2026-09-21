@@ -39,7 +39,7 @@ const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDig
 // an older verifier is re-run on the next open, so a bill locked by a check
 // that has since been corrected unlocks itself after deploy — nobody has to
 // remember to press Re-verify on every affected project.
-const VERIFIER_VERSION = 3;
+const VERIFIER_VERSION = 4; // 4: summary formulas without a cached value are evaluated
 
 function describePrinted(recon) {
   if (!recon) return 'printed total';
