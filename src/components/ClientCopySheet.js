@@ -131,7 +131,7 @@ export default function ClientCopySheet({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ ...label, color: primary, fontSize: 10.5 }}>Where the money goes</div>
-          <div style={{ fontSize: 11, color: MUTED }}>{ohpApplied ? 'Rates include overheads & profit' : 'Rates as tendered'}</div>
+          <div style={{ fontSize: 11, color: MUTED }}>{ohpApplied ? 'Rates are fixed and fully inclusive' : 'Rates as tendered'}</div>
         </div>
         {trades.length === 0 ? (
           <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: MUTED }}>No priced sections in this bill yet.</div>
@@ -152,7 +152,7 @@ export default function ClientCopySheet({
                 <div key={String(t.number) + '-' + i} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) 44px auto', gap: 8, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid ' + HAIRLINE }}>
                   <div style={{ height: 16, borderRadius: 3, background: t.bg, color: t.fg, fontSize: 8.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.provisional ? 'PS' : (i + 1)}</div>
                   <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.title}{t.provisional && <span style={{ fontSize: 10, color: MUTED, marginLeft: 6 }}>provisional</span>}
+                    {t.title}{t.provisional && !/provisional/i.test(t.title) && <span style={{ fontSize: 10, color: MUTED, marginLeft: 6 }}>provisional</span>}
                   </div>
                   <div style={{ ...num, textAlign: 'right', color: MUTED }}>{t.pct.toFixed(1)}%</div>
                   <div style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{money(sym, t.subtotal)}</div>
@@ -196,7 +196,7 @@ export default function ClientCopySheet({
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 10, color: MUTED, borderTop: '1px solid ' + HAIRLINE, paddingTop: 8 }}>
         <div style={{ minWidth: 0 }}>
           {[company, b.footer_text].filter(Boolean).join(' · ') || 'The AI QS'}
-          {' · '}{ohpApplied ? 'Rates are final and inclusive of overheads and profit.' : 'Rates as tendered, exclusive of overheads, profit and contingency.'}
+          {' · '}{ohpApplied ? 'Rates are fixed and fully inclusive.' : 'Rates as tendered.'}
         </div>
         <div style={{ whiteSpace: 'nowrap' }}>Client copy</div>
       </div>
