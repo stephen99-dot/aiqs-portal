@@ -114,3 +114,31 @@ test('a bill whose totals are uncached formulas still verifies', { skip: !DEPS_O
   assert.strictEqual(v.detail.parsed_total, 32749);
   assert.strictEqual(v.detail.printed_total, 32749);
 });
+
+// A tender cascade: OH&P on the measured sections only, provisional sums
+// added flat, "NET TENDER SUM excluding VAT" as the bottom line. The tender
+// sum was not recognised as a printed total, so the bill locked as
+// "no printed total" (Horley Community Centre, 213 lines, £1.6m).
+test('a cascade to "NET TENDER SUM excluding VAT" with OH&P on the measured sections only verifies', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    HEADER,
+    ['1. PRELIMINARIES'],
+    ['1.01', 'Site manager', 'wk', 42, 1650, 69300, 0, 69300],
+    ['', 'Subtotal carried to summary - 1. PRELIMINARIES', '', '', '', 69300, 0, 69300],
+    [],
+    ['2. PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside OH&P)'],
+    ['2.01', 'AV and CCTV first fix', 'PS', 1, 7500, 0, 7500, 7500],
+    ['', 'Subtotal carried to summary - 2. PROVISIONAL SUMS AND DAYWORKS', '', '', '', 0, 7500, 7500],
+    [],
+    ['SUMMARY AND TENDER CASCADE'],
+    ['Sections 1-1: preliminaries and measured works', '', '', '', '', '', '', 69300],
+    ['Overheads and profit at 17% on sections 1-1 (CSA 6.06)', '', '', '', '', '', '', 11781],
+    ['Provisional sums and dayworks, section 2 (no OH&P added)', '', '', '', '', '', '', 7500],
+    ['NET TENDER SUM excluding VAT - to Form of Tender (CSA 10)', '', '', '', '', '', '', 88581],
+    ['VAT at 20%', '', '', '', '', '', '', 17716.2],
+    ['TENDER SUM INCLUDING VAT', '', '', '', '', '', '', 106297.2],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 76800);
+  assert.strictEqual(v.detail.printed_total, 88581);
+});

@@ -462,6 +462,44 @@ function looksLikeSectionRow(row, mergedRows, cols) {
   return numberedPrefix || allCapsHeading || hasFill;
 }
 
+// A note row: a sentence of prose under a heading — "Programme 42 weeks (ER
+// A10/110 indicative 40-45 weeks). JCT DB 2024…", "Employer provisional sums
+// (CSA 6.4) and dayworks (CSA 6.5) carried at stated values." — merged across
+// the description columns, unstyled, unnumbered, mixed case, no figures. Read
+// as a heading it overwrote the trade's title and renumbered it (Horley
+// Community Centre: section 1 became "2. Programme 42 weeks…"); read as a
+// total row ("… carried …") it closed the provisional sums block before its
+// first line, and the lines fell into the trade above. Neither: skipped.
+function isNoteRow(row, a, b, cols) {
+  const text = (a && b && a !== b) ? a + ' ' + b : (a || b);
+  if (!text || text.length < 40) return false;
+  const num = (c) => (c ? cellNumber(row.getCell(c)) : 0);
+  if (num(cols.qty) !== 0 || num(cols.rate) !== 0 || num(cols.labour) !== 0 ||
+      num(cols.materials) !== 0 || num(cols.total) !== 0) return false;
+  if (/^\s*(?:\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+\S/.test(text)) return false; // a numbered heading
+  if (text === text.toUpperCase()) return false;                            // an ALL-CAPS heading
+  const styled = (c) => {
+    const cell = c ? row.getCell(c) : null;
+    return !!(cell && ((cell.font && cell.font.bold) ||
+      (cell.fill && cell.fill.fgColor && cell.fill.fgColor.argb && cell.fill.fgColor.argb !== 'FFFFFFFF')));
+  };
+  if (styled(cols.item) || styled(cols.description)) return false;
+  return text.length > 80 || /[.;:]\s+\S/.test(text);
+}
+
+// The words a client copy never carries, even when the source bill's own
+// section title does: "13. PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside
+// OH&P)" is shown as "PROVISIONAL SUMS AND DAYWORKS". A bracketed clause or a
+// trailing clause that mentions the margin is dropped; the rest is kept.
+const MARGIN_WORDS_RE = /OH\s*&\s*P|\bO\s*&\s*P\b|OVERHEADS?\b|\bPROFITS?\b/i;
+function clientSafeTitle(title) {
+  const src = String(title || '');
+  let t = src.replace(/\s*[(\[][^()\[\]]*[)\]]/g, (m) => (MARGIN_WORDS_RE.test(m) ? '' : m));
+  t = t.replace(/\s*[;,–—-]\s*[^;,–—-]*$/, (m) => (MARGIN_WORDS_RE.test(m) ? '' : m));
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t || src;
+}
+
 function parseSectionLabel(text, fallbackIdx) {
   const m = text.match(/^\s*([\d]+(?:\.\d+)*)[.)]?\s+(.+)$/);
   if (m) {
@@ -634,6 +672,7 @@ async function parseBOQ(filePath) {
     const unitText = textAt(row, cols.unit);
     const mirrored = !!unitText && unitText === (a || b);
     const hasUnitOrQty = !mirrored && (!!unitText || numAt(row, cols.qty) > 0);
+    const noteRow = isNoteRow(row, a, b, cols);
     if (!hasUnitOrQty && numAt(row, cols.total) > 0) {
       let m;
       // The percentage may be embedded in the label ("… @ 10%") OR — in tender
@@ -675,7 +714,7 @@ async function parseBOQ(filePath) {
       const docTotalLabel =
         /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel) ||
         /^TOTAL\s+MEASURED\s+WORKS?\b/.test(upperLabel) ||
-        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY))/.test(upperLabel) ||
+        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|(?:NET\s+)?TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY))/.test(upperLabel) ||
         (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|MEASURED\s+WORKS?)\b/.test(upperLabel));
       if (docTotalLabel && !/\bINC(?:L|LUDING)?\b/.test(upperLabel)) {
         sourceSummary.printed_totals.push({ label: (a || b).slice(0, 80), value: numAt(row, cols.total) });
@@ -692,7 +731,7 @@ async function parseBOQ(filePath) {
       // document prints no separate net line. Read here (before the stopped
       // guard) because it usually sits below a collection / summary heading.
       if (sourceSummary.ex_vat_total == null && !/\bINC(?:L|LUDING)?\b/.test(upperLabel) &&
-          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER))/.test(upperLabel)) {
+          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|(?:NET\s+)?TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER))/.test(upperLabel)) {
         sourceSummary.ex_vat_total = numAt(row, cols.total);
       }
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
@@ -772,7 +811,7 @@ async function parseBOQ(filePath) {
     const provTotalCell = numAt(row, cols.total);
     if (!inProvSums &&
         /\bPROVISIONAL\s+SUMS?\b/.test(upperJoined) && !/\bTOTAL\b/.test(upperJoined) &&
-        provTotalCell <= 0 && !hasUnitOrQty) {
+        provTotalCell <= 0 && !hasUnitOrQty && !noteRow) {
       inProvSums = true;
       // Keep the source document's own numbering when the header carries one
       // ("10.0 PRIME COST & PROVISIONAL SUMS"), so the client copy lists the
@@ -788,6 +827,9 @@ async function parseBOQ(filePath) {
       return;
     }
     if (inProvSums) {
+      // A note under the block's heading keeps the block open. It used to
+      // close it before the first line, and the lines fell into the trade above.
+      if (noteRow) return;
       // A genuine provisional line has its OWN ref AND description AND a positive
       // amount (e.g. "PS.1 | Air-conditioning | 31754", "A | Asbestos removal |
       // 1000"). Capture only that shape. Anything else — a cost-summary value
@@ -818,6 +860,10 @@ async function parseBOQ(filePath) {
     }
 
     if (stopped) return;
+
+    // Prose under a heading is neither a stop marker, a total row ("… carried
+    // at stated values") nor a heading of its own.
+    if (noteRow) return;
 
     // Section carry-down rows ("PRELIMINARIES — TO COLLECTION") repeat the
     // section total — skipping them stops the total being counted as an item.
@@ -1739,7 +1785,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     sw.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.mergeCells('B' + r + ':C' + r);
     const nm = row.getCell(2);
-    nm.value = sanitizeXmlText(x.section.title) + (x.section.provisional && !/provisional/i.test(x.section.title) ? '  (provisional)' : '');
+    nm.value = sanitizeXmlText(clientSafeTitle(x.section.title)) + (x.section.provisional && !/provisional/i.test(x.section.title) ? '  (provisional)' : '');
     nm.font = { name: bodyFont, size: 10, color: { argb: TEXT_DARK } };
     nm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
     const pc = row.getCell(4);
@@ -1792,8 +1838,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
     sec.getCell(1).value = s.provisional
-      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + (/provisional/i.test(s.title) ? '' : '   (provisional)')
-      : '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase();
+      ? '   ' + sanitizeXmlText(clientSafeTitle(s.title)).toUpperCase() + (/provisional/i.test(s.title) ? '' : '   (provisional)')
+      : '   ' + s.number + '.   ' + sanitizeXmlText(clientSafeTitle(s.title)).toUpperCase();
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
       sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: f.sectionFill } };
@@ -1847,7 +1893,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
 
     // Section subtotal — a live SUM over the section's line totals.
     const sub = ws.getRow(r);
-    sub.getCell(2).value = 'Sub-total — ' + sanitizeXmlText(s.title);
+    sub.getCell(2).value = 'Sub-total — ' + sanitizeXmlText(clientSafeTitle(s.title));
     sub.getCell(6).value = r > itemRowStart
       ? { formula: 'SUM(F' + itemRowStart + ':F' + (r - 1) + ')', result: sectionTotal }
       : sectionTotal;
@@ -2116,4 +2162,4 @@ function reconcileParsed(parsed) {
   return { ok: false, printed: nearest.value, printed_label: nearest.label, parsed: parsedTotal, basis: nearest.label === 'ex_vat' ? 'ex_vat' : 'net', printed_all: printedAll };
 }
 
-module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed };
+module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed, clientSafeTitle };

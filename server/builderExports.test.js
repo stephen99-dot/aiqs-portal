@@ -570,3 +570,87 @@ test('sub-totals and summary lines held as uncached formulas are read, not zero'
   assert.strictEqual(parsed.source_summary.ex_vat_total, 315);
   assert.ok(reconcileParsed(parsed).ok);
 });
+
+// ── Horley Community Centre: notes under headings and a tender cascade ──────
+// Every heading is followed by a merged sentence of notes; each trade closes
+// with "Subtotal carried to summary - N. TITLE"; the summary adds OH&P on the
+// measured sections only, then the provisional sums flat, to a "NET TENDER
+// SUM excluding VAT". The notes used to overwrite the trade titles, the
+// provisional sums block collapsed into the trade above, and the tender sum
+// was not recognised as a printed total — so the bill locked.
+async function buildHorleyStyleBill(file) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  ws.addRow(['GHINN & CO']); ws.mergeCells('A1:H1');
+  ws.addRow(['Item', 'Description', 'Unit', 'Quantity', 'Labour £', 'Materials £', 'Rate £', 'Amount £']);
+  const heading = (t) => { const r = ws.addRow([t]); ws.mergeCells('A' + r.number + ':H' + r.number); r.getCell(1).font = { bold: true }; };
+  const note = (t) => { const r = ws.addRow(['', t]); ws.mergeCells('B' + r.number + ':H' + r.number); };
+  const line = (ref, d, u, q, l, m) => ws.addRow([ref, d, u, q, l, m, (l + m) / q, l + m]);
+  const sub = (t, l, m) => { const r = ws.addRow([t, '', '', '', l, m, '', l + m]); ws.mergeCells('A' + r.number + ':D' + r.number); };
+  heading('1. PRELIMINARIES AND GENERAL CONDITIONS (CSA 1)');
+  note('Programme 42 weeks (ER A10/110 indicative 40-45 weeks). JCT DB 2024. Rear GF car park under the building is retained in use.');
+  line('1.01', 'Site manager, full time', 'wk', 42, 69300, 0);
+  line('1.02', 'Welfare and site accommodation', 'wk', 42, 0, 12600);
+  sub('Subtotal carried to summary - 1. PRELIMINARIES AND GENERAL CONDITIONS', 69300, 12600);
+  ws.addRow([]);
+  heading('2. INTERNAL FINISHES (CSA 3)');
+  note('Wall decoration area derived from room areas in accommodation schedule 6002; no finishes schedule issued, allowances made.');
+  line('2.01', 'Emulsion to walls', 'm2', 1000, 6000, 2000);
+  sub('Subtotal carried to summary - 2. INTERNAL FINISHES', 6000, 2000);
+  ws.addRow([]);
+  heading('3. PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside OH&P)');
+  note('Employer provisional sums (CSA 6.4) and dayworks (CSA 6.5) carried at stated values. Contractor OH&P is not added to this section.');
+  line('3.01', 'CSA 6.4(a): AV and CCTV first fix', 'PS', 1, 0, 7500);
+  line('3.02', 'Dayworks labour', 'PS', 1, 4900, 0);
+  sub('Subtotal carried to summary - 3. PROVISIONAL SUMS AND DAYWORKS', 4900, 7500);
+  ws.addRow([]);
+  heading('SUMMARY AND TENDER CASCADE');
+  const s = (t, v) => { const r = ws.addRow([t, '', '', '', '', '', '', v]); ws.mergeCells('A' + r.number + ':G' + r.number); };
+  s('1. PRELIMINARIES AND GENERAL CONDITIONS (CSA 1)', 81900);
+  s('2. INTERNAL FINISHES (CSA 3)', 8000);
+  s('3. PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside OH&P)', 12400);
+  s('Sections 1-2: preliminaries and measured works', 89900);
+  s('Overheads and profit at 17% on sections 1-2 (CSA 6.06)', 15283);
+  s('Provisional sums and dayworks, section 3 (no OH&P added)', 12400);
+  s('NET TENDER SUM excluding VAT - to Form of Tender (CSA 10)', 117583);
+  s('VAT at 20%', 23516.6);
+  s('TENDER SUM INCLUDING VAT', 141099.6);
+  await wb.xlsx.writeFile(file);
+}
+
+test('notes under headings are not headings, the provisional block survives its note, and the tender sum reconciles (Horley)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const file = path.join(os.tmpdir(), 'horley-' + process.pid + '.xlsx');
+  await buildHorleyStyleBill(file);
+  const parsed = await parseBOQ(file);
+  fs.unlinkSync(file);
+  assert.deepStrictEqual(parsed.sections.map((s) => [s.number, s.title]), [
+    ['1', 'PRELIMINARIES AND GENERAL CONDITIONS (CSA 1)'],
+    ['2', 'INTERNAL FINISHES (CSA 3)'],
+    ['3', 'PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside OH&P)'],
+  ], 'the trades keep their own numbers and titles, not the note beneath them');
+  assert.deepStrictEqual(parsed.sections.map((s) => s.items.length), [2, 1, 2]);
+  assert.deepStrictEqual(parsed.sections.map((s) => s.subtotal.total), [81900, 8000, 12400]);
+  assert.strictEqual(parsed.sections[2].provisional, true, 'the provisional sums are their own section, outside the uplift');
+  assert.strictEqual(parsed.source_summary.ohp_pct, 17);
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 117583, '"NET TENDER SUM excluding VAT" is the printed ex-VAT total');
+  const check = reconcileParsed(parsed);
+  assert.ok(check.ok, 'sections 1-2 × 1.17 + provisional sums = the tender sum: ' + JSON.stringify(check));
+});
+
+test('a trade title that names the margin is shown without it on the client copy', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const { clientSafeTitle, generateClientCopyPro } = require('./builderExports');
+  assert.strictEqual(clientSafeTitle('PROVISIONAL SUMS AND DAYWORKS (CSA 5; outside OH&P)'), 'PROVISIONAL SUMS AND DAYWORKS');
+  assert.strictEqual(clientSafeTitle('Provisional sums - no OH&P added'), 'Provisional sums');
+  assert.strictEqual(clientSafeTitle('EXTERNAL WORKS (CSA 3.01 / 6.1; VE-01)'), 'EXTERNAL WORKS (CSA 3.01 / 6.1; VE-01)', 'an ordinary bracket is kept');
+  assert.strictEqual(clientSafeTitle('Uplift and relay paving'), 'Uplift and relay paving', 'trade words that merely resemble margin words are kept');
+  const parsed = { sections: [
+    { number: '1', title: 'Works (incl. overheads & profit)', items: [{ itemRef: '1.1', description: 'Thing', unit: 'nr', qty: 1, labour: 50, materials: 50, total: 100 }] },
+    { number: '2', title: 'PROVISIONAL SUMS (CSA 5; outside OH&P)', provisional: true, items: [{ itemRef: '2.1', description: 'Allowance', unit: 'PS', qty: 1, labour: 0, materials: 500, total: 500 }] },
+  ] };
+  const buf = await generateClientCopyPro(parsed, { vat: 20, overhead_pct: 10, branding: { company_name: 'T' }, project_name: 'P', client_name: 'C' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const hits = [];
+  wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((c) => { const t = typeof c.value === 'string' ? c.value : ''; if (/OH&P|overhead|profit/i.test(t)) hits.push(t); })));
+  assert.deepStrictEqual(hits, [], 'no cell on the client copy names the margin');
+});

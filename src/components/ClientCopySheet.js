@@ -20,6 +20,18 @@ const INK = '#14161A';
 const MUTED = '#5B6470';
 const HAIRLINE = '#E3E6EA';
 
+// Trade titles never carry margin words on the client copy, even when the
+// source bill's own heading does ("… (CSA 5; outside OH&P)"). Mirrors the
+// server's clientSafeTitle so the Excel copy and this sheet agree.
+const MARGIN_WORDS_RE = /OH\s*&\s*P|\bO\s*&\s*P\b|OVERHEADS?\b|\bPROFITS?\b/i;
+function clientSafeTitle(title) {
+  const src = String(title || '');
+  let t = src.replace(/\s*[(\[][^()\[\]]*[)\]]/g, (m) => (MARGIN_WORDS_RE.test(m) ? '' : m));
+  t = t.replace(/\s*[;,–—-]\s*[^;,–—-]*$/, (m) => (MARGIN_WORDS_RE.test(m) ? '' : m));
+  t = t.replace(/\s{2,}/g, ' ').trim();
+  return t || src;
+}
+
 function money(sym, v) {
   return sym + (Math.round((v || 0) * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -59,7 +71,7 @@ export default function ClientCopySheet({
   const trades = rows.map((r, i) => {
     const pct = allTotal > 0 ? (r.subtotal || 0) / allTotal * 100 : 0;
     const bg = tradeTint(primary, i);
-    return { ...r, pct, bg, fg: idealTextOn(bg), barLabel: pct >= 8 ? Math.round(pct) + '%' : '' };
+    return { ...r, title: clientSafeTitle(r.title), pct, bg, fg: idealTextOn(bg), barLabel: pct >= 8 ? Math.round(pct) + '%' : '' };
   });
   const twoCol = trades.length > 9;
   const title = projectName || 'Project';
