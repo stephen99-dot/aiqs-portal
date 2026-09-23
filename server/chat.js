@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
+const { currencySymbol, promptBlock: countryPromptBlock } = require('./lib/countries');
 const { v4: uuidv4 } = require('uuid');
 const { authMiddleware } = require('./auth');
 const jwt = require('jsonwebtoken');
@@ -252,7 +253,49 @@ function extractInsightsFromMessage(userId, message) {
 // DYNAMIC SYSTEM PROMPT
 // ═══════════════════════════════════════════════════════════════════════
 
+// The same rate keys as RATE_CRIB_SHEET, priced for South Africa at the base
+// region (Gauteng): the SA library rate where one maps, else the UK rate at
+// the cost-parity factor — exactly what the pricer will charge before the
+// region factor. Rendered once; byte-stable like the UK sheet.
+let _zaCrib = null;
+function zaRateCribSheet() {
+  if (_zaCrib != null) return _zaCrib;
+  try {
+    const countries = require('./lib/countries');
+    const prof = countries.pricingProfile('ZA', '', null);
+    const base = deterministicPricer.BASE_RATES;
+    const entries = Object.keys(base).sort().map((key) => {
+      const hit = prof.localRate(key);
+      const rate = hit ? hit.rate : base[key].rate * prof.locFactor;
+      return `${key} ${Math.round(rate * 100) / 100}/${base[key].unit || 'Item'}`;
+    });
+    const lines = []; let line = '';
+    for (const e of entries) {
+      if (line && line.length + 3 + e.length > 110) { lines.push(line); line = e; } else line = line ? `${line} | ${e}` : e;
+    }
+    if (line) lines.push(line);
+    _zaCrib = lines.join('\n');
+  } catch (e) { console.error('[Chat] ZA crib sheet:', e.message); _zaCrib = ''; }
+  return _zaCrib;
+}
+
+// Wraps the UK prompt for users in another country: their country block goes
+// first so it overrides the UK assumptions written into the prompt below, and
+// South African users get the rate keys priced in Rand.
 function buildSystemPrompt(userId, forDocGen, benchmarkSection, opts) {
+  const prompt = buildSystemPromptUk(userId, forDocGen, benchmarkSection, opts);
+  let user = null;
+  try { user = db.prepare('SELECT country, region, country_name FROM users WHERE id = ?').get(userId); } catch (e) {}
+  const block = countryPromptBlock(user);
+  if (!block) return prompt;
+  let out = block + '\n\n' + prompt;
+  if (user.country === 'ZA') {
+    out += `\n\n═══ SOUTH AFRICA RATES (ZAR) — REPLACE EVERY "FIXED UK RATES" / GBP FIGURE ABOVE ═══\nSame item_keys, priced in Rand ex VAT at the Gauteng base; the job's regional factor is applied automatically. Use these keys and these Rand figures. Every £ benchmark above (cost/m², typical totals) is a UK figure: do not quote it to this client.\n${zaRateCribSheet()}\n═══`;
+  }
+  return out;
+}
+
+function buildSystemPromptUk(userId, forDocGen, benchmarkSection, opts) {
   let clientRateSection = '';
   let clientInsightsSection = '';
   // The trained rate library is only worth loading when the turn is actually about
@@ -288,7 +331,7 @@ function buildSystemPrompt(userId, forDocGen, benchmarkSection, opts) {
         const conf = r.confidence >= 0.85 ? 'VERIFIED' : r.confidence >= 0.7 ? 'EMERGING' : 'NEW';
         grouped[r.category].push(`  - ${r.display_name}: ${r.value} ${r.unit} [${conf}]`);
       }
-      clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n${rateCapNote}\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use generic UK rates and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
+      clientRateSection = `\n=== CLIENT-SPECIFIC TRAINED RATES ===\nUSE THESE instead of generic rates where applicable.\n${rateCapNote}\n${Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join('\n')}`).join('\n\n')}\n\nFor items NOT covered, use the generic rate library and mark rate_source as "generic".\nClient rates [VERIFIED] -> rate_source: "verified"\nClient rates [EMERGING] -> rate_source: "emerging"\n===\n`;
     }
   } catch (err) { console.error('[Chat] Rate load error:', err.message); }
   // Non-pricing chat: don't dump the library, just let the model know it exists so it
@@ -1541,15 +1584,12 @@ router.get('/takeoff/:sessionId/priced', authMiddleware, (req, res) => {
     const takeoff = benchmarkStore.getTakeoffBySession(db, req.params.sessionId);
     if (!takeoff) return res.status(404).json({ error: 'No takeoff found for this session' });
     if (takeoff.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-    const clientRates = {};
-    try {
-      const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
-      for (const r of dbRates) clientRates[r.item_key] = r.value;
-    } catch (e) {}
+    const _pc = require('./userPricing').pricingContext(req.user.id, takeoff.location);
+    const clientRates = _pc.clientRates;
     const prefs = getPricingPrefsSafe(req.user.id);
     const priced = deterministicPricer.priceLockedQuantities(
       takeoff.items || [], takeoff.location || '', clientRates,
-      { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type }
+      { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type, ..._pc.pricingOptions }
     );
     res.json({
       takeoff: { id: takeoff.id, status: takeoff.status, location: takeoff.location, project_type: takeoff.project_type },
@@ -1589,14 +1629,11 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
     // Phase 11: log the human corrections (model value -> corrected value) for the
     // quality flywheel. Best-effort.
     try { require('./flywheel').logCorrections(db, { jobId: req.params.id, userId: req.user.id, prevItems: takeoff.items || [], newItems: merged }); } catch (e) {}
-    const clientRates = {};
-    try {
-      const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(req.user.id);
-      for (const r of dbRates) clientRates[r.item_key] = r.value;
-    } catch(e) {}
+    const _pc = require('./userPricing').pricingContext(req.user.id, takeoff.location);
+    const clientRates = _pc.clientRates;
     const prefs = getPricingPrefsSafe(req.user.id);
     const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates,
-      withShadow({ contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type }, { userId: req.user.id }));
+      withShadow({ contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type, ..._pc.pricingOptions }, { userId: req.user.id }));
     recordShadow(priced, { userId: req.user.id, jobRef: req.params.id });
     res.json({ success: true, priced, items_raw: merged });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
@@ -2243,12 +2280,9 @@ ${summary}`);
       try {
         const existingTk = benchmarkStore.getTakeoffBySession(db, sessionId_pre);
         if (existingTk && existingTk.items && existingTk.items.length > 0) {
-          const tkClientRates = {};
-          try {
-            const dbR = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
-            for (const r of dbR) tkClientRates[r.item_key] = r.value;
-          } catch(e) {}
-          if (memoryEngine) {
+          const _tkPc = require('./userPricing').pricingContext(userId, existingTk.location);
+          const tkClientRates = _tkPc.clientRates;
+          if (memoryEngine && !_tkPc.skipMemoryRates) {
             const tkRegion = memoryEngine.detectRegion(existingTk.location || '');
             for (const item of existingTk.items) {
               if (!tkClientRates[item.key]) {
@@ -2262,9 +2296,9 @@ ${summary}`);
           const tkPrefs = getPricingPrefsSafe(userId);
           const tkPriced = deterministicPricer.priceLockedQuantities(
             existingTk.items, existingTk.location || '', tkClientRates,
-            { contingency_pct: tkPrefs.contingency_pct, ohp_pct: tkPrefs.ohp_pct, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP' }
+            { contingency_pct: tkPrefs.contingency_pct, ohp_pct: tkPrefs.ohp_pct, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP', ..._tkPc.pricingOptions }
           );
-          const tkSym = tkPriced.summary.currency === 'EUR' ? '€' : '£';
+          const tkSym = currencySymbol(tkPriced.summary.currency);
           const sectionLines = tkPriced.sections.map(s => `${s.name}: ${tkSym}${s.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}`).join('\n');
           const tkIsDraft = existingTk.status === 'draft';
           const tkStatusLabel = tkIsDraft ? 'DRAFT' : 'LOCKED';
@@ -3184,14 +3218,11 @@ CRITICAL RULES:
             console.log(`[Stage 1] Extracted ${parsed.items.length} items, saved as takeoff ${takeoffId}`);
 
             // Price them immediately so user sees costs alongside quantities
-            const clientRates = {};
-            try {
-              const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
-              for (const r of dbRates) clientRates[r.item_key] = r.value;
-            } catch(e) {}
+            const _s1Pc = require('./userPricing').pricingContext(userId, parsed.location);
+            const clientRates = _s1Pc.clientRates;
 
             // Enrich with memory engine rates — must match Stage 3 to avoid discrepancy
-            if (memoryEngine) {
+            if (memoryEngine && !_s1Pc.skipMemoryRates) {
               const region = memoryEngine.detectRegion(parsed.location || '');
               const pricerBaseRates = deterministicPricer ? deterministicPricer.BASE_RATES : {};
               for (const item of parsed.items) {
@@ -3269,18 +3300,19 @@ CRITICAL RULES:
                   currency: isIreland ? 'EUR' : 'GBP',
                   project_type: mergedProjectType,
                   floor_area: intakeFloorArea || parsed.floor_area_m2 || null,
+                  ..._s1Pc.pricingOptions,
                 };
               })(), { userId })
             );
             recordShadow(priced, { userId, jobRef: sessionId });
 
             // Log pricing stage
-            pipelineLog.push({ stage: 'price', label: 'Stage 2: Deterministic pricing', detail: `${priced.sections.length} sections priced — Construction total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})} — Grand total ${priced.summary.currency === 'EUR' ? '€' : '£'}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`, warnings: priced.warnings || [], ts: Date.now() });
+            pipelineLog.push({ stage: 'price', label: 'Stage 2: Deterministic pricing', detail: `${priced.sections.length} sections priced — Construction total ${currencySymbol(priced.summary.currency)}${priced.summary.construction_total.toLocaleString('en-GB', {maximumFractionDigits:0})} — Grand total ${currencySymbol(priced.summary.currency)}${priced.summary.grand_total.toLocaleString('en-GB', {maximumFractionDigits:0})}`, warnings: priced.warnings || [], ts: Date.now() });
 
             // Format quantities summary for user
             const flagged = parsed.items.filter(i => i.flagged);
             const missing = parsed.missing_info || [];
-            const currSym = priced.summary.currency === 'EUR' ? '€' : '£';
+            const currSym = currencySymbol(priced.summary.currency);
 
             let quantitySummary = `Quantity takeoff complete for ${parsed.project_type || 'your project'} at ${parsed.location || 'the project address'}.\n\n`;
             quantitySummary += `${parsed.items.length} items extracted across ${priced.sections.length} sections.\n`;
@@ -3410,7 +3442,7 @@ CRITICAL RULES:
             // Also check parsed.location — AI may have extracted it from drawings
             const hasLocationFromExtraction = parsed.location && parsed.location.trim().length > 0;
             if (!hasAddress && !hasLocationFromExtraction) {
-              quantitySummary += `\n\n📍 **One thing needed:** What's the project address or town? This lets me apply the correct local rates and currency (UK £ or Ireland €). Reply with the location and I'll update the pricing before you generate.`;
+              quantitySummary += `\n\n📍 **One thing needed:** What's the project address or town? This lets me apply the correct local rates and currency. Reply with the location and I'll update the pricing before you generate.`;
             }
 
             quantitySummary += `\n\nQuantities are ready for review (ref: ${takeoffId}). Check the figures above — if anything needs adjusting, tell me now. When you're happy, say "confirm" to lock them in, then "generate documents" to produce your Excel BOQ and Findings Report.`;
@@ -3501,14 +3533,11 @@ CRITICAL RULES:
         // ✅ DETERMINISTIC PATH: use locked quantities
         console.log(`[Stage 3] Using locked takeoff ${lockedTakeoff.id} with ${lockedTakeoff.items.length} items`);
 
-        const clientRates = {};
-        try {
-          const dbRates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(userId);
-          for (const r of dbRates) clientRates[r.item_key] = r.value;
-        } catch(e) {}
+        const _s3Pc = require('./userPricing').pricingContext(userId, lockedTakeoff.location);
+        const clientRates = _s3Pc.clientRates;
 
         // Enrich clientRates with memory engine best rates
-        if (memoryEngine) {
+        if (memoryEngine && !_s3Pc.skipMemoryRates) {
           const region = memoryEngine.detectRegion(lockedTakeoff.location || '');
           const pricerBaseRates = deterministicPricer ? deterministicPricer.BASE_RATES : {};
           for (const item of lockedTakeoff.items) {
@@ -3554,6 +3583,7 @@ CRITICAL RULES:
               ohp_pct: prefs.ohp_pct,
               vat_rate: isIreland ? 13.5 : 20,
               currency: isIreland ? 'EUR' : 'GBP',
+              ..._s3Pc.pricingOptions,
             };
           })(), { userId })
         );
@@ -3610,7 +3640,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             contingency_pct: pricedResult.summary.contingency_pct,
             ohp_pct: pricedResult.summary.ohp_pct,
             vat_rate: pricedResult.summary.vat_rate,
-            currency: pricedResult.summary.currency === 'EUR' ? '€' : '£',
+            currency: currencySymbol(pricedResult.summary.currency),
             // Feed the header block the job context we already hold so the bill
             // reads like a real tender front sheet instead of showing "—". The
             // renderer also auto-recaps PC / Provisional sums from these lines.
@@ -3741,7 +3771,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
         } else if (downloadFiles.length > 0) {
           const itemCount = pricedResult.item_count || 0;
           const grandTotal = pricedResult.summary.grand_total;
-          const docCurrSym = (pricedResult.summary.currency === 'EUR') ? '€' : '£';
+          const docCurrSym = currencySymbol(pricedResult.summary.currency);
           reply = `Documents generated for ${projectName}.\n\n${itemCount} line items priced deterministically from locked quantities.\nGrand Total (inc. VAT): ${docCurrSym}${grandTotal.toLocaleString('en-GB', {maximumFractionDigits:0})}\n\nThis total is locked — it will not change if you regenerate. Download your Excel BOQ and Word Findings Report below.`;
 
           // The pricer's warnings used to be concatenated onto the reply as
@@ -3815,7 +3845,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             // Mirror to activity_log so the admin feed shows BOQ generations
             try {
               const { logActivity } = require('./activityRoutes');
-              const sym = projCurrency === 'EUR' ? '€' : '£';
+              const sym = currencySymbol(projCurrency);
               logActivity({
                 event_type: 'doc_generated',
                 title: `${req.user.full_name || req.user.email} generated a BOQ`,
@@ -4243,7 +4273,8 @@ function runQsPasses(pricedResult, lockedTakeoff, resubmission, qsOpts = {}) {
     const { determineVat } = require('./statutory');
     const loc = String(takeoff.location || '');
     passes.vat = determineVat({
-      jurisdiction: /ireland|dublin|cork|galway|limerick/i.test(loc) ? 'IE' : 'GB',
+      jurisdiction: pricedResult.summary && pricedResult.summary.country === 'ZA' ? 'ZA'
+        : /ireland|dublin|cork|galway|limerick/i.test(loc) ? 'IE' : 'GB',
       projectType: takeoff.project_type || '',
       description: takeoff.description || '',
       enquiryText: takeoff.brief || takeoff.notes || '',

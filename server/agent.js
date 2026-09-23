@@ -713,11 +713,8 @@ async function executeTool(runId, toolName, toolInput, runState) {
         return { type: 'tool_result', content: 'No items to price yet. Call record_takeoff_item first.', is_error: true };
       }
       // Build clientRates from user's rate library
-      const clientRates = {};
-      try {
-        const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(runState.userId);
-        for (const r of rates) clientRates[r.item_key] = r.value;
-      } catch (e) {}
+      const _pc = require('./userPricing').pricingContext(runState.userId, (runState.metadata || {}).location);
+      const clientRates = _pc.clientRates;
 
       const meta = runState.metadata || {};
       // Fold the intake's Ireland hint into the location string if the agent
@@ -743,6 +740,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           contingency_pct: prefs.contingency_pct,
           ohp_pct: prefs.ohp_pct,
           ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
+          ..._pc.pricingOptions,
         });
       } catch (err) {
         return { type: 'tool_result', content: 'Pricer error: ' + err.message, is_error: true };
@@ -771,7 +769,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           const thisCpm2 = priced.summary.construction_total / meta.floor_area_m2;
           const avg = benchmarks.cost_per_m2.avg;
           const deviation = (thisCpm2 - avg) / avg;
-          const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+          const sym2 = require('./lib/countries').currencySymbol(priced.summary.currency);
           if (Math.abs(deviation) >= 0.3) {
             varianceNote = `${deviation > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(deviation) * 100)}% ${deviation > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(avg)}/m² (range ${sym2}${Math.round(benchmarks.cost_per_m2.min)}–${sym2}${Math.round(benchmarks.cost_per_m2.max)}/m² over ${benchmarks.sample_count} past projects)`;
           }
@@ -788,7 +786,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
       });
       emit(runId, { type: 'priced', priced, sanity_warnings: sanityWarnings, variance_note: varianceNote });
 
-      const sym = priced.summary.currency === 'EUR' ? '€' : '£';
+      const sym = require('./lib/countries').currencySymbol(priced.summary.currency);
       const costPerM2 = meta.floor_area_m2 ? Math.round(priced.summary.construction_total / meta.floor_area_m2) : null;
       const summaryLines = [
         `Construction total: ${sym}${Math.round(priced.summary.construction_total).toLocaleString('en-GB')}`,
@@ -869,11 +867,8 @@ async function executeTool(runId, toolName, toolInput, runState) {
         try {
           const meta = runState.metadata || {};
           const pricer = require('./deterministicPricer');
-          const clientRates = {};
-          try {
-            const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(runState.userId);
-            for (const r of rates) clientRates[r.item_key] = r.value;
-          } catch (e) {}
+          const _pc = require('./userPricing').pricingContext(runState.userId, meta.location);
+          const clientRates = _pc.clientRates;
           let effectiveLocation = meta.location || '';
           const looksUk = looksLikeUkLocation(effectiveLocation);
           if (runState.intakeCurrency === 'EUR' && !looksUk && !/ireland|ir$|\.ie|€/i.test(effectiveLocation)) {
@@ -886,6 +881,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
             floor_area: meta.floor_area_m2 || null,
             contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
             ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
+            ..._pc.pricingOptions,
           });
         } catch (e) { console.error(`[Agent ${runId}] review pre-price error:`, e.message); }
       }
@@ -909,7 +905,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           if (bench?.cost_per_m2?.avg) {
             const thisCpm2 = priced.summary.construction_total / runState.metadata.floor_area_m2;
             const dev = (thisCpm2 - bench.cost_per_m2.avg) / bench.cost_per_m2.avg;
-            const sym2 = priced.summary.currency === 'EUR' ? '€' : '£';
+            const sym2 = require('./lib/countries').currencySymbol(priced.summary.currency);
             if (Math.abs(dev) >= 0.3) {
               varianceNote = `${dev > 0 ? 'HIGH' : 'LOW'}: ${sym2}${Math.round(thisCpm2)}/m² is ${Math.round(Math.abs(dev) * 100)}% ${dev > 0 ? 'above' : 'below'} your typical ${sym2}${Math.round(bench.cost_per_m2.avg)}/m² (range ${sym2}${Math.round(bench.cost_per_m2.min)}–${sym2}${Math.round(bench.cost_per_m2.max)}/m² over ${bench.sample_count} past projects)`;
             }
@@ -963,7 +959,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
 
       runState.finalized = true;  // signals runner to exit the tool-use loop
       emit(runId, { type: 'submitted_for_review', summary, findings_notes: notes, structured, priced: priced?.summary, sanity_warnings: sanityWarnings, variance_note: varianceNote });
-      return { type: 'tool_result', content: `Submitted to user for review. ${runState.items.length} items, ${priced?.summary ? (priced.summary.currency === 'EUR' ? '€' : '£') + Math.round(priced.summary.grand_total).toLocaleString('en-GB') : '(no total)'} grand total. The user will now review and approve generation — your work is complete.` };
+      return { type: 'tool_result', content: `Submitted to user for review. ${runState.items.length} items, ${priced?.summary ? require('./lib/countries').currencySymbol(priced.summary.currency) + Math.round(priced.summary.grand_total).toLocaleString('en-GB') : '(no total)'} grand total. The user will now review and approve generation — your work is complete.` };
     }
 
     default:
@@ -998,11 +994,8 @@ async function runGenerationForRun(runId, opts = {}) {
   const findingsGen = require('./findingsGenerator');
 
   // Re-price with current items so any user edits are reflected
-  const clientRates = {};
-  try {
-    const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(run.user_id);
-    for (const r of rates) clientRates[r.item_key] = r.value;
-  } catch (e) {}
+  const _pc = require('./userPricing').pricingContext(run.user_id, run.location);
+  const clientRates = _pc.clientRates;
 
   let location = run.location || '';
   const intakeIsIreland = run.currency === 'EUR' || /ireland/i.test(location);
@@ -1020,6 +1013,7 @@ async function runGenerationForRun(runId, opts = {}) {
     contingency_pct: pricingPrefs.contingency_pct,
     ohp_pct: pricingPrefs.ohp_pct,
     ...(intakeIsIreland ? { currency: 'EUR' } : {}),
+    ..._pc.pricingOptions,
   });
 
   // Phase 9 verifier (ported to the Atlas path): a final deterministic gate over
@@ -1051,7 +1045,7 @@ async function runGenerationForRun(runId, opts = {}) {
 
   setActivity(runId, 'Generating Excel + Word deliverables');
 
-  const sym = priced.summary.currency === 'EUR' ? '€' : '£';
+  const sym = require('./lib/countries').currencySymbol(priced.summary.currency);
   const downloads = [];
   const genErrors = [];
   let _branding = null;

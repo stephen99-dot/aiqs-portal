@@ -293,11 +293,8 @@ router.post('/agent/:id/reprice', authMiddleware, (req, res) => {
     try { items = run.takeoff_json ? JSON.parse(run.takeoff_json) : []; } catch (e) {}
     if (items.length === 0) return res.status(400).json({ error: 'No items to price' });
 
-    const clientRates = {};
-    try {
-      const rates = db.prepare('SELECT item_key, value FROM client_rate_library WHERE user_id = ? AND is_active = 1').all(run.user_id);
-      for (const r of rates) clientRates[r.item_key] = r.value;
-    } catch (e) {}
+    const _pc = require('./userPricing').pricingContext(run.user_id, run.location);
+    const clientRates = _pc.clientRates;
     let location = run.location || '';
     const intakeIsIreland = run.currency === 'EUR' || /ireland/i.test(location);
     if (intakeIsIreland && !/ireland|ir$|\.ie|€/i.test(location)) {
@@ -310,6 +307,7 @@ router.post('/agent/:id/reprice', authMiddleware, (req, res) => {
       floor_area: run.floor_area_m2 || null,
       contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
       ...(intakeIsIreland ? { currency: 'EUR' } : {}),
+      ..._pc.pricingOptions,
     });
     agent.updateRun(req.params.id, {
       priced_json: JSON.stringify(priced),

@@ -7,6 +7,7 @@ import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 import {
   Button, IconButton, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast, Input,
 } from '../ui';
+import { currencySymbol } from '../utils/money';
 
 // SVG icons for document types
 const ExcelIcon = ({ size = 28 }) => (
@@ -150,7 +151,7 @@ export default function ProjectDetailPage() {
   }
 
   function formatCurrency(v, cur) {
-    const sym = cur === 'EUR' ? '€' : '£';
+    const sym = currencySymbol(cur);
     return sym + (v || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 

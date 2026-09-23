@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken } from '../utils/api';
+import { useAuth } from '../context/AuthContext';
+import { CountryFields } from '../components/CountryPicker';
 
 // Three screens:
 //   1. "What's your trade?" — live search over the server's trade catalogue
@@ -44,6 +46,13 @@ function filterTrades(trades, query, limit = 8) {
 export default function OnboardingPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
+  const { user, setUser } = useAuth();
+
+  // Country comes first: it decides the currency the rest of onboarding is
+  // asked in, so it is saved before the trade questions load.
+  const [countryV, setCountryV] = useState({ country: user?.country || '', region: user?.region || '', countryName: user?.country === 'OTHER' ? (user?.countryName || '') : '' });
+  const countryValid = !!countryV.country && (countryV.country !== 'OTHER' || !!String(countryV.countryName || '').trim());
+  const sym = user?.currencySymbol || '£';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,7 +76,7 @@ export default function OnboardingPage() {
   const [dayRateTouched, setDayRateTouched] = useState(false);
 
   // Step 3 — the trade's itemised rate sheet. All optional: typical figures
-  // sit as placeholders, and anything left blank is priced with generic UK
+  // sit as placeholders, and anything left blank is priced with the generic
   // rates instead.
   const [rateItems, setRateItems] = useState([]);
   const [itemRates, setItemRates] = useState({});
@@ -178,6 +187,28 @@ export default function OnboardingPage() {
     }
   }
 
+  // Save the country (if changed) before the trade questions load: the
+  // server asks them in that country's currency.
+  async function nextFromFirst() {
+    const changed = countryV.country !== (user?.country || '') || (countryV.region || '') !== (user?.region || '')
+      || (countryV.country === 'OTHER' && countryV.countryName !== user?.countryName);
+    if (changed) {
+      setSaving(true);
+      try {
+        const res = await apiFetch('/auth/me/country', { method: 'PUT', body: JSON.stringify(countryV) });
+        setUser(u => ({ ...u, ...res }));
+        setQuestionsFor(null); // refetch in the new currency
+        setDayRateTouched(false);
+      } catch (e) {
+        alert(e.message || 'Could not save your country.');
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+    setStep(1);
+  }
+
   async function skip() {
     if (!window.confirm('Skip for now? You can always complete this later from the AI Memory page.')) return;
     setSaving(true);
@@ -276,7 +307,7 @@ export default function OnboardingPage() {
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>£</span>
+            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>{sym}</span>
             <input
               type="number" inputMode="decimal" min="0" step="5"
               value={qualifying[q.id] ?? ''}
@@ -284,7 +315,7 @@ export default function OnboardingPage() {
               style={{ ...inputStyle, width: 130, paddingLeft: 24 }}
             />
           </div>
-          {q.unit && <span style={{ fontSize: 13, color: c.textMuted }}>{q.unit.replace('£/', 'per ')}</span>}
+          {q.unit && <span style={{ fontSize: 13, color: c.textMuted }}>{q.unit.replace(/^[£€R]\//, 'per ')}</span>}
         </div>
       );
     }
@@ -301,11 +332,14 @@ export default function OnboardingPage() {
 
   const steps = [
     {
-      title: "What's your trade?",
-      sub: 'Start typing and pick yours — it shapes the questions we ask and how your AI prices work.',
-      canNext: !!trade,
+      title: "Where are you, and what's your trade?",
+      sub: 'Your country sets your currency, VAT and rates. Your trade shapes the questions we ask and how your AI prices work.',
+      canNext: !!trade && countryValid,
       body: (
         <>
+          <div style={{ marginBottom: 22 }}>
+            <CountryFields value={countryV} onChange={setCountryV} compact />
+          </div>
           <Field colors={c} label="Your trade">
             <div style={{ position: 'relative' }}>
               <input
@@ -413,7 +447,7 @@ export default function OnboardingPage() {
     // straight from questions to notes.
     ...(rateItems.length > 0 ? [{
       title: 'Your rates for the usual jobs',
-      sub: "These are the jobs " + (trade ? 'a ' + trade.toLowerCase() : 'your trade') + " prices every week. Fill in the ones you know — every estimate will use YOUR figure. Leave anything blank and we'll price it with standard UK rates until you tell us otherwise.",
+      sub: "These are the jobs " + (trade ? 'a ' + trade.toLowerCase() : 'your trade') + " prices every week. Fill in the ones you know — every estimate will use YOUR figure. Leave anything blank and we'll price it with the standard rates for your country until you tell us otherwise.",
       canNext: true,
       body: (
         <>
@@ -424,7 +458,7 @@ export default function OnboardingPage() {
                 <div style={{ fontSize: 11.5, color: c.textMuted }}>{item.unit}</div>
               </div>
               <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>£</span>
+                <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>{sym}</span>
                 <input
                   type="number" inputMode="decimal" min="0"
                   value={itemRates[item.key] ?? ''}
@@ -436,7 +470,7 @@ export default function OnboardingPage() {
             </div>
           ))}
           <div style={{ fontSize: 12, color: c.textMuted, marginTop: 12, padding: '10px 12px', background: c.pill, borderRadius: 8 }}>
-            The grey figures are typical UK rates, not yours — type over them where yours differ. Everything here lands in My Rates, where you can add more jobs or import a full rate spreadsheet any time.
+            The grey figures are typical rates, not yours — type over them where yours differ. Everything here lands in My Rates, where you can add more jobs or import a full rate spreadsheet any time.
           </div>
         </>
       ),
@@ -450,7 +484,7 @@ export default function OnboardingPage() {
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="e.g. We never do commercial work. Always add £250 for skip hire on full renovations. Our labourer is £150/day."
+            placeholder="e.g. We never do commercial work. Always add a skip on full renovations. Our labourer's day rate is fixed."
             rows={6}
             style={{ ...inputStyle, resize: 'vertical' }}
           />
@@ -529,7 +563,7 @@ export default function OnboardingPage() {
           </button>
         )}
         <button
-          onClick={() => last ? save() : setStep(s => s + 1)}
+          onClick={() => last ? save() : (step === 0 ? nextFromFirst() : setStep(s => s + 1))}
           disabled={saving || !current.canNext}
           style={{
             padding: '10px 22px', borderRadius: 8,

@@ -150,7 +150,7 @@ async function generateVODocument(variation, project, clientName) {
   }
 
   // 4. Financial Summary
-  const sym = variation.currency === 'EUR' ? '€' : '£';
+  const sym = require('./lib/countries').currencySymbol(variation.currency);
   const fmt = (v) => sym + Math.abs(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const netColor = (variation.net_change || 0) >= 0 ? 'EF4444' : '10B981';
 
@@ -409,7 +409,7 @@ Respond ONLY with this JSON structure:
     // Mirror to activity_log so the admin feed shows variations being raised
     try {
       const { logActivity } = require('./activityRoutes');
-      const sym = currency === 'EUR' ? '€' : '£';
+      const sym = require('./lib/countries').currencySymbol(currency);
       const net = analysis.net_change || 0;
       logActivity({
         event_type: 'variation',
@@ -534,7 +534,7 @@ router.post('/variations/:id/generate-revised-boq', authMiddleware, async (req, 
     if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Anthropic API key not configured' });
 
     const allApproved = db.prepare("SELECT * FROM variations WHERE project_id = ? AND status = 'approved' ORDER BY created_at ASC").all(variation.project_id);
-    const sym = (variation.currency === 'EUR') ? '€' : '£';
+    const sym = require('./lib/countries').currencySymbol(variation.currency);
 
     // Build sections directly from stored variation analysis — no AI call needed
     // This is reliable because we already have the structured scope_changes from when the VO was created
@@ -1052,7 +1052,7 @@ router.post('/projects/:projectId/builder-pack', authMiddleware, async (req, res
       if (generatorBranding && generatorBranding.logo_path) branding = generatorBranding;
     }
     const buffer = await generateBuilderPack(parsed, {
-      currency: project.currency === 'EUR' ? '€' : '£',
+      currency: require('./lib/countries').currencySymbol(project.currency),
       builder_margin: parseFloat(req.body.builder_margin) || 0,
       materials_markup: parseFloat(req.body.materials_markup) || 0,
       project_name: documentTitleForProject(project),
@@ -1107,7 +1107,7 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
     }
 
     const buffer = await generateClientCopyProSafe(parsed, {
-      currency: project.currency === 'EUR' ? '€' : '£',
+      currency: require('./lib/countries').currencySymbol(project.currency),
       contingency: req.body.contingency,
       default_ohp: req.body.default_ohp,
       overhead_pct: req.body.overhead_pct,

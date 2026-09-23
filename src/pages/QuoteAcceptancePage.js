@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckCircleIcon } from '../components/Icons';
+import { currencySymbol } from '../utils/money';
 
 // Public quote acceptance page — /q/<token>. No auth, no estimator gate.
 // This is what the BUILDER'S CLIENT sees on their phone, so it renders the
@@ -10,7 +11,7 @@ import { LinkIcon, CheckCircleIcon } from '../components/Icons';
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
 function fmt(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   return sym + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 

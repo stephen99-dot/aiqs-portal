@@ -14,6 +14,7 @@ import {
   UploadIcon, DownloadIcon, ChatIcon,
   BrainIcon, EditIcon,
 } from '../components/Icons';
+import { currencySymbol } from '../utils/money';
 
 const STRIPE = {
   starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
@@ -618,7 +619,7 @@ export default function DashboardPage() {
                         {project.item_count > 0 && <span>{project.item_count} items</span>}
                         {project.total_value > 0 && (
                           <span>
-                            {project.currency === 'EUR' ? '€' : '£'}{Math.round(project.total_value).toLocaleString()}
+                            {currencySymbol(project.currency)}{Math.round(project.total_value).toLocaleString()}
                           </span>
                         )}
                         {project.project_type && <span style={{ opacity: 0.7 }}>{project.project_type}</span>}

@@ -3,6 +3,7 @@ import { apiFetch } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 import useIsMobile from '../utils/useIsMobile';
 import AsyncButton from './AsyncButton';
+import { currencySymbol } from '../utils/money';
 
 // Plain-English labels for provenance badges on rates and quantities.
 // These map to the rate_source / qty_source values emitted by server/deterministicPricer.js
@@ -45,7 +46,7 @@ function Badge({ spec }) {
 }
 
 function fmtMoney(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   if (n == null || isNaN(n)) return sym + '0';
   return sym + Math.round(n).toLocaleString('en-GB');
 }

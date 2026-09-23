@@ -16,6 +16,7 @@ const { getMessageBalance } = require('./messageCredits');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
 const { grantSignupCredits } = require('./signupCredits');
 const { rateLimit } = require('./publicRateLimit');
+const { userCountryFields, validateCountryInput, publicCountryList } = require('./lib/countries');
 
 const router = express.Router();
 
@@ -501,6 +502,13 @@ router.post('/auth/register', async (req, res) => {
   try {
     const { email, password, fullName, company, phone } = req.body;
     if (!email || !password || !fullName) return res.status(400).json({ error: 'Email, password and full name are required' });
+    // Country is optional here (older clients don't send it) — anyone who
+    // signs up without one is asked on their first visit.
+    let countryInput = null;
+    if (req.body.country) {
+      countryInput = validateCountryInput(req.body);
+      if (countryInput.error) return res.status(400).json({ error: countryInput.error });
+    }
     if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
     if (existing) return res.status(409).json({ error: 'An account with this email already exists' });
@@ -519,7 +527,11 @@ router.post('/auth/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
     db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits, message_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0, 0, 0, 0)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
-    seedDefaultRates(id);
+    if (countryInput) {
+      db.prepare('UPDATE users SET country = ?, region = ?, country_name = ? WHERE id = ?').run(countryInput.country, countryInput.region, countryInput.countryName, id);
+    }
+    // The default rate sheet is UK £; a Rand account starts from the SA library.
+    if (!countryInput || countryInput.country !== 'ZA') seedDefaultRates(id);
     // 150 message credits, plus 1 free BOQ credit unless they bought a pack first.
     grantSignupCredits({ id, email: email.toLowerCase(), role });
 
@@ -537,7 +549,7 @@ router.post('/auth/register', async (req, res) => {
       sendClientWelcomeEmail({ fullName, email: email.toLowerCase() }).catch(err => console.error('[Welcome email] Failed:', err.message));
     }
 
-    res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!newUser.has_estimator } });
+    res.status(201).json({ token, user: { id: newUser.id, email: newUser.email, fullName: newUser.full_name, company: newUser.company, phone: newUser.phone, role: newUser.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!newUser.has_estimator, ...userCountryFields(newUser) } });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -614,7 +626,7 @@ router.post('/auth/login', async (req, res) => {
     } else {
       logActivity({ event_type: 'login', title: (user.full_name || email) + ' logged in', user_id: user.id, user_name: user.full_name, user_email: user.email });
     }
-    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1, hasEstimator: !!user.has_estimator } });
+    res.json({ token, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, forcePasswordChange: user.force_password_change === 1, hasEstimator: !!user.has_estimator, ...userCountryFields(user) } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -625,7 +637,25 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const planInfo = getUserPlanInfo(user);
-  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator });
+  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, ...userCountryFields(user) });
+});
+
+// The countries we price for, with their regions — drives the country picker.
+router.get('/countries', (req, res) => {
+  res.json({ countries: publicCountryList() });
+});
+
+// Self-service: set the country (and region) this account works in. Changes
+// currency, VAT, rate library and the assistant's assumptions from the next
+// quote on; documents already produced keep the currency they were priced in.
+router.put('/auth/me/country', authMiddleware, (req, res) => {
+  const v = validateCountryInput(req.body || {});
+  if (v.error) return res.status(400).json({ error: v.error });
+  db.prepare('UPDATE users SET country = ?, region = ?, country_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(v.country, v.region, v.countryName, req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  logActivity({ event_type: 'profile', title: (user.full_name || user.email) + ' set country: ' + (v.countryName || v.country) + (v.region ? ' (' + v.region + ')' : ''), user_id: user.id, user_name: user.full_name, user_email: user.email });
+  res.json(userCountryFields(user));
 });
 
 router.put('/auth/change-password', authMiddleware, async (req, res) => {
@@ -774,7 +804,7 @@ router.get('/auth/magic', (req, res) => {
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (user.full_name || user.email) + ' logged in via magic link', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator } });
+    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, ...userCountryFields(user) } });
   } catch (err) {
     console.error('Magic link login error:', err);
     res.status(500).json({ error: 'Failed to process magic link' });
@@ -825,7 +855,7 @@ router.post('/auth/team-invite', async (req, res) => {
     const authToken = generateToken(user);
     const planInfo = getUserPlanInfo(user);
     logActivity({ event_type: 'login', title: (delegate.full_name || delegate.email) + ' accepted team access to ' + (user.full_name || user.email) + "'s account", detail: 'Authorized email: ' + delegate.email, user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator } });
+    res.json({ token: authToken, user: { id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, ...userCountryFields(user) } });
   } catch (err) {
     console.error('Team invite accept error:', err);
     res.status(500).json({ error: 'Failed to accept invite' });
@@ -1120,6 +1150,9 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       docs_used: docsUsed, docs_limit: docsLimit,
       boq_remaining: boqBal.total === Infinity ? null : boqBal.total,
       has_estimator: u.has_estimator ? 1 : 0,
+      country: u.country || null, region: u.region || null, country_name: u.country_name || null,
+      onboarding_completed_at: u.onboarding_completed_at || null,
+      onboarding_reset_at: u.onboarding_reset_at || null,
       created_at: u.created_at, project_count: 0,
     };
   }) });
@@ -1329,6 +1362,37 @@ router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) 
 // TODO: wire to billing — when the £50/mo estimator add-on price ID is provisioned
 // in Stripe, set this flag from the customer.subscription.updated webhook instead of
 // (or alongside) the manual admin toggle.
+// Admin: set a user's country / region (same rules as the user's own picker).
+router.put('/admin/users/:id/country', authMiddleware, adminMiddleware, (req, res) => {
+  const v = validateCountryInput(req.body || {});
+  if (v.error) return res.status(400).json({ error: v.error });
+  const r = db.prepare('UPDATE users SET country = ?, region = ?, country_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(v.country, v.region, v.countryName, req.params.id);
+  if (!r.changes) return res.status(404).json({ error: 'User not found' });
+  res.json({ id: req.params.id, ...userCountryFields(db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)) });
+});
+
+// Admin: send a user back through onboarding — optionally setting their
+// country first, so the rates they re-enter are in the right currency and the
+// ones in the old currency are set aside (see onboardingReset.js).
+router.post('/admin/users/:id/reset-onboarding', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const target = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (req.body && req.body.country) {
+      const v = validateCountryInput(req.body);
+      if (v.error) return res.status(400).json({ error: v.error });
+      db.prepare('UPDATE users SET country = ?, region = ?, country_name = ? WHERE id = ?').run(v.country, v.region, v.countryName, target.id);
+    }
+    const out = require('./onboardingReset').resetOnboarding(db, target.id);
+    logActivity({ event_type: 'admin', title: 'Onboarding reset for ' + (target.full_name || target.email), detail: `${out.memoriesCleared} onboarding memories and ${out.ratesCleared} rates in another currency set aside; account currency ${out.currency}`, user_id: target.id, user_name: target.full_name, user_email: target.email });
+    res.json({ success: true, ...out, ...userCountryFields(db.prepare('SELECT * FROM users WHERE id = ?').get(target.id)) });
+  } catch (e) {
+    console.error('[Admin] reset onboarding error:', e.message);
+    res.status(500).json({ error: 'Failed to reset onboarding' });
+  }
+});
+
 router.put('/admin/users/:id/estimator', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { enabled } = req.body;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckIcon, XCircleIcon } from '../components/Icons';
 import useIsMobile from '../utils/useIsMobile';
+import { currencySymbol } from '../utils/money';
 
 // Public-facing approval page. No auth, no estimator gate. Anyone with the
 // shareable /v/<token> URL can view + approve/decline. The server captures
@@ -9,7 +10,7 @@ import useIsMobile from '../utils/useIsMobile';
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
 function fmt(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   return sym + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 

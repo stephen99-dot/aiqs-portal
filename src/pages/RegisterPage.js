@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCountries } from '../components/CountryPicker';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,6 +36,8 @@ export default function RegisterPage() {
   }));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const countries = useCountries();
+  const chosenCountry = countries.find(c => c.code === form.country);
   const [current, setCurrent] = useState(0);
   const [fading, setFading] = useState(false);
 
@@ -156,12 +159,36 @@ export default function RegisterPage() {
               </div>
               <div className="form-field">
                 <label>Email *</label>
-                <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)} placeholder="john@smithbuilding.co.uk" required />
+                <input type="email" value={form.email} onChange={e => updateField('email', e.target.value)} placeholder="john@smithbuilding.com" required />
+              </div>
+              <div className="form-row">
+                <div className="form-field">
+                  <label>Country *</label>
+                  <select value={form.country || ''} onChange={e => { updateField('country', e.target.value); updateField('region', ''); }} required>
+                    <option value="">Where do you work?</option>
+                    {countries.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
+                  </select>
+                </div>
+                {chosenCountry && chosenCountry.regions && chosenCountry.regions.length > 0 && (
+                  <div className="form-field">
+                    <label>Region / province</label>
+                    <select value={form.region || ''} onChange={e => updateField('region', e.target.value)}>
+                      <option value="">Choose…</option>
+                      {chosenCountry.regions.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )}
+                {form.country === 'OTHER' && (
+                  <div className="form-field">
+                    <label>Which country? *</label>
+                    <input type="text" value={form.countryName || ''} onChange={e => updateField('countryName', e.target.value)} placeholder="e.g. Kenya" required />
+                  </div>
+                )}
               </div>
               <div className="form-row">
                 <div className="form-field">
                   <label>Phone</label>
-                  <input type="tel" value={form.phone} onChange={e => updateField('phone', e.target.value)} placeholder="07700 900000" />
+                  <input type="tel" value={form.phone} onChange={e => updateField('phone', e.target.value)} placeholder="Mobile number" />
                 </div>
                 <div className="form-field">
                   <label>Password *</label>

@@ -24,6 +24,7 @@ const ESM_SUNSET = '2027-03-31';
 const ESM_REVERT_RATE = 5;
 
 const RATES = {
+  ZA_STANDARD: 15,
   UK_STANDARD: 20,
   UK_REDUCED: 5,
   UK_ZERO: 0,
@@ -51,6 +52,15 @@ function determineVat(job = {}) {
   const reasoning = [];
   const queries = [];
   const warnings = [];
+
+  // ── South Africa ────────────────────────────────────────────────────────
+  // One standard rate on building work (VAT Act 89 of 1991): no reduced-rate
+  // residential reliefs to test, so none of the UK Notice 708 questions apply.
+  if (jurisdiction === 'ZA') {
+    reasoning.push('South Africa: building work is a standard-rated supply at 15% (VAT Act 89 of 1991). There is no reduced rate for residential work.');
+    queries.push('Confirm the contractor is a registered VAT vendor (compulsory above R1 million taxable supplies in 12 months). A contractor who is not a VAT vendor cannot charge VAT, so the price must then carry no VAT line.');
+    return { rate: RATES.ZA_STANDARD, basis: 'ZA standard rate (15%)', confidence: 'high', reasoning, queries, warnings };
+  }
 
   // ── Ireland ─────────────────────────────────────────────────────────────
   if (jurisdiction === 'IE') {

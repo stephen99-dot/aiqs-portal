@@ -1033,7 +1033,14 @@ const migrations = [
   // are different promises, so the builder chooses the word their client-facing
   // documents use; it is resolved at render time (see documentLabel.js) so the
   // switch re-words documents that have already been sent.
-  { column: 'document_label', table: 'user_branding', sql: "ALTER TABLE user_branding ADD COLUMN document_label TEXT DEFAULT 'quote'" },
+  { column: 'document_label', table: 'user_branding', sql: "ALTER TABLE user_branding ADD COLUMN document_label TEXT DEFAULT 'quote'" },  // Country the user works in (see server/lib/countries.js). NULL = never asked:
+  // priced as UK exactly as before, and the portal asks them on next visit.
+  { column: 'country', table: 'users', sql: "ALTER TABLE users ADD COLUMN country TEXT" },
+  { column: 'region', table: 'users', sql: "ALTER TABLE users ADD COLUMN region TEXT" },
+  { column: 'country_name', table: 'users', sql: "ALTER TABLE users ADD COLUMN country_name TEXT" },
+  // Set when onboarding is reset (admin or self) — sends the user back through
+  // onboarding on their next dashboard visit. See onboardingReset.js.
+  { column: 'onboarding_reset_at', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_reset_at DATETIME" },
 ];
 
 for (const { column, table, sql } of migrations) {

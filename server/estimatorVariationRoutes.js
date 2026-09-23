@@ -527,7 +527,7 @@ ownerRouter.get('/:id/approval-url', (req, res) => {
 
 // ─── PDF export ──────────────────────────────────────────────────────────────
 
-function currencySymbol(code) { return code === 'EUR' ? '€' : '£'; }
+function currencySymbol(code) { return require('./lib/countries').currencySymbol(code); }
 function fmtMoney(n, code) {
   const v = num(n);
   return currencySymbol(code) + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
