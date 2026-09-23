@@ -30,7 +30,7 @@ export function CountryFields({ value, onChange, compact = false }) {
       <Field label="Country you work in">
         <Select value={value.country || ''} onChange={e => set({ country: e.target.value, region: '', countryName: '' })} required>
           <option value="">Choose your country…</option>
-          {countries.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
+          {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
         </Select>
       </Field>
       {regions.length > 0 && (

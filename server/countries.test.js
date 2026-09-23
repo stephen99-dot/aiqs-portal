@@ -208,3 +208,36 @@ test('a South African library rate is not clipped by the GBP unit ceilings', () 
   assert.strictEqual(line.rate_source, 'base_library');
   assert.strictEqual(line.rate, Math.round(countries.zaRateForUkKey('comm_structural_steel_erected').rate * 100) / 100);
 });
+
+// ── Rate detail ────────────────────────────────────────────────────────────
+
+test('every library rate breaks down into labour + materials + plant that sum to the rate', () => {
+  for (const region of [null, 'Western Cape - Cape Town metro & Winelands']) {
+    const v = countries.zaLibraryView(region);
+    for (const sec of v.sections) for (const r of sec.rates) {
+      assert.ok(Math.abs(r.labour + r.materials + r.plant - r.sell) < 0.05, `${r.code}: ${r.labour}+${r.materials}+${r.plant} != ${r.sell}`);
+    }
+  }
+});
+
+test('the library view is adjusted to the region asked for', () => {
+  const base = countries.zaLibraryView(null);
+  const cpt = countries.zaLibraryView('Western Cape - Cape Town metro & Winelands');
+  const a = base.sections[0].rates[0], b = cpt.sections[0].rates[0];
+  assert.ok(Math.abs(b.sell / a.sell - 1.08) < 0.001);
+  assert.strictEqual(cpt.region.factor, 1.08);
+  assert.ok(base.elemental.length > 40, 'R/m2 benchmarks imported');
+});
+
+test('a South African BOQ line names the SA-RL rate that priced it', () => {
+  const r = price([
+    { key: mappedKey, qty: 1, unit: 'm²', section: 'A' },
+    { key: unmappedKey, qty: 1, unit: 'm²', section: 'A' },
+  ], 'Sandton', ZA_USER);
+  const items = r.sections.flatMap((s) => s.items);
+  assert.strictEqual(items.find((i) => i.key === mappedKey).library_ref, countries.zaRateForUkKey(mappedKey).codes.join('+'));
+  assert.strictEqual(items.find((i) => i.key === unmappedKey).converted_from_uk, true);
+  // UK lines carry neither.
+  const uk = price([{ key: mappedKey, qty: 1, unit: 'm²', section: 'A' }], 'Leeds', { country: 'GB' });
+  assert.strictEqual(uk.sections[0].items[0].library_ref, undefined);
+});

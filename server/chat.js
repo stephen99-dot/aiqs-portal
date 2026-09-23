@@ -279,6 +279,26 @@ function zaRateCribSheet() {
   return _zaCrib;
 }
 
+// Every SA-RL rate with its labour / materials / plant split, plus the AECOM
+// R/m2 benchmarks. Rendered once; byte-stable.
+let _zaDetail = null;
+function zaLibraryDetail() {
+  if (_zaDetail != null) return _zaDetail;
+  try {
+    const v = require('./lib/countries').zaLibraryView(null);
+    const f = (n) => Math.round(n).toLocaleString('en-GB');
+    const lines = [];
+    for (const sec of v.sections) {
+      lines.push(`# ${sec.name}`);
+      for (const r of sec.rates) lines.push(`${r.code} ${r.description} | R${f(r.sell)}/${r.unit} (labour R${f(r.labour)}, materials R${f(r.materials)}${r.plant ? ', plant R' + f(r.plant) : ''})`);
+    }
+    lines.push('# R/m2 BENCHMARKS (AECOM, escalated, Gauteng)');
+    for (const e of v.elemental) lines.push(`${e.section} — ${e.type}: R${f(e.low)}–R${f(e.high)}/m2`);
+    _zaDetail = lines.join('\n');
+  } catch (e) { console.error('[Chat] ZA library detail:', e.message); _zaDetail = ''; }
+  return _zaDetail;
+}
+
 // Wraps the UK prompt for users in another country: their country block goes
 // first so it overrides the UK assumptions written into the prompt below, and
 // South African users get the rate keys priced in Rand.
@@ -291,6 +311,11 @@ function buildSystemPrompt(userId, forDocGen, benchmarkSection, opts) {
   let out = block + '\n\n' + prompt;
   if (user.country === 'ZA') {
     out += `\n\n═══ SOUTH AFRICA RATES (ZAR) — REPLACE EVERY "FIXED UK RATES" / GBP FIGURE ABOVE ═══\nSame item_keys, priced in Rand ex VAT at the Gauteng base; the job's regional factor is applied automatically. Use these keys and these Rand figures. Every £ benchmark above (cost/m², typical totals) is a UK figure: do not quote it to this client.\n${zaRateCribSheet()}\n═══`;
+    // The library itself, for conversation: when this client asks what a rate
+    // is or how it is made up, quote the SA-RL item by code with its labour /
+    // materials / plant split, not a single unexplained figure.
+    const includeLibrary = forDocGen ? false : !!(opts && opts.pricingContext);
+    if (includeLibrary) out += `\n\n═══ AI QS SOUTH AFRICA RATES LIBRARY — FULL LIST (sell, ex VAT, Gauteng base; region factors above) ═══\nWhen this client asks about a rate, quote the SA-RL code and give the build-up (labour, materials, plant) — they can also see every build-up in the portal under My Rates → South Africa rates library. Use the R/m² benchmarks to sanity-check totals.\n${zaLibraryDetail()}\n═══`;
   }
   return out;
 }

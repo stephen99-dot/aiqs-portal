@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Badge, Button } from '../ui';
 import { AlertTriangleIcon, CheckCircleIcon } from './Icons';
+import { currencySymbol } from '../utils/money';
 
 // What the chat shows once a bill has been priced.
 //
@@ -46,12 +47,12 @@ export default function DeliverySummary({ delivery }) {
                 }}>
                   <span style={{ color: 'var(--text-muted)' }}>
                     spreadsheet <strong style={{ color: 'var(--text-primary)' }}>
-                      £{Math.round(reconciliation.documentTotal).toLocaleString('en-GB')}
+                      {currencySymbol(delivery.currency)}{Math.round(reconciliation.documentTotal).toLocaleString('en-GB')}
                     </strong>
                   </span>
                   <span style={{ color: 'var(--text-muted)' }}>
                     priced <strong style={{ color: 'var(--text-primary)' }}>
-                      £{Math.round(reconciliation.pricerTotal).toLocaleString('en-GB')}
+                      {currencySymbol(delivery.currency)}{Math.round(reconciliation.pricerTotal).toLocaleString('en-GB')}
                     </strong>
                   </span>
                 </div>

@@ -16,7 +16,7 @@ const { getMessageBalance } = require('./messageCredits');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
 const { grantSignupCredits } = require('./signupCredits');
 const { rateLimit } = require('./publicRateLimit');
-const { userCountryFields, validateCountryInput, publicCountryList } = require('./lib/countries');
+const { userCountryFields, validateCountryInput, publicCountryList, zaLibraryView, countryForUser } = require('./lib/countries');
 
 const router = express.Router();
 
@@ -643,6 +643,32 @@ router.get('/auth/me', authMiddleware, (req, res) => {
 // The countries we price for, with their regions — drives the country picker.
 router.get('/countries', (req, res) => {
   res.json({ countries: publicCountryList() });
+});
+
+// The rate library the signed-in user's jobs are priced from, in full detail.
+// South Africa: the SA-RL library with every rate's build-up (gang, materials,
+// sundries, plant), resource lists and R/m2 benchmarks, adjusted to the chosen
+// region (?region=, else the account's). Elsewhere: the UK base library.
+router.get('/rates/library', authMiddleware, (req, res) => {
+  try {
+    const c = countryForUser(req.user);
+    if (c.code === 'ZA') return res.json(zaLibraryView(req.query.region || req.user.region));
+    const { BASE_RATES } = require('./deterministicPricer');
+    const rates = Object.entries(BASE_RATES).map(([key, r]) => ({
+      code: key, description: r.description, unit: r.unit, sell: r.rate,
+      labour: Math.round(r.rate * r.labour * 100) / 100, materials: Math.round(r.rate * r.materials * 100) / 100, plant: 0,
+    }));
+    res.json({
+      country: c.code, currency: 'GBP', symbol: '£', ref: 'AI QS UK base library', region: null, regions: [],
+      note: c.code === 'GB' ? 'UK average rates. A London / regional factor is applied from each job\'s address.'
+        : c.code === 'IE' ? 'UK base rates in GBP. Irish jobs are converted to euro (x1.17) with a +10% Ireland factor at pricing.'
+        : 'We do not hold a local library for ' + c.name + ' yet: these are UK benchmark rates in GBP.',
+      sections: [{ name: 'All rates', rates }],
+    });
+  } catch (e) {
+    console.error('[Rates] library error:', e.message);
+    res.status(500).json({ error: 'Failed to load rate library' });
+  }
 });
 
 // Self-service: set the country (and region) this account works in. Changes

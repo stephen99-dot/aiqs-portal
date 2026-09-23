@@ -166,7 +166,7 @@ export default function RegisterPage() {
                   <label>Country *</label>
                   <select value={form.country || ''} onChange={e => { updateField('country', e.target.value); updateField('region', ''); }} required>
                     <option value="">Where do you work?</option>
-                    {countries.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
+                    {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
                   </select>
                 </div>
                 {chosenCountry && chosenCountry.regions && chosenCountry.regions.length > 0 && (

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiFetch, getToken } from '../utils/api';
 import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
 import useIsMobile from '../utils/useIsMobile';
+import { currencySymbol } from '../utils/money';
 
 /**
  * Deliverables panel — the return leg of the workflow.
@@ -302,7 +303,7 @@ export default function DeliverablesPanel({ projectId, project }) {
             BOQ deliverable (kind "BOQ", .xlsx) wires that up, so once it's present
             we surface a direct link here instead of making the user hunt for it. */}
         {isAdmin && project && project.boq_filename && (
-          <BoqVerificationCard projectId={projectId} tick={verifyTick} />
+          <BoqVerificationCard projectId={projectId} tick={verifyTick} currency={project && project.currency} />
         )}
 
         {project && project.boq_filename && (
@@ -706,7 +707,7 @@ export default function DeliverablesPanel({ projectId, project }) {
 // Admin-only: the verification gate's verdict on this project's bill, with
 // "Re-verify" (after a parser fix or a corrected upload) and "Unlock" (the
 // admin has checked the figures by hand and takes responsibility).
-function BoqVerificationCard({ projectId, tick }) {
+function BoqVerificationCard({ projectId, tick, currency }) {
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -729,7 +730,7 @@ function BoqVerificationCard({ projectId, tick }) {
   if (!v) return null;
   const ok = !!v.ok;
   const d = v.detail || {};
-  const money = (n) => (n == null ? '—' : '£' + Math.round(n).toLocaleString('en-GB'));
+  const money = (n) => (n == null ? '—' : currencySymbol(currency) + Math.round(n).toLocaleString('en-GB'));
   return (
     <div style={{
       padding: '10px 14px', borderRadius: 10, marginBottom: 12, fontSize: 12.5, lineHeight: 1.5,

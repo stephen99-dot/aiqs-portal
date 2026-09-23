@@ -20,13 +20,16 @@ const { v4: uuidv4 } = require('uuid');
 const SIGNUP_MESSAGE_CREDITS = parseInt(process.env.SIGNUP_MESSAGE_CREDITS, 10) || 150;
 const SIGNUP_FREE_BOQ_CREDITS = 1;
 
-// True when a Stripe payment for this email arrived before the account existed.
-// Any row counts, claimed or not, including payments whose amount matched no
-// pack: they still bought first.
+// True when a Stripe payment for this email arrived before the account existed
+// and is still waiting to be claimed — this new account is about to receive
+// it. Payments whose amount matched no pack count too: they still bought
+// first. A payment an EARLIER account already claimed does not: those credits
+// went to that account, so they must not cost a fresh signup on the same
+// email (a deleted-and-recreated account, or a test purchase) its free BOQ.
 function boughtBeforeSignup(db, email) {
   if (!email) return false;
   try {
-    return !!db.prepare('SELECT 1 FROM pending_credits WHERE LOWER(email) = ? LIMIT 1').get(String(email).toLowerCase());
+    return !!db.prepare('SELECT 1 FROM pending_credits WHERE LOWER(email) = ? AND claimed_at IS NULL LIMIT 1').get(String(email).toLowerCase());
   } catch (e) {
     return false; // table missing in some envs: treat as no purchase
   }

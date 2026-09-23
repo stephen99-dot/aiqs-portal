@@ -23,7 +23,7 @@
  *   - internal   everything else, for the diagnostics drawer, never the answer
  */
 
-const CURRENCY = { GBP: '£', EUR: '€' };
+const CURRENCY = { GBP: '£', EUR: '€', ZAR: 'R' };
 
 function sym(currency) {
   if (!currency) return '£';
@@ -313,7 +313,7 @@ function buildDeliverySummary(priced, recalc, opts = {}) {
 
   return {
     reconciled, reconciliation, headline, sections,
-    needsCheck, internal, statusLine, qs,
+    needsCheck, internal, statusLine, qs, currency: currency || 'GBP',
     counts: {
       sections: sections.length, needsCheck: needsCheck.length, internal: internal.length,
       missed: (qs.missed || []).length,
