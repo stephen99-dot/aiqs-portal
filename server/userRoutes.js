@@ -8,6 +8,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
+const { grantSignupCredits } = require('./signupCredits');
 
 // ─── Middleware: Require Admin Role ──────────────────────────────────────────
 function requireAdmin(req, res, next) {
@@ -66,6 +67,7 @@ router.post('/users', requireAdmin, async (req, res) => {
       INSERT INTO users (id, email, password_hash, full_name, company, phone, role)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, userRole);
+    grantSignupCredits({ id, email: email.toLowerCase(), role: userRole }, { freeBoq: false });
 
     const user = db.prepare('SELECT id, email, full_name, company, phone, role, created_at FROM users WHERE id = ?').get(id);
 

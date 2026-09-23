@@ -14,6 +14,7 @@ const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
 const { getMessageBalance } = require('./messageCredits');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
+const { grantSignupCredits } = require('./signupCredits');
 const { rateLimit } = require('./publicRateLimit');
 
 const router = express.Router();
@@ -519,10 +520,12 @@ router.post('/auth/register', async (req, res) => {
     const role = email.toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'admin' : 'client';
     db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, free_credits, message_credits) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0, 0, 0, 0)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role);
     seedDefaultRates(id);
+    // 150 message credits, plus 1 free BOQ credit unless they bought a pack first.
+    grantSignupCredits({ id, email: email.toLowerCase(), role });
 
-    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     // If they paid for a BOQ pack before creating their account, grant it now.
-    claimPendingCredits(newUser);
+    claimPendingCredits({ id, email: email.toLowerCase(), full_name: fullName });
+    const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
 
@@ -909,6 +912,7 @@ router.get('/auth/google/callback', async (req, res) => {
       db.prepare("INSERT INTO users (id, email, password_hash, full_name, google_id, avatar, role, plan, monthly_quota, monthly_boq_quota, free_credits, message_credits) VALUES (?, ?, '', ?, ?, ?, ?, 'starter', 0, 0, 0, 0)")
         .run(id, email, fullName, googleId, avatar, role);
       seedDefaultRates(id);
+      grantSignupCredits({ id, email, role });
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
       logActivity({ event_type: 'signup', title: fullName + ' signed up via Google', detail: email, user_id: id, user_name: fullName, user_email: email });
@@ -1133,6 +1137,7 @@ router.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
     const passwordHash = await bcrypt.hash(tempPassword, 12);
     db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, phone, role, plan, monthly_quota, monthly_boq_quota, force_password_change) VALUES (?, ?, ?, ?, ?, ?, ?, 'starter', 0, 0, 1)").run(id, email.toLowerCase(), passwordHash, fullName, company || null, phone || null, role || 'client');
     seedDefaultRates(id);
+    grantSignupCredits({ id, email: email.toLowerCase(), role: role || 'client' }, { freeBoq: false });
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     logActivity({ event_type: 'signup', title: fullName + ' added by admin', detail: company ? company + ' — ' + email.toLowerCase() : email.toLowerCase(), user_id: id, user_name: fullName, user_email: email.toLowerCase() });
 
