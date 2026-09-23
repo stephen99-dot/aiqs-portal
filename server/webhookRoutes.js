@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
+const { grantSignupCredits } = require('./signupCredits');
 
 // ─── Webhook secret for Pipedream verification ──────────────────────────────
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'aiqs-webhook-secret-change-me';
@@ -188,6 +189,7 @@ router.post('/webhook/new-project', async (req, res) => {
         VALUES (?, ?, ?, ?, ?, NULL, 'client', 1, 0)
       `).run(userId, email, passwordHash, fullName, company || null);
 
+      grantSignupCredits({ id: userId, email, role: 'client' }, { freeBoq: false });
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
       console.log('✅ Auto-created user:', email, '| Password:', plainPassword);
     }
