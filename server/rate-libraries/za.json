@@ -1,0 +1,4580 @@
+{
+ "ref": "SA-RL-2609-01",
+ "country": "ZA",
+ "currency": "ZAR",
+ "baseRegion": "Gauteng (Johannesburg / Pretoria / Midrand)",
+ "baseDate": "2026-09-01",
+ "marginPct": 17,
+ "vatPct": 15,
+ "escalationPctPa": 4.7,
+ "notes": "Sell rates = NET cost build-up + contractor margin, ex VAT, at the base region. Multiply by the region factor. VAT is added once at the foot of the BOQ.",
+ "regions": [
+  {
+   "name": "Gauteng (Johannesburg / Pretoria / Midrand)",
+   "factor": 1,
+   "isBase": true,
+   "note": "Base — AECOM rates are Gauteng-based."
+  },
+  {
+   "name": "Western Cape - Cape Town metro & Winelands",
+   "factor": 1.08,
+   "isBase": false,
+   "note": "AECOM: WC and KZN upper-class residential significantly above Gauteng. QS ESTIMATE."
+  },
+  {
+   "name": "Western Cape - Garden Route / other",
+   "factor": 1.04,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "KwaZulu-Natal - Durban / Umhlanga / Ballito",
+   "factor": 1.04,
+   "isBase": false,
+   "note": "AECOM regional note. QS ESTIMATE."
+  },
+  {
+   "name": "KwaZulu-Natal - inland / other",
+   "factor": 0.98,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Eastern Cape - Gqeberha / East London metros",
+   "factor": 0.97,
+   "isBase": false,
+   "note": "Lower labour cost, comparable materials. QS ESTIMATE."
+  },
+  {
+   "name": "Eastern Cape - rural (Transkei / Karoo interior)",
+   "factor": 1.06,
+   "isBase": false,
+   "note": "Lower labour offset by haulage, no readymix, supervision travel. QS ESTIMATE."
+  },
+  {
+   "name": "Free State - Bloemfontein",
+   "factor": 0.95,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Free State - rural",
+   "factor": 0.98,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Mpumalanga - Mbombela / Emalahleni",
+   "factor": 0.97,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Limpopo - Polokwane",
+   "factor": 0.95,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Limpopo - rural / remote",
+   "factor": 1.03,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "North West - Rustenburg / Mahikeng",
+   "factor": 0.96,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Northern Cape - Kimberley",
+   "factor": 1,
+   "isBase": false,
+   "note": "QS ESTIMATE."
+  },
+  {
+   "name": "Northern Cape - remote (Upington / Springbok)",
+   "factor": 1.08,
+   "isBase": false,
+   "note": "Long-haul materials. QS ESTIMATE."
+  }
+ ],
+ "rates": [
+  {
+   "code": "PR01",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Site establishment & de-establishment, small works (hoarding, signage, set-up)",
+   "unit": "item",
+   "net": 10349.74,
+   "sell": 12109.2,
+   "labour": 0.08,
+   "materials": 0.92
+  },
+  {
+   "code": "PR02",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Site foreman, full time",
+   "unit": "week",
+   "net": 8673.75,
+   "sell": 10148.29,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "PR03",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Site agent, one day per week",
+   "unit": "week",
+   "net": 2775.6,
+   "sell": 3247.45,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "PR04",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Chemical toilet incl servicing",
+   "unit": "week",
+   "net": 650,
+   "sell": 760.5,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR05",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Site office / store container",
+   "unit": "week",
+   "net": 520,
+   "sell": 608.4,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR06",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Temporary water & electricity (consumption)",
+   "unit": "week",
+   "net": 450,
+   "sell": 526.5,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR07",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Security guard, 12 h shift (Cape BIBC R495.34/day + on-costs)",
+   "unit": "day",
+   "net": 640,
+   "sell": 748.8,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR08",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Skip 6 m3 incl removal",
+   "unit": "no",
+   "net": 2300,
+   "sell": 2691,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR09",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Health & Safety file, plan & baseline risk assessment (Construction Regs 2014)",
+   "unit": "item",
+   "net": 9500,
+   "sell": 11115,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR10",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Electrical Certificate of Compliance (COC)",
+   "unit": "item",
+   "net": 3200,
+   "sell": 3744,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR11",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Plumbing Certificate of Compliance (PIRB)",
+   "unit": "item",
+   "net": 1800,
+   "sell": 2106,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR12",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Setting out by land surveyor, small building",
+   "unit": "item",
+   "net": 6500,
+   "sell": 7605,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR13",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Builder's clean on completion",
+   "unit": "m2",
+   "net": 10.37,
+   "sell": 12.14,
+   "labour": 0.61,
+   "materials": 0.39
+  },
+  {
+   "code": "PR14",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Frame scaffold hire",
+   "unit": "m2/wk",
+   "net": 18,
+   "sell": 21.06,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR15",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Scaffold erect & dismantle",
+   "unit": "m2",
+   "net": 13.28,
+   "sell": 15.53,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "PR16",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Temporary site fencing hire",
+   "unit": "m/wk",
+   "net": 12,
+   "sell": 14.04,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PR17",
+   "section": "PRELIMINARIES & GENERAL",
+   "description": "Temporary protection to finished floors",
+   "unit": "m2",
+   "net": 20.66,
+   "sell": 24.17,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "DM01",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Demolish half-brick wall incl plaster, stack rubble on site",
+   "unit": "m2",
+   "net": 115.16,
+   "sell": 134.73,
+   "labour": 0.91,
+   "materials": 0.09
+  },
+  {
+   "code": "DM02",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Demolish one-brick wall incl plaster",
+   "unit": "m2",
+   "net": 190.26,
+   "sell": 222.61,
+   "labour": 0.92,
+   "materials": 0.08
+  },
+  {
+   "code": "DM03",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Break up concrete surface bed <= 100 mm",
+   "unit": "m2",
+   "net": 147.63,
+   "sell": 172.73,
+   "labour": 0.59,
+   "materials": 0.41
+  },
+  {
+   "code": "DM04",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Break up reinforced concrete",
+   "unit": "m3",
+   "net": 1801.57,
+   "sell": 2107.83,
+   "labour": 0.58,
+   "materials": 0.42
+  },
+  {
+   "code": "DM05",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Strip concrete / clay roof tiles & battens",
+   "unit": "m2",
+   "net": 48.82,
+   "sell": 57.11,
+   "labour": 0.9,
+   "materials": 0.1
+  },
+  {
+   "code": "DM06",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Strip metal roof sheeting",
+   "unit": "m2",
+   "net": 31.29,
+   "sell": 36.61,
+   "labour": 0.84,
+   "materials": 0.16
+  },
+  {
+   "code": "DM07",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Remove roof timbers / trusses",
+   "unit": "m2",
+   "net": 57.58,
+   "sell": 67.37,
+   "labour": 0.91,
+   "materials": 0.09
+  },
+  {
+   "code": "DM08",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Remove ceiling incl brandering & cornice",
+   "unit": "m2",
+   "net": 40.05,
+   "sell": 46.86,
+   "labour": 0.88,
+   "materials": 0.12
+  },
+  {
+   "code": "DM09",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Hack off wall plaster",
+   "unit": "m2",
+   "net": 66.34,
+   "sell": 77.62,
+   "labour": 0.92,
+   "materials": 0.08
+  },
+  {
+   "code": "DM10",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Remove floor tiles incl screed",
+   "unit": "m2",
+   "net": 75.1,
+   "sell": 87.87,
+   "labour": 0.93,
+   "materials": 0.07
+  },
+  {
+   "code": "DM11",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Remove door & frame, make good",
+   "unit": "no",
+   "net": 322.89,
+   "sell": 377.78,
+   "labour": 0.81,
+   "materials": 0.19
+  },
+  {
+   "code": "DM12",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Remove window & frame, make good",
+   "unit": "no",
+   "net": 528.15,
+   "sell": 617.94,
+   "labour": 0.83,
+   "materials": 0.17
+  },
+  {
+   "code": "DM13",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Disconnect & remove sanitary fitting, cap services",
+   "unit": "no",
+   "net": 266.58,
+   "sell": 311.9,
+   "labour": 0.85,
+   "materials": 0.15
+  },
+  {
+   "code": "DM14",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Form opening <= 1.0 m wide in one-brick wall incl precast lintels, make good",
+   "unit": "no",
+   "net": 1735.96,
+   "sell": 2031.07,
+   "labour": 0.77,
+   "materials": 0.23
+  },
+  {
+   "code": "DM15",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Form opening <= 1.0 m wide in half-brick wall incl lintel, make good",
+   "unit": "no",
+   "net": 1059.1,
+   "sell": 1239.15,
+   "labour": 0.78,
+   "materials": 0.22
+  },
+  {
+   "code": "DM16",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Needle & prop loadbearing wall for new opening (props hire allowance)",
+   "unit": "no",
+   "net": 1846.75,
+   "sell": 2160.7,
+   "labour": 0.54,
+   "materials": 0.46
+  },
+  {
+   "code": "DM17",
+   "section": "DEMOLITIONS & ALTERATIONS",
+   "description": "Load & cart rubble to licensed tip incl tip fees",
+   "unit": "m3",
+   "net": 406.55,
+   "sell": 475.67,
+   "labour": 0.07,
+   "materials": 0.93
+  },
+  {
+   "code": "EW01",
+   "section": "EARTHWORKS",
+   "description": "Clear site & remove topsoil 150 mm",
+   "unit": "m2",
+   "net": 7.3,
+   "sell": 8.54,
+   "labour": 0.15,
+   "materials": 0.85
+  },
+  {
+   "code": "EW02",
+   "section": "EARTHWORKS",
+   "description": "Excavate trenches <= 1.5 m deep by machine, soft material",
+   "unit": "m3",
+   "net": 96.48,
+   "sell": 112.88,
+   "labour": 0.14,
+   "materials": 0.86
+  },
+  {
+   "code": "EW03",
+   "section": "EARTHWORKS",
+   "description": "Excavate trenches <= 1.5 m deep by hand, soft material",
+   "unit": "m3",
+   "net": 169.95,
+   "sell": 198.84,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "EW04",
+   "section": "EARTHWORKS",
+   "description": "Extra over for intermediate excavation",
+   "unit": "m3",
+   "net": 278.11,
+   "sell": 325.39,
+   "labour": 0.19,
+   "materials": 0.81
+  },
+  {
+   "code": "EW05",
+   "section": "EARTHWORKS",
+   "description": "Extra over for hard rock excavation (breaker)",
+   "unit": "m3",
+   "net": 1076.22,
+   "sell": 1259.18,
+   "labour": 0.1,
+   "materials": 0.9
+  },
+  {
+   "code": "EW06",
+   "section": "EARTHWORKS",
+   "description": "Bulk excavation by machine <= 2 m deep",
+   "unit": "m3",
+   "net": 65.66,
+   "sell": 76.82,
+   "labour": 0.04,
+   "materials": 0.96
+  },
+  {
+   "code": "EW07",
+   "section": "EARTHWORKS",
+   "description": "Excavate bases / pits by machine",
+   "unit": "m3",
+   "net": 119.93,
+   "sell": 140.32,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "EW08",
+   "section": "EARTHWORKS",
+   "description": "Earthwork support to trench sides <= 1.5 m",
+   "unit": "m2",
+   "net": 60.93,
+   "sell": 71.29,
+   "labour": 0.26,
+   "materials": 0.74
+  },
+  {
+   "code": "EW09",
+   "section": "EARTHWORKS",
+   "description": "Keep excavations free of water",
+   "unit": "day",
+   "net": 556.22,
+   "sell": 650.78,
+   "labour": 0.19,
+   "materials": 0.81
+  },
+  {
+   "code": "EW10",
+   "section": "EARTHWORKS",
+   "description": "Backfill with excavated material, compacted in 150 mm layers",
+   "unit": "m3",
+   "net": 89.19,
+   "sell": 104.35,
+   "labour": 0.71,
+   "materials": 0.29
+  },
+  {
+   "code": "EW11",
+   "section": "EARTHWORKS",
+   "description": "Imported G5 fill under floors, compacted to 93% MOD AASHTO",
+   "unit": "m3",
+   "net": 462.89,
+   "sell": 541.58,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "EW12",
+   "section": "EARTHWORKS",
+   "description": "Load & cart surplus excavated material <= 10 km",
+   "unit": "m3",
+   "net": 217.81,
+   "sell": 254.84,
+   "labour": 0.02,
+   "materials": 0.98
+  },
+  {
+   "code": "EW13",
+   "section": "EARTHWORKS",
+   "description": "Soil poisoning (termite treatment) by registered PCO",
+   "unit": "m2",
+   "net": 22,
+   "sell": 25.74,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EW14",
+   "section": "EARTHWORKS",
+   "description": "Compact bottoms of excavations",
+   "unit": "m2",
+   "net": 8.05,
+   "sell": 9.42,
+   "labour": 0.53,
+   "materials": 0.47
+  },
+  {
+   "code": "EW15",
+   "section": "EARTHWORKS",
+   "description": "Level & compact ground under surface beds",
+   "unit": "m2",
+   "net": 9.11,
+   "sell": 10.66,
+   "labour": 0.58,
+   "materials": 0.42
+  },
+  {
+   "code": "EW16",
+   "section": "EARTHWORKS",
+   "description": "Spread & level topsoil 150 mm",
+   "unit": "m2",
+   "net": 7.97,
+   "sell": 9.32,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "CN01",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Blinding 15 MPa, 50 mm under footings",
+   "unit": "m2",
+   "net": 94.97,
+   "sell": 111.12,
+   "labour": 0.15,
+   "materials": 0.85
+  },
+  {
+   "code": "CN02",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 25 MPa in strip footings",
+   "unit": "m3",
+   "net": 2021.12,
+   "sell": 2364.71,
+   "labour": 0.11,
+   "materials": 0.89
+  },
+  {
+   "code": "CN03",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 25 MPa in pad / column bases",
+   "unit": "m3",
+   "net": 2081.98,
+   "sell": 2435.91,
+   "labour": 0.14,
+   "materials": 0.86
+  },
+  {
+   "code": "CN04",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 25 MPa in surface beds <= 150 mm",
+   "unit": "m3",
+   "net": 2165.26,
+   "sell": 2533.35,
+   "labour": 0.17,
+   "materials": 0.83
+  },
+  {
+   "code": "CN05",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 25 MPa in ground beams",
+   "unit": "m3",
+   "net": 2110.8,
+   "sell": 2469.64,
+   "labour": 0.15,
+   "materials": 0.85
+  },
+  {
+   "code": "CN06",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 30 MPa in suspended slabs, pumped",
+   "unit": "m3",
+   "net": 2463.59,
+   "sell": 2882.4,
+   "labour": 0.16,
+   "materials": 0.84
+  },
+  {
+   "code": "CN07",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 30 MPa in beams, pumped",
+   "unit": "m3",
+   "net": 2578.9,
+   "sell": 3017.31,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "CN08",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Readymix 30 MPa in columns, pumped",
+   "unit": "m3",
+   "net": 2694.21,
+   "sell": 3152.22,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "CN09",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Site-mixed 25 MPa in footings (no readymix access)",
+   "unit": "m3",
+   "net": 2254.59,
+   "sell": 2637.87,
+   "labour": 0.32,
+   "materials": 0.68
+  },
+  {
+   "code": "CN10",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Site-mixed 25 MPa in surface beds",
+   "unit": "m3",
+   "net": 2341.08,
+   "sell": 2739.06,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "CN11",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Surface bed 100 mm 25 MPa readymix incl wood-float finish",
+   "unit": "m2",
+   "net": 239.11,
+   "sell": 279.75,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "CN12",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Steel-trowel finish to concrete",
+   "unit": "m2",
+   "net": 19.93,
+   "sell": 23.32,
+   "labour": 1,
+   "materials": 0
+  },
+  {
+   "code": "CN13",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Power-float finish to concrete",
+   "unit": "m2",
+   "net": 14.17,
+   "sell": 16.58,
+   "labour": 0.7,
+   "materials": 0.3
+  },
+  {
+   "code": "CN14",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "250 micron DPM under surface beds, lapped & taped",
+   "unit": "m2",
+   "net": 11.22,
+   "sell": 13.13,
+   "labour": 0.14,
+   "materials": 0.86
+  },
+  {
+   "code": "CN15",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Rough formwork to sides of footings / bases",
+   "unit": "m2",
+   "net": 202.31,
+   "sell": 236.71,
+   "labour": 0.74,
+   "materials": 0.26
+  },
+  {
+   "code": "CN16",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Smooth formwork to sides & soffits of beams",
+   "unit": "m2",
+   "net": 357.19,
+   "sell": 417.91,
+   "labour": 0.7,
+   "materials": 0.3
+  },
+  {
+   "code": "CN17",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Formwork to soffits of suspended slabs <= 3.5 m props incl props",
+   "unit": "m2",
+   "net": 348.96,
+   "sell": 408.29,
+   "labour": 0.62,
+   "materials": 0.38
+  },
+  {
+   "code": "CN18",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Formwork to columns",
+   "unit": "m2",
+   "net": 395.82,
+   "sell": 463.11,
+   "labour": 0.76,
+   "materials": 0.24
+  },
+  {
+   "code": "CN19",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Formwork to edges of slabs <= 300 mm",
+   "unit": "m",
+   "net": 84.54,
+   "sell": 98.92,
+   "labour": 0.69,
+   "materials": 0.31
+  },
+  {
+   "code": "CN20",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "High-yield reinforcement Y10-Y16, cut, bent & fixed",
+   "unit": "t",
+   "net": 26045.99,
+   "sell": 30473.81,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "CN21",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "High-yield reinforcement Y20-Y32, cut, bent & fixed",
+   "unit": "t",
+   "net": 24633,
+   "sell": 28820.6,
+   "labour": 0.16,
+   "materials": 0.84
+  },
+  {
+   "code": "CN22",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Mild steel reinforcement <= R10, cut, bent & fixed",
+   "unit": "t",
+   "net": 26840.99,
+   "sell": 31403.96,
+   "labour": 0.25,
+   "materials": 0.75
+  },
+  {
+   "code": "CN23",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Fabric reinforcement Ref 193 incl laps & spacers",
+   "unit": "m2",
+   "net": 70.11,
+   "sell": 82.02,
+   "labour": 0.12,
+   "materials": 0.88
+  },
+  {
+   "code": "CN24",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Fabric reinforcement Ref 245 incl laps & spacers",
+   "unit": "m2",
+   "net": 87.87,
+   "sell": 102.8,
+   "labour": 0.11,
+   "materials": 0.89
+  },
+  {
+   "code": "CN25",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Fabric reinforcement Ref 100 incl laps & spacers",
+   "unit": "m2",
+   "net": 44.29,
+   "sell": 51.83,
+   "labour": 0.15,
+   "materials": 0.85
+  },
+  {
+   "code": "CN26",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Construction / isolation joint incl filler & sealant",
+   "unit": "m",
+   "net": 54.32,
+   "sell": 63.55,
+   "labour": 0.46,
+   "materials": 0.54
+  },
+  {
+   "code": "CN27",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Saw-cut contraction joint & seal",
+   "unit": "m",
+   "net": 58.61,
+   "sell": 68.58,
+   "labour": 0.28,
+   "materials": 0.72
+  },
+  {
+   "code": "CN28",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Precast prestressed lintel 110 mm, bedded",
+   "unit": "m",
+   "net": 99.08,
+   "sell": 115.93,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "CN29",
+   "section": "CONCRETE, FORMWORK & REINFORCEMENT",
+   "description": "Rib-and-block suspended slab 250 mm incl 50 mm 30 MPa topping & mesh (props hire incl)",
+   "unit": "m2",
+   "net": 739.79,
+   "sell": 865.55,
+   "labour": 0.19,
+   "materials": 0.81
+  },
+  {
+   "code": "MS01",
+   "section": "MASONRY",
+   "description": "Half-brick wall, clay stock NFP, Class II mortar, brickforce every 4th course",
+   "unit": "m2",
+   "net": 290.13,
+   "sell": 339.45,
+   "labour": 0.49,
+   "materials": 0.51
+  },
+  {
+   "code": "MS02",
+   "section": "MASONRY",
+   "description": "One-brick wall, clay stock NFP",
+   "unit": "m2",
+   "net": 575.12,
+   "sell": 672.89,
+   "labour": 0.46,
+   "materials": 0.54
+  },
+  {
+   "code": "MS03",
+   "section": "MASONRY",
+   "description": "Half-brick wall, cement stock brick",
+   "unit": "m2",
+   "net": 284.63,
+   "sell": 333.01,
+   "labour": 0.5,
+   "materials": 0.5
+  },
+  {
+   "code": "MS04",
+   "section": "MASONRY",
+   "description": "One-brick wall, cement stock brick",
+   "unit": "m2",
+   "net": 564.12,
+   "sell": 660.02,
+   "labour": 0.47,
+   "materials": 0.53
+  },
+  {
+   "code": "MS05",
+   "section": "MASONRY",
+   "description": "280 mm cavity wall, 2 x half-brick clay stock incl ties (4/m2)",
+   "unit": "m2",
+   "net": 605.64,
+   "sell": 708.6,
+   "labour": 0.49,
+   "materials": 0.51
+  },
+  {
+   "code": "MS06",
+   "section": "MASONRY",
+   "description": "140 mm cement block wall",
+   "unit": "m2",
+   "net": 291.83,
+   "sell": 341.44,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "MS07",
+   "section": "MASONRY",
+   "description": "190 mm cement block wall",
+   "unit": "m2",
+   "net": 369.09,
+   "sell": 431.83,
+   "labour": 0.32,
+   "materials": 0.68
+  },
+  {
+   "code": "MS08",
+   "section": "MASONRY",
+   "description": "90 mm cement block partition",
+   "unit": "m2",
+   "net": 219.65,
+   "sell": 256.99,
+   "labour": 0.38,
+   "materials": 0.62
+  },
+  {
+   "code": "MS09",
+   "section": "MASONRY",
+   "description": "Half-brick face brick wall, pointed one side",
+   "unit": "m2",
+   "net": 569.42,
+   "sell": 666.22,
+   "labour": 0.43,
+   "materials": 0.57
+  },
+  {
+   "code": "MS10",
+   "section": "MASONRY",
+   "description": "One-brick wall, face one side / stock other",
+   "unit": "m2",
+   "net": 867.52,
+   "sell": 1015,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "MS11",
+   "section": "MASONRY",
+   "description": "280 mm cavity wall, face brick outer / stock inner incl ties",
+   "unit": "m2",
+   "net": 885.72,
+   "sell": 1036.29,
+   "labour": 0.46,
+   "materials": 0.54
+  },
+  {
+   "code": "MS12",
+   "section": "MASONRY",
+   "description": "One-brick wall in foundations, cement stock, Class I mortar",
+   "unit": "m2",
+   "net": 520.97,
+   "sell": 609.54,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "MS13",
+   "section": "MASONRY",
+   "description": "Brickforce, extra",
+   "unit": "m",
+   "net": 4.92,
+   "sell": 5.75,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "MS14",
+   "section": "MASONRY",
+   "description": "DPC 375 mm under walls",
+   "unit": "m",
+   "net": 13.23,
+   "sell": 15.48,
+   "labour": 0.38,
+   "materials": 0.62
+  },
+  {
+   "code": "MS15",
+   "section": "MASONRY",
+   "description": "DPC 230 mm under walls / sills",
+   "unit": "m",
+   "net": 9.21,
+   "sell": 10.78,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "MS16",
+   "section": "MASONRY",
+   "description": "Face brick-on-edge sill",
+   "unit": "m",
+   "net": 182.07,
+   "sell": 213.02,
+   "labour": 0.56,
+   "materials": 0.44
+  },
+  {
+   "code": "MS17",
+   "section": "MASONRY",
+   "description": "Rake out & repoint face brickwork",
+   "unit": "m2",
+   "net": 125.69,
+   "sell": 147.06,
+   "labour": 0.97,
+   "materials": 0.03
+  },
+  {
+   "code": "MS18",
+   "section": "MASONRY",
+   "description": "Hoop-iron roof anchor built in (1.5 m)",
+   "unit": "no",
+   "net": 15.06,
+   "sell": 17.62,
+   "labour": 0.55,
+   "materials": 0.45
+  },
+  {
+   "code": "MS19",
+   "section": "MASONRY",
+   "description": "Precast concrete panel boundary wall 1.8 m — installed",
+   "unit": "m",
+   "net": 780,
+   "sell": 912.6,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "WP01",
+   "section": "WATERPROOFING",
+   "description": "4 mm APP torch-on membrane on flat roof incl primer",
+   "unit": "m2",
+   "net": 160.8,
+   "sell": 188.14,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "WP02",
+   "section": "WATERPROOFING",
+   "description": "Two-layer torch-on membrane incl primer",
+   "unit": "m2",
+   "net": 293.81,
+   "sell": 343.76,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "WP03",
+   "section": "WATERPROOFING",
+   "description": "Liquid acrylic waterproofing with membrane, 3 coats",
+   "unit": "m2",
+   "net": 115.81,
+   "sell": 135.49,
+   "labour": 0.35,
+   "materials": 0.65
+  },
+  {
+   "code": "WP04",
+   "section": "WATERPROOFING",
+   "description": "Cementitious waterproofing to wet-area floors & walls",
+   "unit": "m2",
+   "net": 108.81,
+   "sell": 127.3,
+   "labour": 0.38,
+   "materials": 0.62
+  },
+  {
+   "code": "WP05",
+   "section": "WATERPROOFING",
+   "description": "Aluminium reflective coat on torch-on",
+   "unit": "m2",
+   "net": 34.3,
+   "sell": 40.13,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "WP06",
+   "section": "WATERPROOFING",
+   "description": "Torch-on flashing / upstand 300 mm girth",
+   "unit": "m",
+   "net": 66.4,
+   "sell": 77.69,
+   "labour": 0.41,
+   "materials": 0.59
+  },
+  {
+   "code": "WP07",
+   "section": "WATERPROOFING",
+   "description": "Tanking to basement / retaining wall, torch-on incl primer",
+   "unit": "m2",
+   "net": 181.21,
+   "sell": 212.01,
+   "labour": 0.3,
+   "materials": 0.7
+  },
+  {
+   "code": "RF01",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Engineered timber trusses, supply & erect incl bracing & clips (per m2 plan area)",
+   "unit": "m2",
+   "net": 446.69,
+   "sell": 522.62,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "RF02",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Loose-cut roof (38x114 rafters @ 600) lean-to",
+   "unit": "m2",
+   "net": 251.65,
+   "sell": 294.43,
+   "labour": 0.49,
+   "materials": 0.51
+  },
+  {
+   "code": "RF03",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Wall plate 38x114 fixed with hoop iron",
+   "unit": "m",
+   "net": 72.9,
+   "sell": 85.29,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "RF04",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Concrete roof tiles on 38x38 battens incl underlay (slope area)",
+   "unit": "m2",
+   "net": 380.96,
+   "sell": 445.73,
+   "labour": 0.39,
+   "materials": 0.61
+  },
+  {
+   "code": "RF05",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Clay roof tiles on battens incl underlay",
+   "unit": "m2",
+   "net": 574.92,
+   "sell": 672.66,
+   "labour": 0.29,
+   "materials": 0.71
+  },
+  {
+   "code": "RF06",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "IBR 0.50 mm pre-painted sheeting fixed to purlins",
+   "unit": "m2",
+   "net": 268.34,
+   "sell": 313.95,
+   "labour": 0.19,
+   "materials": 0.81
+  },
+  {
+   "code": "RF07",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "IBR 0.47 mm Zincalume sheeting",
+   "unit": "m2",
+   "net": 229.84,
+   "sell": 268.91,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "RF08",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Corrugated 0.50 mm galvanised sheeting",
+   "unit": "m2",
+   "net": 224.24,
+   "sell": 262.36,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "RF09",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Timber purlins 38x114 @ 1.2 m crs",
+   "unit": "m2",
+   "net": 68.05,
+   "sell": 79.62,
+   "labour": 0.36,
+   "materials": 0.64
+  },
+  {
+   "code": "RF10",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Steel lipped-channel purlins",
+   "unit": "m",
+   "net": 146.67,
+   "sell": 171.6,
+   "labour": 0.28,
+   "materials": 0.72
+  },
+  {
+   "code": "RF11",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Concrete ridge / hip capping, bedded & pointed",
+   "unit": "m",
+   "net": 125.78,
+   "sell": 147.16,
+   "labour": 0.4,
+   "materials": 0.6
+  },
+  {
+   "code": "RF12",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Pre-painted ridge capping",
+   "unit": "m",
+   "net": 145.92,
+   "sell": 170.72,
+   "labour": 0.17,
+   "materials": 0.83
+  },
+  {
+   "code": "RF13",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Valley gutter",
+   "unit": "m",
+   "net": 203.84,
+   "sell": 238.49,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "RF14",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Fibre-cement fascia 225 mm",
+   "unit": "m",
+   "net": 145.95,
+   "sell": 170.76,
+   "labour": 0.28,
+   "materials": 0.72
+  },
+  {
+   "code": "RF15",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Fibre-cement barge board 225 mm",
+   "unit": "m",
+   "net": 156.14,
+   "sell": 182.68,
+   "labour": 0.33,
+   "materials": 0.67
+  },
+  {
+   "code": "RF16",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Seamless aluminium gutter 125 mm — installed",
+   "unit": "m",
+   "net": 260,
+   "sell": 304.2,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "RF17",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Aluminium downpipe 75 mm incl brackets & shoe",
+   "unit": "m",
+   "net": 124.17,
+   "sell": 145.28,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "RF18",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Polyester ceiling insulation 135 mm (SANS 10400-XA)",
+   "unit": "m2",
+   "net": 99.26,
+   "sell": 116.13,
+   "labour": 0.03,
+   "materials": 0.97
+  },
+  {
+   "code": "RF19",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Glasswool insulation 100 mm",
+   "unit": "m2",
+   "net": 74.06,
+   "sell": 86.64,
+   "labour": 0.04,
+   "materials": 0.96
+  },
+  {
+   "code": "RF20",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Reflective foil under sheeting",
+   "unit": "m2",
+   "net": 32.51,
+   "sell": 38.03,
+   "labour": 0.26,
+   "materials": 0.74
+  },
+  {
+   "code": "RF21",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Thatch roof 200 mm incl poles & fire treatment — installed",
+   "unit": "m2",
+   "net": 950,
+   "sell": 1111.5,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "RF22",
+   "section": "ROOF STRUCTURE & COVERINGS",
+   "description": "Polycarbonate sheeting 10 mm",
+   "unit": "m2",
+   "net": 606.14,
+   "sell": 709.19,
+   "labour": 0.1,
+   "materials": 0.9
+  },
+  {
+   "code": "JN01",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Hollow-core flush door hung in steel frame incl 1.5 pr hinges",
+   "unit": "no",
+   "net": 958.46,
+   "sell": 1121.4,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "JN02",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Semi-solid internal door hung incl hinges",
+   "unit": "no",
+   "net": 1803.52,
+   "sell": 2110.12,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "JN03",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Solid meranti external door hung incl hinges",
+   "unit": "no",
+   "net": 4089.1,
+   "sell": 4784.25,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "JN04",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Pressed steel door frame built in",
+   "unit": "no",
+   "net": 785.41,
+   "sell": 918.94,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "JN05",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Hardwood external door frame built in",
+   "unit": "no",
+   "net": 1821.86,
+   "sell": 2131.58,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "JN06",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "3-lever mortice lockset with handles",
+   "unit": "no",
+   "net": 410.38,
+   "sell": 480.15,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "JN07",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "2-lever mortice lockset with handles",
+   "unit": "no",
+   "net": 265.32,
+   "sell": 310.42,
+   "labour": 0.28,
+   "materials": 0.72
+  },
+  {
+   "code": "JN08",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Cylinder lockset to external door",
+   "unit": "no",
+   "net": 755.45,
+   "sell": 883.87,
+   "labour": 0.14,
+   "materials": 0.86
+  },
+  {
+   "code": "JN09",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Door stop",
+   "unit": "no",
+   "net": 67.6,
+   "sell": 79.09,
+   "labour": 0.33,
+   "materials": 0.67
+  },
+  {
+   "code": "JN10",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Pine skirting 69 mm, fixed",
+   "unit": "m",
+   "net": 61.88,
+   "sell": 72.4,
+   "labour": 0.29,
+   "materials": 0.71
+  },
+  {
+   "code": "JN11",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Built-in cupboards, melamine, full height — installed",
+   "unit": "m",
+   "net": 5200,
+   "sell": 6084,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "JN12",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Kitchen base units incl post-formed top — installed",
+   "unit": "m",
+   "net": 5800,
+   "sell": 6786,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "JN13",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Kitchen wall units — installed",
+   "unit": "m",
+   "net": 3900,
+   "sell": 4563,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "JN14",
+   "section": "CARPENTRY, JOINERY & IRONMONGERY",
+   "description": "Granite / quartz worktop — installed",
+   "unit": "m",
+   "net": 3200,
+   "sell": 3744,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "WD01",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Standard steel window incl glazing, built in",
+   "unit": "m2",
+   "net": 1488.64,
+   "sell": 1741.71,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "WD02",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Aluminium casement window, powder-coated, glazed, fixed",
+   "unit": "m2",
+   "net": 2736.51,
+   "sell": 3201.71,
+   "labour": 0.02,
+   "materials": 0.98
+  },
+  {
+   "code": "WD03",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Aluminium sliding door, safety glass, fixed",
+   "unit": "m2",
+   "net": 3197.81,
+   "sell": 3741.44,
+   "labour": 0.02,
+   "materials": 0.98
+  },
+  {
+   "code": "WD04",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Aluminium hinged / French door, safety glass, fixed",
+   "unit": "m2",
+   "net": 3509.11,
+   "sell": 4105.66,
+   "labour": 0.02,
+   "materials": 0.98
+  },
+  {
+   "code": "WD05",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "uPVC window, glazed, fixed",
+   "unit": "m2",
+   "net": 3386.51,
+   "sell": 3962.21,
+   "labour": 0.02,
+   "materials": 0.98
+  },
+  {
+   "code": "WD06",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Meranti timber window, glazed, fixed",
+   "unit": "m2",
+   "net": 3100.77,
+   "sell": 3627.9,
+   "labour": 0.06,
+   "materials": 0.94
+  },
+  {
+   "code": "WD07",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Burglar bars, fixed",
+   "unit": "m2",
+   "net": 721.51,
+   "sell": 844.16,
+   "labour": 0.08,
+   "materials": 0.92
+  },
+  {
+   "code": "WD08",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Trellis security gate, fixed",
+   "unit": "m2",
+   "net": 1587.81,
+   "sell": 1857.74,
+   "labour": 0.04,
+   "materials": 0.96
+  },
+  {
+   "code": "WD09",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Sectional garage door 2.5 x 2.1 m — installed",
+   "unit": "no",
+   "net": 16500,
+   "sell": 19305,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "WD10",
+   "section": "WINDOWS, EXTERNAL DOORS & SECURITY",
+   "description": "Garage door motor — installed",
+   "unit": "no",
+   "net": 6500,
+   "sell": 7605,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "CL01",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "6.4 mm gypsum ceiling on 38x38 brandering, taped",
+   "unit": "m2",
+   "net": 171.82,
+   "sell": 201.03,
+   "labour": 0.43,
+   "materials": 0.57
+  },
+  {
+   "code": "CL02",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "9.5 mm gypsum ceiling on brandering, taped",
+   "unit": "m2",
+   "net": 194.6,
+   "sell": 227.68,
+   "labour": 0.42,
+   "materials": 0.58
+  },
+  {
+   "code": "CL03",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Suspended 600x600 exposed-grid ceiling, mineral tiles",
+   "unit": "m2",
+   "net": 303.64,
+   "sell": 355.26,
+   "labour": 0.17,
+   "materials": 0.83
+  },
+  {
+   "code": "CL04",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Suspended flush plasterboard ceiling on concealed grid, taped",
+   "unit": "m2",
+   "net": 292.23,
+   "sell": 341.9,
+   "labour": 0.35,
+   "materials": 0.65
+  },
+  {
+   "code": "CL05",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Fibre-cement eaves lining 6 mm on brandering",
+   "unit": "m2",
+   "net": 245.3,
+   "sell": 287,
+   "labour": 0.5,
+   "materials": 0.5
+  },
+  {
+   "code": "CL06",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Gypsum cove cornice 75 mm",
+   "unit": "m",
+   "net": 30.4,
+   "sell": 35.57,
+   "labour": 0.39,
+   "materials": 0.61
+  },
+  {
+   "code": "CL07",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Drywall partition 100 mm, 12.5 board each side on steel studs, taped",
+   "unit": "m2",
+   "net": 533.14,
+   "sell": 623.77,
+   "labour": 0.3,
+   "materials": 0.7
+  },
+  {
+   "code": "CL08",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Fire-rated drywall partition, 15 mm FR board each side",
+   "unit": "m2",
+   "net": 626.27,
+   "sell": 732.74,
+   "labour": 0.29,
+   "materials": 0.71
+  },
+  {
+   "code": "CL09",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Gypsum skim to board ceilings",
+   "unit": "m2",
+   "net": 67.34,
+   "sell": 78.78,
+   "labour": 0.74,
+   "materials": 0.26
+  },
+  {
+   "code": "CL10",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Ceiling access hatch 600x600",
+   "unit": "no",
+   "net": 568.03,
+   "sell": 664.59,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "CL11",
+   "section": "CEILINGS, PARTITIONS & DRYLINING",
+   "description": "Gypsum bulkhead on brandering (per m run, <= 600 girth)",
+   "unit": "m",
+   "net": 182.62,
+   "sell": 213.67,
+   "labour": 0.48,
+   "materials": 0.52
+  },
+  {
+   "code": "FL01",
+   "section": "FLOOR FINISHES",
+   "description": "Sand-cement screed 40 mm incl bonding",
+   "unit": "m2",
+   "net": 109.94,
+   "sell": 128.63,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "FL02",
+   "section": "FLOOR FINISHES",
+   "description": "Sand-cement screed 75 mm",
+   "unit": "m2",
+   "net": 176.41,
+   "sell": 206.4,
+   "labour": 0.38,
+   "materials": 0.62
+  },
+  {
+   "code": "FL03",
+   "section": "FLOOR FINISHES",
+   "description": "Self-levelling compound 5 mm",
+   "unit": "m2",
+   "net": 119.92,
+   "sell": 140.3,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "FL04",
+   "section": "FLOOR FINISHES",
+   "description": "Luxury vinyl click plank",
+   "unit": "m2",
+   "net": 348.09,
+   "sell": 407.27,
+   "labour": 0.1,
+   "materials": 0.9
+  },
+  {
+   "code": "FL05",
+   "section": "FLOOR FINISHES",
+   "description": "Carpet tiles incl adhesive",
+   "unit": "m2",
+   "net": 308.91,
+   "sell": 361.43,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "FL06",
+   "section": "FLOOR FINISHES",
+   "description": "Broadloom carpet incl underfelt & grippers",
+   "unit": "m2",
+   "net": 304.89,
+   "sell": 356.72,
+   "labour": 0.11,
+   "materials": 0.89
+  },
+  {
+   "code": "FL07",
+   "section": "FLOOR FINISHES",
+   "description": "Laminated flooring 8 mm incl underlay",
+   "unit": "m2",
+   "net": 313.37,
+   "sell": 366.64,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "FL08",
+   "section": "FLOOR FINISHES",
+   "description": "Engineered timber flooring, glued",
+   "unit": "m2",
+   "net": 880.41,
+   "sell": 1030.08,
+   "labour": 0.07,
+   "materials": 0.93
+  },
+  {
+   "code": "FL09",
+   "section": "FLOOR FINISHES",
+   "description": "Epoxy floor coating system",
+   "unit": "m2",
+   "net": 185.73,
+   "sell": 217.3,
+   "labour": 0.11,
+   "materials": 0.89
+  },
+  {
+   "code": "FL10",
+   "section": "FLOOR FINISHES",
+   "description": "Polished concrete: grind & seal",
+   "unit": "m2",
+   "net": 127.14,
+   "sell": 148.76,
+   "labour": 0.46,
+   "materials": 0.54
+  },
+  {
+   "code": "TL01",
+   "section": "TILING",
+   "description": "Ceramic floor tiles (PC R180/m2) on adhesive, grouted",
+   "unit": "m2",
+   "net": 355.41,
+   "sell": 415.83,
+   "labour": 0.31,
+   "materials": 0.69
+  },
+  {
+   "code": "TL02",
+   "section": "TILING",
+   "description": "Porcelain 600x600 floor tiles (PC R320/m2)",
+   "unit": "m2",
+   "net": 542.67,
+   "sell": 634.92,
+   "labour": 0.26,
+   "materials": 0.74
+  },
+  {
+   "code": "TL03",
+   "section": "TILING",
+   "description": "Ceramic wall tiles (PC R165/m2)",
+   "unit": "m2",
+   "net": 366.82,
+   "sell": 429.18,
+   "labour": 0.38,
+   "materials": 0.62
+  },
+  {
+   "code": "TL04",
+   "section": "TILING",
+   "description": "Large-format porcelain 600x1200 (PC R480/m2)",
+   "unit": "m2",
+   "net": 765.89,
+   "sell": 896.09,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "TL05",
+   "section": "TILING",
+   "description": "Tile skirting 100 mm",
+   "unit": "m",
+   "net": 57.59,
+   "sell": 67.38,
+   "labour": 0.61,
+   "materials": 0.39
+  },
+  {
+   "code": "TL06",
+   "section": "TILING",
+   "description": "Aluminium tile trim",
+   "unit": "m",
+   "net": 65.04,
+   "sell": 76.09,
+   "labour": 0.32,
+   "materials": 0.68
+  },
+  {
+   "code": "TL07",
+   "section": "TILING",
+   "description": "Mosaic tiles on mesh",
+   "unit": "m2",
+   "net": 853.06,
+   "sell": 998.08,
+   "labour": 0.26,
+   "materials": 0.74
+  },
+  {
+   "code": "TL08",
+   "section": "TILING",
+   "description": "Natural slate / stone paving on adhesive",
+   "unit": "m2",
+   "net": 492.53,
+   "sell": 576.26,
+   "labour": 0.31,
+   "materials": 0.69
+  },
+  {
+   "code": "PL01",
+   "section": "PLASTERING",
+   "description": "Internal plaster 15 mm 1:5 on brickwork, wood-float / steel trowel",
+   "unit": "m2",
+   "net": 95.38,
+   "sell": 111.59,
+   "labour": 0.78,
+   "materials": 0.22
+  },
+  {
+   "code": "PL02",
+   "section": "PLASTERING",
+   "description": "External plaster 15 mm incl waterproofing additive",
+   "unit": "m2",
+   "net": 116.03,
+   "sell": 135.75,
+   "labour": 0.79,
+   "materials": 0.21
+  },
+  {
+   "code": "PL03",
+   "section": "PLASTERING",
+   "description": "Plaster to concrete soffits 12 mm incl bonding",
+   "unit": "m2",
+   "net": 120.19,
+   "sell": 140.62,
+   "labour": 0.83,
+   "materials": 0.17
+  },
+  {
+   "code": "PL04",
+   "section": "PLASTERING",
+   "description": "Gypsum skim 3 mm on plaster",
+   "unit": "m2",
+   "net": 79.59,
+   "sell": 93.12,
+   "labour": 0.63,
+   "materials": 0.37
+  },
+  {
+   "code": "PL05",
+   "section": "PLASTERING",
+   "description": "Bagging / bag-wash to brickwork",
+   "unit": "m2",
+   "net": 37.37,
+   "sell": 43.72,
+   "labour": 0.89,
+   "materials": 0.11
+  },
+  {
+   "code": "PL06",
+   "section": "PLASTERING",
+   "description": "Plaster to reveals & soffits <= 300 wide",
+   "unit": "m",
+   "net": 46.71,
+   "sell": 54.66,
+   "labour": 0.89,
+   "materials": 0.11
+  },
+  {
+   "code": "PL07",
+   "section": "PLASTERING",
+   "description": "Galvanised angle bead",
+   "unit": "m",
+   "net": 23.01,
+   "sell": 26.92,
+   "labour": 0.36,
+   "materials": 0.64
+  },
+  {
+   "code": "PL08",
+   "section": "PLASTERING",
+   "description": "Textured external finish",
+   "unit": "m2",
+   "net": 70.13,
+   "sell": 82.05,
+   "labour": 0.71,
+   "materials": 0.29
+  },
+  {
+   "code": "PD01",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "110 mm uPVC drain in trench incl bedding & fittings (excl excavation)",
+   "unit": "m",
+   "net": 252.2,
+   "sell": 295.08,
+   "labour": 0.31,
+   "materials": 0.69
+  },
+  {
+   "code": "PD02",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "160 mm uPVC drain in trench incl bedding & fittings",
+   "unit": "m",
+   "net": 422.56,
+   "sell": 494.4,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "PD03",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "50 mm uPVC waste pipe incl fittings",
+   "unit": "m",
+   "net": 137.58,
+   "sell": 160.96,
+   "labour": 0.49,
+   "materials": 0.51
+  },
+  {
+   "code": "PD04",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "40 mm uPVC waste pipe incl fittings",
+   "unit": "m",
+   "net": 115.34,
+   "sell": 134.95,
+   "labour": 0.55,
+   "materials": 0.45
+  },
+  {
+   "code": "PD05",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "22 mm copper Class 0 incl fittings & chasing",
+   "unit": "m",
+   "net": 303.55,
+   "sell": 355.16,
+   "labour": 0.26,
+   "materials": 0.74
+  },
+  {
+   "code": "PD06",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "15 mm copper Class 0 incl fittings & chasing",
+   "unit": "m",
+   "net": 211.88,
+   "sell": 247.89,
+   "labour": 0.32,
+   "materials": 0.68
+  },
+  {
+   "code": "PD07",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "16 mm multilayer PEX incl fittings",
+   "unit": "m",
+   "net": 108.12,
+   "sell": 126.5,
+   "labour": 0.42,
+   "materials": 0.58
+  },
+  {
+   "code": "PD08",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "25 mm HDPE water service in trench",
+   "unit": "m",
+   "net": 60.39,
+   "sell": 70.66,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "PD09",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Brick manhole 600x450 <= 1.0 m deep incl benching & cover",
+   "unit": "no",
+   "net": 3824.01,
+   "sell": 4474.09,
+   "labour": 0.43,
+   "materials": 0.57
+  },
+  {
+   "code": "PD10",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Plastic inspection chamber 450 incl lid",
+   "unit": "no",
+   "net": 2279.75,
+   "sell": 2667.31,
+   "labour": 0.3,
+   "materials": 0.7
+  },
+  {
+   "code": "PD11",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Rodding / inspection eye",
+   "unit": "no",
+   "net": 361.27,
+   "sell": 422.68,
+   "labour": 0.5,
+   "materials": 0.5
+  },
+  {
+   "code": "PD12",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Gully with grid incl brick surround",
+   "unit": "no",
+   "net": 813.36,
+   "sell": 951.63,
+   "labour": 0.42,
+   "materials": 0.58
+  },
+  {
+   "code": "PD13",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Connect to municipal sewer incl permit",
+   "unit": "item",
+   "net": 8312.67,
+   "sell": 9725.83,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "PD14",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Close-coupled WC suite fitted incl connectors",
+   "unit": "no",
+   "net": 2959.75,
+   "sell": 3462.91,
+   "labour": 0.23,
+   "materials": 0.77
+  },
+  {
+   "code": "PD15",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Wash basin + pedestal with mixer & waste",
+   "unit": "no",
+   "net": 2316.46,
+   "sell": 2710.26,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "PD16",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Acrylic bath 1700 with mixer & waste",
+   "unit": "no",
+   "net": 5006.34,
+   "sell": 5857.41,
+   "labour": 0.18,
+   "materials": 0.82
+  },
+  {
+   "code": "PD17",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Shower mixer, rose & waste",
+   "unit": "no",
+   "net": 2779.75,
+   "sell": 3252.31,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "PD18",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Frameless shower screen / door — installed",
+   "unit": "no",
+   "net": 7500,
+   "sell": 8775,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PD19",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Stainless double-bowl sink with mixer & waste",
+   "unit": "no",
+   "net": 2846.46,
+   "sell": 3330.36,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "PD20",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Electric geyser 150 L incl drip tray & valves (SANS 10254)",
+   "unit": "no",
+   "net": 9382.92,
+   "sell": 10978.02,
+   "labour": 0.12,
+   "materials": 0.88
+  },
+  {
+   "code": "PD21",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Electric geyser 200 L incl drip tray & valves",
+   "unit": "no",
+   "net": 11196.21,
+   "sell": 13099.57,
+   "labour": 0.11,
+   "materials": 0.89
+  },
+  {
+   "code": "PD22",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Solar water heater 200 L high-pressure — installed",
+   "unit": "no",
+   "net": 26000,
+   "sell": 30420,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PD23",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Heat pump water heater — installed",
+   "unit": "no",
+   "net": 32000,
+   "sell": 37440,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PD24",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "5,000 L rainwater tank on concrete base incl connection",
+   "unit": "no",
+   "net": 9606.34,
+   "sell": 11239.41,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "PD25",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Garden tap",
+   "unit": "no",
+   "net": 426.58,
+   "sell": 499.1,
+   "labour": 0.53,
+   "materials": 0.47
+  },
+  {
+   "code": "PD26",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Isolating valve 22 mm",
+   "unit": "no",
+   "net": 303.29,
+   "sell": 354.85,
+   "labour": 0.37,
+   "materials": 0.63
+  },
+  {
+   "code": "PD27",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Septic tank 2,500 L incl excavation & soakaway",
+   "unit": "no",
+   "net": 16439.5,
+   "sell": 19234.22,
+   "labour": 0.08,
+   "materials": 0.92
+  },
+  {
+   "code": "PD28",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Municipal water meter connection (fees)",
+   "unit": "item",
+   "net": 4500,
+   "sell": 5265,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "PD29",
+   "section": "PLUMBING & DRAINAGE",
+   "description": "Floor drain / shower channel",
+   "unit": "no",
+   "net": 989.88,
+   "sell": 1158.16,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "EL01",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Light point complete incl conduit, wiring & switch",
+   "unit": "no",
+   "net": 483.73,
+   "sell": 565.97,
+   "labour": 0.62,
+   "materials": 0.38
+  },
+  {
+   "code": "EL02",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "LED downlight, supply & fix",
+   "unit": "no",
+   "net": 147.24,
+   "sell": 172.27,
+   "labour": 0.42,
+   "materials": 0.58
+  },
+  {
+   "code": "EL03",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "LED batten / ceiling fitting, supply & fix",
+   "unit": "no",
+   "net": 334.68,
+   "sell": 391.58,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "EL04",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Double switched socket outlet complete",
+   "unit": "no",
+   "net": 593.52,
+   "sell": 694.42,
+   "labour": 0.59,
+   "materials": 0.41
+  },
+  {
+   "code": "EL05",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Stove circuit incl isolator",
+   "unit": "no",
+   "net": 1696.83,
+   "sell": 1985.29,
+   "labour": 0.44,
+   "materials": 0.56
+  },
+  {
+   "code": "EL06",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Geyser circuit incl isolator & timer",
+   "unit": "no",
+   "net": 1672.36,
+   "sell": 1956.66,
+   "labour": 0.37,
+   "materials": 0.63
+  },
+  {
+   "code": "EL07",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "12-way DB board fully equipped",
+   "unit": "no",
+   "net": 4693.66,
+   "sell": 5491.58,
+   "labour": 0.32,
+   "materials": 0.68
+  },
+  {
+   "code": "EL08",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "24-way DB board fully equipped",
+   "unit": "no",
+   "net": 8089.43,
+   "sell": 9464.63,
+   "labour": 0.31,
+   "materials": 0.69
+  },
+  {
+   "code": "EL09",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "16 mm2 4-core SWA supply cable, laid",
+   "unit": "m",
+   "net": 241.59,
+   "sell": 282.66,
+   "labour": 0.15,
+   "materials": 0.85
+  },
+  {
+   "code": "EL10",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Cable trench 600 deep, excavate, backfill & warning tape",
+   "unit": "m",
+   "net": 57.8,
+   "sell": 67.62,
+   "labour": 0.83,
+   "materials": 0.17
+  },
+  {
+   "code": "EL11",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Earth spike & bonding",
+   "unit": "no",
+   "net": 823.41,
+   "sell": 963.4,
+   "labour": 0.45,
+   "materials": 0.55
+  },
+  {
+   "code": "EL12",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "External wall light",
+   "unit": "no",
+   "net": 579.15,
+   "sell": 677.61,
+   "labour": 0.34,
+   "materials": 0.66
+  },
+  {
+   "code": "EL13",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Data / TV point",
+   "unit": "no",
+   "net": 419.15,
+   "sell": 490.41,
+   "labour": 0.48,
+   "materials": 0.52
+  },
+  {
+   "code": "EL14",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Bathroom extractor fan incl wiring",
+   "unit": "no",
+   "net": 1048.73,
+   "sell": 1227.02,
+   "labour": 0.28,
+   "materials": 0.72
+  },
+  {
+   "code": "EL15",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Prepaid / municipal meter connection (fees)",
+   "unit": "item",
+   "net": 6500,
+   "sell": 7605,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL16",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Solar PV 5 kW hybrid + 10 kWh battery — installed",
+   "unit": "no",
+   "net": 115000,
+   "sell": 134550,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL17",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Smoke detector",
+   "unit": "no",
+   "net": 294.68,
+   "sell": 344.78,
+   "labour": 0.25,
+   "materials": 0.75
+  },
+  {
+   "code": "EL18",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Split AC 12,000 BTU — installed",
+   "unit": "no",
+   "net": 14500,
+   "sell": 16965,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL19",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Split AC 18,000 BTU — installed",
+   "unit": "no",
+   "net": 19500,
+   "sell": 22815,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL20",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Split AC 24,000 BTU — installed",
+   "unit": "no",
+   "net": 26500,
+   "sell": 31005,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL21",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "Electric fence wall-top — installed",
+   "unit": "m",
+   "net": 280,
+   "sell": 327.6,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL22",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "4-camera CCTV — installed",
+   "unit": "no",
+   "net": 11500,
+   "sell": 13455,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EL23",
+   "section": "ELECTRICAL (SANS 10142-1)",
+   "description": "6-zone alarm — installed",
+   "unit": "no",
+   "net": 7500,
+   "sell": 8775,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "SS01",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Structural steel sections, fabricated, primed, erected",
+   "unit": "t",
+   "net": 48364.68,
+   "sell": 56586.68,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "SS02",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Light steel sections <= 20 kg/m, fabricated & erected",
+   "unit": "t",
+   "net": 50417.02,
+   "sell": 58987.92,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "SS03",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Hot-dip galvanising, extra",
+   "unit": "t",
+   "net": 6500,
+   "sell": 7605,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "SS04",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Holding-down bolt set M16, cast in",
+   "unit": "no",
+   "net": 261.84,
+   "sell": 306.35,
+   "labour": 0.31,
+   "materials": 0.69
+  },
+  {
+   "code": "SS05",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Mild steel balustrade, fixed",
+   "unit": "m",
+   "net": 1722.79,
+   "sell": 2015.67,
+   "labour": 0.16,
+   "materials": 0.84
+  },
+  {
+   "code": "SS06",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Glass / stainless balustrade — installed",
+   "unit": "m",
+   "net": 6800,
+   "sell": 7956,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "SS07",
+   "section": "STRUCTURAL STEEL & METALWORK",
+   "description": "Intumescent coating 60 min to steel",
+   "unit": "m2",
+   "net": 213.16,
+   "sell": 249.4,
+   "labour": 0.16,
+   "materials": 0.84
+  },
+  {
+   "code": "PT01",
+   "section": "PAINTWORK",
+   "description": "Plaster primer + 2 coats PVA to internal walls",
+   "unit": "m2",
+   "net": 46.75,
+   "sell": 54.69,
+   "labour": 0.53,
+   "materials": 0.47
+  },
+  {
+   "code": "PT02",
+   "section": "PAINTWORK",
+   "description": "Plaster primer + 2 coats PVA to ceilings",
+   "unit": "m2",
+   "net": 51.72,
+   "sell": 60.51,
+   "labour": 0.58,
+   "materials": 0.42
+  },
+  {
+   "code": "PT03",
+   "section": "PAINTWORK",
+   "description": "Primer + 2 coats exterior acrylic to plaster",
+   "unit": "m2",
+   "net": 61.29,
+   "sell": 71.71,
+   "labour": 0.47,
+   "materials": 0.53
+  },
+  {
+   "code": "PT04",
+   "section": "PAINTWORK",
+   "description": "Primer + elastomeric exterior system",
+   "unit": "m2",
+   "net": 89.38,
+   "sell": 104.57,
+   "labour": 0.35,
+   "materials": 0.65
+  },
+  {
+   "code": "PT05",
+   "section": "PAINTWORK",
+   "description": "Undercoat + 2 coats enamel to joinery",
+   "unit": "m2",
+   "net": 69.71,
+   "sell": 81.56,
+   "labour": 0.54,
+   "materials": 0.46
+  },
+  {
+   "code": "PT06",
+   "section": "PAINTWORK",
+   "description": "Primer, undercoat + 2 coats enamel to steelwork",
+   "unit": "m2",
+   "net": 84.35,
+   "sell": 98.69,
+   "labour": 0.49,
+   "materials": 0.51
+  },
+  {
+   "code": "PT07",
+   "section": "PAINTWORK",
+   "description": "Undercoat + 2 coats enamel to door, both sides",
+   "unit": "no",
+   "net": 295.42,
+   "sell": 345.64,
+   "labour": 0.56,
+   "materials": 0.44
+  },
+  {
+   "code": "PT08",
+   "section": "PAINTWORK",
+   "description": "Varnish / sealer to timber, 3 coats",
+   "unit": "m2",
+   "net": 55.02,
+   "sell": 64.37,
+   "labour": 0.53,
+   "materials": 0.47
+  },
+  {
+   "code": "PT09",
+   "section": "PAINTWORK",
+   "description": "Enamel to skirting <= 150 girth",
+   "unit": "m",
+   "net": 11.49,
+   "sell": 13.45,
+   "labour": 0.58,
+   "materials": 0.42
+  },
+  {
+   "code": "PT10",
+   "section": "PAINTWORK",
+   "description": "Roof paint to tiles / sheeting, 2 coats",
+   "unit": "m2",
+   "net": 45.08,
+   "sell": 52.75,
+   "labour": 0.37,
+   "materials": 0.63
+  },
+  {
+   "code": "PT11",
+   "section": "PAINTWORK",
+   "description": "Prepare & repaint existing walls, fill, sand, 2 coats PVA",
+   "unit": "m2",
+   "net": 41.87,
+   "sell": 48.99,
+   "labour": 0.59,
+   "materials": 0.41
+  },
+  {
+   "code": "GL01",
+   "section": "GLAZING",
+   "description": "4 mm clear float glass in frames, putty",
+   "unit": "m2",
+   "net": 424.41,
+   "sell": 496.56,
+   "labour": 0.21,
+   "materials": 0.79
+  },
+  {
+   "code": "GL02",
+   "section": "GLAZING",
+   "description": "6.38 mm laminated safety glass (SANS 10400-N)",
+   "unit": "m2",
+   "net": 876.02,
+   "sell": 1024.94,
+   "labour": 0.13,
+   "materials": 0.87
+  },
+  {
+   "code": "GL03",
+   "section": "GLAZING",
+   "description": "6 mm mirror, polished edges, fixed",
+   "unit": "m2",
+   "net": 738.81,
+   "sell": 864.41,
+   "labour": 0.09,
+   "materials": 0.91
+  },
+  {
+   "code": "GL04",
+   "section": "GLAZING",
+   "description": "Double-glazed unit 4-12-4",
+   "unit": "m2",
+   "net": 1888.12,
+   "sell": 2209.1,
+   "labour": 0.07,
+   "materials": 0.93
+  },
+  {
+   "code": "EX01",
+   "section": "EXTERNAL WORKS",
+   "description": "80 mm interlocking pavers on sand bed on 150 mm G5 base (vehicular)",
+   "unit": "m2",
+   "net": 344.06,
+   "sell": 402.55,
+   "labour": 0.25,
+   "materials": 0.75
+  },
+  {
+   "code": "EX02",
+   "section": "EXTERNAL WORKS",
+   "description": "60 mm interlocking pavers on sand bed on 100 mm G5 (pedestrian)",
+   "unit": "m2",
+   "net": 285.25,
+   "sell": 333.74,
+   "labour": 0.27,
+   "materials": 0.73
+  },
+  {
+   "code": "EX03",
+   "section": "EXTERNAL WORKS",
+   "description": "Precast kerb bedded & backed in concrete",
+   "unit": "m",
+   "net": 201.92,
+   "sell": 236.25,
+   "labour": 0.23,
+   "materials": 0.77
+  },
+  {
+   "code": "EX04",
+   "section": "EXTERNAL WORKS",
+   "description": "Precast channel bedded in concrete",
+   "unit": "m",
+   "net": 154.83,
+   "sell": 181.15,
+   "labour": 0.24,
+   "materials": 0.76
+  },
+  {
+   "code": "EX05",
+   "section": "EXTERNAL WORKS",
+   "description": "Concrete driveway 100 mm 25 MPa incl Ref 193 mesh, broom finish",
+   "unit": "m2",
+   "net": 319.32,
+   "sell": 373.6,
+   "labour": 0.23,
+   "materials": 0.77
+  },
+  {
+   "code": "EX06",
+   "section": "EXTERNAL WORKS",
+   "description": "Clay pavers on sand bed on 100 mm G5",
+   "unit": "m2",
+   "net": 489.38,
+   "sell": 572.57,
+   "labour": 0.23,
+   "materials": 0.77
+  },
+  {
+   "code": "EX07",
+   "section": "EXTERNAL WORKS",
+   "description": "30 mm asphalt incl prime — installed",
+   "unit": "m2",
+   "net": 420,
+   "sell": 491.4,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EX08",
+   "section": "EXTERNAL WORKS",
+   "description": "Galvanised palisade fencing 1.8 m — installed",
+   "unit": "m",
+   "net": 1150,
+   "sell": 1345.5,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EX09",
+   "section": "EXTERNAL WORKS",
+   "description": "358 anti-climb mesh fencing 2.4 m — installed",
+   "unit": "m",
+   "net": 1650,
+   "sell": 1930.5,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EX10",
+   "section": "EXTERNAL WORKS",
+   "description": "Diamond mesh fencing 1.8 m on galvanised posts in concrete",
+   "unit": "m",
+   "net": 192.89,
+   "sell": 225.68,
+   "labour": 0.22,
+   "materials": 0.78
+  },
+  {
+   "code": "EX11",
+   "section": "EXTERNAL WORKS",
+   "description": "Steel sliding driveway gate 4 m incl motor — installed",
+   "unit": "no",
+   "net": 28000,
+   "sell": 32760,
+   "labour": 0,
+   "materials": 1
+  },
+  {
+   "code": "EX12",
+   "section": "EXTERNAL WORKS",
+   "description": "Steel pedestrian gate, hung",
+   "unit": "no",
+   "net": 4018.38,
+   "sell": 4701.5,
+   "labour": 0.2,
+   "materials": 0.8
+  },
+  {
+   "code": "EX13",
+   "section": "EXTERNAL WORKS",
+   "description": "Instant lawn incl compost & preparation",
+   "unit": "m2",
+   "net": 80.72,
+   "sell": 94.44,
+   "labour": 0.1,
+   "materials": 0.9
+  },
+  {
+   "code": "EX14",
+   "section": "EXTERNAL WORKS",
+   "description": "Planting shrub, 5 L bag",
+   "unit": "no",
+   "net": 100.93,
+   "sell": 118.09,
+   "labour": 0.16,
+   "materials": 0.84
+  },
+  {
+   "code": "EX15",
+   "section": "EXTERNAL WORKS",
+   "description": "In-situ concrete V-drain / stormwater channel",
+   "unit": "m",
+   "net": 205.48,
+   "sell": 240.42,
+   "labour": 0.42,
+   "materials": 0.58
+  },
+  {
+   "code": "EX16",
+   "section": "EXTERNAL WORKS",
+   "description": "Concrete retaining blocks incl backfill & geofabric (per m2 face)",
+   "unit": "m2",
+   "net": 636.95,
+   "sell": 745.23,
+   "labour": 0.36,
+   "materials": 0.64
+  },
+  {
+   "code": "FR01",
+   "section": "FIRE PROTECTION (SANS 10400-T)",
+   "description": "Fire extinguisher 4.5 kg DCP incl bracket & sign",
+   "unit": "no",
+   "net": 670.71,
+   "sell": 784.73,
+   "labour": 0.03,
+   "materials": 0.97
+  },
+  {
+   "code": "FR02",
+   "section": "FIRE PROTECTION (SANS 10400-T)",
+   "description": "Fire hose reel 30 m incl connection",
+   "unit": "no",
+   "net": 4706.34,
+   "sell": 5506.41,
+   "labour": 0.19,
+   "materials": 0.81
+  },
+  {
+   "code": "FR03",
+   "section": "FIRE PROTECTION (SANS 10400-T)",
+   "description": "LED emergency exit sign",
+   "unit": "no",
+   "net": 974.47,
+   "sell": 1140.13,
+   "labour": 0.13,
+   "materials": 0.87
+  }
+ ],
+ "labour": [
+  {
+   "code": "L01",
+   "grade": "Labourer",
+   "basicHr": 41.33,
+   "allInHr": 53.11,
+   "allInDay": 477.98
+  },
+  {
+   "code": "L02",
+   "grade": "General worker (semi-skilled)",
+   "basicHr": 53.73,
+   "allInHr": 69.04,
+   "allInDay": 621.39
+  },
+  {
+   "code": "L03",
+   "grade": "Tradesman Class 4",
+   "basicHr": 58.49,
+   "allInHr": 75.16,
+   "allInDay": 676.44
+  },
+  {
+   "code": "L04",
+   "grade": "Tradesman Class 3 (painter, paver, waterproofer)",
+   "basicHr": 64.52,
+   "allInHr": 82.91,
+   "allInDay": 746.17
+  },
+  {
+   "code": "L05",
+   "grade": "Tradesman Class 2 (bricklayer, plasterer, tiler, shutterhand)",
+   "basicHr": 87.95,
+   "allInHr": 113.02,
+   "allInDay": 1017.14
+  },
+  {
+   "code": "L06",
+   "grade": "Artisan (qualified carpenter / joiner / welder)",
+   "basicHr": 117.23,
+   "allInHr": 150.64,
+   "allInDay": 1355.76
+  },
+  {
+   "code": "L07",
+   "grade": "Plant operator / driver Code C1",
+   "basicHr": 73.41,
+   "allInHr": 94.33,
+   "allInDay": 848.99
+  },
+  {
+   "code": "L08",
+   "grade": "Driver Code B",
+   "basicHr": 55.28,
+   "allInHr": 71.03,
+   "allInDay": 639.31
+  },
+  {
+   "code": "L09",
+   "grade": "Electrician (registered, can issue COC)",
+   "basicHr": 140,
+   "allInHr": 179.9,
+   "allInDay": 1619.1
+  },
+  {
+   "code": "L10",
+   "grade": "Plumber (PIRB registered)",
+   "basicHr": 135,
+   "allInHr": 173.48,
+   "allInDay": 1561.28
+  },
+  {
+   "code": "L11",
+   "grade": "Site foreman",
+   "basicHr": 150,
+   "allInHr": 192.75,
+   "allInDay": 1734.75
+  },
+  {
+   "code": "L12",
+   "grade": "Site agent / contracts manager",
+   "basicHr": 240,
+   "allInHr": 308.4,
+   "allInDay": 2775.6
+  }
+ ],
+ "plant": [
+  {
+   "code": "P-TLB",
+   "description": "TLB with operator & fuel",
+   "unit": "hr",
+   "rate": 520
+  },
+  {
+   "code": "P-EXC20",
+   "description": "20 t excavator with operator & fuel",
+   "unit": "hr",
+   "rate": 1050
+  },
+  {
+   "code": "P-JACK",
+   "description": "Compressor + jackhammer / breaker",
+   "unit": "hr",
+   "rate": 150
+  },
+  {
+   "code": "P-PLATE",
+   "description": "Plate compactor",
+   "unit": "day",
+   "rate": 380
+  },
+  {
+   "code": "P-ROLLER",
+   "description": "1 t vibratory roller",
+   "unit": "day",
+   "rate": 1400
+  },
+  {
+   "code": "P-POKER",
+   "description": "Poker vibrator",
+   "unit": "day",
+   "rate": 320
+  },
+  {
+   "code": "P-MIXER",
+   "description": "150 L concrete mixer",
+   "unit": "day",
+   "rate": 300
+  },
+  {
+   "code": "P-FLOAT",
+   "description": "Power float",
+   "unit": "day",
+   "rate": 600
+  },
+  {
+   "code": "P-SAW",
+   "description": "Floor saw",
+   "unit": "day",
+   "rate": 700
+  },
+  {
+   "code": "P-GRINDER",
+   "description": "Floor grinder",
+   "unit": "day",
+   "rate": 1200
+  },
+  {
+   "code": "P-CPUMP",
+   "description": "Concrete pump (per m3 pumped)",
+   "unit": "m3",
+   "rate": 170
+  },
+  {
+   "code": "P-PROPS",
+   "description": "Props & soffit formwork hire per pour (3 weeks)",
+   "unit": "m2",
+   "rate": 45
+  },
+  {
+   "code": "P-PUMP",
+   "description": "Dewatering pump",
+   "unit": "day",
+   "rate": 450
+  },
+  {
+   "code": "P-SKIP",
+   "description": "6 m3 skip incl delivery, removal & tip fee",
+   "unit": "no",
+   "rate": 2300
+  },
+  {
+   "code": "P-CARTRUB",
+   "description": "Load & cart rubble to licensed tip incl fees",
+   "unit": "m3",
+   "rate": 380
+  },
+  {
+   "code": "P-CARTSOIL",
+   "description": "Load & cart surplus soil <= 10 km (bulked m3)",
+   "unit": "m3",
+   "rate": 170
+  },
+  {
+   "code": "P-SCAF",
+   "description": "Frame scaffold hire",
+   "unit": "m2/wk",
+   "rate": 18
+  },
+  {
+   "code": "P-CONT",
+   "description": "Site office / store container 6 m",
+   "unit": "wk",
+   "rate": 520
+  },
+  {
+   "code": "P-TOILET",
+   "description": "Chemical toilet incl weekly service",
+   "unit": "wk",
+   "rate": 650
+  },
+  {
+   "code": "P-FENCE",
+   "description": "Temporary site fencing",
+   "unit": "m/wk",
+   "rate": 12
+  },
+  {
+   "code": "P-CRANE",
+   "description": "25 t mobile crane with operator",
+   "unit": "day",
+   "rate": 9500
+  }
+ ],
+ "materials": [
+  {
+   "code": "CEM",
+   "category": "Aggregates & binders",
+   "description": "Cement CEM II 42.5N, 50 kg bag",
+   "unit": "bag",
+   "price": 98
+  },
+  {
+   "code": "LIME",
+   "category": "Aggregates & binders",
+   "description": "Builders lime, 25 kg bag",
+   "unit": "bag",
+   "price": 72
+  },
+  {
+   "code": "BSAND",
+   "category": "Aggregates & binders",
+   "description": "Building sand, delivered",
+   "unit": "m3",
+   "price": 420
+  },
+  {
+   "code": "PSAND",
+   "category": "Aggregates & binders",
+   "description": "Plaster sand, delivered",
+   "unit": "m3",
+   "price": 390
+  },
+  {
+   "code": "RSAND",
+   "category": "Aggregates & binders",
+   "description": "River / concrete sand, delivered",
+   "unit": "m3",
+   "price": 480
+  },
+  {
+   "code": "STONE19",
+   "category": "Aggregates & binders",
+   "description": "19 mm crushed stone, delivered",
+   "unit": "m3",
+   "price": 560
+  },
+  {
+   "code": "G5",
+   "category": "Aggregates & binders",
+   "description": "Imported G5 selected fill, delivered",
+   "unit": "m3",
+   "price": 300
+  },
+  {
+   "code": "MORT",
+   "category": "Composites",
+   "description": "Class II mortar 1:4 (7 bags cement + 1.1 m3 building sand)",
+   "unit": "m3",
+   "price": 1148
+  },
+  {
+   "code": "PLASMIX",
+   "category": "Composites",
+   "description": "Plaster 1:5 (6 bags cement + 1.15 m3 plaster sand)",
+   "unit": "m3",
+   "price": 1036.5
+  },
+  {
+   "code": "CSITE",
+   "category": "Composites",
+   "description": "Site-mixed 25 MPa concrete (7 bags + 0.65 sand + 0.75 stone) — PPC ~6.7 bags/m3 for 20-29 MPa",
+   "unit": "m3",
+   "price": 1418
+  },
+  {
+   "code": "SCREEDMIX",
+   "category": "Composites",
+   "description": "Screed 1:4 (8 bags cement + 1.1 m3 river sand)",
+   "unit": "m3",
+   "price": 1312
+  },
+  {
+   "code": "RM15",
+   "category": "Concrete",
+   "description": "Readymix 15 MPa / 19 mm, delivered (full loads)",
+   "unit": "m3",
+   "price": 1520
+  },
+  {
+   "code": "RM20",
+   "category": "Concrete",
+   "description": "Readymix 20 MPa",
+   "unit": "m3",
+   "price": 1600
+  },
+  {
+   "code": "RM25",
+   "category": "Concrete",
+   "description": "Readymix 25 MPa",
+   "unit": "m3",
+   "price": 1690
+  },
+  {
+   "code": "RM30",
+   "category": "Concrete",
+   "description": "Readymix 30 MPa",
+   "unit": "m3",
+   "price": 1800
+  },
+  {
+   "code": "RM35",
+   "category": "Concrete",
+   "description": "Readymix 35 MPa",
+   "unit": "m3",
+   "price": 1930
+  },
+  {
+   "code": "REBAR",
+   "category": "Reinforcement",
+   "description": "High-yield Y-bar, scheduled, cut & bent, delivered",
+   "unit": "t",
+   "price": 19800
+  },
+  {
+   "code": "REBARMS",
+   "category": "Reinforcement",
+   "description": "Mild steel R-bar, cut & bent, delivered",
+   "unit": "t",
+   "price": 19200
+  },
+  {
+   "code": "MESH193",
+   "category": "Reinforcement",
+   "description": "Fabric mesh Ref 193",
+   "unit": "m2",
+   "price": 52
+  },
+  {
+   "code": "MESH245",
+   "category": "Reinforcement",
+   "description": "Fabric mesh Ref 245",
+   "unit": "m2",
+   "price": 66
+  },
+  {
+   "code": "MESH100",
+   "category": "Reinforcement",
+   "description": "Fabric mesh Ref 100",
+   "unit": "m2",
+   "price": 31
+  },
+  {
+   "code": "TIEW",
+   "category": "Reinforcement",
+   "description": "Binding wire",
+   "unit": "kg",
+   "price": 42
+  },
+  {
+   "code": "FWMAT",
+   "category": "Formwork",
+   "description": "Formwork materials (18 mm shutter ply + timber, 4 uses)",
+   "unit": "m2",
+   "price": 88
+  },
+  {
+   "code": "DPM250",
+   "category": "Concrete",
+   "description": "250 micron DPM (SANS 952)",
+   "unit": "m2",
+   "price": 7.5
+  },
+  {
+   "code": "JSEAL",
+   "category": "Concrete",
+   "description": "Joint filler + polyurethane sealant",
+   "unit": "m",
+   "price": 28
+  },
+  {
+   "code": "LINT",
+   "category": "Masonry",
+   "description": "Precast prestressed lintel 110 mm",
+   "unit": "m",
+   "price": 78
+  },
+  {
+   "code": "RIBBLK",
+   "category": "Concrete",
+   "description": "Rib-and-block suspended slab system (beams + blocks, excl topping)",
+   "unit": "m2",
+   "price": 380
+  },
+  {
+   "code": "BRKCLAY",
+   "category": "Masonry",
+   "description": "Clay stock brick NFP 222x106x73",
+   "unit": "no",
+   "price": 2.2
+  },
+  {
+   "code": "BRKCEM",
+   "category": "Masonry",
+   "description": "Cement stock brick NFX",
+   "unit": "no",
+   "price": 2.1
+  },
+  {
+   "code": "FACEBRK",
+   "category": "Masonry",
+   "description": "Clay face brick (PC)",
+   "unit": "no",
+   "price": 5.4
+  },
+  {
+   "code": "BLK90",
+   "category": "Masonry",
+   "description": "Cement block 390x190x90",
+   "unit": "no",
+   "price": 9.8
+  },
+  {
+   "code": "BLK140",
+   "category": "Masonry",
+   "description": "Cement block 390x190x140",
+   "unit": "no",
+   "price": 13.5
+  },
+  {
+   "code": "BLK190",
+   "category": "Masonry",
+   "description": "Cement block 390x190x190",
+   "unit": "no",
+   "price": 17.9
+  },
+  {
+   "code": "BFORCE",
+   "category": "Masonry",
+   "description": "Brickforce 150 mm",
+   "unit": "m",
+   "price": 3.1
+  },
+  {
+   "code": "TIES",
+   "category": "Masonry",
+   "description": "Galvanised wire wall tie",
+   "unit": "no",
+   "price": 1.6
+  },
+  {
+   "code": "DPC375",
+   "category": "Masonry",
+   "description": "Embossed polyolefin DPC 375 mm",
+   "unit": "m",
+   "price": 7.5
+  },
+  {
+   "code": "DPC230",
+   "category": "Masonry",
+   "description": "Embossed polyolefin DPC 230 mm",
+   "unit": "m",
+   "price": 4.6
+  },
+  {
+   "code": "HOOP",
+   "category": "Masonry",
+   "description": "Galvanised hoop iron 30x1.6",
+   "unit": "m",
+   "price": 4.5
+  },
+  {
+   "code": "TRUSS",
+   "category": "Roofing",
+   "description": "Engineered timber trusses incl hangers & bracing, delivered (per m2 plan)",
+   "unit": "m2",
+   "price": 330
+  },
+  {
+   "code": "TIM114",
+   "category": "Roofing",
+   "description": "SA pine S5 38x114",
+   "unit": "m",
+   "price": 44
+  },
+  {
+   "code": "TIM152",
+   "category": "Roofing",
+   "description": "SA pine S5 38x152",
+   "unit": "m",
+   "price": 60
+  },
+  {
+   "code": "BAT38",
+   "category": "Roofing",
+   "description": "SA pine batten / brandering 38x38",
+   "unit": "m",
+   "price": 10.5
+  },
+  {
+   "code": "CTILE",
+   "category": "Roofing",
+   "description": "Concrete roof tiles incl 5% cuts allowance",
+   "unit": "m2",
+   "price": 165
+  },
+  {
+   "code": "CLAYTILE",
+   "category": "Roofing",
+   "description": "Clay roof tiles",
+   "unit": "m2",
+   "price": 330
+  },
+  {
+   "code": "UNDERL",
+   "category": "Roofing",
+   "description": "Roof underlay (breathable)",
+   "unit": "m2",
+   "price": 17
+  },
+  {
+   "code": "IBR05",
+   "category": "Roofing",
+   "description": "IBR 0.50 mm pre-painted (Chromadek), per m2 cover",
+   "unit": "m2",
+   "price": 185
+  },
+  {
+   "code": "IBR047",
+   "category": "Roofing",
+   "description": "IBR 0.47 mm Zincalume, per m2 cover",
+   "unit": "m2",
+   "price": 150
+  },
+  {
+   "code": "CORR05",
+   "category": "Roofing",
+   "description": "Corrugated 0.50 mm galvanised, per m2 cover",
+   "unit": "m2",
+   "price": 145
+  },
+  {
+   "code": "PURLIN",
+   "category": "Roofing",
+   "description": "Lipped channel purlin 100x50x20x2.0",
+   "unit": "m",
+   "price": 95
+  },
+  {
+   "code": "RIDGE",
+   "category": "Roofing",
+   "description": "Concrete ridge / hip tile",
+   "unit": "no",
+   "price": 26
+  },
+  {
+   "code": "RIDGEIBR",
+   "category": "Roofing",
+   "description": "Pre-painted ridge capping",
+   "unit": "m",
+   "price": 110
+  },
+  {
+   "code": "VALLEY",
+   "category": "Roofing",
+   "description": "Valley gutter",
+   "unit": "m",
+   "price": 140
+  },
+  {
+   "code": "FASCIA",
+   "category": "Roofing",
+   "description": "Fibre-cement fascia / barge 225 mm",
+   "unit": "m",
+   "price": 92
+  },
+  {
+   "code": "GUTTER",
+   "category": "Roofing",
+   "description": "Seamless aluminium gutter 125 mm — installed",
+   "unit": "m",
+   "price": 260
+  },
+  {
+   "code": "DPIPE",
+   "category": "Roofing",
+   "description": "Aluminium downpipe 75 mm",
+   "unit": "m",
+   "price": 85
+  },
+  {
+   "code": "ISO135",
+   "category": "Roofing",
+   "description": "Polyester ceiling insulation 135 mm (SANS 10400-XA)",
+   "unit": "m2",
+   "price": 92
+  },
+  {
+   "code": "GLASS100",
+   "category": "Roofing",
+   "description": "Glasswool insulation 100 mm",
+   "unit": "m2",
+   "price": 68
+  },
+  {
+   "code": "FOIL",
+   "category": "Roofing",
+   "description": "Reflective foil / sisalation",
+   "unit": "m2",
+   "price": 22
+  },
+  {
+   "code": "THATCH",
+   "category": "Roofing",
+   "description": "Thatch 200 mm incl poles & SANS fire treatment — installed",
+   "unit": "m2",
+   "price": 950
+  },
+  {
+   "code": "POLYC",
+   "category": "Roofing",
+   "description": "Polycarbonate sheeting 10 mm multiwall",
+   "unit": "m2",
+   "price": 480
+  },
+  {
+   "code": "DOORHC",
+   "category": "Joinery",
+   "description": "Hollow-core flush door 813x2032",
+   "unit": "no",
+   "price": 620
+  },
+  {
+   "code": "DOORSS",
+   "category": "Joinery",
+   "description": "Semi-solid door 813x2032",
+   "unit": "no",
+   "price": 1450
+  },
+  {
+   "code": "DOOREXT",
+   "category": "Joinery",
+   "description": "Solid meranti external door",
+   "unit": "no",
+   "price": 3600
+  },
+  {
+   "code": "HINGE",
+   "category": "Joinery",
+   "description": "Steel butt hinges 100 mm",
+   "unit": "pair",
+   "price": 75
+  },
+  {
+   "code": "SFRAME",
+   "category": "Joinery",
+   "description": "Pressed steel door frame 813",
+   "unit": "no",
+   "price": 680
+  },
+  {
+   "code": "HWFRAME",
+   "category": "Joinery",
+   "description": "Hardwood external door frame",
+   "unit": "no",
+   "price": 1650
+  },
+  {
+   "code": "LOCK3",
+   "category": "Ironmongery",
+   "description": "3-lever mortice lockset with handles",
+   "unit": "no",
+   "price": 320
+  },
+  {
+   "code": "LOCK2",
+   "category": "Ironmongery",
+   "description": "2-lever mortice lockset with handles",
+   "unit": "no",
+   "price": 190
+  },
+  {
+   "code": "CYLLOCK",
+   "category": "Ironmongery",
+   "description": "Cylinder lockset external",
+   "unit": "no",
+   "price": 650
+  },
+  {
+   "code": "DSTOP",
+   "category": "Ironmongery",
+   "description": "Door stop",
+   "unit": "no",
+   "price": 45
+  },
+  {
+   "code": "SKIRT",
+   "category": "Joinery",
+   "description": "Pine skirting 69 mm",
+   "unit": "m",
+   "price": 38
+  },
+  {
+   "code": "BIC",
+   "category": "Joinery",
+   "description": "Built-in cupboards melamine full height — installed",
+   "unit": "m",
+   "price": 5200
+  },
+  {
+   "code": "KITBASE",
+   "category": "Joinery",
+   "description": "Kitchen base units incl post-formed top — installed",
+   "unit": "m",
+   "price": 5800
+  },
+  {
+   "code": "KITWALL",
+   "category": "Joinery",
+   "description": "Kitchen wall units — installed",
+   "unit": "m",
+   "price": 3900
+  },
+  {
+   "code": "GRANITE",
+   "category": "Joinery",
+   "description": "Granite / quartz worktop 600 deep — installed",
+   "unit": "m",
+   "price": 3200
+  },
+  {
+   "code": "STEELWIN",
+   "category": "Windows & doors",
+   "description": "Standard steel window incl glazing",
+   "unit": "m2",
+   "price": 1350
+  },
+  {
+   "code": "ALUWIN",
+   "category": "Windows & doors",
+   "description": "Aluminium casement, powder-coated, glazed",
+   "unit": "m2",
+   "price": 2650
+  },
+  {
+   "code": "ALUSLD",
+   "category": "Windows & doors",
+   "description": "Aluminium sliding door, safety glass",
+   "unit": "m2",
+   "price": 3100
+  },
+  {
+   "code": "ALUDOOR",
+   "category": "Windows & doors",
+   "description": "Aluminium hinged / French door, safety glass",
+   "unit": "m2",
+   "price": 3400
+  },
+  {
+   "code": "UPVCWIN",
+   "category": "Windows & doors",
+   "description": "uPVC window, glazed",
+   "unit": "m2",
+   "price": 3300
+  },
+  {
+   "code": "TIMWIN",
+   "category": "Windows & doors",
+   "description": "Meranti timber window, glazed",
+   "unit": "m2",
+   "price": 2900
+  },
+  {
+   "code": "BURGLAR",
+   "category": "Windows & doors",
+   "description": "Mild steel burglar bars, primed",
+   "unit": "m2",
+   "price": 650
+  },
+  {
+   "code": "SECGATE",
+   "category": "Windows & doors",
+   "description": "Trellis security gate",
+   "unit": "m2",
+   "price": 1500
+  },
+  {
+   "code": "GARAGE",
+   "category": "Windows & doors",
+   "description": "Sectional garage door 2.5x2.1 — installed",
+   "unit": "no",
+   "price": 16500
+  },
+  {
+   "code": "GARMOTOR",
+   "category": "Windows & doors",
+   "description": "Garage door motor — installed",
+   "unit": "no",
+   "price": 6500
+  },
+  {
+   "code": "GYP64",
+   "category": "Ceilings & partitions",
+   "description": "Gypsum board 6.4 mm",
+   "unit": "m2",
+   "price": 58
+  },
+  {
+   "code": "GYP95",
+   "category": "Ceilings & partitions",
+   "description": "Gypsum board 9.5 mm",
+   "unit": "m2",
+   "price": 72
+  },
+  {
+   "code": "GYP125",
+   "category": "Ceilings & partitions",
+   "description": "Gypsum board 12.5 mm",
+   "unit": "m2",
+   "price": 88
+  },
+  {
+   "code": "GYPFR",
+   "category": "Ceilings & partitions",
+   "description": "Fire-rated gypsum board 15 mm",
+   "unit": "m2",
+   "price": 118
+  },
+  {
+   "code": "SUSP",
+   "category": "Ceilings & partitions",
+   "description": "Suspended 600x600 exposed grid + mineral tiles",
+   "unit": "m2",
+   "price": 240
+  },
+  {
+   "code": "MFGRID",
+   "category": "Ceilings & partitions",
+   "description": "Concealed metal furring grid",
+   "unit": "m2",
+   "price": 95
+  },
+  {
+   "code": "FCBRD",
+   "category": "Ceilings & partitions",
+   "description": "Fibre-cement board 6 mm (eaves)",
+   "unit": "m2",
+   "price": 88
+  },
+  {
+   "code": "CORN75",
+   "category": "Ceilings & partitions",
+   "description": "Gypsum cove cornice 75 mm",
+   "unit": "m",
+   "price": 16
+  },
+  {
+   "code": "DRYFRAME",
+   "category": "Ceilings & partitions",
+   "description": "Steel stud & track 76 mm @ 600 crs",
+   "unit": "m2",
+   "price": 145
+  },
+  {
+   "code": "SKIM",
+   "category": "Plaster",
+   "description": "Gypsum skim plaster, 40 kg bag",
+   "unit": "bag",
+   "price": 175
+  },
+  {
+   "code": "HATCH",
+   "category": "Ceilings & partitions",
+   "description": "Ceiling access hatch 600x600",
+   "unit": "no",
+   "price": 450
+  },
+  {
+   "code": "SLS",
+   "category": "Floor finishes",
+   "description": "Self-levelling compound 5 mm",
+   "unit": "m2",
+   "price": 95
+  },
+  {
+   "code": "LVT",
+   "category": "Floor finishes",
+   "description": "Luxury vinyl click plank",
+   "unit": "m2",
+   "price": 290
+  },
+  {
+   "code": "CARPTILE",
+   "category": "Floor finishes",
+   "description": "Carpet tiles",
+   "unit": "m2",
+   "price": 260
+  },
+  {
+   "code": "CARPET",
+   "category": "Floor finishes",
+   "description": "Broadloom carpet incl underfelt",
+   "unit": "m2",
+   "price": 240
+  },
+  {
+   "code": "LAMIN",
+   "category": "Floor finishes",
+   "description": "Laminated flooring 8 mm",
+   "unit": "m2",
+   "price": 230
+  },
+  {
+   "code": "UNDERLAYF",
+   "category": "Floor finishes",
+   "description": "Foam underlay",
+   "unit": "m2",
+   "price": 22
+  },
+  {
+   "code": "ENGTIM",
+   "category": "Floor finishes",
+   "description": "Engineered timber flooring",
+   "unit": "m2",
+   "price": 720
+  },
+  {
+   "code": "EPOXY",
+   "category": "Floor finishes",
+   "description": "Epoxy floor coating system",
+   "unit": "m2",
+   "price": 165
+  },
+  {
+   "code": "TILEFC",
+   "category": "Tiling",
+   "description": "Ceramic floor tile (PC)",
+   "unit": "m2",
+   "price": 180
+  },
+  {
+   "code": "TILEPOR",
+   "category": "Tiling",
+   "description": "Porcelain floor tile 600x600 (PC)",
+   "unit": "m2",
+   "price": 320
+  },
+  {
+   "code": "TILEWC",
+   "category": "Tiling",
+   "description": "Ceramic wall tile (PC)",
+   "unit": "m2",
+   "price": 165
+  },
+  {
+   "code": "TILELF",
+   "category": "Tiling",
+   "description": "Large-format porcelain 600x1200 (PC)",
+   "unit": "m2",
+   "price": 480
+  },
+  {
+   "code": "MOSAIC",
+   "category": "Tiling",
+   "description": "Mosaic tile on mesh (PC)",
+   "unit": "m2",
+   "price": 520
+  },
+  {
+   "code": "SLATE",
+   "category": "Tiling",
+   "description": "Natural slate / stone paving (PC)",
+   "unit": "m2",
+   "price": 260
+  },
+  {
+   "code": "ADH",
+   "category": "Tiling",
+   "description": "Tile adhesive, 20 kg bag",
+   "unit": "bag",
+   "price": 145
+  },
+  {
+   "code": "GROUT",
+   "category": "Tiling",
+   "description": "Tile grout, 5 kg bag",
+   "unit": "bag",
+   "price": 95
+  },
+  {
+   "code": "TRIM",
+   "category": "Tiling",
+   "description": "Aluminium tile trim",
+   "unit": "m",
+   "price": 42
+  },
+  {
+   "code": "BEAD",
+   "category": "Plaster",
+   "description": "Galvanised angle bead",
+   "unit": "m",
+   "price": 14
+  },
+  {
+   "code": "PVC110",
+   "category": "Plumbing & drainage",
+   "description": "uPVC SN4 drain pipe 110 mm",
+   "unit": "m",
+   "price": 118
+  },
+  {
+   "code": "PVC160",
+   "category": "Plumbing & drainage",
+   "description": "uPVC SN4 drain pipe 160 mm",
+   "unit": "m",
+   "price": 240
+  },
+  {
+   "code": "PVC50",
+   "category": "Plumbing & drainage",
+   "description": "uPVC waste pipe 50 mm",
+   "unit": "m",
+   "price": 52
+  },
+  {
+   "code": "PVC40",
+   "category": "Plumbing & drainage",
+   "description": "uPVC waste pipe 40 mm",
+   "unit": "m",
+   "price": 38
+  },
+  {
+   "code": "CU22",
+   "category": "Plumbing & drainage",
+   "description": "Copper tube 22 mm Class 0",
+   "unit": "m",
+   "price": 185
+  },
+  {
+   "code": "CU15",
+   "category": "Plumbing & drainage",
+   "description": "Copper tube 15 mm Class 0",
+   "unit": "m",
+   "price": 118
+  },
+  {
+   "code": "PEX16",
+   "category": "Plumbing & drainage",
+   "description": "Multilayer PEX-AL-PEX 16 mm",
+   "unit": "m",
+   "price": 36
+  },
+  {
+   "code": "HDPE25",
+   "category": "Plumbing & drainage",
+   "description": "HDPE Class 12 service pipe 25 mm",
+   "unit": "m",
+   "price": 24
+  },
+  {
+   "code": "MHCOVER",
+   "category": "Plumbing & drainage",
+   "description": "Manhole cover & frame (medium duty)",
+   "unit": "no",
+   "price": 950
+  },
+  {
+   "code": "ICHAM",
+   "category": "Plumbing & drainage",
+   "description": "Plastic inspection chamber 450 incl lid",
+   "unit": "no",
+   "price": 1450
+  },
+  {
+   "code": "RODEYE",
+   "category": "Plumbing & drainage",
+   "description": "Rodding / inspection eye",
+   "unit": "no",
+   "price": 180
+  },
+  {
+   "code": "GULLY",
+   "category": "Plumbing & drainage",
+   "description": "Gully head with grid",
+   "unit": "no",
+   "price": 420
+  },
+  {
+   "code": "WCSUITE",
+   "category": "Sanitaryware",
+   "description": "Close-coupled WC suite (PC)",
+   "unit": "no",
+   "price": 2100
+  },
+  {
+   "code": "BASIN",
+   "category": "Sanitaryware",
+   "description": "Wash basin + pedestal (PC)",
+   "unit": "no",
+   "price": 950
+  },
+  {
+   "code": "BASINMIX",
+   "category": "Sanitaryware",
+   "description": "Basin mixer + waste",
+   "unit": "no",
+   "price": 650
+  },
+  {
+   "code": "BATH",
+   "category": "Sanitaryware",
+   "description": "Acrylic bath 1700 (PC)",
+   "unit": "no",
+   "price": 2400
+  },
+  {
+   "code": "BATHMIX",
+   "category": "Sanitaryware",
+   "description": "Bath mixer + waste",
+   "unit": "no",
+   "price": 1450
+  },
+  {
+   "code": "SHOWMIX",
+   "category": "Sanitaryware",
+   "description": "Shower mixer, rose, arm & waste",
+   "unit": "no",
+   "price": 1900
+  },
+  {
+   "code": "SHOWSCREEN",
+   "category": "Sanitaryware",
+   "description": "Frameless shower screen/door — installed",
+   "unit": "no",
+   "price": 7500
+  },
+  {
+   "code": "SINK",
+   "category": "Sanitaryware",
+   "description": "Stainless double-bowl sink",
+   "unit": "no",
+   "price": 1350
+  },
+  {
+   "code": "SINKMIX",
+   "category": "Sanitaryware",
+   "description": "Sink mixer + waste",
+   "unit": "no",
+   "price": 780
+  },
+  {
+   "code": "GEY150",
+   "category": "Hot water",
+   "description": "Electric geyser 150 L 3 kW (SANS 151)",
+   "unit": "no",
+   "price": 6600
+  },
+  {
+   "code": "GEY200",
+   "category": "Hot water",
+   "description": "Electric geyser 200 L 4 kW",
+   "unit": "no",
+   "price": 8300
+  },
+  {
+   "code": "GEYKIT",
+   "category": "Hot water",
+   "description": "Geyser kit: drip tray, PRV, T&P, vacuum breakers, pipework (SANS 10254)",
+   "unit": "no",
+   "price": 1650
+  },
+  {
+   "code": "SOLARGEY",
+   "category": "Hot water",
+   "description": "Solar water heater 200 L high-pressure — installed",
+   "unit": "no",
+   "price": 26000
+  },
+  {
+   "code": "HEATPUMP",
+   "category": "Hot water",
+   "description": "Heat pump retrofit — installed",
+   "unit": "no",
+   "price": 32000
+  },
+  {
+   "code": "TANK5000",
+   "category": "Plumbing & drainage",
+   "description": "5,000 L rainwater tank",
+   "unit": "no",
+   "price": 7800
+  },
+  {
+   "code": "GTAP",
+   "category": "Plumbing & drainage",
+   "description": "Garden tap + fittings",
+   "unit": "no",
+   "price": 120
+  },
+  {
+   "code": "VALVE22",
+   "category": "Plumbing & drainage",
+   "description": "Isolating valve 22 mm",
+   "unit": "no",
+   "price": 190
+  },
+  {
+   "code": "SEPTIC",
+   "category": "Plumbing & drainage",
+   "description": "Septic tank 2,500 L (precast / poly)",
+   "unit": "no",
+   "price": 9500
+  },
+  {
+   "code": "FDRAIN",
+   "category": "Plumbing & drainage",
+   "description": "Floor drain / shower channel",
+   "unit": "no",
+   "price": 650
+  },
+  {
+   "code": "ELIGHTPT",
+   "category": "Electrical",
+   "description": "Light point materials: conduit, 1.5 mm wiring, box, switch",
+   "unit": "no",
+   "price": 185
+  },
+  {
+   "code": "ESOCKET",
+   "category": "Electrical",
+   "description": "Socket outlet materials: conduit, 2.5 mm wiring, box, double socket",
+   "unit": "no",
+   "price": 245
+  },
+  {
+   "code": "ESTOVE",
+   "category": "Electrical",
+   "description": "Stove circuit: 6 mm cable, isolator, CB",
+   "unit": "no",
+   "price": 950
+  },
+  {
+   "code": "EGEYSER",
+   "category": "Electrical",
+   "description": "Geyser circuit: 4 mm cable, isolator, timer, CB",
+   "unit": "no",
+   "price": 1050
+  },
+  {
+   "code": "DB12",
+   "category": "Electrical",
+   "description": "12-way DB board fully equipped incl earth leakage & SPD",
+   "unit": "no",
+   "price": 3200
+  },
+  {
+   "code": "DB24",
+   "category": "Electrical",
+   "description": "24-way DB board fully equipped",
+   "unit": "no",
+   "price": 5600
+  },
+  {
+   "code": "SWA16",
+   "category": "Electrical",
+   "description": "16 mm2 4-core SWA cable",
+   "unit": "m",
+   "price": 185
+  },
+  {
+   "code": "EARTH",
+   "category": "Electrical",
+   "description": "Earth spike, clamp & bonding",
+   "unit": "no",
+   "price": 450
+  },
+  {
+   "code": "EXTLIGHT",
+   "category": "Electrical",
+   "description": "External wall light IP65",
+   "unit": "no",
+   "price": 380
+  },
+  {
+   "code": "EDATA",
+   "category": "Electrical",
+   "description": "Data / TV point materials",
+   "unit": "no",
+   "price": 220
+  },
+  {
+   "code": "EXTFAN",
+   "category": "Electrical",
+   "description": "Bathroom extractor fan",
+   "unit": "no",
+   "price": 750
+  },
+  {
+   "code": "LEDDL",
+   "category": "Electrical",
+   "description": "LED downlight",
+   "unit": "no",
+   "price": 85
+  },
+  {
+   "code": "LEDBAT",
+   "category": "Electrical",
+   "description": "LED batten / ceiling fitting",
+   "unit": "no",
+   "price": 260
+  },
+  {
+   "code": "SMOKE",
+   "category": "Electrical",
+   "description": "Smoke detector",
+   "unit": "no",
+   "price": 220
+  },
+  {
+   "code": "PVSYS5",
+   "category": "Electrical",
+   "description": "5 kW hybrid inverter + 10 kWh LiFePO4 + panels, SSEG-compliant — installed",
+   "unit": "no",
+   "price": 115000
+  },
+  {
+   "code": "AC12",
+   "category": "Mechanical",
+   "description": "Split AC 12,000 BTU inverter — installed",
+   "unit": "no",
+   "price": 14500
+  },
+  {
+   "code": "AC18",
+   "category": "Mechanical",
+   "description": "Split AC 18,000 BTU inverter — installed",
+   "unit": "no",
+   "price": 19500
+  },
+  {
+   "code": "AC24",
+   "category": "Mechanical",
+   "description": "Split AC 24,000 BTU inverter — installed",
+   "unit": "no",
+   "price": 26500
+  },
+  {
+   "code": "EFENCE",
+   "category": "Security",
+   "description": "Electric fence 6-strand wall-top — installed",
+   "unit": "m",
+   "price": 280
+  },
+  {
+   "code": "CCTV4",
+   "category": "Security",
+   "description": "4-camera CCTV system — installed",
+   "unit": "no",
+   "price": 11500
+  },
+  {
+   "code": "ALARM",
+   "category": "Security",
+   "description": "6-zone alarm system — installed",
+   "unit": "no",
+   "price": 7500
+  },
+  {
+   "code": "STEELFAB",
+   "category": "Structural steel",
+   "description": "Structural steel, fabricated & primed, delivered",
+   "unit": "t",
+   "price": 41000
+  },
+  {
+   "code": "GALV",
+   "category": "Structural steel",
+   "description": "Hot-dip galvanising extra",
+   "unit": "t",
+   "price": 6500
+  },
+  {
+   "code": "HDB",
+   "category": "Structural steel",
+   "description": "Holding-down bolt set M16",
+   "unit": "no",
+   "price": 180
+  },
+  {
+   "code": "BALUS",
+   "category": "Metalwork",
+   "description": "Mild steel balustrade, fabricated",
+   "unit": "m",
+   "price": 1450
+  },
+  {
+   "code": "GLBAL",
+   "category": "Metalwork",
+   "description": "Glass / stainless balustrade — installed",
+   "unit": "m",
+   "price": 6800
+  },
+  {
+   "code": "INTUM",
+   "category": "Metalwork",
+   "description": "Intumescent coating 60 min (materials)",
+   "unit": "m2",
+   "price": 180
+  },
+  {
+   "code": "PRIMER",
+   "category": "Paint",
+   "description": "Plaster primer (20 L = R1,100)",
+   "unit": "L",
+   "price": 55
+  },
+  {
+   "code": "PVA",
+   "category": "Paint",
+   "description": "Interior PVA mid-range",
+   "unit": "L",
+   "price": 52
+  },
+  {
+   "code": "ACRYL",
+   "category": "Paint",
+   "description": "Exterior acrylic",
+   "unit": "L",
+   "price": 80
+  },
+  {
+   "code": "ELAST",
+   "category": "Paint",
+   "description": "Elastomeric exterior coating",
+   "unit": "L",
+   "price": 120
+  },
+  {
+   "code": "UNDERC",
+   "category": "Paint",
+   "description": "Universal undercoat",
+   "unit": "L",
+   "price": 88
+  },
+  {
+   "code": "ENAMEL",
+   "category": "Paint",
+   "description": "Alkyd enamel",
+   "unit": "L",
+   "price": 118
+  },
+  {
+   "code": "METPRIM",
+   "category": "Paint",
+   "description": "Metal primer (red oxide / zinc)",
+   "unit": "L",
+   "price": 105
+  },
+  {
+   "code": "VARNISH",
+   "category": "Paint",
+   "description": "Timber varnish / sealer",
+   "unit": "L",
+   "price": 130
+  },
+  {
+   "code": "ROOFPAINT",
+   "category": "Paint",
+   "description": "Roof paint",
+   "unit": "L",
+   "price": 95
+  },
+  {
+   "code": "ALUPAINT",
+   "category": "Paint",
+   "description": "Aluminium reflective roof coating",
+   "unit": "L",
+   "price": 110
+  },
+  {
+   "code": "TORCH",
+   "category": "Waterproofing",
+   "description": "4 mm APP torch-on membrane",
+   "unit": "m2",
+   "price": 92
+  },
+  {
+   "code": "BPRIMER",
+   "category": "Waterproofing",
+   "description": "Bitumen primer",
+   "unit": "L",
+   "price": 70
+  },
+  {
+   "code": "LIQWP",
+   "category": "Waterproofing",
+   "description": "Liquid acrylic waterproofing system incl membrane (3 coats)",
+   "unit": "m2",
+   "price": 75
+  },
+  {
+   "code": "CEMWP",
+   "category": "Waterproofing",
+   "description": "Cementitious waterproofing (2 coats)",
+   "unit": "m2",
+   "price": 68
+  },
+  {
+   "code": "GLASS4",
+   "category": "Glazing",
+   "description": "4 mm clear float glass",
+   "unit": "m2",
+   "price": 290
+  },
+  {
+   "code": "GLASS638",
+   "category": "Glazing",
+   "description": "6.38 mm laminated safety glass (SANS 10400-N)",
+   "unit": "m2",
+   "price": 680
+  },
+  {
+   "code": "MIRROR",
+   "category": "Glazing",
+   "description": "6 mm mirror, polished edges",
+   "unit": "m2",
+   "price": 620
+  },
+  {
+   "code": "DGU",
+   "category": "Glazing",
+   "description": "Double-glazed unit 4-12-4",
+   "unit": "m2",
+   "price": 1650
+  },
+  {
+   "code": "PAVER80",
+   "category": "External works",
+   "description": "Interlocking concrete paver 80 mm",
+   "unit": "m2",
+   "price": 175
+  },
+  {
+   "code": "PAVER60",
+   "category": "External works",
+   "description": "Interlocking concrete paver 60 mm",
+   "unit": "m2",
+   "price": 148
+  },
+  {
+   "code": "CLAYPAVER",
+   "category": "External works",
+   "description": "Clay paver",
+   "unit": "m2",
+   "price": 310
+  },
+  {
+   "code": "KERB",
+   "category": "External works",
+   "description": "Precast barrier / FB kerb",
+   "unit": "m",
+   "price": 92
+  },
+  {
+   "code": "CHANNEL",
+   "category": "External works",
+   "description": "Precast channel",
+   "unit": "m",
+   "price": 70
+  },
+  {
+   "code": "ASPHALT",
+   "category": "External works",
+   "description": "30 mm asphalt incl prime — installed (small works)",
+   "unit": "m2",
+   "price": 420
+  },
+  {
+   "code": "PALISADE",
+   "category": "External works",
+   "description": "Galvanised palisade 1.8 m incl posts — installed",
+   "unit": "m",
+   "price": 1150
+  },
+  {
+   "code": "CLEARVU",
+   "category": "External works",
+   "description": "358 anti-climb mesh 2.4 m — installed",
+   "unit": "m",
+   "price": 1650
+  },
+  {
+   "code": "PRECWALL",
+   "category": "External works",
+   "description": "Precast concrete panel wall 1.8 m — installed",
+   "unit": "m",
+   "price": 780
+  },
+  {
+   "code": "DIAMOND",
+   "category": "External works",
+   "description": "Diamond mesh 1.8 m + galvanised posts (materials)",
+   "unit": "m",
+   "price": 120
+  },
+  {
+   "code": "SLGATE",
+   "category": "External works",
+   "description": "Steel sliding gate 4 m incl motor — installed",
+   "unit": "no",
+   "price": 28000
+  },
+  {
+   "code": "PEDGATE",
+   "category": "External works",
+   "description": "Steel pedestrian gate, fabricated",
+   "unit": "no",
+   "price": 3200
+  },
+  {
+   "code": "LAWN",
+   "category": "External works",
+   "description": "Instant lawn (kikuyu / buffalo)",
+   "unit": "m2",
+   "price": 55
+  },
+  {
+   "code": "TERRA",
+   "category": "External works",
+   "description": "Concrete retaining block (Terraforce-type)",
+   "unit": "m2",
+   "price": 290
+  },
+  {
+   "code": "FIREEXT",
+   "category": "Fire",
+   "description": "Fire extinguisher 4.5 kg DCP incl bracket & sign",
+   "unit": "no",
+   "price": 650
+  },
+  {
+   "code": "HOSEREEL",
+   "category": "Fire",
+   "description": "Fire hose reel 30 m (SANS 543)",
+   "unit": "no",
+   "price": 3800
+  },
+  {
+   "code": "EXITSIGN",
+   "category": "Fire",
+   "description": "LED emergency exit sign",
+   "unit": "no",
+   "price": 850
+  }
+ ]
+}

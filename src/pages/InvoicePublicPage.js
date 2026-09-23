@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckCircleIcon } from '../components/Icons';
+import { currencySymbol } from '../utils/money';
 
 // Public invoice page — /i/<token>. What the builder's client opens from the
 // email or WhatsApp link. Read-only: see the invoice, download the PDF and —
@@ -9,7 +10,7 @@ import { LinkIcon, CheckCircleIcon } from '../components/Icons';
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
 function fmt(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   return sym + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtDate(d) {

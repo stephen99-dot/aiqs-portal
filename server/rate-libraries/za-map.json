@@ -1,0 +1,687 @@
+{
+  "_about": "Maps UK rate-library keys to equivalent South African (ZAR) library codes, with optional unit-conversion factors or composite code sets; unmapped keys fall back to calibrated currency-parity conversion.",
+  "map": {
+    "aluminium_guttering": {
+      "code": "RF16"
+    },
+    "block_paving": {
+      "code": "EX01",
+      "note": "80 mm concrete pavers on G5 base"
+    },
+    "blockwork_below_dpc": {
+      "code": "MS06",
+      "note": "140 mm cement block wall"
+    },
+    "blockwork_inner_leaf_100mm": {
+      "code": "MS03",
+      "note": "SA practice: half-brick cement stock inner leaf"
+    },
+    "break_out_existing_slab": {
+      "codes": [
+        {
+          "code": "DM04",
+          "factor": 0.15
+        },
+        {
+          "code": "DM17",
+          "factor": 0.15
+        }
+      ],
+      "note": "Assumes 150 mm slab, broken up & carted to tip"
+    },
+    "brick_outer_leaf": {
+      "code": "MS09",
+      "note": "SA face brick half-brick wall"
+    },
+    "carpet_supply_fit": {
+      "code": "FL06"
+    },
+    "ceramic_floor_tiles": {
+      "code": "TL01"
+    },
+    "ceramic_floor_tiles_ensuite": {
+      "code": "TL01"
+    },
+    "ceramic_wall_tiles_ensuite": {
+      "code": "TL03"
+    },
+    "clay_tile_roofing": {
+      "code": "RF05"
+    },
+    "comm_aluminium_window_commercial": {
+      "code": "WD02",
+      "note": "SA aluminium window (typically single-glazed)"
+    },
+    "comm_balustrade_stainless": {
+      "code": "SS06"
+    },
+    "comm_blockwork_dense_140": {
+      "code": "MS06"
+    },
+    "comm_brickwork_facing_commercial": {
+      "code": "MS09"
+    },
+    "comm_carpet_tile_commercial": {
+      "code": "FL05"
+    },
+    "comm_data_outlet_cat6": {
+      "code": "EL13"
+    },
+    "comm_decoration_commercial": {
+      "code": "PT01"
+    },
+    "comm_fencing_palisade": {
+      "code": "EX08",
+      "factor": 1.333,
+      "note": "SA 1.8 m palisade pro-rated to 2.4 m height"
+    },
+    "comm_kerb_precast": {
+      "code": "EX03"
+    },
+    "comm_led_lighting_commercial": {
+      "codes": [
+        {
+          "code": "EL01",
+          "factor": 1
+        },
+        {
+          "code": "EL03",
+          "factor": 1
+        }
+      ],
+      "note": "Light point wiring + LED fitting"
+    },
+    "comm_metsec_partition_boarded": {
+      "code": "CL07",
+      "note": "Drywall partition on steel studs"
+    },
+    "comm_mf_ceiling_plasterboard": {
+      "codes": [
+        {
+          "code": "CL04",
+          "factor": 1
+        },
+        {
+          "code": "CL09",
+          "factor": 1
+        }
+      ],
+      "note": "Concealed-grid board ceiling + skim"
+    },
+    "comm_pad_foundation_rc": {
+      "codes": [
+        {
+          "code": "CN03",
+          "factor": 1
+        },
+        {
+          "code": "EW07",
+          "factor": 1
+        },
+        {
+          "code": "EW12",
+          "factor": 1
+        },
+        {
+          "code": "CN20",
+          "factor": 0.06
+        }
+      ],
+      "note": "Concrete + excavation + cart away + ~60 kg/m3 rebar"
+    },
+    "comm_partition_fire_60min": {
+      "code": "CL08",
+      "note": "Fire-rated drywall partition"
+    },
+    "comm_scaffold_commercial": {
+      "codes": [
+        {
+          "code": "PR15",
+          "factor": 1
+        },
+        {
+          "code": "PR14",
+          "factor": 12
+        }
+      ],
+      "note": "Erect & dismantle + 12 weeks hire"
+    },
+    "comm_shower_commercial": {
+      "code": "PD17"
+    },
+    "comm_site_management_week": {
+      "codes": [
+        {
+          "code": "PR02",
+          "factor": 1
+        },
+        {
+          "code": "PR03",
+          "factor": 1
+        }
+      ],
+      "note": "Full-time foreman + site agent 1 day/week"
+    },
+    "comm_slab_power_floated_200mm": {
+      "codes": [
+        {
+          "code": "CN04",
+          "factor": 0.2
+        },
+        {
+          "code": "CN24",
+          "factor": 1
+        },
+        {
+          "code": "CN14",
+          "factor": 1
+        },
+        {
+          "code": "CN13",
+          "factor": 1
+        },
+        {
+          "code": "EW11",
+          "factor": 0.15
+        },
+        {
+          "code": "CN27",
+          "factor": 0.2
+        }
+      ],
+      "note": "200 mm bed + mesh + DPM + power float + 150 mm G5 + joints"
+    },
+    "comm_steel_fire_protection_60min": {
+      "code": "SS07"
+    },
+    "comm_structural_steel_erected": {
+      "code": "SS01"
+    },
+    "comm_suspended_ceiling_grid_tile": {
+      "code": "CL03"
+    },
+    "comm_wash_basin_commercial": {
+      "code": "PD15"
+    },
+    "comm_wc_suite_commercial": {
+      "code": "PD14",
+      "note": "SA close-coupled suite equivalent"
+    },
+    "comm_welfare_cabins_week": {
+      "codes": [
+        {
+          "code": "PR04",
+          "factor": 1
+        },
+        {
+          "code": "PR05",
+          "factor": 1
+        }
+      ],
+      "note": "Chemical toilet + site office container"
+    },
+    "composite_external_door": {
+      "codes": [
+        {
+          "code": "JN03",
+          "factor": 1
+        },
+        {
+          "code": "JN05",
+          "factor": 1
+        },
+        {
+          "code": "JN08",
+          "factor": 1
+        }
+      ],
+      "note": "Solid meranti door + hardwood frame + cylinder lockset"
+    },
+    "composite_external_door_std": {
+      "codes": [
+        {
+          "code": "JN03",
+          "factor": 1
+        },
+        {
+          "code": "JN05",
+          "factor": 1
+        },
+        {
+          "code": "JN08",
+          "factor": 1
+        }
+      ],
+      "note": "Solid meranti door + hardwood frame + cylinder lockset"
+    },
+    "concrete_slab_100mm": {
+      "codes": [
+        {
+          "code": "CN11",
+          "factor": 1
+        },
+        {
+          "code": "CN23",
+          "factor": 1
+        },
+        {
+          "code": "CN14",
+          "factor": 1
+        },
+        {
+          "code": "CN13",
+          "factor": 1
+        }
+      ],
+      "note": "100 mm surface bed + Ref 193 mesh + DPM + power float"
+    },
+    "concrete_slab_150mm": {
+      "codes": [
+        {
+          "code": "CN04",
+          "factor": 0.15
+        },
+        {
+          "code": "CN24",
+          "factor": 1
+        },
+        {
+          "code": "CN14",
+          "factor": 1
+        },
+        {
+          "code": "CN13",
+          "factor": 1
+        }
+      ],
+      "note": "150 mm surface bed + Ref 245 mesh + DPM + power float"
+    },
+    "concrete_strip_foundation": {
+      "code": "CN02",
+      "note": "25 MPa readymix ~ C25/30"
+    },
+    "decorate_architrave": {
+      "code": "PT09",
+      "note": "Narrow-girth enamel, same as skirting"
+    },
+    "decorate_door": {
+      "code": "PT07"
+    },
+    "decorate_skirting": {
+      "code": "PT09"
+    },
+    "disposal_excavated_material": {
+      "code": "EW12"
+    },
+    "door_frames_hardwood": {
+      "code": "JN05"
+    },
+    "downpipe_68mm": {
+      "code": "RF17",
+      "note": "SA aluminium downpipe"
+    },
+    "dpc_polythene": {
+      "code": "MS14",
+      "factor": 2,
+      "note": "Two courses (one per leaf) of SA 375 mm DPC"
+    },
+    "dpm_1200g": {
+      "code": "CN14",
+      "note": "250 micron DPM lapped & taped"
+    },
+    "drainage_new_run": {
+      "codes": [
+        {
+          "code": "PD01",
+          "factor": 1
+        },
+        {
+          "code": "EW02",
+          "factor": 0.4
+        },
+        {
+          "code": "EW10",
+          "factor": 0.35
+        }
+      ],
+      "note": "110 mm uPVC drain incl bedding + trench excavation/backfill ~0.4 m3/m"
+    },
+    "electrical_testing_certificate": {
+      "code": "PR10",
+      "note": "SA Electrical COC"
+    },
+    "emulsion_ceiling": {
+      "code": "PT02"
+    },
+    "emulsion_walls_2coat": {
+      "code": "PT01"
+    },
+    "engineered_timber_floor": {
+      "code": "FL08"
+    },
+    "engineered_timber_flooring": {
+      "code": "FL08"
+    },
+    "excavation_strip_foundation": {
+      "codes": [
+        {
+          "code": "EW02",
+          "factor": 1
+        },
+        {
+          "code": "EW12",
+          "factor": 1
+        }
+      ],
+      "note": "Machine trench excavation + cart away surplus (UK includes spoil removal)"
+    },
+    "external_decorations_stain": {
+      "code": "PT08",
+      "note": "Sealer/varnish to timber"
+    },
+    "external_lighting": {
+      "codes": [
+        {
+          "code": "EL01",
+          "factor": 1
+        },
+        {
+          "code": "EL12",
+          "factor": 1
+        }
+      ],
+      "note": "Light point wiring + external fitting"
+    },
+    "external_masonry_paint": {
+      "code": "PT03"
+    },
+    "extract_fans": {
+      "code": "EL14"
+    },
+    "fascia_board_timber": {
+      "codes": [
+        {
+          "code": "RF14",
+          "factor": 1
+        },
+        {
+          "code": "RF16",
+          "factor": 1
+        }
+      ],
+      "note": "Fibre-cement fascia + seamless aluminium gutter (SA practice)"
+    },
+    "fascia_soffit_guttering": {
+      "codes": [
+        {
+          "code": "RF14",
+          "factor": 1
+        },
+        {
+          "code": "RF16",
+          "factor": 1
+        }
+      ],
+      "note": "Fibre-cement fascia + seamless aluminium gutter (SA practice)"
+    },
+    "flat_roof_felt": {
+      "code": "WP02",
+      "note": "Two-layer torch-on is SA equivalent of built-up felt (insulation excluded)"
+    },
+    "floor_tile_600x600": {
+      "code": "TL02"
+    },
+    "garden_wall_brick": {
+      "code": "MS10",
+      "note": "One-brick face brick wall"
+    },
+    "gate_metal": {
+      "code": "EX12"
+    },
+    "gloss_woodwork": {
+      "code": "PT05"
+    },
+    "granular_backfill_clause804": {
+      "code": "EW11",
+      "note": "Imported G5 compacted"
+    },
+    "gully_trapped": {
+      "code": "PD12"
+    },
+    "hardcore_fill": {
+      "code": "EW11",
+      "factor": 0.2,
+      "note": "200 mm imported G5 fill, compacted (SA equivalent of hardcore)"
+    },
+    "heating_pipework_first_fix": {
+      "code": "PD06",
+      "note": "15 mm copper incl fittings"
+    },
+    "hip_tiles": {
+      "code": "RF11"
+    },
+    "hot_water_cylinder": {
+      "code": "PD21",
+      "note": "SA 200 L geyser equivalent"
+    },
+    "internal_decorations": {
+      "code": "PT01",
+      "note": "Primer + 2 coats PVA"
+    },
+    "internal_door_painted_solid_core": {
+      "codes": [
+        {
+          "code": "JN02",
+          "factor": 1
+        },
+        {
+          "code": "JN04",
+          "factor": 1
+        },
+        {
+          "code": "JN07",
+          "factor": 1
+        }
+      ],
+      "note": "Semi-solid door + pressed steel frame + 2-lever lockset (SA practice)"
+    },
+    "internal_door_standard": {
+      "codes": [
+        {
+          "code": "JN01",
+          "factor": 1
+        },
+        {
+          "code": "JN04",
+          "factor": 1
+        },
+        {
+          "code": "JN07",
+          "factor": 1
+        }
+      ],
+      "note": "Hollow-core door + pressed steel frame + 2-lever lockset (SA practice)"
+    },
+    "intruder_alarm": {
+      "code": "EL23"
+    },
+    "kitchen_worktop_stone": {
+      "code": "JN14"
+    },
+    "laminate_flooring": {
+      "code": "FL07"
+    },
+    "loft_insulation_topup": {
+      "code": "RF19",
+      "note": "100 mm glasswool layer"
+    },
+    "lvt_flooring_karndean": {
+      "code": "FL04"
+    },
+    "lvt_flooring_luxury": {
+      "code": "FL04"
+    },
+    "manhole_inspection_chamber": {
+      "code": "PD10"
+    },
+    "metal_stud_partition": {
+      "code": "CL07",
+      "note": "Drywall partition on steel studs"
+    },
+    "opening_formation": {
+      "codes": [
+        {
+          "code": "DM14",
+          "factor": 1
+        },
+        {
+          "code": "DM16",
+          "factor": 1
+        }
+      ],
+      "note": "Opening in loadbearing wall incl lintels + needling/propping"
+    },
+    "plasterboard_ceilings": {
+      "codes": [
+        {
+          "code": "CL02",
+          "factor": 1
+        },
+        {
+          "code": "CL09",
+          "factor": 1
+        }
+      ],
+      "note": "Gypsum board ceiling on brandering + skim"
+    },
+    "plasterboard_skim_walls": {
+      "codes": [
+        {
+          "code": "PL01",
+          "factor": 1
+        },
+        {
+          "code": "PL04",
+          "factor": 1
+        }
+      ],
+      "note": "SA wet-plaster equivalent: 15 mm plaster + gypsum skim"
+    },
+    "porcelain_floor_tiles": {
+      "code": "TL02"
+    },
+    "ridge_tiles_dry_fix": {
+      "code": "RF11"
+    },
+    "roof_structure_cut_timber": {
+      "code": "RF02",
+      "note": "Loose-cut rafters"
+    },
+    "roof_tiles_interlocking": {
+      "code": "RF04",
+      "note": "Concrete tiles on battens incl underlay"
+    },
+    "roof_trusses_fink": {
+      "code": "RF01",
+      "note": "Per m2 plan area"
+    },
+    "scaffolding": {
+      "codes": [
+        {
+          "code": "PR15",
+          "factor": 1
+        },
+        {
+          "code": "PR14",
+          "factor": 8
+        }
+      ],
+      "note": "Erect & dismantle + 8 weeks hire"
+    },
+    "scaffolding_two_storey": {
+      "codes": [
+        {
+          "code": "PR15",
+          "factor": 1
+        },
+        {
+          "code": "PR14",
+          "factor": 8
+        }
+      ],
+      "note": "Erect & dismantle + 8 weeks hire"
+    },
+    "screed_sand_cement_75mm": {
+      "code": "FL02"
+    },
+    "skip_hire_8yd": {
+      "code": "PR08",
+      "note": "8 yd3 ~ 6 m3"
+    },
+    "skirting_mdf_95mm": {
+      "code": "JN10",
+      "note": "SA pine skirting equivalent"
+    },
+    "strip_out_ceiling": {
+      "code": "DM08"
+    },
+    "strip_out_plaster": {
+      "code": "DM09"
+    },
+    "stud_wall_plasterboard_both_faces": {
+      "code": "CL07",
+      "note": "SA drywall partition (steel stud) equivalent"
+    },
+    "tarmac_driveway": {
+      "codes": [
+        {
+          "code": "EX07",
+          "factor": 1
+        },
+        {
+          "code": "EW11",
+          "factor": 0.15
+        }
+      ],
+      "note": "Asphalt surfacing + 150 mm G5 base"
+    },
+    "tile_wall_ceramic": {
+      "code": "TL03"
+    },
+    "tile_wall_large_format": {
+      "code": "TL03",
+      "note": "600x300 is standard wall-tile format in SA"
+    },
+    "tv_data_cabling": {
+      "code": "EL13"
+    },
+    "upvc_window_large": {
+      "code": "WD05",
+      "factor": 1.8,
+      "note": "Per window at ~1.5x1.2 = 1.8 m2"
+    },
+    "upvc_window_small": {
+      "code": "WD05",
+      "factor": 0.54,
+      "note": "Per window at 600x900 = 0.54 m2"
+    },
+    "upvc_window_standard": {
+      "code": "WD05",
+      "factor": 1.2,
+      "note": "Per window at ~1.2 m2 typical"
+    },
+    "wall_plate_timber": {
+      "code": "RF03"
+    },
+    "window_obscure_small": {
+      "code": "WD05",
+      "factor": 0.54,
+      "note": "Per window at 600x900 = 0.54 m2"
+    },
+    "window_obscure_standard": {
+      "code": "WD05",
+      "factor": 1.2,
+      "note": "Per window at ~1.2 m2 typical"
+    }
+  }
+}

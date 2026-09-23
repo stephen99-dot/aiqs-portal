@@ -17,6 +17,7 @@ import {
   CheckCircleIcon, CoinsIcon, FileTextIcon, ImageIcon, PackageIcon,
   BarChartIcon, PaperclipIcon, ClipboardIcon,
 } from '../components/Icons';
+import { currencySymbol } from '../utils/money';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -387,7 +388,7 @@ export default function ChatPage() {
     if (!run) return;
     let downloads = [];
     try { downloads = run.download_files ? (typeof run.download_files === 'string' ? JSON.parse(run.download_files) : run.download_files) : []; } catch (e) {}
-    const sym = run.currency === 'EUR' ? '€' : '£';
+    const sym = currencySymbol(run.currency);
     const grand = run.grand_total ? `${sym}${Math.round(run.grand_total).toLocaleString('en-GB')}` : '(no total)';
     // Lead with the agent's own written summary/findings so the left pane reads
     // like a proper explanation, then the headline.

@@ -31,9 +31,10 @@ function slugKey(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
 
-// Upsert a {tradeName: £/day} map into the user's rate library.
+// Upsert a {tradeName: day rate} map into the user's rate library, in the
+// account's currency (`symbol`, default £).
 // Returns { saved } — the number of rows inserted or updated.
-function saveTradeRates(db, { userId, rates }) {
+function saveTradeRates(db, { userId, rates, symbol = '£' }) {
   if (!userId || !rates || typeof rates !== 'object' || Array.isArray(rates)) return { saved: 0 };
 
   const sel = db.prepare(
@@ -57,9 +58,9 @@ function saveTradeRates(db, { userId, rates }) {
     const displayName = name + ' (Day Rate)';
     const existing = sel.get(userId, CATEGORY, itemKey);
     if (existing) {
-      upd.run(value, displayName, '£/day', existing.id);
+      upd.run(value, displayName, symbol + '/day', existing.id);
     } else {
-      ins.run('rl_' + uuidv4().slice(0, 8), userId, CATEGORY, itemKey, displayName, value, '£/day');
+      ins.run('rl_' + uuidv4().slice(0, 8), userId, CATEGORY, itemKey, displayName, value, symbol + '/day');
     }
     saved++;
   }
@@ -71,7 +72,7 @@ function saveTradeRates(db, { userId, rates }) {
 // accepted, so labels and units always come from the catalogue, never the
 // client. Blank / missing items are simply not saved — pricing falls back to
 // the generic UK rates for those. Returns { saved }.
-function saveTradeItemRates(db, { userId, trade, values }) {
+function saveTradeItemRates(db, { userId, trade, values, symbol = '£' }) {
   if (!userId || !values || typeof values !== 'object' || Array.isArray(values)) return { saved: 0 };
   const items = require('./tradeCatalog').getRateItemsForTrade(trade);
   if (!items.length) return { saved: 0 };
@@ -93,9 +94,11 @@ function saveTradeItemRates(db, { userId, trade, values }) {
     const item = byKey.get(key);
     const value = parseFloat(raw);
     if (!item || !Number.isFinite(value) || value <= 0 || value >= 1000000) continue;
+    // Catalogue units are written in £ ('£/m²'); a Rand account's rate is Rand.
+    const unit = String(item.unit || '').replace(/£/g, symbol);
     const existing = sel.get(userId, category, item.key);
-    if (existing) upd.run(value, item.label, item.unit, existing.id);
-    else ins.run('rl_' + uuidv4().slice(0, 8), userId, category, item.key, item.label, value, item.unit);
+    if (existing) upd.run(value, item.label, unit, existing.id);
+    else ins.run('rl_' + uuidv4().slice(0, 8), userId, category, item.key, item.label, value, unit);
     saved++;
   }
   return { saved };

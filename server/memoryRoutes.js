@@ -75,10 +75,24 @@ router.delete('/memories/:id', authMiddleware, (req, res) => {
 
 // ── Onboarding ────────────────────────────────────────────────────────
 
+// Start onboarding again (the user's own "Redo onboarding" button). Clears
+// the answers onboarding saved and any rates in another currency — see
+// onboardingReset.js.
+router.post('/onboarding/reset', authMiddleware, (req, res) => {
+  try {
+    const out = require('./onboardingReset').resetOnboarding(db, req.user.id);
+    if (!out) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, ...out });
+  } catch (e) {
+    console.error('[Onboarding] reset error:', e.message);
+    res.status(500).json({ error: 'Failed to reset onboarding' });
+  }
+});
+
 // Returns current onboarding status and a suggested question set
 router.get('/onboarding', authMiddleware, (req, res) => {
   try {
-    const u = db.prepare('SELECT onboarding_completed_at, onboarding_skipped, created_at FROM users WHERE id = ?').get(req.user.id);
+    const u = db.prepare('SELECT onboarding_completed_at, onboarding_skipped, onboarding_reset_at, created_at FROM users WHERE id = ?').get(req.user.id);
     // is_new_account: the dashboard forces brand-new signups (however they
     // arrive — register, login, magic link) into onboarding before anything
     // else. Scoped to recent accounts so the existing back book is nudged by
@@ -88,10 +102,13 @@ router.get('/onboarding', authMiddleware, (req, res) => {
       const createdIso = String(u.created_at).replace(' ', 'T').replace(/Z?$/, 'Z');
       isNew = (Date.now() - new Date(createdIso).getTime()) / 86400000 <= 14;
     }
+    // A reset account is walked back through onboarding like a new one.
+    const wasReset = !!(u && u.onboarding_reset_at);
     res.json({
       completed_at: u ? u.onboarding_completed_at : null,
       skipped: u ? !!u.onboarding_skipped : false,
-      is_new_account: isNew,
+      is_new_account: isNew || wasReset,
+      was_reset: wasReset,
     });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load onboarding status' });
@@ -116,10 +133,13 @@ router.get('/onboarding/questions', authMiddleware, (req, res) => {
     res.json({
       trade,
       matched: !!tradeCatalog.findTrade(trade),
-      questions: tradeCatalog.getQuestionsForTrade(trade),
+      // In the user's country: a South African account is asked in Rand with
+      // SA certifications (see onboardingLocale.js).
+      questions: require('./onboardingLocale').localiseQuestions(tradeCatalog.getQuestionsForTrade(trade), trade, req.user),
       // The optional itemised rate sheet for this trade — typical figures are
-      // placeholders only; blanks fall back to generic UK rates.
-      rate_items: tradeCatalog.getRateItemsForTrade(trade),
+      // placeholders only; blanks fall back to the generic rate library.
+      rate_items: require('./onboardingLocale').localiseRateItems(tradeCatalog.getRateItemsForTrade(trade), req.user),
+      currency_symbol: require('./lib/countries').countryForUser(req.user).symbol,
     });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load questions' });
@@ -145,7 +165,7 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
     if (notes) answers.extra_notes = notes;
 
     if (skipped) {
-      db.prepare('UPDATE users SET onboarding_skipped = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+      db.prepare('UPDATE users SET onboarding_skipped = 1, onboarding_reset_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
       return res.json({ success: true, skipped: true });
     }
 
@@ -238,14 +258,14 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
     const tradeRates = req.body && req.body.trade_rates;
     if (tradeRates && typeof tradeRates === 'object') {
       try {
-        ratesSaved += require('./tradeRates').saveTradeRates(db, { userId, rates: tradeRates }).saved;
+        ratesSaved += require('./tradeRates').saveTradeRates(db, { userId, rates: tradeRates, symbol: require('./lib/countries').countryForUser(req.user).symbol }).saved;
       } catch (err) {
         console.error('[Onboarding] trade rates save error:', err.message);
       }
     }
     if (trade && Object.keys(rateItemValues).length > 0) {
       try {
-        const { saved } = require('./tradeRates').saveTradeItemRates(db, { userId, trade, values: rateItemValues });
+        const { saved } = require('./tradeRates').saveTradeItemRates(db, { userId, trade, values: rateItemValues, symbol: require('./lib/countries').countryForUser(req.user).symbol });
         ratesSaved += saved;
         if (saved > 0) ratesTouched = true;
       } catch (err) {
@@ -274,7 +294,7 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       catch (err) { console.error('[Onboarding] pricing prefs save error:', err.message); }
     }
 
-    db.prepare('UPDATE users SET onboarding_completed_at = CURRENT_TIMESTAMP, onboarding_skipped = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
+    db.prepare('UPDATE users SET onboarding_completed_at = CURRENT_TIMESTAMP, onboarding_skipped = 0, onboarding_reset_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);
     res.json({ success: true, saved_count: saved.length });
   } catch (e) {
     console.error('[Onboarding] save error:', e.message);

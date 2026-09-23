@@ -22,7 +22,7 @@ const mailer = require('./mailer');
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function fmtMoney(n, code) {
-  const sym = code === 'EUR' ? '€' : '£';
+  const sym = require('./lib/countries').currencySymbol(code);
   return sym + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function daysOverdue(dueDate) {

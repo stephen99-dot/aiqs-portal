@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
+import { currencySymbol } from '../utils/money';
 
 // "Update with AI" — a chat drawer for amending a document by talking. Used on
 // the quote editor (/estimator/quote/:id) and the Builder Pack / Client Copy
@@ -18,7 +19,7 @@ import { apiFetch } from '../utils/api';
 //   title, subtitle, examples, appliedNote, fabLabel — copy overrides
 
 function fmtMoney(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   const v = Number(n) || 0;
   return sym + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

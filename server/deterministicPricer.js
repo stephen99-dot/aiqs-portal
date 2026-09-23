@@ -1871,15 +1871,32 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     return true;
   });
 
-  const locationInfo = detectLocationFactor(location);
+  let locationInfo = detectLocationFactor(location);
 
   // Region is driven by the property address (Phase: detect-from-drawings).
   // A UK postcode forces GBP + UK VAT even if the account default is EUR; an
   // Irish address forces EUR. Only fall back to options.currency when the
   // address gives no country signal.
   const ukPostcode = /\b[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}\b/i.test(location || '');
+
+  // South Africa. The job's address decides first (a South African place name
+  // is decisive); otherwise the account's country (options.country) applies,
+  // unless the address is plainly a UK postcode or an explicitly Irish one.
+  // The Irish place-name list is substring-based ('clare' is in Clarens, Free
+  // State), so for a South African account only an explicit Ireland/Eircode
+  // signal moves the job to Ireland.
+  //
+  // The profile arrives by injection (options.countryPricing, built by
+  // lib/countries.pricingOptions) for the same reason the rate resolver does:
+  // this file requires nothing. Its `byAddress` flag says the address itself
+  // was South African, which beats nothing but a UK postcode.
+  const explicitIreland = /ireland|eircode|\bco\.\s*[a-z]/i.test(location || '');
+  const cp = options.countryPricing && options.countryPricing.country === 'ZA' ? options.countryPricing : null;
+  const za = cp && !ukPostcode && (cp.byAddress || !explicitIreland) ? cp : null;
+  if (za) locationInfo = { factor: za.region.factor, label: za.label, isIreland: false, country: 'ZA', region: za.region.name, library: za.libraryRef };
+
   const isUKAddress = ukPostcode && !locationInfo.isIreland;
-  const isIreland = locationInfo.isIreland || (!isUKAddress && options.currency === 'EUR');
+  const isIreland = !za && (locationInfo.isIreland || (!isUKAddress && options.currency === 'EUR'));
   // Front-end parity: rates are all-in competitive prices, so the summary
   // adds NO automatic markup. A builder can still opt back in via their
   // playbook (Pricing Preferences), which arrives here through options.
@@ -1889,17 +1906,32 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   } = options;
   // VAT + currency follow the detected region. A decisive address (UK postcode
   // or Irish location) overrides any account-default passed in options.
-  const vat_rate = options.vat_rate != null ? options.vat_rate : (isIreland ? 13.5 : 20);
+  // South African VAT is the statutory 15% whatever UK/Irish default a caller
+  // passes in.
+  const vat_rate = za ? za.vatRate : (options.vat_rate != null ? options.vat_rate : (isIreland ? 13.5 : 20));
   let currency;
-  if (isUKAddress) currency = 'GBP';
+  if (za) currency = 'ZAR';
+  else if (isUKAddress) currency = 'GBP';
   else if (locationInfo.isIreland) currency = 'EUR';
   else currency = options.currency || (isIreland ? 'EUR' : 'GBP');
+  const CS = za ? za.symbol : (currency === 'EUR' ? '€' : '£');
 
   // Location factor + currency conversion for Ireland (GBP base rates → EUR)
   let locFactor = locationInfo.factor;
   if (isIreland) {
     locFactor = locationInfo.factor * GBP_TO_EUR; // e.g. 1.10 × 1.17 = 1.287 total uplift
   }
+  // South Africa: keys the SA library covers are priced from it directly (x the
+  // region factor); anything else is the UK rate x the cost-parity factor x the
+  // region factor. The GBP-denominated sanity caps below scale by capScale,
+  // which is 1 everywhere else so UK and Irish output is unchanged.
+  if (za) locFactor = za.locFactor;
+  const capScale = za ? za.capScale : 1;
+  // The location-adjusted library rate for a key, in the job's currency.
+  const libraryRate = (key) => {
+    if (za) { const hit = za.localRate(key); if (hit) return hit.rate; }
+    return BASE_RATES[key].rate * locFactor;
+  };
 
   // ───── Merge duplicate items with the same key + unit ─────
   // Without this, the AI can produce 3 separate `window_bespoke_narrow`
@@ -1959,7 +1991,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   // change in output shape beyond an omitted `shadow` key. Declared after projectType so
   // it can carry it as context.
   let shadow = null;
-  if (typeof options.resolveRate === 'function') {
+  if (typeof options.resolveRate === 'function' && !za) {
     try {
       shadow = createShadowComparer(options.resolveRate, {
         locFactor, clientRates, region: locationInfo.label, projectType,
@@ -1995,6 +2027,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   for (const item of lockedItems) {
     // Rate priority: 1) explicit override in item, 2) client DB rate, 3) base rate library
     let rate, rateSource;
+    // True when the rate is a South African library figure. The unit ceilings
+    // are GBP bounds on AI / client rates converted at a single parity factor;
+    // a curated SA rate (structural steel runs ~16x its UK figure) is not what
+    // they guard against, so it is not clipped by them.
+    let fromLocalLibrary = false;
     // A sum the tender documents state is not a rate to be derived — it is a
     // figure to be carried. Read it here so it can override whatever the ladder
     // below arrives at, and so it never gets the location factor: a GBP 50,000
@@ -2010,10 +2047,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       // Sanity check: if client rate is wildly different from base rate, prefer base rate
       // This catches corrupted memory engine rates that slipped into clientRates
       if (BASE_RATES[item.key] && BASE_RATES[item.key].rate > 0) {
-        const baseWithLoc = BASE_RATES[item.key].rate * locFactor;
+        const baseWithLoc = libraryRate(item.key);
         const ratio = rate / baseWithLoc;
         if (ratio > 5 || ratio < 0.1) {
-          const cs = currency === 'EUR' ? '€' : '£';
+          const cs = CS;
           warnings.push(`Client rate for '${item.key}' (${cs}${Math.round(rate * 100) / 100}) is ${ratio.toFixed(1)}x base rate (${cs}${Math.round(baseWithLoc * 100) / 100}) — using base rate instead`);
           rate = baseWithLoc;
           rateSource = 'base_library';
@@ -2036,23 +2073,24 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         // is priced per Nr). Don't apply that rate — estimate from the line's unit.
         rate = (item.assumed_rate || estimateFallbackRate(item)) * locFactor;
         rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
-        const cs = currency === 'EUR' ? '€' : '£';
+        const cs = CS;
         warnings.push(`Key '${item.key}' prices per ${bk.unit} but the line is per ${item.unit} — likely the wrong rate key. Ignored the library rate, used ${rateSource} ${cs}${Math.round(rate * 100) / 100}/${item.unit}.`);
       } else if (heatingMisuse) {
         rate = (item.assumed_rate || estimateFallbackRate(item)) * locFactor;
         rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
-        const cs = currency === 'EUR' ? '€' : '£';
+        const cs = CS;
         warnings.push(`Key 'heating_extension' (extend whole central heating to a new extension) was applied to a single-radiator move — wrong rate. Re-estimated at ${rateSource} ${cs}${Math.round(rate * 100) / 100}/${item.unit}.`);
       } else {
-        rate = bk.rate * locFactor;
+        rate = libraryRate(item.key);
         rateSource = 'base_library';
+        fromLocalLibrary = !!(za && za.localRate(item.key));
       }
     } else {
       // Unknown key — use AI assumed rate, or estimate from unit type
       rate = item.assumed_rate || estimateFallbackRate(item) ;
       rate = rate * locFactor;
       rateSource = item.assumed_rate ? 'ai_estimated' : 'fallback_estimated';
-      const currSym = currency === 'EUR' ? '€' : '£';
+      const currSym = CS;
       warnings.push(`No base rate for '${item.key}' — used ${rateSource} rate ${currSym}${Math.round(rate * 100) / 100}/${item.unit || 'Item'}`);
     }
 
@@ -2068,11 +2106,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     // when a bad clientRate or AI assumed_rate exists for a key with NO
     // corresponding BASE_RATE (e.g. `extend_private_drain_100mm_wavin` at
     // €3,600/m which is physically impossible for a linear drainage run).
-    const unitCeilingGbp = rateSource === 'stated_sum' ? null : ceilingFor(item.unit, { commercial: isNonResidential });
+    const unitCeilingGbp = (rateSource === 'stated_sum' || (fromLocalLibrary && rateSource === 'base_library')) ? null : ceilingFor(item.unit, { commercial: isNonResidential });
     if (unitCeilingGbp) {
       const ceilingLocal = unitCeilingGbp * locFactor;  // convert to target currency
       if (rate > ceilingLocal) {
-        const cs = currency === 'EUR' ? '€' : '£';
+        const cs = CS;
         // CLIP TO THE CEILING — never to estimateFallbackRate(). The fallback is
         // a generic guess unrelated to the ceiling, and swapping it in silently
         // destroyed real bills: garage construction at £17,250/m was replaced
@@ -2110,13 +2148,13 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       // domestic rate. Above the domestic band, use the unit ceiling as the reference
       // instead: it is the highest defensible rate for the unit, so a rate above five
       // times THAT really is a total masquerading as a rate.
-      const aiCapLineValue = isNonResidential ? 250000 : 50000;
-      if (itemTotal > aiCapLineValue && rate > 500) {
+      const aiCapLineValue = (isNonResidential ? 250000 : 50000) * capScale;
+      if (itemTotal > aiCapLineValue && rate > 500 * capScale) {
         const expectedRate = (isNonResidential
           ? (ceilingFor(item.unit, { commercial: true }) || estimateFallbackRate(item))
           : estimateFallbackRate(item)) * locFactor;
         if (rate > expectedRate * 5) {
-          const cSym = currency === 'EUR' ? '€' : '£';
+          const cSym = CS;
           warnings.push(`Rate for '${item.key}' looks too high (${cSym}${Math.round(rate)}/${item.unit || 'Item'} × ${item.qty} = ${cSym}${Math.round(itemTotal).toLocaleString()}). Using fallback rate ${cSym}${Math.round(expectedRate * 100) / 100}/${item.unit || 'Item'} instead.`);
           rate = expectedRate;
           rateSource = 'fallback_corrected';
@@ -2125,7 +2163,10 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     }
 
     const known = BASE_RATES[item.key];
-    const baseRate = known || { ...defaultSplitForSection(item.section, item.unit), description: item.description };
+    let baseRate = known || { ...defaultSplitForSection(item.section, item.unit), description: item.description };
+    // An SA library rate carries its own labour / materials split.
+    const zaHit = za && known ? za.localRate(item.key) : null;
+    if (zaHit) baseRate = { ...baseRate, labour: Math.round(zaHit.labourShare * 100) / 100, materials: Math.round((1 - zaHit.labourShare) * 100) / 100 };
     const total = Math.round(item.qty * rate * 100) / 100;
     const labour = Math.round(total * baseRate.labour * 100) / 100;
     const materials = Math.round(total * baseRate.materials * 100) / 100;
@@ -2141,8 +2182,8 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     }
 
     // Flag individual items with suspiciously high totals
-    const cs = currency === 'EUR' ? '€' : '£';
-    if (total > 25000) {
+    const cs = CS;
+    if (total > 25000 * capScale) {
       warnings.push(`High-value item: '${bestDescription}' = ${cs}${Math.round(total).toLocaleString()} (${item.qty} ${item.unit || 'Item'} × ${cs}${Math.round(rate * 100) / 100}) — please verify qty and rate`);
     }
 
@@ -2212,12 +2253,12 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
   const extFloorArea = options.floor_area || 0;
   const scaleFactor = extFloorArea > 40 ? Math.min(extFloorArea / 40, 3.0) : 1.0;
   if ((isSingleStoreyExt || isTwoStoreyExt) && !hasPremiumIndicators && !isNonResidential) {
-    const cs = currency === 'EUR' ? '€' : '£';
+    const cs = CS;
     const sectionCaps = {
-      'roof':        { max: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 14000 :  9000) * scaleFactor) },
-      'electrical':  { max: Math.round((isTwoStoreyExt ? 14000 : 10000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 11000 :  8000) * scaleFactor) },
-      'substructure':{ max: Math.round((isTwoStoreyExt ? 22000 : 16000) * scaleFactor), target: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor) },
-      'mechanical':  { max: Math.round((isTwoStoreyExt ? 10000 :  7000) * scaleFactor), target: Math.round((isTwoStoreyExt ?  8000 :  5500) * scaleFactor) },
+      'roof':        { max: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor * capScale), target: Math.round((isTwoStoreyExt ? 14000 :  9000) * scaleFactor * capScale) },
+      'electrical':  { max: Math.round((isTwoStoreyExt ? 14000 : 10000) * scaleFactor * capScale), target: Math.round((isTwoStoreyExt ? 11000 :  8000) * scaleFactor * capScale) },
+      'substructure':{ max: Math.round((isTwoStoreyExt ? 22000 : 16000) * scaleFactor * capScale), target: Math.round((isTwoStoreyExt ? 18000 : 12000) * scaleFactor * capScale) },
+      'mechanical':  { max: Math.round((isTwoStoreyExt ? 10000 :  7000) * scaleFactor * capScale), target: Math.round((isTwoStoreyExt ?  8000 :  5500) * scaleFactor * capScale) },
     };
     for (const sec of sectionTotals) {
       const secLower = sec.name.toLowerCase();
@@ -2297,19 +2338,26 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       maxCostPerM2 = 3500; targetCostPerM2 = 2800; typicalRange = '£2,000-3,500'; projectLabel = 'extensions';
     }
 
+    // Envelopes are GBP; convert to the job's currency (x1 outside South Africa).
+    if (capScale !== 1 && maxCostPerM2 < 999999) {
+      maxCostPerM2 = Math.round(maxCostPerM2 * capScale);
+      targetCostPerM2 = Math.round(targetCostPerM2 * capScale);
+      typicalRange = `${CS}${maxCostPerM2.toLocaleString()} max`;
+    }
+
     // A cap that rewrites every rate in the bill may only run on a floor area
     // somebody actually gave us. The slab line is a proxy, and on the pavilion
     // it was the wrong one by 220 m2 — GIA 470, slab 250, cap 250 x 2,800 =
     // GBP 700,000, and 114 rates were multiplied by 0.3198 to reach it. On a
     // proxy area the breach is reported and left for a human to settle.
     if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999 && floorAreaSource === 'slab_proxy') {
-      const cs = currency === 'EUR' ? '€' : '£';
+      const cs = CS;
       warnings.push(`COST CHECK (not applied): construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m2 against a ${cs}${maxCostPerM2}/m2 envelope for ${projectLabel}, but the ${estimatedFloorArea.toFixed(0)} m2 floor area is inferred from the slab line, not measured. No rates were changed. Confirm the gross internal floor area — if the bill really is over the envelope the quantities need review, not a rescale.`);
       capEvents.push({ cap: 'cost_per_m2', action: 'reported_only', reason: 'floor_area_is_slab_proxy', cost_per_m2: Math.round(costPerM2), envelope: maxCostPerM2, floor_area: estimatedFloorArea });
       reviewFlags.push({ reason: 'cost_per_m2_over_envelope_unverified_area', cost_per_m2: Math.round(costPerM2), envelope: maxCostPerM2, floor_area: estimatedFloorArea, floor_area_source: 'slab_proxy' });
     } else if (costPerM2 > maxCostPerM2 && maxCostPerM2 < 999999) {
       const scaleFactor = (targetCostPerM2 * estimatedFloorArea) / constructionTotal;
-      const cs = currency === 'EUR' ? '€' : '£';
+      const cs = CS;
       capEvents.push({ cap: 'cost_per_m2', action: 'rescaled', from: Math.round(constructionTotal), to: Math.round(targetCostPerM2 * estimatedFloorArea), scale: Math.round(scaleFactor * 10000) / 10000, lines: pricedItems.length, floor_area: estimatedFloorArea, floor_area_source: floorAreaSource });
       reviewFlags.push({ reason: 'every_rate_rescaled_by_cost_cap', scale: Math.round(scaleFactor * 10000) / 10000, lines: pricedItems.length });
       warnings.push(`COST CAP APPLIED: Construction was ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m² floor area), exceeds ${cs}${maxCostPerM2}/m² cap. Typical ${projectLabel} cost ${typicalRange}/m². All items scaled by ${(scaleFactor * 100).toFixed(0)}% to bring to ~${cs}${targetCostPerM2}/m².`);
@@ -2329,7 +2377,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         return s + sec.subtotal;
       }, 0);
     } else if (costPerM2 > maxCostPerM2) {
-      const cs = currency === 'EUR' ? '€' : '£';
+      const cs = CS;
       warnings.push(`Cost/m² note: Construction is ${cs}${Math.round(costPerM2).toLocaleString()}/m² (${estimatedFloorArea.toFixed(1)}m²). No cap applied — HMO/infrastructure project types have variable costs.`);
     }
   }
@@ -2348,13 +2396,13 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     // Max £/m² for extension construction before we consider the pricer to
     // have gone off the rails. Cost/m² cap above already handles the softer
     // typical-range check; this is the hard ceiling.
-    const maxPerM2 = isTwoStoreyExt ? 4200 : 4000;
-    const targetPerM2 = isTwoStoreyExt ? 3200 : 3000;
+    const maxPerM2 = Math.round((isTwoStoreyExt ? 4200 : 4000) * capScale);
+    const targetPerM2 = Math.round((isTwoStoreyExt ? 3200 : 3000) * capScale);
     const absoluteMax = maxPerM2 * extFloorArea;
     const absoluteTarget = targetPerM2 * extFloorArea;
     if (constructionTotal > absoluteMax) {
       const scale = absoluteTarget / constructionTotal;
-      const cs = currency === 'EUR' ? '€' : '£';
+      const cs = CS;
       capEvents.push({ cap: 'absolute_total', action: 'rescaled', from: Math.round(constructionTotal), to: Math.round(absoluteTarget), scale: Math.round(scale * 10000) / 10000, lines: pricedItems.length, floor_area: extFloorArea });
       reviewFlags.push({ reason: 'every_rate_rescaled_by_total_cap', scale: Math.round(scale * 10000) / 10000, lines: pricedItems.length });
       warnings.push(`TOTAL CAP: ${isSingleStoreyExt ? 'Single' : 'Two'} storey extension construction was ${cs}${Math.round(constructionTotal).toLocaleString()} (${cs}${Math.round(constructionTotal / extFloorArea)}/m² over ${extFloorArea}m²) — exceeds ${cs}${maxPerM2}/m² ceiling. Scaled to ~${cs}${Math.round(absoluteTarget).toLocaleString()}.`);
@@ -2395,6 +2443,7 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       vat: Math.round(vat * 100) / 100,
       grand_total: Math.round(grandTotal * 100) / 100,
       currency,
+      country: za ? 'ZA' : (currency === 'EUR' ? 'IE' : 'GB'),
       // Computed after the cap rescaling above, so it describes the numbers actually
       // being delivered rather than the pre-cap ones.
       rate_source_coverage: computeRateSourceCoverage(pricedItems),

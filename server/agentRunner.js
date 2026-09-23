@@ -266,7 +266,7 @@ function intakeSuggestsIreland(intake) {
 // Build the initial user message content from uploaded files.
 // For ZIPs we've already unpacked via zipProcessor; here we just describe
 // what's in the tmp directory so the agent knows which files to view_pdf_page.
-function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth }) {
+function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth, countryBlock }) {
   const content = [];
   const fileList = extractedNames && extractedNames.length > 0
     ? extractedNames.map((n, i) => `  ${i + 1}. ${n}`).join('\n')
@@ -275,6 +275,8 @@ function buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pd
   let introText = `You have been given this BOQ request. Uploaded files have been extracted to a working directory; call view_pdf_page with the exact filename to inspect each drawing.\n\nFILES AVAILABLE:\n${fileList}`;
 
   if (scopeText) introText += `\n\nSCOPE NOTES FROM CLIENT:\n${scopeText}`;
+
+  if (countryBlock) introText += `\n\n${countryBlock}`;
 
   // Promote country/location into a prominent block the model cannot miss —
   // otherwise it defaults to UK/GBP even when the user's intake or saved
@@ -449,7 +451,21 @@ async function runAgent({ runId, userId, apiKey, tmpDir, extractedNames, scopeTe
   try { drawingGroundTruth = await buildDrawingGroundTruth(tmpDir, extractedNames); }
   catch (e) { console.error('[Agent] ground-truth extraction error:', e.message); }
 
-  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth });
+  // The account's country. For a South African account the learned rates are
+  // UK GBP figures, so they are withheld and the country block explains how
+  // the job is priced (the pricer applies the SA library itself).
+  let countryBlock = '';
+  try {
+    const u = db.prepare('SELECT country, region, country_name FROM users WHERE id = ?').get(userId);
+    countryBlock = require('./lib/countries').promptBlock(u);
+    if (u && u.country === 'ZA') {
+      topLearnedRates = [];
+      memoryContextBlob = '';
+      countryBlock += '\nFor this job: set_project_metadata location to the South African town/suburb and province from the drawings (e.g. "Sandton, Gauteng"). Keep using the tool\'s item keys; the pricer converts them to the SA rates library in Rand, and assumed_rate values you give must be in Rand. Ignore every UK/Ireland jurisdiction rule in your instructions: this job is ZAR at 15% VAT unless the drawings show a UK or Irish address.';
+    }
+  } catch (e) { /* country context is best-effort */ }
+
+  const initialContent = buildInitialUserContent({ tmpDir, extractedNames, scopeText, intake, pdfNotes, userMemories, memoriesSuggestIreland, memoryContextBlob, topLearnedRates, drawingGroundTruth, countryBlock });
   const messages = [{ role: 'user', content: initialContent }];
   appendMessage(runId, 0, 'user', initialContent);
 

@@ -90,7 +90,7 @@ function backfill(db) {
       for (const v of variations) {
         if (!v.created_at) continue;
         const m = userMeta(v.user_id);
-        const sym = v.currency === 'EUR' ? '€' : '£';
+        const sym = require('./lib/countries').currencySymbol(v.currency);
         const net = v.net_change || 0;
         const detail = (v.project_title || '') + (v.title ? (v.project_title ? ' — ' : '') + v.title : '')
           + ' (net ' + (net >= 0 ? '+' : '−') + sym + Math.abs(Math.round(net)).toLocaleString('en-GB') + ')';

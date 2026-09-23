@@ -16,6 +16,27 @@ seven stages, with an owner, the date the enquiry actually arrived, a target
 date and a permanent history. See **[JOB_TRACKING.md](JOB_TRACKING.md)** for
 what each stage means, the daily routine, and how to read the queue.
 
+## Countries (UK, Ireland, South Africa)
+
+Every account has a country (`users.country` / `users.region`), asked at signup, on the
+first onboarding screen, or by a one-off prompt for accounts that pre-date it. It drives
+currency, VAT, the rate library and what the AI assumes. The rules live in
+`server/lib/countries.js`.
+
+- **South Africa** prices in ZAR at 15% VAT from the AI QS South Africa Rates Library
+  (`server/rate-libraries/`). 109 UK rate keys map directly to SA library items
+  (`za-map.json`). Every other key is the UK rate × a cost-parity factor (6.6, the median
+  SA/UK ratio of the mapped pairs, checked by `countries.test.js`). Both are then × the
+  region factor from the library's Regions sheet.
+- **The job's address wins.** A South African place name prices in Rand for any
+  account. A UK postcode prices in £ even for a South African account.
+- **New library edition:** drop the `.xlsx` into `server/rate-libraries/` and run
+  `node scripts/import-sa-rates.js server/rate-libraries/<file>.xlsx`.
+- **Redo onboarding:** admins use *Users → Country & onboarding → Reset onboarding*. It
+  can also set the country. Clients use the country button in the sidebar → *Redo
+  onboarding*. Onboarding answers, and any personal rates in a different currency from
+  the account's, are set aside (`is_active = 0`), not deleted.
+
 ## Deployed on Render
 
 ### Environment Variables

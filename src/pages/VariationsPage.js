@@ -6,6 +6,7 @@ import {
   Button, Card, Badge, PageHeader, EmptyState, Banner, Modal,
   Input, Textarea, Field, Skeleton, SkeletonCard,
 } from '../ui';
+import { currencySymbol } from '../utils/money';
 
 const STATUS_META = {
   draft:    { tone: 'neutral', label: 'Draft' },
@@ -14,7 +15,7 @@ const STATUS_META = {
 };
 
 function fmt(val, currency = 'GBP') {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   return sym + Math.abs(val || 0).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 

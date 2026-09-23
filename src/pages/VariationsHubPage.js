@@ -4,6 +4,7 @@ import { apiFetch } from '../utils/api';
 import useIsMobile from '../utils/useIsMobile';
 import { Card, Banner, PageHeader, EmptyState, SkeletonRows } from '../ui';
 import { LayersIcon } from '../components/Icons';
+import { currencySymbol } from '../utils/money';
 
 /**
  * Variations hub — top-level entry that lists every project with at least
@@ -27,7 +28,7 @@ export default function VariationsHubPage() {
   }, []);
 
   function fmt(p) {
-    const sym = p.currency === 'EUR' ? '€' : '£';
+    const sym = currencySymbol(p.currency);
     const v = p.total_net_change || 0;
     const sign = v >= 0 ? '+' : '−';
     return sign + sym + Math.abs(Math.round(v)).toLocaleString('en-GB');

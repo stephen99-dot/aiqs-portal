@@ -11,6 +11,7 @@ import {
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
 import SurveyPopup from './SurveyPopup';
+import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -55,6 +56,9 @@ function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, locati
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const [countryOpen, setCountryOpen] = useState(false);
+  const countries = useCountries();
+  const myCountry = countries.find(c => c.code === user?.country);
   const { t, mode, toggle } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -299,6 +303,16 @@ export default function Layout() {
             </div>
           </div>
 
+          {/* Country — sets currency, VAT and rate library; also where a
+              client redoes onboarding. */}
+          {!isAdmin && (
+            <button onClick={() => setCountryOpen(true)} className="ui-nav-item" style={{ marginBottom: 2 }}
+              title="Change country or redo onboarding">
+              <span style={{ fontSize: 14, width: 15, textAlign: 'center' }}>{myCountry ? myCountry.flag : '🌍'}</span>
+              {user?.country ? (user.countryName || 'Country') + ' · ' + (user.currency || '') : 'Set your country'}
+            </button>
+          )}
+
           {/* Light/dark toggle */}
           <button onClick={toggle} className="ui-nav-item" style={{ marginBottom: 2 }}>
             {mode === 'dark'
@@ -346,6 +360,11 @@ export default function Layout() {
 
       {/* Feedback survey — every non-admin user, once. */}
       {!isAdmin && <SurveyPopup />}
+
+      {/* Country: asked once of anyone who hasn't set it (onboarding sets it
+          itself, so it isn't asked twice there). */}
+      {!isAdmin && user && !user.country && location.pathname !== '/onboarding' && <CountryPromptModal />}
+      {countryOpen && <CountrySettingsModal onClose={() => setCountryOpen(false)} />}
     </div>
   );
 }

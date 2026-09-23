@@ -47,7 +47,7 @@ function num(v, fb = 0) {
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
-function currencySymbol(code) { return code === 'EUR' ? '€' : '£'; }
+function currencySymbol(code) { return require('./lib/countries').currencySymbol(code); }
 function fmtMoney(n, code) {
   return currencySymbol(code) + num(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

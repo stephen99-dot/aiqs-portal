@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { apiFetch, getToken } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, BrainIcon, DotIcon } from './Icons';
+import { currencySymbol } from '../utils/money';
 
 // Renders the agent's reasoning prose as markdown (headers, bullets, bold
 // figures) so it reads like a Claude reply rather than raw text.
@@ -126,7 +127,7 @@ function ToolChip({ c, toolCalls, open, onToggle }) {
 }
 
 function fmtMoney(n, currency) {
-  const sym = currency === 'EUR' ? '€' : '£';
+  const sym = currencySymbol(currency);
   if (n == null || isNaN(n)) return sym + '0';
   return sym + Math.round(n).toLocaleString('en-GB');
 }
@@ -568,7 +569,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
               </div>
               {priced?.summary && (
                 <div style={{ fontSize: 12.5, color: c.muted, marginBottom: 14 }}>
-                  {items.length} items · Construction {fmtMoney(priced.summary.construction_total, priced.summary.currency)} · Grand total <strong style={{ color: c.text }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</strong> ({priced.summary.currency === 'EUR' ? '€' : '£'}, {priced.summary.vat_rate}% VAT)
+                  {items.length} items · Construction {fmtMoney(priced.summary.construction_total, priced.summary.currency)} · Grand total <strong style={{ color: c.text }}>{fmtMoney(priced.summary.grand_total, priced.summary.currency)}</strong> ({currencySymbol(priced.summary.currency)}, {priced.summary.vat_rate}% VAT)
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

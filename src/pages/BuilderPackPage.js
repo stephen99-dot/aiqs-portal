@@ -8,6 +8,7 @@ import AssistantDrawer from '../components/AssistantDrawer';
 import ClientCopySheet from '../components/ClientCopySheet';
 import { docLabel } from '../utils/docLabel';
 import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
+import { currencySymbol } from '../utils/money';
 
 /**
  * Builder Pack page — full-width workspace for turning a priced BOQ into the
@@ -291,7 +292,7 @@ export default function BuilderPackPage() {
     return () => { cancelled = true; };
   }, [id]);
 
-  const sym = (project && project.currency === 'EUR') ? '€' : '£';
+  const sym = (project ? currencySymbol(project.currency) : '£');
   // "Quote" or "Estimate" — the builder's Branding setting, so this page uses
   // the same word their client will see on the document and the shared link.
   const label = docLabel(branding);
@@ -1140,7 +1141,7 @@ export default function BuilderPackPage() {
           isMobile={isMobile}
           endpoint={`/projects/${id}/builder-pack/assistant`}
           getFormFields={() => ({ pack_state: JSON.stringify(getPackState()) })}
-          currency={project && project.currency === 'EUR' ? 'EUR' : 'GBP'}
+          currency={(project && project.currency) || 'GBP'}
           onApply={applyAssistantProposal}
           title="✨ Update this bill"
           examples={[

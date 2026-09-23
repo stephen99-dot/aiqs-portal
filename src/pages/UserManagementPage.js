@@ -266,6 +266,80 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
 // Authorized sign-in emails — colleagues/team members who can sign in with
 // their OWN email (invite sets their password; Google works too) and land in
 // this user's account with full access to everything in it.
+// Country + onboarding: which country's currency / VAT / rate library the
+// account prices in, and a reset that sends the client back through
+// onboarding (their onboarding answers and any rates in another currency are
+// set aside, not deleted).
+function CountryOnboardingCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn, onUpdate, showSuccess, setErrorMsg }) {
+  const [countries, setCountries] = useState([]);
+  const [country, setCountry] = useState(user.country || '');
+  const [region, setRegion] = useState(user.region || '');
+  const [countryName, setCountryName] = useState(user.country_name || '');
+  const [busy, setBusy] = useState('');
+  const muted = isDark ? '#5A6E87' : '#94A3B8';
+
+  useEffect(() => {
+    apiFetch('/countries').then(r => setCountries(r.countries || [])).catch(() => {});
+  }, []);
+  useEffect(() => { setCountry(user.country || ''); setRegion(user.region || ''); setCountryName(user.country_name || ''); }, [user.id, user.country, user.region, user.country_name]);
+
+  const selected = countries.find(c => c.code === country);
+  const regions = (selected && selected.regions) || [];
+  const body = () => ({ country, region: regions.length ? region : null, countryName: country === 'OTHER' ? countryName : null });
+
+  const run = async (key, fn) => { setBusy(key); setErrorMsg(''); try { await fn(); } catch (e) { setErrorMsg(e.message || 'Action failed'); } finally { setBusy(''); } };
+
+  const saveCountry = () => run('country', async () => {
+    const res = await apiFetch('/admin/users/' + user.id + '/country', { method: 'PUT', body: JSON.stringify(body()) });
+    onUpdate({ ...user, country: res.country, region: res.region, country_name: country === 'OTHER' ? countryName : null });
+    showSuccess('Country set to ' + res.countryName + (res.region ? ' — ' + res.region : '') + ' (' + res.currency + ')');
+  });
+
+  const resetOnboarding = () => {
+    const who = user.full_name || user.email;
+    const withCountry = country && country !== (user.country || '') ? '\n\nTheir country will also be set to ' + ((selected && selected.name) || country) + '.' : '';
+    if (!window.confirm('Reset onboarding for ' + who + '?\n\nThey will be taken back through onboarding next time they open the portal. Their onboarding answers, and any personal rates saved in a different currency from their account, are set aside (not deleted).' + withCountry)) return;
+    run('reset', async () => {
+      const res = await apiFetch('/admin/users/' + user.id + '/reset-onboarding', { method: 'POST', body: JSON.stringify(country ? body() : {}) });
+      onUpdate({ ...user, country: res.country, region: res.region, onboarding_completed_at: null, onboarding_reset_at: new Date().toISOString() });
+      showSuccess('Onboarding reset — ' + res.memoriesCleared + ' onboarding answers and ' + res.ratesCleared + ' rates in another currency set aside');
+    });
+  };
+
+  const status = user.onboarding_reset_at && !user.onboarding_completed_at
+    ? 'Reset — waiting for them to redo onboarding'
+    : user.onboarding_completed_at ? 'Completed ' + new Date(String(user.onboarding_completed_at).replace(' ', 'T') + 'Z').toLocaleDateString('en-GB') : 'Not completed';
+
+  return (
+    <div style={cardStyle}>
+      <div style={lbl}>Country &amp; onboarding</div>
+      <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
+        {user.country ? ((countries.find(c => c.code === user.country) || {}).name || user.country) + (user.region ? ' — ' + user.region : '') : 'Country not set yet (priced as UK until they choose)'} · Onboarding: {status}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={country} onChange={e => { setCountry(e.target.value); setRegion(''); }} style={{ ...sInp, minWidth: 170 }}>
+          <option value="">Choose country…</option>
+          {countries.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
+        </select>
+        {regions.length > 0 && (
+          <select value={region} onChange={e => setRegion(e.target.value)} style={{ ...sInp, minWidth: 220 }}>
+            <option value="">Region…</option>
+            {regions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+        {country === 'OTHER' && (
+          <input value={countryName} onChange={e => setCountryName(e.target.value)} placeholder="Which country?" style={{ ...sInp, minWidth: 160 }} />
+        )}
+        <button onClick={saveCountry} disabled={!!busy || !country} style={btn('#2563EB')}>{busy === 'country' ? 'Saving…' : 'Save country'}</button>
+        <button onClick={resetOnboarding} disabled={!!busy || user.role === 'admin'}
+          style={{ ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)' }}>
+          <RefreshCw size={12} /> {busy === 'reset' ? 'Resetting…' : 'Reset onboarding'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AuthorizedEmailsCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn, showSuccess, setErrorMsg }) {
   const [emails, setEmails] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -851,6 +925,14 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               lbl={lbl} outBtn={outBtn} setErrorMsg={setErrorMsg}
             />
           )}
+
+          {/* Country, currency and onboarding reset */}
+          <CountryOnboardingCard
+            user={user} isDark={isDark}
+            cardStyle={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}
+            lbl={lbl} sInp={sInp} btn={btn} outBtn={outBtn}
+            onUpdate={onUpdate} showSuccess={showSuccess} setErrorMsg={setErrorMsg}
+          />
 
           {/* Authorized sign-in emails — team access to this account */}
           <AuthorizedEmailsCard

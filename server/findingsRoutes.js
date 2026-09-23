@@ -87,7 +87,7 @@ function lineValue(it) {
 }
 async function currentCostSummary(project) {
   try {
-    const cur = project.currency === 'EUR' ? '€' : '£';
+    const cur = require('./lib/countries').currencySymbol(project.currency);
 
     // 1) Saved Builder Pack state — the numbers the customer sees on screen.
     let state = null;

@@ -89,7 +89,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   // only shows Contingency/OH&P rows when the caller (playbook prefs) asks.
   const contingencyPct = Number.isFinite(Number(opts.contingency_pct)) ? Number(opts.contingency_pct) : 0;
   const ohpPct = Number.isFinite(Number(opts.ohp_pct)) ? Number(opts.ohp_pct) : 0;
-  const vatRate = opts.vat_rate || 20;
+  const vatRate = opts.vat_rate != null && opts.vat_rate !== '' ? Number(opts.vat_rate) : 20;
 
   const branding = opts.branding || {};
   const style = styleFor(branding);
@@ -205,7 +205,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   // mirrors the front sheet of a chartered QS bill.
   var preparedBy = branding.company_name || 'The AI QS';
   var issueDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-  var currencyCode = currency === '€' ? 'EUR' : currency === '$' ? 'USD' : 'GBP';
+  var currencyCode = currency === '€' ? 'EUR' : currency === 'R' ? 'ZAR' : currency === '$' ? 'USD' : 'GBP';
   var basisParts = [currencyCode + ', ex VAT unless stated (VAT @ ' + vatRate + '%)'];
   if (opts.location) basisParts.push(opts.location + ' rates');
   var metaRows = [
@@ -576,7 +576,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   ws.getRow(row).getCell(2).value = 'AI estimate / Estimate = Priced from spec where no library rate exists';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FFD97706' } };
   row++;
-  ws.getRow(row).getCell(2).value = 'Standard = Standard UK database rate (SPON\'s-style)';
+  ws.getRow(row).getCell(2).value = currency === 'R' ? 'Standard = AI QS South Africa Rates Library (SA-RL), region-adjusted' : 'Standard = Standard UK database rate (SPON\'s-style)';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
 
   // Freeze panes

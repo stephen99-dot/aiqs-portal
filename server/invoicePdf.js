@@ -17,7 +17,7 @@ const brandingDir = path.join(DATA_DIR, 'branding');
 
 function num(v, fb = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : fb; }
 function todayIso() { return new Date().toISOString().slice(0, 10); }
-function currencySymbol(code) { return code === 'EUR' ? '€' : '£'; }
+function currencySymbol(code) { return require('./lib/countries').currencySymbol(code); }
 function fmtMoney(n, code) {
   const v = num(n);
   return currencySymbol(code) + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
