@@ -11,7 +11,7 @@ import { currencySymbol } from '../utils/money';
 const RATE_SOURCE_LABELS = {
   override:             { label: 'Override',          color: '#7C3AED', bg: 'rgba(124,58,237,0.12)', desc: 'Rate manually overridden on this line' },
   client_verified:      { label: 'Your rate',         color: '#10B981', bg: 'rgba(16,185,129,0.12)', desc: 'From your rate library' },
-  base_library:         { label: "SPON's / base",     color: '#64748B', bg: 'rgba(100,116,139,0.12)', desc: 'Standard UK rate from the base library' },
+  base_library:         { label: "SPON's / base",     color: '#64748B', bg: 'rgba(100,116,139,0.12)', desc: 'Standard rate from the base library' },
   ai_estimated:         { label: 'AI estimated',      color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', desc: 'AI estimated — no base rate for this key' },
   fallback_estimated:   { label: 'Fallback estimate', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', desc: 'Conservative fallback based on unit type' },
   fallback_corrected:   { label: 'Auto-corrected',    color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', desc: 'Rate looked too high; auto-corrected to fallback' },
@@ -225,7 +225,13 @@ export default function BoqTable({ sessionId, takeoffId, onChange, onRegenerate,
                   </thead>
                   <tbody>
                     {sec.items.map((item, ii) => {
-                      const rateSpec = RATE_SOURCE_LABELS[item.rate_source];
+                      // South African lines name the SA-RL rate that priced them, or
+                      // say they were converted from the UK library for want of one.
+                      const rateSpec = item.rate_source === 'base_library' && item.library_ref
+                        ? { label: 'SA-RL ' + item.library_ref, color: '#64748B', bg: 'rgba(100,116,139,0.12)', desc: 'AI QS South Africa Rates Library, region-adjusted — see My Rates for the build-up' }
+                        : item.rate_source === 'base_library' && item.converted_from_uk
+                          ? { label: 'Converted', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', desc: 'No SA library equivalent — UK rate converted at the SA cost-parity factor. Confirm locally.' }
+                          : RATE_SOURCE_LABELS[item.rate_source];
                       const qtySpec  = QTY_SOURCE_LABELS[item.qty_source];
                       const isEditing = editingKey === item.key;
                       const ref = item.item_ref || `${si + 1}.${String(ii + 1).padStart(2, '0')}`;

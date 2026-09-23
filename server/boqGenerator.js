@@ -151,7 +151,7 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     { header: 'Labour (' + currency + ')', key: 'labour', width: 12 },
     { header: 'Materials (' + currency + ')', key: 'materials', width: 12 },
     { header: 'Total (' + currency + ')', key: 'total', width: 13 },
-    { header: 'Rate Source', key: 'source', width: 12 }
+    { header: 'Rate Source', key: 'source', width: 18 }
   ];
 
   // Colours — pulled from the style flavour. The rate-source palette stays
@@ -329,6 +329,8 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       if (rs === 'override') srcLabel = 'Override';
       else if (rs === 'client_verified' || rs === 'verified' || rs === 'client') srcLabel = 'Your rate';
       else if (rs === 'emerging') srcLabel = 'Your rate*';
+      else if (rs === 'base_library' && item.library_ref) srcLabel = 'SA-RL ' + item.library_ref;
+      else if (rs === 'base_library' && item.converted_from_uk) srcLabel = 'Estimate (converted)';
       else if (rs === 'base_library') srcLabel = 'Standard';
       else if (rs === 'ai_estimated') srcLabel = 'AI estimate';
       else if (rs === 'ceiling_clipped') srcLabel = 'Capped';
@@ -576,8 +578,13 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   ws.getRow(row).getCell(2).value = 'AI estimate / Estimate = Priced from spec where no library rate exists';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FFD97706' } };
   row++;
-  ws.getRow(row).getCell(2).value = currency === 'R' ? 'Standard = AI QS South Africa Rates Library (SA-RL), region-adjusted' : 'Standard = Standard UK database rate (SPON\'s-style)';
+  ws.getRow(row).getCell(2).value = currency === 'R' ? 'SA-RL <code> = AI QS South Africa Rates Library item, region-adjusted (full build-up in the portal under My Rates)' : 'Standard = Standard UK database rate (SPON\'s-style)';
   ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FF64748B' } };
+  if (currency === 'R') {
+    row++;
+    ws.getRow(row).getCell(2).value = 'Estimate (converted) = no SA library equivalent; UK library rate converted at the SA cost-parity factor. Confirm locally.';
+    ws.getRow(row).getCell(2).font = { name: bodyFont, size: 9, color: { argb: 'FFD97706' } };
+  }
 
   // Freeze panes
   // House format rule: no frozen panes and no split in any Excel deliverable.

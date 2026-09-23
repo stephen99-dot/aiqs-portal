@@ -109,7 +109,17 @@
    "net": 10349.74,
    "sell": 12109.2,
    "labour": 0.08,
-   "materials": 0.92
+   "materials": 0.92,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 16,
+    "labourR": 849.74,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 9500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR02",
@@ -119,7 +129,17 @@
    "net": 8673.75,
    "sell": 10148.29,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-FMN",
+    "gangHours": 45,
+    "labourR": 8673.75,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR03",
@@ -129,7 +149,17 @@
    "net": 2775.6,
    "sell": 3247.45,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-SA",
+    "gangHours": 9,
+    "labourR": 2775.6,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR04",
@@ -139,7 +169,20 @@
    "net": 650,
    "sell": 760.5,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-TOILET",
+     "qty": 1
+    },
+    "plantR": 650
+   }
   },
   {
    "code": "PR05",
@@ -149,7 +192,20 @@
    "net": 520,
    "sell": 608.4,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CONT",
+     "qty": 1
+    },
+    "plantR": 520
+   }
   },
   {
    "code": "PR06",
@@ -159,7 +215,17 @@
    "net": 450,
    "sell": 526.5,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 450,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR07",
@@ -169,7 +235,17 @@
    "net": 640,
    "sell": 748.8,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 640,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR08",
@@ -179,7 +255,20 @@
    "net": 2300,
    "sell": 2691,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-SKIP",
+     "qty": 1
+    },
+    "plantR": 2300
+   }
   },
   {
    "code": "PR09",
@@ -189,7 +278,17 @@
    "net": 9500,
    "sell": 11115,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 9500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR10",
@@ -199,7 +298,17 @@
    "net": 3200,
    "sell": 3744,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 3200,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR11",
@@ -209,7 +318,17 @@
    "net": 1800,
    "sell": 2106,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 1800,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR12",
@@ -219,7 +338,17 @@
    "net": 6500,
    "sell": 7605,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 6500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR13",
@@ -229,7 +358,17 @@
    "net": 10.37,
    "sell": 12.14,
    "labour": 0.61,
-   "materials": 0.39
+   "materials": 0.39,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.12,
+    "labourR": 6.37,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR14",
@@ -239,7 +378,20 @@
    "net": 18,
    "sell": 21.06,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-SCAF",
+     "qty": 1
+    },
+    "plantR": 18
+   }
   },
   {
    "code": "PR15",
@@ -249,7 +401,17 @@
    "net": 13.28,
    "sell": 15.53,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.25,
+    "labourR": 13.28,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PR16",
@@ -259,7 +421,20 @@
    "net": 12,
    "sell": 14.04,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-FENCE",
+     "qty": 1
+    },
+    "plantR": 12
+   }
   },
   {
    "code": "PR17",
@@ -269,7 +444,17 @@
    "net": 20.66,
    "sell": 24.17,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.05,
+    "labourR": 2.66,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 18,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM01",
@@ -279,7 +464,17 @@
    "net": 115.16,
    "sell": 134.73,
    "labour": 0.91,
-   "materials": 0.09
+   "materials": 0.09,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.6,
+    "labourR": 105.16,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM02",
@@ -289,7 +484,17 @@
    "net": 190.26,
    "sell": 222.61,
    "labour": 0.92,
-   "materials": 0.08
+   "materials": 0.08,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 1,
+    "labourR": 175.26,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM03",
@@ -299,7 +504,20 @@
    "net": 147.63,
    "sell": 172.73,
    "labour": 0.59,
-   "materials": 0.41
+   "materials": 0.41,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.5,
+    "labourR": 87.63,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-JACK",
+     "qty": 0.4
+    },
+    "plantR": 60
+   }
   },
   {
    "code": "DM04",
@@ -309,7 +527,20 @@
    "net": 1801.57,
    "sell": 2107.83,
    "labour": 0.58,
-   "materials": 0.42
+   "materials": 0.42,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 6,
+    "labourR": 1051.57,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-JACK",
+     "qty": 5
+    },
+    "plantR": 750
+   }
   },
   {
    "code": "DM05",
@@ -319,7 +550,17 @@
    "net": 48.82,
    "sell": 57.11,
    "labour": 0.9,
-   "materials": 0.1
+   "materials": 0.1,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.25,
+    "labourR": 43.82,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM06",
@@ -329,7 +570,17 @@
    "net": 31.29,
    "sell": 36.61,
    "labour": 0.84,
-   "materials": 0.16
+   "materials": 0.16,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.15,
+    "labourR": 26.29,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM07",
@@ -339,7 +590,17 @@
    "net": 57.58,
    "sell": 67.37,
    "labour": 0.91,
-   "materials": 0.09
+   "materials": 0.09,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.3,
+    "labourR": 52.58,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM08",
@@ -349,7 +610,17 @@
    "net": 40.05,
    "sell": 46.86,
    "labour": 0.88,
-   "materials": 0.12
+   "materials": 0.12,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.2,
+    "labourR": 35.05,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM09",
@@ -359,7 +630,17 @@
    "net": 66.34,
    "sell": 77.62,
    "labour": 0.92,
-   "materials": 0.08
+   "materials": 0.08,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.35,
+    "labourR": 61.34,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM10",
@@ -369,7 +650,17 @@
    "net": 75.1,
    "sell": 87.87,
    "labour": 0.93,
-   "materials": 0.07
+   "materials": 0.07,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 0.4,
+    "labourR": 70.1,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM11",
@@ -379,7 +670,17 @@
    "net": 322.89,
    "sell": 377.78,
    "labour": 0.81,
-   "materials": 0.19
+   "materials": 0.19,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 1.5,
+    "labourR": 262.89,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 60,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM12",
@@ -389,7 +690,17 @@
    "net": 528.15,
    "sell": 617.94,
    "labour": 0.83,
-   "materials": 0.17
+   "materials": 0.17,
+   "buildUp": {
+    "gang": "G-DEM",
+    "gangHours": 2.5,
+    "labourR": 438.15,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 90,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM13",
@@ -399,7 +710,17 @@
    "net": 266.58,
    "sell": 311.9,
    "labour": 0.85,
-   "materials": 0.15
+   "materials": 0.15,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 1,
+    "labourR": 226.58,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 40,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM14",
@@ -409,7 +730,26 @@
    "net": 1735.96,
    "sell": 2031.07,
    "labour": 0.77,
-   "materials": 0.23
+   "materials": 0.23,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 8,
+    "labourR": 1329,
+    "materials": [
+     {
+      "code": "LINT",
+      "qty": 3
+     },
+     {
+      "code": "MORT",
+      "qty": 0.02
+     }
+    ],
+    "materialsR": 256.96,
+    "sundriesR": 150,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM15",
@@ -419,7 +759,26 @@
    "net": 1059.1,
    "sell": 1239.15,
    "labour": 0.78,
-   "materials": 0.22
+   "materials": 0.22,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 5,
+    "labourR": 830.62,
+    "materials": [
+     {
+      "code": "LINT",
+      "qty": 1.5
+     },
+     {
+      "code": "MORT",
+      "qty": 0.01
+     }
+    ],
+    "materialsR": 128.48,
+    "sundriesR": 100,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM16",
@@ -429,7 +788,17 @@
    "net": 1846.75,
    "sell": 2160.7,
    "labour": 0.54,
-   "materials": 0.46
+   "materials": 0.46,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 6,
+    "labourR": 996.75,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 850,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "DM17",
@@ -439,7 +808,20 @@
    "net": 406.55,
    "sell": 475.67,
    "labour": 0.07,
-   "materials": 0.93
+   "materials": 0.93,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.5,
+    "labourR": 26.55,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CARTRUB",
+     "qty": 1
+    },
+    "plantR": 380
+   }
   },
   {
    "code": "EW01",
@@ -449,7 +831,20 @@
    "net": 7.3,
    "sell": 8.54,
    "labour": 0.15,
-   "materials": 0.85
+   "materials": 0.85,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.02,
+    "labourR": 1.06,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-TLB",
+     "qty": 0.012
+    },
+    "plantR": 6.24
+   }
   },
   {
    "code": "EW02",
@@ -459,7 +854,20 @@
    "net": 96.48,
    "sell": 112.88,
    "labour": 0.14,
-   "materials": 0.86
+   "materials": 0.86,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.25,
+    "labourR": 13.28,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-TLB",
+     "qty": 0.16
+    },
+    "plantR": 83.2
+   }
   },
   {
    "code": "EW03",
@@ -469,7 +877,17 @@
    "net": 169.95,
    "sell": 198.84,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 3.2,
+    "labourR": 169.95,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EW04",
@@ -479,7 +897,20 @@
    "net": 278.11,
    "sell": 325.39,
    "labour": 0.19,
-   "materials": 0.81
+   "materials": 0.81,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 1,
+    "labourR": 53.11,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-JACK",
+     "qty": 1.5
+    },
+    "plantR": 225
+   }
   },
   {
    "code": "EW05",
@@ -489,7 +920,20 @@
    "net": 1076.22,
    "sell": 1259.18,
    "labour": 0.1,
-   "materials": 0.9
+   "materials": 0.9,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 2,
+    "labourR": 106.22,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 520,
+    "plant": {
+     "code": "P-JACK",
+     "qty": 3
+    },
+    "plantR": 450
+   }
   },
   {
    "code": "EW06",
@@ -499,7 +943,20 @@
    "net": 65.66,
    "sell": 76.82,
    "labour": 0.04,
-   "materials": 0.96
+   "materials": 0.96,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.05,
+    "labourR": 2.66,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-EXC20",
+     "qty": 0.06
+    },
+    "plantR": 63
+   }
   },
   {
    "code": "EW07",
@@ -509,7 +966,20 @@
    "net": 119.93,
    "sell": 140.32,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.3,
+    "labourR": 15.93,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-TLB",
+     "qty": 0.2
+    },
+    "plantR": 104
+   }
   },
   {
    "code": "EW08",
@@ -519,7 +989,17 @@
    "net": 60.93,
    "sell": 71.29,
    "labour": 0.26,
-   "materials": 0.74
+   "materials": 0.74,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.3,
+    "labourR": 15.93,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 45,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EW09",
@@ -529,7 +1009,20 @@
    "net": 556.22,
    "sell": 650.78,
    "labour": 0.19,
-   "materials": 0.81
+   "materials": 0.81,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 2,
+    "labourR": 106.22,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PUMP",
+     "qty": 1
+    },
+    "plantR": 450
+   }
   },
   {
    "code": "EW10",
@@ -539,7 +1032,20 @@
    "net": 89.19,
    "sell": 104.35,
    "labour": 0.71,
-   "materials": 0.29
+   "materials": 0.29,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 1.2,
+    "labourR": 63.73,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.067
+    },
+    "plantR": 25.46
+   }
   },
   {
    "code": "EW11",
@@ -549,7 +1055,25 @@
    "net": 462.89,
    "sell": 541.58,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.8,
+    "labourR": 42.49,
+    "materials": [
+     {
+      "code": "G5",
+      "qty": 1.3
+     }
+    ],
+    "materialsR": 390,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.08
+    },
+    "plantR": 30.4
+   }
   },
   {
    "code": "EW12",
@@ -559,7 +1083,20 @@
    "net": 217.81,
    "sell": 254.84,
    "labour": 0.02,
-   "materials": 0.98
+   "materials": 0.98,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.1,
+    "labourR": 5.31,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CARTSOIL",
+     "qty": 1.25
+    },
+    "plantR": 212.5
+   }
   },
   {
    "code": "EW13",
@@ -569,7 +1106,17 @@
    "net": 22,
    "sell": 25.74,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 22,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EW14",
@@ -579,7 +1126,20 @@
    "net": 8.05,
    "sell": 9.42,
    "labour": 0.53,
-   "materials": 0.47
+   "materials": 0.47,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.08,
+    "labourR": 4.25,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.01
+    },
+    "plantR": 3.8
+   }
   },
   {
    "code": "EW15",
@@ -589,7 +1149,20 @@
    "net": 9.11,
    "sell": 10.66,
    "labour": 0.58,
-   "materials": 0.42
+   "materials": 0.42,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.1,
+    "labourR": 5.31,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.01
+    },
+    "plantR": 3.8
+   }
   },
   {
    "code": "EW16",
@@ -599,7 +1172,17 @@
    "net": 7.97,
    "sell": 9.32,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.15,
+    "labourR": 7.97,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN01",
@@ -609,7 +1192,22 @@
    "net": 94.97,
    "sell": 111.12,
    "labour": 0.15,
-   "materials": 0.85
+   "materials": 0.85,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.05,
+    "labourR": 14.41,
+    "materials": [
+     {
+      "code": "RM15",
+      "qty": 0.053
+     }
+    ],
+    "materialsR": 80.56,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN02",
@@ -619,7 +1217,25 @@
    "net": 2021.12,
    "sell": 2364.71,
    "labour": 0.11,
-   "materials": 0.89
+   "materials": 0.89,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.8,
+    "labourR": 230.62,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1774.5,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-POKER",
+     "qty": 0.05
+    },
+    "plantR": 16
+   }
   },
   {
    "code": "CN03",
@@ -629,7 +1245,25 @@
    "net": 2081.98,
    "sell": 2435.91,
    "labour": 0.14,
-   "materials": 0.86
+   "materials": 0.86,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 1,
+    "labourR": 288.28,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1774.5,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-POKER",
+     "qty": 0.06
+    },
+    "plantR": 19.2
+   }
   },
   {
    "code": "CN04",
@@ -639,7 +1273,25 @@
    "net": 2165.26,
    "sell": 2533.35,
    "labour": 0.17,
-   "materials": 0.83
+   "materials": 0.83,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 1.3,
+    "labourR": 374.76,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1774.5,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-POKER",
+     "qty": 0.05
+    },
+    "plantR": 16
+   }
   },
   {
    "code": "CN05",
@@ -649,7 +1301,25 @@
    "net": 2110.8,
    "sell": 2469.64,
    "labour": 0.15,
-   "materials": 0.85
+   "materials": 0.85,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 1.1,
+    "labourR": 317.1,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1774.5,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-POKER",
+     "qty": 0.06
+    },
+    "plantR": 19.2
+   }
   },
   {
    "code": "CN06",
@@ -659,7 +1329,25 @@
    "net": 2463.59,
    "sell": 2882.4,
    "labour": 0.16,
-   "materials": 0.84
+   "materials": 0.84,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 1.4,
+    "labourR": 403.59,
+    "materials": [
+     {
+      "code": "RM30",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1890,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CPUMP",
+     "qty": 1
+    },
+    "plantR": 170
+   }
   },
   {
    "code": "CN07",
@@ -669,7 +1357,25 @@
    "net": 2578.9,
    "sell": 3017.31,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 1.8,
+    "labourR": 518.9,
+    "materials": [
+     {
+      "code": "RM30",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1890,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CPUMP",
+     "qty": 1
+    },
+    "plantR": 170
+   }
   },
   {
    "code": "CN08",
@@ -679,7 +1385,25 @@
    "net": 2694.21,
    "sell": 3152.22,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 2.2,
+    "labourR": 634.21,
+    "materials": [
+     {
+      "code": "RM30",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1890,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CPUMP",
+     "qty": 1
+    },
+    "plantR": 170
+   }
   },
   {
    "code": "CN09",
@@ -689,7 +1413,25 @@
    "net": 2254.59,
    "sell": 2637.87,
    "labour": 0.32,
-   "materials": 0.68
+   "materials": 0.68,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 2.5,
+    "labourR": 720.69,
+    "materials": [
+     {
+      "code": "CSITE",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1488.9,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-MIXER",
+     "qty": 0.15
+    },
+    "plantR": 45
+   }
   },
   {
    "code": "CN10",
@@ -699,7 +1441,25 @@
    "net": 2341.08,
    "sell": 2739.06,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 2.8,
+    "labourR": 807.18,
+    "materials": [
+     {
+      "code": "CSITE",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1488.9,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-MIXER",
+     "qty": 0.15
+    },
+    "plantR": 45
+   }
   },
   {
    "code": "CN11",
@@ -709,7 +1469,22 @@
    "net": 239.11,
    "sell": 279.75,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.2,
+    "labourR": 57.66,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 0.105
+     }
+    ],
+    "materialsR": 177.45,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN12",
@@ -719,7 +1494,17 @@
    "net": 19.93,
    "sell": 23.32,
    "labour": 1,
-   "materials": 0
+   "materials": 0,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.12,
+    "labourR": 19.93,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN13",
@@ -729,7 +1514,20 @@
    "net": 14.17,
    "sell": 16.58,
    "labour": 0.7,
-   "materials": 0.3
+   "materials": 0.3,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.06,
+    "labourR": 9.97,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-FLOAT",
+     "qty": 0.007
+    },
+    "plantR": 4.2
+   }
   },
   {
    "code": "CN14",
@@ -739,7 +1537,22 @@
    "net": 11.22,
    "sell": 13.13,
    "labour": 0.14,
-   "materials": 0.86
+   "materials": 0.86,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.03,
+    "labourR": 1.59,
+    "materials": [
+     {
+      "code": "DPM250",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 8.63,
+    "sundriesR": 1,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN15",
@@ -749,7 +1562,22 @@
    "net": 202.31,
    "sell": 236.71,
    "labour": 0.74,
-   "materials": 0.26
+   "materials": 0.26,
+   "buildUp": {
+    "gang": "G-SHT",
+    "gangHours": 0.9,
+    "labourR": 149.51,
+    "materials": [
+     {
+      "code": "FWMAT",
+      "qty": 0.6
+     }
+    ],
+    "materialsR": 52.8,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN16",
@@ -759,7 +1587,22 @@
    "net": 357.19,
    "sell": 417.91,
    "labour": 0.7,
-   "materials": 0.3
+   "materials": 0.3,
+   "buildUp": {
+    "gang": "G-SHT",
+    "gangHours": 1.5,
+    "labourR": 249.19,
+    "materials": [
+     {
+      "code": "FWMAT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 88,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN17",
@@ -769,7 +1612,25 @@
    "net": 348.96,
    "sell": 408.29,
    "labour": 0.62,
-   "materials": 0.38
+   "materials": 0.38,
+   "buildUp": {
+    "gang": "G-SHT",
+    "gangHours": 1.3,
+    "labourR": 215.96,
+    "materials": [
+     {
+      "code": "FWMAT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 88,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PROPS",
+     "qty": 1
+    },
+    "plantR": 45
+   }
   },
   {
    "code": "CN18",
@@ -779,7 +1640,22 @@
    "net": 395.82,
    "sell": 463.11,
    "labour": 0.76,
-   "materials": 0.24
+   "materials": 0.24,
+   "buildUp": {
+    "gang": "G-SHT",
+    "gangHours": 1.8,
+    "labourR": 299.02,
+    "materials": [
+     {
+      "code": "FWMAT",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 96.8,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN19",
@@ -789,7 +1665,22 @@
    "net": 84.54,
    "sell": 98.92,
    "labour": 0.69,
-   "materials": 0.31
+   "materials": 0.31,
+   "buildUp": {
+    "gang": "G-SHT",
+    "gangHours": 0.35,
+    "labourR": 58.14,
+    "materials": [
+     {
+      "code": "FWMAT",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 26.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN20",
@@ -799,7 +1690,26 @@
    "net": 26045.99,
    "sell": 30473.81,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 32,
+    "labourR": 5315.99,
+    "materials": [
+     {
+      "code": "REBAR",
+      "qty": 1.03
+     },
+     {
+      "code": "TIEW",
+      "qty": 8
+     }
+    ],
+    "materialsR": 20730,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN21",
@@ -809,7 +1719,26 @@
    "net": 24633,
    "sell": 28820.6,
    "labour": 0.16,
-   "materials": 0.84
+   "materials": 0.84,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 24,
+    "labourR": 3987,
+    "materials": [
+     {
+      "code": "REBAR",
+      "qty": 1.03
+     },
+     {
+      "code": "TIEW",
+      "qty": 6
+     }
+    ],
+    "materialsR": 20646,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN22",
@@ -819,7 +1748,26 @@
    "net": 26840.99,
    "sell": 31403.96,
    "labour": 0.25,
-   "materials": 0.75
+   "materials": 0.75,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 40,
+    "labourR": 6644.99,
+    "materials": [
+     {
+      "code": "REBARMS",
+      "qty": 1.03
+     },
+     {
+      "code": "TIEW",
+      "qty": 10
+     }
+    ],
+    "materialsR": 20196,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN23",
@@ -829,7 +1777,22 @@
    "net": 70.11,
    "sell": 82.02,
    "labour": 0.12,
-   "materials": 0.88
+   "materials": 0.88,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 0.05,
+    "labourR": 8.31,
+    "materials": [
+     {
+      "code": "MESH193",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 59.8,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN24",
@@ -839,7 +1802,22 @@
    "net": 87.87,
    "sell": 102.8,
    "labour": 0.11,
-   "materials": 0.89
+   "materials": 0.89,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 0.06,
+    "labourR": 9.97,
+    "materials": [
+     {
+      "code": "MESH245",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 75.9,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN25",
@@ -849,7 +1827,22 @@
    "net": 44.29,
    "sell": 51.83,
    "labour": 0.15,
-   "materials": 0.85
+   "materials": 0.85,
+   "buildUp": {
+    "gang": "G-STF",
+    "gangHours": 0.04,
+    "labourR": 6.64,
+    "materials": [
+     {
+      "code": "MESH100",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 35.65,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN26",
@@ -859,7 +1852,22 @@
    "net": 54.32,
    "sell": 63.55,
    "labour": 0.46,
-   "materials": 0.54
+   "materials": 0.54,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.15,
+    "labourR": 24.92,
+    "materials": [
+     {
+      "code": "JSEAL",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 29.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN27",
@@ -869,7 +1877,25 @@
    "net": 58.61,
    "sell": 68.58,
    "labour": 0.28,
-   "materials": 0.72
+   "materials": 0.72,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.1,
+    "labourR": 16.61,
+    "materials": [
+     {
+      "code": "JSEAL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 28,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-SAW",
+     "qty": 0.02
+    },
+    "plantR": 14
+   }
   },
   {
    "code": "CN28",
@@ -879,7 +1905,26 @@
    "net": 99.08,
    "sell": 115.93,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.12,
+    "labourR": 19.93,
+    "materials": [
+     {
+      "code": "LINT",
+      "qty": 1
+     },
+     {
+      "code": "MORT",
+      "qty": 0.001
+     }
+    ],
+    "materialsR": 79.15,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CN29",
@@ -889,7 +1934,33 @@
    "net": 739.79,
    "sell": 865.55,
    "labour": 0.19,
-   "materials": 0.81
+   "materials": 0.81,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.5,
+    "labourR": 144.14,
+    "materials": [
+     {
+      "code": "RIBBLK",
+      "qty": 1
+     },
+     {
+      "code": "RM30",
+      "qty": 0.075
+     },
+     {
+      "code": "MESH100",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 550.65,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PROPS",
+     "qty": 1
+    },
+    "plantR": 45
+   }
   },
   {
    "code": "MS01",
@@ -899,7 +1970,30 @@
    "net": 290.13,
    "sell": 339.45,
    "labour": 0.49,
-   "materials": 0.51
+   "materials": 0.51,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.85,
+    "labourR": 141.21,
+    "materials": [
+     {
+      "code": "BRKCLAY",
+      "qty": 55
+     },
+     {
+      "code": "MORT",
+      "qty": 0.02
+     },
+     {
+      "code": "BFORCE",
+      "qty": 1.6
+     }
+    ],
+    "materialsR": 148.92,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS02",
@@ -909,7 +2003,30 @@
    "net": 575.12,
    "sell": 672.89,
    "labour": 0.46,
-   "materials": 0.54
+   "materials": 0.54,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 1.6,
+    "labourR": 265.8,
+    "materials": [
+     {
+      "code": "BRKCLAY",
+      "qty": 110
+     },
+     {
+      "code": "MORT",
+      "qty": 0.05
+     },
+     {
+      "code": "BFORCE",
+      "qty": 3.2
+     }
+    ],
+    "materialsR": 309.32,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS03",
@@ -919,7 +2036,30 @@
    "net": 284.63,
    "sell": 333.01,
    "labour": 0.5,
-   "materials": 0.5
+   "materials": 0.5,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.85,
+    "labourR": 141.21,
+    "materials": [
+     {
+      "code": "BRKCEM",
+      "qty": 55
+     },
+     {
+      "code": "MORT",
+      "qty": 0.02
+     },
+     {
+      "code": "BFORCE",
+      "qty": 1.6
+     }
+    ],
+    "materialsR": 143.42,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS04",
@@ -929,7 +2069,30 @@
    "net": 564.12,
    "sell": 660.02,
    "labour": 0.47,
-   "materials": 0.53
+   "materials": 0.53,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 1.6,
+    "labourR": 265.8,
+    "materials": [
+     {
+      "code": "BRKCEM",
+      "qty": 110
+     },
+     {
+      "code": "MORT",
+      "qty": 0.05
+     },
+     {
+      "code": "BFORCE",
+      "qty": 3.2
+     }
+    ],
+    "materialsR": 298.32,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS05",
@@ -939,7 +2102,30 @@
    "net": 605.64,
    "sell": 708.6,
    "labour": 0.49,
-   "materials": 0.51
+   "materials": 0.51,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 1.8,
+    "labourR": 299.02,
+    "materials": [
+     {
+      "code": "BRKCLAY",
+      "qty": 110
+     },
+     {
+      "code": "MORT",
+      "qty": 0.042
+     },
+     {
+      "code": "TIES",
+      "qty": 4
+     }
+    ],
+    "materialsR": 296.62,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS06",
@@ -949,7 +2135,30 @@
    "net": 291.83,
    "sell": 341.44,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.6,
+    "labourR": 99.67,
+    "materials": [
+     {
+      "code": "BLK140",
+      "qty": 13
+     },
+     {
+      "code": "MORT",
+      "qty": 0.011
+     },
+     {
+      "code": "BFORCE",
+      "qty": 1.3
+     }
+    ],
+    "materialsR": 192.16,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS07",
@@ -959,7 +2168,30 @@
    "net": 369.09,
    "sell": 431.83,
    "labour": 0.32,
-   "materials": 0.68
+   "materials": 0.68,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.7,
+    "labourR": 116.29,
+    "materials": [
+     {
+      "code": "BLK190",
+      "qty": 13
+     },
+     {
+      "code": "MORT",
+      "qty": 0.014
+     },
+     {
+      "code": "BFORCE",
+      "qty": 1.3
+     }
+    ],
+    "materialsR": 252.8,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS08",
@@ -969,7 +2201,26 @@
    "net": 219.65,
    "sell": 256.99,
    "labour": 0.38,
-   "materials": 0.62
+   "materials": 0.62,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.5,
+    "labourR": 83.06,
+    "materials": [
+     {
+      "code": "BLK90",
+      "qty": 13
+     },
+     {
+      "code": "MORT",
+      "qty": 0.008
+     }
+    ],
+    "materialsR": 136.58,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS09",
@@ -979,7 +2230,30 @@
    "net": 569.42,
    "sell": 666.22,
    "labour": 0.43,
-   "materials": 0.57
+   "materials": 0.57,
+   "buildUp": {
+    "gang": "G-BRKF",
+    "gangHours": 1.2,
+    "labourR": 244.5,
+    "materials": [
+     {
+      "code": "FACEBRK",
+      "qty": 55
+     },
+     {
+      "code": "MORT",
+      "qty": 0.02
+     },
+     {
+      "code": "BFORCE",
+      "qty": 1.6
+     }
+    ],
+    "materialsR": 324.92,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS10",
@@ -989,7 +2263,30 @@
    "net": 867.52,
    "sell": 1015,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-BRKF",
+    "gangHours": 1.9,
+    "labourR": 387.12,
+    "materials": [
+     {
+      "code": "FACEBRK",
+      "qty": 55
+     },
+     {
+      "code": "BRKCLAY",
+      "qty": 55
+     },
+     {
+      "code": "MORT",
+      "qty": 0.05
+     }
+    ],
+    "materialsR": 475.4,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS11",
@@ -999,7 +2296,30 @@
    "net": 885.72,
    "sell": 1036.29,
    "labour": 0.46,
-   "materials": 0.54
+   "materials": 0.54,
+   "buildUp": {
+    "gang": "G-BRKF",
+    "gangHours": 2,
+    "labourR": 407.5,
+    "materials": [
+     {
+      "code": "FACEBRK",
+      "qty": 55
+     },
+     {
+      "code": "BRKCLAY",
+      "qty": 55
+     },
+     {
+      "code": "MORT",
+      "qty": 0.042
+     }
+    ],
+    "materialsR": 466.22,
+    "sundriesR": 12,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS12",
@@ -1009,7 +2329,26 @@
    "net": 520.97,
    "sell": 609.54,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 1.4,
+    "labourR": 232.57,
+    "materials": [
+     {
+      "code": "BRKCEM",
+      "qty": 110
+     },
+     {
+      "code": "MORT",
+      "qty": 0.05
+     }
+    ],
+    "materialsR": 288.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS13",
@@ -1019,7 +2358,22 @@
    "net": 4.92,
    "sell": 5.75,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.01,
+    "labourR": 1.66,
+    "materials": [
+     {
+      "code": "BFORCE",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 3.26,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS14",
@@ -1029,7 +2383,22 @@
    "net": 13.23,
    "sell": 15.48,
    "labour": 0.38,
-   "materials": 0.62
+   "materials": 0.62,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.03,
+    "labourR": 4.98,
+    "materials": [
+     {
+      "code": "DPC375",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 8.25,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS15",
@@ -1039,7 +2408,22 @@
    "net": 9.21,
    "sell": 10.78,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.025,
+    "labourR": 4.15,
+    "materials": [
+     {
+      "code": "DPC230",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 5.06,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS16",
@@ -1049,7 +2433,26 @@
    "net": 182.07,
    "sell": 213.02,
    "labour": 0.56,
-   "materials": 0.44
+   "materials": 0.44,
+   "buildUp": {
+    "gang": "G-BRKF",
+    "gangHours": 0.5,
+    "labourR": 101.87,
+    "materials": [
+     {
+      "code": "FACEBRK",
+      "qty": 14
+     },
+     {
+      "code": "MORT",
+      "qty": 0.004
+     }
+    ],
+    "materialsR": 80.19,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS17",
@@ -1059,7 +2462,22 @@
    "net": 125.69,
    "sell": 147.06,
    "labour": 0.97,
-   "materials": 0.03
+   "materials": 0.03,
+   "buildUp": {
+    "gang": "G-BRKF",
+    "gangHours": 0.6,
+    "labourR": 122.25,
+    "materials": [
+     {
+      "code": "MORT",
+      "qty": 0.003
+     }
+    ],
+    "materialsR": 3.44,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS18",
@@ -1069,7 +2487,22 @@
    "net": 15.06,
    "sell": 17.62,
    "labour": 0.55,
-   "materials": 0.45
+   "materials": 0.45,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.05,
+    "labourR": 8.31,
+    "materials": [
+     {
+      "code": "HOOP",
+      "qty": 1.5
+     }
+    ],
+    "materialsR": 6.75,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "MS19",
@@ -1079,7 +2512,22 @@
    "net": 780,
    "sell": 912.6,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "PRECWALL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 780,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP01",
@@ -1089,7 +2537,26 @@
    "net": 160.8,
    "sell": 188.14,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.25,
+    "labourR": 34,
+    "materials": [
+     {
+      "code": "TORCH",
+      "qty": 1.15
+     },
+     {
+      "code": "BPRIMER",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 126.8,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP02",
@@ -1099,7 +2566,26 @@
    "net": 293.81,
    "sell": 343.76,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.45,
+    "labourR": 61.21,
+    "materials": [
+     {
+      "code": "TORCH",
+      "qty": 2.3
+     },
+     {
+      "code": "BPRIMER",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 232.6,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP03",
@@ -1109,7 +2595,22 @@
    "net": 115.81,
    "sell": 135.49,
    "labour": 0.35,
-   "materials": 0.65
+   "materials": 0.65,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.3,
+    "labourR": 40.81,
+    "materials": [
+     {
+      "code": "LIQWP",
+      "qty": 1
+     }
+    ],
+    "materialsR": 75,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP04",
@@ -1119,7 +2620,22 @@
    "net": 108.81,
    "sell": 127.3,
    "labour": 0.38,
-   "materials": 0.62
+   "materials": 0.62,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.3,
+    "labourR": 40.81,
+    "materials": [
+     {
+      "code": "CEMWP",
+      "qty": 1
+     }
+    ],
+    "materialsR": 68,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP05",
@@ -1129,7 +2645,22 @@
    "net": 34.3,
    "sell": 40.13,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.05,
+    "labourR": 6.8,
+    "materials": [
+     {
+      "code": "ALUPAINT",
+      "qty": 0.25
+     }
+    ],
+    "materialsR": 27.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP06",
@@ -1139,7 +2670,26 @@
    "net": 66.4,
    "sell": 77.69,
    "labour": 0.41,
-   "materials": 0.59
+   "materials": 0.59,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.2,
+    "labourR": 27.2,
+    "materials": [
+     {
+      "code": "TORCH",
+      "qty": 0.35
+     },
+     {
+      "code": "BPRIMER",
+      "qty": 0.1
+     }
+    ],
+    "materialsR": 39.2,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WP07",
@@ -1149,7 +2699,26 @@
    "net": 181.21,
    "sell": 212.01,
    "labour": 0.3,
-   "materials": 0.7
+   "materials": 0.7,
+   "buildUp": {
+    "gang": "G-WPF",
+    "gangHours": 0.4,
+    "labourR": 54.41,
+    "materials": [
+     {
+      "code": "TORCH",
+      "qty": 1.15
+     },
+     {
+      "code": "BPRIMER",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 126.8,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF01",
@@ -1159,7 +2728,22 @@
    "net": 446.69,
    "sell": 522.62,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.45,
+    "labourR": 91.69,
+    "materials": [
+     {
+      "code": "TRUSS",
+      "qty": 1
+     }
+    ],
+    "materialsR": 330,
+    "sundriesR": 25,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF02",
@@ -1169,7 +2753,22 @@
    "net": 251.65,
    "sell": 294.43,
    "labour": 0.49,
-   "materials": 0.51
+   "materials": 0.51,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.6,
+    "labourR": 122.25,
+    "materials": [
+     {
+      "code": "TIM114",
+      "qty": 2.6
+     }
+    ],
+    "materialsR": 114.4,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF03",
@@ -1179,7 +2778,26 @@
    "net": 72.9,
    "sell": 85.29,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.12,
+    "labourR": 24.45,
+    "materials": [
+     {
+      "code": "TIM114",
+      "qty": 1.05
+     },
+     {
+      "code": "HOOP",
+      "qty": 0.5
+     }
+    ],
+    "materialsR": 48.45,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF04",
@@ -1189,7 +2807,30 @@
    "net": 380.96,
    "sell": 445.73,
    "labour": 0.39,
-   "materials": 0.61
+   "materials": 0.61,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.9,
+    "labourR": 149.51,
+    "materials": [
+     {
+      "code": "CTILE",
+      "qty": 1.05
+     },
+     {
+      "code": "BAT38",
+      "qty": 3
+     },
+     {
+      "code": "UNDERL",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 223.45,
+    "sundriesR": 8,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF05",
@@ -1199,7 +2840,30 @@
    "net": 574.92,
    "sell": 672.66,
    "labour": 0.29,
-   "materials": 0.71
+   "materials": 0.71,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 1,
+    "labourR": 166.12,
+    "materials": [
+     {
+      "code": "CLAYTILE",
+      "qty": 1.05
+     },
+     {
+      "code": "BAT38",
+      "qty": 3.2
+     },
+     {
+      "code": "UNDERL",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 398.8,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF06",
@@ -1209,7 +2873,22 @@
    "net": 268.34,
    "sell": 313.95,
    "labour": 0.19,
-   "materials": 0.81
+   "materials": 0.81,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "IBR05",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 203.5,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF07",
@@ -1219,7 +2898,22 @@
    "net": 229.84,
    "sell": 268.91,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "IBR047",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 165,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF08",
@@ -1229,7 +2923,22 @@
    "net": 224.24,
    "sell": 262.36,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "CORR05",
+      "qty": 1.12
+     }
+    ],
+    "materialsR": 162.4,
+    "sundriesR": 12,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF09",
@@ -1239,7 +2948,22 @@
    "net": 68.05,
    "sell": 79.62,
    "labour": 0.36,
-   "materials": 0.64
+   "materials": 0.64,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.12,
+    "labourR": 24.45,
+    "materials": [
+     {
+      "code": "TIM114",
+      "qty": 0.9
+     }
+    ],
+    "materialsR": 39.6,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF10",
@@ -1249,7 +2973,22 @@
    "net": 146.67,
    "sell": 171.6,
    "labour": 0.28,
-   "materials": 0.72
+   "materials": 0.72,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 0.15,
+    "labourR": 40.92,
+    "materials": [
+     {
+      "code": "PURLIN",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 99.75,
+    "sundriesR": 6,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF11",
@@ -1259,7 +2998,26 @@
    "net": 125.78,
    "sell": 147.16,
    "labour": 0.4,
-   "materials": 0.6
+   "materials": 0.6,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "RIDGE",
+      "qty": 2.7
+     },
+     {
+      "code": "MORT",
+      "qty": 0.005
+     }
+    ],
+    "materialsR": 75.94,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF12",
@@ -1269,7 +3027,22 @@
    "net": 145.92,
    "sell": 170.72,
    "labour": 0.17,
-   "materials": 0.83
+   "materials": 0.83,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.15,
+    "labourR": 24.92,
+    "materials": [
+     {
+      "code": "RIDGEIBR",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 121,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF13",
@@ -1279,7 +3052,22 @@
    "net": 203.84,
    "sell": 238.49,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "VALLEY",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 154,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF14",
@@ -1289,7 +3077,22 @@
    "net": 145.95,
    "sell": 170.76,
    "labour": 0.28,
-   "materials": 0.72
+   "materials": 0.72,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.2,
+    "labourR": 40.75,
+    "materials": [
+     {
+      "code": "FASCIA",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 101.2,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF15",
@@ -1299,7 +3102,22 @@
    "net": 156.14,
    "sell": 182.68,
    "labour": 0.33,
-   "materials": 0.67
+   "materials": 0.67,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.25,
+    "labourR": 50.94,
+    "materials": [
+     {
+      "code": "FASCIA",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 101.2,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF16",
@@ -1309,7 +3127,22 @@
    "net": 260,
    "sell": 304.2,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GUTTER",
+      "qty": 1
+     }
+    ],
+    "materialsR": 260,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF17",
@@ -1319,7 +3152,22 @@
    "net": 124.17,
    "sell": 145.28,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.15,
+    "labourR": 24.92,
+    "materials": [
+     {
+      "code": "DPIPE",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 89.25,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF18",
@@ -1329,7 +3177,22 @@
    "net": 99.26,
    "sell": 116.13,
    "labour": 0.03,
-   "materials": 0.97
+   "materials": 0.97,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.05,
+    "labourR": 2.66,
+    "materials": [
+     {
+      "code": "ISO135",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 96.6,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF19",
@@ -1339,7 +3202,22 @@
    "net": 74.06,
    "sell": 86.64,
    "labour": 0.04,
-   "materials": 0.96
+   "materials": 0.96,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.05,
+    "labourR": 2.66,
+    "materials": [
+     {
+      "code": "GLASS100",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 71.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF20",
@@ -1349,7 +3227,22 @@
    "net": 32.51,
    "sell": 38.03,
    "labour": 0.26,
-   "materials": 0.74
+   "materials": 0.74,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.05,
+    "labourR": 8.31,
+    "materials": [
+     {
+      "code": "FOIL",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 24.2,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF21",
@@ -1359,7 +3252,22 @@
    "net": 950,
    "sell": 1111.5,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "THATCH",
+      "qty": 1
+     }
+    ],
+    "materialsR": 950,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "RF22",
@@ -1369,7 +3277,22 @@
    "net": 606.14,
    "sell": 709.19,
    "labour": 0.1,
-   "materials": 0.9
+   "materials": 0.9,
+   "buildUp": {
+    "gang": "G-RFR",
+    "gangHours": 0.35,
+    "labourR": 58.14,
+    "materials": [
+     {
+      "code": "POLYC",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 528,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN01",
@@ -1379,7 +3302,26 @@
    "net": 958.46,
    "sell": 1121.4,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 1.5,
+    "labourR": 225.96,
+    "materials": [
+     {
+      "code": "DOORHC",
+      "qty": 1
+     },
+     {
+      "code": "HINGE",
+      "qty": 1.5
+     }
+    ],
+    "materialsR": 732.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN02",
@@ -1389,7 +3331,26 @@
    "net": 1803.52,
    "sell": 2110.12,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 1.6,
+    "labourR": 241.02,
+    "materials": [
+     {
+      "code": "DOORSS",
+      "qty": 1
+     },
+     {
+      "code": "HINGE",
+      "qty": 1.5
+     }
+    ],
+    "materialsR": 1562.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN03",
@@ -1399,7 +3360,26 @@
    "net": 4089.1,
    "sell": 4784.25,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 2.5,
+    "labourR": 376.6,
+    "materials": [
+     {
+      "code": "DOOREXT",
+      "qty": 1
+     },
+     {
+      "code": "HINGE",
+      "qty": 1.5
+     }
+    ],
+    "materialsR": 3712.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN04",
@@ -1409,7 +3389,26 @@
    "net": 785.41,
    "sell": 918.94,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.6,
+    "labourR": 99.67,
+    "materials": [
+     {
+      "code": "SFRAME",
+      "qty": 1
+     },
+     {
+      "code": "MORT",
+      "qty": 0.005
+     }
+    ],
+    "materialsR": 685.74,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN05",
@@ -1419,7 +3418,26 @@
    "net": 1821.86,
    "sell": 2131.58,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 1,
+    "labourR": 166.12,
+    "materials": [
+     {
+      "code": "HWFRAME",
+      "qty": 1
+     },
+     {
+      "code": "MORT",
+      "qty": 0.005
+     }
+    ],
+    "materialsR": 1655.74,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN06",
@@ -1429,7 +3447,22 @@
    "net": 410.38,
    "sell": 480.15,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 0.6,
+    "labourR": 90.38,
+    "materials": [
+     {
+      "code": "LOCK3",
+      "qty": 1
+     }
+    ],
+    "materialsR": 320,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN07",
@@ -1439,7 +3472,22 @@
    "net": 265.32,
    "sell": 310.42,
    "labour": 0.28,
-   "materials": 0.72
+   "materials": 0.72,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 0.5,
+    "labourR": 75.32,
+    "materials": [
+     {
+      "code": "LOCK2",
+      "qty": 1
+     }
+    ],
+    "materialsR": 190,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN08",
@@ -1449,7 +3497,22 @@
    "net": 755.45,
    "sell": 883.87,
    "labour": 0.14,
-   "materials": 0.86
+   "materials": 0.86,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 0.7,
+    "labourR": 105.45,
+    "materials": [
+     {
+      "code": "CYLLOCK",
+      "qty": 1
+     }
+    ],
+    "materialsR": 650,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN09",
@@ -1459,7 +3522,22 @@
    "net": 67.6,
    "sell": 79.09,
    "labour": 0.33,
-   "materials": 0.67
+   "materials": 0.67,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 0.15,
+    "labourR": 22.6,
+    "materials": [
+     {
+      "code": "DSTOP",
+      "qty": 1
+     }
+    ],
+    "materialsR": 45,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN10",
@@ -1469,7 +3547,22 @@
    "net": 61.88,
    "sell": 72.4,
    "labour": 0.29,
-   "materials": 0.71
+   "materials": 0.71,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 0.12,
+    "labourR": 18.08,
+    "materials": [
+     {
+      "code": "SKIRT",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 41.8,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN11",
@@ -1479,7 +3572,22 @@
    "net": 5200,
    "sell": 6084,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "BIC",
+      "qty": 1
+     }
+    ],
+    "materialsR": 5200,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN12",
@@ -1489,7 +3597,22 @@
    "net": 5800,
    "sell": 6786,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "KITBASE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 5800,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN13",
@@ -1499,7 +3622,22 @@
    "net": 3900,
    "sell": 4563,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "KITWALL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3900,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "JN14",
@@ -1509,7 +3647,22 @@
    "net": 3200,
    "sell": 3744,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GRANITE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3200,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD01",
@@ -1519,7 +3672,26 @@
    "net": 1488.64,
    "sell": 1741.71,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 0.8,
+    "labourR": 132.9,
+    "materials": [
+     {
+      "code": "STEELWIN",
+      "qty": 1
+     },
+     {
+      "code": "MORT",
+      "qty": 0.005
+     }
+    ],
+    "materialsR": 1355.74,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD02",
@@ -1529,7 +3701,22 @@
    "net": 2736.51,
    "sell": 3201.71,
    "labour": 0.02,
-   "materials": 0.98
+   "materials": 0.98,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.5,
+    "labourR": 56.51,
+    "materials": [
+     {
+      "code": "ALUWIN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 2650,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD03",
@@ -1539,7 +3726,22 @@
    "net": 3197.81,
    "sell": 3741.44,
    "labour": 0.02,
-   "materials": 0.98
+   "materials": 0.98,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.6,
+    "labourR": 67.81,
+    "materials": [
+     {
+      "code": "ALUSLD",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3100,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD04",
@@ -1549,7 +3751,22 @@
    "net": 3509.11,
    "sell": 4105.66,
    "labour": 0.02,
-   "materials": 0.98
+   "materials": 0.98,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.7,
+    "labourR": 79.11,
+    "materials": [
+     {
+      "code": "ALUDOOR",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3400,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD05",
@@ -1559,7 +3776,22 @@
    "net": 3386.51,
    "sell": 3962.21,
    "labour": 0.02,
-   "materials": 0.98
+   "materials": 0.98,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.5,
+    "labourR": 56.51,
+    "materials": [
+     {
+      "code": "UPVCWIN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3300,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD06",
@@ -1569,7 +3801,22 @@
    "net": 3100.77,
    "sell": 3627.9,
    "labour": 0.06,
-   "materials": 0.94
+   "materials": 0.94,
+   "buildUp": {
+    "gang": "G-JNR",
+    "gangHours": 1.2,
+    "labourR": 180.77,
+    "materials": [
+     {
+      "code": "TIMWIN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 2900,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD07",
@@ -1579,7 +3826,22 @@
    "net": 721.51,
    "sell": 844.16,
    "labour": 0.08,
-   "materials": 0.92
+   "materials": 0.92,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.5,
+    "labourR": 56.51,
+    "materials": [
+     {
+      "code": "BURGLAR",
+      "qty": 1
+     }
+    ],
+    "materialsR": 650,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD08",
@@ -1589,7 +3851,22 @@
    "net": 1587.81,
    "sell": 1857.74,
    "labour": 0.04,
-   "materials": 0.96
+   "materials": 0.96,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.6,
+    "labourR": 67.81,
+    "materials": [
+     {
+      "code": "SECGATE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1500,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD09",
@@ -1599,7 +3876,22 @@
    "net": 16500,
    "sell": 19305,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GARAGE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 16500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "WD10",
@@ -1609,7 +3901,22 @@
    "net": 6500,
    "sell": 7605,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GARMOTOR",
+      "qty": 1
+     }
+    ],
+    "materialsR": 6500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL01",
@@ -1619,7 +3926,26 @@
    "net": 171.82,
    "sell": 201.03,
    "labour": 0.43,
-   "materials": 0.57
+   "materials": 0.57,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.5,
+    "labourR": 73.77,
+    "materials": [
+     {
+      "code": "GYP64",
+      "qty": 1.1
+     },
+     {
+      "code": "BAT38",
+      "qty": 2.5
+     }
+    ],
+    "materialsR": 90.05,
+    "sundriesR": 8,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL02",
@@ -1629,7 +3955,26 @@
    "net": 194.6,
    "sell": 227.68,
    "labour": 0.42,
-   "materials": 0.58
+   "materials": 0.58,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.55,
+    "labourR": 81.15,
+    "materials": [
+     {
+      "code": "GYP95",
+      "qty": 1.1
+     },
+     {
+      "code": "BAT38",
+      "qty": 2.5
+     }
+    ],
+    "materialsR": 105.45,
+    "sundriesR": 8,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL03",
@@ -1639,7 +3984,22 @@
    "net": 303.64,
    "sell": 355.26,
    "labour": 0.17,
-   "materials": 0.83
+   "materials": 0.83,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.35,
+    "labourR": 51.64,
+    "materials": [
+     {
+      "code": "SUSP",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 252,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL04",
@@ -1649,7 +4009,26 @@
    "net": 292.23,
    "sell": 341.9,
    "labour": 0.35,
-   "materials": 0.65
+   "materials": 0.65,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.7,
+    "labourR": 103.28,
+    "materials": [
+     {
+      "code": "GYP95",
+      "qty": 1.1
+     },
+     {
+      "code": "MFGRID",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 178.95,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL05",
@@ -1659,7 +4038,26 @@
    "net": 245.3,
    "sell": 287,
    "labour": 0.5,
-   "materials": 0.5
+   "materials": 0.5,
+   "buildUp": {
+    "gang": "G-CRP",
+    "gangHours": 0.6,
+    "labourR": 122.25,
+    "materials": [
+     {
+      "code": "FCBRD",
+      "qty": 1.1
+     },
+     {
+      "code": "BAT38",
+      "qty": 2.5
+     }
+    ],
+    "materialsR": 123.05,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL06",
@@ -1669,7 +4067,22 @@
    "net": 30.4,
    "sell": 35.57,
    "labour": 0.39,
-   "materials": 0.61
+   "materials": 0.61,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.08,
+    "labourR": 11.8,
+    "materials": [
+     {
+      "code": "CORN75",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 17.6,
+    "sundriesR": 1,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL07",
@@ -1679,7 +4092,26 @@
    "net": 533.14,
    "sell": 623.77,
    "labour": 0.3,
-   "materials": 0.7
+   "materials": 0.7,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 1.1,
+    "labourR": 162.29,
+    "materials": [
+     {
+      "code": "DRYFRAME",
+      "qty": 1.05
+     },
+     {
+      "code": "GYP125",
+      "qty": 2.2
+     }
+    ],
+    "materialsR": 345.85,
+    "sundriesR": 25,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL08",
@@ -1689,7 +4121,26 @@
    "net": 626.27,
    "sell": 732.74,
    "labour": 0.29,
-   "materials": 0.71
+   "materials": 0.71,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 1.25,
+    "labourR": 184.42,
+    "materials": [
+     {
+      "code": "DRYFRAME",
+      "qty": 1.05
+     },
+     {
+      "code": "GYPFR",
+      "qty": 2.2
+     }
+    ],
+    "materialsR": 411.85,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL09",
@@ -1699,7 +4150,22 @@
    "net": 67.34,
    "sell": 78.78,
    "labour": 0.74,
-   "materials": 0.26
+   "materials": 0.26,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "SKIM",
+      "qty": 0.1
+     }
+    ],
+    "materialsR": 17.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL10",
@@ -1709,7 +4175,22 @@
    "net": 568.03,
    "sell": 664.59,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.8,
+    "labourR": 118.03,
+    "materials": [
+     {
+      "code": "HATCH",
+      "qty": 1
+     }
+    ],
+    "materialsR": 450,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "CL11",
@@ -1719,7 +4200,26 @@
    "net": 182.62,
    "sell": 213.67,
    "labour": 0.48,
-   "materials": 0.52
+   "materials": 0.52,
+   "buildUp": {
+    "gang": "G-DRY",
+    "gangHours": 0.6,
+    "labourR": 88.52,
+    "materials": [
+     {
+      "code": "GYP95",
+      "qty": 0.8
+     },
+     {
+      "code": "BAT38",
+      "qty": 3
+     }
+    ],
+    "materialsR": 89.1,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL01",
@@ -1729,7 +4229,22 @@
    "net": 109.94,
    "sell": 128.63,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "SCREEDMIX",
+      "qty": 0.042
+     }
+    ],
+    "materialsR": 55.1,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL02",
@@ -1739,7 +4254,22 @@
    "net": 176.41,
    "sell": 206.4,
    "labour": 0.38,
-   "materials": 0.62
+   "materials": 0.62,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.4,
+    "labourR": 66.45,
+    "materials": [
+     {
+      "code": "SCREEDMIX",
+      "qty": 0.08
+     }
+    ],
+    "materialsR": 104.96,
+    "sundriesR": 5,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL03",
@@ -1749,7 +4279,22 @@
    "net": 119.92,
    "sell": 140.3,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.15,
+    "labourR": 24.92,
+    "materials": [
+     {
+      "code": "SLS",
+      "qty": 1
+     }
+    ],
+    "materialsR": 95,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL04",
@@ -1759,7 +4304,22 @@
    "net": 348.09,
    "sell": 407.27,
    "labour": 0.1,
-   "materials": 0.9
+   "materials": 0.9,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.25,
+    "labourR": 34.89,
+    "materials": [
+     {
+      "code": "LVT",
+      "qty": 1.08
+     }
+    ],
+    "materialsR": 313.2,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL05",
@@ -1769,7 +4329,22 @@
    "net": 308.91,
    "sell": 361.43,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.2,
+    "labourR": 27.91,
+    "materials": [
+     {
+      "code": "CARPTILE",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 273,
+    "sundriesR": 8,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL06",
@@ -1779,7 +4354,22 @@
    "net": 304.89,
    "sell": 356.72,
    "labour": 0.11,
-   "materials": 0.89
+   "materials": 0.89,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.25,
+    "labourR": 34.89,
+    "materials": [
+     {
+      "code": "CARPET",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 264,
+    "sundriesR": 6,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL07",
@@ -1789,7 +4379,26 @@
    "net": 313.37,
    "sell": 366.64,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.3,
+    "labourR": 41.87,
+    "materials": [
+     {
+      "code": "LAMIN",
+      "qty": 1.08
+     },
+     {
+      "code": "UNDERLAYF",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 271.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL08",
@@ -1799,7 +4408,22 @@
    "net": 880.41,
    "sell": 1030.08,
    "labour": 0.07,
-   "materials": 0.93
+   "materials": 0.93,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.45,
+    "labourR": 62.81,
+    "materials": [
+     {
+      "code": "ENGTIM",
+      "qty": 1.08
+     }
+    ],
+    "materialsR": 777.6,
+    "sundriesR": 40,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL09",
@@ -1809,7 +4433,22 @@
    "net": 185.73,
    "sell": 217.3,
    "labour": 0.11,
-   "materials": 0.89
+   "materials": 0.89,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.25,
+    "labourR": 20.73,
+    "materials": [
+     {
+      "code": "EPOXY",
+      "qty": 1
+     }
+    ],
+    "materialsR": 165,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FL10",
@@ -1819,7 +4458,20 @@
    "net": 127.14,
    "sell": 148.76,
    "labour": 0.46,
-   "materials": 0.54
+   "materials": 0.54,
+   "buildUp": {
+    "gang": "G-SCR",
+    "gangHours": 0.35,
+    "labourR": 58.14,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 45,
+    "plant": {
+     "code": "P-GRINDER",
+     "qty": 0.02
+    },
+    "plantR": 24
+   }
   },
   {
    "code": "TL01",
@@ -1829,7 +4481,30 @@
    "net": 355.41,
    "sell": 415.83,
    "labour": 0.31,
-   "materials": 0.69
+   "materials": 0.69,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.8,
+    "labourR": 111.66,
+    "materials": [
+     {
+      "code": "TILEFC",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.25
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.1
+     }
+    ],
+    "materialsR": 243.75,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL02",
@@ -1839,7 +4514,30 @@
    "net": 542.67,
    "sell": 634.92,
    "labour": 0.26,
-   "materials": 0.74
+   "materials": 0.74,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 1,
+    "labourR": 139.57,
+    "materials": [
+     {
+      "code": "TILEPOR",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.3
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.08
+     }
+    ],
+    "materialsR": 403.1,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL03",
@@ -1849,7 +4547,30 @@
    "net": 366.82,
    "sell": 429.18,
    "labour": 0.38,
-   "materials": 0.62
+   "materials": 0.62,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 1,
+    "labourR": 139.57,
+    "materials": [
+     {
+      "code": "TILEWC",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.25
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.1
+     }
+    ],
+    "materialsR": 227.25,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL04",
@@ -1859,7 +4580,30 @@
    "net": 765.89,
    "sell": 896.09,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 1.3,
+    "labourR": 181.44,
+    "materials": [
+     {
+      "code": "TILELF",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.35
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.06
+     }
+    ],
+    "materialsR": 584.45,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL05",
@@ -1869,7 +4613,26 @@
    "net": 57.59,
    "sell": 67.38,
    "labour": 0.61,
-   "materials": 0.39
+   "materials": 0.39,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.25,
+    "labourR": 34.89,
+    "materials": [
+     {
+      "code": "TILEFC",
+      "qty": 0.11
+     },
+     {
+      "code": "ADH",
+      "qty": 0.02
+     }
+    ],
+    "materialsR": 22.7,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL06",
@@ -1879,7 +4642,22 @@
    "net": 65.04,
    "sell": 76.09,
    "labour": 0.32,
-   "materials": 0.68
+   "materials": 0.68,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 0.15,
+    "labourR": 20.94,
+    "materials": [
+     {
+      "code": "TRIM",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 44.1,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL07",
@@ -1889,7 +4667,30 @@
    "net": 853.06,
    "sell": 998.08,
    "labour": 0.26,
-   "materials": 0.74
+   "materials": 0.74,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 1.6,
+    "labourR": 223.31,
+    "materials": [
+     {
+      "code": "MOSAIC",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.3
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.15
+     }
+    ],
+    "materialsR": 629.75,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "TL08",
@@ -1899,7 +4700,30 @@
    "net": 492.53,
    "sell": 576.26,
    "labour": 0.31,
-   "materials": 0.69
+   "materials": 0.69,
+   "buildUp": {
+    "gang": "G-TIL",
+    "gangHours": 1.1,
+    "labourR": 153.53,
+    "materials": [
+     {
+      "code": "SLATE",
+      "qty": 1.1
+     },
+     {
+      "code": "ADH",
+      "qty": 0.3
+     },
+     {
+      "code": "GROUT",
+      "qty": 0.1
+     }
+    ],
+    "materialsR": 339,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL01",
@@ -1909,7 +4733,22 @@
    "net": 95.38,
    "sell": 111.59,
    "labour": 0.78,
-   "materials": 0.22
+   "materials": 0.22,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.45,
+    "labourR": 74.76,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.017
+     }
+    ],
+    "materialsR": 17.62,
+    "sundriesR": 3,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL02",
@@ -1919,7 +4758,22 @@
    "net": 116.03,
    "sell": 135.75,
    "labour": 0.79,
-   "materials": 0.21
+   "materials": 0.21,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.55,
+    "labourR": 91.37,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.018
+     }
+    ],
+    "materialsR": 18.66,
+    "sundriesR": 6,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL03",
@@ -1929,7 +4783,22 @@
    "net": 120.19,
    "sell": 140.62,
    "labour": 0.83,
-   "materials": 0.17
+   "materials": 0.17,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.6,
+    "labourR": 99.67,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.014
+     }
+    ],
+    "materialsR": 14.51,
+    "sundriesR": 6,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL04",
@@ -1939,7 +4808,22 @@
    "net": 79.59,
    "sell": 93.12,
    "labour": 0.63,
-   "materials": 0.37
+   "materials": 0.37,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "SKIM",
+      "qty": 0.17
+     }
+    ],
+    "materialsR": 29.75,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL05",
@@ -1949,7 +4833,22 @@
    "net": 37.37,
    "sell": 43.72,
    "labour": 0.89,
-   "materials": 0.11
+   "materials": 0.11,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.2,
+    "labourR": 33.22,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.004
+     }
+    ],
+    "materialsR": 4.15,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL06",
@@ -1959,7 +4858,22 @@
    "net": 46.71,
    "sell": 54.66,
    "labour": 0.89,
-   "materials": 0.11
+   "materials": 0.11,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.25,
+    "labourR": 41.53,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.005
+     }
+    ],
+    "materialsR": 5.18,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL07",
@@ -1969,7 +4883,22 @@
    "net": 23.01,
    "sell": 26.92,
    "labour": 0.36,
-   "materials": 0.64
+   "materials": 0.64,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.05,
+    "labourR": 8.31,
+    "materials": [
+     {
+      "code": "BEAD",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 14.7,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PL08",
@@ -1979,7 +4908,22 @@
    "net": 70.13,
    "sell": 82.05,
    "labour": 0.71,
-   "materials": 0.29
+   "materials": 0.29,
+   "buildUp": {
+    "gang": "G-PLS",
+    "gangHours": 0.3,
+    "labourR": 49.84,
+    "materials": [
+     {
+      "code": "PLASMIX",
+      "qty": 0.008
+     }
+    ],
+    "materialsR": 8.29,
+    "sundriesR": 12,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD01",
@@ -1989,7 +4933,26 @@
    "net": 252.2,
    "sell": 295.08,
    "labour": 0.31,
-   "materials": 0.69
+   "materials": 0.69,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.35,
+    "labourR": 79.3,
+    "materials": [
+     {
+      "code": "PVC110",
+      "qty": 1.05
+     },
+     {
+      "code": "RSAND",
+      "qty": 0.05
+     }
+    ],
+    "materialsR": 147.9,
+    "sundriesR": 25,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD02",
@@ -1999,7 +4962,26 @@
    "net": 422.56,
    "sell": 494.4,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.45,
+    "labourR": 101.96,
+    "materials": [
+     {
+      "code": "PVC160",
+      "qty": 1.05
+     },
+     {
+      "code": "RSAND",
+      "qty": 0.07
+     }
+    ],
+    "materialsR": 285.6,
+    "sundriesR": 35,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD03",
@@ -2009,7 +4991,22 @@
    "net": 137.58,
    "sell": 160.96,
    "labour": 0.49,
-   "materials": 0.51
+   "materials": 0.51,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.3,
+    "labourR": 67.98,
+    "materials": [
+     {
+      "code": "PVC50",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 54.6,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD04",
@@ -2019,7 +5016,22 @@
    "net": 115.34,
    "sell": 134.95,
    "labour": 0.55,
-   "materials": 0.45
+   "materials": 0.45,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.28,
+    "labourR": 63.44,
+    "materials": [
+     {
+      "code": "PVC40",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 39.9,
+    "sundriesR": 12,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD05",
@@ -2029,7 +5041,22 @@
    "net": 303.55,
    "sell": 355.16,
    "labour": 0.26,
-   "materials": 0.74
+   "materials": 0.74,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.35,
+    "labourR": 79.3,
+    "materials": [
+     {
+      "code": "CU22",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 194.25,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD06",
@@ -2039,7 +5066,22 @@
    "net": 211.88,
    "sell": 247.89,
    "labour": 0.32,
-   "materials": 0.68
+   "materials": 0.68,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.3,
+    "labourR": 67.98,
+    "materials": [
+     {
+      "code": "CU15",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 123.9,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD07",
@@ -2049,7 +5091,22 @@
    "net": 108.12,
    "sell": 126.5,
    "labour": 0.42,
-   "materials": 0.58
+   "materials": 0.58,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.2,
+    "labourR": 45.32,
+    "materials": [
+     {
+      "code": "PEX16",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 37.8,
+    "sundriesR": 25,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD08",
@@ -2059,7 +5116,22 @@
    "net": 60.39,
    "sell": 70.66,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.12,
+    "labourR": 27.19,
+    "materials": [
+     {
+      "code": "HDPE25",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 25.2,
+    "sundriesR": 8,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD09",
@@ -2069,7 +5141,30 @@
    "net": 3824.01,
    "sell": 4474.09,
    "labour": 0.43,
-   "materials": 0.57
+   "materials": 0.57,
+   "buildUp": {
+    "gang": "G-BRK",
+    "gangHours": 10,
+    "labourR": 1661.25,
+    "materials": [
+     {
+      "code": "BRKCEM",
+      "qty": 250
+     },
+     {
+      "code": "MORT",
+      "qty": 0.12
+     },
+     {
+      "code": "MHCOVER",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1612.76,
+    "sundriesR": 550,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD10",
@@ -2079,7 +5174,22 @@
    "net": 2279.75,
    "sell": 2667.31,
    "labour": 0.3,
-   "materials": 0.7
+   "materials": 0.7,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 3,
+    "labourR": 679.75,
+    "materials": [
+     {
+      "code": "ICHAM",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1450,
+    "sundriesR": 150,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD11",
@@ -2089,7 +5199,22 @@
    "net": 361.27,
    "sell": 422.68,
    "labour": 0.5,
-   "materials": 0.5
+   "materials": 0.5,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.8,
+    "labourR": 181.27,
+    "materials": [
+     {
+      "code": "RODEYE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 180,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD12",
@@ -2099,7 +5224,30 @@
    "net": 813.36,
    "sell": 951.63,
    "labour": 0.42,
-   "materials": 0.58
+   "materials": 0.58,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 1.5,
+    "labourR": 339.88,
+    "materials": [
+     {
+      "code": "GULLY",
+      "qty": 1
+     },
+     {
+      "code": "BRKCEM",
+      "qty": 20
+     },
+     {
+      "code": "MORT",
+      "qty": 0.01
+     }
+    ],
+    "materialsR": 473.48,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD13",
@@ -2109,7 +5257,17 @@
    "net": 8312.67,
    "sell": 9725.83,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 8,
+    "labourR": 1812.67,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 6500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD14",
@@ -2119,7 +5277,22 @@
    "net": 2959.75,
    "sell": 3462.91,
    "labour": 0.23,
-   "materials": 0.77
+   "materials": 0.77,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 3,
+    "labourR": 679.75,
+    "materials": [
+     {
+      "code": "WCSUITE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 2100,
+    "sundriesR": 180,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD15",
@@ -2129,7 +5302,26 @@
    "net": 2316.46,
    "sell": 2710.26,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 2.5,
+    "labourR": 566.46,
+    "materials": [
+     {
+      "code": "BASIN",
+      "qty": 1
+     },
+     {
+      "code": "BASINMIX",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1600,
+    "sundriesR": 150,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD16",
@@ -2139,7 +5331,26 @@
    "net": 5006.34,
    "sell": 5857.41,
    "labour": 0.18,
-   "materials": 0.82
+   "materials": 0.82,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 4,
+    "labourR": 906.34,
+    "materials": [
+     {
+      "code": "BATH",
+      "qty": 1
+     },
+     {
+      "code": "BATHMIX",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3850,
+    "sundriesR": 250,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD17",
@@ -2149,7 +5360,22 @@
    "net": 2779.75,
    "sell": 3252.31,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 3,
+    "labourR": 679.75,
+    "materials": [
+     {
+      "code": "SHOWMIX",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1900,
+    "sundriesR": 200,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD18",
@@ -2159,7 +5385,22 @@
    "net": 7500,
    "sell": 8775,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "SHOWSCREEN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 7500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD19",
@@ -2169,7 +5410,26 @@
    "net": 2846.46,
    "sell": 3330.36,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 2.5,
+    "labourR": 566.46,
+    "materials": [
+     {
+      "code": "SINK",
+      "qty": 1
+     },
+     {
+      "code": "SINKMIX",
+      "qty": 1
+     }
+    ],
+    "materialsR": 2130,
+    "sundriesR": 150,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD20",
@@ -2179,7 +5439,26 @@
    "net": 9382.92,
    "sell": 10978.02,
    "labour": 0.12,
-   "materials": 0.88
+   "materials": 0.88,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 5,
+    "labourR": 1132.92,
+    "materials": [
+     {
+      "code": "GEY150",
+      "qty": 1
+     },
+     {
+      "code": "GEYKIT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 8250,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD21",
@@ -2189,7 +5468,26 @@
    "net": 11196.21,
    "sell": 13099.57,
    "labour": 0.11,
-   "materials": 0.89
+   "materials": 0.89,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 5.5,
+    "labourR": 1246.21,
+    "materials": [
+     {
+      "code": "GEY200",
+      "qty": 1
+     },
+     {
+      "code": "GEYKIT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 9950,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD22",
@@ -2199,7 +5497,22 @@
    "net": 26000,
    "sell": 30420,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "SOLARGEY",
+      "qty": 1
+     }
+    ],
+    "materialsR": 26000,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD23",
@@ -2209,7 +5522,22 @@
    "net": 32000,
    "sell": 37440,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "HEATPUMP",
+      "qty": 1
+     }
+    ],
+    "materialsR": 32000,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD24",
@@ -2219,7 +5547,22 @@
    "net": 9606.34,
    "sell": 11239.41,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 4,
+    "labourR": 906.34,
+    "materials": [
+     {
+      "code": "TANK5000",
+      "qty": 1
+     }
+    ],
+    "materialsR": 7800,
+    "sundriesR": 900,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD25",
@@ -2229,7 +5572,22 @@
    "net": 426.58,
    "sell": 499.1,
    "labour": 0.53,
-   "materials": 0.47
+   "materials": 0.47,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 1,
+    "labourR": 226.58,
+    "materials": [
+     {
+      "code": "GTAP",
+      "qty": 1
+     }
+    ],
+    "materialsR": 120,
+    "sundriesR": 80,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD26",
@@ -2239,7 +5597,22 @@
    "net": 303.29,
    "sell": 354.85,
    "labour": 0.37,
-   "materials": 0.63
+   "materials": 0.63,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 0.5,
+    "labourR": 113.29,
+    "materials": [
+     {
+      "code": "VALVE22",
+      "qty": 1
+     }
+    ],
+    "materialsR": 190,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD27",
@@ -2249,7 +5622,25 @@
    "net": 16439.5,
    "sell": 19234.22,
    "labour": 0.08,
-   "materials": 0.92
+   "materials": 0.92,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 6,
+    "labourR": 1359.5,
+    "materials": [
+     {
+      "code": "SEPTIC",
+      "qty": 1
+     }
+    ],
+    "materialsR": 9500,
+    "sundriesR": 3500,
+    "plant": {
+     "code": "P-TLB",
+     "qty": 4
+    },
+    "plantR": 2080
+   }
   },
   {
    "code": "PD28",
@@ -2259,7 +5650,17 @@
    "net": 4500,
    "sell": 5265,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 4500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PD29",
@@ -2269,7 +5670,22 @@
    "net": 989.88,
    "sell": 1158.16,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 1.5,
+    "labourR": 339.88,
+    "materials": [
+     {
+      "code": "FDRAIN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 650,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL01",
@@ -2279,7 +5695,22 @@
    "net": 483.73,
    "sell": 565.97,
    "labour": 0.62,
-   "materials": 0.38
+   "materials": 0.38,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 1.2,
+    "labourR": 298.73,
+    "materials": [
+     {
+      "code": "ELIGHTPT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 185,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL02",
@@ -2289,7 +5720,22 @@
    "net": 147.24,
    "sell": 172.27,
    "labour": 0.42,
-   "materials": 0.58
+   "materials": 0.58,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.25,
+    "labourR": 62.24,
+    "materials": [
+     {
+      "code": "LEDDL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 85,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL03",
@@ -2299,7 +5745,22 @@
    "net": 334.68,
    "sell": 391.58,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.3,
+    "labourR": 74.68,
+    "materials": [
+     {
+      "code": "LEDBAT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 260,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL04",
@@ -2309,7 +5770,22 @@
    "net": 593.52,
    "sell": 694.42,
    "labour": 0.59,
-   "materials": 0.41
+   "materials": 0.41,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 1.4,
+    "labourR": 348.52,
+    "materials": [
+     {
+      "code": "ESOCKET",
+      "qty": 1
+     }
+    ],
+    "materialsR": 245,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL05",
@@ -2319,7 +5795,22 @@
    "net": 1696.83,
    "sell": 1985.29,
    "labour": 0.44,
-   "materials": 0.56
+   "materials": 0.56,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 3,
+    "labourR": 746.83,
+    "materials": [
+     {
+      "code": "ESTOVE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 950,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL06",
@@ -2329,7 +5820,22 @@
    "net": 1672.36,
    "sell": 1956.66,
    "labour": 0.37,
-   "materials": 0.63
+   "materials": 0.63,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 2.5,
+    "labourR": 622.36,
+    "materials": [
+     {
+      "code": "EGEYSER",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1050,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL07",
@@ -2339,7 +5845,22 @@
    "net": 4693.66,
    "sell": 5491.58,
    "labour": 0.32,
-   "materials": 0.68
+   "materials": 0.68,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 6,
+    "labourR": 1493.66,
+    "materials": [
+     {
+      "code": "DB12",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3200,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL08",
@@ -2349,7 +5870,22 @@
    "net": 8089.43,
    "sell": 9464.63,
    "labour": 0.31,
-   "materials": 0.69
+   "materials": 0.69,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 10,
+    "labourR": 2489.43,
+    "materials": [
+     {
+      "code": "DB24",
+      "qty": 1
+     }
+    ],
+    "materialsR": 5600,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL09",
@@ -2359,7 +5895,22 @@
    "net": 241.59,
    "sell": 282.66,
    "labour": 0.15,
-   "materials": 0.85
+   "materials": 0.85,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.15,
+    "labourR": 37.34,
+    "materials": [
+     {
+      "code": "SWA16",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 194.25,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL10",
@@ -2369,7 +5920,17 @@
    "net": 57.8,
    "sell": 67.62,
    "labour": 0.83,
-   "materials": 0.17
+   "materials": 0.17,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.9,
+    "labourR": 47.8,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL11",
@@ -2379,7 +5940,22 @@
    "net": 823.41,
    "sell": 963.4,
    "labour": 0.45,
-   "materials": 0.55
+   "materials": 0.55,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 1.5,
+    "labourR": 373.41,
+    "materials": [
+     {
+      "code": "EARTH",
+      "qty": 1
+     }
+    ],
+    "materialsR": 450,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL12",
@@ -2389,7 +5965,22 @@
    "net": 579.15,
    "sell": 677.61,
    "labour": 0.34,
-   "materials": 0.66
+   "materials": 0.66,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.8,
+    "labourR": 199.15,
+    "materials": [
+     {
+      "code": "EXTLIGHT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 380,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL13",
@@ -2399,7 +5990,22 @@
    "net": 419.15,
    "sell": 490.41,
    "labour": 0.48,
-   "materials": 0.52
+   "materials": 0.52,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.8,
+    "labourR": 199.15,
+    "materials": [
+     {
+      "code": "EDATA",
+      "qty": 1
+     }
+    ],
+    "materialsR": 220,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL14",
@@ -2409,7 +6015,22 @@
    "net": 1048.73,
    "sell": 1227.02,
    "labour": 0.28,
-   "materials": 0.72
+   "materials": 0.72,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 1.2,
+    "labourR": 298.73,
+    "materials": [
+     {
+      "code": "EXTFAN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 750,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL15",
@@ -2419,7 +6040,17 @@
    "net": 6500,
    "sell": 7605,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 6500,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL16",
@@ -2429,7 +6060,22 @@
    "net": 115000,
    "sell": 134550,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "PVSYS5",
+      "qty": 1
+     }
+    ],
+    "materialsR": 115000,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL17",
@@ -2439,7 +6085,22 @@
    "net": 294.68,
    "sell": 344.78,
    "labour": 0.25,
-   "materials": 0.75
+   "materials": 0.75,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.3,
+    "labourR": 74.68,
+    "materials": [
+     {
+      "code": "SMOKE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 220,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL18",
@@ -2449,7 +6110,22 @@
    "net": 14500,
    "sell": 16965,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "AC12",
+      "qty": 1
+     }
+    ],
+    "materialsR": 14500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL19",
@@ -2459,7 +6135,22 @@
    "net": 19500,
    "sell": 22815,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "AC18",
+      "qty": 1
+     }
+    ],
+    "materialsR": 19500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL20",
@@ -2469,7 +6160,22 @@
    "net": 26500,
    "sell": 31005,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "AC24",
+      "qty": 1
+     }
+    ],
+    "materialsR": 26500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL21",
@@ -2479,7 +6185,22 @@
    "net": 280,
    "sell": 327.6,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "EFENCE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 280,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL22",
@@ -2489,7 +6210,22 @@
    "net": 11500,
    "sell": 13455,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "CCTV4",
+      "qty": 1
+     }
+    ],
+    "materialsR": 11500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EL23",
@@ -2499,7 +6235,22 @@
    "net": 7500,
    "sell": 8775,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "ALARM",
+      "qty": 1
+     }
+    ],
+    "materialsR": 7500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS01",
@@ -2509,7 +6260,25 @@
    "net": 48364.68,
    "sell": 56586.68,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 16,
+    "labourR": 4364.68,
+    "materials": [
+     {
+      "code": "STEELFAB",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 43050,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-CRANE",
+     "qty": 0.1
+    },
+    "plantR": 950
+   }
   },
   {
    "code": "SS02",
@@ -2519,7 +6288,22 @@
    "net": 50417.02,
    "sell": 58987.92,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 24,
+    "labourR": 6547.02,
+    "materials": [
+     {
+      "code": "STEELFAB",
+      "qty": 1.07
+     }
+    ],
+    "materialsR": 43870,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS03",
@@ -2529,7 +6313,22 @@
    "net": 6500,
    "sell": 7605,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GALV",
+      "qty": 1
+     }
+    ],
+    "materialsR": 6500,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS04",
@@ -2539,7 +6338,22 @@
    "net": 261.84,
    "sell": 306.35,
    "labour": 0.31,
-   "materials": 0.69
+   "materials": 0.69,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 0.3,
+    "labourR": 81.84,
+    "materials": [
+     {
+      "code": "HDB",
+      "qty": 1
+     }
+    ],
+    "materialsR": 180,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS05",
@@ -2549,7 +6363,22 @@
    "net": 1722.79,
    "sell": 2015.67,
    "labour": 0.16,
-   "materials": 0.84
+   "materials": 0.84,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 1,
+    "labourR": 272.79,
+    "materials": [
+     {
+      "code": "BALUS",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1450,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS06",
@@ -2559,7 +6388,22 @@
    "net": 6800,
    "sell": 7956,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "GLBAL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 6800,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "SS07",
@@ -2569,7 +6413,22 @@
    "net": 213.16,
    "sell": 249.4,
    "labour": 0.16,
-   "materials": 0.84
+   "materials": 0.84,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.4,
+    "labourR": 33.16,
+    "materials": [
+     {
+      "code": "INTUM",
+      "qty": 1
+     }
+    ],
+    "materialsR": 180,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT01",
@@ -2579,7 +6438,26 @@
    "net": 46.75,
    "sell": 54.69,
    "labour": 0.53,
-   "materials": 0.47
+   "materials": 0.47,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.3,
+    "labourR": 24.87,
+    "materials": [
+     {
+      "code": "PRIMER",
+      "qty": 0.125
+     },
+     {
+      "code": "PVA",
+      "qty": 0.25
+     }
+    ],
+    "materialsR": 19.88,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT02",
@@ -2589,7 +6467,26 @@
    "net": 51.72,
    "sell": 60.51,
    "labour": 0.58,
-   "materials": 0.42
+   "materials": 0.42,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.36,
+    "labourR": 29.85,
+    "materials": [
+     {
+      "code": "PRIMER",
+      "qty": 0.125
+     },
+     {
+      "code": "PVA",
+      "qty": 0.25
+     }
+    ],
+    "materialsR": 19.88,
+    "sundriesR": 2,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT03",
@@ -2599,7 +6496,26 @@
    "net": 61.29,
    "sell": 71.71,
    "labour": 0.47,
-   "materials": 0.53
+   "materials": 0.53,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.35,
+    "labourR": 29.02,
+    "materials": [
+     {
+      "code": "PRIMER",
+      "qty": 0.125
+     },
+     {
+      "code": "ACRYL",
+      "qty": 0.28
+     }
+    ],
+    "materialsR": 29.28,
+    "sundriesR": 3,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT04",
@@ -2609,7 +6525,26 @@
    "net": 89.38,
    "sell": 104.57,
    "labour": 0.35,
-   "materials": 0.65
+   "materials": 0.65,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.38,
+    "labourR": 31.51,
+    "materials": [
+     {
+      "code": "PRIMER",
+      "qty": 0.125
+     },
+     {
+      "code": "ELAST",
+      "qty": 0.4
+     }
+    ],
+    "materialsR": 54.88,
+    "sundriesR": 3,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT05",
@@ -2619,7 +6554,26 @@
    "net": 69.71,
    "sell": 81.56,
    "labour": 0.54,
-   "materials": 0.46
+   "materials": 0.46,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.45,
+    "labourR": 37.31,
+    "materials": [
+     {
+      "code": "UNDERC",
+      "qty": 0.1
+     },
+     {
+      "code": "ENAMEL",
+      "qty": 0.2
+     }
+    ],
+    "materialsR": 32.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT06",
@@ -2629,7 +6583,30 @@
    "net": 84.35,
    "sell": 98.69,
    "labour": 0.49,
-   "materials": 0.51
+   "materials": 0.51,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.5,
+    "labourR": 41.45,
+    "materials": [
+     {
+      "code": "METPRIM",
+      "qty": 0.1
+     },
+     {
+      "code": "UNDERC",
+      "qty": 0.1
+     },
+     {
+      "code": "ENAMEL",
+      "qty": 0.2
+     }
+    ],
+    "materialsR": 42.9,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT07",
@@ -2639,7 +6616,26 @@
    "net": 295.42,
    "sell": 345.64,
    "labour": 0.56,
-   "materials": 0.44
+   "materials": 0.44,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 2,
+    "labourR": 165.82,
+    "materials": [
+     {
+      "code": "UNDERC",
+      "qty": 0.4
+     },
+     {
+      "code": "ENAMEL",
+      "qty": 0.8
+     }
+    ],
+    "materialsR": 129.6,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT08",
@@ -2649,7 +6645,22 @@
    "net": 55.02,
    "sell": 64.37,
    "labour": 0.53,
-   "materials": 0.47
+   "materials": 0.47,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.35,
+    "labourR": 29.02,
+    "materials": [
+     {
+      "code": "VARNISH",
+      "qty": 0.2
+     }
+    ],
+    "materialsR": 26,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT09",
@@ -2659,7 +6670,26 @@
    "net": 11.49,
    "sell": 13.45,
    "labour": 0.58,
-   "materials": 0.42
+   "materials": 0.42,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.08,
+    "labourR": 6.63,
+    "materials": [
+     {
+      "code": "UNDERC",
+      "qty": 0.015
+     },
+     {
+      "code": "ENAMEL",
+      "qty": 0.03
+     }
+    ],
+    "materialsR": 4.86,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT10",
@@ -2669,7 +6699,22 @@
    "net": 45.08,
    "sell": 52.75,
    "labour": 0.37,
-   "materials": 0.63
+   "materials": 0.63,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.2,
+    "labourR": 16.58,
+    "materials": [
+     {
+      "code": "ROOFPAINT",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 28.5,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "PT11",
@@ -2679,7 +6724,22 @@
    "net": 41.87,
    "sell": 48.99,
    "labour": 0.59,
-   "materials": 0.41
+   "materials": 0.41,
+   "buildUp": {
+    "gang": "G-PNT",
+    "gangHours": 0.3,
+    "labourR": 24.87,
+    "materials": [
+     {
+      "code": "PVA",
+      "qty": 0.25
+     }
+    ],
+    "materialsR": 13,
+    "sundriesR": 4,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "GL01",
@@ -2689,7 +6749,22 @@
    "net": 424.41,
    "sell": 496.56,
    "labour": 0.21,
-   "materials": 0.79
+   "materials": 0.79,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.8,
+    "labourR": 90.41,
+    "materials": [
+     {
+      "code": "GLASS4",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 319,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "GL02",
@@ -2699,7 +6774,22 @@
    "net": 876.02,
    "sell": 1024.94,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 1,
+    "labourR": 113.02,
+    "materials": [
+     {
+      "code": "GLASS638",
+      "qty": 1.1
+     }
+    ],
+    "materialsR": 748,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "GL03",
@@ -2709,7 +6799,22 @@
    "net": 738.81,
    "sell": 864.41,
    "labour": 0.09,
-   "materials": 0.91
+   "materials": 0.91,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 0.6,
+    "labourR": 67.81,
+    "materials": [
+     {
+      "code": "MIRROR",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 651,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "GL04",
@@ -2719,7 +6824,22 @@
    "net": 1888.12,
    "sell": 2209.1,
    "labour": 0.07,
-   "materials": 0.93
+   "materials": 0.93,
+   "buildUp": {
+    "gang": "G-GLZ",
+    "gangHours": 1.2,
+    "labourR": 135.62,
+    "materials": [
+     {
+      "code": "DGU",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 1732.5,
+    "sundriesR": 20,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX01",
@@ -2729,7 +6849,33 @@
    "net": 344.06,
    "sell": 402.55,
    "labour": 0.25,
-   "materials": 0.75
+   "materials": 0.75,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 0.45,
+    "labourR": 85.11,
+    "materials": [
+     {
+      "code": "PAVER80",
+      "qty": 1.05
+     },
+     {
+      "code": "RSAND",
+      "qty": 0.03
+     },
+     {
+      "code": "G5",
+      "qty": 0.19
+     }
+    ],
+    "materialsR": 255.15,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.01
+    },
+    "plantR": 3.8
+   }
   },
   {
    "code": "EX02",
@@ -2739,7 +6885,33 @@
    "net": 285.25,
    "sell": 333.74,
    "labour": 0.27,
-   "materials": 0.73
+   "materials": 0.73,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 0.4,
+    "labourR": 75.65,
+    "materials": [
+     {
+      "code": "PAVER60",
+      "qty": 1.05
+     },
+     {
+      "code": "RSAND",
+      "qty": 0.03
+     },
+     {
+      "code": "G5",
+      "qty": 0.12
+     }
+    ],
+    "materialsR": 205.8,
+    "sundriesR": 0,
+    "plant": {
+     "code": "P-PLATE",
+     "qty": 0.01
+    },
+    "plantR": 3.8
+   }
   },
   {
    "code": "EX03",
@@ -2749,7 +6921,26 @@
    "net": 201.92,
    "sell": 236.25,
    "labour": 0.23,
-   "materials": 0.77
+   "materials": 0.77,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 0.25,
+    "labourR": 47.28,
+    "materials": [
+     {
+      "code": "KERB",
+      "qty": 1.02
+     },
+     {
+      "code": "RM15",
+      "qty": 0.04
+     }
+    ],
+    "materialsR": 154.64,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX04",
@@ -2759,7 +6950,26 @@
    "net": 154.83,
    "sell": 181.15,
    "labour": 0.24,
-   "materials": 0.76
+   "materials": 0.76,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 0.2,
+    "labourR": 37.83,
+    "materials": [
+     {
+      "code": "CHANNEL",
+      "qty": 1.02
+     },
+     {
+      "code": "RM15",
+      "qty": 0.03
+     }
+    ],
+    "materialsR": 117,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX05",
@@ -2769,7 +6979,26 @@
    "net": 319.32,
    "sell": 373.6,
    "labour": 0.23,
-   "materials": 0.77
+   "materials": 0.77,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.25,
+    "labourR": 72.07,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 0.105
+     },
+     {
+      "code": "MESH193",
+      "qty": 1.15
+     }
+    ],
+    "materialsR": 237.25,
+    "sundriesR": 10,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX06",
@@ -2779,7 +7008,30 @@
    "net": 489.38,
    "sell": 572.57,
    "labour": 0.23,
-   "materials": 0.77
+   "materials": 0.77,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 0.6,
+    "labourR": 113.48,
+    "materials": [
+     {
+      "code": "CLAYPAVER",
+      "qty": 1.05
+     },
+     {
+      "code": "RSAND",
+      "qty": 0.03
+     },
+     {
+      "code": "G5",
+      "qty": 0.12
+     }
+    ],
+    "materialsR": 375.9,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX07",
@@ -2789,7 +7041,22 @@
    "net": 420,
    "sell": 491.4,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "ASPHALT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 420,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX08",
@@ -2799,7 +7066,22 @@
    "net": 1150,
    "sell": 1345.5,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "PALISADE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1150,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX09",
@@ -2809,7 +7091,22 @@
    "net": 1650,
    "sell": 1930.5,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "CLEARVU",
+      "qty": 1
+     }
+    ],
+    "materialsR": 1650,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX10",
@@ -2819,7 +7116,26 @@
    "net": 192.89,
    "sell": 225.68,
    "labour": 0.22,
-   "materials": 0.78
+   "materials": 0.78,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.8,
+    "labourR": 42.49,
+    "materials": [
+     {
+      "code": "DIAMOND",
+      "qty": 1
+     },
+     {
+      "code": "RM15",
+      "qty": 0.02
+     }
+    ],
+    "materialsR": 150.4,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX11",
@@ -2829,7 +7145,22 @@
    "net": 28000,
    "sell": 32760,
    "labour": 0,
-   "materials": 1
+   "materials": 1,
+   "buildUp": {
+    "gang": null,
+    "gangHours": 0,
+    "labourR": 0,
+    "materials": [
+     {
+      "code": "SLGATE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 28000,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX12",
@@ -2839,7 +7170,22 @@
    "net": 4018.38,
    "sell": 4701.5,
    "labour": 0.2,
-   "materials": 0.8
+   "materials": 0.8,
+   "buildUp": {
+    "gang": "G-STW",
+    "gangHours": 3,
+    "labourR": 818.38,
+    "materials": [
+     {
+      "code": "PEDGATE",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3200,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX13",
@@ -2849,7 +7195,22 @@
    "net": 80.72,
    "sell": 94.44,
    "labour": 0.1,
-   "materials": 0.9
+   "materials": 0.9,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.15,
+    "labourR": 7.97,
+    "materials": [
+     {
+      "code": "LAWN",
+      "qty": 1.05
+     }
+    ],
+    "materialsR": 57.75,
+    "sundriesR": 15,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX14",
@@ -2859,7 +7220,17 @@
    "net": 100.93,
    "sell": 118.09,
    "labour": 0.16,
-   "materials": 0.84
+   "materials": 0.84,
+   "buildUp": {
+    "gang": "G-LAB",
+    "gangHours": 0.3,
+    "labourR": 15.93,
+    "materials": [],
+    "materialsR": 0,
+    "sundriesR": 85,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX15",
@@ -2869,7 +7240,26 @@
    "net": 205.48,
    "sell": 240.42,
    "labour": 0.42,
-   "materials": 0.58
+   "materials": 0.58,
+   "buildUp": {
+    "gang": "G-CON",
+    "gangHours": 0.3,
+    "labourR": 86.48,
+    "materials": [
+     {
+      "code": "RM25",
+      "qty": 0.06
+     },
+     {
+      "code": "FWMAT",
+      "qty": 0.2
+     }
+    ],
+    "materialsR": 119,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "EX16",
@@ -2879,7 +7269,26 @@
    "net": 636.95,
    "sell": 745.23,
    "labour": 0.36,
-   "materials": 0.64
+   "materials": 0.64,
+   "buildUp": {
+    "gang": "G-PAV",
+    "gangHours": 1.2,
+    "labourR": 226.95,
+    "materials": [
+     {
+      "code": "TERRA",
+      "qty": 1
+     },
+     {
+      "code": "G5",
+      "qty": 0.3
+     }
+    ],
+    "materialsR": 380,
+    "sundriesR": 30,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FR01",
@@ -2889,7 +7298,22 @@
    "net": 670.71,
    "sell": 784.73,
    "labour": 0.03,
-   "materials": 0.97
+   "materials": 0.97,
+   "buildUp": {
+    "gang": "G-SEM",
+    "gangHours": 0.3,
+    "labourR": 20.71,
+    "materials": [
+     {
+      "code": "FIREEXT",
+      "qty": 1
+     }
+    ],
+    "materialsR": 650,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FR02",
@@ -2899,7 +7323,22 @@
    "net": 4706.34,
    "sell": 5506.41,
    "labour": 0.19,
-   "materials": 0.81
+   "materials": 0.81,
+   "buildUp": {
+    "gang": "G-PLB",
+    "gangHours": 4,
+    "labourR": 906.34,
+    "materials": [
+     {
+      "code": "HOSEREEL",
+      "qty": 1
+     }
+    ],
+    "materialsR": 3800,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   },
   {
    "code": "FR03",
@@ -2909,9 +7348,25 @@
    "net": 974.47,
    "sell": 1140.13,
    "labour": 0.13,
-   "materials": 0.87
+   "materials": 0.87,
+   "buildUp": {
+    "gang": "G-ELE",
+    "gangHours": 0.5,
+    "labourR": 124.47,
+    "materials": [
+     {
+      "code": "EXITSIGN",
+      "qty": 1
+     }
+    ],
+    "materialsR": 850,
+    "sundriesR": 0,
+    "plant": null,
+    "plantR": 0
+   }
   }
  ],
+ "labourOnCostPct": 28.5,
  "labour": [
   {
    "code": "L01",
@@ -2996,6 +7451,152 @@
    "basicHr": 240,
    "allInHr": 308.4,
    "allInDay": 2775.6
+  }
+ ],
+ "gangs": [
+  {
+   "code": "G-LAB",
+   "description": "Labourer",
+   "composition": "1 x L01",
+   "ratePerHour": 53.11
+  },
+  {
+   "code": "G-SEM",
+   "description": "Semi-skilled general worker",
+   "composition": "1 x L02",
+   "ratePerHour": 69.04
+  },
+  {
+   "code": "G-DEM",
+   "description": "Demolition / strip-out gang",
+   "composition": "1 x L02 + 2 x L01",
+   "ratePerHour": 175.26
+  },
+  {
+   "code": "G-BRK",
+   "description": "Bricklayer + attendant",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-BRKF",
+   "description": "Face-brick artisan + attendant",
+   "composition": "1 x L06 + 1 x L01",
+   "ratePerHour": 203.75
+  },
+  {
+   "code": "G-CON",
+   "description": "Concrete gang",
+   "composition": "1 x L05 + 1 x L02 + 2 x L01",
+   "ratePerHour": 288.28
+  },
+  {
+   "code": "G-SHT",
+   "description": "Shutterhand + labourer",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-STF",
+   "description": "Steel fixer + labourer",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-CRP",
+   "description": "Carpenter + labourer",
+   "composition": "1 x L06 + 1 x L01",
+   "ratePerHour": 203.75
+  },
+  {
+   "code": "G-JNR",
+   "description": "Joiner",
+   "composition": "1 x L06",
+   "ratePerHour": 150.64
+  },
+  {
+   "code": "G-RFR",
+   "description": "Roofer + labourer",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-PLS",
+   "description": "Plasterer + labourer",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-SCR",
+   "description": "Screeder / finisher + labourer",
+   "composition": "1 x L05 + 1 x L01",
+   "ratePerHour": 166.12
+  },
+  {
+   "code": "G-TIL",
+   "description": "Tiler + half labourer",
+   "composition": "1 x L05 + 0.5 x L01",
+   "ratePerHour": 139.57
+  },
+  {
+   "code": "G-DRY",
+   "description": "Ceiling / drywall fixer + half worker",
+   "composition": "1 x L05 + 0.5 x L02",
+   "ratePerHour": 147.54
+  },
+  {
+   "code": "G-PNT",
+   "description": "Painter",
+   "composition": "1 x L04",
+   "ratePerHour": 82.91
+  },
+  {
+   "code": "G-WPF",
+   "description": "Waterproofer + labourer",
+   "composition": "1 x L04 + 1 x L01",
+   "ratePerHour": 136.02
+  },
+  {
+   "code": "G-GLZ",
+   "description": "Glazier / fixer",
+   "composition": "1 x L05",
+   "ratePerHour": 113.02
+  },
+  {
+   "code": "G-STW",
+   "description": "Steel erector gang",
+   "composition": "1 x L06 + 1 x L02 + 1 x L01",
+   "ratePerHour": 272.79
+  },
+  {
+   "code": "G-PLB",
+   "description": "Plumber + labourer",
+   "composition": "1 x L10 + 1 x L01",
+   "ratePerHour": 226.58
+  },
+  {
+   "code": "G-ELE",
+   "description": "Electrician + assistant",
+   "composition": "1 x L09 + 1 x L02",
+   "ratePerHour": 248.94
+  },
+  {
+   "code": "G-PAV",
+   "description": "Paving gang",
+   "composition": "1 x L04 + 2 x L01",
+   "ratePerHour": 189.13
+  },
+  {
+   "code": "G-FMN",
+   "description": "Site foreman",
+   "composition": "1 x L11",
+   "ratePerHour": 192.75
+  },
+  {
+   "code": "G-SA",
+   "description": "Site agent",
+   "composition": "1 x L12",
+   "ratePerHour": 308.4
   }
  ],
  "plant": [
@@ -3132,1449 +7733,2289 @@
    "category": "Aggregates & binders",
    "description": "Cement CEM II 42.5N, 50 kg bag",
    "unit": "bag",
-   "price": 98
+   "price": 98,
+   "basis": "MARKET",
+   "source": "Gauteng R95-R120 incl VAT (handyman JHB 2026 guide)"
   },
   {
    "code": "LIME",
    "category": "Aggregates & binders",
    "description": "Builders lime, 25 kg bag",
    "unit": "bag",
-   "price": 72
+   "price": 72,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BSAND",
    "category": "Aggregates & binders",
    "description": "Building sand, delivered",
    "unit": "m3",
-   "price": 420
+   "price": 420,
+   "basis": "MARKET",
+   "source": "R350-R550/m3 (JHB 2026 guide)"
   },
   {
    "code": "PSAND",
    "category": "Aggregates & binders",
    "description": "Plaster sand, delivered",
    "unit": "m3",
-   "price": 390
+   "price": 390,
+   "basis": "MARKET",
+   "source": "R300-R450/m3"
   },
   {
    "code": "RSAND",
    "category": "Aggregates & binders",
    "description": "River / concrete sand, delivered",
    "unit": "m3",
-   "price": 480
+   "price": 480,
+   "basis": "MARKET",
+   "source": "Premium over building sand"
   },
   {
    "code": "STONE19",
    "category": "Aggregates & binders",
    "description": "19 mm crushed stone, delivered",
    "unit": "m3",
-   "price": 560
+   "price": 560,
+   "basis": "MARKET",
+   "source": "R400-R700/m3"
   },
   {
    "code": "G5",
    "category": "Aggregates & binders",
    "description": "Imported G5 selected fill, delivered",
    "unit": "m3",
-   "price": 300
+   "price": 300,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MORT",
    "category": "Composites",
    "description": "Class II mortar 1:4 (7 bags cement + 1.1 m3 building sand)",
    "unit": "m3",
-   "price": 1148
+   "price": 1148,
+   "basis": "COMPOSITE",
+   "source": "Formula"
   },
   {
    "code": "PLASMIX",
    "category": "Composites",
    "description": "Plaster 1:5 (6 bags cement + 1.15 m3 plaster sand)",
    "unit": "m3",
-   "price": 1036.5
+   "price": 1036.5,
+   "basis": "COMPOSITE",
+   "source": "Formula"
   },
   {
    "code": "CSITE",
    "category": "Composites",
    "description": "Site-mixed 25 MPa concrete (7 bags + 0.65 sand + 0.75 stone) — PPC ~6.7 bags/m3 for 20-29 MPa",
    "unit": "m3",
-   "price": 1418
+   "price": 1418,
+   "basis": "COMPOSITE",
+   "source": "Formula; PPC mix guidance"
   },
   {
    "code": "SCREEDMIX",
    "category": "Composites",
    "description": "Screed 1:4 (8 bags cement + 1.1 m3 river sand)",
    "unit": "m3",
-   "price": 1312
+   "price": 1312,
+   "basis": "COMPOSITE",
+   "source": "Formula"
   },
   {
    "code": "RM15",
    "category": "Concrete",
    "description": "Readymix 15 MPa / 19 mm, delivered (full loads)",
    "unit": "m3",
-   "price": 1520
+   "price": 1520,
+   "basis": "QS ESTIMATE",
+   "source": "Readymix R1,200-R1,800/m3 market range"
   },
   {
    "code": "RM20",
    "category": "Concrete",
    "description": "Readymix 20 MPa",
    "unit": "m3",
-   "price": 1600
+   "price": 1600,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RM25",
    "category": "Concrete",
    "description": "Readymix 25 MPa",
    "unit": "m3",
-   "price": 1690
+   "price": 1690,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RM30",
    "category": "Concrete",
    "description": "Readymix 30 MPa",
    "unit": "m3",
-   "price": 1800
+   "price": 1800,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RM35",
    "category": "Concrete",
    "description": "Readymix 35 MPa",
    "unit": "m3",
-   "price": 1930
+   "price": 1930,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "REBAR",
    "category": "Reinforcement",
    "description": "High-yield Y-bar, scheduled, cut & bent, delivered",
    "unit": "t",
-   "price": 19800
+   "price": 19800,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "REBARMS",
    "category": "Reinforcement",
    "description": "Mild steel R-bar, cut & bent, delivered",
    "unit": "t",
-   "price": 19200
+   "price": 19200,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MESH193",
    "category": "Reinforcement",
    "description": "Fabric mesh Ref 193",
    "unit": "m2",
-   "price": 52
+   "price": 52,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MESH245",
    "category": "Reinforcement",
    "description": "Fabric mesh Ref 245",
    "unit": "m2",
-   "price": 66
+   "price": 66,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MESH100",
    "category": "Reinforcement",
    "description": "Fabric mesh Ref 100",
    "unit": "m2",
-   "price": 31
+   "price": 31,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TIEW",
    "category": "Reinforcement",
    "description": "Binding wire",
    "unit": "kg",
-   "price": 42
+   "price": 42,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FWMAT",
    "category": "Formwork",
    "description": "Formwork materials (18 mm shutter ply + timber, 4 uses)",
    "unit": "m2",
-   "price": 88
+   "price": 88,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DPM250",
    "category": "Concrete",
    "description": "250 micron DPM (SANS 952)",
    "unit": "m2",
-   "price": 7.5
+   "price": 7.5,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "JSEAL",
    "category": "Concrete",
    "description": "Joint filler + polyurethane sealant",
    "unit": "m",
-   "price": 28
+   "price": 28,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LINT",
    "category": "Masonry",
    "description": "Precast prestressed lintel 110 mm",
    "unit": "m",
-   "price": 78
+   "price": 78,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RIBBLK",
    "category": "Concrete",
    "description": "Rib-and-block suspended slab system (beams + blocks, excl topping)",
    "unit": "m2",
-   "price": 380
+   "price": 380,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BRKCLAY",
    "category": "Masonry",
    "description": "Clay stock brick NFP 222x106x73",
    "unit": "no",
-   "price": 2.2
+   "price": 2.2,
+   "basis": "MARKET",
+   "source": "R1,600-R2,500 per 1,000"
   },
   {
    "code": "BRKCEM",
    "category": "Masonry",
    "description": "Cement stock brick NFX",
    "unit": "no",
-   "price": 2.1
+   "price": 2.1,
+   "basis": "MARKET",
+   "source": "R1,800-R3,000 per 1,000"
   },
   {
    "code": "FACEBRK",
    "category": "Masonry",
    "description": "Clay face brick (PC)",
    "unit": "no",
-   "price": 5.4
+   "price": 5.4,
+   "basis": "MARKET",
+   "source": "R3,500-R6,000 per 1,000"
   },
   {
    "code": "BLK90",
    "category": "Masonry",
    "description": "Cement block 390x190x90",
    "unit": "no",
-   "price": 9.8
+   "price": 9.8,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BLK140",
    "category": "Masonry",
    "description": "Cement block 390x190x140",
    "unit": "no",
-   "price": 13.5
+   "price": 13.5,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BLK190",
    "category": "Masonry",
    "description": "Cement block 390x190x190",
    "unit": "no",
-   "price": 17.9
+   "price": 17.9,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BFORCE",
    "category": "Masonry",
    "description": "Brickforce 150 mm",
    "unit": "m",
-   "price": 3.1
+   "price": 3.1,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TIES",
    "category": "Masonry",
    "description": "Galvanised wire wall tie",
    "unit": "no",
-   "price": 1.6
+   "price": 1.6,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DPC375",
    "category": "Masonry",
    "description": "Embossed polyolefin DPC 375 mm",
    "unit": "m",
-   "price": 7.5
+   "price": 7.5,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DPC230",
    "category": "Masonry",
    "description": "Embossed polyolefin DPC 230 mm",
    "unit": "m",
-   "price": 4.6
+   "price": 4.6,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HOOP",
    "category": "Masonry",
    "description": "Galvanised hoop iron 30x1.6",
    "unit": "m",
-   "price": 4.5
+   "price": 4.5,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TRUSS",
    "category": "Roofing",
    "description": "Engineered timber trusses incl hangers & bracing, delivered (per m2 plan)",
    "unit": "m2",
-   "price": 330
+   "price": 330,
+   "basis": "QS ESTIMATE",
+   "source": "Truss cost R250-R650/m2 excl covering (Complete Roofing 2026)"
   },
   {
    "code": "TIM114",
    "category": "Roofing",
    "description": "SA pine S5 38x114",
    "unit": "m",
-   "price": 44
+   "price": 44,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TIM152",
    "category": "Roofing",
    "description": "SA pine S5 38x152",
    "unit": "m",
-   "price": 60
+   "price": 60,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BAT38",
    "category": "Roofing",
    "description": "SA pine batten / brandering 38x38",
    "unit": "m",
-   "price": 10.5
+   "price": 10.5,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CTILE",
    "category": "Roofing",
    "description": "Concrete roof tiles incl 5% cuts allowance",
    "unit": "m2",
-   "price": 165
+   "price": 165,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CLAYTILE",
    "category": "Roofing",
    "description": "Clay roof tiles",
    "unit": "m2",
-   "price": 330
+   "price": 330,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "UNDERL",
    "category": "Roofing",
    "description": "Roof underlay (breathable)",
    "unit": "m2",
-   "price": 17
+   "price": 17,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "IBR05",
    "category": "Roofing",
    "description": "IBR 0.50 mm pre-painted (Chromadek), per m2 cover",
    "unit": "m2",
-   "price": 185
+   "price": 185,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "IBR047",
    "category": "Roofing",
    "description": "IBR 0.47 mm Zincalume, per m2 cover",
    "unit": "m2",
-   "price": 150
+   "price": 150,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CORR05",
    "category": "Roofing",
    "description": "Corrugated 0.50 mm galvanised, per m2 cover",
    "unit": "m2",
-   "price": 145
+   "price": 145,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PURLIN",
    "category": "Roofing",
    "description": "Lipped channel purlin 100x50x20x2.0",
    "unit": "m",
-   "price": 95
+   "price": 95,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RIDGE",
    "category": "Roofing",
    "description": "Concrete ridge / hip tile",
    "unit": "no",
-   "price": 26
+   "price": 26,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RIDGEIBR",
    "category": "Roofing",
    "description": "Pre-painted ridge capping",
    "unit": "m",
-   "price": 110
+   "price": 110,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "VALLEY",
    "category": "Roofing",
    "description": "Valley gutter",
    "unit": "m",
-   "price": 140
+   "price": 140,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FASCIA",
    "category": "Roofing",
    "description": "Fibre-cement fascia / barge 225 mm",
    "unit": "m",
-   "price": 92
+   "price": 92,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GUTTER",
    "category": "Roofing",
    "description": "Seamless aluminium gutter 125 mm — installed",
    "unit": "m",
-   "price": 260
+   "price": 260,
+   "basis": "QS ESTIMATE",
+   "source": "Supply & fix subcontract"
   },
   {
    "code": "DPIPE",
    "category": "Roofing",
    "description": "Aluminium downpipe 75 mm",
    "unit": "m",
-   "price": 85
+   "price": 85,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ISO135",
    "category": "Roofing",
    "description": "Polyester ceiling insulation 135 mm (SANS 10400-XA)",
    "unit": "m2",
-   "price": 92
+   "price": 92,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GLASS100",
    "category": "Roofing",
    "description": "Glasswool insulation 100 mm",
    "unit": "m2",
-   "price": 68
+   "price": 68,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FOIL",
    "category": "Roofing",
    "description": "Reflective foil / sisalation",
    "unit": "m2",
-   "price": 22
+   "price": 22,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "THATCH",
    "category": "Roofing",
    "description": "Thatch 200 mm incl poles & SANS fire treatment — installed",
    "unit": "m2",
-   "price": 950
+   "price": 950,
+   "basis": "MARKET",
+   "source": "R500-R800 base, premium to R2,000 (2026)"
   },
   {
    "code": "POLYC",
    "category": "Roofing",
    "description": "Polycarbonate sheeting 10 mm multiwall",
    "unit": "m2",
-   "price": 480
+   "price": 480,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DOORHC",
    "category": "Joinery",
    "description": "Hollow-core flush door 813x2032",
    "unit": "no",
-   "price": 620
+   "price": 620,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DOORSS",
    "category": "Joinery",
    "description": "Semi-solid door 813x2032",
    "unit": "no",
-   "price": 1450
+   "price": 1450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DOOREXT",
    "category": "Joinery",
    "description": "Solid meranti external door",
    "unit": "no",
-   "price": 3600
+   "price": 3600,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HINGE",
    "category": "Joinery",
    "description": "Steel butt hinges 100 mm",
    "unit": "pair",
-   "price": 75
+   "price": 75,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SFRAME",
    "category": "Joinery",
    "description": "Pressed steel door frame 813",
    "unit": "no",
-   "price": 680
+   "price": 680,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HWFRAME",
    "category": "Joinery",
    "description": "Hardwood external door frame",
    "unit": "no",
-   "price": 1650
+   "price": 1650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LOCK3",
    "category": "Ironmongery",
    "description": "3-lever mortice lockset with handles",
    "unit": "no",
-   "price": 320
+   "price": 320,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LOCK2",
    "category": "Ironmongery",
    "description": "2-lever mortice lockset with handles",
    "unit": "no",
-   "price": 190
+   "price": 190,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CYLLOCK",
    "category": "Ironmongery",
    "description": "Cylinder lockset external",
    "unit": "no",
-   "price": 650
+   "price": 650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DSTOP",
    "category": "Ironmongery",
    "description": "Door stop",
    "unit": "no",
-   "price": 45
+   "price": 45,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SKIRT",
    "category": "Joinery",
    "description": "Pine skirting 69 mm",
    "unit": "m",
-   "price": 38
+   "price": 38,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BIC",
    "category": "Joinery",
    "description": "Built-in cupboards melamine full height — installed",
    "unit": "m",
-   "price": 5200
+   "price": 5200,
+   "basis": "QS ESTIMATE",
+   "source": "Per m run"
   },
   {
    "code": "KITBASE",
    "category": "Joinery",
    "description": "Kitchen base units incl post-formed top — installed",
    "unit": "m",
-   "price": 5800
+   "price": 5800,
+   "basis": "QS ESTIMATE",
+   "source": "Per m run"
   },
   {
    "code": "KITWALL",
    "category": "Joinery",
    "description": "Kitchen wall units — installed",
    "unit": "m",
-   "price": 3900
+   "price": 3900,
+   "basis": "QS ESTIMATE",
+   "source": "Per m run"
   },
   {
    "code": "GRANITE",
    "category": "Joinery",
    "description": "Granite / quartz worktop 600 deep — installed",
    "unit": "m",
-   "price": 3200
+   "price": 3200,
+   "basis": "QS ESTIMATE",
+   "source": "Per m run"
   },
   {
    "code": "STEELWIN",
    "category": "Windows & doors",
    "description": "Standard steel window incl glazing",
    "unit": "m2",
-   "price": 1350
+   "price": 1350,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ALUWIN",
    "category": "Windows & doors",
    "description": "Aluminium casement, powder-coated, glazed",
    "unit": "m2",
-   "price": 2650
+   "price": 2650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ALUSLD",
    "category": "Windows & doors",
    "description": "Aluminium sliding door, safety glass",
    "unit": "m2",
-   "price": 3100
+   "price": 3100,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ALUDOOR",
    "category": "Windows & doors",
    "description": "Aluminium hinged / French door, safety glass",
    "unit": "m2",
-   "price": 3400
+   "price": 3400,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "UPVCWIN",
    "category": "Windows & doors",
    "description": "uPVC window, glazed",
    "unit": "m2",
-   "price": 3300
+   "price": 3300,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TIMWIN",
    "category": "Windows & doors",
    "description": "Meranti timber window, glazed",
    "unit": "m2",
-   "price": 2900
+   "price": 2900,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BURGLAR",
    "category": "Windows & doors",
    "description": "Mild steel burglar bars, primed",
    "unit": "m2",
-   "price": 650
+   "price": 650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SECGATE",
    "category": "Windows & doors",
    "description": "Trellis security gate",
    "unit": "m2",
-   "price": 1500
+   "price": 1500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GARAGE",
    "category": "Windows & doors",
    "description": "Sectional garage door 2.5x2.1 — installed",
    "unit": "no",
-   "price": 16500
+   "price": 16500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GARMOTOR",
    "category": "Windows & doors",
    "description": "Garage door motor — installed",
    "unit": "no",
-   "price": 6500
+   "price": 6500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GYP64",
    "category": "Ceilings & partitions",
    "description": "Gypsum board 6.4 mm",
    "unit": "m2",
-   "price": 58
+   "price": 58,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GYP95",
    "category": "Ceilings & partitions",
    "description": "Gypsum board 9.5 mm",
    "unit": "m2",
-   "price": 72
+   "price": 72,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GYP125",
    "category": "Ceilings & partitions",
    "description": "Gypsum board 12.5 mm",
    "unit": "m2",
-   "price": 88
+   "price": 88,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GYPFR",
    "category": "Ceilings & partitions",
    "description": "Fire-rated gypsum board 15 mm",
    "unit": "m2",
-   "price": 118
+   "price": 118,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SUSP",
    "category": "Ceilings & partitions",
    "description": "Suspended 600x600 exposed grid + mineral tiles",
    "unit": "m2",
-   "price": 240
+   "price": 240,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MFGRID",
    "category": "Ceilings & partitions",
    "description": "Concealed metal furring grid",
    "unit": "m2",
-   "price": 95
+   "price": 95,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FCBRD",
    "category": "Ceilings & partitions",
    "description": "Fibre-cement board 6 mm (eaves)",
    "unit": "m2",
-   "price": 88
+   "price": 88,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CORN75",
    "category": "Ceilings & partitions",
    "description": "Gypsum cove cornice 75 mm",
    "unit": "m",
-   "price": 16
+   "price": 16,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DRYFRAME",
    "category": "Ceilings & partitions",
    "description": "Steel stud & track 76 mm @ 600 crs",
    "unit": "m2",
-   "price": 145
+   "price": 145,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SKIM",
    "category": "Plaster",
    "description": "Gypsum skim plaster, 40 kg bag",
    "unit": "bag",
-   "price": 175
+   "price": 175,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HATCH",
    "category": "Ceilings & partitions",
    "description": "Ceiling access hatch 600x600",
    "unit": "no",
-   "price": 450
+   "price": 450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SLS",
    "category": "Floor finishes",
    "description": "Self-levelling compound 5 mm",
    "unit": "m2",
-   "price": 95
+   "price": 95,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LVT",
    "category": "Floor finishes",
    "description": "Luxury vinyl click plank",
    "unit": "m2",
-   "price": 290
+   "price": 290,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CARPTILE",
    "category": "Floor finishes",
    "description": "Carpet tiles",
    "unit": "m2",
-   "price": 260
+   "price": 260,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CARPET",
    "category": "Floor finishes",
    "description": "Broadloom carpet incl underfelt",
    "unit": "m2",
-   "price": 240
+   "price": 240,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LAMIN",
    "category": "Floor finishes",
    "description": "Laminated flooring 8 mm",
    "unit": "m2",
-   "price": 230
+   "price": 230,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "UNDERLAYF",
    "category": "Floor finishes",
    "description": "Foam underlay",
    "unit": "m2",
-   "price": 22
+   "price": 22,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ENGTIM",
    "category": "Floor finishes",
    "description": "Engineered timber flooring",
    "unit": "m2",
-   "price": 720
+   "price": 720,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EPOXY",
    "category": "Floor finishes",
    "description": "Epoxy floor coating system",
    "unit": "m2",
-   "price": 165
+   "price": 165,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TILEFC",
    "category": "Tiling",
    "description": "Ceramic floor tile (PC)",
    "unit": "m2",
-   "price": 180
+   "price": 180,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost — adjust to client selection"
   },
   {
    "code": "TILEPOR",
    "category": "Tiling",
    "description": "Porcelain floor tile 600x600 (PC)",
    "unit": "m2",
-   "price": 320
+   "price": 320,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "TILEWC",
    "category": "Tiling",
    "description": "Ceramic wall tile (PC)",
    "unit": "m2",
-   "price": 165
+   "price": 165,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "TILELF",
    "category": "Tiling",
    "description": "Large-format porcelain 600x1200 (PC)",
    "unit": "m2",
-   "price": 480
+   "price": 480,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "MOSAIC",
    "category": "Tiling",
    "description": "Mosaic tile on mesh (PC)",
    "unit": "m2",
-   "price": 520
+   "price": 520,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "SLATE",
    "category": "Tiling",
    "description": "Natural slate / stone paving (PC)",
    "unit": "m2",
-   "price": 260
+   "price": 260,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "ADH",
    "category": "Tiling",
    "description": "Tile adhesive, 20 kg bag",
    "unit": "bag",
-   "price": 145
+   "price": 145,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GROUT",
    "category": "Tiling",
    "description": "Tile grout, 5 kg bag",
    "unit": "bag",
-   "price": 95
+   "price": 95,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TRIM",
    "category": "Tiling",
    "description": "Aluminium tile trim",
    "unit": "m",
-   "price": 42
+   "price": 42,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BEAD",
    "category": "Plaster",
    "description": "Galvanised angle bead",
    "unit": "m",
-   "price": 14
+   "price": 14,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PVC110",
    "category": "Plumbing & drainage",
    "description": "uPVC SN4 drain pipe 110 mm",
    "unit": "m",
-   "price": 118
+   "price": 118,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PVC160",
    "category": "Plumbing & drainage",
    "description": "uPVC SN4 drain pipe 160 mm",
    "unit": "m",
-   "price": 240
+   "price": 240,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PVC50",
    "category": "Plumbing & drainage",
    "description": "uPVC waste pipe 50 mm",
    "unit": "m",
-   "price": 52
+   "price": 52,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PVC40",
    "category": "Plumbing & drainage",
    "description": "uPVC waste pipe 40 mm",
    "unit": "m",
-   "price": 38
+   "price": 38,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CU22",
    "category": "Plumbing & drainage",
    "description": "Copper tube 22 mm Class 0",
    "unit": "m",
-   "price": 185
+   "price": 185,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CU15",
    "category": "Plumbing & drainage",
    "description": "Copper tube 15 mm Class 0",
    "unit": "m",
-   "price": 118
+   "price": 118,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PEX16",
    "category": "Plumbing & drainage",
    "description": "Multilayer PEX-AL-PEX 16 mm",
    "unit": "m",
-   "price": 36
+   "price": 36,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HDPE25",
    "category": "Plumbing & drainage",
    "description": "HDPE Class 12 service pipe 25 mm",
    "unit": "m",
-   "price": 24
+   "price": 24,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MHCOVER",
    "category": "Plumbing & drainage",
    "description": "Manhole cover & frame (medium duty)",
    "unit": "no",
-   "price": 950
+   "price": 950,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ICHAM",
    "category": "Plumbing & drainage",
    "description": "Plastic inspection chamber 450 incl lid",
    "unit": "no",
-   "price": 1450
+   "price": 1450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "RODEYE",
    "category": "Plumbing & drainage",
    "description": "Rodding / inspection eye",
    "unit": "no",
-   "price": 180
+   "price": 180,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GULLY",
    "category": "Plumbing & drainage",
    "description": "Gully head with grid",
    "unit": "no",
-   "price": 420
+   "price": 420,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "WCSUITE",
    "category": "Sanitaryware",
    "description": "Close-coupled WC suite (PC)",
    "unit": "no",
-   "price": 2100
+   "price": 2100,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "BASIN",
    "category": "Sanitaryware",
    "description": "Wash basin + pedestal (PC)",
    "unit": "no",
-   "price": 950
+   "price": 950,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "BASINMIX",
    "category": "Sanitaryware",
    "description": "Basin mixer + waste",
    "unit": "no",
-   "price": 650
+   "price": 650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BATH",
    "category": "Sanitaryware",
    "description": "Acrylic bath 1700 (PC)",
    "unit": "no",
-   "price": 2400
+   "price": 2400,
+   "basis": "QS ESTIMATE",
+   "source": "Prime cost"
   },
   {
    "code": "BATHMIX",
    "category": "Sanitaryware",
    "description": "Bath mixer + waste",
    "unit": "no",
-   "price": 1450
+   "price": 1450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SHOWMIX",
    "category": "Sanitaryware",
    "description": "Shower mixer, rose, arm & waste",
    "unit": "no",
-   "price": 1900
+   "price": 1900,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SHOWSCREEN",
    "category": "Sanitaryware",
    "description": "Frameless shower screen/door — installed",
    "unit": "no",
-   "price": 7500
+   "price": 7500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SINK",
    "category": "Sanitaryware",
    "description": "Stainless double-bowl sink",
    "unit": "no",
-   "price": 1350
+   "price": 1350,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SINKMIX",
    "category": "Sanitaryware",
    "description": "Sink mixer + waste",
    "unit": "no",
-   "price": 780
+   "price": 780,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GEY150",
    "category": "Hot water",
    "description": "Electric geyser 150 L 3 kW (SANS 151)",
    "unit": "no",
-   "price": 6600
+   "price": 6600,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GEY200",
    "category": "Hot water",
    "description": "Electric geyser 200 L 4 kW",
    "unit": "no",
-   "price": 8300
+   "price": 8300,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GEYKIT",
    "category": "Hot water",
    "description": "Geyser kit: drip tray, PRV, T&P, vacuum breakers, pipework (SANS 10254)",
    "unit": "no",
-   "price": 1650
+   "price": 1650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SOLARGEY",
    "category": "Hot water",
    "description": "Solar water heater 200 L high-pressure — installed",
    "unit": "no",
-   "price": 26000
+   "price": 26000,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HEATPUMP",
    "category": "Hot water",
    "description": "Heat pump retrofit — installed",
    "unit": "no",
-   "price": 32000
+   "price": 32000,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TANK5000",
    "category": "Plumbing & drainage",
    "description": "5,000 L rainwater tank",
    "unit": "no",
-   "price": 7800
+   "price": 7800,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GTAP",
    "category": "Plumbing & drainage",
    "description": "Garden tap + fittings",
    "unit": "no",
-   "price": 120
+   "price": 120,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "VALVE22",
    "category": "Plumbing & drainage",
    "description": "Isolating valve 22 mm",
    "unit": "no",
-   "price": 190
+   "price": 190,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SEPTIC",
    "category": "Plumbing & drainage",
    "description": "Septic tank 2,500 L (precast / poly)",
    "unit": "no",
-   "price": 9500
+   "price": 9500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FDRAIN",
    "category": "Plumbing & drainage",
    "description": "Floor drain / shower channel",
    "unit": "no",
-   "price": 650
+   "price": 650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ELIGHTPT",
    "category": "Electrical",
    "description": "Light point materials: conduit, 1.5 mm wiring, box, switch",
    "unit": "no",
-   "price": 185
+   "price": 185,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ESOCKET",
    "category": "Electrical",
    "description": "Socket outlet materials: conduit, 2.5 mm wiring, box, double socket",
    "unit": "no",
-   "price": 245
+   "price": 245,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ESTOVE",
    "category": "Electrical",
    "description": "Stove circuit: 6 mm cable, isolator, CB",
    "unit": "no",
-   "price": 950
+   "price": 950,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EGEYSER",
    "category": "Electrical",
    "description": "Geyser circuit: 4 mm cable, isolator, timer, CB",
    "unit": "no",
-   "price": 1050
+   "price": 1050,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DB12",
    "category": "Electrical",
    "description": "12-way DB board fully equipped incl earth leakage & SPD",
    "unit": "no",
-   "price": 3200
+   "price": 3200,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DB24",
    "category": "Electrical",
    "description": "24-way DB board fully equipped",
    "unit": "no",
-   "price": 5600
+   "price": 5600,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SWA16",
    "category": "Electrical",
    "description": "16 mm2 4-core SWA cable",
    "unit": "m",
-   "price": 185
+   "price": 185,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EARTH",
    "category": "Electrical",
    "description": "Earth spike, clamp & bonding",
    "unit": "no",
-   "price": 450
+   "price": 450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EXTLIGHT",
    "category": "Electrical",
    "description": "External wall light IP65",
    "unit": "no",
-   "price": 380
+   "price": 380,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EDATA",
    "category": "Electrical",
    "description": "Data / TV point materials",
    "unit": "no",
-   "price": 220
+   "price": 220,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EXTFAN",
    "category": "Electrical",
    "description": "Bathroom extractor fan",
    "unit": "no",
-   "price": 750
+   "price": 750,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LEDDL",
    "category": "Electrical",
    "description": "LED downlight",
    "unit": "no",
-   "price": 85
+   "price": 85,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LEDBAT",
    "category": "Electrical",
    "description": "LED batten / ceiling fitting",
    "unit": "no",
-   "price": 260
+   "price": 260,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SMOKE",
    "category": "Electrical",
    "description": "Smoke detector",
    "unit": "no",
-   "price": 220
+   "price": 220,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PVSYS5",
    "category": "Electrical",
    "description": "5 kW hybrid inverter + 10 kWh LiFePO4 + panels, SSEG-compliant — installed",
    "unit": "no",
-   "price": 115000
+   "price": 115000,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "AC12",
    "category": "Mechanical",
    "description": "Split AC 12,000 BTU inverter — installed",
    "unit": "no",
-   "price": 14500
+   "price": 14500,
+   "basis": "QS ESTIMATE",
+   "source": "AECOM residential split R1,350-R2,100/m2 GFA"
   },
   {
    "code": "AC18",
    "category": "Mechanical",
    "description": "Split AC 18,000 BTU inverter — installed",
    "unit": "no",
-   "price": 19500
+   "price": 19500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "AC24",
    "category": "Mechanical",
    "description": "Split AC 24,000 BTU inverter — installed",
    "unit": "no",
-   "price": 26500
+   "price": 26500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EFENCE",
    "category": "Security",
    "description": "Electric fence 6-strand wall-top — installed",
    "unit": "m",
-   "price": 280
+   "price": 280,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CCTV4",
    "category": "Security",
    "description": "4-camera CCTV system — installed",
    "unit": "no",
-   "price": 11500
+   "price": 11500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ALARM",
    "category": "Security",
    "description": "6-zone alarm system — installed",
    "unit": "no",
-   "price": 7500
+   "price": 7500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "STEELFAB",
    "category": "Structural steel",
    "description": "Structural steel, fabricated & primed, delivered",
    "unit": "t",
-   "price": 41000
+   "price": 41000,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GALV",
    "category": "Structural steel",
    "description": "Hot-dip galvanising extra",
    "unit": "t",
-   "price": 6500
+   "price": 6500,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HDB",
    "category": "Structural steel",
    "description": "Holding-down bolt set M16",
    "unit": "no",
-   "price": 180
+   "price": 180,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BALUS",
    "category": "Metalwork",
    "description": "Mild steel balustrade, fabricated",
    "unit": "m",
-   "price": 1450
+   "price": 1450,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GLBAL",
    "category": "Metalwork",
    "description": "Glass / stainless balustrade — installed",
    "unit": "m",
-   "price": 6800
+   "price": 6800,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "INTUM",
    "category": "Metalwork",
    "description": "Intumescent coating 60 min (materials)",
    "unit": "m2",
-   "price": 180
+   "price": 180,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PRIMER",
    "category": "Paint",
    "description": "Plaster primer (20 L = R1,100)",
    "unit": "L",
-   "price": 55
+   "price": 55,
+   "basis": "MARKET",
+   "source": "Consumer 20 L tins"
   },
   {
    "code": "PVA",
    "category": "Paint",
    "description": "Interior PVA mid-range",
    "unit": "L",
-   "price": 52
+   "price": 52,
+   "basis": "MARKET",
+   "source": null
   },
   {
    "code": "ACRYL",
    "category": "Paint",
    "description": "Exterior acrylic",
    "unit": "L",
-   "price": 80
+   "price": 80,
+   "basis": "MARKET",
+   "source": null
   },
   {
    "code": "ELAST",
    "category": "Paint",
    "description": "Elastomeric exterior coating",
    "unit": "L",
-   "price": 120
+   "price": 120,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "UNDERC",
    "category": "Paint",
    "description": "Universal undercoat",
    "unit": "L",
-   "price": 88
+   "price": 88,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ENAMEL",
    "category": "Paint",
    "description": "Alkyd enamel",
    "unit": "L",
-   "price": 118
+   "price": 118,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "METPRIM",
    "category": "Paint",
    "description": "Metal primer (red oxide / zinc)",
    "unit": "L",
-   "price": 105
+   "price": 105,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "VARNISH",
    "category": "Paint",
    "description": "Timber varnish / sealer",
    "unit": "L",
-   "price": 130
+   "price": 130,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ROOFPAINT",
    "category": "Paint",
    "description": "Roof paint",
    "unit": "L",
-   "price": 95
+   "price": 95,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ALUPAINT",
    "category": "Paint",
    "description": "Aluminium reflective roof coating",
    "unit": "L",
-   "price": 110
+   "price": 110,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TORCH",
    "category": "Waterproofing",
    "description": "4 mm APP torch-on membrane",
    "unit": "m2",
-   "price": 92
+   "price": 92,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "BPRIMER",
    "category": "Waterproofing",
    "description": "Bitumen primer",
    "unit": "L",
-   "price": 70
+   "price": 70,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LIQWP",
    "category": "Waterproofing",
    "description": "Liquid acrylic waterproofing system incl membrane (3 coats)",
    "unit": "m2",
-   "price": 75
+   "price": 75,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CEMWP",
    "category": "Waterproofing",
    "description": "Cementitious waterproofing (2 coats)",
    "unit": "m2",
-   "price": 68
+   "price": 68,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GLASS4",
    "category": "Glazing",
    "description": "4 mm clear float glass",
    "unit": "m2",
-   "price": 290
+   "price": 290,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "GLASS638",
    "category": "Glazing",
    "description": "6.38 mm laminated safety glass (SANS 10400-N)",
    "unit": "m2",
-   "price": 680
+   "price": 680,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "MIRROR",
    "category": "Glazing",
    "description": "6 mm mirror, polished edges",
    "unit": "m2",
-   "price": 620
+   "price": 620,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DGU",
    "category": "Glazing",
    "description": "Double-glazed unit 4-12-4",
    "unit": "m2",
-   "price": 1650
+   "price": 1650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PAVER80",
    "category": "External works",
    "description": "Interlocking concrete paver 80 mm",
    "unit": "m2",
-   "price": 175
+   "price": 175,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PAVER60",
    "category": "External works",
    "description": "Interlocking concrete paver 60 mm",
    "unit": "m2",
-   "price": 148
+   "price": 148,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CLAYPAVER",
    "category": "External works",
    "description": "Clay paver",
    "unit": "m2",
-   "price": 310
+   "price": 310,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "KERB",
    "category": "External works",
    "description": "Precast barrier / FB kerb",
    "unit": "m",
-   "price": 92
+   "price": 92,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CHANNEL",
    "category": "External works",
    "description": "Precast channel",
    "unit": "m",
-   "price": 70
+   "price": 70,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "ASPHALT",
    "category": "External works",
    "description": "30 mm asphalt incl prime — installed (small works)",
    "unit": "m2",
-   "price": 420
+   "price": 420,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PALISADE",
    "category": "External works",
    "description": "Galvanised palisade 1.8 m incl posts — installed",
    "unit": "m",
-   "price": 1150
+   "price": 1150,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "CLEARVU",
    "category": "External works",
    "description": "358 anti-climb mesh 2.4 m — installed",
    "unit": "m",
-   "price": 1650
+   "price": 1650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PRECWALL",
    "category": "External works",
    "description": "Precast concrete panel wall 1.8 m — installed",
    "unit": "m",
-   "price": 780
+   "price": 780,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "DIAMOND",
    "category": "External works",
    "description": "Diamond mesh 1.8 m + galvanised posts (materials)",
    "unit": "m",
-   "price": 120
+   "price": 120,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "SLGATE",
    "category": "External works",
    "description": "Steel sliding gate 4 m incl motor — installed",
    "unit": "no",
-   "price": 28000
+   "price": 28000,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "PEDGATE",
    "category": "External works",
    "description": "Steel pedestrian gate, fabricated",
    "unit": "no",
-   "price": 3200
+   "price": 3200,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "LAWN",
    "category": "External works",
    "description": "Instant lawn (kikuyu / buffalo)",
    "unit": "m2",
-   "price": 55
+   "price": 55,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "TERRA",
    "category": "External works",
    "description": "Concrete retaining block (Terraforce-type)",
    "unit": "m2",
-   "price": 290
+   "price": 290,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "FIREEXT",
    "category": "Fire",
    "description": "Fire extinguisher 4.5 kg DCP incl bracket & sign",
    "unit": "no",
-   "price": 650
+   "price": 650,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "HOSEREEL",
    "category": "Fire",
    "description": "Fire hose reel 30 m (SANS 543)",
    "unit": "no",
-   "price": 3800
+   "price": 3800,
+   "basis": "QS ESTIMATE",
+   "source": null
   },
   {
    "code": "EXITSIGN",
    "category": "Fire",
    "description": "LED emergency exit sign",
    "unit": "no",
-   "price": 850
+   "price": 850,
+   "basis": "QS ESTIMATE",
+   "source": null
+  }
+ ],
+ "elemental": [
+  {
+   "section": "RESIDENTIAL",
+   "type": "RDP housing",
+   "unit": "m2",
+   "low": 3568,
+   "high": 3778,
+   "mid": 3673
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Low-cost housing",
+   "unit": "m2",
+   "low": 4513,
+   "high": 7766,
+   "mid": 6140
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — economic",
+   "unit": "m2",
+   "low": 8312,
+   "high": 8312,
+   "mid": 8312
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — standard",
+   "unit": "m2",
+   "low": 10337,
+   "high": 10337,
+   "mid": 10337
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — middle-class",
+   "unit": "m2",
+   "low": 12415,
+   "high": 12415,
+   "mid": 12415
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — luxury",
+   "unit": "m2",
+   "low": 17159,
+   "high": 17159,
+   "mid": 17159
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — exclusive",
+   "unit": "m2",
+   "low": 27759,
+   "high": 27759,
+   "mid": 27759
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Private dwelling — super luxury",
+   "unit": "m2",
+   "low": 39881,
+   "high": 83959,
+   "mid": 61920
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Outbuildings — standard",
+   "unit": "m2",
+   "low": 7766,
+   "high": 7766,
+   "mid": 7766
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Outbuildings — luxury",
+   "unit": "m2",
+   "low": 10915,
+   "high": 10915,
+   "mid": 10915
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Simple low-rise apartment block",
+   "unit": "m2",
+   "low": 10810,
+   "high": 15008,
+   "mid": 12909
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Duplex townhouse — economic",
+   "unit": "m2",
+   "low": 10810,
+   "high": 15427,
+   "mid": 13119
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Prestige apartment block",
+   "unit": "m2",
+   "low": 20990,
+   "high": 31485,
+   "mid": 26237
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Student residential high-rise (incl FF&E)",
+   "unit": "m2",
+   "low": 16792,
+   "high": 18366,
+   "mid": 17579
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Retirement — dwelling, middle-class",
+   "unit": "m2",
+   "low": 12174,
+   "high": 12174,
+   "mid": 12174
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Retirement — apartment, middle-class",
+   "unit": "m2",
+   "low": 12594,
+   "high": 12594,
+   "mid": 12594
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Retirement — frail care",
+   "unit": "m2",
+   "low": 19520,
+   "high": 19520,
+   "mid": 19520
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Site services to low-cost stand (250-350 m2)",
+   "unit": "site",
+   "low": 74514,
+   "high": 119642,
+   "mid": 97078
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Carport shaded — single",
+   "unit": "no",
+   "low": 6612,
+   "high": 6612,
+   "mid": 6612
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Carport shaded — double",
+   "unit": "no",
+   "low": 13433,
+   "high": 13433,
+   "mid": 13433
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Carport covered — single",
+   "unit": "no",
+   "low": 10495,
+   "high": 10495,
+   "mid": 10495
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Carport covered — double",
+   "unit": "no",
+   "low": 20465,
+   "high": 20465,
+   "mid": 20465
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Swimming pool <= 50 kl",
+   "unit": "no",
+   "low": 141681,
+   "high": 141681,
+   "mid": 141681
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Swimming pool 50-100 kl",
+   "unit": "no",
+   "low": 251877,
+   "high": 251877,
+   "mid": 251877
+  },
+  {
+   "section": "RESIDENTIAL",
+   "type": "Tennis court — standard",
+   "unit": "no",
+   "low": 745137,
+   "high": 745137,
+   "mid": 745137
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Low-rise office park, standard",
+   "unit": "m2",
+   "low": 11859,
+   "high": 14588,
+   "mid": 13224
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Low-rise office park, prestige",
+   "unit": "m2",
+   "low": 15323,
+   "high": 22774,
+   "mid": 19048
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "High-rise office, standard",
+   "unit": "m2",
+   "low": 17212,
+   "high": 22774,
+   "mid": 19993
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "High-rise office, prestige",
+   "unit": "m2",
+   "low": 22774,
+   "high": 28756,
+   "mid": 25765
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Local convenience centre <= 5,000 m2",
+   "unit": "m2",
+   "low": 11649,
+   "high": 15323,
+   "mid": 13486
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Neighbourhood centre 5,000-12,000 m2",
+   "unit": "m2",
+   "low": 12699,
+   "high": 16897,
+   "mid": 14798
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Community centre 12,000-25,000 m2",
+   "unit": "m2",
+   "low": 13958,
+   "high": 17946,
+   "mid": 15952
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Studios (dance, art exhibition)",
+   "unit": "m2",
+   "low": 20465,
+   "high": 29386,
+   "mid": 24925
+  },
+  {
+   "section": "COMMERCIAL / RETAIL",
+   "type": "Conference centre, international standard",
+   "unit": "m2",
+   "low": 37782,
+   "high": 48276,
+   "mid": 43029
+  },
+  {
+   "section": "INDUSTRIAL",
+   "type": "Warehouse, steel frame & cladding (light duty)",
+   "unit": "m2",
+   "low": 6087,
+   "high": 7766,
+   "mid": 6927
+  },
+  {
+   "section": "INDUSTRIAL",
+   "type": "Warehouse, brick to ceiling + cladding (heavy duty)",
+   "unit": "m2",
+   "low": 6822,
+   "high": 9760,
+   "mid": 8291
+  },
+  {
+   "section": "INDUSTRIAL",
+   "type": "Admin offices / ablution / change block",
+   "unit": "m2",
+   "low": 11020,
+   "high": 14063,
+   "mid": 12541
+  },
+  {
+   "section": "INDUSTRIAL",
+   "type": "Cold storage",
+   "unit": "m2",
+   "low": 20570,
+   "high": 29281,
+   "mid": 24925
+  },
+  {
+   "section": "PARKING",
+   "type": "Parking on grade incl landscaping",
+   "unit": "m2",
+   "low": 840,
+   "high": 1049,
+   "mid": 945
+  },
+  {
+   "section": "PARKING",
+   "type": "Structured parking",
+   "unit": "m2",
+   "low": 5772,
+   "high": 6402,
+   "mid": 6087
+  },
+  {
+   "section": "PARKING",
+   "type": "Semi-basement parking",
+   "unit": "m2",
+   "low": 6402,
+   "high": 8711,
+   "mid": 7556
+  },
+  {
+   "section": "PARKING",
+   "type": "Basement parking",
+   "unit": "m2",
+   "low": 6822,
+   "high": 11859,
+   "mid": 9340
+  },
+  {
+   "section": "SOCIAL",
+   "type": "Primary school",
+   "unit": "m2",
+   "low": 9760,
+   "high": 11230,
+   "mid": 10495
+  },
+  {
+   "section": "SOCIAL",
+   "type": "Secondary school",
+   "unit": "m2",
+   "low": 11649,
+   "high": 12489,
+   "mid": 12069
+  },
+  {
+   "section": "SOCIAL",
+   "type": "District hospital (excl FF&E)",
+   "unit": "m2",
+   "low": 40930,
+   "high": 40930,
+   "mid": 40930
+  },
+  {
+   "section": "SOCIAL",
+   "type": "Hotel — budget (incl FF&E)",
+   "unit": "key",
+   "low": 934045,
+   "high": 1469284,
+   "mid": 1201664
+  },
+  {
+   "section": "SOCIAL",
+   "type": "Hotel — 3-star (incl FF&E)",
+   "unit": "key",
+   "low": 1470333,
+   "high": 2203926,
+   "mid": 1837130
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Electrical — residential",
+   "unit": "m2",
+   "low": 997,
+   "high": 1679,
+   "mid": 1338
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Electrical — offices standard",
+   "unit": "m2",
+   "low": 1154,
+   "high": 1679,
+   "mid": 1417
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Electronic (access, CCTV, fire detection, data) — residential",
+   "unit": "m2",
+   "low": 472,
+   "high": 787,
+   "mid": 630
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Air-conditioning — residential split units",
+   "unit": "m2",
+   "low": 1417,
+   "high": 2204,
+   "mid": 1810
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Air-conditioning — offices split",
+   "unit": "m2",
+   "low": 1417,
+   "high": 2256,
+   "mid": 1837
+  },
+  {
+   "section": "SERVICES (R/m2 GFA)",
+   "type": "Sprinklers incl hydrants & hose reels (offices)",
+   "unit": "m2",
+   "low": 472,
+   "high": 630,
+   "mid": 551
   }
  ]
 }

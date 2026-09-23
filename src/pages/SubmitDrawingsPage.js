@@ -11,6 +11,7 @@ import {
   Button, IconButton, Card, Banner, Badge, PageHeader,
   Field, Input, Select, Textarea, Modal,
 } from '../ui';
+import { gbp } from '../utils/planPrice';
 
 const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
 const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
@@ -668,14 +669,14 @@ export default function SubmitDrawingsPage() {
           </div>
 
           <PackCard
-            name="5 BOQ pack" price="£349" priceColor="var(--accent)"
+            name="5 BOQ pack" price={`${gbp(349)}`} priceColor="var(--accent)"
             tintBg="linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))"
             tintBorder="rgba(245,158,11,0.25)"
-            blurb={<>That's just <strong style={{ color: 'var(--text-primary)' }}>£69.80 per BOQ</strong> — saves you £401 vs. PAYG.</>}
+            blurb={<>That's just <strong style={{ color: 'var(--text-primary)' }}>{gbp(69.80)} per BOQ</strong> — saves you {gbp(401)} vs. PAYG.</>}
             cta={
               <Button href={withUserRef(BOQ_5_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full>
                 <ZapIcon size={15} color="currentColor" />
-                Buy 5 BOQs — £349
+                Buy 5 BOQs — {gbp(349)}
                 <ArrowRightIcon size={15} color="currentColor" />
               </Button>
             }
@@ -683,17 +684,17 @@ export default function SubmitDrawingsPage() {
 
           <div style={{ marginTop: 14 }}>
             <PackCard
-              name="10 BOQ pack" price="£580" priceColor="var(--violet)"
+              name="10 BOQ pack" price={`${gbp(580)}`} priceColor="var(--violet)"
               tintBg="linear-gradient(135deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))"
               tintBorder="rgba(124,58,237,0.25)"
-              blurb={<>Just <strong style={{ color: 'var(--text-primary)' }}>£58 per BOQ</strong> — saves you £920 vs. PAYG.</>}
+              blurb={<>Just <strong style={{ color: 'var(--text-primary)' }}>{gbp(58)} per BOQ</strong> — saves you {gbp(920)} vs. PAYG.</>}
               cta={
                 <Button
                   href={withUserRef(BOQ_10_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full
                   style={{ background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', color: '#fff', boxShadow: '0 4px 18px rgba(124,58,237,0.35)' }}
                 >
                   <ZapIcon size={15} color="currentColor" />
-                  Buy 10 BOQs — £580
+                  Buy 10 BOQs — {gbp(580)}
                   <ArrowRightIcon size={15} color="currentColor" />
                 </Button>
               }
@@ -702,17 +703,17 @@ export default function SubmitDrawingsPage() {
 
           <div style={{ marginTop: 14 }}>
             <PackCard
-              name="20 BOQ pack" price="£980" priceColor="var(--success)"
+              name="20 BOQ pack" price={`${gbp(980)}`} priceColor="var(--success)"
               tintBg="linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))"
               tintBorder="rgba(16,185,129,0.25)"
-              blurb={<>Best value — just <strong style={{ color: 'var(--text-primary)' }}>£49 per BOQ</strong>, saves you £2,020 vs. PAYG.</>}
+              blurb={<>Best value — just <strong style={{ color: 'var(--text-primary)' }}>{gbp(49)} per BOQ</strong>, saves you {gbp(2020)} vs. PAYG.</>}
               cta={
                 <Button
                   href={withUserRef(BOQ_20_PACK_LINK, user)} target="_blank" rel="noopener noreferrer" full
                   style={{ background: 'linear-gradient(135deg, #10B981, #059669)', color: '#fff', boxShadow: '0 4px 18px rgba(16,185,129,0.35)' }}
                 >
                   <ZapIcon size={15} color="currentColor" />
-                  Buy 20 BOQs — £980
+                  Buy 20 BOQs — {gbp(980)}
                   <ArrowRightIcon size={15} color="currentColor" />
                 </Button>
               }
@@ -744,7 +745,7 @@ export default function SubmitDrawingsPage() {
           }}
         >
           <ZapIcon size={14} color="#0A0F1C" />
-          Buy 5 BOQs — £349
+          Buy 5 BOQs — {gbp(349)}
         </button>
       )}
 

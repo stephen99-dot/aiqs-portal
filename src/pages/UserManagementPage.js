@@ -319,7 +319,7 @@ function CountryOnboardingCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={country} onChange={e => { setCountry(e.target.value); setRegion(''); }} style={{ ...sInp, minWidth: 170 }}>
           <option value="">Choose country…</option>
-          {countries.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
+          {countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
         </select>
         {regions.length > 0 && (
           <select value={region} onChange={e => setRegion(e.target.value)} style={{ ...sInp, minWidth: 220 }}>

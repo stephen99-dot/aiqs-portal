@@ -339,10 +339,63 @@ function renderZaLibraryCribSheet(regionFactor = 1) {
   return lines.join('\n');
 }
 
+// The rate library as the portal shows it: every rate with its full
+// build-up, adjusted to the chosen region. South Africa only — other countries
+// are served the UK library by the route (see routes.js /rates/library).
+function zaLibraryView(regionName) {
+  const lib = zaLibrary();
+  const region = (regionName && lib.regions.find((r) => r.name === regionName)) || lib.regions.find((r) => r.isBase) || lib.regions[0];
+  const f = region.factor;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const mat = Object.fromEntries(lib.materials.map((m) => [m.code, m]));
+  const plant = Object.fromEntries(lib.plant.map((p) => [p.code, p]));
+  const gang = Object.fromEntries((lib.gangs || []).map((g) => [g.code, g]));
+  const m = 1 + lib.marginPct / 100;
+  const sections = [];
+  const bySection = {};
+  for (const r of lib.rates) {
+    if (!bySection[r.section]) { bySection[r.section] = { name: r.section, rates: [] }; sections.push(bySection[r.section]); }
+    const b = r.buildUp || {};
+    bySection[r.section].rates.push({
+      code: r.code,
+      description: r.description,
+      unit: r.unit,
+      // Region-adjusted, ex VAT. `sell` includes the library margin.
+      net: r2(r.net * f),
+      sell: r2(r.sell * f),
+      labour: r2((b.labourR || 0) * f * m),
+      materials: r2(((b.materialsR || 0) + (b.sundriesR || 0)) * f * m),
+      plant: r2((b.plantR || 0) * f * m),
+      buildUp: {
+        gang: b.gang ? { code: b.gang, description: (gang[b.gang] || {}).description || b.gang, composition: (gang[b.gang] || {}).composition || '', hoursPerUnit: b.gangHours, ratePerHour: r2(((gang[b.gang] || {}).ratePerHour || 0) * f) } : null,
+        materials: (b.materials || []).map((x) => {
+          const mm = mat[x.code] || {};
+          return { code: x.code, description: mm.description || x.code, unit: mm.unit || '', qty: x.qty, price: r2((mm.price || 0) * f), cost: r2((mm.price || 0) * x.qty * f) };
+        }),
+        sundries: r2((b.sundriesR || 0) * f),
+        plant: b.plant ? { code: b.plant.code, description: (plant[b.plant.code] || {}).description || b.plant.code, unit: (plant[b.plant.code] || {}).unit || '', qty: b.plant.qty, rate: r2(((plant[b.plant.code] || {}).rate || 0) * f), cost: r2((b.plantR || 0) * f) } : null,
+      },
+    });
+  }
+  return {
+    country: 'ZA', currency: 'ZAR', symbol: 'R',
+    ref: lib.ref, baseDate: lib.baseDate, baseRegion: lib.baseRegion,
+    region: { name: region.name, factor: region.factor }, regions: lib.regions,
+    marginPct: lib.marginPct, vatPct: lib.vatPct, labourOnCostPct: lib.labourOnCostPct,
+    escalationPctPa: lib.escalationPctPa,
+    sections,
+    labour: lib.labour.map((l) => ({ ...l, allInHr: r2(l.allInHr * f), allInDay: r2(l.allInDay * f) })),
+    gangs: (lib.gangs || []).map((g) => ({ ...g, ratePerHour: r2(g.ratePerHour * f) })),
+    plant: lib.plant.map((p) => ({ ...p, rate: r2(p.rate * f) })),
+    materials: lib.materials.map((x) => ({ ...x, price: r2(x.price * f) })),
+    elemental: (lib.elemental || []).map((e) => ({ ...e, low: Math.round(e.low * f), high: Math.round(e.high * f), mid: Math.round(e.mid * f) })),
+  };
+}
+
 module.exports = {
   COUNTRIES, OTHER, ZA_GBP_PARITY,
   getCountry, countryForUser, publicCountryList, userCountryFields, validateCountryInput,
   currencySymbol, currencyCode, formatMoney,
   detectCountryFromLocation, zaRegion, zaLibrary, zaRateForUkKey, pricingProfile, pricingOptions,
-  promptBlock, renderZaLibraryCribSheet,
+  promptBlock, renderZaLibraryCribSheet, zaLibraryView,
 };

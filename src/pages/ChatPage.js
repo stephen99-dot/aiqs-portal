@@ -18,6 +18,7 @@ import {
   BarChartIcon, PaperclipIcon, ClipboardIcon,
 } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
+import { gbp } from '../utils/planPrice';
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -1172,20 +1173,20 @@ export default function ChatPage() {
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
                   <a href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)} target="_blank" rel="noopener noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 18px', borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C', textDecoration:'none', fontSize:13, fontWeight:700 }}>
-                    Pay £150 — Generate this BOQ
+                    Pay {gbp(150)} — Generate this BOQ
                   </a>
                   <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                     <a href={withUserRef("https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h", user)} target="_blank" rel="noopener noreferrer"
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(245,158,11,0.06)', border:`1px solid ${c.warnBorder}`, color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
-                      <StarIcon size={14} style={{ verticalAlign:'middle' }} /> 5 BOQs — £349
+                      <StarIcon size={14} style={{ verticalAlign:'middle' }} /> 5 BOQs — {gbp(349)}
                     </a>
                     <a href={withUserRef("https://buy.stripe.com/9B628raZy2Fa4ow62073G0f", user)} target="_blank" rel="noopener noreferrer"
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.2)', color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
-                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 10 BOQs — £580
+                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 10 BOQs — {gbp(580)}
                     </a>
                     <a href={withUserRef("https://buy.stripe.com/cNi4gz6Ji4Ni3ks2PO73G0l", user)} target="_blank" rel="noopener noreferrer"
                       style={{ flex:1, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'9px 14px', borderRadius:8, background:'rgba(16,185,129,0.06)', border:'1px solid rgba(16,185,129,0.2)', color:c.text, textDecoration:'none', fontSize:12, fontWeight:600 }}>
-                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 20 BOQs — £980
+                      <CrownIcon size={14} style={{ verticalAlign:'middle' }} /> 20 BOQs — {gbp(980)}
                     </a>
                   </div>
                 </div>

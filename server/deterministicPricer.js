@@ -2203,6 +2203,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       materials,
       total,
       rate_source: rateSource,
+      // South Africa: which SA-RL rate(s) priced this line, or that it had no
+      // SA equivalent and was converted from the UK library at parity.
+      ...(za && rateSource === 'base_library'
+        ? (zaHit ? { library_ref: zaHit.codes.join('+') } : { library_ref: null, converted_from_uk: true })
+        : {}),
       qty_source: item.qty_source || 'ai_extracted',
       section: item.section || 'General',
       working: item.working || '',
@@ -2500,6 +2505,8 @@ function toPricedSections(pricedResult) {
       materials: item.materials,
       total: item.total,
       rate_source: item.rate_source,
+      library_ref: item.library_ref || null,
+      converted_from_uk: !!item.converted_from_uk,
     };
     }),
   }));

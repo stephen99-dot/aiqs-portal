@@ -12,6 +12,7 @@ import {
   Button, IconButton, Card, Banner, PageHeader,
   Field, Input, Select, Textarea, Modal, ProgressBar,
 } from '../ui';
+import { gbp } from '../utils/planPrice';
 
 const PROJECT_TYPES = [
   'Residential Extension',
@@ -113,7 +114,7 @@ function LimitReachedModal({ usage, user, onClose }) {
           iconBg="rgba(16,185,129,0.08)"
           tintBg="rgba(16,185,129,0.04)" tintBorder="rgba(16,185,129,0.15)"
           title="Buy Extra Project" subtitle="One-off project — processed within 2 hours"
-          price="£150" priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
+          price={`${gbp(150)}`} priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
         />
 
         {/* 5-BOQ bundle */}
@@ -122,8 +123,8 @@ function LimitReachedModal({ usage, user, onClose }) {
           icon={<StarIcon size={18} color="#F59E0B" />}
           iconBg="rgba(245,158,11,0.08)"
           tintBg="rgba(245,158,11,0.04)" tintBorder="rgba(245,158,11,0.15)"
-          title="5 BOQ Bundle" subtitle="Just £69.80 per BOQ — credits never expire"
-          price="£349" priceBg="linear-gradient(135deg, #F59E0B, #D97706)" priceColor="#0A0F1C"
+          title="5 BOQ Bundle" subtitle={`Just ${gbp(69.80)} per BOQ — credits never expire`}
+          price={`${gbp(349)}`} priceBg="linear-gradient(135deg, #F59E0B, #D97706)" priceColor="#0A0F1C"
         />
 
         {/* 10-BOQ bundle */}
@@ -133,8 +134,8 @@ function LimitReachedModal({ usage, user, onClose }) {
           iconBg="rgba(124,58,237,0.08)"
           tintBg="linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.03))"
           tintBorder="rgba(124,58,237,0.15)"
-          title="10 BOQ Bundle" subtitle="Just £58 per BOQ — credits never expire"
-          price="£580" priceBg="linear-gradient(135deg, #7C3AED, #6D28D9)" priceColor="#fff"
+          title="10 BOQ Bundle" subtitle={`Just ${gbp(58)} per BOQ — credits never expire`}
+          price={`${gbp(580)}`} priceBg="linear-gradient(135deg, #7C3AED, #6D28D9)" priceColor="#fff"
         />
 
         {/* 20-BOQ bundle */}
@@ -144,8 +145,8 @@ function LimitReachedModal({ usage, user, onClose }) {
           iconBg="rgba(16,185,129,0.08)"
           tintBg="linear-gradient(135deg, rgba(16,185,129,0.06), rgba(16,185,129,0.03))"
           tintBorder="rgba(16,185,129,0.15)"
-          title="20 BOQ Bundle" subtitle="Best value — just £49 per BOQ, credits never expire"
-          price="£980" priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
+          title="20 BOQ Bundle" subtitle={`Best value — just ${gbp(49)} per BOQ, credits never expire`}
+          price={`${gbp(980)}`} priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
         />
 
         {/* Contact */}
@@ -266,7 +267,7 @@ export default function NewProjectPage() {
               <CreditCardIcon size={16} color="var(--accent)" />
             </div>
             <div>
-              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>Pay As You Go — £150 per project</div>
+              <div style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>Pay As You Go — {gbp(150)} per project</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>You'll be taken to Stripe to pay after submitting</div>
             </div>
           </div>
@@ -374,7 +375,7 @@ export default function NewProjectPage() {
             ) : usage && usage.atLimit ? (
               <><BanIcon size={14} color="currentColor" /> Limit Reached</>
             ) : isPayg ? (
-              <>Submit & Pay £150 <ArrowRightIcon size={14} color="currentColor" /></>
+              <>Submit & Pay {gbp(150)} <ArrowRightIcon size={14} color="currentColor" /></>
             ) : (
               <>Submit Project <ArrowRightIcon size={14} color="currentColor" /></>
             )}

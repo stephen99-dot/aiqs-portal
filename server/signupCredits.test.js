@@ -45,6 +45,14 @@ test('a payment whose amount matched no pack still counts as buying first', () =
   assert.strictEqual(balance(db, 'u3').free_credits, 0);
 });
 
+test('a payment an earlier account already claimed does not cost a new signup its free BOQ', () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO pending_credits (id, stripe_session_id, email, credits, claimed_at) VALUES ('p1', 'cs_1', 'again@example.com', 5, CURRENT_TIMESTAMP)").run();
+  db.prepare("INSERT INTO users (id, email, role) VALUES ('u9', 'again@example.com', 'client')").run();
+  grantSignupCredits({ id: 'u9', email: 'again@example.com', role: 'client' }, { db });
+  assert.deepStrictEqual(balance(db, 'u9'), { free_credits: 1, message_credits: 150 });
+});
+
 test('granting twice does not double up', () => {
   const db = freshDb();
   db.prepare("INSERT INTO users (id, email, role) VALUES ('u4', 'a@example.com', 'client')").run();

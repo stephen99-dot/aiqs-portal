@@ -15,6 +15,7 @@ import {
   BrainIcon, EditIcon,
 } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
+import { gbp, billingNote } from '../utils/planPrice';
 
 const STRIPE = {
   starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
@@ -33,17 +34,18 @@ function BuyBoqButtons({ user, compact = false }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <Button size={size} href={withUserRef(STRIPE.starter_payg, user)} {...ext}>
-        <ZapIcon size={11} color="currentColor" /> £150 per BOQ
+        <ZapIcon size={11} color="currentColor" /> {gbp(150)} per BOQ
       </Button>
       <Button size={size} variant="soft" href={withUserRef(STRIPE.boq_5_pack, user)} {...ext}>
-        5 BOQs — £349
+        5 BOQs — {gbp(349)}
       </Button>
       <Button size={size} variant="secondary" href={withUserRef(STRIPE.boq_10_pack, user)} {...ext}>
-        10 BOQs — £580
+        10 BOQs — {gbp(580)}
       </Button>
       <Button size={size} variant="secondary" href={withUserRef(STRIPE.boq_20_pack, user)} {...ext}>
-        20 BOQs — £980
+        20 BOQs — {gbp(980)}
       </Button>
+      {billingNote() && <span style={{ fontSize: 11, color: 'var(--text-muted)', width: '100%' }}>{billingNote()}</span>}
     </div>
   );
 }
@@ -65,7 +67,7 @@ function UsageBar({ usage, user }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Badge tone="warning" size="sm"><ZapIcon size={11} color="currentColor" /> Pay As You Go</Badge>
             <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-              <strong style={{ color: 'var(--text-primary)' }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · £150 per BOQ
+              <strong style={{ color: 'var(--text-primary)' }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · {gbp(150)} per BOQ
             </span>
           </div>
           <BuyBoqButtons user={user} compact />
@@ -121,7 +123,7 @@ function UsageBar({ usage, user }) {
               fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>
-              Save with a 5-BOQ bundle — £349 <ArrowRightIcon size={11} color="currentColor" />
+              Save with a 5-BOQ bundle — {gbp(349)} <ArrowRightIcon size={11} color="currentColor" />
             </a>
           </div>
         )}

@@ -1,11 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiFetch, getToken, setToken, clearToken } from '../utils/api';
+import { setPriceViewer } from '../utils/planPrice';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Plan prices read the viewer's currency (see utils/planPrice.js). Set
+  // during render so the first paint after sign-in already has it.
+  setPriceViewer(user);
 
   useEffect(() => {
     const token = getToken();

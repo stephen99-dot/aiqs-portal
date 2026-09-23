@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
+import RateLibraryBrowser from '../components/RateLibraryBrowser';
 import {
   Button, IconButton, Card, Banner, Badge, Stat,
   Input, Select, Field, PageHeader, EmptyState, Skeleton, SkeletonRows, useToast,
@@ -58,12 +59,18 @@ export default function MyRatesPage() {
   const [addError, setAddError] = useState('');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  // 'mine' = the builder's own trained rates; 'library' = the country's rate
+  // library those rates override, with full build-ups.
+  const [tab, setTab] = useState('mine');
   const fileInputRef = useRef(null);
 
   const loadRates = useCallback(async () => {
     try {
       const data = await apiFetch('/my-rates');
       setRates(data.rates || []);
+      // A builder with no rates of their own yet lands on the library their
+      // jobs are actually priced from, rather than an empty list.
+      if (!(data.rates || []).length) setTab(t => (t === 'mine' ? 'library' : t));
       setStats(data.stats || null);
       const cats = {};
       for (const r of (data.rates || [])) cats[r.category] = false;
@@ -168,6 +175,17 @@ export default function MyRatesPage() {
         ) : null}
       />
 
+      {/* My rates | the country's rate library */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
+        {[['mine', 'My rates'], ['library', user?.country === 'ZA' ? 'South Africa rates library' : 'Rates library']].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)}
+            style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: '2px solid ' + (tab === id ? 'var(--accent)' : 'transparent'), marginBottom: -1, color: tab === id ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.86rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'library' ? <RateLibraryBrowser user={user} /> : (<>
       {/* Actions row */}
       <div style={{ marginBottom: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <Input
@@ -307,7 +325,7 @@ export default function MyRatesPage() {
                               type="text" value={editUnit}
                               onChange={e => setEditUnit(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') handleSave(rate); if (e.key === 'Escape') setEditingId(null); }}
-                              placeholder="£/m2"
+                              placeholder={(user?.currencySymbol || '£') + '/m2'}
                               style={{ width: 72, textAlign: 'center' }}
                             />
                             <Button size="sm" onClick={() => handleSave(rate)} busyLabel="Saving…">Save</Button>
@@ -339,12 +357,13 @@ export default function MyRatesPage() {
           <div style={{ fontSize: '0.84rem', color: 'var(--text-primary)', fontWeight: 500, marginBottom: 6 }}>
             <LightbulbIcon size={16} style={{ verticalAlign: 'middle', marginRight: 6 }} />How rate training works
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>The AI QS uses your trained rates instead of generic UK averages. Add rates manually, import from Excel, or correct rates in chat. The more you use it, the higher the confidence.</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>The AI QS uses your trained rates instead of the standard rates library for your country. Add rates manually, import from Excel, or correct rates in chat. The more you use it, the higher the confidence.</div>
         </Banner>
       )}
       <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--surface-hover)', borderRadius: 8 }}>
         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}><strong style={{ color: 'var(--text-secondary)' }}>Excel import format:</strong> Columns: Description/Name, Rate/Value, Unit (optional), Category (optional). Headers auto-detected.</div>
       </div>
+      </>)}
     </div>
   );
 }

@@ -69,7 +69,16 @@ for (const row of rows('Rates').slice(3)) {
   if (!Number.isFinite(net) || net <= 0) continue;
   const labour = Number(row[5]) || 0;
   const plant = Number(row[16]) || 0;
-  const materials = (Number(row[12]) || 0) + (Number(row[13]) || 0);
+  const materialsR = Number(row[12]) || 0;
+  const sundries = Number(row[13]) || 0;
+  const materials = materialsR + sundries;
+  // The full build-up, so the portal and the assistant can show HOW a rate is
+  // made up, not just the total: gang and gang-hours, each material with its
+  // quantity, sundries and plant, all at the base region, net of margin.
+  const mats = [];
+  for (const [ci, qi] of [[6, 7], [8, 9], [10, 11]]) {
+    if (row[ci]) mats.push({ code: String(row[ci]).trim(), qty: Number(row[qi]) || 0 });
+  }
   rates.push({
     code: String(code).trim(),
     section,
@@ -81,6 +90,16 @@ for (const row of rows('Rates').slice(3)) {
     // same way the UK library does. Plant is counted with materials.
     labour: r2(labour / net),
     materials: r2((materials + plant) / net),
+    buildUp: {
+      gang: row[3] ? String(row[3]).trim() : null,
+      gangHours: Number(row[4]) || 0,
+      labourR: r2(labour),
+      materials: mats,
+      materialsR: r2(materialsR),
+      sundriesR: r2(sundries),
+      plant: row[14] ? { code: String(row[14]).trim(), qty: Number(row[15]) || 0 } : null,
+      plantR: r2(plant),
+    },
   });
 }
 
@@ -90,7 +109,17 @@ const labour = rows('Labour').slice(1).filter((r) => r[0] && r[1] && Number(r[6]
 const plant = rows('Plant').slice(1).filter((r) => r[0] && r[1] && Number(r[3]) > 0)
   .map((r) => ({ code: r[0], description: r[1], unit: r[2], rate: r2(Number(r[3])) }));
 const materials = rows('Materials').slice(1).filter((r) => r[0] && r[2] && Number(r[4]) > 0)
-  .map((r) => ({ code: r[0], category: r[1], description: r[2], unit: r[3], price: r2(Number(r[4])) }));
+  .map((r) => ({ code: r[0], category: r[1], description: r[2], unit: r[3], price: r2(Number(r[4])), basis: r[5] || null, source: r[6] || null }));
+const gangs = rows('Gangs').slice(1).filter((r) => r[0] && Number(r[3]) > 0)
+  .map((r) => ({ code: r[0], description: r[1], composition: r[2], ratePerHour: r2(Number(r[3])) }));
+const labourOnCostPct = r2(Number(settings['TOTAL ON-COST']) * 100);
+// AECOM R/m2 benchmarks (Elemental sheet): building type, low, high at base date.
+const elemental = [];
+let eSection = null;
+for (const r of rows('Elemental').slice(4)) {
+  if (r[0] && r[1] == null && r[2] == null) { eSection = String(r[0]).trim(); continue; }
+  if (r[0] && Number(r[4]) > 0) elemental.push({ section: eSection, type: String(r[0]).trim(), unit: r[1], low: Math.round(Number(r[4])), high: Math.round(Number(r[5])), mid: Math.round(Number(r[6])) });
+}
 
 const lib = {
   ref,
@@ -104,10 +133,13 @@ const lib = {
   notes: 'Sell rates = NET cost build-up + contractor margin, ex VAT, at the base region. Multiply by the region factor. VAT is added once at the foot of the BOQ.',
   regions,
   rates,
+  labourOnCostPct,
   labour,
+  gangs,
   plant,
   materials,
+  elemental,
 };
 
 fs.writeFileSync(out, JSON.stringify(lib, null, 1) + '\n');
-console.log(`Wrote ${path.relative(process.cwd(), out)}: ${ref}, ${rates.length} rates, ${regions.length} regions, ${labour.length} labour grades, ${plant.length} plant, ${materials.length} materials`);
+console.log(`Wrote ${path.relative(process.cwd(), out)}: ${ref}, ${rates.length} rates, ${regions.length} regions, ${labour.length} labour grades, ${plant.length} plant, ${materials.length} materials, ${gangs.length} gangs, ${elemental.length} elemental benchmarks`);

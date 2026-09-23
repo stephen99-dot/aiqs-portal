@@ -6,7 +6,7 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
-  InboxIcon, FolderIcon, BrainIcon,
+  InboxIcon, FolderIcon, BrainIcon, MapPinIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
@@ -308,8 +308,9 @@ export default function Layout() {
           {!isAdmin && (
             <button onClick={() => setCountryOpen(true)} className="ui-nav-item" style={{ marginBottom: 2 }}
               title="Change country or redo onboarding">
-              <span style={{ fontSize: 14, width: 15, textAlign: 'center' }}>{myCountry ? myCountry.flag : '🌍'}</span>
-              {user?.country ? (user.countryName || 'Country') + ' · ' + (user.currency || '') : 'Set your country'}
+              {/* No flag emoji: Windows draws them as two letters ("ZA"). */}
+              <MapPinIcon size={15} color="currentColor" />
+              {user?.country ? (user.countryName || (myCountry && myCountry.name) || 'Country') + ' · ' + (user.currencySymbol || '') + ' ' + (user.currency || '') : 'Set your country'}
             </button>
           )}
 
