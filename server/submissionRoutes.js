@@ -31,7 +31,7 @@ const FILE_UPLOAD_URL = process.env.PIPEDREAM_FILE_WEBHOOK || 'https://eoinyvk74
 
 // Where a customer sends drawings too big for the portal to accept. Mirrored in
 // src/pages/SubmitDrawingsPage.js.
-const OVERSIZE_EMAIL = process.env.OVERSIZE_UPLOAD_EMAIL || 'hello@theaiqs.com';
+const OVERSIZE_EMAIL = process.env.OVERSIZE_UPLOAD_EMAIL || 'submissions@theaiqs.com';
 
 const MAX_FILE_MB = 100;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024; // 100 MB per file
