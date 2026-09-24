@@ -40,7 +40,7 @@ const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const MAX_FILES = 20;
 
 // Where a customer sends drawings too big for the portal to accept.
-const OVERSIZE_EMAIL = 'hello@theaiqs.com';
+const OVERSIZE_EMAIL = 'submissions@theaiqs.com';
 
 function getFileIcon(name) {
   const ext = name.split('.').pop().toLowerCase();
