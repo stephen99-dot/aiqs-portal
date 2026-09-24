@@ -6,7 +6,7 @@
 // cors({ origin: true }) in index.js covers it) and — by design — unauthenticated:
 // the whole point is that a stranger can ask a question before signing up.
 //
-//   POST /api/public/site-chat   { messages: [{ role, content }] } -> { reply }
+//   POST /api/public/site-chat   { messages: [{ role, content }], market? } -> { reply }
 //
 // Because it is open and it spends money on every call, it is fenced in:
 //   - per-IP rate limit, tighter than the other public routes
@@ -17,7 +17,7 @@
 
 const express = require('express');
 const { callModel, MODELS } = require('./anthropicClient');
-const { SYSTEM_PROMPT, sanitiseHistory, FALLBACK_REPLY } = require('./siteChat');
+const { SYSTEM_PROMPT, sanitiseHistory, marketNote, FALLBACK_REPLY } = require('./siteChat');
 const { rateLimit } = require('./publicRateLimit');
 
 const router = express.Router();
@@ -39,16 +39,23 @@ router.post('/site-chat', async (req, res) => {
     return res.json({ reply: FALLBACK_REPLY, degraded: true });
   }
 
+  // The shared prompt is cached on its own; the per-visitor country note goes
+  // after the cache breakpoint so every visitor still reads the prompt from cache.
+  const note = marketNote(req.body && req.body.market);
+  const system = note
+    ? [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: note }]
+    : SYSTEM_PROMPT;
+
   try {
     const result = await callModel({
       model: MODELS.FAST,
-      system: SYSTEM_PROMPT,
+      system,
       messages,
       maxTokens: MAX_REPLY_TOKENS,
       temperature: 0.4,
       // The system prompt is byte-identical on every call, so it reads from
       // cache instead of being re-billed for each visitor turn.
-      cacheSystem: true,
+      cacheSystem: !note,
       action: 'site_chat',
       maxAttempts: 2,
     });
