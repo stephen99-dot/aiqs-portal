@@ -931,7 +931,7 @@ function CostsTab({ t }) {
   );
 }
 
-// ─── Feedback tab — in-portal survey results ────────────────────────────────
+// ─── Feedback tab — Trustpilot review ask + in-portal survey results ────────
 function SurveyTab({ t }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -943,11 +943,25 @@ function SurveyTab({ t }) {
   if (!data) return <div style={{ color: t.textMuted, padding: 20 }}>Loading…</div>;
 
   const responses = data.responses || [];
-  const summary = (data.summary && data.summary[0]) || null;
+  const summaries = data.summary || [];
+  // Latest key with star ratings = the in-portal survey; trustpilot_* rows are
+  // the review ask, which only records whether they clicked through.
+  const summary = summaries.find(s => s.avg_stars != null) || null;
+  const trustpilot = summaries.find(s => String(s.survey_key).startsWith('trustpilot')) || null;
   const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '16px 20px' };
 
   return (
     <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 14 }}>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#00B67A' }}>{trustpilot ? trustpilot.clicked : 0}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Sent to Trustpilot</div>
+        </div>
+        <div style={card}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{trustpilot ? trustpilot.already_reviewed : 0}</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>Said they'd already reviewed</div>
+        </div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 20 }}>
         <div style={card}>
           <div style={{ fontSize: 26, fontWeight: 700, color: t.text }}>{summary ? summary.responses : 0}</div>
@@ -968,7 +982,7 @@ function SurveyTab({ t }) {
       </div>
 
       {responses.length === 0 ? (
-        <div style={{ ...card, color: t.textMuted, fontSize: 13.5 }}>No responses yet — the survey popup is live for every signed-in user.</div>
+        <div style={{ ...card, color: t.textMuted, fontSize: 13.5 }}>No responses yet — the Trustpilot popup is live for every signed-in user.</div>
       ) : responses.map(r => (
         <div key={r.id} style={{ ...card, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
@@ -978,7 +992,9 @@ function SurveyTab({ t }) {
             <div style={{ fontSize: 12, color: t.textMuted }}>{(r.created_at || '').slice(0, 10)}</div>
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 13, color: t.textMuted, flexWrap: 'wrap' }}>
-            <span style={{ color: '#F59E0B', fontWeight: 700 }}>{'★'.repeat(r.stars || 0)}{'☆'.repeat(5 - (r.stars || 0))}</span>
+            {r.stars != null
+              ? <span style={{ color: '#F59E0B', fontWeight: 700 }}>{'★'.repeat(r.stars)}{'☆'.repeat(5 - r.stars)}</span>
+              : r.outcome && <span style={{ color: '#00B67A', fontWeight: 700 }}>{r.outcome === 'clicked' ? 'Clicked through to Trustpilot' : "Said they'd already reviewed on Trustpilot"}</span>}
             {r.nav_score != null && <span>Navigation {r.nav_score}/10</span>}
           </div>
           {r.feature_request && (
