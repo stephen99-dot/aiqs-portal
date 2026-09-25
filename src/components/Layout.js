@@ -10,7 +10,7 @@ import {
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
-import SurveyPopup from './SurveyPopup';
+import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
@@ -359,8 +359,8 @@ export default function Layout() {
         </nav>
       )}
 
-      {/* Feedback survey — every non-admin user, once. */}
-      {!isAdmin && <SurveyPopup />}
+      {/* Trustpilot review ask — every non-admin user, once. */}
+      {!isAdmin && <TrustpilotPopup />}
 
       {/* Country: asked once of anyone who hasn't set it (onboarding sets it
           itself, so it isn't asked twice there). */}

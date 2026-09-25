@@ -1,9 +1,11 @@
 // surveyRoutes.js — in-portal feedback surveys.
 //
-// One row per (user, survey_key). The popup asks three things: star rating,
-// ease-of-navigation score out of 10, and a feature wish. Submitting completes
-// the survey permanently; "not now" is only snoozed client-side so a gentle
-// re-ask happens next session. Admins read the results aggregated.
+// One row per (user, survey_key). The original popup asked three things: star
+// rating, ease-of-navigation score out of 10, and a feature wish. The current
+// one (trustpilot_*) asks nothing in-portal — it sends people to Trustpilot and
+// just records the outcome. Either way a row completes the prompt permanently;
+// "not now" is only snoozed client-side so a gentle re-ask happens next
+// session. Admins read the results aggregated.
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
@@ -27,6 +29,8 @@ function ensureSchema() {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, survey_key)
   )`);
+  const cols = db.prepare('PRAGMA table_info(user_surveys)').all().map((c) => c.name);
+  if (!cols.includes('outcome')) db.exec('ALTER TABLE user_surveys ADD COLUMN outcome TEXT');
   schemaReady = true;
 }
 
@@ -88,6 +92,31 @@ router.post('/survey', authMiddleware, (req, res) => {
   }
 });
 
+// POST /api/survey/complete — { survey_key, outcome } for prompts with no
+// in-portal questions (the Trustpilot review ask). Records that the user is
+// done with it so it isn't shown again on any device.
+const PROMPT_OUTCOMES = ['clicked', 'already_reviewed'];
+router.post('/survey/complete', authMiddleware, (req, res) => {
+  try {
+    ensureSchema();
+    const b = req.body || {};
+    const key = String(b.survey_key || '').slice(0, 64);
+    if (!key) return res.status(400).json({ error: 'survey_key required' });
+    const outcome = String(b.outcome || '');
+    if (!PROMPT_OUTCOMES.includes(outcome)) return res.status(400).json({ error: 'outcome must be one of: ' + PROMPT_OUTCOMES.join(', ') });
+
+    db.prepare(`
+      INSERT INTO user_surveys (id, user_id, survey_key, outcome)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, survey_key) DO UPDATE SET outcome = excluded.outcome
+    `).run(uuidv4(), req.user.id, key, outcome);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[Survey] complete error:', e.message);
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
 // GET /api/admin/surveys?key=... — responses + averages (all keys if none given)
 router.get('/admin/surveys', authMiddleware, (req, res) => {
   try {
@@ -107,7 +136,9 @@ router.get('/admin/surveys', authMiddleware, (req, res) => {
       SELECT s.survey_key, COUNT(*) AS responses,
              ROUND(AVG(s.stars), 2) AS avg_stars,
              ROUND(AVG(s.nav_score), 2) AS avg_nav_score,
-             SUM(CASE WHEN s.feature_request IS NOT NULL THEN 1 ELSE 0 END) AS feature_requests
+             SUM(CASE WHEN s.feature_request IS NOT NULL THEN 1 ELSE 0 END) AS feature_requests,
+             SUM(CASE WHEN s.outcome = 'clicked' THEN 1 ELSE 0 END) AS clicked,
+             SUM(CASE WHEN s.outcome = 'already_reviewed' THEN 1 ELSE 0 END) AS already_reviewed
       FROM user_surveys s ${where ? where.replace('s.survey_key', 's.survey_key') : ''}
       GROUP BY s.survey_key
       ORDER BY MAX(s.created_at) DESC
