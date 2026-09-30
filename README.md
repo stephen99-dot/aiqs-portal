@@ -63,6 +63,17 @@ list). It drives three things:
   markup per trade). Reference rows carry no unit/qty/rate, so `recalcGate` and
   `preIssueGate` ignore them and `parseBOQ` stops at the "shown for reference" wording.
 
+**Builder Pack.** A parsed bill (the Builder Pack's data source) gets the same treatment
+in `server/boqTrades.js`: every line is tagged by description + section title, each section
+named by its dominant trade, and `GET /projects/:id/builder-breakdown` returns `trade` per
+section/line, `by_trade`, the owner's `pricing_prefs` and a `trade_seed` (the per-section
+uplift the markup-by-trade implies). The page pre-fills *Per-trade uplift override* from it on
+a first visit (a saved state wins afterwards; "Fill from my trade markups" re-applies it), shows
+each section's trade, and the Builder tab and the Builder Pack xlsx's Trade Summary carry a
+*By trade package* table. The "Update this bill" assistant accepts `controls.trade_markup`
+("10% on the electrician and plumber"), `section_uplift` and `remember_trade_markup`, which the
+page saves to the pricing preferences on Apply.
+
 **Same layout every time.** Section titles from the model ("1. Substructure & Foundations",
 "SUBSTRUCTURE", "Substructure") normalise to one canonical name (`canonicalSectionName`,
 16 names ending with Provisional Sums) and print in the standard elemental order

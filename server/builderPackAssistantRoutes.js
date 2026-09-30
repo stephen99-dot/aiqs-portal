@@ -73,18 +73,35 @@ function baseNet(sections) {
 }
 
 // ─── Snapshot — what the model sees ──────────────────────────────────────────
-function snapshotForPrompt(project, sections, controls) {
+function snapshotForPrompt(project, sections, controls, extra = {}) {
   const c = controls || {};
   const out = [];
   out.push(`BOQ for project "${project.title || project.id}" — Builder Pack / Client Copy editor.`);
   out.push(`Client-copy controls: overhead ${num(c.overhead_pct)}% | profit ${num(c.profit_pct)}% | contingency ${num(c.contingency_pct)}% | VAT ${num(c.vat_pct)}% | provisional sums £${num(c.provisional_sum)}`);
+  // Trade packages: each section's dominant trade, the per-section uplift
+  // overrides currently set on the client copy, and the builder's standing
+  // markup by trade — so "put 10% on the sparky" can be mapped and checked.
+  let tradeBySection = {};
+  try {
+    const { classifySections } = require('./boqTrades');
+    const info = classifySections(sections.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
+    for (const s of info.sections) tradeBySection[String(s.number)] = s.trade;
+  } catch (e) { tradeBySection = {}; }
+  const overrides = c.per_trade_ohp && typeof c.per_trade_ohp === 'object' ? Object.entries(c.per_trade_ohp) : [];
+  out.push('Per-section uplift overrides on the client copy (section → %; sections not listed take overhead+profit): '
+    + (overrides.length ? overrides.map(([k, v]) => `${k} → ${num(v)}%`).join(', ') : 'none'));
+  const standing = extra.tradeMarkup && typeof extra.tradeMarkup === 'object' ? Object.entries(extra.tradeMarkup) : [];
+  out.push('Builder\'s standing markup by trade (pricing preferences, applies to every job): '
+    + (standing.length ? standing.map(([k, v]) => `${k} ${num(v)}%`).join(', ') : 'none set'));
+  out.push('Trade package names: ' + TRADE_NAMES.join(' | '));
   out.push('');
   out.push('ITEMS (ref | section | item ref | description | qty | unit | labour £ (line total) | materials £ (line total) | line total £):');
   const flat = flattenItems(sections);
   let lastSection = null;
   for (const f of flat) {
     if (f.section !== lastSection) {
-      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${f.section.provisional ? ' (PROVISIONAL — carried excl. OH&P)' : ''}`);
+      const tr = tradeBySection[String(f.section.number)];
+      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${tr ? ' [trade: ' + tr + ']' : ''}${f.section.provisional ? ' (PROVISIONAL — carried excl. OH&P)' : ''}`);
       lastSection = f.section;
     }
     const it = f.item;
@@ -96,6 +113,7 @@ function snapshotForPrompt(project, sections, controls) {
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
+const TRADE_NAMES = require('./deterministicPricer').TRADES;
 const UPDATE_TOOL = {
   name: 'propose_pack_update',
   description: 'Propose changes to the BOQ items and/or the client-copy controls. The builder reviews the changes on screen and applies them — nothing changes until they do. Only include fields that actually change. IMPORTANT: labour and materials are LINE TOTALS in £ (not per-unit rates); for composite lines (labour and materials both 0) set `total` instead. All figures are NET of VAT.',
@@ -179,6 +197,20 @@ const UPDATE_TOOL = {
           contingency_pct: { type: 'number' },
           vat_pct: { type: 'number' },
           provisional_sum: { type: 'number' },
+          trade_markup: {
+            type: 'object',
+            description: 'Markup (uplift) % by TRADE PACKAGE, e.g. {"Electrical": 10, "Plumbing & Heating": 10}. Keys MUST be trade package names from the list in the BOQ snapshot. Each trade maps onto the sections it covers on this bill as a per-section uplift override; sections of other trades keep overhead+profit.',
+            additionalProperties: { type: 'number' },
+          },
+          section_uplift: {
+            type: 'object',
+            description: 'Uplift % override for specific SECTIONS, keyed by section number, e.g. {"3": 25}. Use when the builder names a section rather than a trade.',
+            additionalProperties: { type: 'number' },
+          },
+          remember_trade_markup: {
+            type: 'boolean',
+            description: 'true when the builder says the trade_markup is their standing rule ("always", "from now on", "as usual", "my normal") — it is then saved to their pricing preferences for every future bill as well as this one.',
+          },
         },
       },
     },
@@ -194,6 +226,8 @@ Typical requests:
 - "Scaffold's gone up to £21,500" → adjust that item.
 - "Take the asbestos lines out" → remove items.
 - "Set VAT to 20%" / "add 10% contingency" → change the client-copy controls.
+- "Put 10% on the electrician and plumber, 20% on everything else" → controls.trade_markup {"Electrical": 10, "Plumbing & Heating": 10} plus overhead_pct 20 (profit 0) for the rest. Each section is tagged [trade: …] in the snapshot; a trade with no section on this bill can't be uplifted, say so. "Always"/"from now on" → also remember_trade_markup: true.
+- "Put 25% on the roof section" → controls.section_uplift {"4": 25} using the section number.
 
 HOW TO BEHAVE:
 1. QUALIFYING QUESTIONS: if the request is ambiguous — you can't tell which items it means, whether an uploaded quote includes VAT, whether it's supply-only or supply-and-fit, or whether it replaces or adds to existing items — ask 1-3 short questions in plain text and DO NOT call propose_pack_update yet. Never guess on money.
@@ -295,11 +329,56 @@ function validateAndPreview(input, project, sections, controls) {
   }
 
   let controlChanges = null;
+  const upliftChanges = []; // human-readable, built alongside
   if (input.controls && typeof input.controls === 'object') {
     controlChanges = {};
     for (const k of ['overhead_pct', 'profit_pct', 'contingency_pct', 'vat_pct', 'provisional_sum']) {
       if (input.controls[k] != null) controlChanges[k] = round2(num(input.controls[k]));
     }
+    // Markup by trade → per-section uplift overrides. The merged map is what
+    // the page stores (controls.per_trade_ohp), so the proposal carries the
+    // whole map after the change, not just the delta.
+    const currentOverrides = (controls && controls.per_trade_ohp && typeof controls.per_trade_ohp === 'object') ? { ...controls.per_trade_ohp } : {};
+    const merged = { ...currentOverrides };
+    let touched = false;
+    const tm = input.controls.trade_markup;
+    if (tm && typeof tm === 'object' && !Array.isArray(tm)) {
+      const { classifySections, sectionOverridesFromTradeMarkup } = require('./boqTrades');
+      const { normaliseTradeMarkup } = require('./deterministicPricer');
+      const clean = normaliseTradeMarkup(tm);
+      for (const k of Object.keys(tm)) {
+        if (!Object.prototype.hasOwnProperty.call(clean, k) && !TRADE_NAMES.some((t) => t.toLowerCase() === String(k).trim().toLowerCase())) {
+          errors.push(`unknown trade "${k}" — use one of: ${TRADE_NAMES.join(', ')}`);
+        }
+      }
+      const info = classifySections(sections.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
+      const perSection = sectionOverridesFromTradeMarkup(sections, clean);
+      for (const [trade, pct] of Object.entries(clean)) {
+        const secs = info.sections.filter((s) => !s.provisional && s.trade === trade).map((s) => String(s.number));
+        if (!secs.length) { errors.push(`no section on this bill is ${trade}, so its ${pct}% has nowhere to go`); continue; }
+        const titles = secs.map((n) => { const s = sections.find((x) => String(x.number) === n); return n + (s && s.title ? ' ' + String(s.title).slice(0, 30) : ''); });
+        upliftChanges.push({ kind: 'header', label: `${trade} → ${pct}% uplift (section${secs.length === 1 ? '' : 's'} ${titles.join(', ')})` });
+      }
+      for (const [n, pct] of Object.entries(perSection)) { merged[n] = pct; touched = true; }
+      if (Object.keys(clean).length) controlChanges.trade_markup = clean;
+      if (input.controls.remember_trade_markup === true && Object.keys(clean).length) {
+        controlChanges.remember_trade_markup = true;
+        upliftChanges.push({ kind: 'header', label: 'Saved as your standing markup by trade for future bills' });
+      }
+    }
+    const su = input.controls.section_uplift;
+    if (su && typeof su === 'object' && !Array.isArray(su)) {
+      for (const [n, v] of Object.entries(su)) {
+        const sec = sections.find((s) => String(s.number) === String(n).trim());
+        if (!sec) { errors.push(`unknown section number ${n}`); continue; }
+        if (sec.provisional) { errors.push(`section ${n} is provisional sums — carried excl. OH&P, not uplifted`); continue; }
+        if (v === null || v === '') { delete merged[String(sec.number)]; touched = true; upliftChanges.push({ kind: 'header', label: `Section ${sec.number} (${String(sec.title || '').slice(0, 30)}) uplift → default` }); continue; }
+        const pct = Math.max(0, Math.min(100, round2(num(v))));
+        merged[String(sec.number)] = pct; touched = true;
+        upliftChanges.push({ kind: 'header', label: `Section ${sec.number} (${String(sec.title || '').slice(0, 30)}) uplift → ${pct}%` });
+      }
+    }
+    if (touched) controlChanges.per_trade_ohp = merged;
     if (Object.keys(controlChanges).length === 0) controlChanges = null;
   }
 
@@ -345,8 +424,10 @@ function validateAndPreview(input, project, sections, controls) {
   if (controlChanges) {
     const pretty = { overhead_pct: 'Overhead %', profit_pct: 'Profit %', contingency_pct: 'Contingency %', vat_pct: 'VAT %', provisional_sum: 'Provisional sums £' };
     for (const [k, v] of Object.entries(controlChanges)) {
-      changes.push({ kind: 'header', label: `${pretty[k] || k}: ${num((controls || {})[k])} → ${v}` });
+      if (!pretty[k]) continue; // trade / section uplifts are described below
+      changes.push({ kind: 'header', label: `${pretty[k]}: ${num((controls || {})[k])} → ${v}` });
     }
+    changes.push(...upliftChanges);
   }
 
   return {
@@ -418,7 +499,9 @@ router.post('/projects/:projectId/builder-pack/assistant', authMiddleware, (req,
       const memBlock = await core.memoryPromptBlock(db, req.user.id, message || project.title);
       if (memBlock) system.push({ type: 'text', text: memBlock });
 
-      const content = [{ type: 'text', text: 'THE BOQ AS IT STANDS NOW:\n' + snapshotForPrompt(project, sections, controls) }];
+      let standingTradeMarkup = {};
+      try { standingTradeMarkup = require('./playbooks').getPricingPrefs(db, project.user_id).trade_markup || {}; } catch (e) { /* none */ }
+      const content = [{ type: 'text', text: 'THE BOQ AS IT STANDS NOW:\n' + snapshotForPrompt(project, sections, controls, { tradeMarkup: standingTradeMarkup }) }];
       content.push(...await core.uploadedFileBlocks(req));
       content.push({ type: 'text', text: 'BUILDER SAYS:\n' + (message || '(no message — just the attached file)') });
 

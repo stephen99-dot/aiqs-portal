@@ -889,6 +889,16 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
     if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'BOQ file not found on server' });
 
     const parsed = await parseBOQ(filePath);
+    // Trade packages: every parsed line is tagged with its trade (the same
+    // ladder the live BOQ uses) and each section named by its dominant trade,
+    // so the page can pre-fill the per-section uplift from the builder's
+    // markup-by-trade and show the bill as subcontract packages.
+    const { classifySections, sectionOverridesFromTradeMarkup } = require('./boqTrades');
+    const tradeInfo = classifySections(parsed.sections);
+    const tradeBySection = {};
+    for (const s of tradeInfo.sections) tradeBySection[String(s.number)] = s;
+    let pricingPrefs = { ohp_pct: 0, contingency_pct: 0, trade_markup: {} };
+    try { pricingPrefs = require('./playbooks').getPricingPrefs(db, project.user_id); } catch (e) { /* defaults */ }
     res.json({
       testing: true,
       currency: project.currency || 'GBP',
@@ -899,8 +909,16 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
         provisional: !!s.provisional, // carried verbatim, exclusive of OH&P
         item_count: s.items.length,
         subtotal: s.subtotal,
-        items: s.items, // full editable line items
+        items: s.items, // full editable line items (each now carries .trade)
+        trade: (tradeBySection[String(s.number)] || {}).trade || null,
+        trades: (tradeBySection[String(s.number)] || {}).trades || [],
       })),
+      by_trade: tradeInfo.by_trade,
+      // The job owner's markup by trade (AI Memory → Pricing margins) and the
+      // per-section override it implies for THIS bill. The page applies the
+      // seed on a first visit; afterwards the saved state wins.
+      pricing_prefs: { ohp_pct: pricingPrefs.ohp_pct, trade_markup: pricingPrefs.trade_markup || {}, trades: require('./deterministicPricer').TRADES },
+      trade_seed: sectionOverridesFromTradeMarkup(parsed.sections, pricingPrefs.trade_markup),
       grand: parsed.grand,
       // Do the parsed lines add up to the bill's own printed total? null when
       // the source printed none. The page warns when they don't, so a total

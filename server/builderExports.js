@@ -1174,6 +1174,85 @@ async function generateBuilderPack(parsed, opts = {}) {
     if (c === 3 || c === 4 || c === 5) gt.getCell(c).alignment = { horizontal: 'right' };
   }
 
+  // ── By trade package ──────────────────────────────────────────────────────
+  // The same lines regrouped as subcontract packages (electrician, plumber,
+  // groundworker…), classified line by line, so a builder can split the work
+  // out to price with subbies. Margins apply exactly as in the section table.
+  {
+    const { classifySections } = require('./boqTrades');
+    const tradeInfo = classifySections(parsed.sections.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
+    const byTrade = tradeInfo.by_trade || [];
+    if (byTrade.length) {
+      r++;
+      ts.mergeCells('A' + r + ':F' + r);
+      const th = ts.getCell('A' + r);
+      th.value = 'BY TRADE PACKAGE — the same lines grouped by trade, for subcontractor pricing';
+      th.font = { name: 'Arial', size: 11, bold: true, color: { argb: '1B2A4A' } };
+      th.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+      th.border = allBorders;
+      ts.getRow(r).height = 22;
+      r++;
+      const bh = ts.getRow(r++);
+      bh.values = ['#', 'Trade package (sections it draws on)', 'Labour (' + currency + ')', 'Materials (' + currency + ')', 'Total (' + currency + ')', '% of project'];
+      for (let c = 1; c <= 6; c++) {
+        const cell = bh.getCell(c);
+        cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+        cell.border = allBorders;
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+      bh.height = 22;
+      let tradeGrand = 0;
+      const tradeRows = byTrade.map((t) => {
+        const labour = t.labour * labourMult;
+        const materials = t.materials * matMult;
+        // Composite lines (no split) take the blanket margin, as in the section table.
+        const composite = Math.max(0, t.total - t.labour - t.materials) * labourMult;
+        const total = labour + materials + composite;
+        tradeGrand += total;
+        return { ...t, labour, materials, total };
+      });
+      tradeRows.forEach((t, idx) => {
+        const row = ts.getRow(r++);
+        row.getCell(1).value = idx + 1;
+        row.getCell(2).value = sanitizeXmlText(t.trade + (t.sections.length ? ' (' + t.sections.join(', ') + ')' : ''));
+        row.getCell(3).value = Math.round(t.labour * 100) / 100;
+        row.getCell(4).value = Math.round(t.materials * 100) / 100;
+        row.getCell(5).value = Math.round(t.total * 100) / 100;
+        row.getCell(6).value = tradeGrand > 0 ? t.total / tradeGrand : 0;
+        for (let c = 1; c <= 6; c++) {
+          row.getCell(c).border = allBorders;
+          row.getCell(c).font = { name: 'Arial', size: 10 };
+          if (c >= 3 && c <= 5) row.getCell(c).numFmt = currFmt;
+          if (c === 6) row.getCell(c).numFmt = '0.0%';
+          if (c === 1 || c === 6) row.getCell(c).alignment = { horizontal: 'center' };
+          if (c >= 3 && c <= 5) row.getCell(c).alignment = { horizontal: 'right' };
+        }
+      });
+      const tg = ts.getRow(r++);
+      tg.getCell(2).value = 'ALL TRADES';
+      tg.getCell(3).value = Math.round(tradeRows.reduce((a, t) => a + t.labour, 0) * 100) / 100;
+      tg.getCell(4).value = Math.round(tradeRows.reduce((a, t) => a + t.materials, 0) * 100) / 100;
+      tg.getCell(5).value = Math.round(tradeGrand * 100) / 100;
+      tg.getCell(6).value = 1;
+      for (let c = 1; c <= 6; c++) {
+        tg.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
+        tg.getCell(c).border = allBorders;
+        tg.getCell(c).font = { name: 'Arial', size: 11, bold: true };
+        if (c >= 3 && c <= 5) tg.getCell(c).numFmt = currFmt;
+        if (c === 6) tg.getCell(c).numFmt = '0.0%';
+        if (c >= 3 && c <= 5) tg.getCell(c).alignment = { horizontal: 'right' };
+      }
+      const noteRow = r++;
+      const note = ts.getRow(noteRow);
+      ts.mergeCells('A' + noteRow + ':F' + noteRow);
+      note.getCell(1).value = 'Trades are assigned line by line from the description and section. Every job differs — treat this as a starting point for splitting subcontract packages.';
+      note.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
+      note.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+      note.height = 28;
+    }
+  }
+
   ts.views = [{ state: 'frozen', ySplit: 5 }];
 
   // ─── Tab 2: Materials Schedule ────────────────────────────────────────────

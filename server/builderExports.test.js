@@ -570,3 +570,42 @@ test('sub-totals and summary lines held as uncached formulas are read, not zero'
   assert.strictEqual(parsed.source_summary.ex_vat_total, 315);
   assert.ok(reconcileParsed(parsed).ok);
 });
+
+// ── Builder Pack: by-trade package block ────────────────────────────────────
+test('the Builder Pack Trade Summary tab also groups the bill by trade package', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const { generateBuilderPack } = require('./builderExports');
+  const parsed = {
+    sections: [
+      { number: '1', title: 'Preliminaries', items: [
+        { itemRef: '1.1', description: 'Site supervision', unit: 'Item', qty: 1, rate: 2500, labour: 2500, materials: 0, total: 2500 },
+      ], subtotal: { labour: 2500, materials: 0, total: 2500 } },
+      { number: '2', title: 'Electrics', items: [
+        { itemRef: '2.1', description: 'First fix electrics', unit: 'Item', qty: 1, rate: 1500, labour: 900, materials: 600, total: 1500 },
+        { itemRef: '2.2', description: 'New combi boiler', unit: 'Nr', qty: 1, rate: 3000, labour: 1000, materials: 2000, total: 3000 },
+      ], subtotal: { labour: 1900, materials: 2600, total: 4500 } },
+    ],
+    grand: { labour: 4400, materials: 2600, total: 7000 },
+  };
+  const buf = await generateBuilderPack(parsed, { currency: '£', builder_margin: 10, project_name: 'Trades', client_name: 'Client' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ts = wb.getWorksheet('Trade Summary');
+  assert.ok(ts, 'Trade Summary tab present');
+  const cells = [];
+  ts.eachRow((row) => { for (let c = 1; c <= 6; c++) cells.push(String(row.getCell(c).value == null ? '' : row.getCell(c).value)); });
+  const all = cells.join('\n');
+  assert.match(all, /BY TRADE PACKAGE/);
+  assert.match(all, /Electrical \(2\)/);
+  assert.match(all, /Plumbing & Heating \(2\)/);   // the boiler line is the plumber's even though it sits in "Electrics"
+  assert.match(all, /Preliminaries \(1\)/);
+  assert.match(all, /ALL TRADES/);
+  // The by-trade total equals the section total (both carry the 10% builder margin).
+  let allTrades = null, grand = null;
+  ts.eachRow((row) => {
+    const label = String(row.getCell(2).value || '');
+    if (label === 'ALL TRADES') allTrades = Number(row.getCell(5).value);
+    if (label === 'GRAND TOTAL') grand = Number(row.getCell(5).value);
+  });
+  assert.ok(allTrades != null && grand != null);
+  assert.ok(Math.abs(allTrades - grand) < 0.02, `all trades ${allTrades} vs grand ${grand}`);
+});

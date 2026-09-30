@@ -170,6 +170,13 @@ export default function BuilderPackPage() {
   // { ok, printed, parsed, basis } or null when the BOQ prints no total.
   const [reconciliation, setReconciliation] = useState(null);
   const [perTradeOhp, setPerTradeOhp] = useState({});
+  // Trade packages: each section's dominant trade (from the server's line-by-
+  // line classification), the builder's saved markup by trade, and the
+  // per-section seed those two imply for this bill.
+  const [sectionTrades, setSectionTrades] = useState({}); // { [number]: { trade, trades: [{trade, share_pct}] } }
+  const [pricingPrefs, setPricingPrefs] = useState(null); // { ohp_pct, trade_markup, trades }
+  const [tradeSeed, setTradeSeed] = useState({});         // { [number]: pct }
+  const [tradeSeeded, setTradeSeeded] = useState(false);  // seed applied on this load
   const [prelimsMode, setPrelimsMode] = useState('off');
   const [prelimsAmount, setPrelimsAmount] = useState(0);
   const [prelimsPct, setPrelimsPct] = useState(0);
@@ -216,6 +223,11 @@ export default function BuilderPackPage() {
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
+        const tmap = {};
+        for (const s of (bd.sections || [])) tmap[String(s.number)] = { trade: s.trade || null, trades: s.trades || [] };
+        setSectionTrades(tmap);
+        setPricingPrefs(bd.pricing_prefs || null);
+        setTradeSeed(bd.trade_seed && typeof bd.trade_seed === 'object' ? bd.trade_seed : {});
         // Client Copy policy: reproduce the uploaded BOQ exactly, line by line,
         // but STRIP overhead/profit/contingency so the client sets their own.
         // OH&P and contingency are deliberately left at 0 (not seeded from the
@@ -254,6 +266,16 @@ export default function BuilderPackPage() {
           if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
           if (saved.rounding != null) setRounding(saved.rounding);
           if (saved.provisional_sum != null) setProvisionalSum(saved.provisional_sum);
+        }
+        // First visit to this bill (nothing saved yet): pre-fill the per-section
+        // uplift from the builder's markup by trade — 10% on the sections the
+        // electrician and plumber cover, and so on. Once a state has been
+        // saved it wins, so a cleared override stays cleared; the "Fill from my
+        // trade markups" button re-applies the seed on demand.
+        const savedHasOverrides = saved && typeof saved === 'object' && saved.per_trade_ohp !== undefined;
+        if (!savedHasOverrides && bd.trade_seed && Object.keys(bd.trade_seed).length) {
+          setPerTradeOhp({ ...bd.trade_seed });
+          setTradeSeeded(true);
         }
         if (br && br.branding) {
           setBranding(br.branding);
@@ -583,6 +605,7 @@ export default function BuilderPackPage() {
       contingency_pct: contingency,
       vat_pct: vat,
       provisional_sum: provisionalSum,
+      per_trade_ohp: perTradeOhp,
     },
   });
 
@@ -644,7 +667,44 @@ export default function BuilderPackPage() {
     if (c.contingency_pct != null) setContingency(c.contingency_pct);
     if (c.vat_pct != null) setVat(c.vat_pct);
     if (c.provisional_sum != null) setProvisionalSum(c.provisional_sum);
+    // Markup by trade arrives already mapped onto section numbers (the whole
+    // map after the change). "Always"/"from now on" also saves it to the
+    // builder's pricing preferences so the next bill starts from it.
+    if (c.per_trade_ohp && typeof c.per_trade_ohp === 'object') setPerTradeOhp({ ...c.per_trade_ohp });
+    if (c.remember_trade_markup && c.trade_markup && typeof c.trade_markup === 'object') {
+      const merged = { ...((pricingPrefs && pricingPrefs.trade_markup) || {}), ...c.trade_markup };
+      apiFetch('/pricing-prefs', { method: 'PUT', body: JSON.stringify({ trade_markup: merged }) })
+        .then((res) => setPricingPrefs((p) => ({ ...(p || {}), trade_markup: (res && res.trade_markup) || merged, trades: (res && res.trades) || (p && p.trades) || [] })))
+        .catch(() => {});
+    }
   };
+
+  // ─── Trade packages (Builder tab) ────────────────────────────────────────
+  // The same lines grouped by trade — each line carries the trade the server
+  // gave it; lines added since (or from an older saved state) take their
+  // section's dominant trade. Margins apply exactly as in the section rows.
+  const tradeRows = useMemo(() => {
+    const order = (pricingPrefs && Array.isArray(pricingPrefs.trades)) ? pricingPrefs.trades : [];
+    const acc = {};
+    sections.forEach((s) => {
+      const secTrade = s.provisional ? 'Fees & Provisional Sums' : ((sectionTrades[String(s.number)] || {}).trade || 'General Building');
+      for (const it of s.items) {
+        const trade = s.provisional ? 'Fees & Provisional Sums' : (it.trade || secTrade);
+        const t = acc[trade] || (acc[trade] = { trade, item_count: 0, labour: 0, materials: 0, total: 0, sections: {} });
+        const ls = num(it.labour), ms = num(it.materials);
+        const comp = (ls !== 0 || ms !== 0) ? 0 : num(it.total);
+        t.item_count++;
+        t.labour += ls * labourMult;
+        t.materials += ms * matMult;
+        t.total += ls * labourMult + ms * matMult + comp * labourMult;
+        t.sections[String(s.number)] = true;
+      }
+    });
+    const rank = (t) => { const i = order.indexOf(t); return i < 0 ? 999 : i; };
+    return Object.values(acc)
+      .map((t) => ({ ...t, sections: Object.keys(t.sections) }))
+      .sort((a, b) => rank(a.trade) - rank(b.trade) || a.trade.localeCompare(b.trade));
+  }, [sections, sectionTrades, pricingPrefs, labourMult, matMult]);
 
   const totalItemCount = sections.reduce((a, s) => a + s.items.length, 0);
   const isDirty = useMemo(() =>
@@ -915,6 +975,7 @@ export default function BuilderPackPage() {
                 dayRate={dayRate} setDayRate={setDayRate}
                 provisionalSum={provisionalSum} setProvisionalSum={setProvisionalSum}
                 perTradeOhp={perTradeOhp} setPerTradeOhp={setPerTradeOhp}
+                sectionTrades={sectionTrades} tradeSeed={tradeSeed} tradeSeeded={tradeSeeded} pricingPrefs={pricingPrefs}
                 sections={sections} sym={sym}
                 projectType={(project && project.project_type) || ''}
                 onSaveProjectType={saveProjectType} savingType={savingType}
@@ -1108,7 +1169,7 @@ export default function BuilderPackPage() {
               background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               {tab === 'builder'
-                ? <BuilderPreview rows={builderRows} totals={builderGrand} base={baseGrand}
+                ? <BuilderPreview rows={builderRows} tradeRows={tradeRows} totals={builderGrand} base={baseGrand}
                     builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
@@ -1394,7 +1455,7 @@ function BuilderControls({
         {downloading ? 'Generating…' : 'Download Builder Pack (3 tabs)'}
       </button>
       <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '8px 0 0', textAlign: 'center' }}>
-        Trade Summary · Materials Schedule · Labour Schedule
+        Trade Summary (by section and by trade package) · Materials Schedule · Labour Schedule
       </p>
     </>
   );
@@ -1407,6 +1468,7 @@ function ClientControls({
   dayRateOn, setDayRateOn, dayRate, setDayRate,
   provisionalSum, setProvisionalSum,
   perTradeOhp, setPerTradeOhp, sections, sym,
+  sectionTrades = {}, tradeSeed = {}, tradeSeeded = false, pricingPrefs = null,
   projectType, onSaveProjectType, savingType, label,
   onDownload, downloading, onShare, sharing, disabled, isDirty, onReset, sourceSeeded,
 }) {
@@ -1518,9 +1580,42 @@ function ClientControls({
         <summary style={{ fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 0' }}>
           Per-trade uplift override ({Object.keys(perTradeOhp).length})
         </summary>
+        {/* The builder's markup by trade (AI Memory → Pricing margins) mapped
+            onto this bill's sections by their dominant trade. Applied on a
+            first visit; re-applied here on demand. */}
+        {(() => {
+          const standing = (pricingPrefs && pricingPrefs.trade_markup) || {};
+          const standingKeys = Object.keys(standing);
+          const seedKeys = Object.keys(tradeSeed || {});
+          const seedMatches = seedKeys.length > 0 && seedKeys.every((k) => Object.prototype.hasOwnProperty.call(perTradeOhp, k) && num(perTradeOhp[k]) === num(tradeSeed[k]));
+          return (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, margin: '4px 0 8px' }}>
+              {standingKeys.length === 0 ? (
+                <>No markup by trade saved yet — set it under <em>AI Memory → Pricing margins</em> and it pre-fills here on every job.</>
+              ) : seedKeys.length === 0 ? (
+                <>Your markup by trade ({standingKeys.map((k) => k + ' ' + num(standing[k]) + '%').join(', ')}) covers no section on this bill.</>
+              ) : (
+                <>
+                  {seedMatches
+                    ? (tradeSeeded ? 'Pre-filled from your markup by trade: ' : 'Matches your markup by trade: ')
+                    : 'Your markup by trade would set: '}
+                  {seedKeys.map((k) => k + ' → ' + num(tradeSeed[k]) + '%').join(', ')}.
+                  {!seedMatches && (
+                    <button type="button" onClick={() => setPerTradeOhp((m) => ({ ...m, ...tradeSeed }))}
+                      style={{ marginLeft: 6, background: 'none', border: '1px solid rgba(168,85,247,0.4)', color: '#A855F7', borderRadius: 5, padding: '1px 7px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                      Fill from my trade markups
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
           {sections.map((s) => {
             const has = Object.prototype.hasOwnProperty.call(perTradeOhp, s.number);
+            const tInfo = sectionTrades[String(s.number)] || {};
+            const mixed = Array.isArray(tInfo.trades) && tInfo.trades.length > 1 && tInfo.trades[0].share_pct < 80;
             return (
               <div key={s.number} style={{
                 display: 'flex', alignItems: 'center', gap: 6,
@@ -1528,8 +1623,16 @@ function ClientControls({
                 background: has ? 'rgba(168,85,247,0.06)' : 'transparent',
                 border: '1px solid ' + (has ? 'rgba(168,85,247,0.3)' : 'var(--border)'),
               }}>
-                <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {s.number}. {s.title}
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.number}. {s.title}
+                  </span>
+                  {(s.provisional || tInfo.trade) && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={Array.isArray(tInfo.trades) ? tInfo.trades.map((t) => t.trade + ' ' + t.share_pct + '%').join(' · ') : ''}>
+                      {s.provisional ? 'Provisional — not uplifted' : tInfo.trade + (mixed ? ' (mixed)' : '')}
+                    </span>
+                  )}
                 </span>
                 <input type="number" inputMode="decimal" min="0" max="80" step="0.5"
                   value={has ? perTradeOhp[s.number] : ''}
@@ -1622,7 +1725,7 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
+function BuilderPreview({ rows, tradeRows = [], totals, base, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
   base = base || { labour: 0, materials: 0, total: 0 };
   const bm = num(builderMargin), mm = num(materialsMarkup);
   const primary = (branding && branding.primary_colour) || '#1B2A4A';
@@ -1717,6 +1820,55 @@ function BuilderPreview({ rows, totals, base, builderMargin, materialsMarkup, sy
         </div>
         </div>
       </div>
+
+      {/* The same lines grouped as subcontract packages — what a builder
+          hands to the electrician, plumber, groundworker to price. */}
+      {tradeRows.length > 0 && (() => {
+        const tradeTotal = tradeRows.reduce((a, t) => a + t.total, 0);
+        return (
+          <>
+            <h2 style={{ fontSize: 16, fontWeight: 700, margin: '20px 0 4px' }}>By trade package</h2>
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
+              The same lines grouped by trade, for splitting subcontractor packages. Assigned line by line from the description and section — a starting point, every job differs.
+            </p>
+            <div style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div style={previewHeaderStyle}>
+                <div>#</div><div>Trade package</div>
+                <div style={{ textAlign: 'right' }}>Labour</div>
+                <div style={{ textAlign: 'right' }}>Materials</div>
+                <div style={{ textAlign: 'right' }}>Total</div>
+                <div style={{ textAlign: 'right' }}>%</div>
+              </div>
+              {tradeRows.map((t, i) => {
+                const pct = tradeTotal > 0 ? (t.total / tradeTotal) * 100 : 0;
+                return (
+                  <div key={t.trade} style={previewRowStyle}>
+                    <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
+                    <div style={{ fontWeight: 500, minWidth: 0 }}>
+                      {t.trade}
+                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{t.item_count} line{t.item_count === 1 ? '' : 's'}{t.sections.length ? ' · sections ' + t.sections.join(', ') : ''}</span>
+                    </div>
+                    <div style={moneyCell('#3B82F6')}>{fmt(sym, t.labour)}</div>
+                    <div style={moneyCell('#A855F7')}>{fmt(sym, t.materials)}</div>
+                    <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, t.total)}</div>
+                    <div style={moneyCell('var(--text-muted)')}>{pct.toFixed(1)}%</div>
+                  </div>
+                );
+              })}
+              <div style={{ ...previewRowStyle, background: 'rgba(245,158,11,0.08)', fontWeight: 700, fontSize: 13.5 }}>
+                <div></div>
+                <div>ALL TRADES</div>
+                <div style={moneyCell()}>{fmt(sym, tradeRows.reduce((a, t) => a + t.labour, 0))}</div>
+                <div style={moneyCell()}>{fmt(sym, tradeRows.reduce((a, t) => a + t.materials, 0))}</div>
+                <div style={moneyCell('#F59E0B')}>{fmt(sym, tradeTotal)}</div>
+                <div style={moneyCell()}>100%</div>
+              </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
