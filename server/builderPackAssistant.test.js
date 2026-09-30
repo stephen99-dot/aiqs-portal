@@ -139,3 +139,43 @@ test('snapshot shows sections, refs, composite money and the net', () => {
   assert.match(snap, /Net build cost .*£23650/);
   assert.equal(baseNet(SECTIONS), 23650);
 });
+
+// ── Markup by trade ─────────────────────────────────────────────────────────
+// "Put 10% on the sparky and plumber" arrives as controls.trade_markup and is
+// mapped onto the sections those trades dominate, merged over the overrides
+// already on the page; a trade with no section, an unknown trade name and a
+// provisional section are warned about rather than silently dropped.
+test('trade_markup maps onto per-section uplift overrides and merges with existing ones', () => {
+  const controls = { ...CONTROLS, per_trade_ohp: { '1': 41 } };
+  const v = validateAndPreview({
+    summary: '10% on the electrician, and remember it',
+    controls: { trade_markup: { Electrical: 10, Roofing: 12, Bogus: 5 }, remember_trade_markup: true },
+  }, PROJECT, SECTIONS, controls);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 41, '2': 10 });
+  assert.deepEqual(v.proposal.controls.trade_markup, { Electrical: 10, Roofing: 12 });
+  assert.equal(v.proposal.controls.remember_trade_markup, true);
+  const labels = v.proposal.changes.map((c) => c.label);
+  assert.ok(labels.some((l) => /Electrical → 10% uplift \(section 2 Electrics\)/.test(l)), labels.join(' | '));
+  assert.ok(labels.some((l) => /standing markup by trade/.test(l)));
+  assert.ok(v.warnings.some((w) => /unknown trade "Bogus"/.test(w)));
+  assert.ok(v.warnings.some((w) => /no section on this bill is Roofing/.test(w)));
+});
+
+test('section_uplift sets or clears one section by number, and refuses provisional sections', () => {
+  const sections = SECTIONS.concat([{ number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] }]);
+  const controls = { ...CONTROLS, per_trade_ohp: { '1': 41, '2': 10 } };
+  const v = validateAndPreview({ summary: 'x', controls: { section_uplift: { '1': 30, '2': null, '9': 5, '42': 1 } } }, PROJECT, sections, controls);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 30 });
+  assert.ok(v.warnings.some((w) => /section 9 is provisional/.test(w)));
+  assert.ok(v.warnings.some((w) => /unknown section number 42/.test(w)));
+});
+
+test('the snapshot names each section\'s trade, the current overrides and the standing markup', () => {
+  const snap = snapshotForPrompt(PROJECT, SECTIONS, { ...CONTROLS, per_trade_ohp: { '2': 10 } }, { tradeMarkup: { Electrical: 10 } });
+  assert.match(snap, /-- Section 2: Electrics \[trade: Electrical\]/);
+  assert.match(snap, /Per-section uplift overrides .*: 2 → 10%/);
+  assert.match(snap, /standing markup by trade .*: Electrical 10%/);
+  assert.match(snap, /Trade package names: Preliminaries \| /);
+});
