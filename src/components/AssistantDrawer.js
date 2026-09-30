@@ -186,6 +186,25 @@ export default function AssistantDrawer({
                   {m.proposal.totals_note && (
                     <div style={{ marginTop: 4, fontSize: 11.5, color: t.textMuted }}>{m.proposal.totals_note}</div>
                   )}
+                  {/* The customer's price — the line that moves on a markup or
+                      uplift change, when the net build cost above does not. */}
+                  {typeof m.proposal.client_before === 'number' && typeof m.proposal.client_after === 'number' && (
+                    <>
+                      <div style={{ marginTop: 8, fontSize: 14, color: t.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtMoney(m.proposal.client_before, currency)} → {fmtMoney(m.proposal.client_after, currency)}
+                        <span style={{
+                          marginLeft: 8, fontSize: 12.5, fontWeight: 700,
+                          color: Math.abs(m.proposal.client_after - m.proposal.client_before) < 0.005 ? t.textMuted
+                            : (m.proposal.client_after > m.proposal.client_before ? t.warning : t.success),
+                        }}>
+                          ({m.proposal.client_after >= m.proposal.client_before ? '+' : '−'}{fmtMoney(Math.abs(m.proposal.client_after - m.proposal.client_before), currency)})
+                        </span>
+                      </div>
+                      {m.proposal.client_note && (
+                        <div style={{ marginTop: 4, fontSize: 11.5, color: t.textMuted }}>{m.proposal.client_note}</div>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div style={{ padding: '10px 12px', borderTop: '1px solid ' + t.border, display: 'flex', gap: 8, alignItems: 'center' }}>
                   {m.applied ? (
