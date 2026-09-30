@@ -739,6 +739,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           floor_area: meta.floor_area_m2 || null,
           contingency_pct: prefs.contingency_pct,
           ohp_pct: prefs.ohp_pct,
+          trade_markup: prefs.trade_markup,
           ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
           ..._pc.pricingOptions,
         });
@@ -879,7 +880,7 @@ async function executeTool(runId, toolName, toolInput, runState) {
           runState.lastPriced = pricer.priceLockedQuantities(runState.items, effectiveLocation, clientRates, {
             project_type: meta.project_type || '',
             floor_area: meta.floor_area_m2 || null,
-            contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
+            contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, trade_markup: prefs.trade_markup,
             ...(runState.intakeCurrency && !looksUk ? { currency: runState.intakeCurrency } : {}),
             ..._pc.pricingOptions,
           });
@@ -1012,6 +1013,7 @@ async function runGenerationForRun(runId, opts = {}) {
     floor_area: run.floor_area_m2 || null,
     contingency_pct: pricingPrefs.contingency_pct,
     ohp_pct: pricingPrefs.ohp_pct,
+    trade_markup: pricingPrefs.trade_markup,
     ...(intakeIsIreland ? { currency: 'EUR' } : {}),
     ..._pc.pricingOptions,
   });
@@ -1161,6 +1163,9 @@ async function runGenerationForRun(runId, opts = {}) {
       contingency: priced.summary.contingency,
       ohp_pct: priced.summary.ohp_pct,
       ohp: priced.summary.ohp,
+      markup_by_trade: !!priced.summary.markup_by_trade,
+      ohp_effective_pct: priced.summary.ohp_effective_pct,
+      trades: priced.summary.trades || [],
       vat_rate: priced.summary.vat_rate,
       vat: priced.summary.vat,
       grand_total: priced.summary.grand_total,

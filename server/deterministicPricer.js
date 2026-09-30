@@ -30,6 +30,253 @@ function defaultSplitForSection(section, unit) {
   return { labour, materials: Math.round((1 - labour) * 100) / 100 };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TRADE PACKAGES & CANONICAL SECTIONS
+//
+// Two things a builder needs from a bill that the elemental layout alone does
+// not give them:
+//
+//   1. Every priced line tagged with the TRADE that would carry it out, so the
+//      bill can be summed by subcontract package (electrician, plumber,
+//      groundworker…) as well as by element, and so markup can differ by trade
+//      — 10% on the sparky's package, 20% on own labour and materials.
+//   2. The same section names in the same order on every bill. Section titles
+//      arrive as free text from the model ("1. Substructure & Foundations",
+//      "Substructure", "SUBSTRUCTURE"); they are normalised to one canonical
+//      title and sorted into the standard elemental order so two bills for two
+//      jobs read the same way.
+//
+// Both are deterministic keyword ladders — no I/O, no model — which is why they
+// live in this file rather than behind a require(): same inputs, same trade,
+// same section, every run.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Canonical trade packages, in the order they print. Names line up with the
+// seeded UK Master Rates `rates.trade` values where the two overlap.
+const TRADES = [
+  'Preliminaries',
+  'Demolition & Strip-out',
+  'Groundworks',
+  'Brickwork & Blockwork',
+  'Structural Steel',
+  'Carpentry & Joinery',
+  'Roofing',
+  'Windows & Doors',
+  'Cladding & Insulation',
+  'Plastering & Drylining',
+  'Tiling',
+  'Flooring & Screed',
+  'Decorating',
+  'Kitchen & Bathroom Fit-out',
+  'Plumbing & Heating',
+  'Electrical',
+  'Drainage & External Works',
+  'Specialist Works',
+  'Fees & Provisional Sums',
+  'General Building',
+];
+const TRADE_RANK = {};
+TRADES.forEach((t, i) => { TRADE_RANK[t] = i; });
+
+// First match wins, so the specific trades sit above the broad ones: a
+// "strip out electrics" line is the electrician's, not the demolition gang's;
+// "roof tiles" are roofing, not tiling; "decorate window" is decorating, not
+// windows. Tested against the item key (underscores → spaces) first, because
+// library keys are well structured, then against the description.
+const TRADE_RULES = [
+  ['Fees & Provisional Sums', /provisional sum|prime cost|\bpc sum|\bp\.?c\.? sum|architect|planning (application|fee|permission)|\bcdm\b|principal designer|engineer'?s? fees?|structural engineer|building control|party wall|professional fee|design fee|statutory fee|\bfees\b/],
+  ['Preliminaries', /prelim|scaffold|welfare|site (setup|set-up|establishment|management|fencing|hoarding|supervision|cabin|accommodation|security|clearance|compound)|skip hire|\bskips?\b|waste (disposal|removal)|traffic management|hoarding|temporary (works|protection|fencing|support)|insurance|snagging|project management|site manager|foreman|final clean|builders?'? clean|protection of|toilet hire|plant hire|crane hire|testing (and|&) commissioning|health (and|&) safety|\bh&s\b|o&m manual|as-built|manuals/],
+  ['Electrical', /electric|rewire|consumer unit|fuse ?board|distribution board|\btpn\b|switchgear|socket|lighting|light fitting|downlight|spotlight|\bev\b|ev charg|smoke (alarm|detect)|heat detect|fire alarm|intruder alarm|\balarm\b|\bcctv\b|\btv\b|aerial|data cabl|cat ?[56]|extract(or)? fan|extract fans?|solar|\bpv\b|photovoltaic|\besb\b|metering pillar|mini pillar|tracer wire|cable|immersion heater/],
+  // Screed before the heating rule: a UFH screed is the screeder's, the pipe in it is the plumber's.
+  ['Flooring & Screed', /screed/],
+  // The heating-specific words first, so "UFH manifold to kitchen" is plumbing, not kitchens.
+  ['Plumbing & Heating', /manifold|\bufh\b|underfloor heat|boiler|radiator|cylinder|heat pump|\bashp\b|\bheating\b|heater\b|ductwork|\bahu\b|\bvrf\b|heat recovery|dry riser|sprinkler/],
+  ['Demolition & Strip-out', /demoli|strip[ -]?out|soft strip|take down|break(ing)? (out|up)|remove existing|removal of|cut back|hack off|grub up|pull down|dismantl|knock (through|down)|form(ing)? opening in existing/],
+  // Decorating before windows/doors: "decorate window" is the painter's.
+  ['Decorating', /decorat|\bpaint(ing|er|work)?\b|emulsion|mist coat|\bgloss\b|eggshell|satinwood|undercoat|\bprimer\b|wallpaper|lining paper|\bstain\b|varnish|lacquer|caulk|make good (and|&) decorate/],
+  ['Kitchen & Bathroom Fit-out', /kitchen (unit|fit|fitout|fit-out|install|worktop|supply|cupboard|island|carcass|door|sink|canopy)|kitchen$|^kitchen|worktop|bathroom (fit|suite|install|refit)|shower room|cloakroom|wet ?room fit|fit-?out|fitout|utility room fit|appliance|splashback/],
+  ['Plumbing & Heating', /plumb|gas (supply|meter|pipe|safe)|pipework|sanitary|\bsvp\b|soil (vent|pipe|stack)|waste pipe|hot (and|&) cold|cold water|water (supply|main|softener)|shower (tray|valve|mixer|enclosure|screen|cubicle)|basin|\bsinks?\b|\bwc\b|toilet|\bbath\b|\btaps?\b|thermostat|\bmvhr\b|\bhvac\b|air ?con|oil tank|\bflue\b|towel rail|macerator|stopcock|ventilation|\bips\b panel/],
+  ['Specialist Works', /asbestos|damp[ -]proof(ing)?\b(?! membrane)|damp course injection|dpc injection|\binjection\b|tanking(?! board)|timber treatment|woodworm|dry rot|wet rot|fungicid|structural drying|dehumidif|knotweed|underpin|waterproof|cavity drain(age)? membrane|pest control|bat survey|lightning/],
+  ['Structural Steel', /structural steel|steelwork|steel (beam|column|post|frame|portal|fire protection)|universal (beam|column)|\brsj\b|\bub\b \d|\buc\b \d|flitch|fabricated steel|steel goalpost|goalpost frame|metal deck/],
+  ['Drainage & External Works', /drainage|drain run|\bdrains?\b|soakaway|manhole|inspection chamber|gull(y|ey)|sewer|septic|treatment plant|surface water|foul (water|connection)|below ground (drain|pipe)|paving|patio(?! door)|block pav|driveway|gravel|resin bound|tarmac|\bfenc|\bgates?\b|landscap|\bturf|planting|retaining wall|garden wall|decking|pergola|\bshed\b|external works|boundary wall|\bkerb|footpath|road (crossing|opening|reinstatement|construction)|line marking|car park|attenuation/],
+  ['Groundworks', /excavat|foundation|footing|trench|hardcore|blinding|\bdpm\b|damp proof membrane|\bslab\b|oversite|\bfill\b|backfill|granular|type ?1|mot type|clause ?804|disposal|cart away|muck away|spoil|piling|\bpiles?\b|ground beam|radon|below dpc|beam (and|&) block|sub-?base|compaction|reduce(d)? level|\bdig\b|topsoil|land drain|sand bed|concrete (bed|base|pad|floor prep)|floor prep|earthwork|precast (concrete )?stair/],
+  ['Roofing', /\broof(?! structure| carcass| timber| joist| truss)|rafter(?! feet)|purlin|ridge|\bhips?\b|valley|eaves|verge|slate|tile batten|counter batten|roof batten|sarking|roofing felt|\bfelt\b|breather membrane|flashing|lead (sheet|work|flash|valley)|\blead\b|velux|rooflight|roof light|skylight|fascia|soffit|gutter|downpipe|\brwp\b|hopper|chimney (repair|pot|cowl|flash|stack repair)|flat roof|\bepdm\b|\bgrp\b|single ply|torch-?on|dormer|firestone|sarnafil|abutment|mansafe|fall restraint/],
+  ['Windows & Doors', /window|bifold|bi-fold|sliding (patio|door)|patio door|french door|external door|front door|composite door|garage door|entrance door|industrial door|sectional door|roller shutter|glazing|glazed screen|secondary glazing|\bsash\b|casement|curtain wall|shopfront|mastic|sealant|\bcills?\b|\bsills?\b|trickle vent|vent panel/],
+  ['Cladding & Insulation', /cladding|\bclad\b|rainscreen|weatherboard|external wall insulation|\bewi\b|internal wall insulation|\biwi\b|loft insulation|insulation (top-?up|to loft|between|over|roll|quilt)|floor insulation|mineral wool|rockwool|ventilated cavity batten|breathable membrane walls|render on insulation/],
+  ['Tiling', /tiling|tiled|\btile[ -](wall|floor)|(wall|floor|ceramic|porcelain|mosaic|quarry|metro|splashback|stone)[ -]tiles?\b|\btiles? to\b|large format|grout|\bwedi\b|tanking board|wet ?room board|porcelain|ceramic|mosaic/],
+  ['Flooring & Screed', /\blvt\b|karndean|amtico|carpet|laminate floor|laminate$|vinyl|engineered (timber|wood|oak)|wood floor|hardwood floor|floor sand|sanding|underlay|threshold|floor finish|safety floor|resin floor|epoxy floor|\blino\b|floor covering|raised access floor/],
+  ['Plastering & Drylining', /plaster|\bskim|render|drylin|dry lin|coving|cornice|\bceiling|partition|metal stud|gypsum|tape (and|&) joint|artex|\blath|monocouche|k-?rend|scratch coat|float(ed)? finish|dot (and|&) dab|beads?\b|celotex|thermal laminate|tb4020/],
+  ['Carpentry & Joinery', /carpent|joiner|timber|\bstud|joist|rafter|truss|purlin|wall plate|sole plate|floor ?board|chipboard|plywood|\bosb\b|sheathing|skirting|architrave|\bdoors?\b|door ?set|ironmongery|staircase|\bstairs?\b|banister|balustrade|handrail|newel|boxing|fascia board|dado|picture rail|shelving|wardrobe|locker|\bbench|loft hatch|noggin|hanger|trap door|roof structure|roof carcass|first floor structure|floor structure|decking board|studwork|frame panel|cubicle|hpl panel/],
+  ['Brickwork & Blockwork', /brick|block ?work|masonry|cavity (wall|tie|closer|tray|insulation|batt)|\bdpc\b|damp proof course|lintel|padstone|repoint|pointing|stone (repair|indent|clean|wall|work)|stonework|coping|chimney|wall tie|opening formation|form(ing)? (new )?opening|bed (and|&) point|\bpiers?\b|arch\b|corbel|air ?brick|weep vent|movement joint|render backing|builders'? work/],
+  // Whole-package lumps that no single trade owns.
+  ['General Building', /garage construction|extension shell|complete (build|construction)|whole house|make good/],
+];
+
+// Where the keyword ladder has nothing to say, the section the line sits in
+// names the trade. Also the whole answer for unrecognised custom lines.
+const SECTION_TRADE_RULES = [
+  ['Preliminaries', /prelim|general (items|conditions)|management|site set/],
+  ['Demolition & Strip-out', /demoli|strip|alteration|removal|enabling/],
+  ['Groundworks', /substructure|groundwork|foundation|excavat|below ground/],
+  ['Structural Steel', /steel/],
+  ['Roofing', /\broof/],
+  ['Windows & Doors', /window|external door|glaz|bifold/],
+  ['Carpentry & Joinery', /internal door|ironmongery|joinery|carpentry|stair/],
+  ['Plastering & Drylining', /internal finish|plaster|partition|ceiling|drylin|wall finish/],
+  ['Tiling', /tiling/],
+  ['Flooring & Screed', /floor finish|flooring|screed|floor covering/],
+  ['Decorating', /decorat|paint/],
+  ['Kitchen & Bathroom Fit-out', /kitchen|bathroom|fit-?out|sanitary|en-?suite|cloakroom|utility/],
+  ['Plumbing & Heating', /mechanic|plumb|heat|hvac|ventilat|m&e|services/],
+  ['Electrical', /electric/],
+  ['Drainage & External Works', /external work|drainage|landscap|paving|patio|garden|driveway|fencing|boundary/],
+  ['Fees & Provisional Sums', /provisional|prime cost|\bpc\b|fees/],
+  ['Cladding & Insulation', /cladding|insulation/],
+  ['Brickwork & Blockwork', /superstructure|external wall|masonry|brick|block|envelope|structure/],
+];
+
+function tradeText(s) {
+  return String(s || '').toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The trade package a priced line belongs to. Deterministic: key first, then
+ * description, then section, then 'General Building'.
+ */
+function tradeForItem(item) {
+  if (!item) return 'General Building';
+  const key = tradeText(item.key);
+  const desc = tradeText(item.description);
+  const section = tradeText(item.section);
+  for (const hay of [key, desc]) {
+    if (!hay) continue;
+    for (const [trade, re] of TRADE_RULES) {
+      if (re.test(hay)) return trade;
+    }
+  }
+  if (section) {
+    for (const [trade, re] of SECTION_TRADE_RULES) {
+      if (re.test(section)) return trade;
+    }
+  }
+  return 'General Building';
+}
+
+/**
+ * Per-trade markup map, cleaned: known trade names only (matched
+ * case-insensitively), percentages clamped to 0-100. Unknown keys and
+ * non-numeric values are dropped so a stale or hand-edited map can never
+ * put a NaN into a bill.
+ */
+function normaliseTradeMarkup(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  const byLower = {};
+  for (const t of TRADES) byLower[t.toLowerCase()] = t;
+  for (const [k, v] of Object.entries(raw)) {
+    const trade = byLower[String(k || '').trim().toLowerCase()];
+    if (!trade) continue;
+    if (v === null || v === undefined || v === '') continue;
+    const n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    out[trade] = Math.max(0, Math.min(100, Math.round(n * 100) / 100));
+  }
+  return out;
+}
+
+// The standard elemental breakdown, in print order. `re` recognises the ways
+// the model names each element; a title that matches nothing keeps its own
+// (cleaned) name and prints where it arrived, after the last recognised
+// section before it. Provisional sums always close the bill.
+const CANONICAL_SECTIONS = [
+  { name: 'Preliminaries & General',       re: /prelim|general (items|conditions|requirements)|site (setup|set-up|establishment)|welfare|site management/ },
+  { name: 'Demolition & Alterations',      re: /demoli|strip[ -]?out|alteration|soft strip|enabling works|\bremovals?\b/ },
+  { name: 'Substructure',                  re: /substructure|foundation|groundwork|excavat|below ground|below dpc/ },
+  { name: 'Superstructure',                re: /superstructure|external wall|masonry|brickwork|blockwork|structural (frame|steel|work)|steelwork|\bframe\b|upper floor|\bstructure\b|walls? (and|&) (frame|structure)/ },
+  { name: 'Roof',                          re: /\broof/ },
+  { name: 'Windows & External Doors',      re: /window|external door|glazing|bifold|curtain wall/ },
+  { name: 'Internal Doors & Ironmongery',  re: /internal door|ironmongery|door ?sets?/ },
+  { name: 'Internal Finishes',             re: /internal finish|wall finish|ceiling finish|plaster|drylin|partition|ceiling|internal wall/ },
+  { name: 'Floor Finishes',                re: /floor finish|flooring|screed|floor covering/ },
+  { name: 'Decoration',                    re: /decorat|paint/ },
+  { name: 'Kitchen',                       re: /kitchen/ },
+  { name: 'Bathroom',                      re: /bathroom|en-?suite|sanitary|shower room|cloakroom|\bwc\b|wet ?room/ },
+  { name: 'Mechanical & Plumbing',         re: /mechanical|plumb|heating|hvac|ventilation|\bm ?& ?e\b|\bservices\b/ },
+  { name: 'Electrical',                    re: /electric/ },
+  { name: 'External Works',                re: /external work|drainage|landscap|paving|patio|garden|driveway|fencing|boundary|site ?works|externals\b/ },
+  { name: 'Provisional Sums',              re: /provisional|prime cost|\bpc sums?\b|contingenc/, last: true },
+];
+const CANONICAL_SECTION_NAMES = CANONICAL_SECTIONS.map((s) => s.name);
+
+// "1. Substructure & Foundations" → "Substructure & Foundations";
+// "SECTION 3 - ROOF" → "ROOF"; "A) Prelims:" → "Prelims".
+function cleanSectionTitle(raw) {
+  let t = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  // Leading numbering / lettering, possibly repeated ("1.   1. PRELIMINARIES").
+  for (let i = 0; i < 3; i++) {
+    const before = t;
+    t = t.replace(/^(section|element|bill|part)\s*[0-9a-z]{1,3}\b\s*[.:)\-–—]*\s*/i, '');
+    t = t.replace(/^[0-9]{1,2}(\.[0-9]{1,2})*\s*[.:)\-–—]*\s+/, '');
+    t = t.replace(/^[0-9]{1,2}(\.[0-9]{1,2})*[.:)]\s*/, '');
+    t = t.replace(/^[A-Z][.)]\s+/, '');
+    if (t === before) break;
+  }
+  t = t.replace(/[\s.:;,\-–—]+$/, '').trim();
+  return t;
+}
+
+function titleCaseIfShouting(t) {
+  if (!t || t !== t.toUpperCase() || !/[A-Z]/.test(t)) return t;
+  const small = new Set(['and', 'or', 'of', 'to', 'the', 'in', 'on', 'for', 'at', 'by', 'with']);
+  return t.toLowerCase().split(' ').map((w, i) => {
+    if (i > 0 && small.has(w)) return w;
+    if (/^(m&e|pc|ps|dpc|dpm|wc|uk|ufh|hvac|mvhr|svp|rwp|lvt|ev|tv)$/.test(w)) return w.toUpperCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ');
+}
+
+/**
+ * Canonical section for a raw model-emitted title. Returns
+ * { name, rank, canonical } — rank is the print order (unknown titles get
+ * null and are slotted by the caller), canonical says whether it matched.
+ */
+function canonicalSection(raw) {
+  const cleaned = cleanSectionTitle(raw);
+  const hay = cleaned.toLowerCase();
+  if (hay) {
+    for (let i = 0; i < CANONICAL_SECTIONS.length; i++) {
+      const cs = CANONICAL_SECTIONS[i];
+      if (cs.re.test(hay)) return { name: cs.name, rank: cs.last ? 1000 : i, canonical: true };
+    }
+  }
+  return { name: titleCaseIfShouting(cleaned) || 'General', rank: null, canonical: false };
+}
+
+function canonicalSectionName(raw) {
+  return canonicalSection(raw).name;
+}
+
+/**
+ * Sort sections into the standard order. Recognised titles take their
+ * canonical slot; an unrecognised title stays just after the last recognised
+ * section that preceded it, so a room-by-room bill ("Hall & Stairs",
+ * "Bedroom 2") keeps its own running order while still starting with the
+ * prelims and ending with the provisional sums. Stable.
+ */
+function orderSections(sections) {
+  let lastRank = -0.5;
+  const ranked = (sections || []).map((sec, idx) => {
+    const cs = canonicalSection(sec.name || sec.title || '');
+    let rank;
+    if (cs.canonical) { rank = cs.rank; if (rank < 1000) lastRank = rank; }
+    else rank = lastRank + 0.5;
+    return { sec, rank, idx };
+  });
+  ranked.sort((a, b) => (a.rank - b.rank) || (a.idx - b.idx));
+  return ranked.map((r) => r.sec);
+}
+
+
 const BASE_RATES = {
   // Substructure
   'excavation_strip_foundation':        { rate: 75,   unit: 'm³',  labour: 0.75, materials: 0.25, description: 'Excavate strip foundations to engineer\'s design depth; remove excavated spoil to skip; trim sides and compact base; including earthwork support where required' },
@@ -2209,7 +2456,13 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
         ? (zaHit ? { library_ref: zaHit.codes.join('+') } : { library_ref: null, converted_from_uk: true })
         : {}),
       qty_source: item.qty_source || 'ai_extracted',
-      section: item.section || 'General',
+      // One canonical title per element so every bill reads the same way
+      // ("1. Substructure & Foundations" and "SUBSTRUCTURE" both print as
+      // "Substructure", in the standard slot).
+      section: canonicalSectionName(item.section),
+      section_raw: item.section || '',
+      // The subcontract package this line belongs to — see TRADE_RULES.
+      trade: tradeForItem(item),
       working: item.working || '',
     });
   }
@@ -2221,11 +2474,11 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     sections[item.section].push(item);
   }
 
-  const sectionTotals = Object.entries(sections).map(([name, items]) => ({
+  const sectionTotals = orderSections(Object.entries(sections).map(([name, items]) => ({
     name,
     items,
     subtotal: items.reduce((s, i) => s + i.total, 0),
-  }));
+  })));
 
   let constructionTotal = sectionTotals.reduce((s, sec) => s + sec.subtotal, 0);
   // The total as PRICED, before any cap rescales it. Reported alongside the
@@ -2423,9 +2676,66 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // MARKUP BY TRADE
+  // ohp_pct is the default markup on every line. options.trade_markup
+  // ({ 'Electrical': 10, 'Carpentry & Joinery': 20, … }) overrides it for the
+  // lines in that trade package — a builder cannot get away with much on the
+  // electrician and plumber but needs more on their own labour and materials.
+  // With no per-trade entries this is exactly constructionTotal × ohp_pct.
+  // Contingency stays on the construction total; VAT on the lot, as before.
+  // ═══════════════════════════════════════════════════════════════════════
+  const tradeMarkup = normaliseTradeMarkup(options.trade_markup);
+  const markupByTrade = Object.keys(tradeMarkup).length > 0;
+  const markupPctFor = (trade) => (Object.prototype.hasOwnProperty.call(tradeMarkup, trade) ? tradeMarkup[trade] : ohp_pct);
+  let ohpExact = 0;
+  for (const item of pricedItems) {
+    item.markup_pct = markupPctFor(item.trade);
+    const m = item.total * (item.markup_pct / 100);
+    item.markup = Math.round(m * 100) / 100;
+    item.total_with_markup = Math.round((item.total + m) * 100) / 100;
+    ohpExact += m;
+  }
+  for (const sec of sectionTotals) {
+    const m = sec.items.reduce((s, i) => s + i.total * (i.markup_pct / 100), 0);
+    sec.markup = Math.round(m * 100) / 100;
+    sec.total_with_markup = Math.round((sec.subtotal + m) * 100) / 100;
+    sec.markup_pct = sec.subtotal > 0 ? Math.round((m / sec.subtotal) * 10000) / 100 : ohp_pct;
+    // Which trade packages this element draws on, most valuable first.
+    const byTrade = {};
+    for (const i of sec.items) byTrade[i.trade] = (byTrade[i.trade] || 0) + i.total;
+    sec.trades = Object.entries(byTrade).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  }
+  // Trade packages — the subcontractor view of the same lines.
+  const tradeAcc = {};
+  for (const item of pricedItems) {
+    const t = tradeAcc[item.trade] || (tradeAcc[item.trade] = { trade: item.trade, item_count: 0, labour: 0, materials: 0, subtotal: 0, markup: 0, sections: {} });
+    t.item_count += 1;
+    t.labour += item.labour;
+    t.materials += item.materials;
+    t.subtotal += item.total;
+    t.markup += item.total * (item.markup_pct / 100);
+    t.sections[item.section] = (t.sections[item.section] || 0) + item.total;
+  }
+  const trades = Object.values(tradeAcc)
+    .sort((a, b) => ((TRADE_RANK[a.trade] ?? 999) - (TRADE_RANK[b.trade] ?? 999)))
+    .map((t) => ({
+      trade: t.trade,
+      item_count: t.item_count,
+      labour: Math.round(t.labour * 100) / 100,
+      materials: Math.round(t.materials * 100) / 100,
+      subtotal: Math.round(t.subtotal * 100) / 100,
+      markup_pct: markupPctFor(t.trade),
+      markup_overridden: Object.prototype.hasOwnProperty.call(tradeMarkup, t.trade),
+      markup: Math.round(t.markup * 100) / 100,
+      total_with_markup: Math.round((t.subtotal + t.markup) * 100) / 100,
+      share_pct: constructionTotal > 0 ? Math.round((t.subtotal / constructionTotal) * 1000) / 10 : 0,
+      sections: Object.entries(t.sections).sort((a, b) => b[1] - a[1]).map(([s]) => s),
+    }));
+
   const contingency = Math.round(constructionTotal * (contingency_pct / 100) * 100) / 100;
   const netTotal = constructionTotal + contingency;
-  const ohp = Math.round(constructionTotal * (ohp_pct / 100) * 100) / 100;
+  const ohp = Math.round(ohpExact * 100) / 100;
   const netWithOhp = netTotal + ohp;
   const vat = Math.round(netWithOhp * (vat_rate / 100) * 100) / 100;
   const grandTotal = netWithOhp + vat;
@@ -2443,6 +2753,14 @@ function priceLockedQuantities(lockedItems, location, clientRates = {}, options 
       net_total: Math.round(netTotal * 100) / 100,
       ohp_pct,
       ohp: Math.round(ohp * 100) / 100,
+      // Markup by trade: the per-trade map that was applied, whether any
+      // trade differs from the default, and the blended rate the OH&P figure
+      // works out at across the whole bill.
+      markup_by_trade: markupByTrade,
+      trade_markup: tradeMarkup,
+      ohp_effective_pct: constructionTotal > 0 ? Math.round((ohp / constructionTotal) * 10000) / 100 : ohp_pct,
+      construction_total_with_markup: Math.round((constructionTotal + ohp) * 100) / 100,
+      trades,
       net_with_ohp: Math.round(netWithOhp * 100) / 100,
       vat_rate,
       vat: Math.round(vat * 100) / 100,
@@ -2481,6 +2799,10 @@ function toPricedSections(pricedResult) {
   return pricedResult.sections.map((sec, si) => ({
     number: String(si + 1),
     title: sec.name,
+    markup: sec.markup,
+    markup_pct: sec.markup_pct,
+    total_with_markup: sec.total_with_markup,
+    trades: sec.trades,
     items: sec.items.map((item, ii) => {
       // Format working field to match professional BOQ style
       let formattedWorking = '';
@@ -2507,6 +2829,8 @@ function toPricedSections(pricedResult) {
       rate_source: item.rate_source,
       library_ref: item.library_ref || null,
       converted_from_uk: !!item.converted_from_uk,
+      trade: item.trade,
+      markup_pct: item.markup_pct,
     };
     }),
   }));
@@ -2517,4 +2841,6 @@ function getBaseRate(key) {
 }
 
 module.exports = { priceLockedQuantities, toPricedSections, detectLocationFactor, getBaseRate, BASE_RATES, LOCATION_FACTORS, unitFamily, detectDuplicatesAndOverlaps, computeRateSourceCoverage, RATE_SOURCE_TIER, renderRateCribSheet, detectBuildingClass, RATE_CEILINGS_COMMERCIAL_GBP, statedSumInDescription,
-  estimateFallbackRate, ceilingFor, RATE_CEILINGS_GBP, GBP_TO_EUR };
+  estimateFallbackRate, ceilingFor, RATE_CEILINGS_GBP, GBP_TO_EUR,
+  // Trade packages + canonical sections (pure, deterministic)
+  TRADES, tradeForItem, normaliseTradeMarkup, CANONICAL_SECTION_NAMES, canonicalSectionName, cleanSectionTitle, orderSections };

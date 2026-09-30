@@ -348,24 +348,42 @@ router.get('/admin/onboarding-submissions/:id/download', authMiddleware, adminMi
 // on top. Setting these percentages adds a visible Contingency / OH&P block
 // to every BOQ summary for this user.
 
+// The response also lists the canonical trade packages so a UI can lay out
+// one input per trade without hard-coding the names.
 router.get('/pricing-prefs', authMiddleware, (req, res) => {
   try {
-    res.json(require('./playbooks').getPricingPrefs(db, req.user.id));
+    const prefs = require('./playbooks').getPricingPrefs(db, req.user.id);
+    res.json({ ...prefs, trades: require('./deterministicPricer').TRADES });
   } catch (e) {
     console.error('[PricingPrefs] load error:', e.message);
     res.status(500).json({ error: 'Failed to load pricing preferences' });
   }
 });
 
+// Body: { ohp_pct?, contingency_pct?, trade_markup? } — trade_markup is an
+// object of { '<trade>': pct } (the whole map; omitted trades use ohp_pct),
+// or null to clear the per-trade overrides. Unknown trade names are rejected
+// so a typo cannot silently price nothing.
 router.put('/pricing-prefs', authMiddleware, (req, res) => {
   try {
-    const { ohp_pct, contingency_pct } = req.body || {};
+    const { ohp_pct, contingency_pct, trade_markup } = req.body || {};
     const bad = (v) => v !== undefined && v !== null && v !== '' && (!Number.isFinite(Number(v)) || Number(v) < 0 || Number(v) > 100);
     if (bad(ohp_pct) || bad(contingency_pct)) {
       return res.status(400).json({ error: 'Percentages must be numbers between 0 and 100' });
     }
-    const prefs = require('./playbooks').setPricingPrefs(db, req.user.id, { ohp_pct, contingency_pct });
-    res.json(prefs);
+    if (trade_markup !== undefined && trade_markup !== null) {
+      if (typeof trade_markup !== 'object' || Array.isArray(trade_markup)) {
+        return res.status(400).json({ error: 'trade_markup must be an object of { trade: percentage }' });
+      }
+      const { TRADES } = require('./deterministicPricer');
+      const known = new Set(TRADES.map((t) => t.toLowerCase()));
+      for (const [k, v] of Object.entries(trade_markup)) {
+        if (!known.has(String(k).trim().toLowerCase())) return res.status(400).json({ error: 'Unknown trade: ' + k, trades: TRADES });
+        if (bad(v)) return res.status(400).json({ error: 'Markup for ' + k + ' must be a number between 0 and 100' });
+      }
+    }
+    const prefs = require('./playbooks').setPricingPrefs(db, req.user.id, { ohp_pct, contingency_pct, trade_markup });
+    res.json({ ...prefs, trades: require('./deterministicPricer').TRADES });
   } catch (e) {
     console.error('[PricingPrefs] save error:', e.message);
     res.status(500).json({ error: 'Failed to save pricing preferences' });

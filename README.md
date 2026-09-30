@@ -37,6 +37,39 @@ currency, VAT, the rate library and what the AI assumes. The rules live in
   onboarding*. Onboarding answers, and any personal rates in a different currency from
   the account's, are set aside (`is_active = 0`), not deleted.
 
+## Markup by trade, trade packages and canonical sections
+
+Every priced BOQ line carries a **trade** (Electrical, Plumbing & Heating, Groundworks,
+Brickwork & Blockwork, Carpentry & Joinery, Roofing, …) as well as its elemental section.
+The trade is assigned deterministically by a keyword ladder in `server/deterministicPricer.js`
+(`tradeForItem`: item key first, then description, then section; `TRADES` is the canonical
+list). It drives three things:
+
+- **Markup by trade.** `ohp_pct` (AI Memory → *Pricing margins*) is the default markup on
+  every line; `trade_markup` (`{ 'Electrical': 10, 'Plumbing & Heating': 10 }`) overrides it
+  for those packages only. Both live in the client playbook (`playbooks.getPricingPrefs`)
+  and reach the pricer through `options.trade_markup` at every call site. OH&P becomes the
+  sum over the lines; contingency stays on the construction total and VAT on the lot.
+  `summary.markup_by_trade`, `summary.ohp_effective_pct`, `summary.trades` and each
+  section's `markup` / `total_with_markup` describe the result. API: `GET/PUT /api/pricing-prefs`
+  (`trade_markup` is the whole map, or `null` to clear; the GET also returns `trades`).
+- **Live BOQ.** Under the bare-cost lines, `BoqTable` shows *Totals with markup & trade
+  packages*: each section's total once markup is on (titles only), then the same lines grouped
+  by trade with an editable markup % per trade. Edits save to the pricing preferences and
+  re-price on the spot, so they apply to every later BOQ and export too.
+- **Excel BOQ.** `boqGenerator` prints the OH&P row as the summed figure with the blended
+  rate in the label when markup varies by trade, then a reference-only *Section totals with
+  markup* block and a *Trade packages* block (labour / materials / bare cost / markup / with
+  markup per trade). Reference rows carry no unit/qty/rate, so `recalcGate` and
+  `preIssueGate` ignore them and `parseBOQ` stops at the "shown for reference" wording.
+
+**Same layout every time.** Section titles from the model ("1. Substructure & Foundations",
+"SUBSTRUCTURE", "Substructure") normalise to one canonical name (`canonicalSectionName`,
+16 names ending with Provisional Sums) and print in the standard elemental order
+(`orderSections`). A title that matches nothing keeps its own name and stays where it
+arrived, so room-by-room reinstatement bills keep their running order. Tests:
+`server/tradePackages.test.js`, `server/pricingPrefs.test.js`, `server/boqGenerator.test.js`.
+
 ## Deployed on Render
 
 ### Environment Variables
