@@ -606,6 +606,13 @@ export default function BuilderPackPage() {
       vat_pct: vat,
       provisional_sum: provisionalSum,
       per_trade_ohp: perTradeOhp,
+      // So the server can quote the client copy total exactly as this page shows it.
+      prelims_mode: prelimsMode,
+      prelims_amount: prelimsAmount,
+      prelims_pct: prelimsPct,
+      day_rate_on: dayRateOn,
+      day_rate: dayRate,
+      rounding,
     },
   });
 

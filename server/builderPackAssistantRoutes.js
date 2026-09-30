@@ -97,19 +97,66 @@ function snapshotForPrompt(project, sections, controls, extra = {}) {
   out.push('');
   out.push('ITEMS (ref | section | item ref | description | qty | unit | labour £ (line total) | materials £ (line total) | line total £):');
   const flat = flattenItems(sections);
+  const sectionSubtotal = (sec) => round2((sec.items || []).reduce((a, it) => a + lineValue(it), 0));
   let lastSection = null;
   for (const f of flat) {
     if (f.section !== lastSection) {
       const tr = tradeBySection[String(f.section.number)];
-      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${tr ? ' [trade: ' + tr + ']' : ''}${f.section.provisional ? ' (PROVISIONAL — carried excl. OH&P)' : ''}`);
+      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${tr ? ' [trade: ' + tr + ']' : ''}${f.section.provisional ? ' (PROVISIONAL — carried excl. OH&P)' : ''} — ${(f.section.items || []).length} lines, subtotal £${sectionSubtotal(f.section)}`);
       lastSection = f.section;
     }
     const it = f.item;
     out.push(`${f.ref} | ${f.section.number || ''} | ${it.itemRef || ''} | ${String(it.description || '').slice(0, 160)} | ${num(it.qty)} | ${it.unit || ''} | ${num(it.labour)} | ${num(it.materials)} | ${round2(lineValue(it))}`);
   }
   out.push('');
+  // The computed section subtotals, in one place. These are the page's own
+  // figures — quote them rather than re-adding the lines.
+  out.push('SECTION SUBTOTALS (computed — use these, do not add lines up yourself):');
+  for (const sec of sections) {
+    out.push(`${sec.number || ''} ${sec.title || 'Untitled'}: £${sectionSubtotal(sec)}`);
+  }
   out.push(`Net build cost (sum of line totals, before overhead/profit/contingency/VAT): £${baseNet(sections)}`);
+  const client = clientCopyExVat(sections, c);
+  if (client) {
+    out.push(`Client copy total (excl. VAT) with the controls above: £${client.ex_vat}${num(c.vat_pct) > 0 ? ` (+VAT @ ${num(c.vat_pct)}% = £${round2(client.ex_vat * (1 + num(c.vat_pct) / 100))})` : ''}`);
+  }
   return out.join('\n');
+}
+
+// ─── Client copy total ───────────────────────────────────────────────────────
+// What the customer's price comes to under a set of client-copy controls —
+// the same maths as the Builder Pack page (uplift baked into each section,
+// provisional sections at face value, prelims / day-rate / contingency on the
+// summary), so a proposal can say what it does to the price the client sees
+// and not only to the net build cost, which markup changes never move.
+function clientCopyExVat(sections, controls) {
+  const c = controls || {};
+  if (!Array.isArray(sections) || !sections.length) return null;
+  const overhead = num(c.overhead_pct), profit = num(c.profit_pct);
+  const baseUplift = (1 + overhead / 100) * (1 + profit / 100);
+  const overrides = c.per_trade_ohp && typeof c.per_trade_ohp === 'object' ? c.per_trade_ohp : {};
+  const rounding = [1, 10, 100].includes(parseInt(c.rounding, 10)) ? parseInt(c.rounding, 10) : 0;
+  const roundMoney = (v) => (rounding ? Math.round(v / rounding) * rounding : v);
+  let net = 0, provisional = 0, originalNet = 0;
+  for (const sec of sections) {
+    const base = (sec.items || []).reduce((a, it) => a + lineValue(it), 0);
+    if (sec.provisional) { provisional += base; continue; }
+    originalNet += base;
+    const key = String(sec.number);
+    const factor = Object.prototype.hasOwnProperty.call(overrides, key) && overrides[key] !== null && overrides[key] !== ''
+      ? 1 + num(overrides[key]) / 100 : baseUplift;
+    net += roundMoney(base * factor);
+  }
+  let running = net;
+  const prelimsMode = c.prelims_mode || 'off';
+  if (prelimsMode === 'flat' && num(c.prelims_amount) > 0) running += num(c.prelims_amount);
+  if (prelimsMode === 'pct' && num(c.prelims_pct) > 0) running += originalNet * (num(c.prelims_pct) / 100);
+  const dr = c.day_rate && typeof c.day_rate === 'object' ? c.day_rate : null;
+  if (c.day_rate_on && dr && num(dr.days) > 0 && num(dr.rate_per_day) > 0) running += num(dr.days) * num(dr.rate_per_day);
+  const provTotal = provisional + (provisional > 0 ? 0 : num(c.provisional_sum));
+  if (provTotal > 0) running += provTotal;
+  if (num(c.contingency_pct) > 0) running += originalNet * (num(c.contingency_pct) / 100);
+  return { ex_vat: round2(running), net_construction: round2(net), original_net: round2(originalNet) };
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
@@ -237,6 +284,7 @@ HOW TO BEHAVE:
 4. UPLOADED SUPPLIER QUOTES: pull out the line items and totals. If the supplier's figures include VAT, strip it (and say so). Map their items onto existing lines where they clearly match; add new items for genuinely new work. If a supplier total replaces several existing items, update or remove those so nothing is double-counted.
 5. MEMORY: when the builder states a durable preference (a supplier they now use, a standing exclusion, a markup rule) — or asks you to remember something — call save_memory as well, and tell them it's been remembered. One-off changes to this BOQ are NOT memories.
 6. Don't touch overhead/profit/contingency/VAT unless asked. Keep everything else exactly as it is.
+8. FIGURES: when you quote a section total, the net or the client copy total, use the computed figures in the snapshot (SECTION SUBTOTALS, net build cost, client copy total). Never add lines up yourself — your arithmetic drifts and the builder checks it against the page.
 7. TONE: write like you're texting a builder you know — short, friendly, plain English sentences with £ figures. NO markdown formatting of any kind: no asterisks, no bold, no headings, no bullet symbols. If you need to list a few things, just use short sentences or "1) 2) 3)". No corporate waffle.`;
 
 // ─── Changeset validation + preview ─────────────────────────────────────────
@@ -430,6 +478,14 @@ function validateAndPreview(input, project, sections, controls) {
     changes.push(...upliftChanges);
   }
 
+  // The customer's price under the controls as they are and as proposed. A
+  // markup or uplift change never moves the net build cost, so without this
+  // an uplift-only proposal read as "+£0.00".
+  const controlsAfter = { ...(controls || {}), ...(controlChanges || {}) };
+  const clientBefore = clientCopyExVat(sections, controls);
+  const clientAfter = clientCopyExVat(work, controlsAfter);
+  const vatPct = num(controlsAfter.vat_pct);
+
   return {
     ok: true,
     proposal: {
@@ -445,7 +501,10 @@ function validateAndPreview(input, project, sections, controls) {
       // page's live preview shows the full cascade the moment it's applied.
       before_total: baseNet(sections),
       after_total: baseNet(work),
-      totals_note: 'Net build cost before overhead, profit, contingency and VAT — the preview recalculates when you apply.',
+      totals_note: 'Net build cost before overhead, profit, contingency and VAT.',
+      client_before: clientBefore ? clientBefore.ex_vat : null,
+      client_after: clientAfter ? clientAfter.ex_vat : null,
+      client_note: 'Client copy total excl. VAT' + (vatPct > 0 ? ` (VAT @ ${vatPct}% on top)` : '') + ' — what your customer\'s price does.',
       currency: project.currency || 'GBP',
     },
     warnings: errors,
@@ -552,4 +611,4 @@ router.post('/projects/:projectId/builder-pack/assistant', authMiddleware, (req,
 });
 
 module.exports = router;
-module.exports._test = { validateAndPreview, snapshotForPrompt, flattenItems, baseNet };
+module.exports._test = { validateAndPreview, snapshotForPrompt, flattenItems, baseNet, clientCopyExVat };

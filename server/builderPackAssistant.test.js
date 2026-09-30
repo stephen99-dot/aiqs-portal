@@ -179,3 +179,48 @@ test('the snapshot names each section\'s trade, the current overrides and the st
   assert.match(snap, /standing markup by trade .*: Electrical 10%/);
   assert.match(snap, /Trade package names: Preliminaries \| /);
 });
+
+// ── Client copy total + computed section subtotals ──────────────────────────
+// An uplift change never moves the net build cost, so the proposal also says
+// what the customer's price does; the snapshot carries computed section
+// subtotals so the model quotes the page's figures instead of adding lines.
+test('an uplift-only proposal shows the client copy moving while the net stays put', () => {
+  const { clientCopyExVat } = require('./builderPackAssistantRoutes')._test;
+  const controls = { ...CONTROLS, overhead_pct: 19, profit_pct: 18.5, vat_pct: 20, per_trade_ohp: {} };
+  const before = clientCopyExVat(SECTIONS, controls);
+  // 19% overhead × 18.5% profit compound to 41.015% on every section.
+  const net = baseNet(SECTIONS);
+  assert.ok(Math.abs(before.ex_vat - net * 1.19 * 1.185) < 0.02, `before ${before.ex_vat}`);
+
+  const v = validateAndPreview({ summary: '10% on electrics', controls: { section_uplift: { '2': 10 } } }, PROJECT, SECTIONS, controls);
+  assert.equal(v.ok, true);
+  assert.equal(v.proposal.before_total, v.proposal.after_total, 'net build cost unchanged');
+  const elecBase = 1500 + 950;
+  const expectedAfter = (net - elecBase) * 1.19 * 1.185 + elecBase * 1.10;
+  assert.equal(v.proposal.client_before, before.ex_vat);
+  assert.ok(Math.abs(v.proposal.client_after - expectedAfter) < 0.02, `after ${v.proposal.client_after} vs ${expectedAfter}`);
+  assert.ok(v.proposal.client_after < v.proposal.client_before);
+  assert.match(v.proposal.client_note, /Client copy total excl\. VAT \(VAT @ 20% on top\)/);
+});
+
+test('client copy total honours prelims, day rate, contingency, provisional sections and rounding like the page', () => {
+  const { clientCopyExVat } = require('./builderPackAssistantRoutes')._test;
+  const sections = SECTIONS.concat([{ number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] }]);
+  const r = clientCopyExVat(sections, {
+    overhead_pct: 10, profit_pct: 0, contingency_pct: 5, vat_pct: 0, provisional_sum: 999, // lump ignored: a provisional section exists
+    per_trade_ohp: { '2': 0 }, prelims_mode: 'flat', prelims_amount: 1000, day_rate_on: true, day_rate: { days: 2, rate_per_day: 300 }, rounding: 10,
+  });
+  const prelimsBase = 2200 + 19000, elecBase = 2450;
+  const netConstruction = Math.round((prelimsBase * 1.10) / 10) * 10 + Math.round((elecBase * 1.0) / 10) * 10;
+  const expected = netConstruction + 1000 + 600 + 500 + (prelimsBase + elecBase) * 0.05;
+  assert.ok(Math.abs(r.ex_vat - expected) < 0.02, `${r.ex_vat} vs ${expected}`);
+  assert.equal(clientCopyExVat([], {}), null);
+});
+
+test('the snapshot carries computed section subtotals and the client copy total', () => {
+  const snap = snapshotForPrompt(PROJECT, SECTIONS, { ...CONTROLS, overhead_pct: 10 });
+  assert.match(snap, /-- Section 1: Preliminaries .*— 2 lines, subtotal £21200/);
+  assert.match(snap, /SECTION SUBTOTALS \(computed/);
+  assert.match(snap, /\n2 Electrics: £2450\n/);
+  assert.match(snap, /Client copy total \(excl\. VAT\) with the controls above: £26015/); // 23650 × 1.10
+});
