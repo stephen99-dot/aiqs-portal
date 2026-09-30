@@ -219,7 +219,9 @@ async function generateFindingsReport(findings, clientName, projectName, brandin
     }));
     totalRow('Net total', cs.net_total, { bold: true });
     if (cs.contingency) totalRow('Contingency at ' + (cs.contingency_pct != null ? cs.contingency_pct : 7.5) + '%', cs.contingency);
-    if (cs.ohp) totalRow('Overheads & profit at ' + (cs.ohp_pct != null ? cs.ohp_pct : 12) + '%', cs.ohp);
+    if (cs.ohp) totalRow(cs.markup_by_trade
+      ? 'Overheads & profit (by trade, average ' + (cs.ohp_effective_pct != null ? cs.ohp_effective_pct : cs.ohp_pct) + '%)'
+      : 'Overheads & profit at ' + (cs.ohp_pct != null ? cs.ohp_pct : 12) + '%', cs.ohp);
     if (cs.vat) totalRow('VAT at ' + (cs.vat_rate != null ? cs.vat_rate : 20) + '%', cs.vat);
     totalRow('TENDER TOTAL', cs.grand_total, { bold: true, fill: totalFill });
 

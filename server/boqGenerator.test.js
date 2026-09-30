@@ -124,3 +124,92 @@ test('no PC/Provisional recap when there are none, and totals still reconcile', 
   const r = await assertBOQMatches(buf, 360);
   assert.strictEqual(r.ok, true, 'plain BOQ still reconciles');
 });
+
+// ── Markup by trade + trade packages ─────────────────────────────────────────
+// A bill priced with per-trade markup prints the OH&P as the sum over the
+// lines (with the blended rate in the label), a "Section totals with markup"
+// block and a "Trade packages" block — all reference-only, so the recalc and
+// pre-issue gates still pass and the Builder Pack parser still reconciles the
+// file it will be handed later.
+test('per-trade markup renders the trade and section-markup blocks and every gate still passes', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const pricer = require('./deterministicPricer');
+  const { runPreIssueGate } = require('./preIssueGate');
+  const { parseBOQ, reconcileParsed } = require('./builderExports');
+  const fs = require('fs'); const os = require('os'); const path = require('path');
+  const items = [
+    { key: 'site_welfare', qty: 1, unit: 'Item', section: 'Preliminaries' },
+    { key: 'excavation_strip_foundation', qty: 12, unit: 'm³', section: '1. Substructure & Foundations' },
+    { key: 'brick_outer_leaf', qty: 40, unit: 'm²', section: 'Superstructure' },
+    { key: 'first_fix_electrical', qty: 1, unit: 'Item', section: 'Electrical' },
+    { key: 'first_fix_plumbing', qty: 1, unit: 'Item', section: 'Mechanical & Plumbing' },
+    // A provisional-sums section has no labour: its sub-total used to be an
+    // uncached SUM formula over zeros, which the pre-issue gate rejects.
+    { key: 'provisional_sum', description: 'Provisional sum for landscaping', qty: 1500, unit: 'Item', section: 'Provisional Sums' },
+  ];
+  const priced = pricer.priceLockedQuantities(items, '', {}, { ohp_pct: 20, trade_markup: { Electrical: 10, 'Plumbing & Heating': 10 } });
+  assert.strictEqual(priced.summary.markup_by_trade, true);
+  const sections = pricer.toPricedSections(priced);
+  const buf = await generateBOQExcel(sections, 'Trade markup job', 'Client', {
+    contingency_pct: priced.summary.contingency_pct, ohp_pct: priced.summary.ohp_pct, vat_rate: 20, currency: '£',
+  });
+
+  const recalc = await assertBOQMatches(buf, priced.summary.construction_total);
+  assert.ok(recalc.ok, 'recalc gate: ' + JSON.stringify(recalc));
+  const gate = await runPreIssueGate(buf);
+  assert.ok(!gate.blocking, 'pre-issue gate: ' + gate.errors.join(' | '));
+
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet('BOQ');
+  const texts = [];
+  let ohpRow = null;
+  ws.eachRow((row) => {
+    const label = String((row.getCell(2).value && row.getCell(2).value.richText ? row.getCell(2).value.richText.map((r) => r.text).join('') : row.getCell(2).value) || '');
+    const a = String(row.getCell(1).value || '');
+    texts.push(a + ' ' + label);
+    if (/^Overheads & Profit/.test(label)) ohpRow = row;
+  });
+  const all = texts.join('\n');
+  assert.ok(ohpRow, 'OH&P summary row present');
+  const ohpLabel = String(ohpRow.getCell(2).value);
+  assert.match(ohpLabel, /by trade, average [\d.]+%/);
+  const ohpCell = ohpRow.getCell(8).value;
+  const ohpVal = typeof ohpCell === 'object' && ohpCell !== null && 'result' in ohpCell ? ohpCell.result : ohpCell;
+  assert.ok(Math.abs(Number(ohpVal) - priced.summary.ohp) < 0.011, `OH&P ${ohpVal} vs pricer ${priced.summary.ohp}`);
+  assert.match(all, /SECTION TOTALS WITH MARKUP & TRADE PACKAGES \(summary of the lines above - shown for reference\)/);
+  assert.match(all, /Section totals with markup/);
+  assert.match(all, /Construction cost with markup/);
+  assert.match(all, /Trade packages \(the same lines grouped by trade/);
+  assert.match(all, /Electrical \(Electrical\)/);
+  assert.match(all, /Groundworks \(Substructure\)/);
+  assert.match(all, /All trades/);
+
+  // The Builder Pack reads this file back later: sections intact, blended
+  // OH&P read from the label, bill reconciles.
+  const file = path.join(os.tmpdir(), `boq-trade-${process.pid}.xlsx`);
+  fs.writeFileSync(file, buf);
+  try {
+    const parsed = await parseBOQ(file);
+    assert.strictEqual(parsed.sections.length, priced.sections.length, 'trade/markup blocks are not parsed as sections');
+    assert.ok(Math.abs(parsed.source_summary.ohp_pct - priced.summary.ohp_effective_pct) < 0.02, 'blended OH&P % read from the label');
+    const rec = reconcileParsed(parsed);
+    assert.ok(rec && rec.ok, 'parsed bill reconciles: ' + JSON.stringify(rec));
+  } finally {
+    try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  }
+});
+
+test('a flat markup still prints the live formula row and no trade block is forced when lines carry no trade', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const buf = await generateBOQExcel(SECTIONS, 'Flat markup', 'Client', { ohp_pct: 12, vat_rate: 20, currency: '£' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet('BOQ');
+  let ohpRow = null; const labels = [];
+  ws.eachRow((row) => { const l = String(row.getCell(2).value || ''); labels.push(l); if (/^Overheads & Profit/.test(l)) ohpRow = row; });
+  assert.ok(ohpRow);
+  assert.strictEqual(String(ohpRow.getCell(2).value), 'Overheads & Profit (12%)');
+  assert.ok(ohpRow.getCell(8).value && typeof ohpRow.getCell(8).value === 'object' && 'formula' in ohpRow.getCell(8).value, 'flat OH&P stays a live formula');
+  assert.ok(!labels.some((l) => /Trade packages/.test(l)), 'no trade block without trades on the lines');
+  // Section totals with markup still print (titles only), because markup is on.
+  assert.ok(labels.some((l) => /Section totals with markup/.test(l)));
+});

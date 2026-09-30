@@ -305,7 +305,7 @@ router.post('/agent/:id/reprice', authMiddleware, (req, res) => {
     const priced = pricer.priceLockedQuantities(items, location, clientRates, {
       project_type: run.project_type || '',
       floor_area: run.floor_area_m2 || null,
-      contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct,
+      contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, trade_markup: prefs.trade_markup,
       ...(intakeIsIreland ? { currency: 'EUR' } : {}),
       ..._pc.pricingOptions,
     });

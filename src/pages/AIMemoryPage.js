@@ -53,7 +53,8 @@ export default function AIMemoryPage() {
   const [entities, setEntities] = useState([]);
   const [expandedEntityId, setExpandedEntityId] = useState(null);
   const [newFactText, setNewFactText] = useState('');
-  const [prefs, setPrefs] = useState(null);          // { ohp_pct, contingency_pct }
+  const [prefs, setPrefs] = useState(null);          // { ohp_pct, contingency_pct, trade_markup: { trade: pct } }
+  const [tradeList, setTradeList] = useState([]);    // canonical trade packages, from the server
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
 
@@ -75,7 +76,10 @@ export default function AIMemoryPage() {
       setRateStats(rateData.stats || { total: 0, avg_confidence: 0 });
       setMemories(memData.memories || []);
       setOnboardingStatus(onbData);
-      if (prefData) setPrefs({ ohp_pct: prefData.ohp_pct ?? 0, contingency_pct: prefData.contingency_pct ?? 0 });
+      if (prefData) {
+        setPrefs({ ohp_pct: prefData.ohp_pct ?? 0, contingency_pct: prefData.contingency_pct ?? 0, trade_markup: prefData.trade_markup || {} });
+        setTradeList(Array.isArray(prefData.trades) ? prefData.trades : []);
+      }
     } catch (err) {
       console.error('Load error:', err);
     }
@@ -180,11 +184,18 @@ export default function AIMemoryPage() {
   async function handleSavePrefs() {
     setPrefsSaving(true); setPrefsSaved(false);
     try {
+      // Only trades with a figure are sent; the rest fall back to the default.
+      const tradeMarkup = {};
+      for (const [k, v] of Object.entries(prefs.trade_markup || {})) {
+        if (v === '' || v == null) continue;
+        tradeMarkup[k] = Number(v);
+      }
       const res = await apiFetch('/pricing-prefs', {
         method: 'PUT',
-        body: JSON.stringify({ ohp_pct: prefs.ohp_pct, contingency_pct: prefs.contingency_pct }),
+        body: JSON.stringify({ ohp_pct: prefs.ohp_pct, contingency_pct: prefs.contingency_pct, trade_markup: tradeMarkup }),
       });
-      setPrefs({ ohp_pct: res.ohp_pct ?? 0, contingency_pct: res.contingency_pct ?? 0 });
+      setPrefs({ ohp_pct: res.ohp_pct ?? 0, contingency_pct: res.contingency_pct ?? 0, trade_markup: res.trade_markup || {} });
+      if (Array.isArray(res.trades)) setTradeList(res.trades);
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 2500);
     } catch (err) { toast.error(err.message || 'Failed to save'); }
@@ -315,6 +326,58 @@ export default function AIMemoryPage() {
                 {Number(prefs.contingency_pct) > 0 && Number(prefs.ohp_pct) > 0 ? ' and ' : ''}
                 {Number(prefs.ohp_pct) > 0 ? `Overheads & Profit (${prefs.ohp_pct}%)` : ''} on top of the priced items.
               </div>
+            )}
+
+            {/* Markup by trade — the override for the packages a builder subs
+                out. Blank = the default above. Every BOQ line is tagged with
+                its trade, so this drives the live BOQ, the Excel export's
+                Trade Packages block and the findings report alike. */}
+            {tradeList.length > 0 && (
+              <details style={{ marginTop: 16 }} open={Object.keys(prefs.trade_markup || {}).length > 0}>
+                <summary style={{ cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, userSelect: 'none' }}>
+                  Markup by trade
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8, fontSize: '0.78rem' }}>
+                    {Object.keys(prefs.trade_markup || {}).length > 0
+                      ? Object.keys(prefs.trade_markup).length + ' trade' + (Object.keys(prefs.trade_markup).length === 1 ? '' : 's') + ' set'
+                      : 'optional — e.g. 10% on the electrician and plumber, more on your own labour and materials'}
+                  </span>
+                </summary>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.6, margin: '8px 0 10px' }}>
+                  Every BOQ line is priced by trade as well as by section. Give a trade its own markup here and
+                  it replaces the default Overheads &amp; profit % on that package only; leave a trade blank to use the default.
+                  The live BOQ shows the same controls under <em>Totals with markup &amp; trade packages</em>.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '8px 16px' }}>
+                  {tradeList.map((trade) => {
+                    const v = prefs.trade_markup && prefs.trade_markup[trade];
+                    const set = v !== undefined && v !== '' && v !== null;
+                    return (
+                      <label key={trade} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: '0.82rem', padding: '4px 8px', borderRadius: 6, background: set ? 'rgba(124,58,237,0.08)' : 'transparent', border: '1px solid ' + (set ? 'rgba(124,58,237,0.35)' : 'var(--border)') }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trade}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          <Input
+                            type="number" inputMode="decimal" min="0" max="100" step="0.5"
+                            value={set ? v : ''}
+                            placeholder={String(prefs.ohp_pct ?? 0)}
+                            onChange={e => setPrefs(p => {
+                              const next = { ...(p.trade_markup || {}) };
+                              if (e.target.value === '') delete next[trade]; else next[trade] = e.target.value;
+                              return { ...p, trade_markup: next };
+                            })}
+                            style={{ width: 70, textAlign: 'right' }}
+                          />
+                          <span style={{ color: 'var(--text-muted)' }}>%</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <Button size="sm" onClick={handleSavePrefs} disabled={prefsSaving} busyLabel="Saving…">
+                    {prefsSaved ? 'Saved ✓' : 'Save trade markups'}
+                  </Button>
+                </div>
+              </details>
             )}
           </Card.Body>
         </Card>

@@ -83,6 +83,68 @@ function classifySums(sections, opts = {}) {
   return { pc, prov };
 }
 
+// Markup carried by the lines. The pricer tags every line with the markup it
+// bears (item.markup_pct — its trade's percentage, or the flat default), so
+// OH&P is the sum of those rather than one % of the net. Lines without a tag
+// (bills built elsewhere) fall back to the flat ohp_pct, exactly as before.
+function summariseMarkup(sections, ohpPct) {
+  let total = 0;
+  let byTrade = false;
+  const perSection = [];
+  for (const s of sections || []) {
+    let cost = 0, markup = 0;
+    for (const it of (s.items || [])) {
+      const lineTotal = Number(it.total) || ((Number(it.labour) || 0) + (Number(it.materials) || 0));
+      const pct = Number(it.markup_pct);
+      const applied = Number.isFinite(pct) ? pct : ohpPct;
+      if (Number.isFinite(pct) && Math.abs(pct - ohpPct) > 1e-9) byTrade = true;
+      cost += lineTotal;
+      markup += lineTotal * (applied / 100);
+    }
+    perSection.push({
+      section: s,
+      cost: round2(cost),
+      markup: round2(markup),
+      pct: cost > 0 ? Math.round((markup / cost) * 10000) / 100 : ohpPct,
+    });
+    total += markup;
+  }
+  return { total: round2(total), by_trade: byTrade, per_section: perSection };
+}
+
+// The same lines regrouped by trade package (item.trade, set by the pricer),
+// in the pricer's trade order — the subcontractor view of the bill. Empty
+// when no line carries a trade.
+function summariseTrades(sections, ohpPct) {
+  let order = [];
+  try { order = require('./deterministicPricer').TRADES; } catch (e) { order = []; }
+  const acc = {};
+  for (const s of sections || []) {
+    for (const it of (s.items || [])) {
+      if (!it || !it.trade) continue;
+      const t = acc[it.trade] || (acc[it.trade] = { trade: it.trade, items: 0, labour: 0, materials: 0, cost: 0, markup: 0, sections: {} });
+      const lineTotal = Number(it.total) || ((Number(it.labour) || 0) + (Number(it.materials) || 0));
+      const pct = Number.isFinite(Number(it.markup_pct)) ? Number(it.markup_pct) : ohpPct;
+      t.items++;
+      t.labour += Number(it.labour) || 0;
+      t.materials += Number(it.materials) || 0;
+      t.cost += lineTotal;
+      t.markup += lineTotal * (pct / 100);
+      t.pct = pct;
+      const title = String(s.title || s.name || '').trim();
+      if (title) t.sections[title] = (t.sections[title] || 0) + lineTotal;
+    }
+  }
+  const rank = (t) => { const i = order.indexOf(t); return i < 0 ? 999 : i; };
+  return Object.values(acc)
+    .sort((a, b) => rank(a.trade) - rank(b.trade) || a.trade.localeCompare(b.trade))
+    .map((t) => ({
+      ...t,
+      labour: round2(t.labour), materials: round2(t.materials), cost: round2(t.cost), markup: round2(t.markup),
+      sections: Object.entries(t.sections).sort((a, b) => b[1] - a[1]).map(([k]) => k),
+    }));
+}
+
 async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
   const currency = opts.currency || '\u00a3';
   // Default ZERO markup: rates are all-in competitive prices, so the summary
@@ -113,7 +175,11 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     }
   }
   const netTotal = totalLabour + totalMaterials;
-  const grandExVat = netTotal * (1 + contingencyPct / 100 + ohpPct / 100);
+  const markupInfo = summariseMarkup(sections, ohpPct);
+  const ohpVal = markupInfo.total;          // OH&P as the lines carry it
+  const ohpByTrade = markupInfo.by_trade;   // true when any trade differs from the default
+  const tradeRows = summariseTrades(sections, ohpPct);
+  const grandExVat = netTotal * (1 + contingencyPct / 100) + ohpVal;
   const grandInclVat = grandExVat * (1 + vatRate / 100);
 
   // \u2500\u2500 Cover sheet (shared renderer) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -381,9 +447,16 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
       subRow.getCell(3).value = '';
       subRow.getCell(4).value = '';
       subRow.getCell(5).value = '';
-      subRow.getCell(6).value = { formula: 'SUM(F' + firstItemRow + ':F' + lastItemRow + ')', result: round2(secLabour) };
-      subRow.getCell(7).value = { formula: 'SUM(G' + firstItemRow + ':G' + lastItemRow + ')', result: round2(secMaterials) };
-      subRow.getCell(8).value = { formula: 'SUM(H' + firstItemRow + ':H' + lastItemRow + ')', result: round2(secTotal) };
+      // A cached result of 0 is dropped on write, so a formula over an all-zero
+      // column (a provisional-sums section has no labour) would reload with no
+      // cached value and render blank in every previewer. Write the 0 itself.
+      var sumOrZero = function (col, val) {
+        var v = round2(val);
+        return v === 0 ? 0 : { formula: 'SUM(' + col + firstItemRow + ':' + col + lastItemRow + ')', result: v };
+      };
+      subRow.getCell(6).value = sumOrZero('F', secLabour);
+      subRow.getCell(7).value = sumOrZero('G', secMaterials);
+      subRow.getCell(8).value = sumOrZero('H', secTotal);
       subRow.getCell(9).value = '';
       
       for (var sc = 1; sc <= 9; sc++) {
@@ -452,12 +525,16 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
     row++;
   }
 
-  if (ohpPct > 0) {
+  if (ohpVal > 0) {
     var ohpRow = ws.getRow(row);
-    ohpRow.getCell(2).value = 'Overheads & Profit (' + ohpPct + '%)';
+    // By trade the figure is a sum over the lines, so it prints as a value
+    // with the blended rate in the label; flat markup stays a live formula.
+    var ohpAvg = netVal > 0 ? Math.round((ohpVal / netVal) * 10000) / 100 : ohpPct;
+    ohpRow.getCell(2).value = ohpByTrade
+      ? 'Overheads & Profit (by trade, average ' + ohpAvg + '% - see Trade Packages below)'
+      : 'Overheads & Profit (' + ohpPct + '%)';
     ohpRow.getCell(2).font = { name: bodyFont, size: 10 };
-    var ohpVal = round2(netVal * (ohpPct / 100));
-    ohpRow.getCell(8).value = { formula: 'H' + netRowNum + '*' + (ohpPct / 100), result: ohpVal };
+    ohpRow.getCell(8).value = ohpByTrade ? ohpVal : { formula: 'H' + netRowNum + '*' + (ohpPct / 100), result: ohpVal };
     gtVal += ohpVal;
     ohpRow.getCell(8).numFmt = currFmt;
     ohpRow.getCell(8).font = { name: bodyFont, size: 10 };
@@ -565,6 +642,155 @@ async function generateBOQExcel(sections, projectName, clientName, opts = {}) {
 
     renderSumGroup('Prime Cost (PC) sums', sums.pc);
     renderSumGroup('Provisional sums', sums.prov);
+  }
+
+  // === TRADE PACKAGES & SECTION TOTALS WITH MARKUP ===
+  // Two reference views of the SAME lines: each section's bare cost with the
+  // markup it carries (titles only — the itemised breakdown is above), and the
+  // bill regrouped by trade package so subcontract packages can be split off.
+  // Reference only: no unit/qty/rate, so the recalc and pre-issue gates skip
+  // these rows, and the Builder Pack parser stops at the "shown for reference"
+  // wording exactly as it does for the PC/Provisional recap.
+  var showSectionMarkup = ohpVal > 0 && markupInfo.per_section.length > 0;
+  var showTrades = tradeRows.length > 0;
+  if (showSectionMarkup || showTrades) {
+    row++;
+    var tpHeader = ws.getRow(row);
+    ws.mergeCells('A' + row + ':I' + row);
+    tpHeader.getCell(1).value = (showSectionMarkup ? 'SECTION TOTALS WITH MARKUP' + (showTrades ? ' & TRADE PACKAGES' : '') : 'TRADE PACKAGES')
+      + ' (summary of the lines above - shown for reference)';
+    tpHeader.getCell(1).font = { name: headingFont, size: 10.5, bold: true, color: { argb: PRIMARY } };
+    tpHeader.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+    tpHeader.getCell(1).border = allBorders;
+    tpHeader.height = 22;
+    row++;
+
+    var refLabelFont = { name: bodyFont, size: 9, bold: true, color: { argb: 'FF334155' } };
+    var refBodyFont = { name: bodyFont, size: 9, color: { argb: 'FF334155' } };
+    var refBoldFont = { name: bodyFont, size: 9.5, bold: true, color: { argb: 'FF334155' } };
+    function refHeadings(cols) {
+      var hr = ws.getRow(row);
+      Object.keys(cols).forEach(function (c) {
+        var cell = hr.getCell(Number(c));
+        cell.value = cols[c];
+        cell.font = refLabelFont;
+        cell.alignment = { horizontal: Number(c) === 2 ? 'left' : 'right', vertical: 'middle' };
+        cell.border = { bottom: { style: 'thin', color: { argb: BORDER_COL } } };
+      });
+      hr.height = 16;
+      row++;
+    }
+    function refMoney(cell, v) {
+      cell.value = round2(v);
+      cell.numFmt = currFmt;
+      cell.font = refBodyFont;
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    }
+    function refPct(cell, v) {
+      cell.value = Math.round((Number(v) || 0) * 100) / 100;
+      cell.numFmt = '0.##"%"';
+      cell.font = refBodyFont;
+      cell.alignment = { horizontal: 'right', vertical: 'middle' };
+    }
+
+    if (showSectionMarkup) {
+      var smTitle = ws.getRow(row);
+      smTitle.getCell(2).value = 'Section totals with markup';
+      smTitle.getCell(2).font = refBoldFont;
+      row++;
+      refHeadings({ 2: 'Section', 5: 'Markup %', 6: 'Bare cost', 7: 'Markup', 8: 'With markup' });
+      var smStart = row;
+      for (var smi = 0; smi < markupInfo.per_section.length; smi++) {
+        var ps = markupInfo.per_section[smi];
+        var smRow = ws.getRow(row);
+        var smNum = ps.section.number != null && ps.section.number !== '' ? String(ps.section.number) + '. ' : '';
+        smRow.getCell(2).value = sanitizeXmlText(smNum + String(ps.section.title || ps.section.name || 'Section'));
+        smRow.getCell(2).font = refBodyFont;
+        smRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
+        refPct(smRow.getCell(5), ps.pct);
+        refMoney(smRow.getCell(6), ps.cost);
+        refMoney(smRow.getCell(7), ps.markup);
+        smRow.getCell(8).value = { formula: 'F' + row + '+G' + row, result: round2(ps.cost + ps.markup) };
+        smRow.getCell(8).numFmt = currFmt;
+        smRow.getCell(8).font = refBodyFont;
+        smRow.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+        smRow.height = 16;
+        row++;
+      }
+      var smTot = ws.getRow(row);
+      smTot.getCell(2).value = 'Construction cost with markup';
+      smTot.getCell(2).font = refBoldFont;
+      var smCost = markupInfo.per_section.reduce(function (a, x) { return a + x.cost; }, 0);
+      var smMark = markupInfo.per_section.reduce(function (a, x) { return a + x.markup; }, 0);
+      smTot.getCell(6).value = { formula: 'SUM(F' + smStart + ':F' + (row - 1) + ')', result: round2(smCost) };
+      smTot.getCell(7).value = { formula: 'SUM(G' + smStart + ':G' + (row - 1) + ')', result: round2(smMark) };
+      smTot.getCell(8).value = { formula: 'SUM(H' + smStart + ':H' + (row - 1) + ')', result: round2(smCost + smMark) };
+      for (var smc = 6; smc <= 8; smc++) {
+        smTot.getCell(smc).numFmt = currFmt;
+        smTot.getCell(smc).font = refBoldFont;
+        smTot.getCell(smc).alignment = { horizontal: 'right', vertical: 'middle' };
+        smTot.getCell(smc).border = { top: { style: 'thin', color: { argb: BORDER_COL } } };
+      }
+      smTot.height = 16;
+      row++;
+      row++;
+    }
+
+    if (showTrades) {
+      var tpTitle = ws.getRow(row);
+      tpTitle.getCell(2).value = 'Trade packages (the same lines grouped by trade, for subcontractor pricing)';
+      tpTitle.getCell(2).font = refBoldFont;
+      row++;
+      refHeadings({ 2: 'Trade package', 3: 'Lines', 5: 'Markup %', 6: 'Labour', 7: 'Materials', 8: 'Bare cost', 9: 'With markup' });
+      var tpStart = row;
+      for (var ti = 0; ti < tradeRows.length; ti++) {
+        var tr = tradeRows[ti];
+        var tpRow = ws.getRow(row);
+        var secNote = tr.sections.length ? ' (' + tr.sections.slice(0, 3).join(', ') + (tr.sections.length > 3 ? ', …' : '') + ')' : '';
+        tpRow.getCell(2).value = sanitizeXmlText(tr.trade + secNote);
+        tpRow.getCell(2).font = refBodyFont;
+        tpRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
+        tpRow.getCell(3).value = tr.items;
+        tpRow.getCell(3).font = refBodyFont;
+        tpRow.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
+        refPct(tpRow.getCell(5), tr.pct);
+        refMoney(tpRow.getCell(6), tr.labour);
+        refMoney(tpRow.getCell(7), tr.materials);
+        refMoney(tpRow.getCell(8), tr.cost);
+        tpRow.getCell(9).value = { formula: 'H' + row + '*(1+E' + row + '/100)', result: round2(tr.cost + tr.markup) };
+        tpRow.getCell(9).numFmt = currFmt;
+        tpRow.getCell(9).font = refBodyFont;
+        tpRow.getCell(9).alignment = { horizontal: 'right', vertical: 'middle' };
+        tpRow.height = 16;
+        row++;
+      }
+      var tpTot = ws.getRow(row);
+      tpTot.getCell(2).value = 'All trades';
+      tpTot.getCell(2).font = refBoldFont;
+      var tpSum = function (k) { return round2(tradeRows.reduce(function (a, x) { return a + x[k]; }, 0)); };
+      tpTot.getCell(3).value = { formula: 'SUM(C' + tpStart + ':C' + (row - 1) + ')', result: tradeRows.reduce(function (a, x) { return a + x.items; }, 0) };
+      tpTot.getCell(3).font = refBoldFont;
+      tpTot.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
+      var tpCols = { 6: tpSum('labour'), 7: tpSum('materials'), 8: tpSum('cost'), 9: round2(tpSum('cost') + tpSum('markup')) };
+      Object.keys(tpCols).forEach(function (c) {
+        var L = String.fromCharCode(64 + Number(c));
+        var cell = tpTot.getCell(Number(c));
+        cell.value = { formula: 'SUM(' + L + tpStart + ':' + L + (row - 1) + ')', result: tpCols[c] };
+        cell.numFmt = currFmt;
+        cell.font = refBoldFont;
+        cell.alignment = { horizontal: 'right', vertical: 'middle' };
+        cell.border = { top: { style: 'thin', color: { argb: BORDER_COL } } };
+      });
+      tpTot.height = 16;
+      row++;
+      var tpNote = ws.getRow(row);
+      ws.mergeCells('B' + row + ':I' + row);
+      tpNote.getCell(2).value = 'Trades are assigned line by line from the item, its description and its section. Every job differs, so treat this as a starting point for splitting subcontract packages.';
+      tpNote.getCell(2).font = { name: bodyFont, size: 8.5, italic: true, color: { argb: 'FF64748B' } };
+      tpNote.getCell(2).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      tpNote.height = 26;
+      row++;
+    }
   }
 
   // Legend

@@ -629,7 +629,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
                 )}
                 {priced.summary.ohp > 0 && (
                   <>
-                    <span style={{ color: c.muted }}>OH&P ({priced.summary.ohp_pct}%)</span>
+                    <span style={{ color: c.muted }}>OH&P ({priced.summary.markup_by_trade ? 'by trade, avg ' + priced.summary.ohp_effective_pct + '%' : priced.summary.ohp_pct + '%'})</span>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(priced.summary.ohp, priced.summary.currency)}</span>
                   </>
                 )}

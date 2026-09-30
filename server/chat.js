@@ -1614,7 +1614,7 @@ router.get('/takeoff/:sessionId/priced', authMiddleware, (req, res) => {
     const prefs = getPricingPrefsSafe(req.user.id);
     const priced = deterministicPricer.priceLockedQuantities(
       takeoff.items || [], takeoff.location || '', clientRates,
-      { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type, ..._pc.pricingOptions }
+      { contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, trade_markup: prefs.trade_markup, project_type: takeoff.project_type, ..._pc.pricingOptions }
     );
     res.json({
       takeoff: { id: takeoff.id, status: takeoff.status, location: takeoff.location, project_type: takeoff.project_type },
@@ -1658,7 +1658,7 @@ router.put('/takeoff/:id', authMiddleware, (req, res) => {
     const clientRates = _pc.clientRates;
     const prefs = getPricingPrefsSafe(req.user.id);
     const priced = deterministicPricer.priceLockedQuantities(merged, takeoff.location || '', clientRates,
-      withShadow({ contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, project_type: takeoff.project_type, ..._pc.pricingOptions }, { userId: req.user.id }));
+      withShadow({ contingency_pct: prefs.contingency_pct, ohp_pct: prefs.ohp_pct, trade_markup: prefs.trade_markup, project_type: takeoff.project_type, ..._pc.pricingOptions }, { userId: req.user.id }));
     recordShadow(priced, { userId: req.user.id, jobRef: req.params.id });
     res.json({ success: true, priced, items_raw: merged });
   } catch (e) { console.error('[Takeoff] Update error:', e.message); res.status(500).json({ error: 'Failed to update takeoff' }); }
@@ -2321,7 +2321,7 @@ ${summary}`);
           const tkPrefs = getPricingPrefsSafe(userId);
           const tkPriced = deterministicPricer.priceLockedQuantities(
             existingTk.items, existingTk.location || '', tkClientRates,
-            { contingency_pct: tkPrefs.contingency_pct, ohp_pct: tkPrefs.ohp_pct, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP', ..._tkPc.pricingOptions }
+            { contingency_pct: tkPrefs.contingency_pct, ohp_pct: tkPrefs.ohp_pct, trade_markup: tkPrefs.trade_markup, vat_rate: tkIsIreland ? 13.5 : 20, currency: tkIsIreland ? 'EUR' : 'GBP', ..._tkPc.pricingOptions }
           );
           const tkSym = currencySymbol(tkPriced.summary.currency);
           const sectionLines = tkPriced.sections.map(s => `${s.name}: ${tkSym}${s.subtotal.toLocaleString('en-GB', {maximumFractionDigits:0})}`).join('\n');
@@ -3321,6 +3321,7 @@ CRITICAL RULES:
                 return {
                   contingency_pct: prefs.contingency_pct,
                   ohp_pct: prefs.ohp_pct,
+                  trade_markup: prefs.trade_markup,
                   vat_rate: isIreland ? 13.5 : 20,
                   currency: isIreland ? 'EUR' : 'GBP',
                   project_type: mergedProjectType,
@@ -3606,6 +3607,7 @@ CRITICAL RULES:
             return {
               contingency_pct: prefs.contingency_pct,
               ohp_pct: prefs.ohp_pct,
+              trade_markup: prefs.trade_markup,
               vat_rate: isIreland ? 13.5 : 20,
               currency: isIreland ? 'EUR' : 'GBP',
               ..._s3Pc.pricingOptions,
@@ -3756,6 +3758,9 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
               contingency: pricedResult.summary.contingency,
               ohp_pct: pricedResult.summary.ohp_pct,
               ohp: pricedResult.summary.ohp,
+              markup_by_trade: !!pricedResult.summary.markup_by_trade,
+              ohp_effective_pct: pricedResult.summary.ohp_effective_pct,
+              trades: pricedResult.summary.trades || [],
               grand_total: pricedResult.summary.grand_total,
             };
           }

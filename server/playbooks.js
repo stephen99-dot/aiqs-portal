@@ -30,6 +30,7 @@ function defaultPlaybook() {
     materials_markup: null,
     ohp_treatment: 'visible',      // buried | visible | stripped
     ohp_pct: null,                 // overrides the global OH&P % when set
+    trade_markup: {},              // { 'Electrical': 10, … } — per-trade override of ohp_pct
     contingency: null,
     contingency_pct: null,         // overrides the global contingency % when set
     vat_treatment: 'standard',
@@ -113,13 +114,20 @@ function recordInsight(db, userId, category, insight) {
 // Default is ZERO: BOQ rates are all-in competitive prices and nothing is
 // added on top automatically (front-end parity). Setting ohp_pct /
 // contingency_pct in a playbook is the explicit opt-in for a margin stack.
+//
+// trade_markup is the per-trade override of ohp_pct: { 'Electrical': 10,
+// 'Plumbing & Heating': 10 } keeps a builder competitive on the packages they
+// sub out while ohp_pct carries the rest. Cleaned through the pricer's own
+// normaliser so only known trade names and sane percentages ever reach a bill.
 function getPricingPrefs(db, userId) {
   let pb = null;
   try { pb = getPlaybook(db, userId); } catch (e) {}
   const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  const { normaliseTradeMarkup } = require('./deterministicPricer');
   return {
     ohp_pct: num(pb && pb.ohp_pct) != null ? num(pb.ohp_pct) : 0,
     contingency_pct: num(pb && pb.contingency_pct) != null ? num(pb.contingency_pct) : 0,
+    trade_markup: normaliseTradeMarkup(pb && pb.trade_markup),
   };
 }
 
@@ -127,11 +135,18 @@ function getPricingPrefs(db, userId) {
 // null/'' clears a value back to the 0 default; numbers are clamped 0-100.
 // Writes a new playbook version so the change is audit-trailed like any other
 // playbook edit.
-function setPricingPrefs(db, userId, { ohp_pct, contingency_pct } = {}) {
+// trade_markup replaces the whole map when given (an object); a trade left
+// out, or set to null/'', falls back to ohp_pct. Pass null to clear every
+// per-trade override.
+function setPricingPrefs(db, userId, { ohp_pct, contingency_pct, trade_markup } = {}) {
   const pb = getPlaybook(db, userId) || defaultPlaybook();
   const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : null);
   if (ohp_pct !== undefined) pb.ohp_pct = num(ohp_pct);
   if (contingency_pct !== undefined) pb.contingency_pct = num(contingency_pct);
+  if (trade_markup !== undefined) {
+    const { normaliseTradeMarkup } = require('./deterministicPricer');
+    pb.trade_markup = trade_markup === null ? {} : normaliseTradeMarkup(trade_markup);
+  }
   savePlaybook(db, userId, pb);
   return getPricingPrefs(db, userId);
 }
