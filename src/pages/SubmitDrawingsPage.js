@@ -142,7 +142,7 @@ export default function SubmitDrawingsPage() {
 
   const oversizedFiles = files.filter(f => f.size > MAX_FILE_BYTES);
   const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting && oversizedFiles.length === 0 && files.length <= MAX_FILES;
-  const noCredits = credits && !credits.is_admin && credits.free_credits <= 0;
+  const noCredits = credits && !credits.is_admin && !credits.unlimited && credits.free_credits <= 0;
 
   function addFiles(newFiles) {
     const incoming = Array.from(newFiles || []);
@@ -316,6 +316,8 @@ export default function SubmitDrawingsPage() {
           <div style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
             {credits.is_admin ? (
               <strong>Admin — unlimited submissions</strong>
+            ) : credits.unlimited ? (
+              <span><strong style={{ color: 'var(--text-primary)' }}>Unlimited plan — unlimited submissions</strong>{credits.total_projects > 0 ? ' (' + credits.total_projects + ' submitted so far)' : ''}</span>
             ) : noCredits ? (
               <span>You have <strong style={{ color: 'var(--danger)' }}>0 BOQ credits</strong> remaining. Top up to keep submitting.</span>
             ) : (

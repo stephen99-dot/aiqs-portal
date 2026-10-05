@@ -60,6 +60,25 @@ function UsageBar({ usage, user }) {
   const remaining = usage.boqRemaining != null ? usage.boqRemaining : usage.remaining;
   const atLimit = usage.boqAtLimit != null ? usage.boqAtLimit : usage.atLimit;
 
+  // Unlimited plan (and admins): BOQs are never deducted, so there is no
+  // balance to count down — just say so, with how many they've generated.
+  if (usage.boqUnlimited) {
+    return (
+      <Card data-tour="usage-bar" style={{ marginBottom: 16 }}>
+        <Card.Body style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '14px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Badge tone="violet" size="sm"><CrownIcon size={11} color="currentColor" /> {plan === 'unlimited' ? planLabel : 'Unlimited'}</Badge>
+            <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--text-primary)' }}>Unlimited BOQs</strong>
+              {used > 0 ? <> · {used} generated so far</> : null}
+            </span>
+          </div>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)' }}>Nothing is deducted on this plan</span>
+        </Card.Body>
+      </Card>
+    );
+  }
+
   if (isPayg) {
     return (
       <Card data-tour="usage-bar" style={{ marginBottom: 16 }}>

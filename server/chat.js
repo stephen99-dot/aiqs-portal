@@ -14,6 +14,7 @@ const { runAgenticTakeoff, shouldUseAgenticTakeoff } = require('./agenticTakeoff
 const { getBillingCycleStart } = require('./billingCycle');
 const boqCredits = require('./boqCredits');
 const messageCredits = require('./messageCredits');
+const { hasUnlimitedBoqs } = require('./unlimitedPlan');
 
 let boqGen, findingsGen, deterministicPricer, benchmarkStore, memoryEngine, zipProcessor, keyNormalizer, memoryStore;
 try { boqGen = require('./boqGenerator'); } catch (e) { console.log('[Chat] ExcelJS not installed — BOQ generation disabled. Run: npm install exceljs'); }
@@ -3496,8 +3497,9 @@ CRITICAL RULES:
     // funds both the chatbot and the Submit-Drawings page. Generating a BOQ
     // here spends one credit, exactly like submitting a job — so the counter
     // goes 5 → 4 either way. We only fall back to the legacy £99 pay gate /
-    // "limit reached" message once the balance hits zero.
-    if (wantsDocuments && req.user.role !== 'admin') {
+    // "limit reached" message once the balance hits zero. Admins and
+    // Unlimited-plan clients skip the gate (and the revision cap) entirely.
+    if (wantsDocuments && !hasUnlimitedBoqs(req.user)) {
       const dPlan = req.user.plan || 'starter';
 
       // Is this a revision of the user's most recent BOQ? Revisions are free
@@ -3862,7 +3864,9 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             // Charge one BOQ credit for an original (monthly allowance → bonus →
             // free credits). The doc_generated row above is already written, so
             // the helper is told the event is already counted this cycle.
-            if (!boqIsRevision && req.user.role !== 'admin') {
+            // Admins and Unlimited-plan clients are never charged (and never
+            // get the "credit used / running low" emails).
+            if (!boqIsRevision && !hasUnlimitedBoqs(req.user)) {
               try {
                 const afterSpend = boqCredits.consumeBoqCredit(userId, { eventAlreadyLogged: true });
                 // Confirm the spend to the customer, plus the LOW-balance
@@ -4174,8 +4178,9 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
       const qDocs = boqBal.used;
       const qRevs = db.prepare("SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND action='doc_revision'").get(userId).c;
       const qMsgLimit = qMsgs + msgBal.total;
-      const qDocLimit = qDocs + boqBal.total;
-      quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
+      // Unlimited-plan clients have no BOQ limit (Infinity would serialise as null anyway).
+      const qDocLimit = boqBal.unlimited ? null : qDocs + boqBal.total;
+      quotaInfo = { plan: qPlan, messages_used: qMsgs, messages_limit: qMsgLimit, docs_used: qDocs - qRevs, docs_limit: qDocLimit, boq_unlimited: !!boqBal.unlimited, revisions_used: qRevs, pay_per_doc: qPlan === 'starter' };
     }
 
     // Return session_id and takeoff_id so frontend can persist them
