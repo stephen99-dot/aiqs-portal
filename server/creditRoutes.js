@@ -7,14 +7,17 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
+const { hasUnlimitedBoqs } = require('./unlimitedPlan');
 
 // ─── GET /api/credits — Get current user's credit info ──────────────────────
 // `free_credits` here is the SINGLE spendable balance (free_credits + bonus_docs
 // + monthly allowance remaining), kept for backwards-compatibility with the
 // frontend which reads `credits.free_credits` as "BOQ credits remaining".
+// `unlimited` is true for admins and Unlimited-plan clients, whose BOQs are
+// never deducted (free_credits reads 999 for them as a legacy fallback).
 router.get('/', (req, res) => {
   try {
-    const user = db.prepare('SELECT id, total_projects, role FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, total_projects, role, plan FROM users WHERE id = ?').get(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -26,6 +29,18 @@ router.get('/', (req, res) => {
         total_projects: user.total_projects,
         can_submit: true,
         is_admin: true,
+        unlimited: true,
+      });
+    }
+
+    // Unlimited plan — nothing is deducted
+    if (hasUnlimitedBoqs(user)) {
+      return res.json({
+        free_credits: 999,
+        total_projects: user.total_projects || 0,
+        can_submit: true,
+        is_admin: false,
+        unlimited: true,
       });
     }
 
@@ -36,6 +51,7 @@ router.get('/', (req, res) => {
       total_projects: user.total_projects || 0,
       can_submit: total > 0,
       is_admin: false,
+      unlimited: false,
     });
   } catch (err) {
     console.error('Credits check error:', err);
@@ -46,7 +62,7 @@ router.get('/', (req, res) => {
 // ─── POST /api/credits/use — Consume 1 credit (called when submitting a project)
 router.post('/use', (req, res) => {
   try {
-    const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT id, role, plan FROM users WHERE id = ?').get(req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -54,7 +70,14 @@ router.post('/use', (req, res) => {
 
     // Admins don't use credits
     if (user.role === 'admin') {
-      return res.json({ success: true, remaining: 999 });
+      return res.json({ success: true, remaining: 999, unlimited: true });
+    }
+
+    // Unlimited-plan clients don't either — the job still counts towards
+    // their project tally, but nothing is deducted and no credit emails go out.
+    if (hasUnlimitedBoqs(user)) {
+      db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+      return res.json({ success: true, remaining: 999, unlimited: true });
     }
 
     const before = getBoqBalance(user.id);

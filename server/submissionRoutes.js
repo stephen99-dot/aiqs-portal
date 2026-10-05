@@ -14,6 +14,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./database');
 const { getBoqBalance, consumeBoqCredit } = require('./boqCredits');
+const { hasUnlimitedBoqs } = require('./unlimitedPlan');
 const {
   STAGES, SOURCES, DEFAULT_STAGE, DEFAULT_TURNAROUND_DAYS,
   isValidStage, isValidSource, stageLabel, defaultDueAt,
@@ -286,15 +287,17 @@ router.post('/', uploadFiles, async (req, res) => {
   res.on('close', () => cleanupUploads(req));
   try {
     const user = db.prepare(
-      'SELECT id, email, full_name, company, phone, role, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
+      'SELECT id, email, full_name, company, phone, role, plan, free_credits, bonus_docs, monthly_boq_quota, billing_cycle_start FROM users WHERE id = ?'
     ).get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const isAdmin = user.role === 'admin';
+    // Admins and Unlimited-plan clients submit without spending a credit.
+    const boqUnlimited = hasUnlimitedBoqs(user);
 
     // Single spendable balance: free_credits + bonus_docs + monthly allowance left.
-    const totalCredits = isAdmin ? Infinity : getBoqBalance(user.id).total;
-    if (!isAdmin && totalCredits <= 0) {
+    const totalCredits = boqUnlimited ? Infinity : getBoqBalance(user.id).total;
+    if (!boqUnlimited && totalCredits <= 0) {
       return res.status(403).json({ error: 'No BOQ credits remaining', upgrade_required: true });
     }
 
@@ -362,12 +365,15 @@ router.post('/', uploadFiles, async (req, res) => {
       }
     }
 
-    let creditsRemaining = isAdmin ? 999 : Math.max(0, totalCredits - 1);
+    let creditsRemaining = boqUnlimited ? 999 : Math.max(0, totalCredits - 1);
     if (!isAdmin) {
+      // Every client job counts towards their project tally, Unlimited or not.
+      db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+    }
+    if (!boqUnlimited) {
       // Charge one BOQ credit (monthly allowance → bonus_docs → free_credits).
       // Called BEFORE the drawing_submissions row is inserted below, so the
       // helper measures this cycle's usage without counting this job yet.
-      db.prepare('UPDATE users SET total_projects = total_projects + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
       const after = consumeBoqCredit(user.id, { eventAlreadyLogged: false });
       creditsRemaining = Math.max(0, after.total);
       // Confirm the spend to the customer — and the LOW-balance top-up email

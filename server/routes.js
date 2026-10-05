@@ -13,6 +13,7 @@ const { startPipelineRun } = require('./pipelineRoutes');
 const { getBillingCycleStart } = require('./billingCycle');
 const { getBoqBalance } = require('./boqCredits');
 const { getMessageBalance } = require('./messageCredits');
+const { UNLIMITED_PLAN, UNLIMITED_PLAN_MESSAGES, grantUnlimitedPlan } = require('./unlimitedPlan');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
 const { grantSignupCredits } = require('./signupCredits');
 const { rateLimit } = require('./publicRateLimit');
@@ -33,6 +34,9 @@ const PLANS = {
   professional: { label: 'Professional',   quota: 10, boqQuota: 10, price: 347 },
   premium:      { label: 'Premium',        quota: 20, boqQuota: 20, price: 447 },
   custom:       { label: 'Custom',         quota: 0,  boqQuota: 0,  price: 0   },
+  // Unlimited BOQs (never deducted) + UNLIMITED_PLAN_MESSAGES messages granted
+  // when the plan is applied. Quotas are 0 because nothing is metered monthly.
+  [UNLIMITED_PLAN]: { label: 'Unlimited',  quota: 0,  boqQuota: 0,  price: 0, unlimitedBoqs: true, messageCredits: UNLIMITED_PLAN_MESSAGES },
 };
 
 // Ensure new columns exist (safe to run on every start)
@@ -1118,11 +1122,15 @@ router.get('/usage', authMiddleware, (req, res) => {
 
   // BOQ credits — the single spendable balance shared by the chatbot and the
   // Submit-Drawings page. `boqLimit` is the effective granted total (used +
-  // remaining) so the dashboard bar reads e.g. 1 / 5 after one BOQ.
+  // remaining) so the dashboard bar reads e.g. 1 / 5 after one BOQ. Admins
+  // and Unlimited-plan clients never run out: `boqUnlimited` tells the
+  // dashboard to show "Unlimited" instead of a bar (the 999s are a fallback
+  // for older clients that only read the numbers).
   const balance = getBoqBalance(req.user.id);
+  const boqUnlimited = !!balance.unlimited;
   const boqUsed = balance.isAdmin ? 0 : balance.used;
-  const boqRemaining = balance.isAdmin ? 999 : balance.total;
-  const boqLimit = balance.isAdmin ? 999 : (boqUsed + boqRemaining);
+  const boqRemaining = boqUnlimited ? 999 : balance.total;
+  const boqLimit = boqUnlimited ? 999 : (boqUsed + boqRemaining);
 
   // Calculate cycle dates for display
   const cycleStartDate = new Date(cycleStart);
@@ -1136,8 +1144,8 @@ router.get('/usage', authMiddleware, (req, res) => {
     billingCycleEnd: cycleEndDate.toISOString(),
     messagesUsed, messagesLimit, messagesRemaining,
     messagesAtLimit: messagesLimit > 0 && messagesUsed >= messagesLimit,
-    boqUsed, boqLimit, boqRemaining,
-    boqAtLimit: boqLimit > 0 && boqUsed >= boqLimit,
+    boqUsed, boqLimit, boqRemaining, boqUnlimited,
+    boqAtLimit: !boqUnlimited && boqLimit > 0 && boqUsed >= boqLimit,
   });
 });
 
@@ -1154,7 +1162,9 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
     // reset). `used` is lifetime; `*_limit` is used + remaining so the Users
     // area bars read e.g. 2 / 5. `boq_remaining` / `message_credits` are the
     // live spendable balances that tick down on use and up on top-up/purchase.
-    const boqBal = u.role === 'admin' ? { total: Infinity, used: 0 } : getBoqBalance(u.id);
+    // `boq_unlimited` marks admins and Unlimited-plan clients, whose BOQs are
+    // never deducted (boq_remaining / docs_limit are null for them).
+    const boqBal = u.role === 'admin' ? { total: Infinity, used: 0, unlimited: true } : getBoqBalance(u.id);
     const msgBal = u.role === 'admin' ? { total: Infinity, used: 0 } : getMessageBalance(u.id);
     const docsUsed = boqBal.used;
     const docsLimit = boqBal.total === Infinity ? null : docsUsed + boqBal.total;
@@ -1175,6 +1185,7 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       free_credits: u.free_credits || 0,
       docs_used: docsUsed, docs_limit: docsLimit,
       boq_remaining: boqBal.total === Infinity ? null : boqBal.total,
+      boq_unlimited: !!boqBal.unlimited,
       has_estimator: u.has_estimator ? 1 : 0,
       country: u.country || null, region: u.region || null, country_name: u.country_name || null,
       onboarding_completed_at: u.onboarding_completed_at || null,
@@ -1366,18 +1377,41 @@ router.delete('/admin/users/:id', authMiddleware, adminMiddleware, (req, res) =>
 router.put('/admin/users/:id/plan', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { plan, monthlyQuota, boqQuota } = req.body;
-    const validPlans = ['starter', 'professional', 'premium', 'custom'];
-    if (!plan || !validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be: starter, professional, premium, or custom' });
+    const validPlans = Object.keys(PLANS);
+    if (!plan || !validPlans.includes(plan)) return res.status(400).json({ error: 'Invalid plan. Must be one of: ' + validPlans.join(', ') });
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const quota = monthlyQuota !== undefined ? parseInt(monthlyQuota) : (PLANS[plan]?.quota || 0);
     const boq   = boqQuota    !== undefined ? parseInt(boqQuota)     : (PLANS[plan]?.boqQuota || 0);
     db.prepare('UPDATE users SET plan = ?, monthly_quota = ?, monthly_boq_quota = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(plan, quota, boq, req.params.id);
+
+    // Unlimited plan: BOQs stop being deducted from here on, and the plan's
+    // message allowance is granted the first time the plan is applied (the
+    // balance is topped UP to it, never reduced). Re-saving the plan on
+    // someone already on it leaves their messages alone.
+    let unlimitedGrant = null;
+    if (plan === UNLIMITED_PLAN) {
+      unlimitedGrant = grantUnlimitedPlan(req.params.id);
+    }
+
     const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
     const planInfo = getUserPlanInfo(updated);
-    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' plan changed to ' + plan, detail: quota + ' msgs, ' + boq + ' BOQs/month', user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ id: updated.id, email: updated.email, fullName: updated.full_name, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining });
+    const boqBal = getBoqBalance(updated.id);
+    const detail = plan === UNLIMITED_PLAN
+      ? 'Unlimited BOQs' + (unlimitedGrant && unlimitedGrant.messagesGranted > 0
+          ? ', +' + unlimitedGrant.messagesGranted + ' messages (balance now ' + unlimitedGrant.messagesAfter + ')'
+          : ', message balance unchanged (' + (unlimitedGrant ? unlimitedGrant.messagesAfter : updated.message_credits || 0) + ')')
+      : quota + ' msgs, ' + boq + ' BOQs/month';
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' plan changed to ' + plan, detail, user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({
+      id: updated.id, email: updated.email, fullName: updated.full_name,
+      plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining,
+      message_credits: updated.role === 'admin' ? null : (updated.message_credits || 0),
+      boq_unlimited: !!boqBal.unlimited,
+      boq_remaining: boqBal.total === Infinity ? null : boqBal.total,
+      unlimited_grant: unlimitedGrant,
+    });
   } catch (err) {
     console.error('Update plan error:', err);
     res.status(500).json({ error: 'Failed to update plan' });
@@ -1521,8 +1555,11 @@ router.put('/admin/users/:id/credits', authMiddleware, adminMiddleware, (req, re
     }
     const balance = getBoqBalance(req.params.id);
     const msgBalance = getMessageBalance(req.params.id);
-    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_docs + ' bonus docs' + (hasFree ? ', ' + free_credits + ' free credits' : '') + ' → ' + balance.total + ' BOQ balance' + (hasMsgCredits ? ', ' + message_credits + ' message credits' : ''), user_id: user.id, user_name: user.full_name, user_email: user.email });
-    res.json({ success: true, bonus_messages, bonus_docs, free_credits: hasFree ? free_credits : (user.free_credits || 0), boq_balance: balance.total, message_credits: msgBalance.total, breakdown: balance });
+    // Infinity does not survive JSON — report unlimited balances as null plus a flag.
+    const boqBalanceOut = balance.unlimited ? null : balance.total;
+    const msgBalanceOut = Number.isFinite(msgBalance.total) ? msgBalance.total : null;
+    logActivity({ event_type: 'plan_changed', title: (user.full_name || user.email) + ' credits updated by admin', detail: bonus_docs + ' bonus docs' + (hasFree ? ', ' + free_credits + ' free credits' : '') + ' → ' + (balance.unlimited ? 'unlimited' : balance.total) + ' BOQ balance' + (hasMsgCredits ? ', ' + message_credits + ' message credits' : ''), user_id: user.id, user_name: user.full_name, user_email: user.email });
+    res.json({ success: true, bonus_messages, bonus_docs, free_credits: hasFree ? free_credits : (user.free_credits || 0), boq_balance: boqBalanceOut, boq_unlimited: !!balance.unlimited, message_credits: msgBalanceOut, breakdown: { ...balance, total: boqBalanceOut } });
   } catch (err) {
     console.error('Set credits error:', err);
     res.status(500).json({ error: 'Failed to update credits' });

@@ -7,6 +7,7 @@ const PLAN_OPTIONS = [
   { value: 'starter', label: 'Starter (PAYG)', quota: 0 },
   { value: 'professional', label: 'Professional', quota: 10 },
   { value: 'premium', label: 'Premium', quota: 20 },
+  { value: 'unlimited', label: 'Unlimited', quota: 0 }, // unlimited BOQs + 1000 messages granted on apply
   { value: 'custom', label: 'Custom', quota: 999 },
 ];
 
@@ -186,7 +187,7 @@ function ClientsTab({ t }) {
   }
 
   const planBadge = (plan) => {
-    const s = { starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' }, professional: { bg: t.warningBg, color: t.warning, label: 'Pro' }, premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' }, custom: { bg: t.goldBg, color: t.gold, label: 'Custom' } }[plan] || { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' };
+    const s = { starter: { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' }, professional: { bg: t.warningBg, color: t.warning, label: 'Pro' }, premium: { bg: 'rgba(124,58,237,0.1)', color: '#A78BFA', label: 'Premium' }, unlimited: { bg: 'rgba(8,145,178,0.12)', color: '#0891B2', label: 'Unlimited' }, custom: { bg: t.goldBg, color: t.gold, label: 'Custom' } }[plan] || { bg: t.surfaceHover, color: t.textMuted, label: 'PAYG' };
     return <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{s.label}</span>;
   };
 

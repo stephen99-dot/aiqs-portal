@@ -501,10 +501,14 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const muted = isDark ? '#5A6E87' : '#94A3B8';
   const bg2 = isDark ? '#131B2E' : '#FFF';
 
+  // Unlimited: BOQs are never deducted and the message balance is topped up to
+  // UNLIMITED_PLAN_MESSAGES when the plan is applied (server: unlimitedPlan.js).
+  const UNLIMITED_PLAN_MESSAGES = 1000;
   const PLANS = [
     { value: 'starter', label: 'Starter', msgs: 10, docs: 0 },
     { value: 'professional', label: 'Professional', msgs: 100, docs: 10 },
     { value: 'premium', label: 'Premium', msgs: 200, docs: 20 },
+    { value: 'unlimited', label: 'Unlimited', msgs: 0, docs: 0 },
     { value: 'custom', label: 'Custom', msgs: null, docs: null },
   ];
 
@@ -517,14 +521,66 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const doAction = async (key, fn) => { setLoading(key); setErrorMsg(''); try { await fn(); } catch (e) { setErrorMsg(e.message || 'Action failed'); } finally { setLoading(''); } };
   function showSuccess(msg) { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 4000); }
 
+  // Fold a /plan response back into the row: the plan itself plus whatever the
+  // server reports changed with it — the Unlimited plan grants messages and
+  // switches BOQs to never-deducted, and leaving it switches them back.
+  const applyPlanResult = (res, nextPlan, quotas) => {
+    const next = { ...user, plan: nextPlan, ...quotas };
+    if (res && res.message_credits != null) { next.message_credits = res.message_credits; setMsgCredits(res.message_credits); }
+    if (res && res.boq_unlimited != null) next.boq_unlimited = res.boq_unlimited;
+    if (res && res.boq_remaining !== undefined) next.boq_remaining = res.boq_remaining;
+    onUpdate(next);
+  };
+  const unlimitedSuccessText = (res) => {
+    const g = res && res.unlimited_grant;
+    return 'Unlimited plan applied — BOQs are no longer deducted'
+      + (g && g.messagesGranted > 0
+        ? ', +' + g.messagesGranted + ' messages (balance now ' + g.messagesAfter + ')'
+        : ', message balance unchanged');
+  };
+
   const savePlan = () => doAction('plan', async () => {
-    await apiFetch('/admin/users/' + user.id + '/plan', {
+    const quotas = { monthly_quota: parseInt(msgAllowance) || 0, monthly_boq_quota: parseInt(docAllowance) || 0 };
+    const res = await apiFetch('/admin/users/' + user.id + '/plan', {
       method: 'PUT',
-      body: JSON.stringify({ plan, monthlyQuota: parseInt(msgAllowance) || 0, boqQuota: parseInt(docAllowance) || 0 })
+      body: JSON.stringify({ plan, monthlyQuota: quotas.monthly_quota, boqQuota: quotas.monthly_boq_quota })
     });
-    onUpdate({ ...user, plan, monthly_quota: parseInt(msgAllowance) || 0, monthly_boq_quota: parseInt(docAllowance) || 0 });
-    showSuccess('Plan updated to ' + plan);
+    applyPlanResult(res, plan, quotas);
+    showSuccess(plan === 'unlimited' ? unlimitedSuccessText(res) : 'Plan updated to ' + plan);
   });
+
+  // One click to put a client on the Unlimited plan: unlimited BOQs and the
+  // message top-up. Consequential enough to confirm.
+  const grantUnlimited = () => {
+    const who = user.full_name || user.email;
+    if (!window.confirm(`Put ${who} on the Unlimited plan?\n\nBOQs will no longer be deducted from their balance, and their message balance will be topped up to ${UNLIMITED_PLAN_MESSAGES.toLocaleString()}.`)) return;
+    doAction('unlimited', async () => {
+      const res = await apiFetch('/admin/users/' + user.id + '/plan', {
+        method: 'PUT',
+        body: JSON.stringify({ plan: 'unlimited', monthlyQuota: 0, boqQuota: 0 })
+      });
+      setPlan('unlimited'); setMsgAllowance(0); setDocAllowance(0);
+      applyPlanResult(res, 'unlimited', { monthly_quota: 0, monthly_boq_quota: 0 });
+      showSuccess(unlimitedSuccessText(res));
+    });
+  };
+
+  // Back to Starter (pay as you go). Their stored BOQ credits come back into
+  // play; the messages they were granted stay.
+  const removeUnlimited = () => {
+    const who = user.full_name || user.email;
+    const stored = (user.free_credits || 0) + (user.bonus_docs || 0);
+    if (!window.confirm(`Take ${who} off the Unlimited plan?\n\nThey go back to Starter (pay as you go) and spend their stored BOQ credits again (${stored} stored). Their message balance is kept.`)) return;
+    doAction('unlimited', async () => {
+      const res = await apiFetch('/admin/users/' + user.id + '/plan', {
+        method: 'PUT',
+        body: JSON.stringify({ plan: 'starter', monthlyQuota: 0, boqQuota: 0 })
+      });
+      setPlan('starter'); setMsgAllowance(0); setDocAllowance(0);
+      applyPlanResult(res, 'starter', { monthly_quota: 0, monthly_boq_quota: 0 });
+      showSuccess('Unlimited plan removed — back to Starter, spending stored credits (' + stored + ' available)');
+    });
+  };
 
   const saveAllowances = () => doAction('allowances', async () => {
     const msgs = parseInt(msgAllowance) || 0;
@@ -679,14 +735,17 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
   const msgPct = msgsTotal > 0 ? Math.min(100, (msgsUsed / msgsTotal) * 100) : 0;
   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
 
+  // Admins and Unlimited-plan clients never have BOQs deducted.
+  const isUnlimited = user.role === 'admin' || user.plan === 'unlimited' || user.boq_unlimited === true;
+
   // The spendable BOQ balance the user can actually spend right now —
   // free_credits + bonus_docs. Prefer the authoritative figure the server
-  // computed via getBoqBalance (user.boq_remaining).
-  const spendableBalance = user.role === 'admin'
+  // computed via getBoqBalance (user.boq_remaining). For an Unlimited client
+  // this is what they'd go back to if the plan were removed.
+  const storedCredits = (user.free_credits || 0) + (user.bonus_docs || 0);
+  const spendableBalance = isUnlimited
     ? Infinity
-    : (user.boq_remaining != null
-        ? user.boq_remaining
-        : (user.free_credits || 0) + (user.bonus_docs || 0));
+    : (user.boq_remaining != null ? user.boq_remaining : storedCredits);
 
   return (
     <>
@@ -718,7 +777,31 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             purchased/granted credits (never expire) plus any monthly allowance
             left. This is the primary control; the monthly plan allowance lives
             under "Subscription allowances" below for the few on monthly plans. */}
-        {user.role !== 'admin' && (
+        {user.role !== 'admin' && isUnlimited && (
+          <div style={{ padding: '16px 18px', borderRadius: 10, border: '1px solid rgba(8,145,178,0.35)', background: bg2, marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Available BOQs</span>
+              <span style={{ fontSize: 26, fontWeight: 800, color: '#0891B2', lineHeight: 1 }}>Unlimited</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: muted, marginBottom: 14 }}>
+              Unlimited plan — BOQs are never deducted. {user.docs_used || 0} generated so far.
+              {storedCredits > 0 ? ` ${storedCredits} stored credit${storedCredits === 1 ? '' : 's'} kept in reserve for if the plan is ever removed.` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(8,145,178,0.12)', color: '#0891B2', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Zap size={11} /> Unlimited plan
+              </span>
+              <button onClick={removeUnlimited} disabled={loading === 'unlimited'} style={outBtn}>
+                {loading === 'unlimited' ? 'Updating…' : 'Remove Unlimited plan'}
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
+              Removing the plan puts them back on Starter (pay as you go) with their stored credits. Their message balance is kept.
+            </div>
+          </div>
+        )}
+
+        {user.role !== 'admin' && !isUnlimited && (
           <div style={{ padding: '16px 18px', borderRadius: 10, border: '1px solid ' + border, background: bg2, marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Available BOQs</span>
@@ -727,7 +810,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               </span>
             </div>
             <div style={{ fontSize: 11.5, color: muted, marginBottom: 14 }}>
-              {(user.free_credits || 0) + (user.bonus_docs || 0)} BOQ credit{((user.free_credits || 0) + (user.bonus_docs || 0)) === 1 ? '' : 's'} — never expire, top up here or via a portal purchase
+              {storedCredits} BOQ credit{storedCredits === 1 ? '' : 's'} — never expire, top up here or via a portal purchase
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div>
@@ -747,6 +830,16 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
             </div>
             <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
               Set the spendable balance directly. It ticks down as BOQs are generated and up when topped up or purchased. "Zero" empties it.
+            </div>
+
+            {/* Unlimited plan — unlimited BOQs + the message top-up, in one click. */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed ' + border, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11.5, color: muted }}>
+                <strong style={{ color: text }}>Unlimited plan</strong> — unlimited BOQs and {UNLIMITED_PLAN_MESSAGES.toLocaleString()} messages. Nothing is deducted while it's on.
+              </div>
+              <button onClick={grantUnlimited} disabled={loading === 'unlimited'} style={btn('#0891B2')}>
+                <Zap size={12} /> {loading === 'unlimited' ? 'Applying…' : 'Grant Unlimited plan'}
+              </button>
             </div>
           </div>
         )}
@@ -777,6 +870,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           </div>
           <div style={{ fontSize: 10.5, color: muted, marginTop: 8 }}>
             Persistent balance — one is spent per chatbot message. New accounts start at 0.
+            {isUnlimited ? ` The Unlimited plan tops this up to ${UNLIMITED_PLAN_MESSAGES.toLocaleString()} when it's applied; top up again here any time.` : ''}
           </div>
         </div>
         )}
@@ -1368,8 +1462,8 @@ export default function UserManagementPage({ theme }) {
                         <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
                         <td style={{padding:'12px 16px'}}>
                           <span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',
-                            background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':user.plan==='custom'?'rgba(245,158,11,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),
-                            color:user.role==='admin'?'#2563EB':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':user.plan==='custom'?'#F59E0B':(isDark?'#94A3B8':'#64748B')}}>
+                            background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='unlimited'?'rgba(8,145,178,0.12)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':user.plan==='custom'?'rgba(245,158,11,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),
+                            color:user.role==='admin'?'#2563EB':user.plan==='unlimited'?'#0891B2':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':user.plan==='custom'?'#F59E0B':(isDark?'#94A3B8':'#64748B')}}>
                             {user.role==='admin'?'Admin':(user.plan||'starter')}
                           </span>
                         </td>
@@ -1396,6 +1490,13 @@ export default function UserManagementPage({ theme }) {
                           {(()=>{
                             if (user.role === 'admin') return <span style={{fontSize:11,color:muted}}>Unlimited</span>;
                             const docsUsed = user.docs_used || 0;
+                            // Unlimited plan — nothing is deducted; show the lifetime count only.
+                            if (user.plan === 'unlimited' || user.boq_unlimited) return (
+                              <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
+                                <span style={{fontSize:11,fontWeight:700,color:'#0891B2'}}>Unlimited</span>
+                                <span style={{fontSize:10,color:muted}}>{docsUsed} used</span>
+                              </div>
+                            );
                             // Spendable BOQ balance (free + bonus) — the number that
                             // ticks down on use and up on top-up/purchase.
                             const remaining = user.boq_remaining != null

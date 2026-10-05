@@ -48,9 +48,12 @@ function fmtRemaining(n) {
 }
 
 // Customer-facing: a credit was just spent on a submitted job. `remaining` is
-// the balance AFTER the spend. Admins never receive these (they don't spend).
+// the balance AFTER the spend. Admins and Unlimited-plan clients never receive
+// these (they don't spend): an infinite balance means nothing was deducted, so
+// there is no "credit used" — and certainly no "you're out" — to report.
 function notifyCreditSpent(user, remaining, jobLabel) {
   if (!user || !user.email) return;
+  if (remaining === Infinity) return;
   const n = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
 
   mailer.sendMail({
@@ -124,7 +127,9 @@ function notifyPackPurchased({ email, credits, amountPence, sessionId, status, b
     paragraphs: ok
       ? [
         (email || 'A customer') + ' bought a ' + amount + ' pack — ' + credits + ' BOQ credit' + (credits === 1 ? '' : 's') + ' added.',
-        balanceAfter != null ? 'Their balance is now ' + fmtRemaining(balanceAfter) + '.' : '',
+        balanceAfter === Infinity
+          ? 'They are on the Unlimited plan, so these credits are held in reserve and nothing is deducted while the plan is active.'
+          : balanceAfter != null ? 'Their balance is now ' + fmtRemaining(balanceAfter) + '.' : '',
         'Stripe session: ' + (sessionId || 'n/a'),
       ].filter(Boolean)
       : willSelfResolve
@@ -219,10 +224,13 @@ async function runCreditReminders() {
 
   let candidates;
   try {
+    // Unlimited-plan clients can't run out, so they never get chased —
+    // grantUnlimitedPlan() also clears credits_out_at when the plan is applied.
     candidates = db.prepare(`
       SELECT id, email, full_name, free_credits, bonus_docs, credits_out_at, credit_reminder_stage
       FROM users
       WHERE role = 'client'
+        AND COALESCE(plan, '') != 'unlimited'
         AND COALESCE(suspended, 0) = 0
         AND credits_out_at IS NOT NULL
         AND email IS NOT NULL AND email != ''
