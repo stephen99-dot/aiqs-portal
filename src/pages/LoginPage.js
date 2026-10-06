@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
-const reviews = [
-  { text: "We submitted drawings on a Monday and had a fully priced BOQ back by Tuesday morning. The accuracy was spot-on — saved our estimator two full days of work.", author: "Mark Ellison", role: "Contracts Manager, Ellison Build Ltd", initials: "ME" },
-  { text: "The findings reports are incredibly detailed. We used one to support a planning application and the consultant was genuinely impressed by the level of breakdown.", author: "Sarah Donovan", role: "Development Director, Donovan Homes", initials: "SD" },
-  { text: "We've tried other estimating tools but nothing comes close for speed and quality. Our tender submissions look far more professional now.", author: "Tom Rafferty", role: "Director, Rafferty Contractors", initials: "TR" },
-  { text: "As a smaller contractor, having access to AI-powered quantity surveying levels the playing field. We're winning more tenders than ever.", author: "Claire Hutchinson", role: "Owner, CH Construction Services", initials: "CH" },
-];
+import TrustpilotReviewCarousel from '../components/TrustpilotReviewCarousel';
 
 const stats = [
   { value: "£2.5M+", label: "Largest single BOQ" },
@@ -31,8 +25,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [current, setCurrent] = useState(0);
-  const [fading, setFading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -40,14 +32,6 @@ export default function LoginPage() {
     if (err === 'google_denied') setError('Google sign-in was cancelled.');
     else if (err === 'account_suspended') setError('Your account has been suspended. Please contact support.');
     else if (err) setError('Google sign-in failed. Please try again.');
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFading(true);
-      setTimeout(() => { setCurrent(c => (c + 1) % reviews.length); setFading(false); }, 400);
-    }, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   async function handleSubmit(e) {
@@ -58,8 +42,6 @@ export default function LoginPage() {
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
-
-  const review = reviews[current];
 
   return (
     <>
@@ -103,23 +85,8 @@ export default function LoginPage() {
               </div>
             ))}
           </div>
-          <div style={{ ...styles.card, opacity: fading ? 0 : 1, transition: 'opacity 0.4s ease' }}>
-            <span style={styles.quoteIcon}>"</span>
-            <p style={styles.reviewText}>{review.text}</p>
-            <div style={styles.reviewer}>
-              <div style={styles.avatar}>{review.initials}</div>
-              <div>
-                <div style={styles.authorName}>{review.author}</div>
-                <div style={styles.authorRole}>{review.role}</div>
-              </div>
-            </div>
-          </div>
-          <div style={styles.dots}>
-            {reviews.map((_, i) => (
-              <button key={i} style={{ ...styles.dot, ...(i === current ? styles.dotActive : {}) }}
-                onClick={() => { setFading(true); setTimeout(() => { setCurrent(i); setFading(false); }, 400); }} />
-            ))}
-          </div>
+          {/* Real reviews from the Trustpilot profile — see server/trustpilotReviews.js */}
+          <TrustpilotReviewCarousel />
           <p style={styles.tagline}>Precision estimating, powered by AI.</p>
         </div>
 
@@ -179,16 +146,6 @@ const styles = {
   stat: { display: 'flex', flexDirection: 'column', gap: 2 },
   statVal: { color: '#F5A623', fontSize: 22, fontWeight: 'bold' },
   statLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase' },
-  card: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '28px 32px', backdropFilter: 'blur(8px)', marginBottom: 20 },
-  quoteIcon: { display: 'block', fontSize: 56, lineHeight: 0.8, color: '#F5A623', marginBottom: 12 },
-  reviewText: { color: 'rgba(255,255,255,0.88)', fontSize: 15, lineHeight: 1.7, fontStyle: 'italic', margin: '0 0 20px' },
-  reviewer: { display: 'flex', alignItems: 'center', gap: 12 },
-  avatar: { width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #F5A623, #d47e00)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: 13, flexShrink: 0 },
-  authorName: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  authorRole: { color: 'rgba(255,255,255,0.45)', fontSize: 12 },
-  dots: { display: 'flex', gap: 8, marginBottom: 32 },
-  dot: { width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', padding: 0, transition: 'all 0.3s' },
-  dotActive: { background: '#F5A623', width: 20, borderRadius: 3 },
   tagline: { color: 'rgba(255,255,255,0.25)', fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase', margin: 0 },
   formWrap: { width: '100%', maxWidth: 380 },
   labelRow: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },

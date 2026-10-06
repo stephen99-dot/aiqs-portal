@@ -932,6 +932,100 @@ function CostsTab({ t }) {
   );
 }
 
+// ─── Trustpilot reviews on the sign-in page ─────────────────────────────────
+// The sign-in and register pages rotate the business's real Trustpilot
+// reviews, read from the public profile by server/trustpilotReviews.js on a
+// schedule. This card shows what was imported and when, and re-reads the
+// profile on demand — a failed read says why, and the sign-in page keeps the
+// last good set meanwhile.
+function TrustpilotSyncCard({ t }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const load = () => apiFetch('/admin/trustpilot').then(setData).catch(e => setError(e.message));
+  useEffect(() => { load(); }, []);
+
+  async function syncNow() {
+    setBusy(true); setError('');
+    try {
+      const r = await apiFetch('/admin/trustpilot/sync', { method: 'POST' });
+      if (!r.ok) setError(r.message || 'Sync failed');
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 12, padding: '16px 20px', marginBottom: 20 };
+  const meta = (data && data.meta) || null;
+  const reviews = (data && data.reviews) || [];
+  const minRating = data ? data.min_rating_shown : 4;
+  const shown = reviews.filter(r => !r.hidden && r.rating >= minRating).length;
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'never');
+  const failed = meta && meta.status === 'failed';
+  const list = showAll ? reviews : reviews.slice(0, 5);
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 700, color: t.text, fontSize: 15 }}>Trustpilot reviews on the sign-in page</div>
+        <span style={{ flex: 1 }} />
+        <a href={(data && data.source_url) || '#'} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: t.textMuted }}>Open profile</a>
+        <button type="button" disabled={busy} onClick={syncNow} style={{ fontSize: 12.5, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', background: '#00B67A', color: '#fff', border: 'none', fontWeight: 700 }}>
+          {busy ? 'Reading Trustpilot…' : 'Sync now'}
+        </button>
+      </div>
+      {error && <div style={{ marginTop: 8, color: '#EF4444', fontSize: 13 }}>{error}</div>}
+      {!data && !error && <div style={{ marginTop: 8, color: t.textMuted, fontSize: 13 }}>Loading…</div>}
+      {data && (
+        <>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 12 }}>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: '#00B67A' }}>{meta && meta.trust_score != null ? meta.trust_score : '—'}</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>TrustScore</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: t.text }}>{meta && meta.number_of_reviews != null ? meta.number_of_reviews : '—'}</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>Reviews on Trustpilot</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: t.text }}>{reviews.length}</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>Imported · {shown} shown ({minRating}★ and up)</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: failed ? '#EF4444' : t.text }}>{meta ? when(meta.last_success_at) : 'never'}</div>
+              <div style={{ fontSize: 12, color: t.textMuted }}>Last successful read</div>
+            </div>
+          </div>
+          {meta && meta.message && (
+            <div style={{ marginTop: 10, fontSize: 13, color: failed ? '#EF4444' : t.textMuted }}>
+              {failed ? 'Last attempt failed (' + when(meta.last_attempt_at) + '): ' : ''}{meta.message}
+            </div>
+          )}
+          {!meta && <div style={{ marginTop: 10, fontSize: 13, color: t.textMuted }}>Nothing imported yet — press Sync now. The sign-in page shows a link to the profile until then.</div>}
+          {list.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              {list.map(r => (
+                <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'baseline', padding: '8px 0', borderTop: '1px solid ' + t.border, fontSize: 13 }}>
+                  <span style={{ color: '#00B67A', fontWeight: 700, whiteSpace: 'nowrap' }}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                  <span style={{ color: t.text, fontWeight: 600 }}>{r.author}</span>
+                  <span style={{ color: t.textMuted, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title || r.body}</span>
+                  <span style={{ color: t.textMuted, whiteSpace: 'nowrap' }}>{(r.published_at || '').slice(0, 10)}</span>
+                  {r.rating < minRating && <span style={{ fontSize: 11, color: t.textMuted }}>not shown</span>}
+                </div>
+              ))}
+              {reviews.length > 5 && (
+                <button type="button" onClick={() => setShowAll(v => !v)} style={{ marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, fontSize: 12.5, padding: 0 }}>
+                  {showAll ? 'Show fewer' : 'Show all ' + reviews.length}
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Feedback tab — Trustpilot review ask + in-portal survey results ────────
 function SurveyTab({ t }) {
   const [data, setData] = useState(null);
@@ -953,6 +1047,7 @@ function SurveyTab({ t }) {
 
   return (
     <div>
+      <TrustpilotSyncCard t={t} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 14 }}>
         <div style={card}>
           <div style={{ fontSize: 26, fontWeight: 700, color: '#00B67A' }}>{trustpilot ? trustpilot.clicked : 0}</div>

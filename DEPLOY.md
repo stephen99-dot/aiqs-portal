@@ -70,6 +70,9 @@ prove the scale — that is the gate working, not an error.
 | `STRICT_RECALC` | strict (on) | `0` reverts to warn-and-ship on a bill that does not reconcile. Leave it strict. |
 | `STRICT_ISSUE_GATE` | warn | `1` hard-fails generation when the deliverable gate finds a defect. |
 | `BLENDED_DAY_RATE` | `250` | Single-operative day rate for the labour governor and programme engine. |
+| `TRUSTPILOT_DOMAIN` | `theaiqs.co.uk` | The Trustpilot profile whose reviews the sign-in page shows. |
+| `TRUSTPILOT_REVIEW_URL` | `https://uk.trustpilot.com/review/<domain>` | Override the profile page read by the sync. |
+| `TRUSTPILOT_SYNC` | on | `off` stops the scheduled sync (the admin **Sync now** button still works). |
 
 ## Running the sidecar separately
 
