@@ -1,0 +1,8 @@
+# The exchange-rate cache is written by fx-rates.php and read by index.php.
+# Nothing in here needs to be reachable over the web.
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Deny from all
+</IfModule>

@@ -8,3 +8,7 @@ build/
 evidence/__pycache__/
 evidence/**/__pycache__/
 evidence/.pytest_cache/
+
+# Exchange-rate cache written at runtime by hostinger/fx-rates.php
+hostinger/cache/*.json
+hostinger/cache/*.tmp
