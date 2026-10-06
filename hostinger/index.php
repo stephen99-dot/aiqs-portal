@@ -2026,16 +2026,17 @@ document.documentElement.classList.remove('no-js');
     return Math.round(x * p) / p;
   }
   // A converted price that looks set by a person rather than by a formula:
-  // 201 -> 199, 468 -> 469, 1313 -> 1299, 13892 -> 13999. The step is a
-  // hundredth of the figure's size, so KWD 61 and IDR 3,300,000 both come out
-  // sensible, and a day-to-day rate move only shows once it crosses a step.
-  // Big-unit currencies (six figures and up) keep the round figure, where
-  // "-1" would just look odd.
+  // 176 -> 179, 468 -> 469, 1,151 -> 1,149, 13,577 -> 13,499. Three figures
+  // round to the nearest 10; four and up to the nearest 5% unit (50, 500,
+  // 5,000 ...), so the figure shown is never more than 2.5% from the true
+  // conversion and a day-to-day rate move only shows once it crosses a step.
+  // KWD 61 stays as it is and big-unit currencies (six figures and up, like
+  // IDR 3,350,000) keep the round figure, where "-1" would just look odd.
   function charmPrice(x) {
     if (!(x > 0)) return 0;
     var digits = Math.floor(Math.log10(x)) + 1;
     if (digits < 3) return Math.round(x);
-    var step = Math.pow(10, digits - 2);
+    var step = digits === 3 ? 10 : 5 * Math.pow(10, digits - 3);
     var r = Math.round(x / step) * step;
     return digits <= 5 ? r - 1 : r;
   }
