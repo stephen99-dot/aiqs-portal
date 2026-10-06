@@ -114,3 +114,26 @@ test('a bill whose totals are uncached formulas still verifies', { skip: !DEPS_O
   assert.strictEqual(v.detail.parsed_total, 32749);
   assert.strictEqual(v.detail.printed_total, 32749);
 });
+
+// Trafalgar House: the OH&P row prints only its percentage (17% in the Rate
+// cell, nothing in Total) and the one document total is "TOTAL QUOTATION
+// (EXCLUDING VAT)". The lines equal the bill's own net; the printed total is
+// that net × 1.17. Locked as a mismatch until the percentage-only row was read.
+test('a bill whose OH&P is a percentage-only row and whose total is "TOTAL QUOTATION (EXCLUDING VAT)" verifies', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    HEADER,
+    ['1  PRELIMINARIES'],
+    ['1.1', 'Site set-up', 'item', 1, 1000, 800, 200, 1000],
+    ['1.2', 'Skips', 'nr', 2, 300, 100, 500, 600],
+    ['Section 1 total carried to summary', '', '', '', '', 900, 700, 1600],
+    ['SUMMARY'],
+    ['Overheads and profit', '', '', '', 0.17],
+    ['1', 'Preliminaries', '', '', '', 1600, 272, 1872],
+    ['TOTAL QUOTATION (EXCLUDING VAT)', '', '', '', '', 1600, 272, 1872],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.ok(v.ok);
+  assert.strictEqual(v.detail.parsed_total, 1600);
+  assert.strictEqual(v.detail.printed_total, 1872);
+  assert.match(v.message, /OH&P/);
+});

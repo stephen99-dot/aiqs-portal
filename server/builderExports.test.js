@@ -609,3 +609,70 @@ test('the Builder Pack Trade Summary tab also groups the bill by trade package',
   assert.ok(allTrades != null && grand != null);
   assert.ok(Math.abs(allTrades - grand) < 0.02, `all trades ${allTrades} vs grand ${grand}`);
 });
+
+// ── Percentage-only summary adders ──────────────────────────────────────────
+// The Trafalgar House delivery (Max Facilities): sections closed by "Section N
+// total carried to summary", merged mixed-case elevation sub-headings inside
+// section 3, then a SUMMARY whose "Overheads and profit" row holds 17% in the
+// Rate cell (0%-formatted) and NOTHING in Total — the £ sits in the package
+// lines beneath — closed by "TOTAL QUOTATION (EXCLUDING VAT)". The summary
+// reader only ran on rows with a £ amount, so the 17% was never read, the
+// lines (= the bill's own net) matched none of the totals it prints, and a
+// correct £138k bill locked.
+test('a percentage-only "Overheads and profit" row and a TOTAL QUOTATION line are read, and the bill reconciles', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  const merge = (r) => ws.mergeCells(`A${r}:H${r}`);
+  ws.addRow(['QUOTATION - BILL OF QUANTITIES']); merge(1);
+  ws.addRow(['Item', 'Description', 'Qty', 'Unit', 'Rate £', 'Labour £', 'Materials £', 'Total £']);
+  ws.addRow(['1  PRELIMINARIES AND SITE MANAGEMENT']); merge(3);
+  ws.addRow(['1.1', 'Contract supervision', 30, 'days', 280, 8400, { formula: 'H4-F4' }, { formula: 'ROUND(C4*E4,2)', result: 8400 }]);
+  ws.addRow(['1.2', 'Van, fuel and parking', 30, 'wk', 140, 0, { formula: 'H5-F5', result: 4200 }, { formula: 'ROUND(C5*E5,2)', result: 4200 }]);
+  ws.addRow(['Section 1 total carried to summary', '', '', '', '', { formula: 'SUM(F4:F5)', result: 8400 }, { formula: 'SUM(G4:G5)', result: 4200 }, { formula: 'SUM(H4:H5)', result: 12600 }]); ws.mergeCells('A6:E6');
+  ws.addRow([]);
+  ws.addRow(['3  EXTERNAL CLEANING PACKAGE']); merge(8);
+  ws.addRow(['South elevation - gridline A, grids 1-16']); merge(9);
+  ws.addRow(['3.4.1', 'Clean window by hand from scaffold', 91, 'nr', 46.25, 3981.25, { formula: 'H10-F10', result: 227.5 }, { formula: 'ROUND(C10*E10,2)', result: 4208.75 }]);
+  ws.addRow(['North elevation - gridline D']); merge(11);
+  ws.addRow(['3.8.1', 'Clean window by hand from scaffold', 163, 'nr', 46.25, 7131.25, { formula: 'H12-F12', result: 407.5 }, { formula: 'ROUND(C12*E12,2)', result: 7538.75 }]);
+  ws.addRow(['Section 3 total carried to summary', '', '', '', '', { formula: 'SUM(F10:F12)', result: 11112.5 }, { formula: 'SUM(G10:G12)', result: 635 }, { formula: 'SUM(H10:H12)', result: 11747.5 }]); ws.mergeCells('A13:E13');
+  ws.addRow([]);
+  ws.addRow(['SUMMARY']); merge(15);
+  ws.addRow(['Overheads and profit', '', '', '', 0.17]); ws.mergeCells('A16:D16'); ws.getCell('E16').numFmt = '0%';
+  ws.addRow(['', 'Package', '', '', '', 'Net £', 'OH&P £', 'Price £']);
+  ws.addRow(['1', 'Preliminaries and site management', '', '', '', { formula: 'H6', result: 12600 }, { formula: 'ROUND(F18*$E$16,2)', result: 2142 }, { formula: 'F18+G18', result: 14742 }]); ws.mergeCells('B18:E18');
+  ws.addRow(['3', 'External cleaning package (lump sum)', '', '', '', { formula: 'H13', result: 11747.5 }, { formula: 'ROUND(F19*$E$16,2)', result: 1997.08 }, { formula: 'F19+G19', result: 13744.58 }]); ws.mergeCells('B19:E19');
+  ws.addRow(['TOTAL QUOTATION (EXCLUDING VAT)', '', '', '', '', { formula: 'SUM(F18:F19)', result: 24347.5 }, { formula: 'SUM(G18:G19)', result: 4139.08 }, { formula: 'SUM(H18:H19)', result: 28486.58 }]); ws.mergeCells('A20:E20');
+  ws.addRow(['Prices exclude VAT. Valid for 30 days from the date above.']); merge(21);
+  const file = path.join(os.tmpdir(), `boqtfh-${process.pid}.xlsx`);
+  await wb.xlsx.writeFile(file);
+  let parsed;
+  try { parsed = await parseBOQ(file); } finally { try { fs.unlinkSync(file); } catch (e) { /* ignore */ } }
+
+  const items = parsed.sections.reduce((a, s) => a + s.items.length, 0);
+  assert.strictEqual(items, 4, 'section totals, the summary page and its adder are not lines');
+  assert.ok(!parsed.sections.some((s) => /summary|overheads/i.test(s.title)), 'SUMMARY and the adder are not trades');
+  assert.strictEqual(Math.round(parsed.grand.total * 100) / 100, 24347.5, 'the lines are the bill\'s own net');
+  assert.strictEqual(parsed.source_summary.ohp_pct, 17, 'the 0%-formatted 17% in the Rate cell is read with no £ in Total');
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 28486.58, '"TOTAL QUOTATION (EXCLUDING VAT)" is the printed ex-VAT total');
+  const check = reconcileParsed(parsed);
+  assert.ok(check.ok, 'net × 1.17 reconciles to the printed total: ' + JSON.stringify(check));
+  assert.strictEqual(check.printed, 28486.58);
+});
+
+test('a percentage-only adder row becomes a summary percentage, not a £0 line', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    PLAIN_HEADER,
+    ['1', 'WORKS'],
+    ['1.1', 'A', 'nr', 2, 50, 60, 40, 100],
+    ['', 'Contingency', '', '', 0.05],
+    ['', 'VAT @ 20%'],
+    ['', 'Net construction cost', '', '', '', '', '', 100],
+  ]);
+  assert.deepStrictEqual(parsed.sections.map((s) => s.items.map((i) => i.description)), [['A']],
+    '"Contingency" with only a rate-cell percentage was a £0 line before; it is a summary row');
+  assert.strictEqual(parsed.source_summary.contingency_pct, 5);
+  assert.strictEqual(parsed.source_summary.vat_pct, 20);
+  assert.strictEqual(parsed.source_summary.net_total, 100);
+  assert.ok(reconcileParsed(parsed).ok);
+});

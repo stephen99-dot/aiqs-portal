@@ -634,37 +634,48 @@ async function parseBOQ(filePath) {
     const unitText = textAt(row, cols.unit);
     const mirrored = !!unitText && unitText === (a || b);
     const hasUnitOrQty = !mirrored && (!!unitText || numAt(row, cols.qty) > 0);
-    if (!hasUnitOrQty && numAt(row, cols.total) > 0) {
-      let m;
-      // The percentage may be embedded in the label ("… @ 10%") OR — in tender
-      // BOQs whose labels read just "Overhead %" / "Profit %" / "VAT %" — sit in
-      // the Rate column with the label naming what it is. Read either: a strict
-      // "<keyword> … N%" first (preserves existing behaviour exactly), else fall
-      // back to the rate cell. Percent-formatted cells store a fraction
-      // (0.155 → 15.5%), as does any bare value ≤ 1; otherwise it's already a %.
-      const pctFromRateCell = () => {
-        const read = (cell) => {
-          let v = cellNumber(cell);
-          if (!v) return null;
-          const fmt = (cell && cell.numFmt) || '';
-          if (fmt.includes('%') || v <= 1) v = v * 100;
-          return Math.round(v * 1000) / 1000;
-        };
-        const fromRate = read(cols.rate ? row.getCell(cols.rate) : null);
-        if (fromRate != null) return fromRate;
-        // Some tender summaries park the percentage in a different value column
-        // (e.g. a 0.0%-formatted cell under Materials, with the £ amount in
-        // Total). Only a percent-FORMATTED cell is trusted in this sweep — a
-        // bare number elsewhere on the row could be anything.
-        for (let c = 1; c <= 14; c++) {
-          if (c === cols.total) continue;
-          const cell = row.getCell(c);
-          if (!(((cell && cell.numFmt) || '').includes('%'))) continue;
-          const v = read(cell);
-          if (v != null) return v;
-        }
-        return null;
+    // The percentage may be embedded in the label ("… @ 10%") OR — in tender
+    // BOQs whose labels read just "Overhead %" / "Profit %" / "VAT %" — sit in
+    // the Rate column with the label naming what it is. Read either: a strict
+    // "<keyword> … N%" first (preserves existing behaviour exactly), else fall
+    // back to the rate cell. Percent-formatted cells store a fraction
+    // (0.155 → 15.5%), as does any bare value ≤ 1; otherwise it's already a %.
+    const pctFromRateCell = () => {
+      const read = (cell) => {
+        let v = cellNumber(cell);
+        if (!v) return null;
+        const fmt = (cell && cell.numFmt) || '';
+        if (fmt.includes('%') || v <= 1) v = v * 100;
+        return Math.round(v * 1000) / 1000;
       };
+      const fromRate = read(cols.rate ? row.getCell(cols.rate) : null);
+      if (fromRate != null) return fromRate;
+      // Some tender summaries park the percentage in a different value column
+      // (e.g. a 0.0%-formatted cell under Materials, with the £ amount in
+      // Total). Only a percent-FORMATTED cell is trusted in this sweep — a
+      // bare number elsewhere on the row could be anything.
+      for (let c = 1; c <= 14; c++) {
+        if (c === cols.total) continue;
+        const cell = row.getCell(c);
+        if (!(((cell && cell.numFmt) || '').includes('%'))) continue;
+        const v = read(cell);
+        if (v != null) return v;
+      }
+      return null;
+    };
+    const rowTotal = numAt(row, cols.total);
+    // The summary block below reads rows that carry a £ amount in Total. One
+    // shape carries none: a percentage-only adder — "Overheads and profit"
+    // with 17% in the Rate cell and the £ worked into the package lines
+    // beneath it (Trafalgar House). Unread, the bill's 17% was unknown, its
+    // lines matched none of the totals it printed, and a correct £138k bill
+    // locked. Let such a row in only when it names an adder AND carries a
+    // percentage, so a bare heading or a priced line is never swallowed.
+    const pctOnlyAdder = rowTotal <= 0 &&
+      /^(OVERHEADS?\b|PROFIT\b|CONTINGENCY\b|VAT\b)/.test(upperLabel) &&
+      (/\d\s*%/.test(upperLabel) || pctFromRateCell() != null);
+    if (!hasUnitOrQty && (rowTotal > 0 || pctOnlyAdder)) {
+      let m;
       // Every document-level total the bill prints, kept as a list: "Net
       // measured works" (which may exclude preliminaries), the summary's
       // "Sub-total", "Tender sum", "Contract sum"… A bill is reconciled
@@ -675,7 +686,7 @@ async function parseBOQ(filePath) {
       const docTotalLabel =
         /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel) ||
         /^TOTAL\s+MEASURED\s+WORKS?\b/.test(upperLabel) ||
-        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY))/.test(upperLabel) ||
+        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel) ||
         (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|MEASURED\s+WORKS?)\b/.test(upperLabel));
       if (docTotalLabel && !/\bINC(?:L|LUDING)?\b/.test(upperLabel)) {
         sourceSummary.printed_totals.push({ label: (a || b).slice(0, 80), value: numAt(row, cols.total) });
@@ -692,7 +703,7 @@ async function parseBOQ(filePath) {
       // document prints no separate net line. Read here (before the stopped
       // guard) because it usually sits below a collection / summary heading.
       if (sourceSummary.ex_vat_total == null && !/\bINC(?:L|LUDING)?\b/.test(upperLabel) &&
-          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER))/.test(upperLabel)) {
+          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel)) {
         sourceSummary.ex_vat_total = numAt(row, cols.total);
       }
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
@@ -838,6 +849,7 @@ async function parseBOQ(filePath) {
         upperLabel.startsWith('TOTAL (EXCL') || upperLabel.startsWith('TOTAL (EX') ||
         upperLabel.startsWith('CONTRACT SUM') || upperLabel.startsWith('TOTAL TENDER') ||
         upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM') ||
+        upperLabel.startsWith('TOTAL QUOT') || /^QUOT(?:E|ATION)\s+TOTAL/.test(upperLabel) ||
         // A collection / summary page heading: everything beneath it repeats
         // the section totals, so it is read exactly like PROJECT SUMMARY.
         (!hasUnitOrQty && /^(COLLECTION|SUMMARY|(?:FINAL|MAIN|GENERAL|BILL|TENDER|PRICE|COST)\s+SUMMARY)\b/.test(upperLabel))) {
