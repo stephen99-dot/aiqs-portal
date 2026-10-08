@@ -86,6 +86,9 @@ app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', superBrainRoutes);
 app.use('/api', surveyRoutes);
+// Trustpilot reviews for the sign-in page: /api/public/trustpilot (read) and
+// the admin sync / listing under /api/admin/trustpilot.
+app.use('/api', require('./trustpilotReviews').router);
 app.use('/api', agentRoutes);
 app.use('/api/estimator', estimatorRoutes);
 // AI assistant on a saved quote — "tell it what changed, it proposes the edit".
@@ -163,6 +166,9 @@ require('./rateOnboarding').start();
 // Credit top-up drip — chase zero-balance accounts on day 2/4/6/8/10 after
 // running out, then one final sign-off on day 12. Stops itself on top-up.
 require('./creditNotifications').start();
+// Trustpilot reviews — read the public profile shortly after boot and every
+// few hours, so the sign-in page shows the real reviews and keeps up.
+require('./trustpilotReviews').start();
 // Planning Leads — start the slow background harvester that fills the local
 // planning-application store one area at a time, so scans never hit PlanIt live.
 require('./planningData').startHarvester();
