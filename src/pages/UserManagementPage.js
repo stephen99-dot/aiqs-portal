@@ -881,7 +881,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
           {showAdvanced ? '▾ Hide subscription allowances' : '▸ Subscription allowances (monthly plans)'}
         </button>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 14 }}>
 
           {/* Plan */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
@@ -1429,6 +1429,9 @@ export default function UserManagementPage({ theme }) {
         {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
          filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
           <div style={cardStyle}>
+            {/* Scroll sideways on narrow screens rather than letting the card's
+                overflow:hidden clip the right-hand columns and action buttons. */}
+            <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
                 {['User','Company','Plan','Messages','BOQs','Status',''].map(h => (
@@ -1450,16 +1453,19 @@ export default function UserManagementPage({ theme }) {
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <td style={{padding:'12px 16px'}}>
                           <div style={{display:'flex',alignItems:'center',gap:10}}>
-                            <div style={{width:36,height:36,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:700}}>
+                            <div style={{width:36,height:36,flexShrink:0,borderRadius:'50%',background:user.role==='admin'?'linear-gradient(135deg,#2563EB,#7C3AED)':(isDark?'#1C2A44':'#E2E8F0'),display:'flex',alignItems:'center',justifyContent:'center',color:user.role==='admin'?'#FFF':(isDark?'#5A6E87':'#94A3B8'),fontSize:13,fontWeight:700}}>
                               {user.full_name?user.full_name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2):'??'}
                             </div>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A'}}>{user.full_name} {user.role==='admin'&&<Shield size={11} style={{color:'#2563EB'}} />}</div>
-                              <div style={{fontSize:11,color:muted}}>{user.email}</div>
+                            {/* overflowWrap:anywhere lets a long name/email break rather than
+                                widen the column until the table no longer fits the card; the
+                                minWidth keeps the column readable (the table scrolls instead). */}
+                            <div style={{minWidth:140}}>
+                              <div style={{fontSize:13,fontWeight:600,color:isDark?'#E8EDF5':'#0F172A',overflowWrap:'anywhere'}}>{user.full_name} {user.role==='admin'&&<Shield size={11} style={{color:'#2563EB'}} />}</div>
+                              <div style={{fontSize:11,color:muted,overflowWrap:'anywhere'}}>{user.email}</div>
                             </div>
                           </div>
                         </td>
-                        <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}>{user.company||'-'}</td>
+                        <td style={{padding:'12px 16px',fontSize:12,color:isDark?'#94A3B8':'#64748B'}}><div style={{minWidth:80,overflowWrap:'anywhere'}}>{user.company||'-'}</div></td>
                         <td style={{padding:'12px 16px'}}>
                           <span style={{padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',
                             background:user.role==='admin'?'rgba(37,99,235,0.1)':user.plan==='unlimited'?'rgba(8,145,178,0.12)':user.plan==='premium'?'rgba(124,58,237,0.1)':user.plan==='professional'?'rgba(16,185,129,0.1)':user.plan==='custom'?'rgba(245,158,11,0.1)':(isDark?'rgba(148,163,184,0.1)':'#F1F5F9'),
@@ -1537,7 +1543,13 @@ export default function UserManagementPage({ theme }) {
                       </tr>
                       {expandedUser===user.id&&(
                         <tr><td colSpan={7} style={{padding:0}}>
-                          <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} />
+                          {/* width:0 + minWidth:100% stops the panel's content from
+                              ever setting the table's minimum width (which would push
+                              the right edge under the card's overflow:hidden) while
+                              still filling the row once laid out. */}
+                          <div style={{width:0,minWidth:'100%'}}>
+                            <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} />
+                          </div>
                         </td></tr>
                       )}
                     </React.Fragment>
@@ -1545,6 +1557,7 @@ export default function UserManagementPage({ theme }) {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </>)}
