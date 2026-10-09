@@ -15,7 +15,7 @@ const { getBoqBalance } = require('./boqCredits');
 const { getMessageBalance } = require('./messageCredits');
 const { UNLIMITED_PLAN, UNLIMITED_PLAN_MESSAGES, grantUnlimitedPlan } = require('./unlimitedPlan');
 const { claimPendingCredits, absorbPendingCredits } = require('./pendingCredits');
-const { grantSignupCredits } = require('./signupCredits');
+const { grantSignupCredits, describeSignupCredits } = require('./signupCredits');
 const { rateLimit } = require('./publicRateLimit');
 const { userCountryFields, validateCountryInput, publicCountryList, zaLibraryView, countryForUser } = require('./lib/countries');
 
@@ -109,9 +109,17 @@ async function notifyAdmin({ type, title, detail, icon }) {
   }
 }
 
-async function sendAdminSignupEmail({ fullName, email, company, phone }) {
+// The "someone just signed up" alert to the admin inbox. `user` is the row as
+// it stands after signup credits and any pre-signup purchase have been
+// applied, and `claimed` is how many BOQ credits that purchase contributed,
+// so the Plan / credits lines describe the account exactly as the portal
+// shows it (there is no free trial any more — a new account is pay as you
+// go with whatever credits it actually holds).
+async function sendAdminSignupEmail({ fullName, email, company, phone, user, claimed }) {
   const companyLine = company ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Company</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${company}</td></tr>` : '';
   const phoneLine = phone ? `<tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Phone</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${phone}</td></tr>` : '';
+  const planLabel = getUserPlanInfo(user || {}).planLabel;
+  const credits = describeSignupCredits({ freeCredits: user && user.free_credits, messageCredits: user && user.message_credits, claimed });
   await sendEmail({
     to: ADMIN_EMAIL,
     subject: `🆕 New Signup: ${fullName}`,
@@ -127,7 +135,9 @@ async function sendAdminSignupEmail({ fullName, email, company, phone }) {
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Name</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${fullName}</td></tr>
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Email</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;"><a href="mailto:${email}" style="color:#38BDF8;text-decoration:none;">${email}</a></td></tr>
             ${companyLine}${phoneLine}
-            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Plan</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#10B981;">Free Trial (2 projects)</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Plan</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${planLabel}</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;vertical-align:top;">BOQ credits</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#10B981;">${credits.boq}</td></tr>
+            <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Messages</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#F1F5F9;">${credits.messages}</td></tr>
             <tr><td style="padding:6px 12px;color:#94A3B8;font-size:13px;">Time</td><td style="padding:6px 12px;font-size:14px;color:#F1F5F9;">${new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</td></tr>
           </table>
         </div>
@@ -540,7 +550,7 @@ router.post('/auth/register', async (req, res) => {
     grantSignupCredits({ id, email: email.toLowerCase(), role });
 
     // If they paid for a BOQ pack before creating their account, grant it now.
-    claimPendingCredits({ id, email: email.toLowerCase(), full_name: fullName });
+    const claimed = claimPendingCredits({ id, email: email.toLowerCase(), full_name: fullName });
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);
@@ -549,7 +559,7 @@ router.post('/auth/register', async (req, res) => {
 
     if (role !== 'admin') {
       notifyAdmin({ type: 'new_signup', title: `New signup: ${fullName}`, detail: [email.toLowerCase(), company, phone].filter(Boolean).join(' · '), icon: 'user-plus' });
-      sendAdminSignupEmail({ fullName, email: email.toLowerCase(), company, phone });
+      sendAdminSignupEmail({ fullName, email: email.toLowerCase(), company, phone, user: newUser, claimed });
       sendClientWelcomeEmail({ fullName, email: email.toLowerCase() }).catch(err => console.error('[Welcome email] Failed:', err.message));
     }
 
@@ -973,12 +983,15 @@ router.get('/auth/google/callback', async (req, res) => {
         .run(id, email, fullName, googleId, avatar, role);
       seedDefaultRates(id);
       grantSignupCredits({ id, email, role });
+      // A pack bought before the account existed is applied here, before the
+      // admin alert, so the alert reports the balance the portal will show.
+      const claimed = claimPendingCredits({ id, email, full_name: fullName });
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
       logActivity({ event_type: 'signup', title: fullName + ' signed up via Google', detail: email, user_id: id, user_name: fullName, user_email: email });
       if (role !== 'admin') {
         notifyAdmin({ type: 'new_signup', title: `New signup (Google): ${fullName}`, detail: email, icon: 'user-plus' });
-        sendAdminSignupEmail({ fullName, email, company: null, phone: null });
+        sendAdminSignupEmail({ fullName, email, company: null, phone: null, user, claimed });
         sendClientWelcomeEmail({ fullName, email }).catch(err => console.error('[Welcome email] Failed:', err.message));
       }
     } else {

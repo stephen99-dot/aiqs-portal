@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const Database = require('better-sqlite3');
 
-const { grantSignupCredits } = require('./signupCredits');
+const { grantSignupCredits, describeSignupCredits } = require('./signupCredits');
 
 function freshDb() {
   const db = new Database(':memory:');
@@ -73,4 +73,26 @@ test('accounts made another way get the message credits but no free BOQ credit f
   db.prepare("INSERT INTO users (id, email, role, free_credits) VALUES ('u5', 'email@example.com', 'client', 1)").run();
   assert.deepStrictEqual(grantSignupCredits({ id: 'u5', email: 'email@example.com', role: 'client' }, { freeBoq: false, db }), { messages: 150, boq: 0 });
   assert.deepStrictEqual(balance(db, 'u5'), { free_credits: 1, message_credits: 150 });
+});
+
+// The admin "new signup" alert words the balance from the live row, so it
+// never promises a free trial or a credit the account does not hold.
+test('the signup alert describes a pack bought before signing up as applied, nothing to add', () => {
+  assert.deepStrictEqual(describeSignupCredits({ freeCredits: 5, messageCredits: 150, claimed: 5 }), {
+    boq: '5 BOQ credits — 5 credits bought before signing up, applied automatically (nothing to add by hand)',
+    messages: '150 message credits',
+  });
+});
+
+test('the signup alert describes a plain signup as one free BOQ credit', () => {
+  assert.deepStrictEqual(describeSignupCredits({ freeCredits: 1, messageCredits: 150, claimed: 0 }), {
+    boq: '1 free BOQ credit',
+    messages: '150 message credits',
+  });
+});
+
+test('the signup alert never claims credits an account does not hold', () => {
+  assert.strictEqual(describeSignupCredits({ freeCredits: 0, messageCredits: 0 }).boq, 'None — pays per BOQ');
+  assert.strictEqual(describeSignupCredits({}).messages, '0 message credits');
+  assert.strictEqual(describeSignupCredits({ freeCredits: 1, messageCredits: 150, claimed: 1 }).boq, '1 BOQ credit — 1 credit bought before signing up, applied automatically (nothing to add by hand)');
 });

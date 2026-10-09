@@ -52,4 +52,25 @@ function grantSignupCredits(user, { freeBoq = true, db = require('./database') }
   return { messages: SIGNUP_MESSAGE_CREDITS, boq };
 }
 
-module.exports = { grantSignupCredits, boughtBeforeSignup, SIGNUP_MESSAGE_CREDITS, SIGNUP_FREE_BOQ_CREDITS };
+// What the admin's "new signup" alert says about the account's starting
+// balance, worded from the live row (free_credits / message_credits after
+// grantSignupCredits and claimPendingCredits have both run) so it can never
+// drift from what the portal shows. `claimed` is the number of BOQ credits
+// claimPendingCredits pulled in from a pack bought before the account existed.
+function describeSignupCredits({ freeCredits, messageCredits, claimed } = {}) {
+  const boq = Math.max(0, Number(freeCredits) || 0);
+  const bought = Math.max(0, Number(claimed) || 0);
+  const messages = Math.max(0, Number(messageCredits) || 0);
+  const n = (count, noun) => count + ' ' + noun + (count === 1 ? '' : 's');
+  let boqLine;
+  if (bought > 0) {
+    boqLine = n(boq, 'BOQ credit') + ' — ' + n(bought, 'credit') + ' bought before signing up, applied automatically (nothing to add by hand)';
+  } else if (boq > 0) {
+    boqLine = n(boq, 'free BOQ credit');
+  } else {
+    boqLine = 'None — pays per BOQ';
+  }
+  return { boq: boqLine, messages: n(messages, 'message credit') };
+}
+
+module.exports = { grantSignupCredits, boughtBeforeSignup, describeSignupCredits, SIGNUP_MESSAGE_CREDITS, SIGNUP_FREE_BOQ_CREDITS };
