@@ -45,7 +45,7 @@ function saveSubmission(db, { userId, trade, qualifying, notes }) {
 function listSubmissions(db) {
   ensureTable(db);
   return db.prepare(`
-    SELECT s.*, u.full_name, u.email, u.company,
+    SELECT s.*, u.full_name, u.email, u.company, u.country,
            CASE WHEN b.logo_filename IS NOT NULL THEN 1 ELSE 0 END AS has_logo
     FROM onboarding_submissions s
     JOIN users u ON u.id = s.user_id
@@ -57,7 +57,7 @@ function listSubmissions(db) {
 function getSubmission(db, id) {
   ensureTable(db);
   return db.prepare(`
-    SELECT s.*, u.full_name, u.email, u.company, b.logo_filename
+    SELECT s.*, u.full_name, u.email, u.company, u.country, b.logo_filename
     FROM onboarding_submissions s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN user_branding b ON b.user_id = s.user_id
@@ -67,10 +67,13 @@ function getSubmission(db, id) {
 
 // Answers as [label, value] pairs in the order the questions were asked, so
 // the admin sheet reads like the screen did. Unknown ids (questions we've
-// since removed) still come out, labelled by their id.
+// since removed) still come out, labelled by their id. Units print in the
+// account's currency (a Rand account's "Hourly rate (R/hour)").
 function answerRows(submission) {
   let qual = {};
   try { qual = JSON.parse(submission.qualifying || '{}') || {}; } catch (e) {}
+  const symbol = require('./lib/countries').countryForUser({ country: submission.country }).symbol || '£';
+  const unitLabel = (u) => (u ? ' (' + String(u).replace(/£/g, symbol) + ')' : '');
   const questions = getQuestionsForTrade(submission.trade);
   const rows = [];
   const seen = new Set();
@@ -79,16 +82,23 @@ function answerRows(submission) {
     seen.add(q.id);
     const v = qual[q.id];
     const val = Array.isArray(v) ? v.join(', ') : String(v);
-    if (val !== '') rows.push([q.label + (q.unit ? ' (' + q.unit + ')' : ''), val]);
+    if (val !== '') rows.push([q.label + unitLabel(q.unit), val]);
   }
-  // The itemised rate sheet, labelled from the catalogue so the download
-  // reads like the screen did ("Skim over existing (£/m²): 18").
+  // The itemised rate sheet, in sheet order and labelled from the catalogue
+  // with its group, so the download reads like the screen did
+  // ("Labour · Hourly rate (£/hour): 45"). Keys the catalogue no longer
+  // knows still come out, labelled by their key.
   if (qual.rate_items && typeof qual.rate_items === 'object' && !Array.isArray(qual.rate_items)) {
     seen.add('rate_items');
-    const byKey = new Map(getRateItemsForTrade(submission.trade).map(i => [i.key, i]));
-    for (const [k, v] of Object.entries(qual.rate_items)) {
-      const item = byKey.get(k);
-      rows.push([item ? item.label + ' (' + item.unit + ')' : k, String(v)]);
+    const filled = qual.rate_items;
+    const known = new Set();
+    for (const item of getRateItemsForTrade(submission.trade)) {
+      if (!(item.key in filled)) continue;
+      known.add(item.key);
+      rows.push([item.group + ' · ' + item.label + unitLabel(item.unit), String(filled[item.key])]);
+    }
+    for (const [k, v] of Object.entries(filled)) {
+      if (!known.has(k)) rows.push([k, String(v)]);
     }
   }
   for (const [id, v] of Object.entries(qual)) {

@@ -37,6 +37,39 @@ currency, VAT, the rate library and what the AI assumes. The rules live in
   onboarding*. Onboarding answers, and any personal rates in a different currency from
   the account's, are set aside (`is_active = 0`), not deleted.
 
+## Onboarding and the trade rate sheet
+
+New accounts go through a five-step onboarding (`/onboarding`, `src/pages/OnboardingPage.js`):
+country and trade, **About your business**, **How you price**, **Your rate sheet**, then notes.
+Everything the screens ask is defined once, server-side, in `server/tradeCatalog.js`, so the
+screen, the stored submission (`onboarding_submissions`) and the admin download agree.
+
+- **Questions** carry a `section`: `business` (experience, team, area, travel radius, who they
+  work for, job size, quotes a month, specialisms, certifications) or `pricing` (day rate, how
+  they price, who supplies materials, markup on materials, OH&P, contingency, payment terms,
+  deposit, what a quote includes, quote validity, guarantee). Percentages are never prefilled:
+  blank means nothing is added, which is what the pricer assumes.
+- **The rate sheet** is grouped like a price list. Every trade, custom ones included, gets a
+  *Labour* group derived from its day rate (hourly, half-day minimum, labourer, apprentice,
+  weekend, call-out) and site trades get *Preliminaries & extras* (skip, waste, tower hire,
+  travel). The 40 catalogue trades add their own groups — the jobs that trade prices every week,
+  12–30 rows each, with a typical UK figure as a placeholder and a hint saying what the row
+  covers (supply & fit vs labour only). Office trades (QS, architect) bill time and fees instead
+  of prelims. Nothing is prefilled: a figure typed becomes the client's rate; a blank is not saved.
+- **Where answers go.** Filled rows land in `client_rate_library` — universal rows under
+  `labour` / `prelims`, trade rows under the trade's slug — so the chat prompt, the estimator and
+  My Rates read them like any other client rate. Rows whose key matches the pricer's base library
+  (`skip_hire_8yd`, `plasterboard_skim_walls`, `gas_boiler_combi`, …) are read straight by the
+  deterministic pricer; keys are only reused where unit and scope match, because a client rate
+  outside 0.1x–5x of the base is rejected as corrupt (`tradeCatalog.test.js` checks). Day rate,
+  hourly rate and materials markup go to the playbook (`playbooks.setHouseRates`); OH&P and
+  contingency to `setPricingPrefs`; every other answer becomes an onboarding memory.
+- **Countries.** `server/onboardingLocale.js` asks a South African account in Rand with SA
+  schemes: the day rate and the Labour group derive from the SA rates library, £ rows are
+  converted at the parity factor, percentages are left alone, distances are in km.
+- **Admin.** Completing onboarding raises a bell and email and the profile is downloadable from
+  *Admin → Onboarding* as a spreadsheet, rate rows labelled by group in the account's currency.
+
 ## Markup by trade, trade packages and canonical sections
 
 Every priced BOQ line carries a **trade** (Electrical, Plumbing & Heating, Groundworks,

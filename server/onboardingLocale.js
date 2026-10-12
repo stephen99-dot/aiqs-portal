@@ -54,6 +54,8 @@ function localiseQuestions(questions, tradeName, user) {
         return { ...q, placeholder: 'e.g. Johannesburg and the East Rand' };
       case 'typical_job_value':
         return { ...q, options: ['Under R100k', 'R100k – R500k', 'R500k – R2m', 'R2m – R10m', 'R10m+'] };
+      case 'travel_radius':
+        return { ...q, options: ['Up to 20 km', '20–50 km', '50–100 km', 'Anywhere in the country'] };
       case 'day_rate':
         return { ...q, unit: 'R/day', default: dayRate || q.default, desc: 'What a day of your labour costs a customer, ex VAT. Prefilled from the AI QS South Africa rates library — change it to your own figure.' };
       case 'certifications': {
@@ -66,14 +68,32 @@ function localiseQuestions(questions, tradeName, user) {
   });
 }
 
+// Rate-sheet rows in the account's currency. Only a £ figure is converted:
+// a percentage (a QS fee) is the same everywhere, and a row the catalogue
+// flags `scale: false` was already derived from the localised day rate (see
+// localiseRateSheet) so converting it again would double it.
 function localiseRateItems(items, user) {
   const c = countries.countryForUser(user);
   if (c.code !== 'ZA') return items;
-  return items.map((it) => ({
-    ...it,
-    unit: String(it.unit || '').replace(/£/g, 'R'),
-    typical: roundish(it.typical * countries.ZA_GBP_PARITY),
-  }));
+  return items.map((it) => {
+    const sterling = /£/.test(String(it.unit || ''));
+    return {
+      ...it,
+      unit: String(it.unit || '').replace(/£/g, 'R'),
+      typical: sterling && it.scale !== false ? roundish(it.typical * countries.ZA_GBP_PARITY) : it.typical,
+    };
+  });
 }
 
-module.exports = { localiseQuestions, localiseRateItems, zaDayRate };
+// The grouped sheet for a trade in the account's currency. The Labour group's
+// typicals derive from the day rate, so for a Rand account the sheet is built
+// from the Rand day rate (the same figure the day-rate question prefills) and
+// then localised row by row.
+function localiseRateSheet(tradeName, user) {
+  const { getRateSheetForTrade } = require('./tradeCatalog');
+  const c = countries.countryForUser(user);
+  const dayRate = c.code === 'ZA' ? zaDayRate(tradeName) : null;
+  return getRateSheetForTrade(tradeName, { dayRate }).map((g) => ({ ...g, items: localiseRateItems(g.items, user) }));
+}
+
+module.exports = { localiseQuestions, localiseRateItems, localiseRateSheet, zaDayRate };

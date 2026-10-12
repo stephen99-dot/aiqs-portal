@@ -5,16 +5,27 @@ import { apiFetch, getToken } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { CountryFields } from '../components/CountryPicker';
 
-// Three screens:
-//   1. "What's your trade?" — live search over the server's trade catalogue
-//      (names + aliases, so "sparky" finds Electrician), plus company name
-//      and an optional logo upload.
-//   2. Qualifying questions for that trade, fetched from the server so the
-//      screen, the stored submission and the admin download all agree.
-//   3. "Anything else?" free text, then submit.
-// Completing it stores the full submission, alerts the admin (bell + email,
-// downloadable from Admin → Onboarding with the logo), seeds memories, and
-// puts the day rate into the rate library so estimates price from it.
+// Five screens:
+//   1. "Where are you, and what's your trade?" — country (sets the currency
+//      everything else is asked in), live search over the server's trade
+//      catalogue (names + aliases, so "sparky" finds Electrician), company
+//      name and an optional logo upload.
+//   2. "About your business" — the qualifying questions tagged section
+//      'business' by the server: experience, team, area, who they work for,
+//      job size, specialisms, certifications.
+//   3. "How you price" — the 'pricing' section: day rate, pricing basis,
+//      materials, markups, payment terms, what a quote includes, guarantee.
+//   4. "Your rate sheet" — the trade's rate sheet as groups (Labour and
+//      Preliminaries for every trade, then the trade's own jobs). All
+//      optional: typical figures sit as placeholders, and anything left
+//      blank is priced with the generic rates instead.
+//   5. "Anything else?" free text, then submit.
+// Questions and the sheet come from the server so the screen, the stored
+// submission and the admin download all agree. Completing it stores the full
+// submission, alerts the admin (bell + email, downloadable from Admin →
+// Onboarding with the logo), seeds memories, puts the day rate and every
+// filled sheet row into the rate library, and the house rates (day, hourly,
+// materials markup, OH&P, contingency) into the pricing playbook.
 
 // Defined OUTSIDE the component so React doesn't treat it as a new component type
 // on every render — that was causing the input to lose focus after every keystroke.
@@ -43,6 +54,15 @@ function filterTrades(trades, query, limit = 8) {
   return bands.flat().slice(0, limit);
 }
 
+// '£/m²' → 'per m²', '%' → '%', so a unit reads naturally next to its input.
+function unitText(unit) {
+  if (!unit) return '';
+  if (unit === '%') return '%';
+  return unit.replace(/^[£€R]\//, 'per ');
+}
+
+const STEP_LABELS = ['You', 'Business', 'Pricing', 'Rate sheet', 'Notes'];
+
 export default function OnboardingPage() {
   const { t } = useTheme();
   const navigate = useNavigate();
@@ -69,19 +89,21 @@ export default function OnboardingPage() {
   const [logoUploaded, setLogoUploaded] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Step 2 — qualifying questions for the chosen trade
+  // Steps 2 & 3 — qualifying questions for the chosen trade, split by the
+  // server's `section` into the business screen and the pricing screen.
   const [questions, setQuestions] = useState([]);
   const [questionsFor, setQuestionsFor] = useState(null);
   const [qualifying, setQualifying] = useState({});
   const [dayRateTouched, setDayRateTouched] = useState(false);
 
-  // Step 3 — the trade's itemised rate sheet. All optional: typical figures
+  // Step 4 — the trade's rate sheet as groups. All optional: typical figures
   // sit as placeholders, and anything left blank is priced with the generic
   // rates instead.
-  const [rateItems, setRateItems] = useState([]);
+  const [rateSheet, setRateSheet] = useState([]);
   const [itemRates, setItemRates] = useState({});
+  const [collapsed, setCollapsed] = useState({});
 
-  // Step 3 — anything else
+  // Step 5 — anything else
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -95,16 +117,18 @@ export default function OnboardingPage() {
     ]).finally(() => setLoading(false));
   }, []);
 
-  // Load the question set when the chosen trade changes; prefill defaults
-  // (like the trade's typical day rate) without clobbering answers on Back.
+  // Load the question set and rate sheet when the chosen trade changes;
+  // prefill defaults (like the trade's typical day rate) without clobbering
+  // answers on Back.
   useEffect(() => {
-    if (step !== 1 || !trade || questionsFor === trade) return;
+    if (step < 1 || !trade || questionsFor === trade) return;
     apiFetch('/onboarding/questions?trade=' + encodeURIComponent(trade))
       .then(d => {
         const qs = d.questions || [];
         setQuestions(qs);
-        setRateItems(d.rate_items || []);
+        setRateSheet(d.rate_sheet || []);
         setItemRates({});
+        setCollapsed({});
         setQuestionsFor(trade);
         setQualifying(prev => {
           const next = {};
@@ -249,6 +273,10 @@ export default function OnboardingPage() {
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: c.textMuted }}>Loading...</div>;
 
+  const filledCount = (items) => items.filter(it => parseFloat(itemRates[it.key]) > 0).length;
+  const totalItems = rateSheet.reduce((n, g) => n + g.items.length, 0);
+  const totalFilled = rateSheet.reduce((n, g) => n + filledCount(g.items), 0);
+
   // ── Done screen ──────────────────────────────────────────────────────
   if (done) {
     return (
@@ -259,7 +287,7 @@ export default function OnboardingPage() {
         </h1>
         <p style={{ fontSize: 14, color: c.textMuted, lineHeight: 1.6, marginBottom: 26 }}>
           Our team has been notified and your AI QS is being tuned to how {trade ? `a ${trade.toLowerCase()} works` : 'you work'}.
-          Your answers live in AI Memory, and your day rate is in My Rates — both editable any time.
+          Your answers live in AI Memory. Your day rate{totalFilled > 0 ? ` and the ${totalFilled} rate${totalFilled === 1 ? '' : 's'} you filled in` : ''} are in My Rates — both editable any time.
         </p>
         <button
           onClick={() => navigate('/dashboard')}
@@ -279,6 +307,28 @@ export default function OnboardingPage() {
   const suggestions = filterTrades(trades, tradeQuery);
   const exactMatch = trades.some(x => x.name.toLowerCase() === tradeQuery.toLowerCase().trim());
   const showCustom = tradeQuery.trim().length > 2 && !exactMatch;
+
+  // A money or percentage input: currency symbol on the left for money, a
+  // '%' on the right for percentages; the unit spelt out alongside.
+  const numberInput = ({ value, onChange, unit, placeholder, width = 130 }) => {
+    const pct = unit === '%';
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ position: 'relative' }}>
+          {!pct && <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>{sym}</span>}
+          <input
+            type="number" inputMode="decimal" min="0" step={pct ? 1 : 5}
+            value={value ?? ''}
+            placeholder={placeholder || ''}
+            onChange={e => onChange(e.target.value)}
+            style={{ ...inputStyle, width, paddingLeft: pct ? 12 : 24, paddingRight: pct ? 26 : 12 }}
+          />
+          {pct && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>%</span>}
+        </div>
+        {!pct && unit && <span style={{ fontSize: 13, color: c.textMuted }}>{unitText(unit)}</span>}
+      </div>
+    );
+  };
 
   const renderQuestion = (q) => {
     if (q.type === 'pills') {
@@ -304,20 +354,12 @@ export default function OnboardingPage() {
       );
     }
     if (q.type === 'number') {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>{sym}</span>
-            <input
-              type="number" inputMode="decimal" min="0" step="5"
-              value={qualifying[q.id] ?? ''}
-              onChange={e => setAnswer(q.id, e.target.value)}
-              style={{ ...inputStyle, width: 130, paddingLeft: 24 }}
-            />
-          </div>
-          {q.unit && <span style={{ fontSize: 13, color: c.textMuted }}>{q.unit.replace(/^[£€R]\//, 'per ')}</span>}
-        </div>
-      );
+      return numberInput({
+        value: qualifying[q.id],
+        onChange: v => setAnswer(q.id, v),
+        unit: q.unit,
+        placeholder: q.placeholder,
+      });
     }
     return (
       <input
@@ -327,6 +369,71 @@ export default function OnboardingPage() {
         onChange={e => setAnswer(q.id, e.target.value)}
         style={inputStyle}
       />
+    );
+  };
+
+  const renderQuestions = (list) => (
+    list.length === 0
+      ? <div style={{ color: c.textMuted, fontSize: 13 }}>Loading questions…</div>
+      : list.map(q => (
+          <Field key={q.id} colors={c} label={q.label} desc={q.desc}>
+            {renderQuestion(q)}
+          </Field>
+        ))
+  );
+
+  const businessQuestions = questions.filter(q => q.section !== 'pricing');
+  const pricingQuestions = questions.filter(q => q.section === 'pricing');
+  const tradeLower = trade ? trade.toLowerCase() : 'your trade';
+
+  const renderRateGroup = (g) => {
+    const isOpen = !collapsed[g.key];
+    const filled = filledCount(g.items);
+    return (
+      <div key={g.key} style={{ border: `1px solid ${c.border}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
+        <button
+          type="button"
+          onClick={() => setCollapsed(s => ({ ...s, [g.key]: !s[g.key] }))}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+            padding: '12px 14px', background: c.pill, border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: c.text,
+          }}
+        >
+          <span style={{ fontSize: 12, color: c.textMuted, width: 12, display: 'inline-block' }}>{isOpen ? '▾' : '▸'}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{g.title}</span>
+            {g.desc && isOpen && <span style={{ display: 'block', fontSize: 12, color: c.textMuted, marginTop: 2, lineHeight: 1.45 }}>{g.desc}</span>}
+          </span>
+          <span style={{
+            fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+            color: filled > 0 ? c.accent : c.textMuted,
+            padding: '3px 9px', borderRadius: 999, border: `1px solid ${filled > 0 ? c.accentBorder : c.border}`,
+          }}>
+            {filled} of {g.items.length}
+          </span>
+        </button>
+        {isOpen && (
+          <div style={{ padding: '10px 14px 4px' }}>
+            {g.items.map(item => (
+              <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text }}>{item.label}</div>
+                  <div style={{ fontSize: 11.5, color: c.textMuted }}>
+                    {item.unit === '%' ? 'percent' : item.unit}{item.desc ? ' · ' + item.desc : ''}
+                  </div>
+                </div>
+                {numberInput({
+                  value: itemRates[item.key],
+                  onChange: v => setItemRates(r => ({ ...r, [item.key]: v })),
+                  unit: item.unit === '%' ? '%' : undefined,
+                  placeholder: String(item.typical),
+                  width: 120,
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -432,59 +539,59 @@ export default function OnboardingPage() {
       ),
     },
     {
-      title: trade ? `A few questions for a ${trade.toLowerCase()}` : 'A few questions',
-      sub: 'Quick ones — they tune every estimate to how you actually work.',
+      title: 'About your business',
+      sub: `Quick ones — who you are and what you take on as a ${tradeLower}. They tune every estimate to how you actually work.`,
       canNext: true,
-      body: questions.length === 0
-        ? <div style={{ color: c.textMuted, fontSize: 13 }}>Loading questions…</div>
-        : questions.map(q => (
-            <Field key={q.id} colors={c} label={q.label} desc={q.desc}>
-              {renderQuestion(q)}
-            </Field>
-          )),
+      body: renderQuestions(businessQuestions),
     },
-    // Only trades the catalogue knows get a rate sheet; a custom trade goes
-    // straight from questions to notes.
-    ...(rateItems.length > 0 ? [{
-      title: 'Your rates for the usual jobs',
-      sub: "These are the jobs " + (trade ? 'a ' + trade.toLowerCase() : 'your trade') + " prices every week. Fill in the ones you know — every estimate will use YOUR figure. Leave anything blank and we'll price it with the standard rates for your country until you tell us otherwise.",
+    {
+      title: 'How you price',
+      sub: 'Your day rate, how you build a price and your terms. Every percentage is optional — leave it blank if it does not apply and nothing is added.',
+      canNext: true,
+      body: renderQuestions(pricingQuestions),
+    },
+    {
+      title: 'Your rate sheet',
+      sub: `The jobs a ${tradeLower} prices every week, grouped the way you'd lay out a price list. Fill in what you know — every estimate will use YOUR figure. Leave anything blank and we'll price it with the standard rates for your country until you tell us otherwise.`,
       canNext: true,
       body: (
         <>
-          {rateItems.map(item => (
-            <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: c.text }}>{item.label}</div>
-                <div style={{ fontSize: 11.5, color: c.textMuted }}>{item.unit}</div>
-              </div>
-              <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: c.textMuted, fontSize: 13 }}>{sym}</span>
-                <input
-                  type="number" inputMode="decimal" min="0"
-                  value={itemRates[item.key] ?? ''}
-                  placeholder={String(item.typical)}
-                  onChange={e => setItemRates(r => ({ ...r, [item.key]: e.target.value }))}
-                  style={{ ...inputStyle, width: 120, paddingLeft: 24 }}
-                />
-              </div>
-            </div>
-          ))}
-          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 12, padding: '10px 12px', background: c.pill, borderRadius: 8 }}>
-            The grey figures are typical rates, not yours — type over them where yours differ. Everything here lands in My Rates, where you can add more jobs or import a full rate spreadsheet any time.
+          {rateSheet.length === 0
+            ? <div style={{ color: c.textMuted, fontSize: 13 }}>Loading your rate sheet…</div>
+            : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, fontSize: 12.5, color: c.textMuted }}>
+                  <span>{totalFilled} of {totalItems} filled in · all optional</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allOpen = rateSheet.every(g => !collapsed[g.key]);
+                      setCollapsed(allOpen ? Object.fromEntries(rateSheet.map(g => [g.key, true])) : {});
+                    }}
+                    style={{ background: 'none', border: 'none', color: c.accent, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}
+                  >
+                    {rateSheet.every(g => !collapsed[g.key]) ? 'Collapse all' : 'Expand all'}
+                  </button>
+                </div>
+                {rateSheet.map(renderRateGroup)}
+              </>
+            )}
+          <div style={{ fontSize: 12, color: c.textMuted, marginTop: 12, padding: '10px 12px', background: c.pill, borderRadius: 8, lineHeight: 1.5 }}>
+            The grey figures are typical rates, not yours — type over them where yours differ, and say what a figure covers on the last screen if it needs explaining. Everything here lands in My Rates, where you can add more jobs or import a full price list any time.
           </div>
         </>
       ),
-    }] : []),
+    },
     {
       title: 'Anything you want to add?',
-      sub: "Anything else we should know — how you like to quote, what you never take on, rates for other trades you use. It all goes to our team and into your AI's memory.",
+      sub: "Anything else we should know — how you like to quote, what you never take on, what your rates include, rates for other trades you use. It all goes to our team and into your AI's memory.",
       canNext: true,
       body: (
         <>
           <textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="e.g. We never do commercial work. Always add a skip on full renovations. Our labourer's day rate is fixed."
+            placeholder="e.g. We never do commercial work. Always add a skip on full renovations. My m² rates include materials but not scaffold. Our labourer's day rate is fixed."
             rows={6}
             style={{ ...inputStyle, resize: 'vertical' }}
           />
@@ -522,10 +629,15 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      {/* Progress dots */}
+      {/* Progress: a dot per step, labelled so they can see what's coming */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {steps.map((_, i) => (
-          <div key={i} style={{ width: i === step ? 22 : 8, height: 8, borderRadius: 999, background: i <= step ? c.accent : c.border, transition: 'all 0.2s' }} />
+          <div key={i} style={{ flex: i === step ? 2 : 1, minWidth: 0 }}>
+            <div style={{ height: 6, borderRadius: 999, background: i <= step ? c.accent : c.border, transition: 'all 0.2s' }} />
+            <div style={{ fontSize: 10.5, marginTop: 4, color: i === step ? c.accent : c.textMuted, fontWeight: i === step ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {STEP_LABELS[i]}
+            </div>
+          </div>
         ))}
       </div>
 

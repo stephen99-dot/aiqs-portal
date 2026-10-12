@@ -70,14 +70,20 @@ function saveTradeRates(db, { userId, rates, symbol = '£' }) {
 // Upsert the filled-in rows of a trade's onboarding rate sheet. `values` is
 // {itemKey: price}; only keys the catalogue knows for this trade are
 // accepted, so labels and units always come from the catalogue, never the
-// client. Blank / missing items are simply not saved — pricing falls back to
-// the generic UK rates for those. Returns { saved }.
+// client. Universal rows (the Labour and Preliminaries groups every trade
+// gets) carry their own category ('labour', 'prelims') so they sit next to
+// the day rate in My Rates; the trade's own rows go under the trade's slug.
+// A custom trade therefore still saves its universal rows. Blank / missing
+// items are simply not saved — pricing falls back to the generic rates for
+// those. Returns { saved }.
 function saveTradeItemRates(db, { userId, trade, values, symbol = '£' }) {
   if (!userId || !values || typeof values !== 'object' || Array.isArray(values)) return { saved: 0 };
   const items = require('./tradeCatalog').getRateItemsForTrade(trade);
   if (!items.length) return { saved: 0 };
+  // Stray flags from the catalogue never reach a row: only key, label, unit
+  // and category are read below.
   const byKey = new Map(items.map(i => [i.key, i]));
-  const category = slugKey(trade) || CATEGORY;
+  const tradeCategory = slugKey(String(trade || '').slice(0, MAX_NAME_LEN)) || CATEGORY;
 
   const sel = db.prepare(
     'SELECT id FROM client_rate_library WHERE user_id = ? AND category = ? AND item_key = ? AND is_active = 1'
@@ -94,8 +100,11 @@ function saveTradeItemRates(db, { userId, trade, values, symbol = '£' }) {
     const item = byKey.get(key);
     const value = parseFloat(raw);
     if (!item || !Number.isFinite(value) || value <= 0 || value >= 1000000) continue;
+    // A percentage row (a QS fee as % of contract) is capped like one.
+    if (item.unit === '%' && value > 100) continue;
     // Catalogue units are written in £ ('£/m²'); a Rand account's rate is Rand.
     const unit = String(item.unit || '').replace(/£/g, symbol);
+    const category = item.category || tradeCategory;
     const existing = sel.get(userId, category, item.key);
     if (existing) upd.run(value, item.label, unit, existing.id);
     else ins.run('rl_' + uuidv4().slice(0, 8), userId, category, item.key, item.label, value, unit);

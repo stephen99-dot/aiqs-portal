@@ -125,23 +125,35 @@ router.get('/onboarding/trades', authMiddleware, (req, res) => {
   }
 });
 
-// Qualifying questions for a chosen (or typed-in) trade. Unknown trades get
-// the common question set, so a custom trade never dead-ends the flow.
+// Qualifying questions and the rate sheet for a chosen (or typed-in) trade.
+// Unknown trades get the common question set and the universal rate-sheet
+// groups, so a custom trade never dead-ends the flow.
 router.get('/onboarding/questions', authMiddleware, (req, res) => {
   try {
-    const trade = String(req.query.trade || '');
+    const trade = String(req.query.trade || '').slice(0, 80);
+    const locale = require('./onboardingLocale');
+    // The grouped sheet, in the user's currency. `scale` and `category` are
+    // catalogue-internal (locale conversion, which library category a row
+    // saves under) and never reach the screen.
+    const clean = ({ scale, category, ...item }) => item;
+    const rateSheet = locale.localiseRateSheet(trade, req.user)
+      .map(g => ({ key: g.key, title: g.title, desc: g.desc || '', items: g.items.map(clean) }));
     res.json({
       trade,
       matched: !!tradeCatalog.findTrade(trade),
       // In the user's country: a South African account is asked in Rand with
-      // SA certifications (see onboardingLocale.js).
-      questions: require('./onboardingLocale').localiseQuestions(tradeCatalog.getQuestionsForTrade(trade), trade, req.user),
-      // The optional itemised rate sheet for this trade — typical figures are
-      // placeholders only; blanks fall back to the generic rate library.
-      rate_items: require('./onboardingLocale').localiseRateItems(tradeCatalog.getRateItemsForTrade(trade), req.user),
+      // SA certifications (see onboardingLocale.js). Each question carries a
+      // `section` ('business' | 'pricing') the screen splits on.
+      questions: locale.localiseQuestions(tradeCatalog.getQuestionsForTrade(trade), trade, req.user),
+      // The optional itemised rate sheet for this trade, as groups — typical
+      // figures are placeholders only; blanks fall back to the generic rate
+      // library. `rate_items` is the same sheet flattened.
+      rate_sheet: rateSheet,
+      rate_items: rateSheet.flatMap(g => g.items.map(it => ({ ...it, group: g.title }))),
       currency_symbol: require('./lib/countries').countryForUser(req.user).symbol,
     });
   } catch (e) {
+    console.error('[Onboarding] questions error:', e.message);
     res.status(500).json({ error: 'Failed to load questions' });
   }
 });
@@ -156,7 +168,7 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
 
     // New flow: trade + qualifying answers + free-text notes. The legacy
     // `answers` object is still accepted so nothing old breaks.
-    const trade = String((req.body && req.body.trade) || '').trim();
+    const trade = String((req.body && req.body.trade) || '').trim().slice(0, 80);
     const qualifying = (req.body && req.body.qualifying && typeof req.body.qualifying === 'object' && !Array.isArray(req.body.qualifying))
       ? req.body.qualifying : {};
     const notes = String((req.body && req.body.notes) || '').trim();
@@ -180,6 +192,18 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
       { key: 'typical_job_value',    category: 'commercial',            template: v => `Typical job value: ${v}` },
       { key: 'specialisms',          category: 'project_type',          template: v => `Specialises in: ${v}`, multi: true },
       { key: 'certifications',       category: 'profile',               template: v => `Certification: ${v}`, multi: true },
+      { key: 'travel_radius',        category: 'region',                template: v => `Travels for work: ${v}` },
+      { key: 'work_mix',             category: 'project_type',          template: v => `Works for: ${v}`, multi: true },
+      { key: 'quotes_per_month',     category: 'commercial',            template: v => `Sends ${v} quotes a month` },
+      // How they price. materials_markup_pct also lands in the playbook below.
+      { key: 'pricing_basis',        category: 'commercial',            template: v => `Prices work by: ${v}`, multi: true },
+      { key: 'materials_supply',     category: 'supplier',              template: v => `Materials: ${v}` },
+      { key: 'materials_markup_pct', category: 'markup',                template: v => `Markup on materials supplied: ${v}%` },
+      { key: 'payment_terms',        category: 'commercial',            template: v => `Payment terms: ${v}` },
+      { key: 'deposit_pct',          category: 'commercial',            template: v => `Deposit asked for: ${v}%` },
+      { key: 'quote_includes',       category: 'commercial',            template: v => `Quotes normally include: ${v}`, multi: true },
+      { key: 'quote_validity',       category: 'commercial',            template: v => `Quotes valid for: ${v}` },
+      { key: 'guarantee',            category: 'commercial',            template: v => `Guarantee on work: ${v}` },
       { key: 'extra_notes',          category: 'general',               template: v => `Note from onboarding: ${v}` },
       { key: 'role',                 category: 'profile',               template: v => `Company/role: ${v}` },
       { key: 'company_name',         category: 'profile',               template: v => `Company name: ${v}` },
@@ -292,6 +316,19 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
     if (Object.keys(pctAnswers).length > 0) {
       try { require('./playbooks').setPricingPrefs(db, userId, pctAnswers); }
       catch (err) { console.error('[Onboarding] pricing prefs save error:', err.message); }
+    }
+    // So do the house rates: the day rate they gave, the hourly rate from the
+    // sheet's Labour group and the markup on materials. The playbook renders
+    // them as house rules on every pricing prompt.
+    const dayRateGiven = tradeRates && typeof tradeRates === 'object' && trade ? parseFloat(tradeRates[trade]) : NaN;
+    const houseRates = {
+      day: Number.isFinite(dayRateGiven) && dayRateGiven > 0 ? dayRateGiven : undefined,
+      hourly: rateItemValues.hourly_rate,
+      materials_markup: answers.materials_markup_pct != null && answers.materials_markup_pct !== '' ? answers.materials_markup_pct : undefined,
+    };
+    if (Object.values(houseRates).some(v => v !== undefined)) {
+      try { require('./playbooks').setHouseRates(db, userId, houseRates); }
+      catch (err) { console.error('[Onboarding] house rates save error:', err.message); }
     }
 
     db.prepare('UPDATE users SET onboarding_completed_at = CURRENT_TIMESTAMP, onboarding_skipped = 0, onboarding_reset_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userId);

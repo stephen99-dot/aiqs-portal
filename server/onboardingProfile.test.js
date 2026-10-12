@@ -16,7 +16,7 @@ function freshDb() {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE users (
-      id TEXT PRIMARY KEY, email TEXT, full_name TEXT, company TEXT
+      id TEXT PRIMARY KEY, email TEXT, full_name TEXT, company TEXT, country TEXT
     );
     CREATE TABLE user_branding (
       user_id TEXT PRIMARY KEY, logo_filename TEXT
@@ -78,15 +78,30 @@ test('answerRows come out in question order with human labels', () => {
   assert.strictEqual(spec[1], 'Rewires, EV chargers');
 });
 
-test('answerRows labels rate-sheet items from the catalogue', () => {
+test('answerRows labels rate-sheet items from the catalogue, with their group, in sheet order', () => {
   const db = freshDb();
   const row = op.saveSubmission(db, {
     userId: 'u1', trade: 'Electrician',
-    qualifying: { ...QUAL, rate_items: { rewire_3bed: 4200, unknown_item: 10 } },
+    qualifying: { ...QUAL, rate_items: { rewire_3bed: 4200, hourly_rate: 48, unknown_item: 10 } },
   });
   const rows = op.answerRows(op.getSubmission(db, row.id));
-  assert.ok(rows.some(r => r[0] === 'Full rewire — 3-bed house (£/job)' && r[1] === '4200'));
+  const labels = rows.map(r => r[0]);
+  assert.ok(rows.some(r => r[0] === 'Labour · Hourly rate (£/hour)' && r[1] === '48'));
+  assert.ok(rows.some(r => r[0] === 'Whole-house & certification · Full rewire — 3-bed house (£/job)' && r[1] === '4200'));
+  assert.ok(labels.indexOf('Labour · Hourly rate (£/hour)') < labels.indexOf('Whole-house & certification · Full rewire — 3-bed house (£/job)'), 'sheet order, not the order typed');
   assert.ok(rows.some(r => r[0] === 'unknown_item' && r[1] === '10'));
+});
+
+test('answerRows prints units in the account currency', () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO users (id, email, full_name, company, country) VALUES ('za1', 'sipho@example.com', 'Sipho Dlamini', 'Dlamini Electrical', 'ZA')").run();
+  const row = op.saveSubmission(db, {
+    userId: 'za1', trade: 'Electrician',
+    qualifying: { day_rate: 2400, rate_items: { hourly_rate: 300 } },
+  });
+  const rows = op.answerRows(op.getSubmission(db, row.id));
+  assert.ok(rows.some(r => r[0] === 'Your day rate (R/day)' && r[1] === '2400'));
+  assert.ok(rows.some(r => r[0] === 'Labour · Hourly rate (R/hour)' && r[1] === '300'));
 });
 
 test('answerRows survives an id the catalogue no longer knows', () => {
