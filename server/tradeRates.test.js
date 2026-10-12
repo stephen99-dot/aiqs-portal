@@ -137,10 +137,42 @@ test('rate-sheet re-submission updates values instead of duplicating', () => {
   assert.strictEqual(rows[0].value, 20);
 });
 
-test('rate-sheet save is a no-op for a trade the catalogue does not know', () => {
+test('universal rows save under their own category, trade rows under the trade slug', () => {
   const db = freshDb();
-  const { saved } = saveTradeItemRates(db, { userId: 'u1', trade: 'Thatcher', values: { anything: 100 } });
-  assert.strictEqual(saved, 0);
+  const { saved } = saveTradeItemRates(db, {
+    userId: 'u1', trade: 'Plasterer',
+    values: { hourly_rate: 40, labourer_day: 150, skip_hire_8yd: 300, skim_walls_m2: 20 },
+  });
+  assert.strictEqual(saved, 4);
+  const rows = all(db, 'u1');
+  assert.strictEqual(rows.find(r => r.item_key === 'hourly_rate').category, 'labour');
+  assert.strictEqual(rows.find(r => r.item_key === 'hourly_rate').unit, '£/hour');
+  assert.strictEqual(rows.find(r => r.item_key === 'labourer_day').category, 'labour');
+  assert.strictEqual(rows.find(r => r.item_key === 'skip_hire_8yd').category, 'prelims');
+  assert.strictEqual(rows.find(r => r.item_key === 'skim_walls_m2').category, 'plasterer');
+});
+
+test('a custom trade still saves its universal rows; unknown keys are dropped', () => {
+  const db = freshDb();
+  const { saved } = saveTradeItemRates(db, { userId: 'u1', trade: 'Thatcher', values: { hourly_rate: 38, anything: 100 } });
+  assert.strictEqual(saved, 1);
+  const rows = all(db, 'u1');
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].item_key, 'hourly_rate');
+  assert.strictEqual(rows[0].category, 'labour');
+});
+
+test('a percentage row keeps its % unit in any currency and is capped at 100', () => {
+  const db = freshDb();
+  const { saved } = saveTradeItemRates(db, {
+    userId: 'u1', trade: 'Quantity surveyor / estimator', symbol: 'R',
+    values: { fee_pct_contract: 3, boq_m2_gifa: 40 },
+  });
+  assert.strictEqual(saved, 2);
+  const rows = all(db, 'u1');
+  assert.strictEqual(rows.find(r => r.item_key === 'fee_pct_contract').unit, '%');
+  assert.strictEqual(rows.find(r => r.item_key === 'boq_m2_gifa').unit, 'R/m²');
+  assert.strictEqual(saveTradeItemRates(db, { userId: 'u2', trade: 'qs', values: { fee_pct_contract: 150 } }).saved, 0);
 });
 
 test('slugKey matches the my-rates import slug rule', () => {

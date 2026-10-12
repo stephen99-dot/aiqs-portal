@@ -11,7 +11,7 @@ const Database = require('better-sqlite3');
 const countries = require('./lib/countries');
 const { priceLockedQuantities, BASE_RATES } = require('./deterministicPricer');
 const { resetOnboarding } = require('./onboardingReset');
-const { localiseQuestions, localiseRateItems } = require('./onboardingLocale');
+const { localiseQuestions, localiseRateItems, localiseRateSheet, zaDayRate } = require('./onboardingLocale');
 const tradeCatalog = require('./tradeCatalog');
 
 const ZA_USER = { country: 'ZA', region: null };
@@ -154,10 +154,32 @@ test('onboarding asks a South African builder in Rand with SA certifications', (
   assert.ok(qs.find((q) => q.id === 'certifications').options.includes('NHBRC registered'));
   assert.ok(!qs.find((q) => q.id === 'certifications').options.includes('NICEIC'));
   assert.ok(qs.find((q) => q.id === 'typical_job_value').options.every((o) => !o.includes('£')));
+  assert.ok(qs.find((q) => q.id === 'travel_radius').options.every((o) => !/mile/.test(o)), 'distances in km');
   const items = localiseRateItems(tradeCatalog.getRateItemsForTrade('Flooring installer'), ZA_USER);
   assert.ok(items.every((i) => i.unit.startsWith('R/')));
+  const lvt = tradeCatalog.getRateItemsForTrade('Flooring installer').find((i) => i.key === 'lvt_flooring_karndean');
+  assert.ok(items.find((i) => i.key === 'lvt_flooring_karndean').typical > lvt.typical * 5, 'a £ figure is converted to Rand');
   // UK accounts: untouched
   assert.deepStrictEqual(localiseQuestions(tradeCatalog.getQuestionsForTrade('Electrician'), 'Electrician', { country: 'GB' }), tradeCatalog.getQuestionsForTrade('Electrician'));
+  assert.deepStrictEqual(localiseRateSheet('Electrician', { country: 'GB' }), tradeCatalog.getRateSheetForTrade('Electrician'));
+});
+
+test('a South African rate sheet derives labour from the Rand day rate and leaves percentages alone', () => {
+  const sheet = localiseRateSheet('Electrician', ZA_USER);
+  const hourly = sheet[0].items.find((i) => i.key === 'hourly_rate');
+  assert.strictEqual(hourly.unit, 'R/hour');
+  const ukHourly = tradeCatalog.getRateSheetForTrade('Electrician')[0].items.find((i) => i.key === 'hourly_rate').typical;
+  assert.ok(hourly.typical > ukHourly * 3, 'derived from the Rand day rate, not left in £');
+  assert.ok(hourly.typical < ukHourly * 20, 'derived once, not converted on top of the Rand day rate');
+  assert.ok(Math.abs(hourly.typical - zaDayRate('Electrician') / 8) <= 5, 'the Rand day rate / 8, rounded');
+  // Preliminaries are converted £ → R.
+  const skip = sheet[1].items.find((i) => i.key === 'skip_hire_8yd');
+  assert.strictEqual(skip.unit, 'R/skip');
+  assert.ok(skip.typical > 1500);
+  // A QS fee percentage is the same everywhere.
+  const fee = localiseRateSheet('qs', ZA_USER).flatMap((g) => g.items).find((i) => i.key === 'fee_pct_contract');
+  assert.strictEqual(fee.unit, '%');
+  assert.strictEqual(fee.typical, 2.5);
 });
 
 // ── Onboarding reset ───────────────────────────────────────────────────────

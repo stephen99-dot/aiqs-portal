@@ -151,6 +151,26 @@ function setPricingPrefs(db, userId, { ohp_pct, contingency_pct, trade_markup } 
   return getPricingPrefs(db, userId);
 }
 
+// The house rates onboarding collects — day rate, hourly rate and markup on
+// materials — into the playbook fields the prompt renders as house rules.
+// Only a given, sane value is written, and only when it changes, so re-running
+// onboarding with the same answers makes no new playbook version.
+function setHouseRates(db, userId, { day, hourly, materials_markup } = {}) {
+  const pb = getPlaybook(db, userId) || defaultPlaybook();
+  if (!pb.rates || typeof pb.rates !== 'object') pb.rates = { day: null, hourly: null };
+  const money = (v, max) => (v != null && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) < max ? Number(v) : null);
+  const pct = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : null);
+  let changed = false;
+  const d = money(day, 100000);
+  if (d != null && d !== pb.rates.day) { pb.rates.day = d; changed = true; }
+  const h = money(hourly, 10000);
+  if (h != null && h !== pb.rates.hourly) { pb.rates.hourly = h; changed = true; }
+  const m = pct(materials_markup);
+  if (m != null && m !== pb.materials_markup) { pb.materials_markup = m; changed = true; }
+  if (changed) savePlaybook(db, userId, pb);
+  return { changed, rates: { ...pb.rates }, materials_markup: pb.materials_markup };
+}
+
 // Render the playbook into the cached system prefix (stable, sorted serialisation).
 function renderPlaybook(playbook) {
   if (!playbook) return '';
@@ -160,4 +180,4 @@ function renderPlaybook(playbook) {
   return `\n=== CLIENT PLAYBOOK (apply these as house rules) ===\n${JSON.stringify(pb, null, 2)}\n===\n`;
 }
 
-module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs, setPricingPrefs };
+module.exports = { ensureSchema, defaultPlaybook, getPlaybook, savePlaybook, migrateFromLegacy, recordInsight, renderPlaybook, getPricingPrefs, setPricingPrefs, setHouseRates };
