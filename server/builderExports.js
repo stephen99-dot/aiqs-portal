@@ -379,13 +379,22 @@ function buildColMap(headerRow, groupRow) {
 
   // The line Total is a "total"/"amount" column that is NOT part of a labour or
   // material group — those amounts are the split, not the combined line total.
+  // Nor is it a rate: a bill laid out "Labour rate | Materials rate | Total
+  // rate | Amount" prints the per-unit all-in rate under "Total rate" and the
+  // line value under "Amount". Taking the first label that starts with
+  // "total" read every line as its unit rate (a £114k bill summed to £52k),
+  // and left the summary's net total — printed under Amount — unread, so the
+  // bill locked as "no printed total". A value column named "total"/"amount"
+  // that is not a rate wins; the old first-match stays as the fallback.
   const grouped = new Set([...labourGroup, ...materialGroup]);
+  const isValueLabel = (t) => t.startsWith('total') || t.startsWith('amount');
   let total;
   if (grouped.size) {
     const findOut = (pred) => { for (let c = 1; c <= 14; c++) { if (!grouped.has(c) && labels[c] && pred(labels[c])) return c; } return null; };
-    total = findOut((t) => t.startsWith('total')) || findOut((t) => t.startsWith('amount'));
+    total = findOut((t) => t.startsWith('total') && !isRate(t)) || findOut((t) => t.startsWith('amount') && !isRate(t))
+      || findOut((t) => t.startsWith('total')) || findOut((t) => t.startsWith('amount'));
   } else {
-    total = find((t) => t.startsWith('total') || t.startsWith('amount'));
+    total = find((t) => isValueLabel(t) && !isRate(t)) || find(isValueLabel);
   }
 
   return {

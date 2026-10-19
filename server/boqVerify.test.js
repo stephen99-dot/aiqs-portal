@@ -137,3 +137,34 @@ test('a bill whose OH&P is a percentage-only row and whose total is "TOTAL QUOTA
   assert.strictEqual(v.detail.printed_total, 1872);
   assert.match(v.message, /OH&P/);
 });
+
+// Hidcote Garden Room (Vision Build): the bill prints a per-unit "Total rate"
+// column beside the line "Amount". The first header starting with "total" was
+// taken as the line value, so 97 lines summed to their unit rates (£52k, not
+// the bill's £114k) and the net total — printed under Amount — was never
+// read: a correct bill locked as "no printed total".
+test('a "Labour rate | Materials rate | Total rate | Amount" layout reads Amount as the line value and verifies', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    ['Item', 'Description', 'Unit', 'Quantity', 'Labour rate', 'Materials & plant rate', 'Total rate', 'Amount'],
+    ['S1', 'PRELIMINARIES'],
+    ['1.01', 'Site supervision, one day per week', 'week', 10, 290, 0, 290, 2900],
+    ['1.02', 'Welfare unit, weekly hire', 'week', 10, 0, 120, 120, 1200],
+    ['', 'Total carried to summary: Preliminaries', '', '', '', '', '', 4100],
+    ['S2', 'SUBSTRUCTURE'],
+    ['2.01', 'Strip topsoil and set aside', 'm2', 40, 7.5, 2.5, 10, 400],
+    ['', 'Total carried to summary: Substructure', '', '', '', '', '', 400],
+    ['SUMMARY'],
+    ['S1', 'Preliminaries', '', '', '', '', '', 4100],
+    ['S2', 'Substructure', '', '', '', '', '', 400],
+    ['', 'NET TOTAL (prime cost)', '', '', '', '', '', 4500],
+    ['', 'Overheads and profit', '', '', '', 0.17, 'on net total', 765],
+    ['', 'SUB TOTAL', '', '', '', '', '', 5265],
+    ['', 'Value Added Tax', '', '', '', 0.2, 'on sub total', 1053],
+    ['', 'TOTAL', '', '', '', '', '', 6318],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.ok(v.ok);
+  assert.strictEqual(v.detail.items, 3);
+  assert.strictEqual(v.detail.parsed_total, 4500);
+  assert.strictEqual(v.detail.printed_total, 4500);
+});
