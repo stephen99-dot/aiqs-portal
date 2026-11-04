@@ -85,6 +85,13 @@ app.use('/api', brandingRoutes);
 app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
 app.use('/api', superBrainRoutes);
+// Account link for AI Trades Pilot (see partnerRoutes.js). Same shared key as
+// the Super Brain exchange; off until SUPER_BRAIN_KEY is set.
+{
+  const partner = require('./partnerRoutes');
+  if (partner.router) app.use('/api', partner.router);
+  else console.error('[partner] routes not mounted:', partner.routerError && partner.routerError.message);
+}
 app.use('/api', surveyRoutes);
 // Trustpilot reviews for the sign-in page: /api/public/trustpilot (read) and
 // the admin sync / listing under /api/admin/trustpilot.
