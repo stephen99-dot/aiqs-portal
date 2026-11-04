@@ -571,6 +571,31 @@ test('sub-totals and summary lines held as uncached formulas are read, not zero'
   assert.ok(reconcileParsed(parsed).ok);
 });
 
+// A per-unit "Total rate" column beside the line "Amount" (Hidcote Garden
+// Room): Amount is the line value, the rate columns are per unit, and the
+// labour / materials split is scaled up by the quantity as for any per-unit
+// bill. Before this the "Total rate" column was read as the line value.
+test('a "Total rate | Amount" header reads Amount as the line total and scales the per-unit split', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    ['Item', 'Description', 'Unit', 'Quantity', 'Labour rate', 'Materials & plant rate', 'Total rate', 'Amount'],
+    ['S1', 'PRELIMINARIES'],
+    ['1.01', 'Site supervision, one day per week', 'week', 10, 290, 0, 290, 2900],
+    ['1.02', 'Welfare unit, weekly hire', 'week', 10, 0, 120, 120, 1200],
+    ['', 'Total carried to summary: Preliminaries', '', '', '', '', '', 4100],
+    ['S2', 'SUBSTRUCTURE'],
+    ['2.01', 'Strip topsoil and set aside', 'm2', 40, 7.5, 2.5, 10, 400],
+    ['', 'Total carried to summary: Substructure', '', '', '', '', '', 400],
+    ['SUMMARY'],
+    ['', 'NET TOTAL (prime cost)', '', '', '', '', '', 4500],
+  ]);
+  assert.deepStrictEqual(parsed.sections.map((s) => [s.title, s.items.length, s.subtotal.total]), [['S1 PRELIMINARIES', 2, 4100], ['S2 SUBSTRUCTURE', 1, 400]]);
+  assert.deepStrictEqual(parsed.sections[0].items.map((i) => [i.total, i.labour, i.materials]), [[2900, 2900, 0], [1200, 0, 1200]]);
+  assert.deepStrictEqual(parsed.sections[1].items.map((i) => [i.total, i.labour, i.materials]), [[400, 300, 100]]);
+  assert.strictEqual(parsed.grand.total, 4500);
+  assert.strictEqual(parsed.source_summary.net_total, 4500);
+  assert.ok(reconcileParsed(parsed).ok);
+});
+
 // ── Builder Pack: by-trade package block ────────────────────────────────────
 test('the Builder Pack Trade Summary tab also groups the bill by trade package', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
   const { generateBuilderPack } = require('./builderExports');

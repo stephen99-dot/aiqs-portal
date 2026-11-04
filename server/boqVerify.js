@@ -39,7 +39,7 @@ const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDig
 // an older verifier is re-run on the next open, so a bill locked by a check
 // that has since been corrected unlocks itself after deploy — nobody has to
 // remember to press Re-verify on every affected project.
-const VERIFIER_VERSION = 5; // 5: percentage-only OH&P / contingency / VAT lines (no £ in Total) are read
+const VERIFIER_VERSION = 6; // 6: a "Total rate" column is no longer mistaken for the line Amount
 
 function describePrinted(recon) {
   if (!recon) return 'printed total';
