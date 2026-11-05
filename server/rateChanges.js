@@ -54,6 +54,11 @@ function createTracker({ db, mailer, logActivity, adminEmail, now = Date.now, qu
     first_at INTEGER NOT NULL,
     last_at INTEGER NOT NULL
   )`);
+  try { db.exec('ALTER TABLE notifications ADD COLUMN link TEXT'); } catch (e) { /* already there */ }
+
+  // Bell and email both land on the client's rate library, "Recent changes"
+  // open, so the admin sees exactly which rates moved.
+  const ratesLink = (userId) => '/admin/users?user=' + encodeURIComponent(userId) + '&show=rates';
 
   // Note a change. Counts accumulate until the roll-up is sent.
   function record(user, { source, added = 0, updated = 0, removed = 0 } = {}) {
@@ -103,9 +108,10 @@ function createTracker({ db, mailer, logActivity, adminEmail, now = Date.now, qu
       logActivity({ event_type: 'rates_updated', title: who + ' updated their rates', detail, user_id: u.id, user_name: u.full_name, user_email: u.email });
     } catch (e) { console.error('[RateChanges] activity log failed:', e.message); }
 
+    const link = ratesLink(u.id);
     try {
-      db.prepare('INSERT INTO notifications (id, type, title, detail, icon) VALUES (?, ?, ?, ?, ?)')
-        .run(uuidv4(), 'rates_updated', who + ' updated their rates', detail, 'clipboard');
+      db.prepare('INSERT INTO notifications (id, type, title, detail, icon, link) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(uuidv4(), 'rates_updated', who + ' updated their rates', detail, 'clipboard', link);
     } catch (e) { console.error('[RateChanges] notification insert failed:', e.message); }
 
     try {
@@ -120,12 +126,12 @@ function createTracker({ db, mailer, logActivity, adminEmail, now = Date.now, qu
           'Their rate library now holds ' + plural(total, 'active rate') + '.',
           'Refresh their rates in our system so their BOQs keep pricing from their own numbers.',
         ],
-        ctaText: 'Open user management',
-        ctaUrl: mailer.BASE_URL + '/admin/users',
+        ctaText: 'See what changed',
+        ctaUrl: mailer.BASE_URL + link,
       });
     } catch (e) { console.error('[RateChanges] admin email failed:', e.message); }
 
-    return { user_id: u.id, who, counts, how, total };
+    return { user_id: u.id, who, counts, how, total, link };
   }
 
   async function sweep(t = now()) {

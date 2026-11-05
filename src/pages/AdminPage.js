@@ -525,6 +525,8 @@ function LogsTab({ t }) {
           <option value="project_completed">Completions</option>
           <option value="login">Logins</option>
           <option value="plan_changed">Plan Changes</option>
+          <option value="rates_added">Rates Added (client's first)</option>
+          <option value="rates_updated">Rate Changes</option>
           <option value="error">Errors</option>
         </select>
         <button onClick={loadActivity} style={{ padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: t.surfaceHover, color: t.textSecondary, border: '1px solid ' + t.border, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}><RefreshIcon size={14} /> Refresh</button>
@@ -654,6 +656,7 @@ function OnboardingTab({ t }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     apiFetch('/admin/onboarding-submissions')
@@ -688,11 +691,35 @@ function OnboardingTab({ t }) {
     );
   }
 
+  // Search across who they are (name, email, company), their trade and
+  // country, and what they said (answers, notes) — so "sparky" or "Leeds"
+  // finds them as readily as a surname.
+  const q = query.trim().toLowerCase();
+  const matches = (r) => !q || [r.full_name, r.email, r.company, r.trade, r.country, r.notes, ...(r.answers || []).map(a => a.value)]
+    .some(v => v && String(v).toLowerCase().includes(q));
+  const shown = rows.filter(matches);
+
   return (
     <div style={{ background: t.card, border: '1px solid ' + t.border, borderRadius: 14, overflow: 'hidden', boxShadow: t.shadowSm }}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + t.border }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Onboarding profiles</div>
-        <div style={{ fontSize: 12, color: t.textMuted }}>{rows.length} completed — download the profile as a spreadsheet, and their logo where they've added one</div>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid ' + t.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Onboarding profiles</div>
+          <div style={{ fontSize: 12, color: t.textMuted }}>{q ? shown.length + ' of ' + rows.length : rows.length} completed — download the profile as a spreadsheet, and their logo where they've added one</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', borderRadius: 8, border: '1px solid ' + t.border, background: t.inputBg || t.surface, flex: '1 1 240px', maxWidth: 340 }}>
+          <SearchIcon size={14} style={{ color: t.textMuted, flexShrink: 0 }} />
+          <input
+            type="text" value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Search name, email, company, trade…"
+            aria-label="Search onboarding profiles"
+            style={{ flex: 1, minWidth: 0, padding: '8px 0', border: 'none', background: 'transparent', color: t.text, fontSize: 12.5, outline: 'none', fontFamily: 'inherit' }}
+          />
+          {query && (
+            <button type="button" onClick={() => setQuery('')} title="Clear search" style={{ background: 'none', border: 'none', cursor: 'pointer', color: t.textMuted, padding: 0, display: 'flex' }}>
+              <XIcon size={13} />
+            </button>
+          )}
+        </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
@@ -704,7 +731,10 @@ function OnboardingTab({ t }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => {
+            {shown.length === 0 && (
+              <tr><td colSpan={5} style={{ padding: '28px 14px', textAlign: 'center', color: t.textMuted, fontSize: 13 }}>No onboarding profiles match “{query.trim()}”.</td></tr>
+            )}
+            {shown.map(r => {
               const safeName = (r.full_name || r.email || 'client').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '-') || 'client';
               return (
                 <React.Fragment key={r.id}>

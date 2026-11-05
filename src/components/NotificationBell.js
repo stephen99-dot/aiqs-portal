@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch } from '../utils/api';
 
-// Toast notification that auto-appears when new notifications arrive
-function NotificationToast({ notification, onClose, theme }) {
+// Toast notification that auto-appears when new notifications arrive.
+// onOpen (when the notification carries a link) takes the admin to it.
+function NotificationToast({ notification, onClose, onOpen, theme }) {
   const isDark = theme === 'dark';
 
   useEffect(() => {
@@ -59,7 +61,7 @@ function NotificationToast({ notification, onClose, theme }) {
       display: 'flex', gap: '12px', alignItems: 'flex-start',
       animation: 'toastSlideIn 0.35s cubic-bezier(0.22,1,0.36,1)',
       cursor: 'pointer',
-    }} onClick={onClose}>
+    }} onClick={() => { onClose(); if (onOpen) onOpen(); }}>
       <div style={{
         width: '34px', height: '34px', borderRadius: '9px', flexShrink: 0,
         background: iconBgColor,
@@ -85,7 +87,7 @@ function NotificationToast({ notification, onClose, theme }) {
           </div>
         )}
         <div style={{ fontSize: '10px', color: isDark ? '#475569' : '#94A3B8', marginTop: '4px' }}>
-          Just now
+          Just now{onOpen ? <span style={{ color: '#F59E0B', fontWeight: 600 }}> · Click to open</span> : null}
         </div>
       </div>
       <button onClick={(e) => { e.stopPropagation(); onClose(); }} style={{
@@ -129,6 +131,7 @@ function playNotificationSound() {
 
 export default function NotificationBell() {
   const { t, mode } = useTheme();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -197,6 +200,13 @@ export default function NotificationBell() {
     } catch (err) {
       console.error('Failed to mark read:', err);
     }
+  };
+
+  // Click: mark it read and, when the alert points somewhere (a client's
+  // rate library, say), go there.
+  const openNotification = (n) => {
+    if (!n.read) markRead(n.id);
+    if (n.link) { setOpen(false); navigate(n.link); }
   };
 
   const timeAgo = (dateStr) => {
@@ -271,6 +281,7 @@ export default function NotificationBell() {
         <NotificationToast
           notification={toast}
           onClose={() => setToast(null)}
+          onOpen={toast.link ? () => openNotification(toast) : null}
           theme={mode}
         />
       )}
@@ -367,11 +378,12 @@ export default function NotificationBell() {
               notifications.map((n) => (
                 <div
                   key={n.id}
-                  onClick={() => { if (!n.read) markRead(n.id); }}
+                  onClick={() => openNotification(n)}
+                  title={n.link ? 'Open' : undefined}
                   style={{
                     display: 'flex', gap: '10px', padding: '11px 16px',
                     borderBottom: `1px solid ${isDark ? 'rgba(30,41,59,0.5)' : 'rgba(241,245,249,0.8)'}`,
-                    cursor: n.read ? 'default' : 'pointer',
+                    cursor: (n.read && !n.link) ? 'default' : 'pointer',
                     background: n.read
                       ? 'transparent'
                       : (isDark ? 'rgba(245,158,11,0.03)' : 'rgba(245,158,11,0.04)'),
@@ -379,6 +391,7 @@ export default function NotificationBell() {
                   }}
                   onMouseEnter={e => {
                     if (!n.read) e.currentTarget.style.background = isDark ? 'rgba(245,158,11,0.06)' : 'rgba(245,158,11,0.07)';
+                    else if (n.link) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.025)';
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.background = n.read
@@ -423,6 +436,11 @@ export default function NotificationBell() {
                       background: n.icon === 'user-blocked' ? '#EF4444' : '#F59E0B',
                       flexShrink: 0, marginTop: '5px',
                     }} />
+                  )}
+                  {n.link && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={t.textMuted || '#64748B'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '4px', opacity: 0.7 }}>
+                      <path d="M9 18l6-6-6-6"/>
+                    </svg>
                   )}
                 </div>
               ))

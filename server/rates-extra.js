@@ -76,7 +76,7 @@ router.post('/my-rates/dedupe', authMiddleware, (req, res) => {
 // Delete a rate (soft delete)
 router.delete('/my-rates/:rateId', authMiddleware, (req, res) => {
   try {
-    const result = db.prepare('UPDATE client_rate_library SET is_active = 0 WHERE id = ? AND user_id = ?').run(req.params.rateId, req.user.id);
+    const result = db.prepare('UPDATE client_rate_library SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(req.params.rateId, req.user.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Rate not found' });
     rateOnboarding.recordRateChange(req.user, { source: 'manual', removed: 1 });
     res.json({ success: true });
@@ -358,11 +358,14 @@ router.get('/admin/clients-list', authMiddleware, function(req, res) {
 // shows what they added. Each rate is flagged against the system defaults:
 //   is_custom  — the client added this line themselves (no matching default)
 //   is_edited  — a seeded default whose value the client changed
-// so the admin can see the client's own numbers at a glance.
+// so the admin can see the client's own numbers at a glance. `recent` is the
+// answer to the alert itself — the rates that changed lately (added, updated,
+// removed), newest first, with the value each replaced (rateHistory.js) — so
+// one corrected rate is findable without scrolling the whole library.
 router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   try {
-    const user = db.prepare('SELECT id, email, full_name FROM users WHERE id = ?').get(req.params.id);
+    const user = db.prepare('SELECT id, email, full_name, own_rates_added_at FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     const rates = db.prepare(`
       SELECT r.*,
@@ -381,8 +384,9 @@ router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
       LEFT JOIN client_rate_library r ON r.id = c.rate_id
       WHERE c.user_id = ? ORDER BY c.created_at DESC LIMIT 20
     `).all(user.id);
+    const recent = require('./rateHistory').recentChanges(db, user.id);
     res.json({
-      user: { id: user.id, email: user.email, full_name: user.full_name },
+      user: { id: user.id, email: user.email, full_name: user.full_name, own_rates_added_at: user.own_rates_added_at || null },
       rates,
       stats: {
         total: rates.length,
@@ -391,6 +395,9 @@ router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
         last_updated: rates.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '') || null,
       },
       corrections,
+      recent: recent.changes,
+      recent_truncated: recent.truncated,
+      recent_days: recent.days,
     });
   } catch (e) {
     console.error('[AdminRates] view error:', e);

@@ -10,7 +10,7 @@ function harness() {
   db.exec(`
     CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT, full_name TEXT, company TEXT, role TEXT);
     CREATE TABLE client_rate_library (id TEXT PRIMARY KEY, user_id TEXT, is_active INTEGER DEFAULT 1);
-    CREATE TABLE notifications (id TEXT PRIMARY KEY, type TEXT, title TEXT, detail TEXT, icon TEXT, read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE notifications (id TEXT PRIMARY KEY, type TEXT, title TEXT, detail TEXT, icon TEXT, read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, link TEXT);
     INSERT INTO users VALUES ('u1', 'jo@builder.co.uk', 'Jo Builder', 'Builder Ltd', 'client');
     INSERT INTO users VALUES ('a1', 'hello@crmwizardai.com', 'Admin', NULL, 'admin');
     INSERT INTO client_rate_library VALUES ('r1', 'u1', 1), ('r2', 'u1', 1), ('r3', 'u1', 0);
@@ -52,12 +52,13 @@ test('changes roll up into one alert, sent after the quiet window, once', async 
   assert.strictEqual(bell[0].type, 'rates_updated');
   assert.strictEqual(bell[0].title, 'Jo Builder updated their rates');
   assert.match(bell[0].detail, /3 rates updated · 3 rates added · 1 rate removed — via the My Rates page and an Excel import/);
+  assert.strictEqual(bell[0].link, '/admin/users?user=u1&show=rates', 'bell opens the client with their rates showing');
 
   assert.strictEqual(h.mails.length, 1);
   assert.strictEqual(h.mails[0].to, 'hello@crmwizardai.com');
   assert.match(h.mails[0].subject, /^Rates updated — Jo Builder \(3 rates updated/);
   assert.ok(h.mails[0].paragraphs[0].includes('Builder Ltd') && h.mails[0].paragraphs[0].includes('jo@builder.co.uk'));
-  assert.strictEqual(h.mails[0].ctaUrl, 'https://portal.test/admin/users');
+  assert.strictEqual(h.mails[0].ctaUrl, 'https://portal.test/admin/users?user=u1&show=rates');
 
   assert.strictEqual(h.activity.length, 1);
   assert.strictEqual(h.activity[0].event_type, 'rates_updated');
