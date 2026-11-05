@@ -4,13 +4,14 @@ import { KeyIcon } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { resolveUrl, portalOrigin } from '../utils/api';
 
-const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
+// Page-local fetch wrapper (predates utils/api). URLs resolve through the
+// shared helper so they work inside the iOS app as well as on the website.
 function apiFetch(endpoint, options = {}) {
   const token = getToken();
   const h = { 'Authorization': 'Bearer ' + token, ...options.headers };
   if (!(options.body instanceof FormData)) h['Content-Type'] = 'application/json';
-  return fetch(API_BASE + endpoint, { ...options, headers: h })
+  return fetch(resolveUrl('/api' + endpoint), { ...options, headers: h })
     .then(async (res) => { const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Request failed'); return data; });
 }
 

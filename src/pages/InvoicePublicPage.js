@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckCircleIcon } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
+import { resolveUrl } from '../utils/api';
 
 // Public invoice page — /i/<token>. What the builder's client opens from the
 // email or WhatsApp link. Read-only: see the invoice, download the PDF and —
@@ -36,7 +37,7 @@ export default function InvoicePublicPage() {
   const [error, setError] = useState('');
   const [showLines, setShowLines] = useState(false);
 
-  const base = '/api/public/invoices/' + encodeURIComponent(token);
+  const base = resolveUrl('/api/public/invoices/' + encodeURIComponent(token));
 
   const load = useCallback(async () => {
     try {

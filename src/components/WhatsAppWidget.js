@@ -47,6 +47,16 @@ export default function WhatsAppWidget({ theme, userName }) {
   const [customMessage, setCustomMessage] = useState('');
   const [showPulse, setShowPulse] = useState(true);
   const [bottomPos, setBottomPos] = useState(24);
+  // Hidden while a field has focus on a phone (keyboard up) — see .wa-widget--typing.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const isField = (el) => !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName || '');
+    const onFocusIn = (e) => { if (isField(e.target)) setTyping(true); };
+    const onFocusOut = () => setTimeout(() => setTyping(isField(document.activeElement)), 50);
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    return () => { document.removeEventListener('focusin', onFocusIn); document.removeEventListener('focusout', onFocusOut); };
+  }, []);
   const dragging = useRef(false);
   const moved = useRef(false);
   const startY = useRef(0);
@@ -118,15 +128,14 @@ export default function WhatsAppWidget({ theme, userName }) {
   return (
     <div
       ref={widgetRef}
-      style={{
-        position: 'fixed', bottom: `calc(${bottomPos}px + var(--safe-bottom))`, right: 'calc(24px + var(--safe-right))', zIndex: 9998,
-      }}
+      className={'wa-widget' + (typing ? ' wa-widget--typing' : '')}
+      style={{ '--wa-bottom': bottomPos + 'px' }}
     >
       {/* ─── Chat Panel ──────────────────────────────────────────────── */}
       {isOpen && (
         <div style={{
           position: 'absolute', bottom: 68, right: 0,
-          width: 360, maxHeight: 520,
+          width: 'min(360px, calc(100vw - 32px))', maxHeight: 'min(520px, calc(100dvh - 160px))',
           background: isDark ? '#131B2E' : '#FFFFFF',
           border: `1px solid ${isDark ? '#1C2A44' : '#E2E8F0'}`,
           borderRadius: 20,

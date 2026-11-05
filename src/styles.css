@@ -102,6 +102,20 @@ html.native-app input, html.native-app textarea, html.native-app [contenteditabl
 html.native-app p, html.native-app td, html.native-app pre, html.native-app li {
   -webkit-user-select: text; user-select: text;
 }
+/* --- FLOATING WHATSAPP BUTTON (WhatsAppWidget.js) --- */
+/* Sits under sheets, drawers, the sidebar and the bottom nav (z-index), lifts
+   above the bottom nav when one is on screen, and hides while the user is
+   typing on a phone so it never covers a Send button. */
+.wa-widget {
+  position: fixed; z-index: 160;
+  right: calc(24px + var(--safe-right));
+  bottom: calc(var(--wa-bottom, 24px) + var(--safe-bottom) + var(--wa-nav-offset, 0px));
+}
+body:has(.bottom-nav) .wa-widget { --wa-nav-offset: 68px; }
+@media (max-width: 768px) {
+  .wa-widget--typing { display: none; }
+}
+
 /* Pages that fill the screen on their own (auth, magic link, public docs). */
 .full-height-page { min-height: 100vh; min-height: 100dvh; }
 /* Long words, URLs and reference codes wrap instead of pushing the layout
@@ -596,6 +610,10 @@ body {
   /* Tables that already sit in their own scroll wrapper (.sticky-first-col)
      keep table layout so their sticky first column works. */
   table:not(.sticky-first-col) { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Inside a table a squeezed column must widen the table (and scroll), not
+     break "Preliminaries" into one letter per line. */
+  td, th { overflow-wrap: normal; }
+  th { white-space: nowrap; }
 
   /* Generous tap targets — Apple/Google guidance is 44px minimum. */
   button, a.btn-primary, a.btn-secondary, .btn-primary, .btn-secondary,

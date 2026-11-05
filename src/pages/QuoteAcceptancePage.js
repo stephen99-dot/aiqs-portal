@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckCircleIcon } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
+import { resolveUrl } from '../utils/api';
 
 // Public quote acceptance page — /q/<token>. No auth, no estimator gate.
 // This is what the BUILDER'S CLIENT sees on their phone, so it renders the
@@ -57,7 +58,7 @@ export default function QuoteAcceptancePage() {
   // Which price sections are expanded
   const [openSections, setOpenSections] = useState({});
 
-  const base = '/api/public/quotes/' + encodeURIComponent(token);
+  const base = resolveUrl('/api/public/quotes/' + encodeURIComponent(token));
 
   const load = useCallback(async () => {
     try {

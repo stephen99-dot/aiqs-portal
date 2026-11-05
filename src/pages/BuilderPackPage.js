@@ -1704,8 +1704,8 @@ function Field({ label, children }) {
 
 const previewHeaderStyle = {
   display: 'grid',
-  gridTemplateColumns: '32px 1fr 100px 100px 100px 60px',
-  minWidth: 460,
+  gridTemplateColumns: '32px minmax(150px, 1fr) 100px 100px 100px 60px',
+  minWidth: 600,
   gap: 8, padding: '9px 12px',
   background: 'rgba(27,42,74,0.06)',
   fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
@@ -1713,8 +1713,8 @@ const previewHeaderStyle = {
 };
 const previewRowStyle = {
   display: 'grid',
-  gridTemplateColumns: '32px 1fr 100px 100px 100px 60px',
-  minWidth: 460,
+  gridTemplateColumns: '32px minmax(150px, 1fr) 100px 100px 100px 60px',
+  minWidth: 600,
   gap: 8, padding: '10px 12px',
   borderTop: '1px solid var(--border)',
   fontSize: 12.5,
