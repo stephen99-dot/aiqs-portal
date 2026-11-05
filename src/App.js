@@ -131,7 +131,8 @@ function AppInner() {
         </Route>
         <Route path="*" element={<HomeRedirect />} />
       </Routes>
-      {user && <WhatsAppWidget theme={t} userName={user?.fullName} />}
+      {/* Customer support widget — not for admins, who are the people answering it. */}
+      {user && user.role !== 'admin' && <WhatsAppWidget theme={t} userName={user?.fullName} />}
       <AdminNotifications />
     </BrowserRouter>
   );

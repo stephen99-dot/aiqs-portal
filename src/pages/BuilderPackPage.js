@@ -1043,12 +1043,12 @@ export default function BuilderPackPage() {
                     marginTop: 10, overflow: 'hidden',
                   }}>
                     <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 12px', background: 'rgba(27,42,74,0.06)',
+                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: isMobile ? 'wrap' : 'nowrap',
+                      padding: isMobile ? '8px 10px' : '10px 12px', background: 'rgba(27,42,74,0.06)',
                     }}>
                       <button
                         onClick={() => setOpenSectionIds((m) => ({ ...m, [s.number]: !m[s.number] }))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)', minWidth: 28, minHeight: 36 }}
                         aria-label={open ? 'Collapse' : 'Expand'}
                       >{open ? '▾' : '▸'}</button>
                       <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--text-muted)', minWidth: 28 }}>{s.number}</span>
@@ -1061,15 +1061,82 @@ export default function BuilderPackPage() {
                           padding: '3px 4px', outline: 'none',
                         }}
                       />
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}</span>
-                      <span style={{ fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--text-primary)', minWidth: 90, textAlign: 'right' }}>
-                        {fmt(sym, t.total)}
-                      </span>
+                      {/* Phones: the title keeps the first line to itself; count and total sit beneath it. */}
+                      <div style={isMobile
+                        ? { flex: '1 1 100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 66, marginTop: -4 }
+                        : { display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}</span>
+                        <span style={{ fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--text-primary)', minWidth: 90, textAlign: 'right' }}>
+                          {fmt(sym, t.total)}
+                        </span>
+                      </div>
                     </div>
 
                     {open && (
-                      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: isMobile ? 560 : 700, tableLayout: 'fixed' }}>
+                      <div style={{ overflowX: isMobile ? 'visible' : 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        {isMobile ? (
+                          /* One card per line on a phone: description in full, the
+                             figures labelled underneath. A 560px table meant reading
+                             every line through a horizontal scroll. */
+                          <div>
+                            {s.items.map((it, iIdx) => {
+                              const total = lineTotal(it);
+                              return (
+                                <div key={it._id || iIdx} style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                    <input value={it.itemRef || ''} onChange={(e) => updateItem(sIdx, iIdx, { itemRef: e.target.value })}
+                                      aria-label="Ref" placeholder="Ref"
+                                      style={{ ...mobileCell, flex: '0 0 64px', width: 64, fontFamily: 'JetBrains Mono, monospace' }} />
+                                    <textarea value={it.description || ''} onChange={(e) => updateItem(sIdx, iIdx, { description: e.target.value })}
+                                      rows={Math.min(6, Math.max(2, Math.ceil(String(it.description || '').length / 34)))} aria-label="Description"
+                                      style={{ ...mobileCell, flex: 1, minHeight: 46, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.35 }} />
+                                    <button onClick={() => removeItem(sIdx, iIdx)} title="Remove item" aria-label="Remove item"
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 20, padding: '2px 4px', lineHeight: 1, minHeight: 0 }}>×</button>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${hasSplit ? 4 : 3}, minmax(0, 1fr))`, gap: 6 }}>
+                                    <label style={mobileLabel}>Unit
+                                      <input value={it.unit || ''} onChange={(e) => updateItem(sIdx, iIdx, { unit: e.target.value })}
+                                        style={{ ...mobileCell, textAlign: 'center' }} />
+                                    </label>
+                                    <label style={mobileLabel}>Qty
+                                      <input type="number" inputMode="decimal" step="0.01" value={it.qty}
+                                        onChange={(e) => updateItem(sIdx, iIdx, { qty: e.target.value })}
+                                        style={{ ...mobileCell, textAlign: 'right' }} />
+                                    </label>
+                                    {hasSplit && (
+                                      <label style={mobileLabel}>Labour
+                                        <input type="number" inputMode="decimal" step="0.01" value={it.labour}
+                                          onChange={(e) => updateItem(sIdx, iIdx, { labour: e.target.value })}
+                                          style={{ ...mobileCell, textAlign: 'right', color: '#3B82F6' }} />
+                                      </label>
+                                    )}
+                                    {hasSplit && (
+                                      <label style={mobileLabel}>Materials
+                                        <input type="number" inputMode="decimal" step="0.01" value={it.materials}
+                                          onChange={(e) => updateItem(sIdx, iIdx, { materials: e.target.value })}
+                                          style={{ ...mobileCell, textAlign: 'right', color: '#A855F7' }} />
+                                      </label>
+                                    )}
+                                    {!hasSplit && (
+                                      <label style={mobileLabel}>Total
+                                        <input type="number" inputMode="decimal" step="0.01" value={it.total}
+                                          onChange={(e) => updateItem(sIdx, iIdx, { total: e.target.value })}
+                                          style={{ ...mobileCell, textAlign: 'right', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }} />
+                                      </label>
+                                    )}
+                                  </div>
+                                  {hasSplit && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, color: 'var(--text-muted)' }}>
+                                      <span>Line total</span>
+                                      <span style={{ fontSize: 13.5, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{fmt(sym, total, 2)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 700, tableLayout: 'fixed' }}>
                           <thead>
                             <tr style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)', textAlign: 'left' }}>
                               <th style={th(48)}>Ref</th>
@@ -1142,7 +1209,8 @@ export default function BuilderPackPage() {
                             })}
                           </tbody>
                         </table>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-primary)' }}>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-primary)', flexWrap: 'wrap', gap: 8 }}>
                           <button
                             onClick={() => addItem(sIdx)}
                             style={{
@@ -1242,6 +1310,16 @@ const inputCell = {
   background: 'transparent', color: 'var(--text-primary)',
   border: '1px solid transparent', fontSize: 12, outline: 'none',
   boxSizing: 'border-box',
+};
+// Phone layout for the line items (one card per line, see the items map).
+const mobileCell = {
+  ...inputCell,
+  border: '1px solid var(--border-input)', background: 'var(--bg-input)',
+  padding: '7px 8px', borderRadius: 7, minHeight: 40,
+};
+const mobileLabel = {
+  display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0,
+  fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)',
 };
 const th = (w) => ({
   padding: '8px 10px', fontSize: 10.5, fontWeight: 700,

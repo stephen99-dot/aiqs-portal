@@ -192,7 +192,7 @@ export default function Layout() {
         className={`sidebar-panel ${mobileOpen ? 'open' : ''}`}
         data-tour="sidebar-nav"
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, width: 'var(--sidebar-width)',
+          position: 'fixed', top: 0, left: 0, bottom: 0, width: 'calc(var(--sidebar-width) + var(--safe-left))',
           background: sidebarBg,
           borderRight: `1px solid ${t.sidebarBorder}`,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -342,7 +342,7 @@ export default function Layout() {
       {/* ── Main content ── */}
       <main style={{
         flex: 1,
-        marginLeft: 'var(--sidebar-width)',
+        marginLeft: 'calc(var(--sidebar-width) + var(--safe-left))',
         background: t.bg,
         transition: 'background 0.2s',
       }} className={`main-content${showBottomNav ? ' has-bottom-nav' : ''}`}>

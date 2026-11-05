@@ -301,7 +301,10 @@ body {
 
 /* --- APP LAYOUT --- */
 .app-layout { display: flex; min-height: 100vh; min-height: 100dvh; }
+/* Landscape phone / unfolded iPhone Duo: the sidebar is widened by the left
+   inset in Layout.js, so the padding here never squeezes the nav labels. */
 .sidebar-panel { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left); }
+.main-content { padding-right: var(--safe-right); }
 .mobile-header-bar { display: none !important; }
 
 /* --- BOTTOM NAV (phones only — see media query) --- */
@@ -554,7 +557,7 @@ body {
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
   .sidebar-panel {
-    transform: translateX(-100%); width: min(86vw, 300px) !important;
+    transform: translateX(-100%); width: calc(min(86vw, 300px) + var(--safe-left)) !important;
     padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left);
   }
   .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,0.18); }
@@ -564,6 +567,9 @@ body {
     margin-left: 0 !important;
     padding-top: calc(var(--mobile-header-h) + var(--safe-top));
     padding-left: var(--safe-left); padding-right: var(--safe-right);
+    /* Room to scroll the last rows clear of floating buttons (the Builder
+       Pack's "Update with AI"). Pages with the bottom nav set their own. */
+    padding-bottom: calc(110px + var(--safe-bottom));
   }
   .page { padding: 18px 14px; }
   .page-header { flex-direction: column; gap: 12px; }
