@@ -100,8 +100,8 @@ export default function AdminNotifications() {
   return (
     <div style={{
       position: 'fixed',
-      bottom: 24,
-      right: 24,
+      bottom: 'calc(24px + var(--safe-bottom))',
+      right: 'calc(24px + var(--safe-right))',
       zIndex: 99999,
       display: 'flex',
       flexDirection: 'column-reverse',

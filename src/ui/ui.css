@@ -37,33 +37,33 @@ summary:focus-visible {
   background: var(--gradient-amber); color: #0A0F1C; font-weight: 700;
   box-shadow: 0 2px 10px rgba(245,158,11,0.18);
 }
-.ui-btn--primary:hover:not(:disabled) {
+@media (hover: hover) { .ui-btn--primary:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 18px rgba(245,158,11,0.25);
-}
+} }
 .ui-btn--secondary {
   background: var(--bg-card); color: var(--text-primary);
   border-color: var(--border-input);
 }
-.ui-btn--secondary:hover:not(:disabled) {
+@media (hover: hover) { .ui-btn--secondary:hover:not(:disabled) {
   border-color: var(--text-muted); background: var(--bg-card-hover);
-}
+} }
 .ui-btn--ghost { background: transparent; color: var(--text-secondary); }
-.ui-btn--ghost:hover:not(:disabled) { background: var(--nav-hover); color: var(--text-primary); }
+@media (hover: hover) { .ui-btn--ghost:hover:not(:disabled) { background: var(--nav-hover); color: var(--text-primary); } }
 .ui-btn--danger {
   background: var(--danger-bg); color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
 }
-.ui-btn--danger:hover:not(:disabled) {
+@media (hover: hover) { .ui-btn--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
-}
+} }
 .ui-btn--soft {
   background: var(--accent-glow); color: var(--accent);
   border-color: var(--border-accent);
 }
-.ui-btn--soft:hover:not(:disabled) {
+@media (hover: hover) { .ui-btn--soft:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-}
+} }
 
 /* --- Icon-only button (rename, delete, close…) --- */
 .ui-icon-btn {
@@ -74,8 +74,8 @@ summary:focus-visible {
   transition: background 0.12s ease, color 0.12s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.ui-icon-btn:hover { background: var(--nav-hover); color: var(--text-primary); }
-.ui-icon-btn--danger:hover { background: var(--danger-bg); color: var(--danger); }
+@media (hover: hover) { .ui-icon-btn:hover { background: var(--nav-hover); color: var(--text-primary); } }
+@media (hover: hover) { .ui-icon-btn--danger:hover { background: var(--danger-bg); color: var(--danger); } }
 .ui-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* --- Badge --- */
@@ -291,7 +291,7 @@ summary:focus-visible {
     max-width: 100%; border-radius: 16px 16px 0 0;
     border-left: none; border-right: none; border-bottom: none;
     max-height: calc(100dvh - 40px);
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-bottom);
   }
   .ui-modal__footer { flex-direction: column-reverse; }
   .ui-modal__footer .ui-btn { width: 100%; }
@@ -299,7 +299,7 @@ summary:focus-visible {
 
 /* --- Toasts --- */
 .ui-toast-stack {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: calc(20px + var(--safe-bottom)); left: 50%; transform: translateX(-50%);
   z-index: 600; display: flex; flex-direction: column; gap: 8px;
   width: min(420px, calc(100vw - 32px));
   pointer-events: none;
@@ -327,7 +327,7 @@ summary:focus-visible {
   to { opacity: 1; transform: translateY(0); }
 }
 @media (max-width: 640px) {
-  .ui-toast-stack { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .ui-toast-stack { bottom: calc(76px + var(--safe-bottom)); }
 }
 
 /* --- Tile: a large clickable row (document downloads, feature links).
@@ -341,9 +341,9 @@ summary:focus-visible {
   color: var(--text-primary); font-family: var(--font-body);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.ui-tile:hover:not(:disabled) {
+@media (hover: hover) { .ui-tile:hover:not(:disabled) {
   background: var(--tile-bg-hover, var(--bg-card-hover));
-}
+} }
 .ui-tile:disabled { opacity: 0.6; cursor: progress; }
 .ui-tile__title { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
 .ui-tile__meta { font-size: 0.78rem; color: var(--text-muted); }
@@ -380,7 +380,7 @@ summary:focus-visible {
   transition: background 0.12s ease;
 }
 .ui-row:last-child { border-bottom: none; }
-a.ui-row:hover, .ui-row--link:hover { background: var(--bg-card-hover); cursor: pointer; }
+@media (hover: hover) { a.ui-row:hover, .ui-row--link:hover { background: var(--bg-card-hover); cursor: pointer; } }
 .ui-row__main { flex: 1; min-width: 0; }
 .ui-row__title {
   font-weight: 600; font-size: 0.92rem; color: var(--text-primary);
@@ -411,7 +411,7 @@ a.ui-row:hover, .ui-row--link:hover { background: var(--bg-card-hover); cursor: 
   transition: background 0.15s ease, color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.ui-nav-item:hover { background: var(--nav-hover); }
+@media (hover: hover) { .ui-nav-item:hover { background: var(--nav-hover); } }
 .ui-nav-item.active, .ui-nav-item--active {
   background: var(--nav-active); color: var(--text-primary); font-weight: 600;
 }
@@ -434,14 +434,14 @@ a.ui-row:hover, .ui-row--link:hover { background: var(--bg-card-hover); cursor: 
   color: var(--text-muted); text-decoration: none;
   position: relative; transition: background 0.15s ease, color 0.15s ease;
 }
-.ui-nav-subitem:hover { background: var(--nav-hover); }
+@media (hover: hover) { .ui-nav-subitem:hover { background: var(--nav-hover); } }
 .ui-nav-subitem--active { background: var(--nav-active); color: var(--text-primary); font-weight: 600; }
 .ui-nav-subitem__dot {
   position: absolute; left: -13px; top: 50%; transform: translateY(-50%);
   width: 5px; height: 5px; border-radius: 50%;
   background: var(--accent-bright);
 }
-.ui-nav-item--logout:hover { background: var(--danger-bg); color: var(--danger); }
+@media (hover: hover) { .ui-nav-item--logout:hover { background: var(--danger-bg); color: var(--danger); } }
 .ui-nav-caret {
   color: var(--text-muted); font-size: 10px;
   transition: transform 0.18s ease;

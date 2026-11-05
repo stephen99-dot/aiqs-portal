@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
+import { saveBlob, saveText } from '../native/saveFile';
 import { ClientsIcon, FileTextIcon, PoundIcon, ZapIcon, KeyIcon, CheckCircleIcon, XCircleIcon, XIcon, EditIcon, MailIcon, TrashIcon, AlertTriangleIcon, BookIcon, InboxIcon, UploadIcon, SearchIcon, CheckIcon, UserIcon, ClipboardIcon, CreditCardIcon, PaperclipIcon, BarChartIcon, InfoIcon, RefreshIcon } from '../components/Icons';
 
 const PLAN_OPTIONS = [
@@ -367,7 +368,7 @@ function RatesTab({ t }) {
     try { const nr = await apiFetch('/admin/rates', { method: 'POST', body: JSON.stringify({ ...addData, library_id: selectedLib }) }); setRates(prev => [nr, ...prev]); setShowAdd(false); setAddData({ code: '', trade: '', description: '', unit: '', labour_rate: '', material_rate: '', notes: '' }); flash('Rate added'); } catch (err) { setAddError(err.message); }
   }
   async function handleExport() {
-    try { const data = await apiFetch('/admin/rates/export/' + selectedLib); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'rate-library-export.json'; a.click(); URL.revokeObjectURL(url); flash('Exported ' + data.count + ' rates'); } catch (err) { alert('Export failed: ' + err.message); }
+    try { const data = await apiFetch('/admin/rates/export/' + selectedLib); await saveText(JSON.stringify(data, null, 2), 'rate-library-export.json', 'application/json'); flash('Exported ' + data.count + ' rates'); } catch (err) { alert('Export failed: ' + err.message); }
   }
   function handleImport() {
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
@@ -664,14 +665,10 @@ function OnboardingTab({ t }) {
   // Auth rides in a header, so downloads go through fetch → blob, not <a href>.
   const download = async (url, filename) => {
     try {
-      const res = await fetch('/api' + url, { headers: { Authorization: 'Bearer ' + getToken() } });
+      const res = await fetch(resolveUrl('/api' + url), { headers: { Authorization: 'Bearer ' + getToken() } });
       if (!res.ok) throw new Error('Download failed (' + res.status + ')');
       const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await saveBlob(blob, filename);
     } catch (e) { alert(e.message || 'Download failed'); }
   };
 

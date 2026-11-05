@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
 import { Button, Card, Banner, Field, Input, Textarea, PageHeader, Skeleton, SkeletonCard } from '../ui';
 import ClientCopySheet from '../components/ClientCopySheet';
@@ -54,7 +54,7 @@ export default function BrandingPage() {
     if (!urlPath) { setLogoUrl(null); return; }
     try {
       const token = getToken();
-      const resp = await fetch(urlPath, {
+      const resp = await fetch(resolveUrl(urlPath), {
         headers: { Authorization: 'Bearer ' + token },
       });
       if (!resp.ok) { setLogoUrl(null); return; }
@@ -134,7 +134,7 @@ export default function BrandingPage() {
       const fd = new FormData();
       fd.append('logo', file, file.name);
       const token = getToken();
-      const resp = await fetch('/api/branding/logo', {
+      const resp = await fetch(resolveUrl('/api/branding/logo'), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token },
         body: fd,
@@ -162,7 +162,7 @@ export default function BrandingPage() {
     setError('');
     try {
       const token = getToken();
-      const resp = await fetch('/api/branding/logo', {
+      const resp = await fetch(resolveUrl('/api/branding/logo'), {
         method: 'DELETE',
         headers: { Authorization: 'Bearer ' + token },
       });
@@ -413,7 +413,7 @@ export default function BrandingPage() {
         {/* Live document preview */}
         <Card style={{
           position: 'sticky', top: 12,
-          maxHeight: 'calc(100vh - 40px)', overflowY: 'auto',
+          maxHeight: 'calc(100dvh - 40px)', overflowY: 'auto',
         }}>
           <Card.Body style={{ padding: 18 }}>
             <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>

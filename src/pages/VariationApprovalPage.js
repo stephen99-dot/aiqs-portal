@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckIcon, XCircleIcon } from '../components/Icons';
 import useIsMobile from '../utils/useIsMobile';
 import { currencySymbol } from '../utils/money';
+import { resolveUrl } from '../utils/api';
 
 // Public-facing approval page. No auth, no estimator gate. Anyone with the
 // shareable /v/<token> URL can view + approve/decline. The server captures
@@ -56,7 +57,7 @@ export default function VariationApprovalPage() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/public/variations/' + encodeURIComponent(token));
+      const r = await fetch(resolveUrl('/api/public/variations/' + encodeURIComponent(token)));
       const body = await r.json();
       if (!r.ok) throw new Error(body.error || 'Unable to load.');
       setData(body);
@@ -81,7 +82,7 @@ export default function VariationApprovalPage() {
     setSubmitting(true);
     setError('');
     try {
-      const r = await fetch('/api/public/variations/' + encodeURIComponent(token) + '/approve', {
+      const r = await fetch(resolveUrl('/api/public/variations/' + encodeURIComponent(token) + '/approve'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), email: email.trim(), signature: signature.trim() }),
@@ -98,7 +99,7 @@ export default function VariationApprovalPage() {
     setSubmitting(true);
     setError('');
     try {
-      const r = await fetch('/api/public/variations/' + encodeURIComponent(token) + '/decline', {
+      const r = await fetch(resolveUrl('/api/public/variations/' + encodeURIComponent(token) + '/decline'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: declineReason.trim() }),
@@ -111,11 +112,11 @@ export default function VariationApprovalPage() {
   };
 
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
+    return <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
   }
   if (!data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
         <div style={{ maxWidth: 460, padding: 32, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, textAlign: 'center', color: '#111827' }}>
           <div style={{ marginBottom: 8 }}><LinkIcon size={32} /></div>
           <h2 style={{ margin: 0, fontSize: 20 }}>Link not found</h2>
@@ -130,10 +131,10 @@ export default function VariationApprovalPage() {
   const company = data.company || {};
   const job = data.job || {};
   const decided = data.status === 'approved' || data.status === 'declined';
-  const logoUrl = company.has_logo ? '/api/public/variations/' + encodeURIComponent(token) + '/logo' : null;
+  const logoUrl = company.has_logo ? resolveUrl('/api/public/variations/' + encodeURIComponent(token) + '/logo') : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, padding: '24px 16px', color: c.text, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ minHeight: '100dvh', background: c.bg, padding: '24px 16px', color: c.text, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ maxWidth: 820, margin: '0 auto' }}>
         {/* Header band */}
         <div style={{ background: c.primary, borderRadius: '12px 12px 0 0', padding: isMobile ? '20px 16px' : '24px 28px', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>

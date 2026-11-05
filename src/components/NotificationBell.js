@@ -41,7 +41,7 @@ function NotificationToast({ notification, onClose, theme }) {
 
   return (
     <div style={{
-      position: 'fixed', top: '20px', right: '20px', zIndex: 99999,
+      position: 'fixed', top: 'calc(20px + var(--safe-top))', right: 'calc(20px + var(--safe-right))', zIndex: 99999,
       width: '340px',
       background: isDark ? '#131A2B' : '#FFFFFF',
       border: `1px solid ${isDark ? '#1E293B' : '#E2E8F0'}`,

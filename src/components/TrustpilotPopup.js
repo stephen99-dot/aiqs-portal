@@ -93,7 +93,7 @@ export default function TrustpilotPopup() {
   if (!visible) return null;
 
   const card = {
-    width: 'min(440px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto',
+    width: 'min(440px, calc(100vw - 32px))', maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto',
     background: isDark ? '#111827' : '#FFFFFF',
     border: '1px solid ' + (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
     borderRadius: 16, padding: '22px 22px 18px',

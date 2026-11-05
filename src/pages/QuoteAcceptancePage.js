@@ -115,11 +115,11 @@ export default function QuoteAcceptancePage() {
   };
 
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
+    return <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
   }
   if (!data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: 16 }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: 16 }}>
         <div style={{ maxWidth: 420, padding: 32, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, textAlign: 'center', color: '#111827' }}>
           <div style={{ marginBottom: 8 }}><LinkIcon size={32} /></div>
           <h2 style={{ margin: 0, fontSize: 20 }}>This link isn't working</h2>
@@ -157,7 +157,7 @@ export default function QuoteAcceptancePage() {
   const label = { display: 'block', fontSize: 13, fontWeight: 600, color: c.textSecondary, marginBottom: 6, marginTop: 14 };
 
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, color: c.text, paddingBottom: accepted ? 24 : 96 }}>
+    <div style={{ minHeight: '100dvh', background: c.bg, color: c.text, paddingBottom: accepted ? 24 : 96 }}>
       {/* Brand band */}
       <div style={{ background: c.primary, padding: '18px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         {company.has_logo && (

@@ -8,6 +8,11 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
 - **Database:** SQLite (via better-sqlite3)
 - **Auth:** JWT tokens + bcrypt
 - **Uploads:** Multer (local file storage)
+- **iOS app:** the same React build wrapped by Capacitor 8 (`ios/`, Swift Package Manager, iPhone only).
+  `npm run ios` builds, syncs and opens Xcode. Everything from first run to App Review is in
+  **[docs/IOS_APP.md](docs/IOS_APP.md)** — including the App Store rules the app is shaped around
+  (no in-app Stripe links, no Google button in the app, in-app account deletion) and the device
+  matrix with the iPhone Duo.
 
 ## Job tracking
 

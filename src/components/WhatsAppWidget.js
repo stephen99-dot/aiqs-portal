@@ -119,7 +119,7 @@ export default function WhatsAppWidget({ theme, userName }) {
     <div
       ref={widgetRef}
       style={{
-        position: 'fixed', bottom: bottomPos, right: 24, zIndex: 9998,
+        position: 'fixed', bottom: `calc(${bottomPos}px + var(--safe-bottom))`, right: 'calc(24px + var(--safe-right))', zIndex: 9998,
       }}
     >
       {/* ─── Chat Panel ──────────────────────────────────────────────── */}

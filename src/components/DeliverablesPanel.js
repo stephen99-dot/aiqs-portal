@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl, portalOrigin } from '../utils/api';
+import { saveBlob } from '../native/saveFile';
 import { MailIcon, PhoneIcon, CheckIcon, AlertTriangleIcon } from './Icons';
 import useIsMobile from '../utils/useIsMobile';
 import { currencySymbol } from '../utils/money';
@@ -130,7 +131,7 @@ export default function DeliverablesPanel({ projectId, project }) {
       if (notes.trim()) fd.append('notes', notes.trim());
       for (const f of files) fd.append('files', f, f.name);
       const token = getToken();
-      const resp = await fetch(`/api/projects/${projectId}/deliverables`, {
+      const resp = await fetch(resolveUrl(`/api/projects/${projectId}/deliverables`), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token },
         body: fd,
@@ -166,7 +167,7 @@ export default function DeliverablesPanel({ projectId, project }) {
     if (!window.confirm('Hide this file from the customer? The previous version (if any) will be promoted back to current.')) return;
     try {
       const token = getToken();
-      const resp = await fetch(`/api/deliverables/${id}`, {
+      const resp = await fetch(resolveUrl(`/api/deliverables/${id}`), {
         method: 'DELETE',
         headers: { Authorization: 'Bearer ' + token },
       });
@@ -186,19 +187,12 @@ export default function DeliverablesPanel({ projectId, project }) {
     setError('');
     try {
       const token = getToken();
-      const resp = await fetch(`/api/downloads/${filename}`, {
+      const resp = await fetch(resolveUrl(`/api/downloads/${filename}`), {
         headers: { Authorization: 'Bearer ' + token },
       });
       if (!resp.ok) throw new Error('Download failed');
       const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await saveBlob(blob, filename);
     } catch (err) {
       setError(err.message || 'Download failed');
     } finally {
@@ -276,7 +270,7 @@ export default function DeliverablesPanel({ projectId, project }) {
                 <button
                   type="button"
                   onClick={async () => {
-                    const url = window.location.origin + '/project/' + projectId;
+                    const url = portalOrigin() + '/project/' + projectId;
                     try {
                       await navigator.clipboard.writeText(url);
                       setUploadOk('Customer URL copied — paste in an email if they say they can\'t find the job.');

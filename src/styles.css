@@ -49,12 +49,61 @@
   --radius-lg: 16px;
   --shadow-glow: 0 0 60px rgba(245,158,11,0.04);
   --sidebar-width: 240px;
+  /* Fonts are bundled (@fontsource, imported in src/index.js) so the app paints
+     the real typeface offline and never waits on fonts.googleapis.com. The
+     variable build of Instrument Sans registers as 'Instrument Sans Variable'. */
   --font-display: 'DM Serif Display', Georgia, serif;
-  --font-body: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --font-body: 'Instrument Sans Variable', 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, 'Courier New', monospace;
+
+  /* Safe areas — the notch / Dynamic Island, the home indicator, and the
+     rounded corners in landscape. 0 everywhere except inside the iOS app and
+     full-screen Safari (viewport-fit=cover is set in public/index.html).
+     Fixed chrome (mobile header, sidebar, bottom nav, floating buttons,
+     toasts) adds these so nothing sits under the system UI. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-header-h: 56px;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* --- TOUCH --- */
+/* No 300ms tap delay / accidental double-tap zoom on controls, no grey flash
+   on tap, and a pressed state so a finger gets feedback where a mouse had
+   hover (hover rules below only apply to devices that can hover). */
+button, a, [role="button"], input, select, textarea, label, summary { touch-action: manipulation; }
+button, a, [role="button"], summary { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  .ui-btn:active:not(:disabled), .btn-primary:active:not(:disabled), .btn-secondary:active:not(:disabled),
+  .btn-small:active:not(:disabled), .ui-tile:active:not(:disabled), .ui-icon-btn:active:not(:disabled),
+  .ui-nav-item:active, .ui-nav-subitem:active, .bottom-nav-item:active, .project-row:active, a.ui-row:active {
+    opacity: 0.72; transition-duration: 0s;
+  }
+}
+/* Users who asked the OS for less motion get none of the decorative kind. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* --- INSIDE THE iOS APP (html.native-app is set by NativeBridge) --- */
+/* The shell must feel like an app, not a web page: no rubber-banding of the
+   whole document, no text-selection handles on chrome, no "Open in new tab"
+   callouts on long-press. Content stays selectable. */
+html.native-app { -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+html.native-app body { overscroll-behavior: none; -webkit-touch-callout: none; }
+html.native-app .sidebar-panel, html.native-app .mobile-header-bar, html.native-app .bottom-nav,
+html.native-app button, html.native-app .ui-btn, html.native-app .ui-nav-item, html.native-app .ui-nav-subitem {
+  -webkit-user-select: none; user-select: none;
+}
+html.native-app input, html.native-app textarea, html.native-app [contenteditable="true"],
+html.native-app p, html.native-app td, html.native-app pre, html.native-app li {
+  -webkit-user-select: text; user-select: text;
+}
+/* Pages that fill the screen on their own (auth, magic link, public docs). */
+.full-height-page { min-height: 100vh; min-height: 100dvh; }
 /* Long words, URLs and reference codes wrap instead of pushing the layout
    sideways or spilling off the edge. */
 p, h1, h2, h3, h4, h5, span, div, td, th, li, a, button, label, strong, em { overflow-wrap: break-word; }
@@ -74,7 +123,11 @@ body {
 
 /* App shell (Layout.js). dvh fallback pattern: browsers without dvh keep vh. */
 .app-shell { display: flex; min-height: 100vh; min-height: 100dvh; }
-.main-content { min-height: 100vh; min-height: 100dvh; }
+/* min-width: 0 — as a flex item, <main> would otherwise refuse to shrink below
+   its content's intrinsic width (the chat page's sidebar + top bar), which
+   pushed the whole shell sideways on a landscape phone / unfolded iPhone Duo.
+   Wide content (tables) still scrolls inside its own wrapper. */
+.main-content { min-height: 100vh; min-height: 100dvh; min-width: 0; }
 
 /* Chat page shell — the message list scrolls inside this, the composer stays
    pinned. dvh keeps the composer above mobile browser toolbars / keyboard. */
@@ -156,7 +209,7 @@ body {
   font-size: 0.84rem; color: var(--text-muted);
 }
 .auth-footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
-.auth-footer a:hover { text-decoration: underline; }
+@media (hover: hover) { .auth-footer a:hover { text-decoration: underline; } }
 
 /* --- FORM ELEMENTS --- */
 .form-field { display: flex; flex-direction: column; gap: 5px; }
@@ -204,10 +257,10 @@ body {
   transition: all 0.2s;
   box-shadow: 0 2px 10px rgba(245,158,11,0.18);
 }
-.btn-primary:hover {
+@media (hover: hover) { .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 18px rgba(245,158,11,0.25);
-}
+} }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .btn-primary.full-width { width: 100%; }
 
@@ -219,7 +272,7 @@ body {
   border: 1px solid var(--border); cursor: pointer; text-decoration: none;
   transition: all 0.2s;
 }
-.btn-secondary:hover { border-color: var(--text-muted); background: rgba(255,255,255,0.02); }
+@media (hover: hover) { .btn-secondary:hover { border-color: var(--text-muted); background: rgba(255,255,255,0.02); } }
 
 .btn-small {
   padding: 6px 12px; border-radius: 6px;
@@ -229,11 +282,12 @@ body {
   font-weight: 600; cursor: pointer;
   font-family: var(--font-body); transition: all 0.2s;
 }
-.btn-small:hover { background: rgba(245,158,11,0.15); }
+@media (hover: hover) { .btn-small:hover { background: rgba(245,158,11,0.15); } }
 .btn-small:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* --- APP LAYOUT --- */
 .app-layout { display: flex; min-height: 100vh; min-height: 100dvh; }
+.sidebar-panel { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left); }
 .mobile-header-bar { display: none !important; }
 
 /* --- BOTTOM NAV (phones only — see media query) --- */
@@ -284,7 +338,7 @@ body {
   font-size: 0.78rem; font-weight: 500;
   margin-bottom: 12px; transition: color 0.2s;
 }
-.back-link:hover { color: var(--accent); }
+@media (hover: hover) { .back-link:hover { color: var(--accent); } }
 
 /* --- STATS ROW --- */
 .stats-row {
@@ -337,7 +391,7 @@ body {
   transition: background 0.12s;
 }
 .project-row:last-child { border-bottom: none; }
-.project-row:hover { background: var(--bg-card-hover); }
+@media (hover: hover) { .project-row:hover { background: var(--bg-card-hover); } }
 .project-info { min-width: 0; flex: 1; }
 .project-title {
   font-weight: 600; font-size: 0.92rem;
@@ -417,10 +471,10 @@ body {
   text-align: center; cursor: pointer;
   transition: all 0.2s; background: var(--bg-input);
 }
-.drop-zone:hover {
+@media (hover: hover) { .drop-zone:hover {
   border-color: var(--text-muted);
   background: var(--bg-card-hover);
-}
+} }
 .drop-zone.active {
   border-color: var(--accent);
   background: rgba(245,158,11,0.03);
@@ -452,7 +506,7 @@ body {
   color: var(--text-muted); cursor: pointer;
   padding: 3px; border-radius: 4px; transition: all 0.12s;
 }
-.file-remove:hover { color: var(--danger); background: rgba(239,68,68,0.08); }
+@media (hover: hover) { .file-remove:hover { color: var(--danger); background: rgba(239,68,68,0.08); } }
 
 /* --- EMPTY STATE --- */
 .empty-state { padding: 48px 24px; text-align: center; }
@@ -485,11 +539,18 @@ body {
 /* === RESPONSIVE — MOBILE (max-width: 768px) === */
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
-  .sidebar-panel { transform: translateX(-100%); width: min(86vw, 300px) !important; }
+  .sidebar-panel {
+    transform: translateX(-100%); width: min(86vw, 300px) !important;
+    padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left);
+  }
   .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,0.18); }
   /* The <main> element carries className="main-content" — must match here or the
      240px sidebar gutter (and the 56px fixed-header offset) is never removed. */
-  .main-content, .main-panel { margin-left: 0 !important; padding-top: 56px; }
+  .main-content, .main-panel {
+    margin-left: 0 !important;
+    padding-top: calc(var(--mobile-header-h) + var(--safe-top));
+    padding-left: var(--safe-left); padding-right: var(--safe-right);
+  }
   .page { padding: 18px 14px; }
   .page-header { flex-direction: column; gap: 12px; }
   .page-title { font-size: 1.35rem; }
@@ -543,7 +604,7 @@ body {
   .form-actions { gap: 12px; }
 
   /* Chat: mobile header (56px) replaces the desktop offset. */
-  .chat-shell { height: calc(100vh - 56px); height: calc(100dvh - 56px); }
+  .chat-shell { height: calc(100vh - var(--mobile-header-h) - var(--safe-top)); height: calc(100dvh - var(--mobile-header-h) - var(--safe-top)); }
 
   /* iOS zooms the whole page in when you focus an input smaller than 16px —
      the #1 cause of a form feeling "not optimised" on a phone. Force every
@@ -563,12 +624,12 @@ body {
   .bottom-nav {
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 250;
     background: var(--bg-secondary); border-top: 1px solid var(--border);
-    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    padding: 4px calc(4px + var(--safe-right)) calc(4px + var(--safe-bottom)) calc(4px + var(--safe-left));
   }
   .has-bottom-nav { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .has-bottom-nav .chat-shell {
-    height: calc(100vh - 56px - 60px - env(safe-area-inset-bottom));
-    height: calc(100dvh - 56px - 60px - env(safe-area-inset-bottom));
+    height: calc(100vh - var(--mobile-header-h) - var(--safe-top) - 60px - var(--safe-bottom));
+    height: calc(100dvh - var(--mobile-header-h) - var(--safe-top) - 60px - var(--safe-bottom));
   }
 
   /* Modals become bottom sheets on phones. !important so the rules win over

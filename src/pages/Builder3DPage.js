@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
+import { saveBlob } from '../native/saveFile';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3D Builder (Phase 1) — admin-only proof of concept.
@@ -909,7 +910,7 @@ function Builder3DInner() {
         const renderer = rendererRef.current;
         if (renderer) snapshot = renderer.domElement.toDataURL('image/png');
       } catch (e) { /* canvas not ready — export without the image */ }
-      const r = await fetch('/api/builder3d/pdf', {
+      const r = await fetch(resolveUrl('/api/builder3d/pdf'), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: modelName, modules, ohpPct, vatPct, snapshot }),
@@ -920,11 +921,7 @@ function Builder3DInner() {
         throw new Error(msg);
       }
       const blob = await r.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (modelName || 'estimate').replace(/[^a-z0-9_-]+/gi, '_') + '.pdf';
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await saveBlob(blob, (modelName || 'estimate').replace(/[^a-z0-9_-]+/gi, '_') + '.pdf');
     } catch (e) {
       setError(e.message || 'PDF export failed');
       window.alert('Export failed: ' + (e.message || 'unknown error'));

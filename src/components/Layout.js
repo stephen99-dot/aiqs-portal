@@ -12,6 +12,8 @@ import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
 import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
+import DeleteAccountModal from './DeleteAccountModal';
+import { selectionChanged } from '../native/haptics';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -57,6 +59,7 @@ function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, locati
 export default function Layout() {
   const { user, logout } = useAuth();
   const [countryOpen, setCountryOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const countries = useCountries();
   const myCountry = countries.find(c => c.code === user?.country);
   const { t, mode, toggle } = useTheme();
@@ -150,10 +153,10 @@ export default function Layout() {
       {/* ── Mobile header ── */}
       <header className="mobile-header-bar" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300,
-        height: 56, background: t.surface,
+        height: 'calc(var(--mobile-header-h) + var(--safe-top))', background: t.surface,
         borderBottom: `1px solid ${t.border}`,
         alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 16px',
+        padding: 'var(--safe-top) calc(16px + var(--safe-right)) 0 calc(16px + var(--safe-left))',
       }}>
         <button
           onClick={() => setMobileOpen(o => !o)}
@@ -327,6 +330,12 @@ export default function Layout() {
             <LogOutIcon size={15} color="currentColor" />
             Sign out
           </button>
+          {!isAdmin && (
+            <button onClick={() => setDeleteOpen(true)} className="ui-nav-item"
+              style={{ fontSize: 11.5, color: 'var(--text-muted)', padding: '6px 12px', minHeight: 0 }}>
+              Delete account
+            </button>
+          )}
         </div>
       </aside>
 
@@ -346,7 +355,7 @@ export default function Layout() {
           {bottomNavItems.map(item => {
             const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
             return (
-              <NavLink key={item.path} to={item.path} className={`bottom-nav-item${active ? ' active' : ''}`}>
+              <NavLink key={item.path} to={item.path} onClick={selectionChanged} className={`bottom-nav-item${active ? ' active' : ''}`}>
                 <item.Icon size={20} color="currentColor" />
                 {item.label}
               </NavLink>
@@ -366,6 +375,7 @@ export default function Layout() {
           itself, so it isn't asked twice there). */}
       {!isAdmin && user && !user.country && location.pathname !== '/onboarding' && <CountryPromptModal />}
       {countryOpen && <CountrySettingsModal onClose={() => setCountryOpen(false)} />}
+      {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} />}
     </div>
   );
 }

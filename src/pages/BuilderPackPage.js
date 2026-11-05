@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl, portalOrigin } from '../utils/api';
+import { saveBlob, filenameFromResponse } from '../native/saveFile';
 import useIsMobile from '../utils/useIsMobile';
 import { useTheme } from '../context/ThemeContext';
 import ShareLinkModal from '../components/ShareLinkModal';
@@ -282,7 +283,7 @@ export default function BuilderPackPage() {
           // Logo endpoint needs auth — fetch as blob so <img> can render it.
           if (br.logo_url) {
             const token = getToken();
-            fetch(br.logo_url, { headers: { Authorization: 'Bearer ' + token } })
+            fetch(resolveUrl(br.logo_url), { headers: { Authorization: 'Bearer ' + token } })
               .then((r) => r.ok ? r.blob() : null)
               .then((blob) => { if (blob && !cancelled) setLogoUrl(URL.createObjectURL(blob)); })
               .catch(() => {});
@@ -492,7 +493,7 @@ export default function BuilderPackPage() {
     setDownloading(true); setError('');
     try {
       const token = getToken();
-      const resp = await fetch(`/api/projects/${id}/builder-pack`, {
+      const resp = await fetch(resolveUrl(`/api/projects/${id}/builder-pack`), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -514,7 +515,7 @@ export default function BuilderPackPage() {
     setDownloading(true); setError('');
     try {
       const token = getToken();
-      const resp = await fetch(`/api/projects/${id}/client-copy-pro`, {
+      const resp = await fetch(resolveUrl(`/api/projects/${id}/client-copy-pro`), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -575,21 +576,15 @@ export default function BuilderPackPage() {
         }),
       });
       const sent = await apiFetch(`/estimator/quotes/${q.quote_id}/send`, { method: 'POST' });
-      setShare({ url: window.location.origin + sent.path });
+      setShare({ url: portalOrigin() + sent.path });
     } catch (err) { setError(err.message); }
     finally { setSharing(false); }
   }
 
   async function streamBlob(resp) {
     const blob = await resp.blob();
-    const disp = resp.headers.get('content-disposition') || '';
-    const m = disp.match(/filename="?([^"]+)"?/);
-    const filename = m ? m[1] : 'export.xlsx';
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const filename = filenameFromResponse(resp, 'export.xlsx');
+    await saveBlob(blob, filename);
   }
 
   // ─── AI assistant — "tell it what changed" ────────────────────────────────
@@ -958,7 +953,7 @@ export default function BuilderPackPage() {
             position: isNarrow ? 'static' : 'sticky', top: 12,
             padding: 18, borderRadius: 12,
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            maxHeight: isNarrow ? 'none' : 'calc(100vh - 40px)', overflowY: isNarrow ? 'visible' : 'auto',
+            maxHeight: isNarrow ? 'none' : 'calc(100dvh - 40px)', overflowY: isNarrow ? 'visible' : 'auto',
           }}>
             {tab === 'builder' ? (
               <BuilderControls
@@ -1354,7 +1349,7 @@ function RateImportModal({ projectId, candidates, sym, onClose, onImported }) {
       background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        width: 'min(820px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+        width: 'min(820px, 100%)', maxHeight: '86dvh', display: 'flex', flexDirection: 'column',
         background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
         boxShadow: '0 18px 60px rgba(0,0,0,0.4)',
       }}>

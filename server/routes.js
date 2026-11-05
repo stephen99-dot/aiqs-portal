@@ -641,7 +641,52 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const planInfo = getUserPlanInfo(user);
-  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, ...userCountryFields(user) });
+  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, hasPassword: !!user.password_hash, ...userCountryFields(user) });
+});
+
+// Delete my own account. App Store Review Guideline 5.1.1(v) requires any
+// app with sign-up to offer this in-app, and it is the right thing to have
+// anyway. Password accounts confirm with the password; Google-only accounts
+// (no password) type DELETE. Admin accounts are removed by another admin from
+// Users, never from here. Uploaded drawings are unlinked from disk, the
+// Stripe subscription (if any) is cancelled, then the same cascade the admin
+// delete uses removes every row that references the user.
+router.delete('/auth/me', authMiddleware, async (req, res) => {
+  try {
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(400).json({ error: 'Admin accounts cannot be deleted from here — ask another admin to remove it from Users.' });
+    const { password, confirm } = req.body || {};
+    if (user.password_hash) {
+      const ok = typeof password === 'string' && password.length > 0 && await bcrypt.compare(password, user.password_hash);
+      if (!ok) return res.status(400).json({ error: 'That password is not right.' });
+    } else if (confirm !== 'DELETE') {
+      return res.status(400).json({ error: 'Type DELETE to confirm.' });
+    }
+
+    // Stop billing before the row goes (best effort — never blocks the deletion).
+    if (user.stripe_subscription_id && process.env.STRIPE_SECRET_KEY) {
+      try { await require('stripe')(process.env.STRIPE_SECRET_KEY).subscriptions.cancel(user.stripe_subscription_id); }
+      catch (e) { console.error('[account delete] Stripe cancel failed for', user.email, e.message); }
+    }
+
+    // Uploaded files for this user's projects.
+    try {
+      const rows = db.prepare('SELECT f.filename FROM files f JOIN projects p ON p.id = f.project_id WHERE p.user_id = ?').all(user.id);
+      for (const row of rows) {
+        const fp = path.join(uploadsDir, path.basename(String(row.filename || '')));
+        try { if (row.filename && fs.existsSync(fp)) fs.unlinkSync(fp); } catch (e) { /* leave it; the DB rows still go */ }
+      }
+    } catch (e) { console.error('[account delete] file cleanup:', e.message); }
+
+    cascadeDeleteUser(user.id);
+    logActivity({ event_type: 'user_deleted', title: (user.full_name || user.email) + ' deleted their account', detail: user.email, user_id: null, user_name: user.full_name, user_email: user.email });
+    notifyAdmin({ type: 'account_deleted', title: 'Account deleted: ' + (user.full_name || user.email), detail: user.email, icon: 'user-blocked' }).catch(() => {});
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete own account error:', err);
+    res.status(500).json({ error: 'Could not delete the account: ' + (err.message || err) });
+  }
 });
 
 // The countries we price for, with their regions — drives the country picker.

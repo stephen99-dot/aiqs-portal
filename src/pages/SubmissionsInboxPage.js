@@ -826,7 +826,7 @@ export default function SubmissionsInboxPage() {
       {/* Split pane — list left, detail right; stacks under 900px */}
       <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(280px, 380px)' }}>
         {/* Queue */}
-        <Card style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
+        <Card style={{ maxHeight: 'calc(100dvh - 220px)', overflowY: 'auto' }}>
           {loading && <SkeletonRows rows={5} />}
           {!loading && filtered.length === 0 && (
             <EmptyState title="Nothing here" body="No jobs match this filter." />

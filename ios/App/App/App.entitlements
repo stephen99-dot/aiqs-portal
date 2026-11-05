@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal links + Password AutoFill. The host must serve
+	     /.well-known/apple-app-site-association (server/appLinks.js, needs
+	     APPLE_TEAM_ID set on the portal). Change the host here if the portal
+	     moves to a custom domain, e.g. portal.theaiqs.co.uk. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:aiqs-portal.onrender.com</string>
+		<string>webcredentials:aiqs-portal.onrender.com</string>
+	</array>
+</dict>
+</plist>
