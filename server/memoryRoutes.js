@@ -298,9 +298,9 @@ router.post('/onboarding', authMiddleware, async (req, res) => {
     }
     if (ratesSaved > 0) {
       try {
-        require('./rateOnboarding').markOwnRatesAdded(req.user, {
+        require('./rateOnboarding').recordRateChange(req.user, {
           source: 'onboarding',
-          count: ratesSaved,
+          added: ratesSaved,
           silent: !ratesTouched,
         });
       } catch (err) {

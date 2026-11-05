@@ -1496,7 +1496,13 @@ router.post('/my-rates/corrections', authMiddleware, (req, res) => {
       }
     });
     tx();
-    if (results.length > 0) rateOnboarding.markOwnRatesAdded(req.user, { source: 'correction', count: results.length });
+    if (results.length > 0) {
+      rateOnboarding.recordRateChange(req.user, {
+        source: 'correction',
+        added: results.filter((r) => r.action === 'created').length,
+        updated: results.filter((r) => r.action === 'updated').length,
+      });
+    }
     res.json({ results, saved: results.length });
   } catch(e) { console.error('[Rates]', e); res.status(500).json({ error: 'Failed to save corrections' }); }
 });
@@ -1575,6 +1581,7 @@ router.post('/tender-return', authMiddleware, (req, res) => {
     tx();
 
     console.log(`[Tender Return] ${results.length} actual rates saved for user ${userId}`);
+    if (results.length > 0) { try { rateOnboarding.recordRateChange({ id: userId }, { source: 'tender_return', updated: results.length }); } catch (e) { /* non-fatal */ } }
     res.json({
       success: true,
       rates_updated: results.length,
@@ -3964,6 +3971,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
           if (!newValue) { const nums = userMsg.match(/\d[\d,.]*(?:\.\d+)?/g); if (nums) newValue = parseFloat(nums[0].replace(/,/g,'')); }
           if (bestMatch && bestScore >= 1 && newValue && newValue !== bestMatch.value) {
             db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(newValue, bestMatch.id);
+            try { rateOnboarding.recordRateChange({ id: userId }, { source: 'chat', updated: 1 }); } catch (e) { /* non-fatal */ }
             db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),bestMatch.id,userId,bestMatch.value,newValue,'auto_chat',userMsg.substring(0,500));
           }
         }
@@ -4065,6 +4073,7 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
     // Parse tags
     let capturedMemories = [];
     try {
+      let chatRatesAdded = 0, chatRatesUpdated = 0;
       const addMatches = reply.match(/\[RATE_ADD\|([^|]+)\|([^|]+)\|([^|]+)\|([^\]]+)\]/g) || [];
       for (const m of addMatches) {
         const parts = m.replace(/^\[RATE_ADD\|/, '').replace(/\]$/, '').split('|');
@@ -4087,8 +4096,8 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
                 if (match) exists = { id: match.id };
               }
             }
-            if (!exists) { db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit); }
-            else { db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id); }
+            if (!exists) { db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0.75, 1)').run('rl_'+uuidv4().slice(0,8), userId, cat, itemKey, rName, rVal, rUnit); chatRatesAdded++; }
+            else { db.prepare('UPDATE client_rate_library SET value = ?, unit = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(rVal, rUnit, exists.id); chatRatesUpdated++; }
           }
         }
       }
@@ -4103,11 +4112,13 @@ Describe the scope of works (or upload drawings) and I'll measure and price it f
             if (!found) { found = allRates.find(r => { const words = uName.split(/[\s&,\/\-]+/).filter(w => w.length > 2); return words.filter(w => r.display_name.toLowerCase().includes(w)).length >= 2; }); }
             if (found && uVal !== found.value) {
               db.prepare('UPDATE client_rate_library SET value=?,confidence=MIN(confidence+0.05,0.95),times_confirmed=times_confirmed+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(uVal, found.id);
+              chatRatesUpdated++;
               db.prepare('INSERT INTO rate_corrections_log(id,rate_id,user_id,old_value,new_value,correction_source,raw_message)VALUES(?,?,?,?,?,?,?)').run('rc_'+uuidv4().slice(0,8),found.id,userId,found.value,uVal,'tag_update',reply.substring(0,200));
             }
           }
         }
       }
+      if (chatRatesAdded + chatRatesUpdated > 0) { try { rateOnboarding.recordRateChange({ id: userId }, { source: 'chat', added: chatRatesAdded, updated: chatRatesUpdated }); } catch (e) { /* non-fatal */ } }
       const insightMatches = reply.match(/\[INSIGHT\|([^|]+)\|([^\]]+)\]/g) || [];
       const validInsightCats = ['spec_preference','markup','supplier','scope','geography','trade','standard','feedback','workflow','exclusion','team','project_type','commercial'];
       for (const m of insightMatches) {

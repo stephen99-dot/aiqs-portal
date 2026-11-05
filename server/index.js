@@ -174,6 +174,9 @@ require('./paymentReminders').start();
 // Rate onboarding — remind new signups to add their rates (day 3/7/14), and
 // alert the admin the moment they do. Same twice-daily sweep pattern.
 require('./rateOnboarding').start();
+// Rate changes after that first time — edits, imports, corrections, deletions —
+// roll up into one bell + email per client once they've stopped editing.
+require('./rateChanges').start();
 // Credit top-up drip — chase zero-balance accounts on day 2/4/6/8/10 after
 // running out, then one final sign-off on day 12. Stops itself on top-up.
 require('./creditNotifications').start();
