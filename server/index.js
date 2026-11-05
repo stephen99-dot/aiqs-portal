@@ -160,6 +160,10 @@ app.get('/api/health', async function (req, res) {
   res.json({ ok: true, evidence, uptime_s: Math.round(process.uptime()) });
 });
 
+// iOS universal links: /.well-known/apple-app-site-association. Must sit
+// before the SPA catch-all or Apple's crawler would be handed index.html.
+app.use(require('./appLinks').router);
+
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));

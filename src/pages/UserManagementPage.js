@@ -2,14 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap, Mail } from 'lucide-react';
 import { KeyIcon } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
+import { resolveUrl, portalOrigin } from '../utils/api';
 
-const API_BASE = '/api';
 function getToken() { return localStorage.getItem('aiqs_token'); }
+// Page-local fetch wrapper (predates utils/api). URLs resolve through the
+// shared helper so they work inside the iOS app as well as on the website.
 function apiFetch(endpoint, options = {}) {
   const token = getToken();
   const h = { 'Authorization': 'Bearer ' + token, ...options.headers };
   if (!(options.body instanceof FormData)) h['Content-Type'] = 'application/json';
-  return fetch(API_BASE + endpoint, { ...options, headers: h })
+  return fetch(resolveUrl('/api' + endpoint), { ...options, headers: h })
     .then(async (res) => { const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Request failed'); return data; });
 }
 
@@ -718,7 +720,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
     try {
       const fd = new FormData(); fd.append('file', file);
       const token = localStorage.getItem('aiqs_token');
-      const resp = await fetch((process.env.REACT_APP_API_URL || '') + '/api/admin/import-rates/' + user.id, {
+      const resp = await fetch(resolveUrl('/api/admin/import-rates/' + user.id), {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd
       });
       const res = await resp.json();
@@ -1223,7 +1225,7 @@ function SystemDefaultRatesCard({ isDark }) {
 function SignupLinkCard({ isDark }) {
   // Public sign-up URL — works for any new client who hasn't been pre-invited
   // through the Add User flow. Just paste into an email/WhatsApp/etc.
-  const url = (typeof window !== 'undefined' ? window.location.origin : '') + '/register';
+  const url = portalOrigin() + '/register';
   const [copied, setCopied] = useState(false);
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';

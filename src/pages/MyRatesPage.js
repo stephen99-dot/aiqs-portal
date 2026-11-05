@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../utils/api';
+import { apiFetch, resolveUrl } from '../utils/api';
 import RateLibraryBrowser from '../components/RateLibraryBrowser';
 import {
   Button, IconButton, Card, Banner, Badge, Stat,
@@ -139,7 +139,7 @@ export default function MyRatesPage() {
       const formData = new FormData();
       formData.append('file', file);
       const token = localStorage.getItem('aiqs_token');
-      const resp = await fetch((process.env.REACT_APP_API_URL||'')+'/api/my-rates/import', { method:'POST', headers:{'Authorization':'Bearer '+token}, body:formData });
+      const resp = await fetch(resolveUrl('/api/my-rates/import'), { method:'POST', headers:{'Authorization':'Bearer '+token}, body:formData });
       const data = await resp.json();
       if (data.error) setImportResult({ error:data.error }); else { setImportResult(data); loadRates(); }
     } catch(err) { setImportResult({ error:err.message||'Import failed' }); }

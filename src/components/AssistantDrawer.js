@@ -109,7 +109,7 @@ export default function AssistantDrawer({
         onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
         title="Tell the AI what's changed"
         style={{
-          position: 'fixed', right: 16, bottom: 86, zIndex: 180,
+          position: 'fixed', right: 'calc(16px + var(--safe-right))', bottom: 'calc(86px + var(--safe-bottom))', zIndex: 180,
           display: 'inline-flex', alignItems: 'center', gap: 8,
           minHeight: 50, padding: '0 18px', borderRadius: 999, border: 'none',
           background: t.accent, color: '#fff', fontSize: 14.5, fontWeight: 700,
@@ -122,8 +122,8 @@ export default function AssistantDrawer({
   }
 
   const panelStyle = isMobile
-    ? { position: 'fixed', left: 0, right: 0, bottom: 0, top: '12%', zIndex: 220, borderRadius: '16px 16px 0 0' }
-    : { position: 'fixed', right: 16, bottom: 16, width: 420, height: 'min(640px, calc(100vh - 100px))', zIndex: 220, borderRadius: 16 };
+    ? { position: 'fixed', left: 0, right: 0, bottom: 0, top: '12%', zIndex: 220, borderRadius: '16px 16px 0 0', paddingBottom: 'var(--safe-bottom)' }
+    : { position: 'fixed', right: 16, bottom: 16, width: 420, height: 'min(640px, calc(100dvh - 100px))', zIndex: 220, borderRadius: 16 };
 
   return (
     <div style={{

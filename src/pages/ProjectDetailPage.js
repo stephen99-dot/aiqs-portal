@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiFetch } from '../utils/api';
+import { apiFetch, resolveUrl } from '../utils/api';
+import { saveBlob } from '../native/saveFile';
 import DeliverablesPanel from '../components/DeliverablesPanel';
 import { ClipboardIcon, EditIcon } from '../components/Icons';
 import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
@@ -130,19 +131,12 @@ export default function ProjectDetailPage() {
     setDownloading(filename);
     try {
       const token = localStorage.getItem('aiqs_token');
-      const resp = await fetch(`/api/downloads/${filename}`, {
+      const resp = await fetch(resolveUrl(`/api/downloads/${filename}`), {
         headers: { 'Authorization': 'Bearer ' + token }
       });
       if (!resp.ok) throw new Error('Download failed');
       const blob = await resp.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await saveBlob(blob, filename);
     } catch (err) {
       toast.error('Download failed — the file may have expired. Please regenerate from the chat.');
     } finally {

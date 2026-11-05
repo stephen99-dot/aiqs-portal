@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useCountries } from '../components/CountryPicker';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isNative } from '../native/platform';
+import { resolveUrl } from '../utils/api';
 import TrustpilotReviewCarousel from '../components/TrustpilotReviewCarousel';
 
 const stats = [
@@ -51,7 +53,7 @@ export default function RegisterPage() {
   return (
     <>
       <style>{`
-        .auth-shell { display: flex; min-height: 100vh; width: 100%; }
+        .auth-shell { display: flex; min-height: 100vh; min-height: 100dvh; width: 100%; }
         .auth-left-panel {
           flex: 1 1 50%;
           background: linear-gradient(135deg, #0d1b2e 0%, #1B2A4A 55%, #0f2340 100%);
@@ -104,15 +106,17 @@ export default function RegisterPage() {
               <p>Start getting professional BOQs in hours</p>
             </div>
             {error && <div className="auth-error">{error}</div>}
-            <a href="/api/auth/google" style={styles.googleBtn}>
-              <GoogleIcon />
-              Sign up with Google
-            </a>
-            <div style={styles.divider}>
-              <span style={styles.dividerLine} />
-              <span style={styles.dividerText}>or</span>
-              <span style={styles.dividerLine} />
-            </div>
+            {!isNative() && (<>
+              <a href={resolveUrl('/api/auth/google')} style={styles.googleBtn}>
+                <GoogleIcon />
+                Sign up with Google
+              </a>
+              <div style={styles.divider}>
+                <span style={styles.dividerLine} />
+                <span style={styles.dividerText}>or</span>
+                <span style={styles.dividerLine} />
+              </div>
+            </>)}
             <form onSubmit={handleSubmit} className="auth-form">
               <div className="form-row">
                 <div className="form-field">

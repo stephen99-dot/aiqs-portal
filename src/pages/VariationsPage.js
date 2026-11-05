@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
+import { saveBlob } from '../native/saveFile';
 import { CheckIcon, XIcon, FileTextIcon } from '../components/Icons';
 import {
   Button, Card, Badge, PageHeader, EmptyState, Banner, Modal,
@@ -66,7 +67,7 @@ export default function VariationsPage() {
       files.forEach(f => fd.append('drawings', f));
 
       const token = getToken();
-      const res = await fetch(`/api/variations/${projectId}`, {
+      const res = await fetch(resolveUrl(`/api/variations/${projectId}`), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: fd
@@ -128,12 +129,10 @@ export default function VariationsPage() {
 
   async function handleDownload(filename) {
     const token = getToken();
-    const res = await fetch(`/api/variations/download/${filename}`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(resolveUrl(`/api/variations/download/${filename}`), { headers: { 'Authorization': `Bearer ${token}` } });
     if (!res.ok) { setError('Download failed'); return; }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    try { await saveBlob(blob, filename); } catch (e) { setError(e.message || 'Download failed'); }
   }
 
   function parseAnalysis(v) {

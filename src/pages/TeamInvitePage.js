@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { resolveUrl } from '../utils/api';
 
 // A colleague invited via "Authorized sign-in emails" on the admin Users page
 // lands here from their invite email, sets their own password, and is signed
@@ -28,7 +29,7 @@ export default function TeamInvitePage() {
     // Clear any existing session first
     logout();
 
-    fetch(`/api/auth/team-invite?token=${token}`)
+    fetch(resolveUrl(`/api/auth/team-invite?token=${token}`))
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Invalid or expired invite');
@@ -49,7 +50,7 @@ export default function TeamInvitePage() {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/auth/team-invite', {
+      const res = await fetch(resolveUrl('/api/auth/team-invite'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
@@ -75,7 +76,7 @@ export default function TeamInvitePage() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'linear-gradient(135deg, #06080F 0%, #0C1528 50%, #0A0F1C 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Instrument Sans', -apple-system, sans-serif",

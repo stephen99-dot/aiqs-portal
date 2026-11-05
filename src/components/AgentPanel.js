@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
+import { saveBlob } from '../native/saveFile';
+import { openExternal } from '../native/openExternal';
 import { useTheme } from '../context/ThemeContext';
 import { SearchIcon, ClipboardIcon, RulerIcon, EditIcon, TrashIcon, CalculatorIcon, CheckCircleIcon, XCircleIcon, FileTextIcon, PlugIcon, WrenchIcon, AlertTriangleIcon, CheckIcon, BrainIcon, DotIcon } from './Icons';
 import { currencySymbol } from '../utils/money';
@@ -198,7 +200,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
 
     (async () => {
       try {
-        const resp = await fetch('/api/agent/' + runId + '/stream', {
+        const resp = await fetch(resolveUrl('/api/agent/' + runId + '/stream'), {
           headers: token ? { 'Authorization': 'Bearer ' + token } : {},
           signal: ac.signal,
         });
@@ -232,7 +234,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
   async function updateItem(key, patch) {
     try {
       const token = getToken();
-      const r = await fetch(`/api/agent/${runId}/update-item`, {
+      const r = await fetch(resolveUrl(`/api/agent/${runId}/update-item`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
         body: JSON.stringify({ key, ...patch }),
@@ -246,7 +248,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
     if (!window.confirm('Remove this item from the BOQ?')) return;
     try {
       const token = getToken();
-      const r = await fetch(`/api/agent/${runId}/remove-item`, {
+      const r = await fetch(resolveUrl(`/api/agent/${runId}/remove-item`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
         body: JSON.stringify({ key }),
@@ -258,7 +260,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
   async function reprice() {
     try {
       const token = getToken();
-      const r = await fetch(`/api/agent/${runId}/reprice`, {
+      const r = await fetch(resolveUrl(`/api/agent/${runId}/reprice`), {
         method: 'POST',
         headers: token ? { Authorization: 'Bearer ' + token } : {},
       });
@@ -271,7 +273,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
     setGenerating(true);
     try {
       const token = getToken();
-      const r = await fetch(`/api/agent/${runId}/generate`, {
+      const r = await fetch(resolveUrl(`/api/agent/${runId}/generate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
         body: JSON.stringify({ findings_notes: findingsNotes }),
@@ -503,7 +505,7 @@ export default function AgentPanel({ runId, onClose, onCompleted, onGenerate }) 
   // sits inline in the chat with a generous height cap so it's readable.
   // Inline, borderless presentation — flows in the conversation like a Claude
   // message rather than a heavy boxed panel.
-  const rootStyle = { marginTop: 6, display: 'flex', flexDirection: 'column', maxHeight: '72vh' };
+  const rootStyle = { marginTop: 6, display: 'flex', flexDirection: 'column', maxHeight: '72dvh' };
 
   return (
     <div style={rootStyle}>
@@ -781,12 +783,12 @@ function fmtFileSize(bytes) {
 async function agentOpenInViewer(f) {
   try {
     const token = getToken();
-    const r = await fetch('/api/files/sign/' + encodeURIComponent(f.name), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    const r = await fetch(resolveUrl('/api/files/sign/' + encodeURIComponent(f.name)), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
     if (!r.ok) throw new Error();
     const { url } = await r.json();
     const ext = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
     const viewer = ext === 'pdf' ? url : 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=false';
-    window.open(viewer, '_blank', 'noopener');
+    await openExternal(viewer);
   } catch { alert('Could not open the file — try downloading it instead.'); }
 }
 
@@ -808,12 +810,10 @@ function DownloadButton({ f, c, isDark }) {
     setBusy(true);
     try {
       const token = getToken();
-      const r = await fetch(f.url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+      const r = await fetch(resolveUrl(f.url), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
       if (!r.ok) throw new Error();
       const blob = await r.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = f.name;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      await saveBlob(blob, f.name);
     } catch (e) { alert('Download failed — try again.'); }
     finally { setBusy(false); }
   };

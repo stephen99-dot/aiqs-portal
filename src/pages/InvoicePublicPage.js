@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { LinkIcon, CheckCircleIcon } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
+import { resolveUrl } from '../utils/api';
 
 // Public invoice page — /i/<token>. What the builder's client opens from the
 // email or WhatsApp link. Read-only: see the invoice, download the PDF and —
@@ -36,7 +37,7 @@ export default function InvoicePublicPage() {
   const [error, setError] = useState('');
   const [showLines, setShowLines] = useState(false);
 
-  const base = '/api/public/invoices/' + encodeURIComponent(token);
+  const base = resolveUrl('/api/public/invoices/' + encodeURIComponent(token));
 
   const load = useCallback(async () => {
     try {
@@ -51,11 +52,11 @@ export default function InvoicePublicPage() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
+    return <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#94A3B8' }}>Loading…</div>;
   }
   if (!data) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: 16 }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', padding: 16 }}>
         <div style={{ maxWidth: 420, padding: 32, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, textAlign: 'center', color: '#111827' }}>
           <div style={{ marginBottom: 8 }}><LinkIcon size={32} /></div>
           <h2 style={{ margin: 0, fontSize: 20 }}>This invoice link isn't working</h2>
@@ -74,7 +75,7 @@ export default function InvoicePublicPage() {
   const canPay = !paid && data.status !== 'void' && data.stripe_payment_link;
 
   return (
-    <div style={{ minHeight: '100vh', background: c.bg, color: c.text, paddingBottom: canPay ? 96 : 24 }}>
+    <div style={{ minHeight: '100dvh', background: c.bg, color: c.text, paddingBottom: canPay ? 96 : 24 }}>
       {/* Brand band */}
       <div style={{ background: c.primary, padding: '18px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         {company.has_logo && (

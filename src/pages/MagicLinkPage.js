@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiFetch } from '../utils/api';
+import { apiFetch, resolveUrl } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function MagicLinkPage() {
@@ -29,7 +29,7 @@ export default function MagicLinkPage() {
 
     const verifyMagicLink = async () => {
       try {
-        const response = await fetch(`/api/auth/magic?token=${token}`);
+        const response = await fetch(resolveUrl(`/api/auth/magic?token=${token}`));
         const data = await response.json();
 
         if (!response.ok) {
@@ -94,7 +94,7 @@ export default function MagicLinkPage() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'linear-gradient(135deg, #06080F 0%, #0C1528 50%, #0A0F1C 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Instrument Sans', -apple-system, sans-serif",

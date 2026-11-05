@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
+import { canShowPurchases } from '../utils/purchases';
+import NativePurchaseNotice from '../components/NativePurchaseNotice';
 import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import {
   Button, IconButton, Card, Banner, Badge, StatusBadge,
@@ -29,6 +31,7 @@ const STRIPE = {
 // The bundle buy-links, rendered identically wherever they appear (PAYG bar,
 // at-limit prompt). One primary action; bundles as quiet secondaries.
 function BuyBoqButtons({ user, compact = false }) {
+  if (!canShowPurchases()) return <NativePurchaseNotice compact={compact} />;
   const size = compact ? 'sm' : 'sm';
   const ext = { target: '_blank', rel: 'noopener noreferrer' };
   return (
@@ -138,12 +141,12 @@ function UsageBar({ usage, user }) {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
           }}>
             <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
-            <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+            {canShowPurchases() && <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
               fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>
               Save with a 5-BOQ bundle — {gbp(349)} <ArrowRightIcon size={11} color="currentColor" />
-            </a>
+            </a>}
           </div>
         )}
       </Card.Body>

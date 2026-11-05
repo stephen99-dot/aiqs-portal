@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import TrustpilotReviewCarousel from '../components/TrustpilotReviewCarousel';
+import { isNative } from '../native/platform';
+import { resolveUrl } from '../utils/api';
 
 const stats = [
   { value: "£2.5M+", label: "Largest single BOQ" },
@@ -46,7 +48,7 @@ export default function LoginPage() {
   return (
     <>
       <style>{`
-        .auth-shell { display: flex; min-height: 100vh; width: 100%; }
+        .auth-shell { display: flex; min-height: 100vh; min-height: 100dvh; width: 100%; }
         .auth-left-panel {
           flex: 1 1 50%;
           background: linear-gradient(135deg, #0d1b2e 0%, #1B2A4A 55%, #0f2340 100%);
@@ -99,15 +101,17 @@ export default function LoginPage() {
               <p>Sign in to your AI QS portal</p>
             </div>
             {error && <div className="auth-error">{error}</div>}
-            <a href="/api/auth/google" style={styles.googleBtn}>
-              <GoogleIcon />
-              Continue with Google
-            </a>
-            <div style={styles.divider}>
-              <span style={styles.dividerLine} />
-              <span style={styles.dividerText}>or</span>
-              <span style={styles.dividerLine} />
-            </div>
+            {!isNative() && (<>
+              <a href={resolveUrl('/api/auth/google')} style={styles.googleBtn}>
+                <GoogleIcon />
+                Continue with Google
+              </a>
+              <div style={styles.divider}>
+                <span style={styles.dividerLine} />
+                <span style={styles.dividerText}>or</span>
+                <span style={styles.dividerLine} />
+              </div>
+            </>)}
             <form onSubmit={handleSubmit} className="auth-form">
               <div className="form-field">
                 <label>Email</label>

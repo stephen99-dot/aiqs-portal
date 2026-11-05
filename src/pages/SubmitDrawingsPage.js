@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, apiUpload } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
+import { canShowPurchases } from '../utils/purchases';
+import NativePurchaseNotice from '../components/NativePurchaseNotice';
 import {
   UploadIcon, XIcon, PaperclipIcon, FileTextIcon, FileImageIcon,
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
@@ -661,7 +663,18 @@ export default function SubmitDrawingsPage() {
 
       {/* Top-up offer — shown automatically on no credits, dismissible but always
           reachable via the floating button at bottom-right. */}
-      {showTopUpModal && (
+      {showTopUpModal && !canShowPurchases() && (
+        <Modal title="Need more BOQs?" onClose={() => setShowTopUpModal(false)}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 14 }}>
+            You're out of BOQ credits.
+          </div>
+          <NativePurchaseNotice />
+          <Button variant="ghost" size="sm" full style={{ marginTop: 12 }} onClick={() => setShowTopUpModal(false)}>
+            OK
+          </Button>
+        </Modal>
+      )}
+      {showTopUpModal && canShowPurchases() && (
         <Modal title="Need more BOQs?" onClose={() => setShowTopUpModal(false)}>
           <Badge tone="accent" size="sm" pill style={{ marginBottom: 12 }}>
             <ZapIcon size={11} color="currentColor" /> One-off top-up
@@ -730,12 +743,12 @@ export default function SubmitDrawingsPage() {
 
       {/* Persistent floating offer — always reachable when credits are out.
           Bespoke pulsing pill, deliberately kept inline. */}
-      {noCredits && !showTopUpModal && !submitting && (
+      {noCredits && !showTopUpModal && !submitting && canShowPurchases() && (
         <button
           type="button"
           onClick={() => setShowTopUpModal(true)}
           style={{
-            position: 'fixed', bottom: 24, right: 24, zIndex: 9990,
+            position: 'fixed', bottom: 'calc(24px + var(--safe-bottom))', right: 'calc(24px + var(--safe-right))', zIndex: 9990,
             display: 'inline-flex', alignItems: 'center', gap: 8,
             padding: '12px 18px', borderRadius: 999,
             background: 'linear-gradient(135deg, #F59E0B, #D97706)',

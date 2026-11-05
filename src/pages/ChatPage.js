@@ -4,8 +4,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch, getToken, streamChat } from '../utils/api';
+import { apiFetch, getToken, streamChat, resolveUrl } from '../utils/api';
+import { saveBlob, saveText } from '../native/saveFile';
+import { openExternal } from '../native/openExternal';
 import { withUserRef } from '../utils/stripeLinks';
+import { canShowPurchases } from '../utils/purchases';
+import NativePurchaseNotice from '../components/NativePurchaseNotice';
 import useIsMobile from '../utils/useIsMobile';
 import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
@@ -190,12 +194,10 @@ function fmtFileSize(bytes) {
 async function downloadFile(f) {
   try {
     const token = localStorage.getItem('aiqs_token');
-    const r = await fetch(f.url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    const r = await fetch(resolveUrl(f.url), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
     if (!r.ok) throw new Error();
     const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = f.name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    await saveBlob(blob, f.name);
   } catch { alert('Download failed — please try again.'); }
 }
 
@@ -205,12 +207,12 @@ async function downloadFile(f) {
 async function openInViewer(f) {
   try {
     const token = localStorage.getItem('aiqs_token');
-    const r = await fetch('/api/files/sign/' + encodeURIComponent(f.name), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    const r = await fetch(resolveUrl('/api/files/sign/' + encodeURIComponent(f.name)), { headers: token ? { Authorization: 'Bearer ' + token } : {} });
     if (!r.ok) throw new Error();
     const { url } = await r.json();
     const ext = (f.type || (f.name || '').split('.').pop() || '').toLowerCase();
     const viewer = ext === 'pdf' ? url : 'https://docs.google.com/viewer?url=' + encodeURIComponent(url) + '&embedded=false';
-    window.open(viewer, '_blank', 'noopener');
+    await openExternal(viewer);
   } catch { alert('Could not open the file — try downloading it instead.'); }
 }
 
@@ -359,7 +361,7 @@ export default function ChatPage() {
       fd.append('session_id', sessId);
       capturedFiles.forEach(f => fd.append('files', f));
       const token = getToken();
-      const resp = await fetch('/api/agent', {
+      const resp = await fetch(resolveUrl('/api/agent'), {
         method: 'POST',
         headers: token ? { Authorization: 'Bearer ' + token } : {},
         body: fd,
@@ -1170,6 +1172,7 @@ export default function ChatPage() {
             {msg.paymentRequired && (
               <div style={{ marginTop:14, padding:16, borderRadius:10, background:c.warnBg, border:`1px solid ${c.warnBorder}` }}>
                 <div style={{ fontSize:13, fontWeight:600, color:c.text, marginBottom:4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
+                {canShowPurchases() ? (
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
                   <a href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)} target="_blank" rel="noopener noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 18px', borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C', textDecoration:'none', fontSize:13, fontWeight:700 }}>
@@ -1190,6 +1193,7 @@ export default function ChatPage() {
                     </a>
                   </div>
                 </div>
+                ) : <NativePurchaseNotice compact style={{ marginTop: 12 }} />}
               </div>
             )}
           </div>
@@ -1200,7 +1204,7 @@ export default function ChatPage() {
 
   // ── Sidebar style ──────────────────────────────────────────────────
   const sideStyle = mobile ? {
-    position:'fixed', top:0, left:0, height:'100%', width:280, zIndex:200,
+    position:'fixed', top:0, left:0, height:'100%', width:280, zIndex:200, paddingTop:'var(--safe-top)', paddingBottom:'var(--safe-bottom)',
     transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
     transition:'transform 0.25s ease', background:c.side, borderRight:`1px solid ${c.sideBorder}`,
     display:'flex', flexDirection:'column',
@@ -1236,13 +1240,7 @@ export default function ChatPage() {
             </div>
             <button onClick={() => copyText(artifact.content)} title="Copy" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 12, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>⧉ Copy</button>
             <button onClick={() => {
-              try {
-                const blob = new Blob([artifact.content], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = 'snippet.' + (LANG_EXT[(artifact.language || '').toLowerCase()] || 'txt');
-                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-              } catch (e) {}
+              saveText(artifact.content, 'snippet.' + (LANG_EXT[(artifact.language || '').toLowerCase()] || 'txt')).catch(() => {});
             }} title="Download" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>↓</button>
             <button onClick={() => setArtifact(null)} title="Close" style={{ background: 'none', border: `1px solid ${c.chatBorder}`, cursor: 'pointer', color: c.textSub, fontSize: 13, fontFamily: 'inherit', padding: '5px 9px', borderRadius: 6 }}>✕</button>
           </div>
@@ -1325,8 +1323,8 @@ export default function ChatPage() {
           </button>
           <div style={{ width:1, height:18, background:c.topBorder, flexShrink:0 }}/>
           <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:14, fontWeight:700, color:c.text, flexShrink:0 }}>AI Quantity Surveyor</span>
-            {!mobile && <span style={{ fontSize:12, color:c.textMuted }}>Beta — for a QS-checked BOQ, use Submit Drawings</span>}
+            <span style={{ fontSize:14, fontWeight:700, color:c.text, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>AI Quantity Surveyor</span>
+            {!mobile && <span style={{ fontSize:12, color:c.textMuted, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>Beta — for a QS-checked BOQ, use Submit Drawings</span>}
             {!mobile && currentTakeoffId && <TakeoffBanner/>}
           </div>
           {quotaInfo && quotaInfo.messages_limit > 0 && (() => {
@@ -1369,7 +1367,7 @@ export default function ChatPage() {
             <div style={{ width:'100%', maxWidth:860, flex:1, display:'flex', flexDirection:'column', gap:18, minHeight:0 }}>
 
             {messages.length === 0 && (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flex:1, textAlign:'center', padding:'0 16px' }}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', margin:'auto 0', textAlign:'center', padding:'0 16px' }}>
                 <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:18 }}><RulerIcon size={30} /></div>
                 <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>AI Chat — beta</h3>
                 <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 14px', maxWidth:460, lineHeight:1.65 }}>

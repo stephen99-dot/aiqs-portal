@@ -1,4 +1,38 @@
-const API_BASE = '/api';
+import { isNative } from '../native/platform';
+
+// Where the API lives.
+//
+//   • Website: same origin, so '/api'.
+//   • iOS app: the bundle is served from capacitor://localhost, so a relative
+//     '/api' would point at the phone itself. The app talks to the live portal
+//     over HTTPS — REACT_APP_API_URL at build time, else the production host.
+//
+// REACT_APP_API_URL may be given with or without a trailing /api.
+const PRODUCTION_ORIGIN = 'https://aiqs-portal.onrender.com';
+function resolveApiOrigin() {
+  const configured = String(process.env.REACT_APP_API_URL || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
+  if (configured) return configured;
+  return isNative() ? PRODUCTION_ORIGIN : '';
+}
+const API_ORIGIN = resolveApiOrigin();
+const API_BASE = API_ORIGIN + '/api';
+
+/** Absolute URL for an API endpoint given without the /api prefix ('/auth/me'). */
+function apiUrl(endpoint) {
+  return API_BASE + endpoint;
+}
+
+/**
+ * Absolute URL for any portal path. Server-provided download links arrive as
+ * '/api/downloads/<file>'; pages also build '/api/...' paths by hand. Both
+ * need the API origin prepended inside the app and left alone on the web.
+ */
+function resolveUrl(pathOrUrl) {
+  const p = String(pathOrUrl || '');
+  if (/^https?:\/\//i.test(p)) return p;
+  if (p.startsWith('/api/') || p === '/api') return API_ORIGIN + p;
+  return API_BASE + (p.startsWith('/') ? p : '/' + p);
+}
 function getToken() {
   return localStorage.getItem('aiqs_token');
 }
@@ -342,7 +376,25 @@ function apiUpload(endpoint, formData, options = {}) {
   });
 }
 
+/**
+ * The public portal origin, for links we hand to other people (share links,
+ * invite URLs, "view your project"). Inside the app window.location.origin is
+ * capacitor://localhost, which nobody else can open.
+ */
+function portalOrigin() {
+  return API_ORIGIN || window.location.origin;
+}
+
+/** Fetch with the portal's bearer token attached (for raw downloads/streams). */
+function authedFetch(pathOrUrl, init = {}) {
+  const token = getToken();
+  const headers = { ...(init.headers || {}) };
+  if (token && !headers.Authorization) headers.Authorization = 'Bearer ' + token;
+  return fetch(resolveUrl(pathOrUrl), { ...init, headers });
+}
+
 export {
   apiFetch, apiUpload, getToken, setToken, clearToken, streamChat,
   getEstimatorKey, setEstimatorKey, clearEstimatorKey,
+  API_ORIGIN, API_BASE, apiUrl, resolveUrl, authedFetch, portalOrigin,
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
+import { saveBlob, filenameFromResponse } from '../native/saveFile';
 import { CheckIcon } from '../components/Icons';
 import {
   Button, IconButton, Card, Banner, PageHeader, EmptyState,
@@ -102,7 +103,7 @@ export default function FindingsEditorPage() {
     setError('');
     try {
       const token = getToken();
-      const resp = await fetch(`/api/projects/${id}/findings/export`, {
+      const resp = await fetch(resolveUrl(`/api/projects/${id}/findings/export`), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ findings }),
@@ -112,14 +113,8 @@ export default function FindingsEditorPage() {
         throw new Error(e.error || 'Export failed');
       }
       const blob = await resp.blob();
-      const disp = resp.headers.get('content-disposition') || '';
-      const m = disp.match(/filename="?([^"]+)"?/);
-      const filename = m ? m[1] : 'Findings.docx';
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      const filename = filenameFromResponse(resp, 'Findings.docx');
+      await saveBlob(blob, filename);
     } catch (err) {
       setError(err.message || 'Export failed');
     } finally {

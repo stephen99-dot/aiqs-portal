@@ -32,8 +32,11 @@ import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
 import InvoicePublicPage from './pages/InvoicePublicPage';
 import Builder3DPage from './pages/Builder3DPage';
 import BrandingPage from './pages/BrandingPage';
+import OAuthSuccessPage from './pages/OAuthSuccessPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
+import OfflineBanner from './components/OfflineBanner';
+import NativeBridge from './native/NativeBridge';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -64,12 +67,17 @@ function AppInner() {
 
   return (
     <BrowserRouter>
+      {/* Native shell glue (deep links, status bar, splash) — a no-op on the web. */}
+      <NativeBridge />
+      <OfflineBanner />
       <Routes>
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
+        {/* Where the server lands the browser after Google sign-in (?token=) */}
+        <Route path="/auth/google/success" element={<OAuthSuccessPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
-import { apiFetch, getToken } from '../utils/api';
+import { apiFetch, getToken, resolveUrl } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { CountryFields } from '../components/CountryPicker';
 
@@ -168,7 +168,7 @@ export default function OnboardingPage() {
     try {
       const fd = new FormData();
       fd.append('logo', file, file.name);
-      const resp = await fetch('/api/branding/logo', {
+      const resp = await fetch(resolveUrl('/api/branding/logo'), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + getToken() },
         body: fd,

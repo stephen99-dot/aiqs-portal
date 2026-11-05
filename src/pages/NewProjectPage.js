@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
+import { canShowPurchases } from '../utils/purchases';
+import NativePurchaseNotice from '../components/NativePurchaseNotice';
 import {
   ZapIcon, StarIcon, CrownIcon, BanIcon, ArrowRightIcon,
   UploadIcon, XIcon, CreditCardIcon, ChatIcon,
@@ -107,6 +109,7 @@ function LimitReachedModal({ usage, user, onClose }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
+        {canShowPurchases() ? (<>
         {/* Buy Extra Project — always shown */}
         <OfferRow
           href={withUserRef(STRIPE_PAYG_LINK, user)}
@@ -148,6 +151,8 @@ function LimitReachedModal({ usage, user, onClose }) {
           title="20 BOQ Bundle" subtitle={`Best value — just ${gbp(49)} per BOQ, credits never expire`}
           price={`${gbp(980)}`} priceBg="linear-gradient(135deg, #10B981, #059669)" priceColor="#fff"
         />
+
+        </>) : <NativePurchaseNotice />}
 
         {/* Contact */}
         <OfferRow

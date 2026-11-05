@@ -2,21 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- viewport-fit=cover lets the page extend under the notch / home indicator;
+       the CSS safe-area variables (src/styles.css) keep the chrome clear of them. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>AI QS — Customer Portal</title>
   <meta name="description" content="Upload drawings, track orders, and download your professional BOQs." />
-  <link rel="icon" href="/favicon.ico" />
-  <link rel="apple-touch-icon" href="/logo192.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#F5F7FA" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#141C2E" media="(prefers-color-scheme: dark)" />
+  <!-- Stop iOS turning rate figures, references and postcodes into tap-to-call links. -->
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="AI QS" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="192x192" href="%PUBLIC_URL%/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/icons/apple-touch-icon.png" />
+  <!-- Fonts are bundled (@fontsource, see src/index.js) — no Google Fonts request. -->
   <style>
     *, *::before, *::after { box-sizing: border-box; }
+    html { background: #F5F7FA; }
     body { margin: 0; overflow-x: hidden; }
+    /* iOS Safari/WKWebView zooms the page when a focused field is under 16px.
+       Only text fields need this — buttons keep their designed sizes. */
     input, select, textarea { font-size: 16px !important; }
-    @media (max-width: 768px) {
-      input, select, textarea, button { font-size: 16px !important; }
-    }
   </style>
 </head>
 <body>

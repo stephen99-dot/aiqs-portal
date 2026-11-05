@@ -31,6 +31,9 @@ export function ThemeProvider({ children }) {
     document.body.style.background = palette.bg;
     document.body.style.color = palette.text;
     document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
+    // The browser chrome / iOS status bar area follows the chosen mode too.
+    root.style.colorScheme = mode;
+    document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', palette.bg));
   }, [mode, palette]);
 
   const toggle = () => setMode(m => (m === 'dark' ? 'light' : 'dark'));

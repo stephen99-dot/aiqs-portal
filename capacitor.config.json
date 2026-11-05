@@ -1,0 +1,34 @@
+{
+  "appId": "uk.co.theaiqs.portal",
+  "appName": "AI QS",
+  "webDir": "build",
+  "backgroundColor": "#F5F7FA",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": true,
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false,
+    "handleApplicationNotifications": false
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchShowDuration": 0,
+      "backgroundColor": "#F5F7FA",
+      "showSpinner": false,
+      "splashFullScreen": false,
+      "splashImmersive": false
+    },
+    "Keyboard": {
+      "resize": "native",
+      "resizeOnFullScreen": true
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "LIGHT"
+    }
+  }
+}
