@@ -32,7 +32,7 @@ router.post('/my-rates/add', authMiddleware, (req, res) => {
     if (existing) return res.status(409).json({ error: 'Rate already exists in that category. Edit it instead.' });
     const id = 'rl_' + uuidv4().slice(0, 8);
     db.prepare('INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit, confidence, client_note) VALUES (?, ?, ?, ?, ?, ?, ?, 0.80, ?)').run(id, userId, category, item_key, display_name, parseFloat(value), unit, note || null);
-    rateOnboarding.markOwnRatesAdded(req.user, { source: 'manual', count: 1 });
+    rateOnboarding.recordRateChange(req.user, { source: 'manual', added: 1 });
     res.json({ success: true, id, message: 'Added: ' + display_name + ' = ' + value + ' ' + unit });
   } catch(e) { console.error('[Rates] Add:', e); res.status(500).json({ error: 'Failed to add rate' }); }
 });
@@ -78,6 +78,7 @@ router.delete('/my-rates/:rateId', authMiddleware, (req, res) => {
   try {
     const result = db.prepare('UPDATE client_rate_library SET is_active = 0 WHERE id = ? AND user_id = ?').run(req.params.rateId, req.user.id);
     if (result.changes === 0) return res.status(404).json({ error: 'Rate not found' });
+    rateOnboarding.recordRateChange(req.user, { source: 'manual', removed: 1 });
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: 'Failed to delete rate' }); }
 });
@@ -215,7 +216,13 @@ router.post('/my-rates/import', authMiddleware, upload.single('file'), async (re
 
     try { fs.unlinkSync(req.file.path); } catch(e) {}
     console.log('[Import] ' + imported.length + ' rates from ' + sheetsProcessed.length + ' sheets imported for ' + req.user.email);
-    if (imported.length > 0) rateOnboarding.markOwnRatesAdded(req.user, { source: 'import', count: imported.length });
+    if (imported.length > 0) {
+      rateOnboarding.recordRateChange(req.user, {
+        source: 'import',
+        added: imported.filter((r) => r.action === 'created').length,
+        updated: imported.filter((r) => r.action === 'updated').length,
+      });
+    }
     res.json({ success: true, imported: imported.length, skipped: skipped.length, sheets: sheetsProcessed, skipped_items: skipped.slice(0, 10), rates: imported.slice(0, 20) });
   } catch(e) {
     console.error('[Import]', e);

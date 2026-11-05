@@ -75,6 +75,22 @@ screen, the stored submission (`onboarding_submissions`) and the admin download 
 - **Admin.** Completing onboarding raises a bell and email and the profile is downloadable from
   *Admin → Onboarding* as a spreadsheet, rate rows labelled by group in the account's currency.
 
+## Rate alerts to the admin
+
+The admin hears about a client's rates twice over, both as a bell notification and an
+email to `ADMIN_EMAIL`:
+
+- **First time** a client puts their own rates in (`server/rateOnboarding.js`,
+  `markOwnRatesAdded`) — instant, so the rates can be pulled into the pricing brain.
+- **Every change after that** (`server/rateChanges.js`) — a rate edited or added on My
+  Rates, a rate deleted, an Excel or BOQ import, corrections made in chat, supplier quotes
+  fed back, a rate sheet redone in onboarding. Changes are rolled up per client and sent
+  once they have been quiet for 5 minutes (or 20 minutes after the first change), so a
+  40-row import is one message: *"Jo Builder updated their rates — 3 rates updated · 1 rate
+  added, via the My Rates page and an Excel import"*. Pending roll-ups live in
+  `rate_change_digests`, so a deploy mid-edit loses nothing. Admin-side imports on a
+  client's behalf never alert. Tests: `server/rateChanges.test.js`.
+
 ## Markup by trade, trade packages and canonical sections
 
 Every priced BOQ line carries a **trade** (Electrical, Plumbing & Heating, Groundworks,

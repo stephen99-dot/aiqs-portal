@@ -134,7 +134,7 @@ router.post('/projects/:projectId/rate-import/apply', authMiddleware, (req, res)
     tx();
 
     if (created.length + updated.length > 0) {
-      try { rateOnboarding.markOwnRatesAdded(req.user, { source: 'boq_import', count: created.length + updated.length }); } catch (e) { /* non-fatal */ }
+      try { rateOnboarding.recordRateChange(req.user, { source: 'boq_import', added: created.length, updated: updated.length }); } catch (e) { /* non-fatal */ }
     }
 
     console.log('[RateImport] ' + req.user.email + ': ' + created.length + ' created, ' + updated.length + ' updated, ' + skippedExisting.length + ' already existed (project ' + project.id + ')');

@@ -52,7 +52,7 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
   try {
     if (!user || !user.id) return;
     const row = db.prepare('SELECT id, email, full_name, company, role, own_rates_added_at FROM users WHERE id = ?').get(user.id);
-    if (!row || row.role === 'admin' || row.role === 'system' || row.own_rates_added_at) return;
+    if (!row || row.role === 'admin' || row.role === 'system' || row.own_rates_added_at) return false;
 
     db.prepare('UPDATE users SET own_rates_added_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
 
@@ -67,7 +67,7 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
       user_id: row.id, user_name: row.full_name, user_email: row.email,
     });
 
-    if (silent) return;
+    if (silent) return true;
 
     // Admin bell (same notifications table notifyAdmin in routes.js writes to).
     try {
@@ -92,8 +92,26 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
       ctaText: 'Open user management',
       ctaUrl: mailer.BASE_URL + '/admin/users',
     }).catch(() => {});
+    return true;
   } catch (err) {
     console.error('[RateOnboarding] markOwnRatesAdded failed:', err.message);
+    return false;
+  }
+}
+
+// Every deliberate rate change by a client goes through here. The first one
+// raises the instant "added their rates" alert above; every later one is
+// rolled into the per-client rate-change alert (rateChanges.js) so the admin
+// hears about updates, imports, corrections and deletions the same way.
+// silent (admin did it on the client's behalf) records the milestone only.
+function recordRateChange(user, { source, added = 0, updated = 0, removed = 0, silent } = {}) {
+  try {
+    const touched = (added | 0) + (updated | 0);
+    const firstTime = touched > 0 ? markOwnRatesAdded(user, { source, count: touched, silent }) : false;
+    if (firstTime || silent) return;
+    require('./rateChanges').record(user, { source, added, updated, removed });
+  } catch (err) {
+    console.error('[RateOnboarding] recordRateChange failed:', err.message);
   }
 }
 
@@ -193,4 +211,4 @@ function start() {
   if (timer.unref) timer.unref();
 }
 
-module.exports = { markOwnRatesAdded, runRateReminders, start, REMINDER_WINDOW_DAYS };
+module.exports = { markOwnRatesAdded, recordRateChange, runRateReminders, start, REMINDER_WINDOW_DAYS };

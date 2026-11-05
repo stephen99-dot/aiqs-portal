@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import useIsMobile from '../utils/useIsMobile';
 import {
   safeHex, idealTextOn, accentText, tradeTint, heroFontPx, titleFontPx, tint, luminance, detectLightLogo,
 } from '../utils/brandColours';
@@ -61,7 +62,10 @@ export default function ClientCopySheet({
     const bg = tradeTint(primary, i);
     return { ...r, pct, bg, fg: idealTextOn(bg), barLabel: pct >= 8 ? Math.round(pct) + '%' : '' };
   });
-  const twoCol = trades.length > 9;
+  // Phones: masthead stacks, the money list is one column, labels left-aligned.
+  // The XLSX keeps its own layout; this is the readable on-screen version.
+  const compact = useIsMobile(600);
+  const twoCol = trades.length > 9 && !compact;
   const title = projectName || 'Project';
 
   return (
@@ -71,7 +75,7 @@ export default function ClientCopySheet({
       display: 'flex', flexDirection: 'column', gap: 14,
     }}>
       {/* Split masthead: logo and project on white, the total on the brand colour */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(190px, 1fr)', border: '1px solid #DDE1E6', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? 'minmax(0, 1fr)' : 'minmax(0, 1.4fr) minmax(190px, 1fr)', border: '1px solid #DDE1E6', borderRadius: 8, overflow: 'hidden' }}>
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', minHeight: 56 }}>
             {logoUrl ? (
@@ -107,7 +111,7 @@ export default function ClientCopySheet({
       </div>
 
       {/* Who it's for and from */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16, paddingBottom: 12, borderBottom: '1px solid ' + HAIRLINE }}>
+      <div style={{ display: 'grid', gridTemplateColumns: compact ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', gap: compact ? 12 : 16, paddingBottom: 12, borderBottom: '1px solid ' + HAIRLINE }}>
         <div style={{ minWidth: 0 }}>
           <div style={label}>Prepared for</div>
           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clientName || 'Your client'}</div>
@@ -120,7 +124,7 @@ export default function ClientCopySheet({
             <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(b.company_address || b.footer_text).replace(/\s+/g, ' ').trim()}</div>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div style={{ textAlign: compact ? 'left' : 'right' }}>
           <div style={label}>Issued</div>
           <div style={{ fontWeight: 600 }}>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
           <div style={{ fontSize: 11, color: MUTED }}>Valid 30 days</div>
@@ -151,7 +155,7 @@ export default function ClientCopySheet({
               {trades.map((t, i) => (
                 <div key={String(t.number) + '-' + i} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) 44px auto', gap: 8, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid ' + HAIRLINE }}>
                   <div style={{ height: 16, borderRadius: 3, background: t.bg, color: t.fg, fontSize: 8.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.provisional ? 'PS' : (i + 1)}</div>
-                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'normal' : 'nowrap', lineHeight: 1.25 }}>
                     {t.title}{t.provisional && !/provisional/i.test(t.title) && <span style={{ fontSize: 10, color: MUTED, marginLeft: 6 }}>provisional</span>}
                   </div>
                   <div style={{ ...num, textAlign: 'right', color: MUTED }}>{t.pct.toFixed(1)}%</div>
