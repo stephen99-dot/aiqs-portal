@@ -268,10 +268,12 @@ only uses HTTPS), so there is no export-compliance questionnaire per build.
    track you*; purpose *App functionality* (email also *Developer's
    communications*). This mirrors `ios/App/App/PrivacyInfo.xcprivacy`.
 5. **Version page:**
-   * Screenshots: Xcode Simulator → iPhone 18 Pro Max → **⌘S** saves a PNG at
-     the exact 6.9″ size Apple wants (1320 × 2868). That one size is
-     mandatory; others are optional and scale from it. Take: sign-in,
-     dashboard, submit drawings, project with downloads, chat.
+   * Screenshots: App Store Connect's "iPhone with Dynamic Island (medium
+     display)" slot takes 1206 × 2622 (or 1179 × 2556). Xcode Simulator →
+     **iPhone 17 Pro** → **⌘S** saves a PNG at exactly 1206 × 2622. Pro Max
+     shots (1320 × 2868) are rejected as "dimensions are invalid". The iPhone
+     Duo, iPad and Watch slots are optional. Take: dashboard, submit
+     drawings, project with downloads, Builder Pack, chat, sign-in.
    * Description, keywords (quantity surveying, BOQ, bill of quantities,
      estimating, builder, construction), support URL, marketing URL,
      privacy policy URL.

@@ -63,8 +63,9 @@ menu → Delete account.
 
 ## Screenshots
 
-Mandatory: iPhone 6.9-inch display, 1320 × 2868 portrait. Xcode Simulator →
-iPhone 17 Pro Max or 18 Pro Max → ⌘S saves at exactly this size. Take, in order:
+Mandatory slot: "iPhone with Dynamic Island (medium display)", 1206 × 2622
+portrait. Xcode Simulator → iPhone 17 Pro → ⌘S saves at exactly this size
+(Pro Max screenshots are rejected). Take, in order:
 
 1. My Projects (signed in, a few jobs with "docs ready" badges)
 2. Submit Drawings
