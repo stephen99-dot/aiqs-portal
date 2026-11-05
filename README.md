@@ -91,6 +91,14 @@ email to `ADMIN_EMAIL`:
   `rate_change_digests`, so a deploy mid-edit loses nothing. Admin-side imports on a
   client's behalf never alert. Tests: `server/rateChanges.test.js`.
 
+Both alerts link to **what actually changed**: the bell entry and the email button open
+`/admin/users?user=<id>&show=rates` — user management with that client expanded and their
+rate library open on a **Recent changes** list (`server/rateHistory.js`, served as `recent`
+by `GET /api/admin/users/:id/rates`): every rate added, changed or removed in the last 30
+days, newest first, with the value it replaced (from the correction log, else the seeded
+default it overrides), how it was changed and what the client said. Tests:
+`server/rateHistory.test.js`. Notifications carry an optional `link` column for this.
+
 ## Markup by trade, trade packages and canonical sections
 
 Every priced BOQ line carries a **trade** (Electrical, Plumbing & Heating, Groundworks,

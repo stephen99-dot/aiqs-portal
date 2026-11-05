@@ -36,6 +36,14 @@ const REMINDER_WINDOW_DAYS = 30;
 try { db.exec('ALTER TABLE users ADD COLUMN own_rates_added_at DATETIME'); } catch (e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN rates_reminder_stage INTEGER DEFAULT 0'); } catch (e) {}
 try { db.exec('ALTER TABLE users ADD COLUMN rates_reminder_last_at DATETIME'); } catch (e) {}
+try { db.exec('ALTER TABLE notifications ADD COLUMN link TEXT'); } catch (e) {}
+
+// Where the alert sends the admin: user management with this client expanded
+// and their rate library open on "Recent changes", so the rate they just
+// put in is the first thing on screen.
+function ratesLink(userId) {
+  return '/admin/users?user=' + encodeURIComponent(userId) + '&show=rates';
+}
 
 const SOURCE_LABELS = {
   manual: 'added manually on the My Rates page',
@@ -70,9 +78,10 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
     if (silent) return true;
 
     // Admin bell (same notifications table notifyAdmin in routes.js writes to).
+    const link = ratesLink(row.id);
     try {
-      db.prepare('INSERT INTO notifications (id, type, title, detail, icon) VALUES (?, ?, ?, ?, ?)')
-        .run(uuidv4(), 'rates_added', who + ' added their rates', countLabel + ' ' + how, 'clipboard');
+      db.prepare('INSERT INTO notifications (id, type, title, detail, icon, link) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(uuidv4(), 'rates_added', who + ' added their rates', countLabel + ' ' + how, 'clipboard', link);
     } catch (e) {
       console.error('[RateOnboarding] notification insert failed:', e.message);
     }
@@ -89,8 +98,8 @@ function markOwnRatesAdded(user, { source, count, silent } = {}) {
         'Their rate library now holds ' + total + ' active rate' + (total === 1 ? '' : 's') + '.',
         'Extract their rates and add them to our system so their BOQs price from their own numbers.',
       ],
-      ctaText: 'Open user management',
-      ctaUrl: mailer.BASE_URL + '/admin/users',
+      ctaText: 'See what they added',
+      ctaUrl: mailer.BASE_URL + link,
     }).catch(() => {});
     return true;
   } catch (err) {
@@ -211,4 +220,4 @@ function start() {
   if (timer.unref) timer.unref();
 }
 
-module.exports = { markOwnRatesAdded, recordRateChange, runRateReminders, start, REMINDER_WINDOW_DAYS };
+module.exports = { markOwnRatesAdded, recordRateChange, runRateReminders, start, ratesLink, REMINDER_WINDOW_DAYS };

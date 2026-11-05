@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, UserPlus, Trash2, Shield, Search, X, Upload, Pause, Play, CreditCard, ChevronDown, Link2, Activity, Save, Key, RefreshCw, MessageSquare, Send, Copy, Check, Zap, Mail } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { KeyIcon } from '../components/Icons';
 import { useAuth } from '../context/AuthContext';
 import { resolveUrl, portalOrigin } from '../utils/api';
@@ -171,18 +172,22 @@ function ChangeEmailModal({ user, isDark, onClose, onSuccess, onUpdate }) {
   );
 }
 
-// The client's rate library, viewed from the admin side. The "client added
-// their rates" alert points here — custom lines (added by the client) and
-// edited defaults are flagged and sorted to the top so what they added is
-// visible at a glance.
-function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) {
+// The client's rate library, viewed from the admin side. The "client added /
+// updated their rates" alerts (bell + email) land here with autoOpen set:
+// "Recent changes" lists exactly which rates moved — added, changed, removed —
+// with the value each replaced, newest first, so one corrected rate is found
+// without scrolling a 450-row library. Below it, the full library with custom
+// lines and edited defaults flagged and sorted to the top.
+function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg, autoOpen }) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState(null);
   const [loadingRates, setLoadingRates] = useState(false);
   const [ownOnly, setOwnOnly] = useState(true);
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
   const muted = isDark ? '#5A6E87' : '#94A3B8';
+  const headBg = isDark ? '#0D1320' : '#F1F5F9';
 
   const load = async () => {
     setLoadingRates(true);
@@ -196,8 +201,39 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
   };
   const toggle = () => { const next = !open; setOpen(next); if (next && !data) load(); };
 
+  // Arrived from a rate alert: open straight onto what changed.
+  useEffect(() => { if (autoOpen) { setOpen(true); load(); } }, [autoOpen]); // eslint-disable-line
+
   const shown = data ? data.rates.filter(r => !ownOnly || r.is_custom || r.is_edited) : [];
-  const fmtDate = (d) => { try { return new Date(String(d).replace(' ', 'T') + (String(d).endsWith('Z') ? '' : 'Z')).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return d; } };
+  const recent = (data && data.recent) || [];
+  const RECENT_PREVIEW = 8;
+  const recentShown = showAllRecent ? recent : recent.slice(0, RECENT_PREVIEW);
+  const recentDays = (data && data.recent_days) || 30;
+
+  // Timestamps arrive as SQLite UTC 'YYYY-MM-DD HH:MM:SS'.
+  const parseDb = (d) => new Date(String(d).replace(' ', 'T') + (String(d).endsWith('Z') ? '' : 'Z'));
+  const fmtDate = (d) => { try { return parseDb(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch (e) { return d; } };
+  const fmtFull = (d) => { try { return parseDb(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return d; } };
+  // "2h ago" for this week's changes, a plain date beyond that.
+  const timeAgo = (d) => {
+    const diff = Date.now() - parseDb(d).getTime();
+    if (!Number.isFinite(diff)) return d;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return days + 'd ago';
+    return fmtDate(d);
+  };
+  const isFresh = (d) => Date.now() - parseDb(d).getTime() < 7 * 86400000;
+  const money = (v) => '£' + Number(v).toLocaleString('en-GB', { maximumFractionDigits: 2 });
+  const KIND = {
+    added: { label: 'Added', color: '#10B981' },
+    updated: { label: 'Changed', color: '#F59E0B' },
+    removed: { label: 'Removed', color: '#EF4444' },
+  };
 
   return (
     <div style={cardStyle}>
@@ -214,12 +250,55 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
               <span><strong style={{ color: text }}>{data.stats.total}</strong> active</span>
               <span><strong style={{ color: '#10B981' }}>{data.stats.custom}</strong> added by client</span>
               <span><strong style={{ color: '#F59E0B' }}>{data.stats.edited}</strong> defaults edited</span>
-              {data.stats.last_updated && <span>last change {fmtDate(data.stats.last_updated)}</span>}
+              {data.stats.last_updated && <span title={fmtFull(data.stats.last_updated)}>last change {timeAgo(data.stats.last_updated)}</span>}
+              {data.user && data.user.own_rates_added_at && <span title={fmtFull(data.user.own_rates_added_at)}>own rates since {fmtDate(data.user.own_rates_added_at)}</span>}
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginLeft: 'auto' }}>
                 <input type="checkbox" checked={ownOnly} onChange={e => setOwnOnly(e.target.checked)} />
                 Their own rates only
               </label>
             </div>
+
+            {/* What changed lately — the thing the alert is about */}
+            <div style={{ border: '1px solid ' + border, borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: headBg, fontSize: 11, fontWeight: 600, color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <span>Recent changes · last {recentDays} days</span>
+                <span>{recent.length}{data.recent_truncated ? '+' : ''}</span>
+              </div>
+              {recent.length === 0 ? (
+                <div style={{ padding: '9px 10px', fontSize: 12, color: muted, fontStyle: 'italic' }}>Nothing added, changed or removed in the last {recentDays} days.</div>
+              ) : recentShown.map(ch => {
+                const k = KIND[ch.kind] || KIND.updated;
+                const fresh = isFresh(ch.changed_at);
+                return (
+                  <div key={ch.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderTop: '1px solid ' + border, fontSize: 12 }}>
+                    <span style={{ flexShrink: 0, marginTop: 1, fontSize: 10.5, fontWeight: 700, color: k.color, background: k.color + '1A', padding: '2px 7px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{k.label}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: text, fontWeight: 600 }}>
+                        {ch.display_name}
+                        <span style={{ color: muted, fontWeight: 400, textTransform: 'capitalize' }}> · {ch.category}</span>
+                      </div>
+                      <div style={{ color: muted, marginTop: 2 }}>
+                        {ch.old_value != null ? <span style={{ textDecoration: 'line-through', marginRight: 6 }}>{money(ch.old_value)}</span> : null}
+                        <strong style={{ color: ch.kind === 'removed' ? muted : text, textDecoration: ch.kind === 'removed' ? 'line-through' : 'none' }}>{money(ch.value)}</strong>
+                        {ch.unit ? ' ' + ch.unit : ''}
+                        {ch.source ? ' · via ' + ch.source : ''}
+                        {ch.client_note ? ' · ' + ch.client_note : ''}
+                      </div>
+                      {ch.raw_message && (
+                        <div title={ch.raw_message} style={{ color: muted, fontStyle: 'italic', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>“{ch.raw_message}”</div>
+                      )}
+                    </div>
+                    <span title={fmtFull(ch.changed_at)} style={{ flexShrink: 0, color: fresh ? '#F59E0B' : muted, fontWeight: fresh ? 600 : 400, whiteSpace: 'nowrap' }}>{timeAgo(ch.changed_at)}</span>
+                  </div>
+                );
+              })}
+              {recent.length > RECENT_PREVIEW && (
+                <button type="button" onClick={() => setShowAllRecent(s => !s)} style={{ width: '100%', padding: '7px 10px', background: 'transparent', border: 'none', borderTop: '1px solid ' + border, color: '#2563EB', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                  {showAllRecent ? 'Show fewer' : 'Show all ' + recent.length + (data.recent_truncated ? '+' : '') + ' changes'}
+                </button>
+              )}
+            </div>
+
             {shown.length === 0 ? (
               <div style={{ fontSize: 12, color: muted, fontStyle: 'italic' }}>
                 {ownOnly ? 'No client-added or edited rates yet — everything matches the seeded defaults.' : 'No active rates.'}
@@ -228,7 +307,7 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
               <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid ' + border, borderRadius: 8 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
-                    <tr style={{ position: 'sticky', top: 0, background: isDark ? '#0D1320' : '#F1F5F9' }}>
+                    <tr style={{ position: 'sticky', top: 0, background: headBg }}>
                       {['Item', 'Category', 'Rate', 'Unit', 'Source', 'Updated'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '7px 10px', color: muted, fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                       ))}
@@ -240,10 +319,11 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
                         <td style={{ padding: '7px 10px', color: text, fontWeight: (r.is_custom || r.is_edited) ? 600 : 400 }}>{r.display_name || r.item_key}</td>
                         <td style={{ padding: '7px 10px', color: muted, textTransform: 'capitalize' }}>{r.category}</td>
                         <td style={{ padding: '7px 10px', color: text }}>
-                          £{Number(r.value).toLocaleString('en-GB', { maximumFractionDigits: 2 })}
-                          {r.is_edited && r.default_value != null && (
-                            <span style={{ color: muted, marginLeft: 6, textDecoration: 'line-through' }}>£{Number(r.default_value).toLocaleString('en-GB', { maximumFractionDigits: 2 })}</span>
-                          )}
+                          {money(r.value)}
+                          {/* is_edited is a SQLite 0/1 — a bare `0 &&` would print a stray 0 after the value */}
+                          {r.is_edited && r.default_value != null ? (
+                            <span style={{ color: muted, marginLeft: 6, textDecoration: 'line-through' }}>{money(r.default_value)}</span>
+                          ) : null}
                         </td>
                         <td style={{ padding: '7px 10px', color: muted }}>{r.unit}</td>
                         <td style={{ padding: '7px 10px' }}>
@@ -251,7 +331,7 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg }) 
                             : r.is_edited ? <span style={{ color: '#F59E0B', fontWeight: 600 }}>Client edited</span>
                             : <span style={{ color: muted }}>Default</span>}
                         </td>
-                        <td style={{ padding: '7px 10px', color: muted, whiteSpace: 'nowrap' }}>{fmtDate(r.updated_at)}</td>
+                        <td title={fmtFull(r.updated_at)} style={{ padding: '7px 10px', color: isFresh(r.updated_at) ? '#F59E0B' : muted, fontWeight: isFresh(r.updated_at) ? 600 : 400, whiteSpace: 'nowrap' }}>{timeAgo(r.updated_at)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -470,7 +550,7 @@ function AuthorizedEmailsCard({ user, isDark, cardStyle, lbl, sInp, btn, outBtn,
   );
 }
 
-function UserActionPanel({ user, isDark, onUpdate, onClose }) {
+function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
   const { user: me } = useAuth();
   const [loading, setLoading] = useState('');
   const [plan, setPlan] = useState(user.plan || 'starter');
@@ -957,9 +1037,9 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               style={user.suspended ? btn('#10B981') : btn('#EF4444')}>
               {user.suspended ? <><Play size={12} /> Reactivate</> : <><Pause size={12} /> Suspend</>}
             </button>
-            {user.suspended && user.suspended_reason && (
+            {user.suspended && user.suspended_reason ? (
               <div style={{ fontSize: 11, color: '#EF4444', marginTop: 6 }}>Reason: {user.suspended_reason}</div>
-            )}
+            ) : null}
           </div>
 
           {/* Office in a Box beta access */}
@@ -1019,6 +1099,7 @@ function UserActionPanel({ user, isDark, onUpdate, onClose }) {
               user={user} isDark={isDark}
               cardStyle={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2, gridColumn: '1 / -1' }}
               lbl={lbl} outBtn={outBtn} setErrorMsg={setErrorMsg}
+              autoOpen={!!openRates}
             />
           )}
 
@@ -1292,11 +1373,31 @@ export default function UserManagementPage({ theme }) {
   const t = theme || {};
   const isDark = t.name === 'dark';
 
+  // ?user=<id>&show=rates is where the rate alerts (bell + email) send the
+  // admin: that client expanded and scrolled into view, rate library open on
+  // "Recent changes". Done once per id so it doesn't fight later clicks.
+  const [searchParams] = useSearchParams();
+  const focusUserId = searchParams.get('user');
+  const focusRates = searchParams.get('show') === 'rates';
+  const focusedRef = useRef(null);
+
   const fetchUsers = useCallback(async () => {
     try { setLoading(true); const data = await apiFetch('/admin/users'); setUsers(data.users || data || []); setError(''); }
     catch (err) { setError(err.message); } finally { setLoading(false); }
   }, []);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  useEffect(() => {
+    if (loading || !focusUserId || focusedRef.current === focusUserId) return;
+    if (!users.some(u => u.id === focusUserId)) return;
+    focusedRef.current = focusUserId;
+    setTab('users');
+    setExpandedUser(focusUserId);
+    setTimeout(() => {
+      const el = document.getElementById('user-row-' + focusUserId);
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }, [loading, users, focusUserId]);
 
   const loadActivity = useCallback(async () => {
     if (activity.length > 0) return;
@@ -1446,7 +1547,7 @@ export default function UserManagementPage({ theme }) {
                   const msgBarColor = msgPct >= 90 ? '#EF4444' : msgPct >= 70 ? '#F59E0B' : '#10B981';
                   return (
                     <React.Fragment key={user.id}>
-                      <tr style={{borderBottom:expandedUser===user.id?'none':(i<filtered.length-1?'1px solid '+(isDark?'#1C2A44':'#F1F5F9'):'none'),cursor:'pointer'}}
+                      <tr id={'user-row-' + user.id} style={{borderBottom:expandedUser===user.id?'none':(i<filtered.length-1?'1px solid '+(isDark?'#1C2A44':'#F1F5F9'):'none'),cursor:'pointer'}}
                         onClick={() => setExpandedUser(expandedUser===user.id?null:user.id)}
                         onMouseEnter={e => { e.currentTarget.style.background = isDark?'rgba(37,99,235,0.04)':'#FAFBFE'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
@@ -1539,7 +1640,7 @@ export default function UserManagementPage({ theme }) {
                       </tr>
                       {expandedUser===user.id&&(
                         <tr><td colSpan={7} style={{padding:0}}>
-                          <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} />
+                          <UserActionPanel user={user} isDark={isDark} onUpdate={handleUserUpdate} onClose={() => setExpandedUser(null)} openRates={focusRates && focusUserId === user.id} />
                         </td></tr>
                       )}
                     </React.Fragment>

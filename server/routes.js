@@ -94,6 +94,8 @@ try {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Where the bell takes the admin when a notification is clicked (optional).
+  try { db.exec('ALTER TABLE notifications ADD COLUMN link TEXT'); } catch (e) {}
   console.log('[Notifications] Table ready');
 } catch (err) {
   console.error('[Notifications] Failed to create table:', err.message);
