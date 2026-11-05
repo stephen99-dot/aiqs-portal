@@ -263,8 +263,10 @@ only uses HTTPS), so there is no export-compliance questionnaire per build.
    content rights, age rating questionnaire (all "None" → 4+).
 3. **Pricing:** Free.
 4. **App Privacy:** Data collected → Contact Info (email, name, phone),
-   User Content (photos/videos, other user content); all *linked to the
-   user*, none *used to track you*; purpose *App functionality*.
+   User Content (photos/videos, other user content), Identifiers (user ID),
+   Usage Data (product interaction); all *linked to the user*, none *used to
+   track you*; purpose *App functionality* (email also *Developer's
+   communications*). This mirrors `ios/App/App/PrivacyInfo.xcprivacy`.
 5. **Version page:**
    * Screenshots: Xcode Simulator → iPhone 18 Pro Max → **⌘S** saves a PNG at
      the exact 6.9″ size Apple wants (1320 × 2868). That one size is
