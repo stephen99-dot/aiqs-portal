@@ -1430,8 +1430,8 @@ export default function UserManagementPage({ theme }) {
         {error && <div style={{background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'12px 16px',marginBottom:16,color:'#EF4444',fontSize:13}}>{error}</div>}
         {loading ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>Loading...</div> :
          filtered.length === 0 ? <div style={{textAlign:'center',padding:'50px 0',color:muted}}>{search?'No match':'No users'}</div> : (
-          <div style={cardStyle}>
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <div style={{ ...cardStyle, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{width:'100%',borderCollapse:'collapse', minWidth: 760}}>
               <thead><tr style={{background:isDark?'rgba(37,99,235,0.06)':'#F8FAFC'}}>
                 {['User','Company','Plan','Messages','BOQs','Status',''].map(h => (
                   <th key={h} style={{padding:'11px 16px',fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:muted,textAlign:h===''?'right':'left',borderBottom:'1px solid '+(isDark?'#1C2A44':'#E2E8F0')}}>{h}</th>
