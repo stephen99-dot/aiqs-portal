@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Button, Field, Input } from '../ui';
 import { apiFetch } from '../utils/api';
@@ -14,8 +14,19 @@ export default function DeleteAccountModal({ onClose }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
-  const needsPassword = !!(user && user.hasPassword);
-  const ready = needsPassword ? password.length > 0 : confirm.trim() === 'DELETE';
+  // Which confirmation applies comes from the server, not from whatever the
+  // sign-in reply happened to include: a password account asked to "type
+  // DELETE" would be refused by the server.
+  const [hasPassword, setHasPassword] = useState(user && typeof user.hasPassword === 'boolean' ? user.hasPassword : null);
+  useEffect(() => {
+    let live = true;
+    apiFetch('/auth/me')
+      .then((me) => { if (live) setHasPassword(!!me.hasPassword); })
+      .catch(() => { if (live && hasPassword === null) setHasPassword(true); });
+    return () => { live = false; };
+  }, []);
+  const needsPassword = hasPassword !== false;
+  const ready = hasPassword !== null && (needsPassword ? password.length > 0 : confirm.trim() === 'DELETE');
 
   const remove = async () => {
     setError('');
