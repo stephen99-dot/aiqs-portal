@@ -300,11 +300,35 @@ function GettingStarted({ projects }) {
 // The dashboard's job is to answer "what needs me right now?" — one row per
 // project with an action waiting on the user, each a single click to the
 // place the action happens. Renders nothing when the user is all caught up.
-function NeedsAttention({ projects }) {
+//
+// A "documents ready" row can be dismissed, and clears itself once the project
+// has been opened from it. The dismissal remembers how many documents there
+// were, so a newly delivered document raises the row again. Payment rows
+// cannot be dismissed — the job is not moving until that is done.
+const ATTENTION_KEY = 'aiqs_attention_dismissed';
+function readAttentionDismissed(userId) {
+  try {
+    const v = JSON.parse(localStorage.getItem(`${ATTENTION_KEY}_${userId || 'me'}`) || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch { return {}; }
+}
+
+function NeedsAttention({ projects, userId }) {
+  const [dismissed, setDismissed] = useState(() => readAttentionDismissed(userId));
+  const dismiss = (entries) => {
+    setDismissed(prev => {
+      const next = { ...prev };
+      for (const it of entries) next[it.projectId] = it.count;
+      try { localStorage.setItem(`${ATTENTION_KEY}_${userId || 'me'}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const items = [];
   for (const p of projects) {
     if (p.deliverableCount > 0) {
+      if ((dismissed[p.id] || 0) >= p.deliverableCount) continue;
       items.push({
+        projectId: p.id, count: p.deliverableCount, dismissable: true,
         key: `docs-${p.id}`, to: `/project/${p.id}`,
         icon: DownloadIcon, tone: 'success',
         title: `${p.deliverableCount} document${p.deliverableCount === 1 ? '' : 's'} ready to download`,
@@ -328,11 +352,27 @@ function NeedsAttention({ projects }) {
 
   return (
     <Card style={{ marginBottom: 16, borderColor: 'var(--border-accent)' }}>
-      <Card.Header title="Needs your attention" extra={`${items.length} item${items.length === 1 ? '' : 's'}`} />
+      <Card.Header
+        title="Needs your attention"
+        extra={(
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            {`${items.length} item${items.length === 1 ? '' : 's'}`}
+            {items.some(i => i.dismissable) && (
+              <button
+                type="button"
+                onClick={() => dismiss(items.filter(i => i.dismissable))}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'var(--accent)', fontWeight: 600 }}
+              >
+                Dismiss all
+              </button>
+            )}
+          </span>
+        )}
+      />
       {items.slice(0, 5).map(item => {
         const tv = TONE[item.tone] || TONE.warning;
         return (
-          <Link key={item.key} to={item.to} className="ui-row">
+          <Link key={item.key} to={item.to} className="ui-row" onClick={() => { if (item.dismissable) dismiss([item]); }}>
             <div style={{
               width: 30, height: 30, borderRadius: 8, flexShrink: 0,
               background: tv.bg, color: tv.color,
@@ -344,6 +384,21 @@ function NeedsAttention({ projects }) {
               <div className="ui-row__title">{item.title}</div>
               <div className="ui-row__meta">{item.meta}</div>
             </div>
+            {item.dismissable && (
+              <button
+                type="button"
+                aria-label={`Dismiss — ${item.meta}`}
+                title="Dismiss"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); dismiss([item]); }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0,
+                  minWidth: 32, minHeight: 32, borderRadius: 8, fontSize: 18, lineHeight: 1,
+                  color: 'var(--text-muted)',
+                }}
+              >
+                ×
+              </button>
+            )}
             <ArrowRightIcon size={14} color="var(--text-muted)" />
           </Link>
         );
@@ -580,7 +635,7 @@ export default function DashboardPage() {
         }
       />
 
-      <NeedsAttention projects={projectList} />
+      <NeedsAttention projects={projectList} userId={user && user.id} />
       <UsageBar usage={usage} user={user} />
       <MessageUsageBar usage={usage} />
       <GettingStarted projects={projectList} />
