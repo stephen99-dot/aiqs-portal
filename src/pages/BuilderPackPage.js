@@ -170,6 +170,9 @@ export default function BuilderPackPage() {
   // Server check of the parsed lines against the BOQ's own printed total —
   // { ok, printed, parsed, basis } or null when the BOQ prints no total.
   const [reconciliation, setReconciliation] = useState(null);
+  // The OH&P / contingency the delivered BOQ states on its summary page — shown,
+  // never applied, so the gap between the BOQ's total and the lines is explained.
+  const [sourceSummary, setSourceSummary] = useState(null);
   const [perTradeOhp, setPerTradeOhp] = useState({});
   // Trade packages: each section's dominant trade (from the server's line-by-
   // line classification), the builder's saved markup by trade, and the
@@ -237,6 +240,7 @@ export default function BuilderPackPage() {
         const ss = bd.source_summary || {};
         if (ss.vat_pct != null) setVat(ss.vat_pct);
         setReconciliation(bd.reconciliation || null);
+        setSourceSummary(ss);
         // Provisional sums now arrive as their own itemised section (see seeded);
         // only fall back to the flat lump for older BOQs that weren't itemised.
         const hasProvSection = seeded.some((s) => s.provisional);
@@ -1005,6 +1009,29 @@ export default function BuilderPackPage() {
                     : 'Edit qty or the line total — the bill recomputes automatically. This BOQ is priced on a composite basis (one rate per line), so labour/materials aren’t shown separately.'}
                 </span>
               </div>
+
+              {reconciliation && reconciliation.ok && reconciliation.doc_total > 0
+                && Math.abs(reconciliation.doc_total - reconciliation.parsed) > 5 && (() => {
+                const ss = sourceSummary || {};
+                const adders = [];
+                const ohpPct = ss.ohp_pct != null ? ss.ohp_pct
+                  : (ss.overhead_pct != null || ss.profit_pct != null)
+                    ? Math.round((((1 + (ss.overhead_pct || 0) / 100) * (1 + (ss.profit_pct || 0) / 100)) - 1) * 1000) / 10
+                    : null;
+                if (ohpPct) adders.push(`overheads and profit at ${ohpPct}%`);
+                if (ss.contingency_pct) adders.push(`contingency at ${ss.contingency_pct}%`);
+                return (
+                  <div style={{
+                    marginTop: 10, padding: '10px 14px', borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                    background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.35)', color: 'var(--text-primary)',
+                  }}>
+                    <strong>These are your BOQ's lines at net cost: {fmt(sym, reconciliation.parsed, 2)}.</strong>{' '}
+                    The BOQ we sent you totals <strong>{fmt(sym, reconciliation.doc_total, 2)}</strong> (excl. VAT) because its summary page adds
+                    {adders.length ? ` ${adders.join(' and ')}` : ' its own allowances'} on top of the lines.
+                    {' '}None of that is applied here — every markup starts at zero, and what you set with the sliders is the only uplift on these figures.
+                  </div>
+                );
+              })()}
 
               {reconciliation && !reconciliation.ok && (
                 <div style={{

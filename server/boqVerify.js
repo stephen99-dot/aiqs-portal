@@ -39,7 +39,7 @@ const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDig
 // an older verifier is re-run on the next open, so a bill locked by a check
 // that has since been corrected unlocks itself after deploy — nobody has to
 // remember to press Re-verify on every affected project.
-const VERIFIER_VERSION = 6; // 6: a "Total rate" column is no longer mistaken for the line Amount
+const VERIFIER_VERSION = 7; // 7: section-by-section proof; OH&P on measured sections only; "Net before VAT"
 
 function describePrinted(recon) {
   if (!recon) return 'printed total';
@@ -90,6 +90,8 @@ async function verifyBoqFile(filePath) {
   }
   detail.printed_total = round2(recon.printed);
   detail.basis = recon.basis;
+  detail.proof = recon.proof || 'total';
+  detail.doc_total = recon.doc_total != null ? round2(recon.doc_total) : null;
   detail.printed_all = (recon.printed_all || []).map((p) => ({ label: p.label, value: round2(p.value) }));
   if (!recon.ok) {
     const others = detail.printed_all.map((p) => (p.label === 'net' ? 'net' : p.label === 'ex_vat' ? 'ex-VAT' : p.label) + ' ' + fmt(p.value)).join(', ');
@@ -98,6 +100,21 @@ async function verifyBoqFile(filePath) {
       message: 'The ' + items + ' lines read from the bill add up to ' + fmt(detail.parsed_total)
         + ', which matches none of the totals the bill prints (' + others + '), with or without the OH&P / contingency it states.'
         + ' A total row, summary page or unusual column layout is being misread.',
+    };
+  }
+  if (recon.proof === 'sections') {
+    return {
+      ok: true, status: 'verified', detail,
+      message: items + ' lines reconcile, section by section, to each of the ' + recon.sections_checked
+        + ' section totals the bill prints (lines total ' + fmt(detail.parsed_total) + ')'
+        + (recon.doc_total ? '; the bill\'s own bottom line of ' + fmt(recon.doc_total) + ' adds its summary allowances on top.' : '.'),
+    };
+  }
+  if (recon.proof === 'parts') {
+    return {
+      ok: true, status: 'verified', detail,
+      message: items + ' lines across ' + parsed.sections.length + ' sections add up to ' + fmt(detail.parsed_total)
+        + ', the sum of the part totals the bill prints.',
     };
   }
   const note = Math.abs(recon.printed - detail.parsed_total) > 5
@@ -221,9 +238,13 @@ async function ensureBoqVerified(project, opts = {}) {
   const result = await verifyBoqFile(boq.filePath);
   const v = { ...result, filename: boq.filename, verifier: VERIFIER_VERSION, checked_at: new Date().toISOString() };
   if (!v.ok) {
-    const alreadyAlerted = stored && stored.filename === boq.filename && stored.status === v.status && stored.alerted_at;
+    // alerted_status survives an override, so unlocking a bill by hand and
+    // re-verifying it later does not send the same alert a second time.
+    const alreadyAlerted = stored && stored.filename === boq.filename && stored.alerted_at
+      && (stored.alerted_status || stored.status) === v.status;
     if (alreadyAlerted) v.alerted_at = stored.alerted_at;
     else { v.alerted_at = new Date().toISOString(); notifyAdmin(project, v); }
+    v.alerted_status = v.status;
   }
   store(project, v);
   return v;

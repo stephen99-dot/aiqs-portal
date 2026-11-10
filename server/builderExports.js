@@ -257,6 +257,11 @@ const UNIT_TOKENS = new Set([
   'pc', 'pcs', 'roll', 'sheet', 'coat', 'bag', 'load', 'unit',
 ]);
 const BARE_NUMBER = /^\d+(?:\.\d+)?$/;
+// Document-level totals worded by what they exclude: "NET BEFORE VAT",
+// "TOTAL EXCLUDING VAT", "SUB TOTAL (excl. VAT)", "Total net of VAT".
+const EX_VAT_TOTAL_RE = /^(NET|TOTAL|SUB[\s-]?TOTAL|TENDER|CONTRACT)\b.*\b(BEFORE|EXCL(?:UDING|USIVE)?\.?|EX\.?|NET\s+OF)\s*(?:OF\s+)?VAT\b/;
+// The summary's opening figure: "MEASURED WORKS (Sections 1.0 to 12.0)".
+const MEASURED_WORKS_TOTAL_RE = /^MEASURED\s+WORKS?\b/;
 
 // Sub-total row label — the word "subtotal" anywhere, so a leading
 // "Sub-total — Preliminaries", a trailing "Section 1 subtotal" and a bare
@@ -611,6 +616,7 @@ async function parseBOQ(filePath) {
   // net_total: the net (pre-OH&P / contingency) construction total the source
   // document prints — "Net Construction Cost", "NET MEASURED WORKS" — kept so
   // the parsed lines can be checked against the bill's own bottom line.
+  let vatAmountSeen = false; // a VAT £ line has been passed — totals below it include VAT
   const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null, net_total: null, ex_vat_total: null, printed_totals: [] };
 
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -692,13 +698,22 @@ async function parseBOQ(filePath) {
       // figures the bill itself prints, under the OH&P/contingency it states.
       // Bare "Sub-total"/"Total" rows only count once the summary has begun
       // (stopped), so a section's own sub-total is never mistaken for one.
+      // "Total carried to summary" closes ONE section — it is a document
+      // total only on the summary page itself (stopped). "Net before VAT",
+      // "Total excluding VAT" and a "Measured works (Sections 1 to 12)" line
+      // are document totals wherever they sit.
       const docTotalLabel =
         /^NET\s+(MEASURED|CONSTRUCTION|DIRECT|TOTAL|COST|WORKS|BUILD)/.test(upperLabel) ||
         /^TOTAL\s+MEASURED\s+WORKS?\b/.test(upperLabel) ||
-        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER|SUMMARY)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel) ||
-        (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|MEASURED\s+WORKS?)\b/.test(upperLabel));
+        (!/\bSECTION\b/.test(upperLabel) && (MEASURED_WORKS_TOTAL_RE.test(upperLabel) ||
+          ((stopped || !/^SUB/.test(upperLabel)) && EX_VAT_TOTAL_RE.test(upperLabel)))) ||
+        /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel) ||
+        (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|TOTAL\s+CARRIED\s+TO\s+SUMMARY)\b/.test(upperLabel));
+      // A total printed below the bill's VAT line includes the VAT, however
+      // it is worded ("CONTRACT SUM" under "VAT at 13.5%").
+      const incVat = vatAmountSeen || /\bINC(?:L|LUDING|LUSIVE)?\b/.test(upperLabel);
       if (docTotalLabel && !/\bINC(?:L|LUDING)?\b/.test(upperLabel)) {
-        sourceSummary.printed_totals.push({ label: (a || b).slice(0, 80), value: numAt(row, cols.total) });
+        sourceSummary.printed_totals.push({ label: (a || b).slice(0, 80), value: numAt(row, cols.total), ...(incVat ? { inc_vat: true } : {}) });
       }
       // The printed net total. No `return`: "NET MEASURED WORKS" is also a
       // stop marker below, and returning here would leave the rows after it
@@ -711,10 +726,11 @@ async function parseBOQ(filePath) {
       // The printed ex-VAT grand total — the fallback check figure when the
       // document prints no separate net line. Read here (before the stopped
       // guard) because it usually sits below a collection / summary heading.
-      if (sourceSummary.ex_vat_total == null && !/\bINC(?:L|LUDING)?\b/.test(upperLabel) &&
-          /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel)) {
+      if (sourceSummary.ex_vat_total == null && !incVat &&
+          (EX_VAT_TOTAL_RE.test(upperLabel) || /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+SUM|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel))) {
         sourceSummary.ex_vat_total = numAt(row, cols.total);
       }
+      if (/^VAT\b/.test(upperLabel) && rowTotal > 0) vatAmountSeen = true;
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
         const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
@@ -852,6 +868,8 @@ async function parseBOQ(filePath) {
         upperA.includes('GRAND TOTAL') || upperB.includes('GRAND TOTAL') ||
         upperLabel.includes('COLLECTION & SUMMARY') ||
         upperLabel.startsWith('NET MEASURED') || upperLabel.startsWith('TOTAL MEASURED') ||
+        (!hasUnitOrQty && rowTotal > 0 && !/\bSECTION\b/.test(upperLabel) &&
+          (MEASURED_WORKS_TOTAL_RE.test(upperLabel) || (/^NET\b/.test(upperLabel) && EX_VAT_TOTAL_RE.test(upperLabel)))) ||
         upperLabel.startsWith('NET CONSTRUCTION COST') || upperLabel.startsWith('NET DIRECT COST') ||
         upperLabel.startsWith('TOTAL EXCLUDING VAT') || upperLabel.startsWith('TOTAL EXCL') ||
         upperLabel.startsWith('TOTAL CONSTRUCTION') || upperLabel.startsWith('TOTAL COST') ||
@@ -1019,6 +1037,9 @@ async function parseBOQ(filePath) {
         if (idx >= 0) s.items.splice(idx, 1);
       }
     }
+    // Keep the section's own printed total: reconcileParsed checks the lines
+    // against it section by section.
+    if (s.printed > 0) s.printed_total = s.printed;
     delete s.printed;
     // Recompute subtotals from the normalised items so they always agree
     s.subtotal.labour = s.items.reduce((a, i) => a + (i.labour || 0), 0);
@@ -2189,31 +2210,87 @@ function reconcileParsed(parsed) {
   for (const base of [net, net + prov, net - prelims, net - prelims + prov]) {
     if (!(base > 0)) continue;
     candidates.push(base, base * (1 + ohp), base * (1 + ohp + cont), base * (1 + ohp) * (1 + cont));
-    candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump);
+    candidates.push(base * (1 + ohp) + prov + lump, base * (1 + ohp) * (1 + cont) + prov + lump, base * (1 + ohp) + base * cont + prov + lump, (base * (1 + ohp) + prov + lump) * (1 + cont));
   }
   // Every figure the bill prints at document level, de-duplicated.
   const printedAll = [];
   const seen = new Set();
-  const addPrinted = (label, value) => {
+  const addPrinted = (label, value, incVat) => {
     if (!(value > 0)) return;
     const k = Math.round(value * 100);
     if (seen.has(k)) return;
-    seen.add(k); printedAll.push({ label, value });
+    seen.add(k); printedAll.push({ label, value, ...(incVat ? { inc_vat: true } : {}) });
   };
   if (ss.net_total > 0) addPrinted('net', ss.net_total);
-  for (const pt of (ss.printed_totals || [])) addPrinted(pt.label, pt.value);
+  for (const pt of (ss.printed_totals || [])) addPrinted(pt.label, pt.value, pt.inc_vat);
   if (ss.ex_vat_total > 0) addPrinted('ex_vat', ss.ex_vat_total);
-  if (!printedAll.length) return null;
 
   const parsedTotal = net + prov;
-  const hit = printedAll.find((pt) => candidates.some((c) => within(c, pt.value)));
-  if (hit) {
-    return { ok: true, printed: hit.value, printed_label: hit.label, parsed: parsedTotal, basis: hit.label === 'ex_vat' ? 'ex_vat' : 'net', printed_all: printedAll };
+  const exVat = printedAll.filter((pt) => !pt.inc_vat);
+  // The bill's own bottom line before VAT — what the customer's emailed copy
+  // shows. Reported alongside a pass so the page can explain any gap between
+  // it and the lines (the OH&P / contingency the bill adds on its summary).
+  const docTotal = exVat.reduce((m, pt) => Math.max(m, pt.value), 0) || null;
+  const basisOf = (pt) => (pt.label === 'ex_vat' ? 'ex_vat' : 'net');
+  const pass = (pt, extra) => ({
+    ok: true, printed: pt.value, printed_label: pt.label, parsed: parsedTotal, basis: basisOf(pt),
+    printed_all: printedAll, doc_total: docTotal, ...extra,
+  });
+
+  if (printedAll.length) {
+    const hit = printedAll.find((pt) => candidates.some((c) => within(c, pt.value)));
+    if (hit) return pass(hit);
   }
+
+  // The checks below are exact-arithmetic ones: a bill worked in a
+  // spreadsheet reproduces its own figures to the penny, so they are held to
+  // pennies. (The 1% allowance above, tried against this many more
+  // candidates, would let a misread bill through by coincidence.)
+  const exact = (x, y) => Math.abs(x - y) <= Math.max(2, Math.abs(y) * 0.00002);
+
+  // OH&P on the measured sections only, with the closing sections carried at
+  // face value: "Measured works (A to O)" + 17% + the PC / provisional
+  // sections after it. Split the bill at each section boundary and try the
+  // head with the stated OH&P and the tail added flat.
+  const totals = parsed.sections.map((s) => (s.subtotal && s.subtotal.total) || 0);
+  let head = 0;
+  for (let k = 1; k <= totals.length; k++) {
+    head += totals[k - 1];
+    if (k < 2 || head < parsedTotal * 0.5) continue;
+    const tail = parsedTotal - head + lump;
+    const splitCands = [head];
+    if (ohp > 0 || cont > 0) {
+      splitCands.push(head * (1 + ohp) + tail, (head * (1 + ohp) + tail) * (1 + cont), head * (1 + ohp) * (1 + cont) + tail, head * (1 + ohp + cont) + tail);
+    }
+    const sHit = printedAll.find((pt) => splitCands.some((c) => exact(Math.round(c * 100) / 100, pt.value)));
+    if (sHit) return pass(sHit, { proof: 'split' });
+  }
+
+  // A bill in parts ("Total Part A", "Total Part B", …) prints no single
+  // figure for the lines, but its part totals add up to them.
+  if (exVat.length >= 2 && exact(exVat.reduce((acc, pt) => acc + pt.value, 0), parsedTotal)) {
+    return { ok: true, printed: parsedTotal, printed_label: 'parts', parsed: parsedTotal, basis: 'net', printed_all: printedAll, doc_total: null, proof: 'parts' };
+  }
+
+  // Section by section. When every section prints its own total and the
+  // lines beneath each one add up to it, the bill has been read correctly —
+  // whatever the summary page then adds (OH&P, contingency, preliminaries
+  // worked as a percentage) and however it words its bottom line. A total row
+  // read as a line, or summary rows read into the last section, break the
+  // section they land in and fail this.
+  const measured = parsed.sections.filter((s) => !s.provisional);
+  if (measured.length >= 2 && measured.every((s) => s.printed_total > 0 && exact((s.subtotal && s.subtotal.total) || 0, s.printed_total))) {
+    return {
+      ok: true, printed: docTotal != null ? docTotal : parsedTotal, printed_label: 'sections', parsed: parsedTotal,
+      basis: 'net', printed_all: printedAll, doc_total: docTotal, proof: 'sections', sections_checked: measured.length,
+    };
+  }
+
+  if (!printedAll.length) return null;
   // Failed: report the printed figure nearest the lines, so the message
   // reads "lines add up to X, bill prints Y" with the most relevant Y.
   const nearest = printedAll.reduce((best, pt) => (best == null || Math.abs(pt.value - parsedTotal) < Math.abs(best.value - parsedTotal) ? pt : best), null);
-  return { ok: false, printed: nearest.value, printed_label: nearest.label, parsed: parsedTotal, basis: nearest.label === 'ex_vat' ? 'ex_vat' : 'net', printed_all: printedAll };
+  return { ok: false, printed: nearest.value, printed_label: nearest.label, parsed: parsedTotal, basis: basisOf(nearest), printed_all: printedAll, doc_total: docTotal };
 }
 
 module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed };
