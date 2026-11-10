@@ -260,6 +260,17 @@ const BARE_NUMBER = /^\d+(?:\.\d+)?$/;
 // Document-level totals worded by what they exclude: "NET BEFORE VAT",
 // "TOTAL EXCLUDING VAT", "SUB TOTAL (excl. VAT)", "Total net of VAT".
 const EX_VAT_TOTAL_RE = /^(NET|TOTAL|SUB[\s-]?TOTAL|TENDER|CONTRACT)\b.*\b(BEFORE|EXCL(?:UDING|USIVE)?\.?|EX\.?|NET\s+OF)\s*(?:OF\s+)?VAT\b/;
+const SUMMARY_HEADING_RE = /^(COLLECTION|SUMMARY|(?:(?:FINAL|MAIN|GENERAL|BILL|TENDER|PRICE|COST)\s+){1,2}SUMMARY)\b/;
+// Headings of the schedules a tender prints after its measured sections —
+// item amounts re-listed with OH&P for a pricing schedule, allowance
+// registers, memoranda. Everything beneath repeats figures already in the
+// bill, so reading stops there exactly as it does at a summary heading.
+const RECAP_HEADING_RE = /^(?:TENDER\s+RETURN\b|ITEM\s+AMOUNTS\b|ALLOWANCE\s+REGISTER\b|MEMORAND(?:A|UM)\b)|\bMEMORANDUM\s+ONLY\b|\bNOT\s+ADDED\s+(?:AGAIN|TO\s+THE)\b/;
+// "Section A — contractor works, net", "Section A sum of items (check …)".
+const SECTION_NET_RE = /^SECTION\s+\S+\s*(?:[—–:-]\s*)?.*\b(?:NET|SUM\s+OF\s+ITEMS)\b/;
+// A block of options / alternatives the bill prices but states are NOT in its
+// total: "X  OPTIONS AND ALTERNATIVES - PRICED SEPARATELY, NOT IN THE TENDER SUM".
+const OPTIONS_HEADING_RE = /^(?:[A-Z]{1,2}\d*\s+)?(?:OPTIONS?\b|OPTIONAL\b|ALTERNATIVES?\b|ALTERNATES?\b).*(?:\bNOT\s+(?:IN|INCLUDED|ADDED|PART)\b|PRICED\s+SEPARATELY|\bEXCLUDED\b|FOR\s+INFORMATION)/;
 // The summary's opening figure: "MEASURED WORKS (Sections 1.0 to 12.0)".
 const MEASURED_WORKS_TOTAL_RE = /^MEASURED\s+WORKS?\b/;
 
@@ -503,11 +514,16 @@ function isHeaderRow(row) {
   return joined.includes('description') && (joined.includes('qty') || joined.includes('quantity'));
 }
 
-// Find the row number of the header row in a worksheet's top 30 rows, or null.
+// How far down a sheet the column header may sit. Bills open with a basis of
+// measurement, a day-rate card or a budget summary before the header — 30
+// rows was too few, and a bill whose header sat on row 32 read as "not a bill".
+const HEADER_SEARCH_ROWS = 150;
+
+// Find the row number of the (first) header row near the top of a worksheet, or null.
 function findHeaderRow(ws) {
   let found = null;
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (found != null || rowNumber > 30) return;
+    if (found != null || rowNumber > HEADER_SEARCH_ROWS) return;
     if (isHeaderRow(row)) found = rowNumber;
   });
   return found;
@@ -572,9 +588,13 @@ async function parseBOQ(filePath) {
   // total read as materials, descriptions read as units. Defaults: row 4 / A-H.
   let headerRow = 4;
   let cols = { ...DEFAULT_COLS };
+  let headerFound = false;
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber > 30) return;
+    // The first header row is the bill's; a later one (a second table, or the
+    // header repeated at a page break) must not move the start of the bill.
+    if (headerFound || rowNumber > HEADER_SEARCH_ROWS) return;
     if (isHeaderRow(row)) {
+      headerFound = true;
       headerRow = rowNumber;
       // Pass the row directly above as the (optional) group banner — some BOQs
       // split labour/materials with a merged "LABOUR"/"MATERIAL" banner there.
@@ -589,6 +609,7 @@ async function parseBOQ(filePath) {
   });
 
   const numAt = (row, c) => (c ? cellNumber(row.getCell(c)) : 0);
+  const runningSum = (items) => items.reduce((acc, i) => acc + (i.total || ((i.labour || 0) + (i.materials || 0)) || (i.rate || 0) * (i.qty || 0)), 0);
   const textAt = (row, c) => (c ? cellText(row.getCell(c)).trim() : '');
 
   const sections = [];
@@ -616,6 +637,7 @@ async function parseBOQ(filePath) {
   // net_total: the net (pre-OH&P / contingency) construction total the source
   // document prints — "Net Construction Cost", "NET MEASURED WORKS" — kept so
   // the parsed lines can be checked against the bill's own bottom line.
+  let inExcludedOptions = false;
   let vatAmountSeen = false; // a VAT £ line has been passed — totals below it include VAT
   const sourceSummary = { ohp_pct: null, ohp_sections: null, overhead_pct: null, profit_pct: null, contingency_pct: null, vat_pct: null, provisional_sum: null, net_total: null, ex_vat_total: null, printed_totals: [] };
 
@@ -708,7 +730,9 @@ async function parseBOQ(filePath) {
         (!/\bSECTION\b/.test(upperLabel) && (MEASURED_WORKS_TOTAL_RE.test(upperLabel) ||
           ((stopped || !/^SUB/.test(upperLabel)) && EX_VAT_TOTAL_RE.test(upperLabel)))) ||
         /^(GRAND\s+TOTAL|TOTAL\s+CONSTRUCTION|TOTAL\s+COST|TOTAL\s+EXCL|TOTAL\s*\(EX|CONTRACT\s+SUM|TOTAL\s+TENDER|TENDER\s+(?:SUM|TOTAL)|TOTAL\s+CARRIED\s+TO\s+(?:FORM|TENDER)|TOTAL\s+QUOT(?:E|ATION)|QUOT(?:E|ATION)\s+TOTAL)/.test(upperLabel) ||
-        (stopped && /^(SUB[\s-]?TOTALS?|TOTALS?|TOTAL\s+CARRIED\s+TO\s+SUMMARY)\b/.test(upperLabel));
+        // On the summary page any "… total" row is a document total:
+        // "STAGE 1 NET TOTAL (excluding VAT)", "Bespoke joinery total".
+        (stopped && /\b(SUB[\s-]?TOTALS?|TOTALS?)\b/.test(upperLabel));
       // A total printed below the bill's VAT line includes the VAT, however
       // it is worded ("CONTRACT SUM" under "VAT at 13.5%").
       const incVat = vatAmountSeen || /\bINC(?:L|LUDING|LUSIVE)?\b/.test(upperLabel);
@@ -731,6 +755,12 @@ async function parseBOQ(filePath) {
         sourceSummary.ex_vat_total = numAt(row, cols.total);
       }
       if (/^VAT\b/.test(upperLabel) && rowTotal > 0) vatAmountSeen = true;
+      // OH&P worked section by section ("Overheads & profit — own work at
+      // 17%" above each "Section total carried to summary"): remembered on
+      // the section so its lines can be checked against the carried total.
+      if (!stopped && current && rowTotal > 0 && /^(OVERHEADS?\b|PROFIT\b)/.test(upperLabel)) {
+        current.adders = (current.adders || 0) + rowTotal;
+      }
       if ((m = upperLabel.match(/^OVERHEADS\s*(?:&|AND)\s*PROFIT\D*?([\d.]+)\s*%/))) {
         sourceSummary.ohp_pct = parseFloat(m[1]);
         const sc = upperLabel.match(/SECTIONS?\s*([\d.]+)\s*[–—-]\s*([\d.]+)/);
@@ -875,11 +905,24 @@ async function parseBOQ(filePath) {
         upperLabel.startsWith('TOTAL CONSTRUCTION') || upperLabel.startsWith('TOTAL COST') ||
         upperLabel.startsWith('TOTAL (EXCL') || upperLabel.startsWith('TOTAL (EX') ||
         upperLabel.startsWith('CONTRACT SUM') || upperLabel.startsWith('TOTAL TENDER') ||
-        upperLabel.startsWith('NET TOTAL') || upperLabel.includes('TENDER SUM') ||
+        upperLabel.startsWith('NET TOTAL') || /\bTENDER\s+SUM\b/.test(upperLabel) ||
         upperLabel.startsWith('TOTAL QUOT') || /^QUOT(?:E|ATION)\s+TOTAL/.test(upperLabel) ||
         // A collection / summary page heading: everything beneath it repeats
         // the section totals, so it is read exactly like PROJECT SUMMARY.
-        (!hasUnitOrQty && /^(COLLECTION|SUMMARY|(?:FINAL|MAIN|GENERAL|BILL|TENDER|PRICE|COST)\s+SUMMARY)\b/.test(upperLabel))) {
+        (!hasUnitOrQty && SUMMARY_HEADING_RE.test(upperLabel)) ||
+        (!hasUnitOrQty && rowTotal <= 0 && RECAP_HEADING_RE.test(upperLabel)) ||
+        // Any other "… SUMMARY" heading ("ELEMENTAL SUMMARY", "TENDER PRICE
+        // SUMMARY"), and the column header of a second table beneath the
+        // bill ("Ref | Element | % of net | Total") — no Qty column, so not
+        // the bill's own header repeated at a page break.
+        (!hasUnitOrQty && rowTotal <= 0 && /^(?:[A-Z&/-]+\s+){0,3}SUMMARY\b/.test(upperLabel)) ||
+        (/^(REF|ITEM|NO\.?|#)$/.test(upperA) && /^(TOTAL|AMOUNT|VALUE|SUM)\b/i.test(textAt(row, cols.total)) &&
+          !/^(QTY|QUANTITY)/i.test(textAt(row, cols.qty))) ||
+        // The same heading with a short ref in the item cell: "S" | "SUMMARY",
+        // "SUM" | "SUMMARY". Read by the ref alone it was missed, and the
+        // summary's repeat of every section total was read as a second set of
+        // lines — exactly doubling the bill.
+        (!hasUnitOrQty && rowTotal <= 0 && upperA.length <= 4 && SUMMARY_HEADING_RE.test(upperB))) {
       stopped = true;
       return;
     }
@@ -887,8 +930,19 @@ async function parseBOQ(filePath) {
     // Sub-total row (SUBTOTAL_RE / SECTION_TOTAL_RE, module scope). Without
     // catching the trailing "Section 1 subtotal" and "Section 1 total — …"
     // forms the row was read as a priced line, doubling the section total.
-    if (isTotalRowLabel(upperA, upperB, upperJoined, hasUnitOrQty)) {
+    // Besides the wordings above, a row with no unit or quantity whose amount
+    // IS the sum of the section's lines so far is that section's total,
+    // however it is worded.
+    const sumsSection = !hasUnitOrQty && rowTotal > 0 && current && current.items.length >= 2 &&
+      Math.abs(runningSum(current.items) - rowTotal) <= 0.011;
+    if (isTotalRowLabel(upperA, upperB, upperJoined, hasUnitOrQty) || sumsSection ||
+        (!hasUnitOrQty && rowTotal > 0 && SECTION_NET_RE.test(upperLabel))) {
       if (current) {
+        // From its first total row a section is closing: the rows that follow
+        // build the total up (OH&P, allowances, "carried to summary") and are
+        // not lines. lastTotal is the figure the section finally carries.
+        current.closed = true;
+        if (numAt(row, cols.total) > 0) current.lastTotal = numAt(row, cols.total);
         current.subtotal = {
           labour: numAt(row, cols.labour),
           materials: numAt(row, cols.materials),
@@ -907,6 +961,15 @@ async function parseBOQ(filePath) {
     // "PRELIMINARIES") so the number and the title both survive — reading only
     // the first cell left every trade named by its bare number.
     const headingKind = looksLikeSectionRow(row, mergedRows, cols);
+    // Options and alternatives priced outside the bill's total: every section
+    // from this heading to the summary is kept out of the lines, so the
+    // portal's net is the bill's net and not the net plus every option.
+    if (!hasUnitOrQty && rowTotal <= 0 && OPTIONS_HEADING_RE.test(upperJoined)) {
+      inExcludedOptions = true;
+      current = { number: 'X', title: (b || a), items: [], subtotal: { labour: 0, materials: 0, total: 0 }, excluded: true };
+      sections.push(current);
+      return;
+    }
     if (headingKind) {
       const label = (a && b && a !== b) ? a + ' ' + b : (a || b);
       const { number, title } = parseSectionLabel(label, sections.length);
@@ -914,11 +977,12 @@ async function parseBOQ(filePath) {
       // before any items — just update the current pointer. A heading that
       // carries its own total always opens a fresh section, so the amount can
       // be reconciled against exactly the lines beneath it.
-      if (current && current.items.length === 0 && headingKind !== 'carried' && current.carried == null) {
+      if (current && current.items.length === 0 && headingKind !== 'carried' && current.carried == null && !current.excluded) {
         current.number = number;
         current.title = title;
       } else {
         current = { number, title, items: [], subtotal: { labour: 0, materials: 0, total: 0 } };
+        if (inExcludedOptions) current.excluded = true;
         if (headingKind === 'carried') {
           current.carried = numAt(row, cols.total);
           // What the row would have been as a line, should it turn out to be a
@@ -954,6 +1018,10 @@ async function parseBOQ(filePath) {
       unit = '';
     }
 
+    // Amount-only rows after a section's total row belong to the total's
+    // build-up ("of which subcontract quotations", "Employer allowances at
+    // face value"), not to the lines.
+    if (current && current.closed && !hasUnitOrQty) return;
     if (description && (qty > 0 || rate !== 0 || labour !== 0 || materials !== 0 || total !== 0)) {
       if (!current) {
         current = { number: '1', title: 'GENERAL', items: [], subtotal: { labour: 0, materials: 0, total: 0 } };
@@ -996,8 +1064,27 @@ async function parseBOQ(filePath) {
     }
   }
 
-  // Drop empty sections (a heading row with no items beneath it)
-  const cleaned = settled.filter((s) => s.items.length > 0);
+  // Drop empty sections (a heading row with no items beneath it) and the
+  // options / alternatives the bill prices outside its total.
+  const excludedTotal = settled.filter((s) => s.excluded).reduce((acc, s) => acc + lineSum(s.items), 0);
+  if (excludedTotal) sourceSummary.excluded_options_total = Math.round(excludedTotal * 100) / 100;
+  let cleaned = settled.filter((s) => s.items.length > 0 && !s.excluded);
+
+  // A section whose every line repeats another section's total is the bill's
+  // summary page read as lines (its heading was worded in a way the stop
+  // detection above did not recognise). Left in, it doubles the bill.
+  const sectionSums = cleaned.map((s) => lineSum(s.items));
+  cleaned = cleaned.filter((s, idx) => {
+    if (s.provisional || s.items.length < 2) return true;
+    const pool = sectionSums.map((v, j) => (j === idx ? null : v));
+    const echoes = s.items.every((it) => {
+      const j = pool.findIndex((v) => v != null && Math.abs(v - (it.total || 0)) <= 0.011);
+      if (j < 0) return false;
+      pool[j] = null;
+      return true;
+    });
+    return !echoes;
+  });
 
   // Normalise labour/materials to LINE totals. Two shapes exist in the wild:
   // the chat generator writes line totals (Total = Labour + Materials), while
@@ -1040,7 +1127,8 @@ async function parseBOQ(filePath) {
     // Keep the section's own printed total: reconcileParsed checks the lines
     // against it section by section.
     if (s.printed > 0) s.printed_total = s.printed;
-    delete s.printed;
+    if (s.lastTotal > 0) s.carried_total = s.lastTotal;
+    delete s.printed; delete s.closed; delete s.lastTotal;
     // Recompute subtotals from the normalised items so they always agree
     s.subtotal.labour = s.items.reduce((a, i) => a + (i.labour || 0), 0);
     s.subtotal.materials = s.items.reduce((a, i) => a + (i.materials || 0), 0);
@@ -2247,6 +2335,20 @@ function reconcileParsed(parsed) {
   // pennies. (The 1% allowance above, tried against this many more
   // candidates, would let a misread bill through by coincidence.)
   const exact = (x, y) => Math.abs(x - y) <= Math.max(2, Math.abs(y) * 0.00002);
+  // A bill in parts ("Total Part A", "Total Part B", …) prints no single
+  // figure for the lines, but its part totals add up to them.
+  if (exVat.length >= 2 && exact(exVat.reduce((acc, pt) => acc + pt.value, 0), parsedTotal)) {
+    return { ok: true, printed: parsedTotal, printed_label: 'parts', parsed: parsedTotal, basis: 'net', printed_all: printedAll, doc_total: null, proof: 'parts' };
+  }
+
+  // Lines that add up to more than the bill's own bottom line are never a
+  // correct reading, whatever else happens to agree: something that is not a
+  // line (a summary page, a schedule, priced options) has been read as one.
+  const overDoc = docTotal != null && parsedTotal > docTotal + Math.max(2, docTotal * 0.00002);
+  if (overDoc) {
+    const near = printedAll.reduce((best, pt) => (best == null || Math.abs(pt.value - parsedTotal) < Math.abs(best.value - parsedTotal) ? pt : best), null);
+    return { ok: false, printed: near.value, printed_label: near.label, parsed: parsedTotal, basis: basisOf(near), printed_all: printedAll, doc_total: docTotal };
+  }
 
   // OH&P on the measured sections only, with the closing sections carried at
   // face value: "Measured works (A to O)" + 17% + the PC / provisional
@@ -2258,18 +2360,14 @@ function reconcileParsed(parsed) {
     head += totals[k - 1];
     if (k < 2 || head < parsedTotal * 0.5) continue;
     const tail = parsedTotal - head + lump;
-    const splitCands = [head];
+    // Never the head on its own: a summary page read as lines makes the
+    // real sections a "head" that equals the printed net exactly.
+    const splitCands = [];
     if (ohp > 0 || cont > 0) {
       splitCands.push(head * (1 + ohp) + tail, (head * (1 + ohp) + tail) * (1 + cont), head * (1 + ohp) * (1 + cont) + tail, head * (1 + ohp + cont) + tail);
     }
     const sHit = printedAll.find((pt) => splitCands.some((c) => exact(Math.round(c * 100) / 100, pt.value)));
     if (sHit) return pass(sHit, { proof: 'split' });
-  }
-
-  // A bill in parts ("Total Part A", "Total Part B", …) prints no single
-  // figure for the lines, but its part totals add up to them.
-  if (exVat.length >= 2 && exact(exVat.reduce((acc, pt) => acc + pt.value, 0), parsedTotal)) {
-    return { ok: true, printed: parsedTotal, printed_label: 'parts', parsed: parsedTotal, basis: 'net', printed_all: printedAll, doc_total: null, proof: 'parts' };
   }
 
   // Section by section. When every section prints its own total and the
@@ -2278,11 +2376,29 @@ function reconcileParsed(parsed) {
   // worked as a percentage) and however it words its bottom line. A total row
   // read as a line, or summary rows read into the last section, break the
   // section they land in and fail this.
+  //
+  // A printed total may cover a run of sections (sub-headed bills total the
+  // whole of "A" beneath A.06), and may be the lines plus the OH&P the
+  // section itself states. Every measured section has to fall under a total
+  // that checks out.
   const measured = parsed.sections.filter((s) => !s.provisional);
-  if (measured.length >= 2 && measured.every((s) => s.printed_total > 0 && exact((s.subtotal && s.subtotal.total) || 0, s.printed_total))) {
+  let groups = 0;
+  let run = 0;
+  let open = false;
+  let allOk = measured.length >= 2;
+  for (const s of measured) {
+    run += (s.subtotal && s.subtotal.total) || 0;
+    open = true;
+    if (!(s.printed_total > 0)) continue;
+    const okGroup = exact(run, s.printed_total) ||
+      (s.carried_total > 0 && exact(run + (s.adders || 0), s.carried_total));
+    if (!okGroup) { allOk = false; break; }
+    groups++; run = 0; open = false;
+  }
+  if (allOk && !open && groups >= 2) {
     return {
       ok: true, printed: docTotal != null ? docTotal : parsedTotal, printed_label: 'sections', parsed: parsedTotal,
-      basis: 'net', printed_all: printedAll, doc_total: docTotal, proof: 'sections', sections_checked: measured.length,
+      basis: 'net', printed_all: printedAll, doc_total: docTotal, proof: 'sections', sections_checked: groups,
     };
   }
 

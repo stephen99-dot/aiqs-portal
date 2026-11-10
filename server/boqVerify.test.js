@@ -243,19 +243,20 @@ test('the section proof fails when a section\'s lines do not reach its own total
   assert.strictEqual(v.status, 'mismatch');
 });
 
-test('summary rows read into the last section break the section proof', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+test('amount-only rows after a section\'s total row are not read as lines', { skip: !DEPS_OK && 'deps not installed' }, async () => {
   const a = SEC(1, 'DEMOLITION', [['Strip out', 2000], ['Skips', 1000]]);
   const b = SEC(2, 'JOINERY', [['Doors', 4000], ['Skirting', 3000]]);
   const v = await check([
     HEADER,
     ...a.rows, ['', 'Total carried to summary', '', '', '', 1500, 1500, a.sum],
     ...b.rows, ['', 'Total carried to summary', '', '', '', 3500, 3500, b.sum],
-    // No summary heading: these repeat the sections and are read as lines.
+    // No summary heading: these repeat the sections and must not be read as lines.
     ['', 'Demolition', '', '', '', '', '', a.sum],
     ['', 'Joinery', '', '', '', '', '', b.sum],
     ['', 'Contract sum', '', '', '', '', '', 12345],
   ]);
-  assert.ok(!v.ok, v.message);
+  assert.ok(v.ok, v.message);
+  assert.strictEqual(v.detail.parsed_total, 10000);
 });
 
 test('"Measured works (A to B)" plus OH&P, with a closing section at face value (Grange Lawn)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
@@ -298,4 +299,126 @@ test('a doubled bill still locks under the new checks', { skip: !DEPS_OK && 'dep
     ['', 'TOTAL EXCLUDING VAT', '', '', '', '', '', 7020],
   ]);
   assert.strictEqual(v.status, 'mismatch');
+});
+
+// ── Layouts from the second batch of locked bills ──────────────────────────
+test('a summary headed "S | SUMMARY" is not read as a second set of lines (Dubai, Orb Electrical)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const a = SEC(1, 'PRELIMINARIES', [['Site set-up', 2000], ['Welfare', 1000]]);
+  const b = SEC(2, 'FLOORING', [['Epoxy', 4000], ['Screed', 3000]]);
+  const v = await check([
+    HEADER,
+    ...a.rows, ['', 'Subtotal carried to summary — A', '', '', '', 1500, 1500, a.sum],
+    ...b.rows, ['', 'Subtotal carried to summary — B', '', '', '', 3500, 3500, b.sum],
+    ['SUM', 'SUMMARY'],
+    ['A', 'PRELIMINARIES', '', '', '', 1500, 1500, a.sum],
+    ['B', 'FLOORING', '', '', '', 3500, 3500, b.sum],
+    ['', 'Net construction cost', '', '', '', '', '', 10000],
+    ['', 'Overheads and profit', '', '', 0.17, '', '', 1700],
+    ['', 'TOTAL EXCLUDING VAT', '', '', '', '', '', 11700],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 10000);
+});
+
+test('a summary page read as lines can never pass on its real sections alone', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  // An unrecognised heading and summary rows that do not simply echo the
+  // section totals: the lines come to more than the bill's bottom line.
+  const a = SEC(1, 'PRELIMINARIES', [['Site set-up', 2000], ['Welfare', 1000]]);
+  const b = SEC(2, 'FLOORING', [['Epoxy', 4000], ['Screed', 3000]]);
+  const v = await check([
+    HEADER, ...a.rows, ...b.rows,
+    ['9.0   BREAKDOWN BY ELEMENT'],
+    ['9.01', 'Building works', 'item', 1, 6000, 3000, 3000, 6000],
+    ['9.02', 'Finishes', 'item', 1, 4000, 2000, 2000, 4000],
+    ['', 'Net construction cost', '', '', '', '', '', 10000],
+  ]);
+  assert.strictEqual(v.status, 'mismatch');
+});
+
+test('options priced outside the tender sum are kept out of the lines (Twyford Ave)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const a = SEC(1, 'ROOFS', [['Slating', 2000], ['Leadwork', 1000]]);
+  const b = SEC(2, 'KITCHEN', [['Units', 4000], ['Worktops', 3000]]);
+  const v = await check([
+    HEADER,
+    ...a.rows, ['', 'Total - Section 1', '', '', '', 1500, 1500, a.sum],
+    ...b.rows, ['', 'Total - Section 2', '', '', '', 3500, 3500, b.sum],
+    ['X', 'OPTIONS AND ALTERNATIVES - PRICED SEPARATELY, NOT IN THE TENDER SUM'],
+    ['X1', 'Open the hall wall'],
+    ['X1.1', 'Form opening', 'item', 1, 4000, 2400, 1600, 4000],
+    ['X1.2', 'Deduct door', 'item', 1, -500, -300, -200, -500],
+    ['', 'SUMMARY'],
+    ['', 'NET COST OF THE WORKS (Sections 1 to 2)', '', '', '', '', '', 10000],
+    ['', 'TENDER SUM, EXCLUSIVE OF VAT', '', '', '', '', '', 10000],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 10000);
+});
+
+test('a header below a long preamble is still found (Mountjoy Square, Northcote Manor)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const preamble = [];
+  for (let i = 0; i < 45; i++) preamble.push(['', 'Basis of measurement note ' + i, 'm2', 12.5, 'As stated in scope']);
+  const a = SEC(1, 'PRELIMINARIES', [['Site set-up', 2000], ['Welfare', 1000]]);
+  const v = await check([
+    ...preamble, HEADER, ...a.rows,
+    ['', 'SUMMARY'],
+    ['', 'NET TOTAL', '', '', '', '', '', 3000],
+    [], HEADER, // a second table beneath the bill must not move its start
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 3000);
+});
+
+test('OH&P worked section by section, sub-headed sections and a re-listed schedule (Platway Lane)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    HEADER,
+    ['A', 'PRELIMINARIES'],
+    ['A.01', 'Site management'],
+    ['', 'Site manager', 'wk', 10, 250, 2500, 0, 2500],
+    ['', 'Welfare unit', 'wk', 10, 100, 0, 1000, 1000],
+    ['A.02', 'Scaffolding'],
+    ['', 'Scaffold', 'item', 1, 3500, 0, 3500, 3500],
+    ['', 'PROVISIONAL SUM — staircase (employer allowance)', 'item', 1, 2000, 0, 2000, 2000],
+    ['', 'Section A — contractor works, net', '', '', '', '', '', 7000],
+    ['', ' of which subcontract quotations returned', '', '', '', '', '', 3500],
+    ['', 'Overheads & profit — own work at H1', '', '', '', '', '', 1190],
+    ['', 'Employer allowances (at face value, not uplifted)', '', '', '', '', '', 2000],
+    ['', 'SECTION A TOTAL CARRIED TO TENDER SUMMARY', '', '', '', '', '', 10190],
+    ['B', 'DEMOLITION'],
+    ['B.01', 'Roof'],
+    ['', 'Strip tiles', 'm2', 100, 11, 1100, 0, 1100],
+    ['', 'Remove structure', 'm2', 60, 15, 900, 0, 900],
+    ['', 'Section B — contractor works, net', '', '', '', '', '', 2000],
+    ['', 'Overheads & profit — own work at H1', '', '', '', '', '', 340],
+    ['', 'SECTION B TOTAL CARRIED TO TENDER SUMMARY', '', '', '', '', '', 2340],
+    ['TENDER RETURN — ITEM AMOUNTS FOR SCHEDULE (incl. OH&P, excl. VAT)'],
+    ['A.01', 'Site management', '', '', '', '', '', 4095],
+    ['A.02', 'Scaffolding', '', '', '', '', '', 6095],
+    ['B.01', 'Roof', '', '', '', '', '', 2340],
+    ['TENDER PRICE SUMMARY'],
+    ['A', 'Preliminaries', '', '', '', '', '', 10190],
+    ['B', 'Demolition', '', '', '', '', '', 2340],
+    ['', 'BASE TENDER TOTAL A–B, EXCLUDING VAT', '', '', '', '', '', 12530],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 11000);
+  assert.strictEqual(v.detail.doc_total, 12530);
+});
+
+test('sub-totals and a second table under an "ELEMENTAL SUMMARY" are not lines (Chesterfield, Eireann)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const a = SEC(1, 'CEILINGS', [['Coffers', 2000], ['Bulkheads', 1000]]);
+  const b = SEC(2, 'JOINERY', [['Bar', 4000], ['Booths', 3000]]);
+  const v = await check([
+    HEADER,
+    ...a.rows, ['', 'Sub-total measured work', '', '', '', '', '', a.sum],
+    ...b.rows, ['', 'Section 2 total carried to summary', '', '', '', '', '', b.sum],
+    ['ELEMENTAL SUMMARY'],
+    ['Ref', 'Element', '', '', '% of net', 'GBP / m2', '', 'Total'],
+    ['1', 'Ceilings', '', '', 0.3, 17, '', 3000],
+    ['2', 'Joinery', '', '', 0.7, 40, '', 7000],
+    ['', 'NET WORKS TOTAL', '', '', '', '', '', 10000],
+    ['', 'TOTAL BUDGET EXCLUDING VAT', '', '', '', '', '', 12285],
+    ['', 'TOTAL BUDGET INCLUDING VAT', '', '', '', '', '', 14742],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.parsed_total, 10000);
 });
