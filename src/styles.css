@@ -556,10 +556,17 @@ body {
 /* === RESPONSIVE — MOBILE (max-width: 768px) === */
 @media (max-width: 768px) {
   .mobile-header-bar { display: flex !important; }
+  /* The slide-in menu starts BELOW the fixed header (which carries the
+     wordmark and the close button), so nothing hides under it and the panel
+     scrolls within the space that is actually visible. */
   .sidebar-panel {
     transform: translateX(-100%); width: calc(min(86vw, 300px) + var(--safe-left)) !important;
-    padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); padding-left: var(--safe-left);
+    top: calc(var(--mobile-header-h) + var(--safe-top)) !important;
+    padding-top: 0; padding-bottom: var(--safe-bottom); padding-left: var(--safe-left);
+    -webkit-overflow-scrolling: touch;
   }
+  .sidebar-panel .sidebar-brand { display: none; }
+  .mobile-overlay { top: calc(var(--mobile-header-h) + var(--safe-top)) !important; }
   .sidebar-panel.open { transform: translateX(0); box-shadow: 0 0 40px rgba(15,23,42,0.18); }
   /* The <main> element carries className="main-content" — must match here or the
      240px sidebar gutter (and the 56px fixed-header offset) is never removed. */

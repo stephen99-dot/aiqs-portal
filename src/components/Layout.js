@@ -205,7 +205,7 @@ export default function Layout() {
 
           {/* Logo — the AI QS wordmark (matches the homepage logo: "AI" in
               ink, "QS" in amber, letterspaced strapline beneath). */}
-          <div style={{
+          <div className="sidebar-brand" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 28, padding: '2px 6px',
           }}>
