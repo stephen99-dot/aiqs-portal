@@ -30,3 +30,15 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # iOS app — push notifications (docs/IOS_APP.md §9). All optional: with
+      # none set the app still works and customers still get the emails.
+      - key: APPLE_TEAM_ID
+        sync: false
+      - key: APNS_KEY_ID
+        sync: false
+      - key: APNS_KEY
+        sync: false
+      # iOS app — which native build numbers may take web bundle updates from
+      # this server (docs/IOS_APP.md §10), e.g. "2". Unset = none.
+      - key: APP_LIVE_UPDATE_BUILDS
+        sync: false
