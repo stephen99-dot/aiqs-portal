@@ -658,6 +658,10 @@ body {
     padding: 4px calc(4px + var(--safe-right)) calc(4px + var(--safe-bottom)) calc(4px + var(--safe-left));
   }
   .has-bottom-nav { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  /* The bottom nav sits above the open menu, so the menu has to end where
+     the nav begins — otherwise its last rows (Sign out, Delete account) are
+     underneath it and cannot be tapped. */
+  body:has(.bottom-nav) .sidebar-panel { padding-bottom: calc(64px + var(--safe-bottom)); }
   .has-bottom-nav .chat-shell {
     height: calc(100vh - var(--mobile-header-h) - var(--safe-top) - 60px - var(--safe-bottom));
     height: calc(100dvh - var(--mobile-header-h) - var(--safe-top) - 60px - var(--safe-bottom));
