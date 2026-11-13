@@ -6,7 +6,7 @@ import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
-  InboxIcon, FolderIcon, BrainIcon, MapPinIcon,
+  InboxIcon, FolderIcon, BrainIcon, MapPinIcon, BellIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
@@ -14,6 +14,7 @@ import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 import DeleteAccountModal from './DeleteAccountModal';
 import { selectionChanged } from '../native/haptics';
+import { pushAvailable, sendTestPush } from '../native/push';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
 // Clicking the header toggles expand/collapse; clicking a child navigates.
@@ -58,6 +59,7 @@ function NavGroup({ item, expanded, onToggle, isAnyActive, setMobileOpen, locati
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const [testingPush, setTestingPush] = useState(false);
   const [countryOpen, setCountryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const countries = useCountries();
@@ -324,6 +326,23 @@ export default function Layout() {
               : <MoonIcon size={15} color="currentColor" />}
             {mode === 'dark' ? 'Light mode' : 'Dark mode'}
           </button>
+
+          {/* In the app, for admins: check that notifications reach this
+              iPhone without having to deliver a real job. */}
+          {isAdmin && pushAvailable() && (
+            <button
+              className="ui-nav-item" style={{ marginBottom: 2 }} disabled={testingPush}
+              onClick={async () => {
+                setTestingPush(true);
+                const msg = await sendTestPush();
+                setTestingPush(false);
+                window.alert(msg);
+              }}
+            >
+              <BellIcon size={15} color="currentColor" />
+              {testingPush ? 'Sending…' : 'Send test notification'}
+            </button>
+          )}
 
           {/* Logout */}
           <button onClick={handleLogout} className="ui-nav-item ui-nav-item--logout">

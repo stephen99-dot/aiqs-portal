@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiFetch, getToken, setToken, clearToken } from '../utils/api';
 import { setPriceViewer } from '../utils/planPrice';
+import { disablePushForUser } from '../native/push';
 
 const AuthContext = createContext(null);
 
@@ -60,6 +61,10 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    // In the app: stop this phone getting the account's notifications. Called
+    // (not awaited) before the token is cleared — the request picks the token
+    // up synchronously as it starts.
+    disablePushForUser();
     clearToken();
     setUser(null);
   }

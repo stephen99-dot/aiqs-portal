@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Push notifications. "development" here is what Xcode expects in the
+	     file; it is switched to "production" automatically when the app is
+	     archived for TestFlight / the App Store. -->
+	<key>aps-environment</key>
+	<string>development</string>
 	<!-- Universal links + Password AutoFill. The host must serve
 	     /.well-known/apple-app-site-association (server/appLinks.js, needs
 	     APPLE_TEAM_ID set on the portal). Change the host here if the portal

@@ -13,6 +13,9 @@
 //     bought on the website, admin changes)
 //   • scrolls the focused field into view when the keyboard opens
 //   • opens outside links in an in-app Safari sheet instead of leaving the app
+//   • keeps the app's screens in step with the website (liveUpdate.js)
+//   • registers for push notifications once signed in, and opens the project
+//     a tapped notification is about (push.js)
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { App as CapApp } from '@capacitor/app';
@@ -21,6 +24,8 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { Keyboard } from '@capacitor/keyboard';
 import { isNative, isIOS, platform } from './platform';
 import { openExternal, isExternalHref, opensAnotherApp } from './openExternal';
+import { confirmReady, checkForNewBundle } from './liveUpdate';
+import { listenForPush, enablePushForUser } from './push';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -57,6 +62,10 @@ export default function NativeBridge() {
     return () => root.classList.remove(...classes);
   }, []);
 
+  // This bundle started. Said first, before anything that could fail: a
+  // freshly applied web bundle is rolled back if the shell never hears it.
+  useEffect(() => { confirmReady(); }, []);
+
   // Deep links — while running, and the one the app was launched with.
   useEffect(() => {
     if (!isNative()) return undefined;
@@ -81,7 +90,23 @@ export default function NativeBridge() {
   useEffect(() => {
     if (!isNative() || loading) return;
     SplashScreen.hide({ fadeOutDuration: 180 }).catch(() => {});
+    // Once the app is up, see whether the portal has newer screens. Fetched
+    // in the background and used from the next reopen.
+    const t = setTimeout(() => { checkForNewBundle({ force: true }); }, 4000);
+    return () => clearTimeout(t);
   }, [loading]);
+
+  // Push: listen for the device token and for taps, for the app's lifetime.
+  useEffect(() => listenForPush({ onOpen: (path) => navigate(path) }), [navigate]);
+
+  // Ask for notification permission once someone is signed in — not on the
+  // login screen, where the prompt would mean nothing yet.
+  const userId = user && user.id;
+  useEffect(() => {
+    if (!isNative() || !userId) return undefined;
+    const t = setTimeout(() => { enablePushForUser(); }, 1500);
+    return () => clearTimeout(t);
+  }, [userId]);
 
   // Foreground → refresh the account.
   useEffect(() => {
@@ -89,6 +114,7 @@ export default function NativeBridge() {
     let handle;
     CapApp.addListener('appStateChange', ({ isActive }) => {
       if (isActive && latest.current.user) latest.current.refreshUser();
+      if (isActive) checkForNewBundle();
     }).then((h) => { handle = h; });
     return () => { if (handle) handle.remove(); };
   }, []);
