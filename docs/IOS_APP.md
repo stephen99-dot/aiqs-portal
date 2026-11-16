@@ -31,7 +31,9 @@ React app (src/)  ──build──►  build/  ──cap sync──►  ios/App
 * **Native plugins** (all official Capacitor, all Swift Package Manager, no
   CocoaPods): App (deep links, foreground/background), Browser (in-app
   Safari), Filesystem + Share (saving files), Haptics, Keyboard, SplashScreen,
-  StatusBar.
+  StatusBar, PushNotifications (§9). One community plugin,
+  `@capgo/capacitor-updater`, used in manual mode against our own server
+  only (§10).
 * **Everything else is the website.** Camera and photo library come free from
   `<input type="file">` in WKWebView; drag-and-drop, upload progress, SSE chat
   streaming and the blob-based downloads all already worked over HTTPS.
@@ -306,10 +308,12 @@ In Xcode:
    Add yourself as an internal tester; TestFlight on your phone installs it.
 5. When happy, attach it to a version and submit.
 
-Web-only changes (anything in `src/`) still need steps above — the bundle is
-inside the app. If that becomes tedious, Capacitor supports over-the-air
-updates of the web bundle (Capgo / Ionic Appflow) within Apple's rules; the
-native shell only changes when a plugin does.
+From build 2 (version 1.0.1) on, web-only changes (anything in `src/`) reach
+the app **without** these steps — see §10. The Mac is only needed when
+something native changes: a new plugin, a permission, the icon, the version.
+
+After Apple approves a build, add its build number to `APP_LIVE_UPDATE_BUILDS`
+on Render (§10). Until you do, that build runs the screens it shipped with.
 
 Useful scripts (`package.json`):
 
@@ -322,26 +326,164 @@ Useful scripts (`package.json`):
 
 ---
 
-## 9. Where things live
+## 9. Push notifications
+
+When a job is delivered (or re-issued) the customer gets the usual email
+**and**, if they use the app and allowed notifications, a push: "Your job is
+ready — <project>". Tapping it opens that project. Push is an extra to the
+email, never instead of it: with nothing configured, or no phone registered,
+nothing breaks and the email still goes.
+
+How it fits together:
+
+* App: `src/native/push.js`. After sign-in it asks iOS for permission (iOS
+  shows that prompt once, ever), registers with Apple, and posts the device
+  token to `POST /api/push/register`. On sign-out it removes it.
+* Server: `server/pushNotifications.js`. Tokens live in the `push_devices`
+  table; `sendToUser()` talks to Apple directly over HTTP/2 with a signed
+  token — no third-party push service. Called from
+  `server/deliverableRoutes.js`, beside the delivery email.
+* Native: two forwarding methods in `AppDelegate.swift`, the
+  `aps-environment` entitlement, and `PushNotifications` in
+  `capacitor.config.json`.
+
+### One-time set-up (about 10 minutes, in a browser)
+
+1. **developer.apple.com → Certificates, Identifiers & Profiles → Keys → +.**
+   Name it "AI QS Push", tick **Apple Push Notifications service (APNs)**,
+   Continue, Register. **Download the `.p8` file** — Apple lets you download
+   it once only. Note the 10-character **Key ID** shown on that page.
+2. **Identifiers → `uk.co.theaiqs.portal`** → make sure **Push
+   Notifications** is ticked → Save. (Xcode's automatic signing normally
+   ticks this for you on the first build with the new entitlement.)
+3. **Render → aiqs-portal → Environment**, add:
+
+   | Variable | Value |
+   |---|---|
+   | `APNS_KEY` | the whole contents of the `.p8` file, pasted as-is |
+   | `APNS_KEY_ID` | the Key ID from step 1 |
+   | `APPLE_TEAM_ID` | already set if universal links work (§5) |
+
+4. **App Store Connect → App Privacy:** under *Identifiers* add **Device
+   ID** (linked to the user, app functionality, not tracking). The privacy
+   manifest in the app already declares it.
+
+### Checking it works
+
+Push cannot be tested in the Simulator or from a browser — it needs the
+build on a real iPhone.
+
+1. Install the new build through TestFlight, sign in, tap **Allow** when iOS
+   asks about notifications.
+2. Open the menu (More). Signed in as an admin you will see **Send test
+   notification**. Tap it, then lock the phone or go to the home screen.
+   The message it shows says what happened: sent, not set up on the server
+   (and which variable is missing), no iPhone registered, or Apple's reason
+   for refusing.
+3. The real thing: deliver a document to a *customer* account that is signed
+   in on a phone. (Uploading into your own account sends nothing, same as the
+   email.)
+
+If someone tapped **Don't Allow**, iOS will not ask again: Settings → AI QS
+→ Notifications → Allow, then reopen the app.
+
+---
+
+## 10. Updating the app's screens without a new build
+
+The app carries its own copy of the React build. Without this section every
+screen change would need a Mac build and an App Store review before app users
+saw it.
+
+Now: whenever the portal is deployed, it offers the web build it is serving
+as a zip (`server/appBundle.js`). The app (`src/native/liveUpdate.js`) asks on
+launch and when it returns to the foreground; if the portal's build differs
+from the one it is running, it downloads it in the background and switches
+to it **the next time the app is reopened**. Nothing is shown to the user and
+nothing reloads under them. If a downloaded build fails to start, the app
+falls back to the last one that worked.
+
+What travels this way: HTML, CSS, JavaScript — i.e. anything in `src/`.
+What does not: plugins, permissions, the icon, the version number. Those
+still need §8.
+
+### The switch: `APP_LIVE_UPDATE_BUILDS`
+
+Updates are offered only to the native build numbers listed in this Render
+environment variable. Unset, nobody gets any.
+
+| Value | Meaning |
+|---|---|
+| *(unset)* | off |
+| `2` | build 2 takes updates |
+| `2,3` or `2-3` | builds 2 and 3 |
+
+**Add a build only after Apple has approved it.** While a build is in
+review it is not on the list, so the reviewer sees exactly the screens that
+were submitted — which is what Apple expects. So the routine for a native
+release is:
+
+1. Archive and upload build N (§8). Submit for review.
+2. Approved and released → add N to `APP_LIVE_UPDATE_BUILDS`.
+3. From then on, deploying the portal updates the app's screens too.
+
+Version 1.0 (build 1) does not contain the updater and will never update
+itself; those users move to 1.0.1 through the App Store as normal.
+
+### Things to keep in mind
+
+* **Same build, both places.** The app receives the build Render made, so
+  whatever `REACT_APP_*` variables are set on Render apply inside the app as
+  well. In particular leave `REACT_APP_NATIVE_PURCHASES` unset on Render
+  unless In-App Purchase has shipped (§6), or the app would start showing
+  Stripe links.
+* **Stay within what was reviewed.** Apple permits downloading interpreted
+  code (JavaScript in a web view) as long as it does not change the app's
+  purpose. Fixes and improvements to existing screens are fine; do not use
+  this to introduce a feature Apple would have wanted to review.
+* **Never tell the user the app is updating.** No "update available"
+  banners or buttons — that wording is what gets apps rejected.
+* **New native features need a guard.** A screen that calls a plugin the
+  installed shell does not have must check `hasPlugin()` first
+  (`src/native/platform.js`), because the new screens can reach an older
+  shell.
+* **No third party.** The plugin's own cloud endpoints are switched off in
+  `capacitor.config.json` (`updateUrl`, `statsUrl`, `channelUrl` are empty);
+  the only server the app talks to is the portal.
+
+Check what the portal is offering:
+
+```bash
+curl -s "https://aiqs-portal.onrender.com/api/app/bundle?platform=ios&build=2&current=x"
+```
+
+`"available": true` with a version and URL means build 2 will pick it up;
+`"reason": "build_not_enabled"` means the build is not on the list.
+
+---
+
+## 11. Where things live
 
 | File | Purpose |
 |---|---|
 | `capacitor.config.json` | App ID, name, `webDir`, splash/keyboard/status-bar plugin settings |
 | `ios/App/App.xcodeproj` | The Xcode project (iPhone only, iOS 15.0+, automatic signing) |
 | `ios/App/App/Info.plist` | Display name, camera/photo usage strings, orientations, encryption flag |
-| `ios/App/App/App.entitlements` | Associated domains (universal links, password autofill) |
+| `ios/App/App/App.entitlements` | Associated domains (universal links, password autofill), push notifications |
 | `ios/App/App/PrivacyInfo.xcprivacy` | Privacy manifest |
 | `ios/App/App/Assets.xcassets` | App icon + launch images (generated — do not hand-edit) |
 | `ios/App/CapApp-SPM/Package.swift` | Plugin list — written by `cap sync`, never by hand |
 | `ios/App/App/public/` | The web build — gitignored, created by `cap sync` |
 | `resources/` | Source artwork for icons/splash (`scripts/build-app-icons.js` makes them) |
-| `src/native/` | `platform.js`, `saveFile.js`, `openExternal.js`, `haptics.js`, `NativeBridge.js` |
+| `src/native/` | `platform.js`, `saveFile.js`, `openExternal.js`, `haptics.js`, `NativeBridge.js`, `push.js` (§9), `liveUpdate.js` (§10) |
+| `server/pushNotifications.js` | Device tokens and sending to Apple (§9) |
+| `server/appBundle.js` | The web build the app updates its screens from (§10) |
 | `src/utils/purchases.js` | The native purchase gate |
 | `server/appLinks.js` | The apple-app-site-association route |
 
 ---
 
-## 10. Known limits and sensible next steps
+## 12. Known limits and sensible next steps
 
 * **Uploads do not continue in the background.** iOS suspends the web view
   about 30 seconds after the app leaves the foreground, so a 100 MB drawing
@@ -349,9 +491,9 @@ Useful scripts (`package.json`):
   customers upload big sets from site often, the next step is a native
   background-upload plugin (`@capgo/capacitor-uploader`) behind the same
   `apiUpload()` call.
-* **No push notifications yet.** The admin bell polls; clients get email.
-  Adding APNs is `@capacitor/push-notifications` + a device-token table +
-  sends from the places that already email — a day's work when wanted.
+* **Push covers "job ready" and "job updated" only** (§9). The admin bell
+  still polls, and every other customer message is email. Adding another
+  push is one `sendToUser()` call next to the email it mirrors.
 * **Dynamic Type** (the iOS text-size setting) does not affect web content.
   Font sizes follow the app's own scale.
 * **Android** is the same `cap add android` away. Everything in
@@ -362,7 +504,7 @@ Useful scripts (`package.json`):
 
 ---
 
-## 11. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|

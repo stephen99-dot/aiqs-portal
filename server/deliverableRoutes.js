@@ -404,6 +404,15 @@ router.post('/projects/:projectId/deliverables', authMiddleware, upload.array('f
           ctaText: isUpdate ? 'See what changed' : 'Open your project',
           ctaUrl: require('./mailer').BASE_URL + '/project/' + project.id,
         }).catch(() => {});
+        // The same news to their iPhone, if they use the app. An extra to the
+        // email, never instead of it; does nothing when push is not set up.
+        require('./pushNotifications').sendToUser(owner.id, {
+          title: isUpdate ? 'Your job has been updated' : 'Your job is ready',
+          body: isUpdate
+            ? title + ' (V' + ver + ') — revised documents are in your portal.'
+            : title + ' — ' + docList + ' now in your portal.',
+          path: '/project/' + project.id,
+        }).catch(() => {});
       }
     } catch (mailErr) {
       console.error('[Deliverables] delivery email error:', mailErr.message);

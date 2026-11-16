@@ -163,6 +163,9 @@ app.get('/api/health', async function (req, res) {
 // iOS universal links: /.well-known/apple-app-site-association. Must sit
 // before the SPA catch-all or Apple's crawler would be handed index.html.
 app.use(require('./appLinks').router);
+// iOS app: push device registration, and the web bundle the app updates itself from.
+app.use('/api', require('./pushNotifications').router);
+app.use('/api', require('./appBundle').router);
 
 if (process.env.NODE_ENV === 'production') {
   const buildPath = path.join(__dirname, '..', 'build');
