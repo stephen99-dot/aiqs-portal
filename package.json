@@ -31,7 +31,7 @@
     "@fontsource-variable/instrument-sans": "^5.3.0",
     "@fontsource/dm-serif-display": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",
     "concurrently": "^9.1.0",
