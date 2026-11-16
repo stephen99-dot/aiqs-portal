@@ -1,0 +1,158 @@
+name: Android app
+
+# Builds the Android app on GitHub's machines, so no computer here needs
+# Android Studio or the disk space it takes.
+#
+#   Actions tab → "Android app" → Run workflow
+#
+# Every run produces a TEST build (an .apk you can install straight onto an
+# Android phone). When the signing secrets below are set it also produces the
+# PLAY STORE build (a signed .aab to upload to Google Play).
+#
+# Signing secrets (Settings → Secrets and variables → Actions), all four or none:
+#   ANDROID_KEYSTORE_BASE64     the upload keystore file, base64-encoded
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# See docs/ANDROID_APP.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version users see (e.g. 1.0.1)'
+        default: '1.0.1'
+        required: true
+      version_code:
+        description: 'Version code — must be higher than the last one uploaded to Google Play. Leave blank to use the run number.'
+        required: false
+  # Also on changes to the Android project itself, so a broken build is seen
+  # on the pull request rather than at release time. Test build only.
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'capacitor.config.json'
+      - 'scripts/android-smoke.sh'
+      - '.github/workflows/android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.1' }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code || github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the web app and copy it into the Android project
+        run: npm run android:sync
+
+      - name: Build the test app (.apk)
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload the test app
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqs-android-test-${{ env.ANDROID_VERSION_NAME }}-${{ env.ANDROID_VERSION_CODE }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Is release signing set up?
+        id: signing
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No Play Store build: signing secrets are not set, or this is a pull-request run." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build the Play Store app (.aab, signed)
+        if: steps.signing.outputs.ready == 'true'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
+          ./gradlew --no-daemon bundleRelease
+          rm -f "$RUNNER_TEMP/upload.jks"
+
+      - name: Upload the Play Store app
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqs-android-playstore-${{ env.ANDROID_VERSION_NAME }}-${{ env.ANDROID_VERSION_CODE }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "### AI QS Android ${ANDROID_VERSION_NAME} (version code ${ANDROID_VERSION_CODE})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the build from the **Artifacts** section at the bottom of this page." >> "$GITHUB_STEP_SUMMARY"
+
+  # No Android phone to hand? This starts a virtual one on GitHub, installs
+  # the test build, opens it and saves screenshots (launch, first screen,
+  # landscape, after the back button). A separate job, so a flaky emulator
+  # never stops the app itself from being built and downloadable.
+  smoke:
+    name: Run it on a virtual phone
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the test app
+        uses: actions/download-artifact@v4
+        with:
+          pattern: aiqs-android-test-*
+          merge-multiple: true
+          path: apk
+
+      - name: Allow the emulator to use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start a virtual phone, open the app, take screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: scripts/android-smoke.sh apk/app-debug.apk screenshots
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqs-android-screenshots
+          path: screenshots
+          if-no-files-found: warn
