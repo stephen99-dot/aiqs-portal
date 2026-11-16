@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "439611727382",
+    "project_id": "the-ai-qs",
+    "storage_bucket": "the-ai-qs.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439611727382:android:2146f0be4dbce54e7e5f37",
+        "android_client_info": {
+          "package_name": "uk.co.theaiqs.portal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAi4rl1_VFPZ7qXeMPt48ek5i_MoNgkR1o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
