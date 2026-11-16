@@ -42,3 +42,13 @@ services:
       # this server (docs/IOS_APP.md §10), e.g. "2". Unset = none.
       - key: APP_LIVE_UPDATE_BUILDS
         sync: false
+      # Android app (docs/ANDROID_APP.md). All optional.
+      # Push: the Firebase service-account JSON file, pasted whole.
+      - key: FCM_SERVICE_ACCOUNT
+        sync: false
+      # App links: SHA-256 fingerprint(s) of the app's signing certificate.
+      - key: ANDROID_CERT_SHA256
+        sync: false
+      # Which Android version codes may take web bundle updates, e.g. "1".
+      - key: APP_LIVE_UPDATE_BUILDS_ANDROID
+        sync: false

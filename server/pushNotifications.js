@@ -1,4 +1,5 @@
-// Push notifications to the iOS app (Apple Push Notification service).
+// Push notifications to the phone apps: Apple Push Notification service for
+// iOS, Firebase Cloud Messaging for Android.
 //
 // The app registers its device token after sign-in (src/native/push.js →
 // POST /api/push/register); the places that already email a customer call
@@ -13,6 +14,15 @@
 //   APNS_KEY_ID     the key's 10-character Key ID
 //   APPLE_TEAM_ID   the 10-character Team ID (already set for universal links)
 //   IOS_BUNDLE_ID   optional, defaults to uk.co.theaiqs.portal
+//
+// Android (docs/ANDROID_APP.md), one variable:
+//   FCM_SERVICE_ACCOUNT   the service-account JSON file from the Firebase
+//                         console (Project settings → Service accounts →
+//                         Generate new private key). Paste the whole file;
+//                         a base64 copy is also accepted.
+//
+// Each platform is independent: with only Apple configured iPhones get
+// pushes and Android phones do not, and the other way round.
 //
 // A device token only works against the APNs environment the build was
 // signed for: App Store and TestFlight builds use production, a build run
@@ -46,9 +56,57 @@ try {
 // ── Pure helpers (unit-tested) ─────────────────────────────────────────────
 
 // An APNs device token is 32 bytes as hex (64 chars); Apple reserves the
-// right to lengthen it, so accept up to 200.
-function isValidToken(token) {
-  return typeof token === 'string' && /^[0-9a-fA-F]{64,200}$/.test(token);
+// right to lengthen it, so accept up to 200. An FCM registration token is a
+// long opaque string of URL-safe characters and colons, and is case-sensitive.
+function isValidToken(token, platform = 'ios') {
+  if (typeof token !== 'string') return false;
+  if (platform === 'android') return /^[A-Za-z0-9_:\-]{100,4096}$/.test(token);
+  return /^[0-9a-fA-F]{64,200}$/.test(token);
+}
+
+const normalisePlatform = (p) => (String(p || '').toLowerCase() === 'android' ? 'android' : 'ios');
+// Stored form: APNs tokens are hex, so case-fold them; FCM tokens are not.
+const storedToken = (token, platform) => (platform === 'android' ? token : token.toLowerCase());
+
+// The Firebase service-account file as pasted into an environment variable.
+function readFcmConfig(env = process.env) {
+  let raw = String(env.FCM_SERVICE_ACCOUNT || '').trim();
+  if (!raw) return { configured: false, missing: ['FCM_SERVICE_ACCOUNT'] };
+  if (!raw.startsWith('{')) {
+    try { raw = Buffer.from(raw, 'base64').toString('utf8').trim(); } catch (e) { /* not base64 */ }
+  }
+  try {
+    const j = JSON.parse(raw);
+    const key = String(j.private_key || '').replace(/\\n/g, '\n');
+    if (!j.project_id || !j.client_email || !key.includes('BEGIN')) {
+      return { configured: false, missing: ['FCM_SERVICE_ACCOUNT (not a service-account key file)'] };
+    }
+    return { configured: true, missing: [], projectId: j.project_id, clientEmail: j.client_email, key };
+  } catch (e) {
+    return { configured: false, missing: ['FCM_SERVICE_ACCOUNT (not valid JSON)'] };
+  }
+}
+
+// The FCM v1 message for one Android device.
+function buildFcmMessage(token, { title, body, path }) {
+  const message = {
+    token,
+    notification: { title: String(title || 'AI QS').slice(0, 120), body: String(body || '').slice(0, 300) },
+    android: { priority: 'HIGH', notification: { channel_id: 'jobs' } },
+  };
+  if (path && /^\/[^/]/.test(String(path))) message.data = { path: String(path).slice(0, 300) };
+  return { message };
+}
+
+// What to do with an Android device after Google's answer.
+function classifyFcmResponse(status, errorStatus) {
+  if (status === 200) return 'ok';
+  if (status === 404 || errorStatus === 'UNREGISTERED' || errorStatus === 'NOT_FOUND') return 'drop';
+  // A malformed or foreign token. (INVALID_ARGUMENT can also mean a bad
+  // message, but ours is fixed in shape, so it is the token.)
+  if (status === 400 && errorStatus === 'INVALID_ARGUMENT') return 'drop';
+  if (status === 403 && errorStatus === 'SENDER_ID_MISMATCH') return 'drop';
+  return 'fail';
 }
 
 // The .p8 as it survives being pasted into an environment variable: real
@@ -178,6 +236,50 @@ async function deliver(device, payload, cfg, request = apnsRequest) {
   return { outcome: 'drop', reason: last.reason || 'BadDeviceToken' };
 }
 
+// ── Android (FCM HTTP v1) ──────────────────────────────────────────────────
+
+// Google wants a short-lived OAuth token, obtained by signing a JWT with the
+// service account's key. Good for an hour; refreshed after 50 minutes.
+let cachedFcmToken = null;
+async function fcmAccessToken(cfg, fetchImpl = fetch) {
+  const now = Date.now();
+  if (cachedFcmToken && cachedFcmToken.email === cfg.clientEmail && now - cachedFcmToken.at < 50 * 60 * 1000) return cachedFcmToken.token;
+  const assertion = jwt.sign(
+    { iss: cfg.clientEmail, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token' },
+    cfg.key, { algorithm: 'RS256', expiresIn: 3600 }
+  );
+  const res = await fetchImpl('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=' + encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer') + '&assertion=' + encodeURIComponent(assertion),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.access_token) throw new Error('Google sign-in failed: ' + (data.error_description || data.error || res.status));
+  cachedFcmToken = { token: data.access_token, email: cfg.clientEmail, at: now };
+  return cachedFcmToken.token;
+}
+
+// One message to one Android device → { outcome, reason? }.
+async function deliverFcm(device, notification, cfg, fetchImpl = fetch) {
+  try {
+    const access = await fcmAccessToken(cfg, fetchImpl);
+    const res = await fetchImpl('https://fcm.googleapis.com/v1/projects/' + encodeURIComponent(cfg.projectId) + '/messages:send', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + access, 'content-type': 'application/json' },
+      body: JSON.stringify(buildFcmMessage(device.token, notification)),
+    });
+    if (res.status === 200) return { outcome: 'ok' };
+    const data = await res.json().catch(() => ({}));
+    const errorStatus = (data.error && data.error.status) || '';
+    const details = (data.error && data.error.details) || [];
+    const fcmCode = (details.find((d) => d && d.errorCode) || {}).errorCode || errorStatus;
+    const verdict = classifyFcmResponse(res.status, fcmCode);
+    return { outcome: verdict, reason: fcmCode || String(res.status) };
+  } catch (e) {
+    return { outcome: 'fail', reason: e.message };
+  }
+}
+
 /**
  * Send a notification to every device a user has signed in on.
  *   → { configured, devices, sent, dropped, failed, reasons }
@@ -187,17 +289,25 @@ async function sendToUser(userId, { title, body, path } = {}) {
   const result = { configured: false, devices: 0, sent: 0, dropped: 0, failed: 0, reasons: [] };
   try {
     const cfg = readConfig();
-    result.configured = cfg.configured;
-    if (!cfg.configured) { result.reasons.push('Not configured: ' + cfg.missing.join(', ')); return result; }
-    const devices = db.prepare('SELECT token, sandbox FROM push_devices WHERE user_id = ?').all(userId);
+    const fcm = readFcmConfig();
+    result.configured = cfg.configured || fcm.configured;
+    const devices = db.prepare('SELECT token, sandbox, platform FROM push_devices WHERE user_id = ?').all(userId);
     result.devices = devices.length;
-    if (!devices.length) return result;
+    // Nothing set up at all, or a phone whose platform is not set up: say
+    // which variables are missing rather than failing silently.
+    const needsApple = devices.some((d) => d.platform !== 'android') || !devices.length;
+    const needsGoogle = devices.some((d) => d.platform === 'android') || !devices.length;
+    if (needsApple && !cfg.configured && (devices.length || !fcm.configured)) result.reasons.push('iPhone push not configured: ' + cfg.missing.join(', '));
+    if (needsGoogle && !fcm.configured && (devices.length || !cfg.configured)) result.reasons.push('Android push not configured: ' + fcm.missing.join(', '));
+    if (!result.configured || !devices.length) return result;
     const payload = buildPayload({ title, body, path });
     for (const device of devices) {
-      const r = await deliver(device, payload, cfg);
+      const android = device.platform === 'android';
+      if (android ? !fcm.configured : !cfg.configured) { result.failed++; continue; }
+      const r = android ? await deliverFcm(device, { title, body, path }, fcm) : await deliver(device, payload, cfg);
       if (r.outcome === 'ok') {
         result.sent++;
-        if (device.sandbox !== r.sandbox) db.prepare('UPDATE push_devices SET sandbox = ? WHERE token = ?').run(r.sandbox, device.token);
+        if (!android && device.sandbox !== r.sandbox) db.prepare('UPDATE push_devices SET sandbox = ? WHERE token = ?').run(r.sandbox, device.token);
       } else if (r.outcome === 'drop') {
         result.dropped++;
         db.prepare('DELETE FROM push_devices WHERE token = ?').run(device.token);
@@ -223,20 +333,21 @@ const router = express.Router();
 // moves it from any previous account.
 router.post('/push/register', authMiddleware, (req, res) => {
   const token = String((req.body && req.body.token) || '').trim();
-  if (!isValidToken(token)) return res.status(400).json({ error: 'Invalid device token' });
-  const platform = String((req.body && req.body.platform) || 'ios').slice(0, 20);
+  const platform = normalisePlatform(req.body && req.body.platform);
+  if (!isValidToken(token, platform)) return res.status(400).json({ error: 'Invalid device token' });
   db.prepare(
     'INSERT INTO push_devices (token, user_id, platform) VALUES (?, ?, ?) '
     + 'ON CONFLICT(token) DO UPDATE SET user_id = excluded.user_id, platform = excluded.platform, last_seen_at = CURRENT_TIMESTAMP'
-  ).run(token.toLowerCase(), req.user.id, platform);
+  ).run(storedToken(token, platform), req.user.id, platform);
   res.json({ ok: true });
 });
 
 // On sign-out, so a phone handed to someone else stops receiving the
 // previous user's job alerts.
 router.post('/push/unregister', authMiddleware, (req, res) => {
-  const token = String((req.body && req.body.token) || '').trim().toLowerCase();
-  if (token) db.prepare('DELETE FROM push_devices WHERE token = ? AND user_id = ?').run(token, req.user.id);
+  const token = String((req.body && req.body.token) || '').trim();
+  // Either stored form: hex tokens are case-folded, FCM tokens kept as sent.
+  if (token) db.prepare('DELETE FROM push_devices WHERE (token = ? OR token = ?) AND user_id = ?').run(token, token.toLowerCase(), req.user.id);
   res.json({ ok: true });
 });
 
@@ -246,15 +357,16 @@ router.post('/push/unregister', authMiddleware, (req, res) => {
 router.post('/push/test', authMiddleware, async (req, res) => {
   const r = await sendToUser(req.user.id, {
     title: 'AI QS',
-    body: 'Notifications are working on this iPhone.',
+    body: 'Notifications are working on this phone.',
     path: '/dashboard',
   });
   let message;
   if (!r.configured) message = 'Push is not set up on the server yet (' + r.reasons.join('; ') + ').';
-  else if (!r.devices && !r.dropped) message = 'No iPhone is registered for this account. Allow notifications for AI QS in iOS Settings, then reopen the app.';
+  else if (!r.devices && !r.dropped) message = 'No phone is registered for this account. Allow notifications for AI QS in the phone\'s Settings, then reopen the app.';
+  else if (!r.sent && !r.dropped && r.reasons.some((x) => /not configured/.test(x))) message = 'Push is not set up on the server for this kind of phone yet (' + r.reasons.join('; ') + ').';
   else if (r.sent) message = 'Sent to ' + r.sent + ' device' + (r.sent === 1 ? '' : 's') + '. It should arrive within a few seconds.';
-  else if (r.dropped) message = 'Apple no longer recognises this device. Close and reopen the app, then try again.';
-  else message = 'Apple rejected the notification: ' + (r.reasons.join(', ') || 'unknown reason') + '.';
+  else if (r.dropped) message = 'This device is no longer recognised. Close and reopen the app, then try again.';
+  else message = 'The notification was rejected: ' + (r.reasons.join(', ') || 'unknown reason') + '.';
   res.json({ ok: r.sent > 0, message, ...r });
 });
 
@@ -262,4 +374,5 @@ module.exports = {
   router, sendToUser,
   // exported for tests
   isValidToken, normaliseKey, readConfig, buildPayload, classifyResponse, deliver, HOSTS,
+  readFcmConfig, buildFcmMessage, classifyFcmResponse, deliverFcm,
 };

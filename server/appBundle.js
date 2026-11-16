@@ -12,7 +12,11 @@
 //
 // Which installed apps get it is an explicit list, by native build number:
 //
-//   APP_LIVE_UPDATE_BUILDS   e.g. "2" or "2,3" (Render → Environment)
+//   APP_LIVE_UPDATE_BUILDS           iOS builds, e.g. "3" or "3,4"
+//   APP_LIVE_UPDATE_BUILDS_ANDROID   Android version codes, e.g. "1"
+//
+// (Render → Environment.) The two stores number their builds separately, so
+// each platform has its own list.
 //
 // Unset, nothing is offered to anyone. A build is added to the list only
 // once Apple has approved it, so the copy a reviewer is testing always runs
@@ -131,6 +135,10 @@ function decide({ bundle, allowList, build, current, origin }) {
   };
 }
 
+function allowListFor(platform, env = process.env) {
+  return String(platform || '').toLowerCase() === 'android' ? env.APP_LIVE_UPDATE_BUILDS_ANDROID : env.APP_LIVE_UPDATE_BUILDS;
+}
+
 const router = express.Router();
 
 router.get('/app/bundle', (req, res) => {
@@ -140,7 +148,7 @@ router.get('/app/bundle', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json(decide({
     bundle: currentBundle(),
-    allowList: process.env.APP_LIVE_UPDATE_BUILDS,
+    allowList: allowListFor(req.query.platform),
     build: req.query.build,
     current: String(req.query.current || ''),
     origin: proto + '://' + host,
@@ -154,4 +162,4 @@ router.get('/app/bundle/:file', (req, res) => {
   res.type('application/zip').send(bundle.zip);
 });
 
-module.exports = { router, bundleVersion, buildAllowed, shouldShip, packBundle, decide };
+module.exports = { router, bundleVersion, buildAllowed, shouldShip, packBundle, decide, allowListFor };

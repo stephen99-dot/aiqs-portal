@@ -328,7 +328,7 @@ export default function Layout() {
           </button>
 
           {/* In the app, for admins: check that notifications reach this
-              iPhone without having to deliver a real job. */}
+              phone without having to deliver a real job. */}
           {isAdmin && pushAvailable() && (
             <button
               className="ui-nav-item" style={{ marginBottom: 2 }} disabled={testingPush}

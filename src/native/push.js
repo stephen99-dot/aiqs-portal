@@ -1,4 +1,4 @@
-// Push notifications in the iOS app: "your job is ready" on the lock screen.
+// Push notifications in the phone apps (iOS and Android): "your job is ready" on the lock screen.
 //
 // After sign-in the app asks iOS for permission (once — iOS never shows the
 // prompt twice), registers with Apple, and gives the device token to the
@@ -34,6 +34,14 @@ async function sendTokenToServer(token) {
  */
 export function listenForPush({ onOpen } = {}) {
   if (!pushAvailable()) return () => {};
+  // Android posts notifications to a named channel, which the user can mute
+  // or tune in system settings. The server sends to this one ("jobs").
+  if (platform() === 'android') {
+    PushNotifications.createChannel({
+      id: 'jobs', name: 'Job updates', description: 'When your priced documents are ready or updated',
+      importance: 4, visibility: 1,
+    }).catch(() => {});
+  }
   const handles = [];
   const keep = (p) => p.then((h) => handles.push(h)).catch(() => {});
   keep(PushNotifications.addListener('registration', ({ value }) => { sendTokenToServer(value); }));
