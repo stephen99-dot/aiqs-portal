@@ -84,3 +84,66 @@ test('a dead token is dropped; a server-side fault keeps it', { skip }, async ()
   const badKey = async () => ({ status: 403, reason: 'InvalidProviderToken' });
   assert.deepStrictEqual(await push.deliver({ token: 't' }, {}, {}, badKey), { outcome: 'fail', reason: 'InvalidProviderToken' });
 });
+
+// ── Android (Firebase Cloud Messaging) ─────────────────────────────────────
+const FCM_TOKEN = 'dQw4w9WgXcQ:APA91b' + 'A1b2C3d4E5_-'.repeat(12);
+
+test('Android tokens are accepted as Android, and never case-folded into a different token', { skip }, () => {
+  assert.ok(push.isValidToken(FCM_TOKEN, 'android'));
+  assert.ok(!push.isValidToken(FCM_TOKEN, 'ios'), 'an FCM token is not an APNs token');
+  assert.ok(!push.isValidToken('short', 'android'));
+  assert.ok(!push.isValidToken('a'.repeat(64) + ' <script>', 'android'));
+});
+
+test('the Firebase service-account file is read from the environment', { skip }, () => {
+  assert.deepStrictEqual(push.readFcmConfig({}).missing, ['FCM_SERVICE_ACCOUNT']);
+  assert.ok(!push.readFcmConfig({ FCM_SERVICE_ACCOUNT: '{not json' }).configured);
+  assert.ok(!push.readFcmConfig({ FCM_SERVICE_ACCOUNT: '{"project_id":"p"}' }).configured);
+  const file = JSON.stringify({ project_id: 'aiqs-1', client_email: 'x@aiqs-1.iam.gserviceaccount.com', private_key: PEM.replace(/\n/g, '\\n') });
+  const cfg = push.readFcmConfig({ FCM_SERVICE_ACCOUNT: file });
+  assert.ok(cfg.configured);
+  assert.strictEqual(cfg.projectId, 'aiqs-1');
+  assert.ok(cfg.key.includes('\n'), 'escaped newlines in the key are restored');
+  assert.ok(push.readFcmConfig({ FCM_SERVICE_ACCOUNT: Buffer.from(file).toString('base64') }).configured);
+});
+
+test('the Android message carries the alert, the channel and an in-app path', { skip }, () => {
+  const m = push.buildFcmMessage(FCM_TOKEN, { title: 'Your job is ready', body: 'Foyle Road', path: '/project/abc' }).message;
+  assert.strictEqual(m.token, FCM_TOKEN);
+  assert.deepStrictEqual(m.notification, { title: 'Your job is ready', body: 'Foyle Road' });
+  assert.strictEqual(m.android.notification.channel_id, 'jobs');
+  assert.deepStrictEqual(m.data, { path: '/project/abc' });
+  assert.strictEqual(push.buildFcmMessage(FCM_TOKEN, { title: 't', body: 'b', path: 'https://evil.example' }).message.data, undefined);
+});
+
+test('Google\'s answers are read correctly', { skip }, () => {
+  assert.strictEqual(push.classifyFcmResponse(200, ''), 'ok');
+  assert.strictEqual(push.classifyFcmResponse(404, 'UNREGISTERED'), 'drop');
+  assert.strictEqual(push.classifyFcmResponse(400, 'INVALID_ARGUMENT'), 'drop');
+  assert.strictEqual(push.classifyFcmResponse(403, 'SENDER_ID_MISMATCH'), 'drop');
+  assert.strictEqual(push.classifyFcmResponse(401, 'UNAUTHENTICATED'), 'fail');
+  assert.strictEqual(push.classifyFcmResponse(503, 'UNAVAILABLE'), 'fail');
+});
+
+test('an Android send signs in to Google, posts to the project, and reports the outcome', { skip }, async () => {
+  const { generateKeyPairSync } = require('crypto');
+  const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const cfg = { projectId: 'aiqs-1', clientEmail: 'unit-' + Date.now() + '@aiqs-1.iam.gserviceaccount.com', key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
+  const calls = [];
+  const fakeFetch = (answer) => async (url, opts) => {
+    calls.push({ url, opts });
+    if (/oauth2/.test(url)) return { ok: true, status: 200, json: async () => ({ access_token: 'ya29.test' }) };
+    return answer;
+  };
+  const ok = await push.deliverFcm({ token: FCM_TOKEN }, { title: 't', body: 'b', path: '/project/1' }, cfg, fakeFetch({ status: 200, json: async () => ({}) }));
+  assert.deepStrictEqual(ok, { outcome: 'ok' });
+  assert.match(calls[0].opts.body, /grant_type=.*jwt-bearer.*assertion=/);
+  assert.strictEqual(calls[1].url, 'https://fcm.googleapis.com/v1/projects/aiqs-1/messages:send');
+  assert.strictEqual(calls[1].opts.headers.authorization, 'Bearer ya29.test');
+  assert.strictEqual(JSON.parse(calls[1].opts.body).message.token, FCM_TOKEN);
+
+  const gone = await push.deliverFcm({ token: FCM_TOKEN }, { title: 't', body: 'b' }, cfg, fakeFetch({
+    status: 404, json: async () => ({ error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } }),
+  }));
+  assert.deepStrictEqual(gone, { outcome: 'drop', reason: 'UNREGISTERED' });
+});

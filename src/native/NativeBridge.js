@@ -22,7 +22,7 @@ import { App as CapApp } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { Keyboard } from '@capacitor/keyboard';
-import { isNative, isIOS, platform } from './platform';
+import { isNative, platform } from './platform';
 import { openExternal, isExternalHref, opensAnotherApp } from './openExternal';
 import { confirmReady, checkForNewBundle } from './liveUpdate';
 import { listenForPush, enablePushForUser } from './push';
@@ -79,10 +79,22 @@ export default function NativeBridge() {
     return () => { if (handle) handle.remove(); };
   }, [navigate]);
 
+  // Android's back button / back gesture: go back a page, and at the first
+  // page send the app to the background (not kill it), as Android users expect.
+  useEffect(() => {
+    if (platform() !== 'android') return undefined;
+    let handle;
+    CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (canGoBack) window.history.back();
+      else CapApp.minimizeApp().catch(() => {});
+    }).then((h) => { handle = h; });
+    return () => { if (handle) handle.remove(); };
+  }, []);
+
   // Status bar text colour follows the theme (the bar itself is transparent
   // over our own header, see capacitor.config.json).
   useEffect(() => {
-    if (!isIOS()) return;
+    if (!isNative()) return;
     StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light }).catch(() => {});
   }, [isDark]);
 

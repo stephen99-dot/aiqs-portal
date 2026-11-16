@@ -75,3 +75,11 @@ test('the update answer', { skip }, () => {
     available: true, version: 'v2', checksum: 'abc', url: 'https://portal.example/api/app/bundle/v2.zip',
   });
 });
+
+test('iOS and Android have separate build lists', { skip }, () => {
+  const env = { APP_LIVE_UPDATE_BUILDS: '3', APP_LIVE_UPDATE_BUILDS_ANDROID: '1' };
+  assert.strictEqual(bundle.allowListFor('ios', env), '3');
+  assert.strictEqual(bundle.allowListFor('android', env), '1');
+  assert.strictEqual(bundle.allowListFor(undefined, env), '3');
+  assert.ok(!bundle.buildAllowed(bundle.allowListFor('android', { APP_LIVE_UPDATE_BUILDS: '3' }), 3), 'an iOS list never enables Android');
+});
