@@ -32,6 +32,7 @@ on:
     paths:
       - 'android/**'
       - 'capacitor.config.json'
+      - 'scripts/android-smoke.sh'
       - '.github/workflows/android.yml'
 
 jobs:
@@ -109,3 +110,49 @@ jobs:
         run: |
           echo "### AI QS Android ${ANDROID_VERSION_NAME} (version code ${ANDROID_VERSION_CODE})" >> "$GITHUB_STEP_SUMMARY"
           echo "Download the build from the **Artifacts** section at the bottom of this page." >> "$GITHUB_STEP_SUMMARY"
+
+  # No Android phone to hand? This starts a virtual one on GitHub, installs
+  # the test build, opens it and saves screenshots (launch, first screen,
+  # landscape, after the back button). A separate job, so a flaky emulator
+  # never stops the app itself from being built and downloadable.
+  smoke:
+    name: Run it on a virtual phone
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_VERSION_NAME: ${{ inputs.version_name || '1.0.1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the test app
+        uses: actions/download-artifact@v4
+        with:
+          pattern: aiqs-android-test-*
+          merge-multiple: true
+          path: apk
+
+      - name: Allow the emulator to use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Start a virtual phone, open the app, take screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: scripts/android-smoke.sh apk/app-debug.apk screenshots
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqs-android-screenshots
+          path: screenshots
+          if-no-files-found: warn
