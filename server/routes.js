@@ -350,6 +350,7 @@ router.post('/office/verify', authMiddleware, async (req, res) => {
 // ── File Upload Config ────────────────────────────────────────────────────────
 const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
 const uploadsDir = path.join(DATA_DIR, 'uploads');
+const outputsDir = path.join(DATA_DIR, 'outputs');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -680,6 +681,17 @@ router.delete('/auth/me', authMiddleware, async (req, res) => {
         try { if (row.filename && fs.existsSync(fp)) fs.unlinkSync(fp); } catch (e) { /* leave it; the DB rows still go */ }
       }
     } catch (e) { console.error('[account delete] file cleanup:', e.message); }
+
+    // The documents delivered to them (BOQs, findings reports, marked-up
+    // drawings) are theirs too — remove the files, not just the rows, so the
+    // public "what is deleted" page is true.
+    try {
+      const rows = db.prepare('SELECT d.filename FROM project_deliverables d JOIN projects p ON p.id = d.project_id WHERE p.user_id = ?').all(user.id);
+      for (const row of rows) {
+        const fp = path.join(outputsDir, path.basename(String(row.filename || '')));
+        try { if (row.filename && fs.existsSync(fp)) fs.unlinkSync(fp); } catch (e) { /* leave it; the DB rows still go */ }
+      }
+    } catch (e) { console.error('[account delete] deliverable cleanup:', e.message); }
 
     cascadeDeleteUser(user.id);
     logActivity({ event_type: 'user_deleted', title: (user.full_name || user.email) + ' deleted their account', detail: user.email, user_id: null, user_name: user.full_name, user_email: user.email });
