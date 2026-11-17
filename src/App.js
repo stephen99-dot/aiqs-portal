@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import DeleteAccountInfoPage from './pages/DeleteAccountInfoPage';
 import DashboardPage from './pages/DashboardPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
@@ -74,6 +75,9 @@ function AppInner() {
         <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+        {/* Public: how to delete an account. Required by Google Play and
+            Apple as a web address that works without signing in. */}
+        <Route path="/delete-account" element={<DeleteAccountInfoPage />} />
         {/* Magic link — handles its own auth */}
         <Route path="/magic" element={<MagicLinkPage />} />
         {/* Where the server lands the browser after Google sign-in (?token=) */}
