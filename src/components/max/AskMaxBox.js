@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { openMax, fmtMoney0 } from '../../utils/max';
 import MaxCharacter from './MaxCharacter';
-import { MicIcon, ArrowRightIcon } from '../Icons';
+import { MicIcon, ArrowRightIcon, CameraIcon } from '../Icons';
 
 // ═══ Ask MAX — the box at the top of the dashboard ══════════════════════════
 // Type a job and press go (or tap the mic) and the MAX panel opens with it
@@ -53,6 +54,7 @@ export default function AskMaxBox() {
       </div>
       <div className="askmax__chips">
         {chips.map((c) => <button key={c} type="button" className="max-chip" onClick={() => openMax({ prompt: c, send: true })}>{c}</button>)}
+        <Link to="/surveys?new=1" className="max-chip" style={{ textDecoration: 'none', borderColor: 'var(--border-accent)' }}><CameraIcon size={14} /> Scan a room</Link>
       </div>
       {limits && <div className="askmax__limit">Small jobs up to {fmtMoney0(limits.limitGbp)} ex VAT. Bigger jobs go to the AI QS team for a full take-off.</div>}
     </form>

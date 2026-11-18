@@ -154,6 +154,9 @@ app.use('/api/max', require('./maxRoutes'));
 // MAX's microphone: MediaRecorder audio → server speech-to-text → text. Audio
 // is transcribed from memory and dropped; nothing is written to disk.
 app.use('/api/transcribe', require('./transcribeRoutes'));
+// Room surveys ("Scan a room"): property visits with rooms, photos, measured
+// quantities, AI analysis, exports and pricing through MAX. See roomSurveyRoutes.js.
+app.use('/api/surveys', require('./roomSurveyRoutes'));
 // Health endpoint. Registered BEFORE the SPA catch-all, or it would be served
 // index.html and report healthy no matter what state the server was in.
 // Also reports whether the evidence layer came up, which is how you verify a

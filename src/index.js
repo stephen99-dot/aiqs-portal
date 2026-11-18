@@ -12,6 +12,7 @@ import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
 import './styles/max.css';
+import './styles/survey.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

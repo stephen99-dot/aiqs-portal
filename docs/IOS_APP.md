@@ -475,7 +475,8 @@ curl -s "https://aiqs-portal.onrender.com/api/app/bundle?platform=ios&build=2&cu
 | `ios/App/CapApp-SPM/Package.swift` | Plugin list — written by `cap sync`, never by hand |
 | `ios/App/App/public/` | The web build — gitignored, created by `cap sync` |
 | `resources/` | Source artwork for icons/splash (`scripts/build-app-icons.js` makes them) |
-| `src/native/` | `platform.js`, `saveFile.js`, `openExternal.js`, `haptics.js`, `NativeBridge.js`, `push.js` (§9), `liveUpdate.js` (§10) |
+| `src/native/` | `platform.js`, `saveFile.js`, `openExternal.js`, `haptics.js`, `NativeBridge.js`, `push.js` (§9), `liveUpdate.js` (§10), `roomScan.js` (LiDAR, below) |
+| `ios/App/App/RoomScanPlugin.swift` | The LiDAR room scanner (Apple RoomPlan) behind "Scan with LiDAR" on a room survey. **Add it to the App target in Xcode** (File → Add Files to "App"…, tick the App target) — `cap sync` does not register local Swift files. Needs iOS 16+, iPhone 12 Pro or later / iPad Pro; everywhere else the button becomes "Import a scan" and photos remain the way in. Add `NSCameraUsageDescription` text that mentions scanning the room if the existing string does not already. |
 | `server/pushNotifications.js` | Device tokens and sending to Apple (§9) |
 | `server/appBundle.js` | The web build the app updates its screens from (§10) |
 | `src/utils/purchases.js` | The native purchase gate |

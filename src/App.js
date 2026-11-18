@@ -36,6 +36,9 @@ import BrandingPage from './pages/BrandingPage';
 import OAuthSuccessPage from './pages/OAuthSuccessPage';
 import EstimatesPage from './pages/EstimatesPage';
 import EstimatePage from './pages/EstimatePage';
+import SurveysPage from './pages/SurveysPage';
+import SurveyPage from './pages/SurveyPage';
+import SurveyRoomPage from './pages/SurveyRoomPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 import OfflineBanner from './components/OfflineBanner';
@@ -102,6 +105,9 @@ function AppInner() {
           {/* MAX small-job estimates — drafted by MAX, edited and sent here. */}
           <Route path="/estimates" element={<EstimatesPage />} />
           <Route path="/estimates/:id" element={<EstimatePage />} />
+          <Route path="/surveys" element={<SurveysPage />} />
+          <Route path="/surveys/:id" element={<SurveyPage />} />
+          <Route path="/surveys/:id/rooms/:roomId" element={<SurveyRoomPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/super-brain" element={<SuperBrainPage />} />

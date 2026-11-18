@@ -7,7 +7,7 @@ import {
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, BrainIcon, MapPinIcon, BellIcon,
-  MicIcon, PoundIcon,
+  MicIcon, PoundIcon, CameraIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
@@ -108,6 +108,7 @@ export default function Layout() {
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
     { path: '/estimates', label: 'Estimates', Icon: PoundIcon, maxOnly: true },
+    { path: '/surveys', label: 'Scan a room', Icon: CameraIcon, badge: 'New' },
     // No standalone Variations entry: OiB users raise them from the job page,
     // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
@@ -159,7 +160,7 @@ export default function Layout() {
             { path: '/chat', label: 'Chat', Icon: ChatIcon },
           ]);
   const bottomNavRoutes = [
-    '/dashboard', '/submit-drawings', '/variations', '/estimates',
+    '/dashboard', '/submit-drawings', '/variations', '/estimates', '/surveys',
     '/my-rates', '/ai-memory', '/branding',
     '/admin', '/admin/users', '/admin/submissions',
   ];
