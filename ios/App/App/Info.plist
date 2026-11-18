@@ -25,7 +25,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>AI QS uses the camera so you can photograph drawings, site conditions and progress straight into a project.</string>
+	<string>AI QS uses the camera so you can photograph drawings, site conditions and progress straight into a project, and scan a room with LiDAR to measure it.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>AI QS reads photos you choose so you can attach drawings and site photos to a project.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
