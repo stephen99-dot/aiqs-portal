@@ -13,44 +13,28 @@ import simd
 // for exports from Polycam and magicplan — so this deliberately produces the
 // same thing rather than inventing a format:
 //
-//   { walls: [{dimensions:[w,h,d]}], doors: […], windows: […],
-//     openings: […], objects: [{category:"sofa", dimensions:[w,h,d]}] }
+//   { walls: [{dimensions:[w,h,d], transform:[16 numbers]}], doors: […],
+//     windows: […], openings: […], objects: [{category:"sofa", …}] }
 //
 // The dictionary is built by hand instead of running CapturedRoom through
 // JSONEncoder. Swift encodes an enum without a raw value as a nested object
 // ({"sofa": {}}), where the server wants a plain string — and Apple is free to
 // change that shape between iOS releases. Building it here keeps the contract
 // ours.
+//
+// This is the Trades Pilot scanner without its textured-USDZ export: AI QS
+// keeps the measurements and draws its own plan and 3D view from them, so the
+// photo-texturing files (RoomKeyframes, RoomTextures) are not needed here.
+//
+// Registered with the Capacitor bridge by MainViewController.capacitorDidLoad().
 @objc(RoomScanPlugin)
 public class RoomScanPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "RoomScanPlugin"
     public let jsName = "RoomScan"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "isAvailable", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "scan", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "exportModel", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "scan", returnType: CAPPluginReturnPromise)
     ]
-
-    /// The last room scanned, kept so its 3D model can be written on demand
-    /// rather than exporting a file after every scan whether it's wanted or
-    /// not. Held as Any? because a stored property can't carry an @available
-    /// type on a class that has to compile against iOS 15.
-    private var lastRoom: Any?
-    /// The photographs that went with it, for texturing the exported model.
-    private var lastKeyframes: Any?
-
-    /// Covering the model in photographs of the real room is switched off.
-    ///
-    /// It worked — the walls genuinely carried their own pictures — but the
-    /// result was not yet worth what it cost: floors smeared, exposure jumped
-    /// between shots, and collecting three dozen frames taxed the scan. The
-    /// measurements and what the room contains are the parts that earn their
-    /// keep, so the model is clean geometry for now.
-    ///
-    /// Setting this back to true re-enables the whole path: frame collection,
-    /// the textured USDZ, and (with the matching flag in RoomView3D.js) the
-    /// projected surfaces in the viewer.
-    static let photoTexturing = false
 
     /// LiDAR is Pro-only hardware, so most phones can't do this at all and the
     /// web app needs to know before it offers the button.
@@ -81,79 +65,19 @@ public class RoomScanPlugin: CAPPlugin, CAPBridgedPlugin {
                     if let error = error {
                         call.reject(error.localizedDescription, "SCAN_FAILED")
                     } else if let room = room {
-                        self.lastRoom = room
-                        self.lastKeyframes = RoomScanPlugin.photoTexturing
-                            ? (scanner?.keyframes.frames ?? [])
-                            : []
-                        var result: [String: Any] = [
+                        call.resolve([
                             "cancelled": false,
                             "room": RoomScanPlugin.payload(from: room)
-                        ]
-                        // Written into a folder of their own so a second scan
-                        // can't be textured with the first one's photographs.
-                        let folder = FileManager.default.temporaryDirectory
-                            .appendingPathComponent("roomscan-\(Int(Date().timeIntervalSince1970))")
-                        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                        result["keyframes"] = RoomScanPlugin.photoTexturing
-                            ? (scanner?.keyframes.export(into: folder) ?? [])
-                            : []
-                        call.resolve(result)
+                        ])
                     } else {
                         // Backing out is a normal outcome, not a failure — the
-                        // web app just returns the builder to the scan screen.
+                        // web app just returns the builder to the room page.
                         call.resolve(["cancelled": true])
                     }
                 }
             }
             scanner.modalPresentationStyle = .fullScreen
             host.present(scanner, animated: true)
-        }
-    }
-
-    /// Write the last scan out as a USDZ — the format iOS previews natively,
-    /// so a client can be sent the 3D model and just tap it open.
-    @objc func exportModel(_ call: CAPPluginCall) {
-        guard #available(iOS 16.0, *), let room = lastRoom as? CapturedRoom else {
-            call.reject("Scan a room first.", "NO_SCAN")
-            return
-        }
-        let name = (call.getString("name") ?? "room").replacingOccurrences(of: "/", with: "-")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).usdz")
-        try? FileManager.default.removeItem(at: url)
-
-        // Textures have to live somewhere on disk while the model is written.
-        let workshop = FileManager.default.temporaryDirectory
-            .appendingPathComponent("usdz-\(Int(Date().timeIntervalSince1970))")
-        try? FileManager.default.createDirectory(at: workshop, withIntermediateDirectories: true)
-
-        let frames = RoomScanPlugin.photoTexturing
-            ? ((lastKeyframes as? [RoomKeyframeCollector.Keyframe]) ?? [])
-            : []
-        if !frames.isEmpty {
-            // Each surface gets the photograph that saw it, warped flat, so
-            // whoever opens the file sees the actual room rather than boxes.
-            do {
-                try RoomTextures.exportTextured(
-                    room: room, keyframes: frames, to: url, workingDirectory: workshop
-                )
-                call.resolve(["path": url.path, "uri": url.absoluteString, "textured": true])
-                return
-            } catch {
-                // Fall through to RoomPlan's own export rather than sending
-                // the builder away with nothing.
-                print("[RoomScan] textured export failed, falling back: \(error)")
-                try? FileManager.default.removeItem(at: url)
-            }
-        }
-
-        do {
-            // No photographs, or texturing failed. `.model` at least carries
-            // the mesh the LiDAR measured, so bay windows and chimney breasts
-            // survive even without their surfaces.
-            try room.export(to: url, exportOptions: .model)
-            call.resolve(["path": url.path, "uri": url.absoluteString, "textured": false])
-        } catch {
-            call.reject("Could not save the 3D model: \(error.localizedDescription)", "EXPORT_FAILED")
         }
     }
 
@@ -211,9 +135,6 @@ final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate {
 
     private var captureView: RoomCaptureView!
     private var finished = false
-    // Photographs of the room, each tagged with where the camera was, so the
-    // walls can be covered in pictures of themselves afterwards.
-    let keyframes = RoomKeyframeCollector()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -231,15 +152,6 @@ final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         captureView.captureSession.run(configuration: RoomCaptureSession.Configuration())
-        // Sampling frames costs battery and memory throughout the scan, so it
-        // only runs when something is going to use them.
-        if RoomScanPlugin.photoTexturing {
-            keyframes.start(session: captureView.captureSession.arSession)
-        }
-    }
-
-    deinit {
-        keyframes.stop()
     }
 
     private func addButton(title: String, action: Selector, alignRight: Bool) {
@@ -271,14 +183,12 @@ final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate {
     @objc private func doneTapped() {
         // Stopping the session is what triggers RoomPlan to process the scan;
         // the finished room arrives in captureView(didPresent:error:) below.
-        keyframes.stop()
         captureView.captureSession.stop()
     }
 
     @objc private func cancelTapped() {
         guard !finished else { return }
         finished = true
-        keyframes.stop()
         captureView.captureSession.stop()
         onFinish?(nil, nil)
     }
