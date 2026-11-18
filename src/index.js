@@ -11,6 +11,7 @@ import '@fontsource/dm-serif-display/400-italic.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
+import './styles/max.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

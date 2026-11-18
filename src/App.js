@@ -34,6 +34,8 @@ import InvoicePublicPage from './pages/InvoicePublicPage';
 import Builder3DPage from './pages/Builder3DPage';
 import BrandingPage from './pages/BrandingPage';
 import OAuthSuccessPage from './pages/OAuthSuccessPage';
+import EstimatesPage from './pages/EstimatesPage';
+import EstimatePage from './pages/EstimatePage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 import OfflineBanner from './components/OfflineBanner';
@@ -97,6 +99,9 @@ function AppInner() {
           <Route path="/submit-drawings" element={<SubmitDrawingsPage />} />
           <Route path="/project/:id" element={<ProjectDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
+          {/* MAX small-job estimates — drafted by MAX, edited and sent here. */}
+          <Route path="/estimates" element={<EstimatesPage />} />
+          <Route path="/estimates/:id" element={<EstimatePage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
           <Route path="/super-brain" element={<SuperBrainPage />} />

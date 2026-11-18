@@ -147,6 +147,13 @@ app.use('/api/builder3d', require('./builder3dRoutes'));
 // applications and draft a headed intro letter. Locked to a single account
 // (the router gates itself with authMiddleware + an email allowlist).
 app.use('/api/planning-leads', require('./planningLeadsRoutes'));
+// MAX — the AI estimator and assistant (see maxEngine.js). Chat and approvals
+// stream over SSE; tools call this server back over loopback with the
+// builder's own token. Who MAX is on for is decided in maxRollout.js.
+app.use('/api/max', require('./maxRoutes'));
+// MAX's microphone: MediaRecorder audio → server speech-to-text → text. Audio
+// is transcribed from memory and dropped; nothing is written to disk.
+app.use('/api/transcribe', require('./transcribeRoutes'));
 // Health endpoint. Registered BEFORE the SPA catch-all, or it would be served
 // index.html and report healthy no matter what state the server was in.
 // Also reports whether the evidence layer came up, which is how you verify a

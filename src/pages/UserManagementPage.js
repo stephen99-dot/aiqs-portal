@@ -754,6 +754,14 @@ function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
       : 'Office in a Box beta turned off for this account');
   });
 
+  // MAX early access: on for this client even while the rollout is admins-only.
+  const toggleMax = () => doAction('max', async () => {
+    const enabled = !user.max_access;
+    await apiFetch('/max/users/' + user.id + '/access', { method: 'PUT', body: JSON.stringify({ enabled }) });
+    onUpdate({ ...user, max_access: enabled ? 1 : 0 });
+    showSuccess(enabled ? 'MAX switched on for this client' : 'MAX early access turned off for this client');
+  });
+
   const genMagicLink = () => doAction('magic', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
     setMagicLink(res.magicLink || res.link || res.magicUrl || '');
@@ -1057,6 +1065,24 @@ function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
                 ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
                 : { ...btn('#F59E0B'), color: '#0F172A' }}>
               <Zap size={12} /> {user.has_estimator ? 'Turn off beta access' : 'Enable beta access'}
+            </button>
+          </div>
+
+          {/* MAX early access */}
+          <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
+            <div style={lbl}><MessageSquare size={11} style={{ verticalAlign: 'middle', marginRight: 4, color: '#F59E0B' }} />MAX (AI estimator)</div>
+            <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
+              {user.role === 'admin'
+                ? 'Admins always have MAX.'
+                : user.max_access
+                  ? 'Early access is on — this client can use MAX now, whatever the rollout setting.'
+                  : 'No early access — they get MAX when the rollout is switched to everyone (Admin → MAX).'}
+            </div>
+            <button onClick={toggleMax} disabled={!!loading || user.role === 'admin'}
+              style={user.max_access
+                ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
+                : { ...btn('#F59E0B'), color: '#0F172A' }}>
+              <MessageSquare size={12} /> {user.max_access ? 'Turn off early access' : 'Give early access to MAX'}
             </button>
           </div>
 

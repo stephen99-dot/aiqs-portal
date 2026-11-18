@@ -2,8 +2,10 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Use persistent disk if available, otherwise fall back to local
-const DATA_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data');
+// Use persistent disk if available, otherwise fall back to local. AIQS_DATA_DIR
+// overrides both — the test suite points it at a temporary folder so a run
+// never touches a real database.
+const DATA_DIR = process.env.AIQS_DATA_DIR || (fs.existsSync('/data') ? '/data' : path.join(__dirname, '..', 'data'));
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const DB_PATH = path.join(DATA_DIR, 'aiqs.db');
@@ -343,6 +345,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_quotes_user ON quotes(user_id);
   CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(user_id, status);
   CREATE INDEX IF NOT EXISTS idx_quote_lines_quote ON quote_lines(quote_id);
+
+  -- Portal-wide settings an admin changes live, without a redeploy: who MAX is
+  -- switched on for, the small-job pricing thresholds, the daily MAX allowance.
+  -- One row per key; the code reading a key supplies its own default.
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_by TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 
   -- Wave 2: Finance Hub. A light "job" the estimator owns end-to-end. Kept
   -- separate from the BOQ-pipeline projects table so the two systems don't
@@ -1041,6 +1053,16 @@ const migrations = [
   // Set when onboarding is reset (admin or self) — sends the user back through
   // onboarding on their next dashboard visit. See onboardingReset.js.
   { column: 'onboarding_reset_at', table: 'users', sql: "ALTER TABLE users ADD COLUMN onboarding_reset_at DATETIME" },
+  // MAX — per-account feature switches as JSON ({"max": true} gives a client
+  // early access while the rollout is admins-only). See maxRollout.js.
+  { column: 'feature_overrides', table: 'users', sql: "ALTER TABLE users ADD COLUMN feature_overrides TEXT" },
+  // MAX small-job estimates are quotes. `source` says who wrote it ('max' or
+  // null for a hand-built quote); `location` is the site address the rates
+  // were adjusted for; `max_meta` is the JSON MAX attaches — assumptions,
+  // exclusions, open questions, rate provenance and the threshold verdict.
+  { column: 'source', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN source TEXT" },
+  { column: 'location', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN location TEXT" },
+  { column: 'max_meta', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN max_meta TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

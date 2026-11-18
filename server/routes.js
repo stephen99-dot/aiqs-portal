@@ -644,7 +644,14 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const planInfo = getUserPlanInfo(user);
-  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator, hasPassword: !!user.password_hash, ...userCountryFields(user) });
+  // MAX: whether this account can use it, and the small-job thresholds the
+  // panel and the estimate page quote back to the builder.
+  let maxEnabled = false; let maxLimits = null;
+  try {
+    maxEnabled = require('./maxRollout').isEnabledFor(user);
+    if (maxEnabled) { const l = require('./maxSettings').limits(); maxLimits = { noticeGbp: l.notice_gbp, limitGbp: l.limit_gbp }; }
+  } catch (e) { maxEnabled = false; }
+  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator || maxEnabled, hasPassword: !!user.password_hash, maxEnabled, maxLimits, ...userCountryFields(user) });
 });
 
 // Delete my own account. App Store Review Guideline 5.1.1(v) requires any
@@ -1246,6 +1253,8 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       boq_remaining: boqBal.total === Infinity ? null : boqBal.total,
       boq_unlimited: !!boqBal.unlimited,
       has_estimator: u.has_estimator ? 1 : 0,
+      // MAX early access while the rollout is admins-only (maxRollout.js).
+      max_access: (() => { try { const o = JSON.parse(u.feature_overrides || '{}'); return o && o.max === true ? 1 : 0; } catch (e) { return 0; } })(),
       country: u.country || null, region: u.region || null, country_name: u.country_name || null,
       onboarding_completed_at: u.onboarding_completed_at || null,
       onboarding_reset_at: u.onboarding_reset_at || null,

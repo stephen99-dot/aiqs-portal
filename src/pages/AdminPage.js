@@ -1131,10 +1131,109 @@ function SurveyTab({ t }) {
   );
 }
 
+// ── MAX tab — who it is on for, the small-job limits, the daily allowance ──
+// Everything here changes live (app_settings) — no redeploy. The server is
+// the authority: a client MAX is off for gets a 403 whatever the UI shows.
+function MaxTab({ t }) {
+  const [data, setData] = useState(null);
+  const [form, setForm] = useState({ notice_gbp: '', limit_gbp: '', daily_turns: '' });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [activity, setActivity] = useState([]);
+
+  function flash(text, type) { setMsg({ text, type: type || 'success' }); setTimeout(() => setMsg(null), 4000); }
+  const load = useCallback(() => {
+    apiFetch('/max/settings').then((d) => { setData(d); setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns }); }).catch((e) => flash(e.message || 'Could not load MAX settings', 'error'));
+    apiFetch('/admin/activity?type=max_over_limit&limit=8').then((r) => setActivity(r.activities || [])).catch(() => {});
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(changes) {
+    setSaving(true);
+    try {
+      const d = await apiFetch('/max/settings', { method: 'PUT', body: JSON.stringify(changes) });
+      setData(d);
+      setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns });
+      flash(d.changes && d.changes.length ? 'Saved: ' + d.changes.join('; ') : 'Nothing changed');
+    } catch (e) { flash(e.message || 'Could not save', 'error'); }
+    finally { setSaving(false); }
+  }
+  async function setRollout(mode) {
+    if (mode === 'all' && !window.confirm('Switch MAX on for every client right now? Each client\'s estimates then price from their own rates; jobs over the limit are refused and sent to the team. You can switch back to admins-only at any time.')) return;
+    await save({ rollout: mode });
+  }
+
+  const card = { background: t.card, border: '1px solid ' + t.border, borderRadius: 14, padding: 20, boxShadow: t.shadowSm };
+  const h3 = { fontSize: 15, fontWeight: 600, color: t.text, margin: '0 0 6px' };
+  const sub = { fontSize: 13, color: t.textMuted, margin: '0 0 14px', lineHeight: 1.5 };
+  const input = { width: 140, padding: '8px 10px', borderRadius: 8, fontSize: 13, background: t.inputBg || t.surface, border: '1px solid ' + t.border, color: t.text, fontFamily: 'var(--font-mono)' };
+  const label = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: t.textSecondary, fontWeight: 600 };
+  const btn = (primary) => ({ padding: '9px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: '1px solid ' + (primary ? 'transparent' : t.border), background: primary ? t.accent : t.surfaceHover, color: primary ? t.accentText : t.text, opacity: saving ? 0.6 : 1 });
+  const money = (n) => '£' + Math.round(Number(n) || 0).toLocaleString('en-GB');
+
+  if (!data) return <div style={{ color: t.textMuted, fontSize: 13 }}>Loading MAX settings…</div>;
+  const u = data.usage || {};
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {msg && <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, background: msg.type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(22,163,74,0.08)', color: msg.type === 'error' ? '#EF4444' : '#16A34A', border: '1px solid ' + (msg.type === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(22,163,74,0.2)') }}>{msg.text}</div>}
+
+      <div style={card}>
+        <h3 style={h3}>Who MAX is on for</h3>
+        <p style={sub}>Currently <strong style={{ color: t.text }}>{data.rollout === 'all' ? 'everyone' : 'admins only'}</strong> ({data.rollout_source === 'setting' ? 'set here' : 'from the MAX_ROLLOUT environment default: ' + data.env_default}). While it is admins-only, give individual clients early access from Users → the client → MAX. {u.early_access ? u.early_access + ' client' + (u.early_access === 1 ? ' has' : 's have') + ' early access.' : 'No client has early access yet.'}</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button style={btn(data.rollout !== 'all')} disabled={saving || data.rollout === 'admin'} onClick={() => setRollout('admin')}>Admins only</button>
+          <button style={btn(data.rollout === 'all')} disabled={saving || data.rollout === 'all'} onClick={() => setRollout('all')}>MAX for everyone</button>
+        </div>
+      </div>
+
+      <div style={card}>
+        <h3 style={h3}>Small-job limits</h3>
+        <p style={sub}>Compared against the estimate's price ex VAT (net + contingency + OH&amp;P). From the notice level MAX adds "worth a full take-off". At or above the limit MAX makes no estimate and sends the job to Submit Drawings for the team to price.</p>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={label}>Notice from (£ ex VAT)<input style={input} inputMode="numeric" value={form.notice_gbp} onChange={(e) => setForm((f) => ({ ...f, notice_gbp: e.target.value }))} /></label>
+          <label style={label}>Limit — MAX stops at (£ ex VAT)<input style={input} inputMode="numeric" value={form.limit_gbp} onChange={(e) => setForm((f) => ({ ...f, limit_gbp: e.target.value }))} /></label>
+          <label style={label}>MAX turns per client per day<input style={input} inputMode="numeric" value={form.daily_turns} onChange={(e) => setForm((f) => ({ ...f, daily_turns: e.target.value }))} /></label>
+          <button style={btn(true)} disabled={saving} onClick={() => save({ notice_gbp: form.notice_gbp, limit_gbp: form.limit_gbp, daily_turns: form.daily_turns })}>{saving ? 'Saving…' : 'Save limits'}</button>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, color: t.textMuted }}>Live now: notice from {money(data.notice_gbp)}, limit {money(data.limit_gbp)}, {data.daily_turns} turns a day per client.</div>
+      </div>
+
+      <div style={card}>
+        <h3 style={h3}>Usage (last 30 days)</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+          {[['MAX turns (24h)', u.turns_24h], ['MAX turns (30d)', u.turns_30d], ['Estimates drafted', u.estimates_30d], ['Over the limit', u.over_limit_30d], ['AI cost (USD)', '$' + (u.cost_30d_usd || 0).toFixed(2)]].map(([k, v]) => (
+            <div key={k} style={{ padding: '12px 14px', borderRadius: 10, background: t.surfaceHover, border: '1px solid ' + t.border }}>
+              <div style={{ fontSize: 11, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: t.text, fontFamily: 'var(--font-mono)', marginTop: 4 }}>{v == null ? '—' : v}</div>
+            </div>
+          ))}
+        </div>
+        <p style={{ ...sub, margin: '12px 0 0' }}>Every MAX action, approval and refusal is in the Activity Log (event types starting <code>max_</code>). Model usage is in Costs under the actions <code>max</code> and <code>max_takeoff</code>.</p>
+      </div>
+
+      {activity.length > 0 && (
+        <div style={card}>
+          <h3 style={h3}>Jobs MAX refused as over the limit</h3>
+          <p style={sub}>These builders were sent to Submit Drawings. Worth a follow-up if the drawings never arrived.</p>
+          {activity.map((a) => {
+            let d = {}; try { d = a.detail ? JSON.parse(a.detail) : {}; } catch (e) { d = { text: a.detail }; }
+            return (
+              <div key={a.id} style={{ padding: '10px 0', borderBottom: '1px solid ' + t.border, fontSize: 13 }}>
+                <div style={{ color: t.text, fontWeight: 600 }}>{a.user_name || a.user_email} · {d.rough_price_ex_vat != null ? money(d.rough_price_ex_vat) + ' ex VAT (rough)' : ''}</div>
+                <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{(d.description || '').slice(0, 160)}{d.description && d.description.length > 160 ? '…' : ''} · {new Date(String(a.created_at).replace(' ', 'T') + 'Z').toLocaleString('en-GB')}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { t } = useTheme();
   const [tab, setTab] = useState('overview');
-  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'onboarding', label: 'Onboarding' }, { key: 'feedback', label: 'Feedback' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
+  const tabs = [{ key: 'overview', label: 'Overview' }, { key: 'max', label: 'MAX' }, { key: 'clients', label: 'Clients' }, { key: 'submissions', label: 'Submissions' }, { key: 'onboarding', label: 'Onboarding' }, { key: 'feedback', label: 'Feedback' }, { key: 'costs', label: 'Costs' }, { key: 'rates', label: 'Rate Libraries' }, { key: 'playbooks', label: 'Playbooks' }, { key: 'logs', label: 'Activity Log' }, { key: 'settings', label: 'Settings' }];
 
   return (
     <div style={{ padding: '28px', maxWidth: 1100, margin: '0 auto' }}>
@@ -1146,6 +1245,7 @@ export default function AdminPage() {
         {tabs.map(tb => <button key={tb.key} onClick={() => setTab(tb.key)} style={{ flex: 1, padding: '10px 14px', borderRadius: 9, background: tab === tb.key ? t.card : 'transparent', color: tab === tb.key ? t.text : t.textMuted, border: tab === tb.key ? '1px solid ' + t.border : '1px solid transparent', cursor: 'pointer', fontSize: 13, fontWeight: tab === tb.key ? 600 : 400, boxShadow: tab === tb.key ? t.shadowSm : 'none', whiteSpace: 'nowrap' }}>{tb.label}</button>)}
       </div>
       {tab === 'overview' && <OverviewTab t={t} />}
+      {tab === 'max' && <MaxTab t={t} />}
       {tab === 'clients' && <ClientsTab t={t} />}
       {tab === 'submissions' && <SubmissionsTab t={t} />}
       {tab === 'onboarding' && <OnboardingTab t={t} />}

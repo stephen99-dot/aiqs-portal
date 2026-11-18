@@ -7,9 +7,12 @@ import {
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, BrainIcon, MapPinIcon, BellIcon,
+  MicIcon, PoundIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
+import MaxPanel from './max/MaxPanel';
+import { openMax } from '../utils/max';
 import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 import DeleteAccountModal from './DeleteAccountModal';
@@ -73,6 +76,7 @@ export default function Layout() {
   // false = nothing to show, the feedback survey may run.
 
   const isAdmin = user?.role === 'admin';
+  const maxEnabled = !!user?.maxEnabled;
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
@@ -96,10 +100,14 @@ export default function Layout() {
   const isSettingsRouteActive = settingsRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
   const navItems = [
+    // MAX leads for accounts it is switched on for: ask, and it prices the
+    // job from their rates. Big jobs still go through Submit Drawings.
+    { action: 'max', label: 'Ask MAX', Icon: MicIcon, maxOnly: true, tour: 'max-nav' },
     // Submit Drawings leads: the QS-team route is the primary path while the
     // chatbot is in its testing phase.
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
+    { path: '/estimates', label: 'Estimates', Icon: PoundIcon, maxOnly: true },
     // No standalone Variations entry: OiB users raise them from the job page,
     // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
@@ -114,6 +122,7 @@ export default function Layout() {
   const visibleNavItems = navItems.filter(item => {
     if (item.adminOnly && !isAdmin) return false;
     if (item.clientOnly && isAdmin) return false;
+    if (item.maxOnly && !maxEnabled) return false;
     return true;
   });
 
@@ -137,20 +146,27 @@ export default function Layout() {
         { path: '/admin/users', label: 'Users', Icon: ClientsIcon },
         { path: '/chat', label: 'Chat', Icon: ChatIcon },
       ]
-    : [
-        { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
-        { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
-        { path: '/chat', label: 'Chat', Icon: ChatIcon },
-      ];
+    : (maxEnabled
+        ? [
+            { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+            { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
+            { action: 'max', label: 'MAX', Icon: MicIcon },
+            { path: '/estimates', label: 'Estimates', Icon: PoundIcon },
+          ]
+        : [
+            { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+            { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
+            { path: '/chat', label: 'Chat', Icon: ChatIcon },
+          ]);
   const bottomNavRoutes = [
-    '/dashboard', '/submit-drawings', '/variations',
+    '/dashboard', '/submit-drawings', '/variations', '/estimates',
     '/my-rates', '/ai-memory', '/branding',
     '/admin', '/admin/users', '/admin/submissions',
   ];
   const showBottomNav = bottomNavRoutes.includes(location.pathname);
 
   return (
-    <div className="app-shell" style={{ background: t.bg }}>
+    <div className={`app-shell${showBottomNav ? ' app-shell--tabs' : ''}`} style={{ background: t.bg }}>
 
       {/* ── Mobile header ── */}
       <header className="mobile-header-bar" style={{
@@ -233,6 +249,22 @@ export default function Layout() {
           {/* Nav items */}
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {visibleNavItems.map(item => {
+              if (item.action === 'max') {
+                return (
+                  <button
+                    key="max"
+                    type="button"
+                    className="ui-nav-item"
+                    data-tour={item.tour}
+                    onClick={() => { setMobileOpen(false); openMax({ open: true, keyboard: true }); }}
+                    title="Ask MAX — ⌘J"
+                  >
+                    <item.Icon size={16} color="var(--accent-bright)" />
+                    <span className="ui-nav-item__label">{item.label}</span>
+                    <Badge tone="accent" size="sm" outlined>New</Badge>
+                  </button>
+                );
+              }
               if (item.group) {
                 return (
                   <NavGroup
@@ -372,6 +404,14 @@ export default function Layout() {
       {showBottomNav && (
         <nav className="bottom-nav" aria-label="Primary">
           {bottomNavItems.map(item => {
+            if (item.action === 'max') {
+              return (
+                <button key="max" type="button" className="bottom-nav-item" onClick={() => { selectionChanged(); openMax({ open: true, keyboard: true }); }} aria-label="Ask MAX">
+                  <item.Icon size={20} color="var(--accent)" />
+                  {item.label}
+                </button>
+              );
+            }
             const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
             return (
               <NavLink key={item.path} to={item.path} onClick={selectionChanged} className={`bottom-nav-item${active ? ' active' : ''}`}>
@@ -395,6 +435,9 @@ export default function Layout() {
       {!isAdmin && user && !user.country && location.pathname !== '/onboarding' && <CountryPromptModal />}
       {countryOpen && <CountrySettingsModal onClose={() => setCountryOpen(false)} />}
       {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} />}
+
+      {/* MAX — renders nothing for accounts it is not switched on for. */}
+      <MaxPanel />
     </div>
   );
 }
