@@ -465,3 +465,19 @@ test('the transcript the panel sends back is cleaned, trimmed and closed', () =>
   assert.ok(/£100,000 ex VAT or more/.test(prompt), 'the limit is in the prompt');
   assert.ok(/Alice Anderson of Anderson Builders/.test(prompt));
 });
+
+// What MAX says aloud is the written reply's own words unless the model
+// rewrite is switched on, so the voice and the screen cannot disagree.
+test('the spoken reply is taken from the written reply, not rewritten', async () => {
+  const speech = require('./maxSpeech');
+  const written = 'Who should I send it to? I need the customer\'s email address. Once I have it I will show you the approval card.';
+  const before = process.env.MAX_SPOKEN_REWRITE;
+  delete process.env.MAX_SPOKEN_REWRITE;
+  try {
+    const spoken = await speech.spokenVersion(written, { userId: 'u1' });
+    assert.strictEqual(spoken, speech.shorten(written));
+    assert.ok(spoken.startsWith('Who should I send it to? I need the customer\'s email address.'));
+  } finally {
+    if (before === undefined) delete process.env.MAX_SPOKEN_REWRITE; else process.env.MAX_SPOKEN_REWRITE = before;
+  }
+});

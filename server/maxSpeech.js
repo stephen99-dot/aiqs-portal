@@ -3,9 +3,13 @@
 //
 // The spoken version of a written reply. MAX reads aloud only a short form:
 // numbers as words, no lists, "the details are on screen" when the written
-// reply has more. A fast model pass does the rewrite when a key is set and
-// answers quickly; otherwise a deterministic shortener does the job so voice
-// never waits on the model.
+// reply has more.
+//
+// What MAX says is the written reply's OWN opening sentences. It used to be
+// rewritten by a second model pass, which meant the voice could say something
+// the screen did not — different wording, and on a tool that sends estimates
+// to customers, potentially a different name or figure. The rewrite is now
+// opt-in (MAX_SPOKEN_REWRITE=1); by default the two always agree.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
@@ -65,6 +69,7 @@ const SPOKEN_SYSTEM = 'Rewrite the assistant reply below as what MAX, a UK build
 // spokenVersion(text, { userId, timeoutMs }) → string. Never throws.
 async function spokenVersion(text, { userId, timeoutMs = 3500 } = {}) {
   const fallback = shorten(text);
+  if (process.env.MAX_SPOKEN_REWRITE !== '1') return fallback;
   if (!process.env.ANTHROPIC_API_KEY || !String(text || '').trim()) return fallback;
   try {
     const { callModel, MODELS } = require('./anthropicClient');

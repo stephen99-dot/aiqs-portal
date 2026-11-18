@@ -65,6 +65,11 @@ export function AuthProvider({ children }) {
     // (not awaited) before the token is cleared — the request picks the token
     // up synchronously as it starts.
     disablePushForUser();
+    // Nothing of this account's MAX conversation stays in the tab for the
+    // next person to sign in on it.
+    try {
+      for (const k of Object.keys(sessionStorage)) if (k.startsWith('aiqs_max_')) sessionStorage.removeItem(k);
+    } catch (e) { /* storage blocked */ }
     clearToken();
     setUser(null);
   }

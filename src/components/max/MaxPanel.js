@@ -28,25 +28,35 @@ import {
 // Keyboard: ⌘J / Ctrl+J toggles, Esc closes. Full screen on a phone, a side
 // panel on a desktop — same component, same thread.
 
-const THREAD_KEY = 'aiqs_max_thread';
-const THREAD_VERSION = 1;
+// The thread is kept per ACCOUNT. It used to sit under one shared key, so
+// signing out and into another account in the same tab showed the previous
+// account's conversation — and sent it to the server as this account's
+// history, customer names and all.
+const LEGACY_THREAD_KEY = 'aiqs_max_thread';
+const threadKey = (userId) => 'aiqs_max_thread_' + (userId || 'none');
+const THREAD_VERSION = 2;
 const OPEN_KEY = 'aiqs_max_open';
 
 function newThreadId() { return 'mx_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
-function loadThread() {
+function loadThread(userId) {
   try {
-    const raw = sessionStorage.getItem(THREAD_KEY);
+    sessionStorage.removeItem(LEGACY_THREAD_KEY);
+    if (!userId) return null;
+    const raw = sessionStorage.getItem(threadKey(userId));
     if (!raw) return null;
     const t = JSON.parse(raw);
-    if (!t || t.v !== THREAD_VERSION || !Array.isArray(t.items) || !Array.isArray(t.transcript)) return null;
+    // `owner` is checked as well as the key: a thread is only ever restored
+    // for the account that wrote it.
+    if (!t || t.v !== THREAD_VERSION || t.owner !== userId || !Array.isArray(t.items) || !Array.isArray(t.transcript)) return null;
     return t;
   } catch (e) { return null; }
 }
-function saveThread(items, transcript, threadId) {
+function saveThread(userId, items, transcript, threadId) {
+  if (!userId) return;
   try {
     const slim = items.slice(-80).map((it) => (it.kind === 'assistant' ? { ...it, streaming: false } : it)).filter((it) => !(it.kind === 'assistant' && !it.text));
-    sessionStorage.setItem(THREAD_KEY, JSON.stringify({ v: THREAD_VERSION, items: slim, transcript, threadId }));
+    sessionStorage.setItem(threadKey(userId), JSON.stringify({ v: THREAD_VERSION, owner: userId, items: slim, transcript, threadId }));
   } catch (e) { /* storage blocked: the thread lives for this page only */ }
 }
 
@@ -214,14 +224,16 @@ export default function MaxPanel() {
   const location = useLocation();
   const toast = useToast();
   const [open, setOpen] = useState(() => { try { return sessionStorage.getItem(OPEN_KEY) === '1'; } catch (e) { return false; } });
-  const [items, setItems] = useState(() => (loadThread() || { items: [] }).items);
+  const userId = user ? user.id : null;
+  const userIdRef = useRef(userId);
+  const [items, setItems] = useState(() => (loadThread(userId) || { items: [] }).items);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [status, setStatusInfo] = useState(null);   // /max/status
   const [voiceTurn, setVoiceTurn] = useState(false);
-  const transcriptRef = useRef((loadThread() || { transcript: [] }).transcript);
-  const threadIdRef = useRef((loadThread() || {}).threadId || newThreadId());
+  const transcriptRef = useRef((loadThread(userId) || { transcript: [] }).transcript);
+  const threadIdRef = useRef((loadThread(userId) || {}).threadId || newThreadId());
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const sendRef = useRef(null);
@@ -237,7 +249,7 @@ export default function MaxPanel() {
   const update = useCallback((fn) => {
     setItems((prev) => {
       const next = fn(prev);
-      saveThread(next, transcriptRef.current, threadIdRef.current);
+      saveThread(userIdRef.current, next, transcriptRef.current, threadIdRef.current);
       return next;
     });
   }, []);
@@ -398,8 +410,21 @@ export default function MaxPanel() {
     transcriptRef.current = [];
     threadIdRef.current = newThreadId();
     update(() => []);
-    try { sessionStorage.removeItem(THREAD_KEY); } catch (e) { /* fine */ }
+    try { sessionStorage.removeItem(threadKey(userIdRef.current)); } catch (e) { /* fine */ }
   };
+
+  // A different account signed in without the page reloading: drop what is
+  // on screen and in the outgoing transcript, and pick up that account's own
+  // thread (normally none).
+  useEffect(() => {
+    if (userIdRef.current === userId) return;
+    userIdRef.current = userId;
+    const t = loadThread(userId);
+    transcriptRef.current = t ? t.transcript : [];
+    threadIdRef.current = (t && t.threadId) || newThreadId();
+    setItems(t ? t.items : []);
+    setOpen(false);
+  }, [userId]);
 
   // ── Opening, closing, keyboard, outside requests ─────────────────────────
   useEffect(() => {
