@@ -6,6 +6,7 @@ import { withUserRef } from '../utils/stripeLinks';
 import { canShowPurchases } from '../utils/purchases';
 import NativePurchaseNotice from '../components/NativePurchaseNotice';
 import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
+import AskMaxBox from '../components/max/AskMaxBox';
 import {
   Button, IconButton, Card, Banner, Badge, StatusBadge,
   Input, PageHeader, Stat, EmptyState, SkeletonRows, ProgressBar, useToast,
@@ -634,6 +635,9 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {/* Ask MAX — text or voice; renders nothing until MAX is on for the account. */}
+      <AskMaxBox />
 
       <NeedsAttention projects={projectList} userId={user && user.id} />
       <UsageBar usage={usage} user={user} />

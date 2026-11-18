@@ -32,7 +32,7 @@ function authMiddleware(req, res, next) {
   try {
     var decoded = jwt.verify(token, JWT_SECRET);
     var freshUser = db.prepare(
-      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company, has_estimator, country, region, country_name FROM users WHERE id = ?'
+      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company, has_estimator, country, region, country_name, feature_overrides FROM users WHERE id = ?'
     ).get(decoded.id);
     if (!freshUser) return res.status(401).json({ error: 'User not found' });
     req.user = freshUser;
@@ -48,9 +48,15 @@ function adminMiddleware(req, res, next) {
 }
 
 // Estimator add-on gate. Admins always pass through so they can test the flow.
+// MAX includes the estimator: the small-job estimates MAX drafts are quotes,
+// so a client MAX is switched on for (maxRollout.js) can read, edit, export
+// and send them through these same routes.
 function requireEstimator(req, res, next) {
   if (req.user.role === 'admin') return next();
   if (!req.user.has_estimator) {
+    try {
+      if (require('./maxRollout').isEnabledFor(req.user)) return next();
+    } catch (e) { /* rollout module unavailable: fall through to the old rule */ }
     return res.status(403).json({
       error: 'Estimator add-on not enabled on this account. Contact support to enable it.',
       code: 'ESTIMATOR_DISABLED',

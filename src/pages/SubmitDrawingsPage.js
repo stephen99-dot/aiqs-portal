@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, apiUpload } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
@@ -33,6 +34,25 @@ const PROJECT_TYPES = [
 ];
 
 const MIN_SUBMIT_CHARS = 20;
+
+// MAX names the type of work in its own words ("Landscaping", "Loft
+// conversion"); the form has a fixed list. Match what we can, else "Other".
+function mapProjectType(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (!s) return '';
+  const exact = PROJECT_TYPES.find(t => t.toLowerCase() === s);
+  if (exact) return exact;
+  if (/extension/.test(s)) return 'Residential Extension';
+  if (/loft/.test(s)) return 'Loft Conversion';
+  if (/refurb/.test(s)) return 'Full Refurbishment';
+  if (/new build/.test(s)) return 'New Build';
+  if (/commercial|fit-?out/.test(s)) return 'Commercial Fit-Out';
+  if (/demolition|enabling/.test(s)) return 'Demolition / Enabling Works';
+  if (/heritage|listed/.test(s)) return 'Heritage / Listed Building';
+  if (/steel/.test(s)) return 'Structural Steelwork';
+  if (/metal|fabrication/.test(s)) return 'Metalwork / Fabrication';
+  return 'Other';
+}
 
 // Mirrors MAX_FILE_MB / MAX_FILES in server/submissionRoutes.js. Checking here
 // means an oversized file is refused instantly instead of after the user has
@@ -141,6 +161,21 @@ export default function SubmitDrawingsPage() {
   useEffect(() => {
     apiFetch('/credits').then(setCredits).catch(() => {});
   }, []);
+
+  // Handed over by MAX (a job over the small-job limit, or "send this to the
+  // team"): the brief, type of work and site arrive in the query string so the
+  // builder only has to attach the drawings and press Submit.
+  const [searchParams] = useSearchParams();
+  const fromMax = searchParams.get('from') === 'max';
+  useEffect(() => {
+    if (!fromMax) return;
+    const brief = searchParams.get('brief');
+    const type = searchParams.get('type');
+    const address = searchParams.get('address');
+    if (brief) setMessage(brief);
+    if (type) setProjectType(mapProjectType(type));
+    if (address) setSiteAddress(address);
+  }, [fromMax, searchParams]);
 
   const oversizedFiles = files.filter(f => f.size > MAX_FILE_BYTES);
   const canSubmit = !!projectType && siteAddress.trim().length > 0 && message.trim().length >= MIN_SUBMIT_CHARS && files.length > 0 && termsAccepted && !submitting && oversizedFiles.length === 0 && files.length <= MAX_FILES;

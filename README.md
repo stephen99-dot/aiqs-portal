@@ -14,6 +14,52 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
   (no in-app Stripe links, no Google button in the app, in-app account deletion) and the device
   matrix with the iPhone Duo.
 
+## MAX — the AI estimator and assistant
+
+MAX is the chat-and-voice assistant on every signed-in screen (the **Ask MAX** box on the
+dashboard, the **Ask MAX** entry in the menu, the floating button, ⌘J / Ctrl+J). Its headline
+job is **pricing small jobs**: the builder says *"Price a 20 m² patio using my usual rates,
+including removal of the existing slabs"* and an editable estimate appears with every quantity,
+rate and assumption shown.
+
+How a small job is priced (`server/maxPricing.js`):
+
+1. **Take-off (the model).** One forced-tool call turns the description into measurable lines —
+   section, description, unit, quantity, the working behind the quantity — and the rate-library
+   key (or the builder's own rate key) each line is priced from. The model emits quantities and
+   keys, never money, except an *assumed rate* for work no key covers, which is flagged.
+2. **Pricing (deterministic).** `deterministicPricer.priceLockedQuantities` — the same engine that
+   prices the QS team's BOQs — applies the builder's own rates first (`client_rate_library`), the
+   base library adjusted for the site's region second, and the assumed rate last. Totals use the
+   builder's OH&P / contingency (AI Memory → Pricing margins) and VAT. Every line records where
+   its rate came from; lines on an estimated rate are marked for checking.
+3. **The threshold (`server/maxSettings.js`).** The price ex VAT is compared with two admin-set
+   limits (defaults £80,000 notice, £100,000 limit; Admin → MAX, or `MAX_SMALL_JOB_*` env).
+   Below the notice the estimate is drafted as normal. From the notice it carries a "worth a full
+   take-off" note. **At or above the limit MAX makes no estimate**: it shows a warning card with
+   the rough figure and a button that opens Submit Drawings with the brief filled in, so the AI QS
+   team prices it from drawings. The refusal is logged (`max_over_limit`).
+
+Estimates are rows in `quotes` (`source = 'max'`, assumptions and provenance in `max_meta`), so
+they use the existing branded PDF / Excel exports and the public `/q/<token>` acceptance page.
+`/estimates` lists them; `/estimates/:id` is the editor (lines, percentages, assumptions, send).
+
+Other things MAX does: revise an estimate by chat, save a rate the builder states ("my skim rate
+is £22 a metre"), search their rates and the library, report on drawings jobs with the team and
+take-off credits, find and read stored drawings/BOQs, and hand a job to Submit Drawings.
+**Sending an estimate to a customer and deleting wait for a tap on an approval card** — a
+typed or spoken "yes" is never approval. Every action, approval and refusal is written to
+`activity_log` (`max_*` events); each builder sees their own at `GET /api/max/activity`.
+
+Rollout (`server/maxRollout.js`): **admins only by default**, plus any client an admin gives
+early access (Users → the client → MAX). Admin → MAX switches it on for everyone, live. The
+server is the authority: `/api/max/*` answers `403 MAX_NOT_ENABLED` for anyone else. A client
+MAX is on for can also use the estimator routes (`requireEstimator`), since MAX's estimates are
+quotes. A per-client daily allowance (default 300 turns) is enforced and shown on
+`GET /api/max/status`. Voice: speech-to-text needs `OPENAI_API_KEY` or `DEEPGRAM_API_KEY`
+(else the browser's own recogniser), spoken replies need `ELEVENLABS_API_KEY` (else the
+browser's voice). Tests: `server/max.test.js`.
+
 ## Job tracking
 
 Every job — portal submission or email enquiry — sits in one queue at one of

@@ -133,6 +133,18 @@ function computeTotals(lines, opts) {
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
+// quotes.max_meta is JSON written by MAX (assumptions, exclusions, questions,
+// rate provenance, the threshold verdict). Stored as text, capped, or null.
+function serialiseMeta(v) {
+  if (v == null || v === '') return null;
+  try {
+    const obj = typeof v === 'string' ? JSON.parse(v) : v;
+    if (!obj || typeof obj !== 'object') return null;
+    const s = JSON.stringify(obj);
+    return s.length > 60000 ? null : s;
+  } catch (e) { return null; }
+}
+
 // ─── Rate lookup — fuzzy match against the seeded `rates` table ─────────────
 // Returns { rate, labour, materials, matched } or null.
 function lookupRate(line) {
@@ -462,8 +474,8 @@ router.post('/draft', async (req, res) => {
 router.get('/quotes', (req, res) => {
   try {
     const rows = db.prepare(
-      'SELECT id, client_name, project_name, project_type, currency, grand_total, status, quote_number, '
-      + 'public_token, sent_at, accepted_at, acceptance_name, locked, created_at, updated_at '
+      'SELECT id, client_name, project_name, project_type, currency, net_total, grand_total, status, quote_number, '
+      + 'public_token, sent_at, accepted_at, acceptance_name, locked, source, location, created_at, updated_at '
       + 'FROM quotes WHERE user_id = ? ORDER BY created_at DESC LIMIT 500'
     ).all(req.user.id);
     res.json({ quotes: rows });
@@ -573,12 +585,17 @@ router.post('/quotes', (req, res) => {
     // Naming a customer creates/links their client record automatically
     let clientId = null;
     try { clientId = require('./clientStore').findOrCreateClient(db, req.user.id, { name: b.client_name, email: b.client_email }); } catch (e) {}
+    // MAX estimates: who drafted it, the site the rates were adjusted for, and
+    // the assumptions/verdict JSON the estimate page shows under the lines.
+    const source = b.source === 'max' ? 'max' : null;
+    const location = b.location ? String(b.location).slice(0, 200) : null;
+    const maxMeta = serialiseMeta(b.max_meta);
     const txn = db.transaction(() => {
       db.prepare(
         'INSERT INTO quotes (id, user_id, client_name, client_email, project_name, project_type, currency, input_text, '
         + 'net_total, ohp_pct, ohp_amount, contingency_pct, contingency_amount, vat_pct, vat_amount, '
-        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, client_id, job_id) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        + 'grand_total, target_margin_pct, margin_pct, status, notes, quote_number, client_id, job_id, source, location, max_meta) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(
         id, req.user.id,
         b.client_name || null, b.client_email || null, b.project_name || 'Untitled quote', b.project_type || null,
@@ -587,7 +604,7 @@ router.post('/quotes', (req, res) => {
         totals.contingency_pct, totals.contingency_amount,
         totals.vat_pct, totals.vat_amount,
         totals.grand_total, totals.target_margin_pct, totals.margin_pct,
-        b.status || 'draft', b.notes || null, quoteNumber, clientId, b.job_id || null
+        b.status || 'draft', b.notes || null, quoteNumber, clientId, b.job_id || null, source, location, maxMeta
       );
       const ins = db.prepare(
         'INSERT INTO quote_lines (id, quote_id, section, item, description, unit, qty, rate, labour, materials, line_total, est_rate, sort_order, source_url) '
@@ -642,12 +659,13 @@ router.patch('/quotes/:id', (req, res) => {
     if (!q) return res.status(404).json({ error: 'Quote not found.' });
     if (rejectIfQuoteLocked(q, res)) return;
     const b = req.body || {};
-    const allowed = ['client_name', 'client_email', 'project_name', 'project_type', 'currency', 'notes', 'status', 'ohp_pct', 'contingency_pct', 'vat_pct', 'target_margin_pct'];
+    const allowed = ['client_name', 'client_email', 'project_name', 'project_type', 'currency', 'notes', 'status', 'ohp_pct', 'contingency_pct', 'vat_pct', 'target_margin_pct', 'location'];
     const sets = [];
     const vals = [];
     for (const k of allowed) {
       if (k in b) { sets.push(k + ' = ?'); vals.push(b[k]); }
     }
+    if ('max_meta' in b) { sets.push('max_meta = ?'); vals.push(serialiseMeta(b.max_meta)); }
     // When any percentage changes, recompute the stored money amounts against the
     // current net so percentages and amounts can never diverge (the frontend and
     // exports read the stored amounts directly).
