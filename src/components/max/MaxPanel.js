@@ -231,7 +231,9 @@ export default function MaxPanel() {
   const allowed = !!user && !!user.maxEnabled;
   // No floating button where the page already has its own way in: the
   // drawings chat composer, and the estimate editor's "Ask MAX to change it".
-  const hideFab = location.pathname.startsWith('/chat') || /^\/estimates\/[^/]+/.test(location.pathname);
+  // No floating button where the page has its own pinned bar or microphone:
+  // the chat composer, an estimate's sticky total, a room survey's capture flow.
+  const hideFab = location.pathname.startsWith('/chat') || /^\/estimates\/[^/]+/.test(location.pathname) || /^\/surveys\/[^/]+\/rooms\//.test(location.pathname);
 
   // ── Items ─────────────────────────────────────────────────────────────────
   const update = useCallback((fn) => {

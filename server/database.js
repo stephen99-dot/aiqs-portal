@@ -356,6 +356,81 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Room surveys ("Scan a room"). A survey is one property visit; it holds the
+  -- rooms walked, each with its photos, dimensions, openings, features,
+  -- finishes, condition and the quantities derived from them. Everything is
+  -- scoped to the builder (user_id on every row). See roomSurveyRoutes.js.
+  CREATE TABLE IF NOT EXISTS room_surveys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    address TEXT,
+    customer_name TEXT,
+    customer_email TEXT,
+    project_id TEXT,                       -- a drawings job, when the survey supports one
+    notes TEXT,
+    status TEXT DEFAULT 'open',            -- open | complete | archived
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_room_surveys_user ON room_surveys(user_id, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS survey_rooms (
+    id TEXT PRIMARY KEY,
+    survey_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    room_type TEXT,
+    floor_level TEXT,                      -- Ground, First, Basement, Loft…
+    shape TEXT DEFAULT 'rectangular',      -- rectangular | l_shape | custom
+    length_m REAL, width_m REAL, height_m REAL,
+    notch_length_m REAL, notch_width_m REAL,   -- the corner cut out of an L-shaped room
+    floor_area_override_m2 REAL,           -- custom shapes / LiDAR: the measured floor area
+    dims_source TEXT DEFAULT 'unknown',    -- measured | stated | estimated | unknown
+    walls TEXT,                            -- JSON [{ id, label, length_m, height_m }]
+    openings TEXT,                         -- JSON [{ id, kind, width_m, height_m, count, wall, notes, source }]
+    features TEXT,                         -- JSON [{ id, item, count, notes, source }]
+    finishes TEXT,                         -- JSON { floor, walls, ceiling, woodwork: { type, condition }, source }
+    hazards TEXT,                          -- JSON [string]
+    condition_notes TEXT,
+    work_wanted TEXT,
+    assumptions TEXT,                      -- JSON [string]
+    confidence TEXT,                       -- high | medium | low
+    ai_summary TEXT,
+    quantities TEXT,                       -- JSON, recomputed on every save (surveyGeometry.js)
+    capture TEXT,                          -- raw RoomPlan JSON for a LiDAR-measured room
+    notes TEXT,                            -- JSON [{ id, text, at, source }]
+    estimate_id TEXT,                      -- quotes.id once priced
+    status TEXT DEFAULT 'draft',           -- draft | surveyed | priced
+    sort_order INTEGER DEFAULT 0,
+    analysed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (survey_id) REFERENCES room_surveys(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_survey_rooms_survey ON survey_rooms(survey_id, sort_order);
+  CREATE INDEX IF NOT EXISTS idx_survey_rooms_user ON survey_rooms(user_id);
+
+  CREATE TABLE IF NOT EXISTS survey_photos (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL,
+    survey_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    thumb_filename TEXT,
+    mime TEXT,
+    file_size INTEGER,
+    width INTEGER, height INTEGER,
+    kind TEXT DEFAULT 'general',           -- corner | wall | floor | ceiling | detail | general
+    caption TEXT,
+    ai_notes TEXT,                         -- what the AI saw in this photo
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES survey_rooms(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_survey_photos_room ON survey_photos(room_id, sort_order);
+
   -- Wave 2: Finance Hub. A light "job" the estimator owns end-to-end. Kept
   -- separate from the BOQ-pipeline projects table so the two systems don't
   -- couple. Jobs are the umbrella for budgets, cost actuals and (later)

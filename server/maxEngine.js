@@ -70,6 +70,20 @@ function pageNote(user, context) {
       if (q) note = 'The builder is looking at estimate ' + (q.quote_number || '') + ' "' + (q.project_name || '') + '" (id ' + q.id + (q.client_name ? ', customer ' + q.client_name : '') + ', ' + q.status + '). "This estimate" means that one.';
     } catch (err) { /* fine */ }
   }
+  const sr = path.match(/^\/surveys\/([A-Za-z0-9_-]+)\/rooms\/([A-Za-z0-9_-]+)/);
+  if (sr) {
+    try {
+      const rm = db.prepare('SELECT r.id, r.name, r.room_type, s.title FROM survey_rooms r JOIN room_surveys s ON s.id = r.survey_id WHERE r.id = ? AND r.user_id = ?').get(sr[2], user.id);
+      if (rm) note = 'The builder is looking at the surveyed room "' + rm.name + '" (room_id ' + rm.id + ') in the survey "' + rm.title + '". "This room" means that one — price it with price_small_job and room_id ' + rm.id + '.';
+    } catch (err) { /* fine */ }
+  }
+  const sv = path.match(/^\/surveys\/([A-Za-z0-9_-]+)$/);
+  if (sv) {
+    try {
+      const s = db.prepare('SELECT id, title FROM room_surveys WHERE id = ? AND user_id = ?').get(sv[1], user.id);
+      if (s) note = 'The builder is looking at the room survey "' + s.title + '" (survey id ' + s.id + '). "This survey" means that one.';
+    } catch (err) { /* fine */ }
+  }
   const p = path.match(/^\/project\/([A-Za-z0-9_-]+)/);
   if (p) {
     try {
@@ -103,6 +117,7 @@ function systemPrompt(user, context) {
     '- Keep their rate library current (my_rates, save_rate) and explain which rates and assumptions an estimate rests on. Lines priced on an estimated rate are the ones to check.',
     '- Revise an estimate by chat (revise_estimate). Sending it to the customer (send_estimate) is approved by a tap; the acceptance page carries the builder\'s branding.',
     '- Their drawings jobs with the AI QS team (list_jobs, get_job): what has been sent, what is being priced, what has come back, and their take-off credits (takeoff_credits). Full drawing take-offs and BOQs are done by the AI QS team, never by you: start_takeoff_request opens Submit drawings with the brief filled in.',
+    '- Their room surveys from Scan a room (list_room_surveys, get_room_survey): rooms photographed and measured on site, with floor, wall, ceiling and skirting quantities, openings, counted sockets and radiators, finishes and condition. To price work in a surveyed room, call price_small_job with that room\'s room_id and the work wanted — the survey\'s quantities become the measurements, so never re-estimate a surveyed room from its description.',
     '- Find anything stored (find) and read a drawing, BOQ or document (ask_about_files).',
     '- Short practical trade answers' + (WEB_SEARCH_ENABLED() ? ', and the web for current prices, products and regulations.' : '.'),
     '',
@@ -450,6 +465,8 @@ function suggestionsFor(context) {
   if (/^\/estimates\/[^/]+/.test(path)) return ['What rates did this rest on?', 'Add 10% contingency to this estimate', 'Send this estimate to the customer', 'Which lines should I double-check?'];
   if (path.startsWith('/estimates')) return ['Price a 20 m² patio, taking up the old slabs', 'Which estimates are still waiting on the customer?', 'What\'s my rate for plasterboard and skim?'];
   if (/^\/project\/[^/]+/.test(path)) return ['Where is this job up to?', 'What does the BOQ say for the roof?', 'What documents have come back on this job?'];
+  if (/^\/surveys\/[^/]+\/rooms\/[^/]+/.test(path)) return ['Price a full redecoration of this room', 'What did the survey count in here?', 'Price new skirting and coving in this room'];
+  if (path.startsWith('/surveys')) return ['Which rooms have I surveyed but not priced?', 'Price the decorating for the whole house survey', 'What\'s the total floor area across the survey?'];
   if (path.startsWith('/my-rates')) return ['My skim rate is £22 a square metre', 'Which of my rates are over a year old?', 'What would the library charge for blockwork?'];
   if (path.startsWith('/submit-drawings')) return ['How many take-off credits have I got?', 'Where are my drawings jobs up to?'];
   return ['Price a 20 m² patio using my usual rates, taking up the old slabs', 'Where are my drawings jobs up to?', 'What\'s my rate for a day\'s labour?', 'Find the latest BOQ'];

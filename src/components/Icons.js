@@ -151,6 +151,14 @@ export const FryingPanIcon = (p) => <Icon {...p}><circle cx="10" cy="13" r="7"/>
 export const BurstIcon = (p) => <Icon {...p}><path d="M12 2l2.4 5.2L20 6l-2.8 5L22 13l-5.6 1L17 20l-5-3-5 3 .6-6L2 13l4.8-2L4 6l5.6 1.2z"/></Icon>;
 export const ShopIcon = (p) => <Icon {...p}><path d="M3 9l1.5-5h15L21 9M4 9v11a1 1 0 001 1h14a1 1 0 001-1V9M3 9h18M9 21v-6h6v6"/></Icon>;
 
+// Room surveys
+export const CameraIcon = (p) => <Icon {...p}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></Icon>;
+export const ScanIcon = (p) => <Icon {...p}><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><path d="M7 12h10M12 7v10"/></Icon>;
+export const OrbitIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5z"/></Icon>;
+export const DoorIcon = (p) => <Icon {...p}><path d="M4 21V5a2 2 0 012-2h8a2 2 0 012 2v16M2 21h20"/><circle cx="12.5" cy="12" r="1" fill="currentColor"/></Icon>;
+export const MeasureIcon = (p) => <Icon {...p}><path d="M21.3 8.7l-6-6L2.7 15.3l6 6z"/><path d="M14 6l2 2M11 9l2 2M8 12l2 2M5 15l2 2"/></Icon>;
+export const MaximizeIcon = (p) => <Icon {...p}><path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/></Icon>;
+
 // ─── Brand marks ────────────────────────────────────────────────────────────
 // Xero logo: a blue disc with a white "x". Rendered from its own <svg> (not the
 // thin-line Icon wrapper) so it keeps Xero's brand blue and filled shape.

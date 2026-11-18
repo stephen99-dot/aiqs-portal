@@ -73,6 +73,19 @@ function requireEstimatorPassword(req, res, next) {
   next();
 }
 
+// Short-lived, purpose-scoped links: an <img src> cannot carry a bearer token,
+// so a photo URL carries a token signed for that one scope (a survey room)
+// instead. Signed with the same secret as sessions; verified by scope.
+function signLink(scope, ttlSeconds) {
+  return jwt.sign({ scope: String(scope), kind: 'link' }, JWT_SECRET, { expiresIn: ttlSeconds || 7200 });
+}
+function verifyLink(token, scope) {
+  try {
+    const d = jwt.verify(String(token || ''), JWT_SECRET);
+    return !!(d && d.kind === 'link' && d.scope === String(scope));
+  } catch (e) { return false; }
+}
+
 function safeEqual(a, b) {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -80,4 +93,4 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
-module.exports = { generateToken, authMiddleware, adminMiddleware, requireEstimator, requireEstimatorPassword };
+module.exports = { generateToken, authMiddleware, adminMiddleware, requireEstimator, requireEstimatorPassword, signLink, verifyLink };

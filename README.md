@@ -60,6 +60,45 @@ quotes. A per-client daily allowance (default 300 turns) is enforced and shown o
 (else the browser's own recogniser), spoken replies need `ELEVENLABS_API_KEY` (else the
 browser's voice). Tests: `server/max.test.js`.
 
+## Room surveys — "Scan a room"
+
+**Scan a room** (menu, the dashboard chip, `/surveys`) is the site visit, kept. A survey is one
+property; each room under it keeps everything the builder captured, for as long as the account
+does: photographs (stored with thumbnails, captions and what the AI saw in each), the room's
+shape and sizes with where they came from (*measured* by LiDAR, *stated* by the builder,
+*estimated* from photos), doors, windows and openings on their walls, fittings and features,
+finishes and their condition, hazards, condition notes, typed and spoken site notes, and what
+the customer wants done. The quantities a pricer needs (floor, ceiling, net wall area,
+perimeter, skirting, coving, volume, window area) are worked out live as the numbers change
+and stored with the room (`server/surveyGeometry.js`, mirrored in `src/utils/surveyGeometry.js`).
+
+On a phone the room page is a four-step capture flow — Photos, Size, Details, Work — then
+Review; on a desktop it is one screen with the plan sketch, an orbitable 3D view, the
+quantities and the actions pinned on the right. Everything autosaves. The photo tips, the
+default door and window sizes and the quick chips are there so a room takes two minutes.
+
+Three ways to a measured room: type the length, width and height (rectangular or L-shaped);
+**Survey with AI** (`POST /api/surveys/rooms/:id/analyse`, `server/surveyVision.js`) which
+reads the photos and fills in only what the builder has not already measured or typed; or
+**Scan with LiDAR** in the iOS app (`ios/App/App/RoomScanPlugin.swift`, Apple RoomPlan, see
+`docs/IOS_APP.md`) / **Import a scan** (a RoomPlan, Polycam or magicplan JSON export) which
+locks the outline and marks it *measured*.
+
+**Price with MAX** hands the room to MAX's `price_small_job` tool with a quantities brief
+("use these exactly … price only this"), so the estimate comes from the surveyed numbers and the
+builder's rates; the same small-job limit and over-limit card apply, and the estimate is linked
+back to the room. MAX can also read surveys in conversation (`list_room_surveys`,
+`get_room_survey`). Exports per property: a branded **survey report PDF** (cover, a page per
+room with the sketch, quantities, openings, features, finishes, notes and a photo grid), a
+**schedule in Excel** (rooms, openings, features, finishes) and, for LiDAR scans, scaled
+**floor plan PDFs**. **Send to the AI QS team** pre-fills Submit Drawings with the survey as the
+brief.
+
+Storage: `room_surveys`, `survey_rooms`, `survey_photos` in SQLite (every row carries
+`user_id`); photo files under `<data dir>/room-surveys/`, served through signed, survey-scoped
+link tokens so `<img>` tags work without a header. Routes: `server/roomSurveyRoutes.js`
+(`/api/surveys/*`). Tests: `server/surveys.test.js`, `server/floorPlanGeometry.test.js`.
+
 ## Job tracking
 
 Every job — portal submission or email enquiry — sits in one queue at one of
