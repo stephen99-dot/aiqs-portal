@@ -35,6 +35,9 @@ const STEPS = [
   { key: 'review', label: 'Review', Icon: SparklesIcon },
 ];
 const STATUS = { draft: ['neutral', 'Capturing'], surveyed: ['info', 'Surveyed'], priced: ['success', 'Priced'] };
+// The AI says how sure it was in words; the bar and the label read from these.
+const CONFIDENCE = { high: { pct: 85, label: 'Fairly sure' }, medium: { pct: 60, label: 'Reasonably sure' }, low: { pct: 35, label: 'Not very sure — check the sizes' } };
+const confidenceOf = (c) => (typeof c === 'number' && Number.isFinite(c) ? { pct: Math.round(Math.max(0, Math.min(1, c)) * 100), label: Math.round(c * 100) + '% sure' } : CONFIDENCE[String(c || '').toLowerCase()] || null);
 const KIND_LABEL = { corner: 'Corner', wall: 'Wall', floor: 'Floor', ceiling: 'Ceiling', detail: 'Detail', general: '', render: 'Finished' };
 const BUSY_LINES = ['Looking at the photos…', 'Finding the walls, doors and windows…', 'Counting sockets, switches and lights…', 'Checking the finishes and their condition…', 'Working out the quantities…'];
 const FINISH_KEYS = [['floor', 'Floor'], ['walls', 'Walls'], ['ceiling', 'Ceiling'], ['woodwork', 'Woodwork']];
@@ -248,7 +251,8 @@ export default function SurveyRoomPage() {
       const r = await apiFetch('/surveys/rooms/' + roomId + '/analyse', { method: 'POST', body: JSON.stringify({}) });
       pendingRef.current = {};
       setRoom(r.room);
-      toast.success('Surveyed — ' + Math.round((r.analysis.confidence || 0) * 100) + '% confident. Check the sizes and the openings.');
+      const conf = confidenceOf(r.analysis && r.analysis.confidence);
+      toast.success('Surveyed' + (conf ? ' — ' + conf.label.toLowerCase() : '') + '. Check the sizes and the openings.');
       if (isMobile) setStep('review');
     } catch (e) { toast.error(e.message || 'Could not survey the room.'); }
     finally { clearInterval(tick); setBusy(null); }
@@ -389,7 +393,7 @@ export default function SurveyRoomPage() {
     <div className="sr-ai">
       <div className="sr-ai__head">
         <span className="sr-ai__title"><SparklesIcon size={15} /> AI survey</span>
-        {room.confidence != null && <span className="sr-ai__conf">{Math.round(room.confidence * 100)}% sure <span className="sr-ai__bar"><i style={{ width: Math.round(room.confidence * 100) + '%' }} /></span></span>}
+        {confidenceOf(room.confidence) && <span className="sr-ai__conf">{confidenceOf(room.confidence).label} <span className="sr-ai__bar"><i style={{ width: confidenceOf(room.confidence).pct + '%' }} /></span></span>}
       </div>
       {room.ai_summary && <div className="sr-ai__text">{room.ai_summary}</div>}
       {(room.assumptions || []).length > 0 && <ul className="sr-ai__list">{room.assumptions.map((a, i) => <li key={i}>{a}</li>)}</ul>}
