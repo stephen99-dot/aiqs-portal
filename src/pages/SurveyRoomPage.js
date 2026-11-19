@@ -313,6 +313,37 @@ export default function SurveyRoomPage() {
   const addHazard = () => { const t = hazardText.trim(); if (t && !hazards.includes(t)) update({ hazards: [...hazards, t] }); setHazardText(''); };
   const deleteNote = async (nid) => { try { const r = await apiFetch('/surveys/rooms/' + roomId + '/notes/' + nid, { method: 'DELETE' }); setRoom((cur) => ({ ...cur, notes: r.notes })); } catch (e) { toast.error('Could not delete the note.'); } };
 
+  // The finished room: the before/after once a render exists, otherwise a
+  // card inviting one — at the top of the Photos step, where a thumb lands.
+  const sourceForRender = photos.find((p) => p.kind === 'corner') || photos.find((p) => p.kind !== 'render') || null;
+  const hasScope = !!(room.work_wanted || '').trim();
+  const noRendersLeft = !!(data.render_allowance && data.render_allowance.remaining === 0);
+  const renderPanel = !data.max_enabled || !sourceForRender ? null : renders.length > 0 ? (
+    <div className="sr-render">
+      <div className="sr-render__head">
+        <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
+        {renders.length > 1 && <select className="ui-select" style={{ width: 'auto', minWidth: 0, padding: '5px 28px 5px 9px', fontSize: 12.5 }} value={shownRender.id} onChange={(e) => setRenderPick(e.target.value)} aria-label="Which render">{renders.map((p, i) => <option key={p.id} value={p.id}>{'Render ' + (i + 1) + (p.caption ? ' — ' + p.caption.replace(/^Finished room\s*[—-]?\s*/, '').slice(0, 40) : '')}</option>)}</select>}
+      </div>
+      <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || sourceForRender} after={shownRender} height={isMobile ? 240 : 300} />
+      <div className="sr-render__sub">{shownRender.caption}</div>
+      <div className="sr-render__row">
+        <Input value={renderTweak} onChange={(e) => setRenderTweak(e.target.value)} placeholder="Change something — 'grey tiles', 'walk-in shower instead of the bath'…" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak); } }} />
+        <Button onClick={() => renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak)} disabled={noRendersLeft}><SparklesIcon size={13} color="currentColor" /> Again</Button>
+      </div>
+      <div className="sr-render__foot">An AI concept of the work described, not to scale — it goes in the report marked as such.{renderAllowanceText ? ' ' + renderAllowanceText : ''}</div>
+    </div>
+  ) : (
+    <button type="button" className={'sr-magic' + (noRendersLeft ? ' sr-magic--off' : '')} onClick={() => { if (noRendersLeft) return; if (!hasScope) { toast.show('Say what the customer wants first — that is what gets painted in.'); setStep('work'); return; } renderRoom(sourceForRender, ''); }} aria-label="Show the finished room">
+      <span className="sr-magic__thumb"><img src={resolveUrl(sourceForRender.thumb_url)} alt="" /><span className="sr-magic__spark"><SparklesIcon size={14} color="#fff" /></span></span>
+      <span className="sr-magic__text">
+        <span className="sr-magic__title">Show the finished room</span>
+        <span className="sr-magic__sub">{noRendersLeft ? 'This month\'s renders are used up.' : hasScope ? 'Paints what the customer wants onto this photo — about 20 seconds.' : 'Add what the customer wants on the Work step, then tap here.'}</span>
+        {renderAllowanceText && !noRendersLeft && <span className="sr-magic__meta">{renderAllowanceText}</span>}
+      </span>
+      <span className="sr-magic__go"><ArrowRightIcon size={18} color="currentColor" /></span>
+    </button>
+  );
+
   const sketchPanel = (
     <div className="sr-sketch">
       <div className="sr-sketch__tabs">
@@ -387,6 +418,7 @@ export default function SurveyRoomPage() {
         {priceCard}
         <div className="sr-actions">
           <Button onClick={analyse} disabled={!data.max_enabled || !photos.length} title={!photos.length ? 'Add photos first' : undefined} busyLabel="Surveying…"><SparklesIcon size={15} color="currentColor" /> {room.analysed_at ? 'Survey again with AI' : 'Survey with AI'}</Button>
+          {sourceForRender && <Button variant={renders.length ? 'secondary' : 'primary'} onClick={() => { if (!hasScope) { toast.error('Say what the customer wants first (Work step).'); if (isMobile) setStep('work'); return; } renderRoom(sourceForRender, ''); }} disabled={!data.max_enabled || noRendersLeft} title={!hasScope ? 'Say what work is wanted first' : undefined}><ImageIcon size={15} color="currentColor" /> {renders.length ? 'Render the finished room again' : 'Show the finished room'}</Button>}
           <Button onClick={price} disabled={!canPrice} variant={room.estimate_id ? 'secondary' : 'primary'} title={!q.complete ? 'Needs a size first' : !(room.work_wanted || '').trim() ? 'Say what work is wanted first' : undefined} busyLabel="Pricing…"><PoundIcon size={15} color="currentColor" /> {room.estimate_id ? 'Price again with MAX' : 'Price with MAX'}</Button>
           {data.estimate && <Button variant="secondary" to={'/estimates/' + data.estimate.id}><ExternalLinkIcon size={14} color="currentColor" /> Estimate {data.estimate.quote_number} · {fmtMoney2(data.estimate.grand_total)}</Button>}
           <Button variant="secondary" onClick={() => downloadFile('/api/surveys/' + id + '/report.pdf', (room.name || 'room').replace(/[^\w-]+/g, '_') + '_survey.pdf').catch((e) => toast.error(e.message))} busyLabel="Making PDF…"><FileTextIcon size={14} color="currentColor" /> Survey report PDF</Button>
@@ -435,7 +467,8 @@ export default function SurveyRoomPage() {
                 {photos.length === 0 && (
                   <div className="sr-tip"><LightbulbIcon size={16} /><span><strong>Stand in a corner</strong> and shoot the opposite corner so two walls, the floor and the ceiling are in frame. Do the same from the corner opposite. Then one of each wall, the floor, the ceiling and anything odd — damp, cracks, a boxed-in pipe.</span></div>
                 )}
-                <div className="ph-actions">
+                {renderPanel}
+                <div className={'ph-actions' + (photos.length > 0 ? ' ph-actions--compact' : '')}>
                   <button type="button" className="ph-cta" onClick={() => camRef.current && camRef.current.click()}><CameraIcon size={22} /> Take a photo<small>Opens the camera</small></button>
                   <button type="button" className="ph-cta ph-cta--plain" onClick={() => galRef.current && galRef.current.click()}><ImageIcon size={22} /> From the gallery<small>Pick several at once</small></button>
                   {lidar.available
@@ -456,27 +489,6 @@ export default function SurveyRoomPage() {
                   </div>
                 )}
                 {photos.length > 0 && <div className="sr-sec__hint">Tap a photo to caption it, say what it shows, or delete it. Photos stay with the room until you remove them.</div>}
-                {renders.length > 0 ? (
-                  <div className="sr-render">
-                    <div className="sr-render__head">
-                      <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
-                      {renders.length > 1 && <select className="ui-select" style={{ width: 'auto', minWidth: 0, padding: '5px 28px 5px 9px', fontSize: 12.5 }} value={shownRender.id} onChange={(e) => setRenderPick(e.target.value)} aria-label="Which render">{renders.map((p, i) => <option key={p.id} value={p.id}>{'Render ' + (i + 1) + (p.caption ? ' — ' + p.caption.replace(/^Finished room\s*[—-]?\s*/, '').slice(0, 40) : '')}</option>)}</select>}
-                    </div>
-                    <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || photos.find((p) => p.kind !== 'render')} after={shownRender} height={isMobile ? 240 : 300} />
-                    <div className="sr-render__sub">{shownRender.caption}</div>
-                    {data.max_enabled && (
-                      <div className="sr-render__row">
-                        <Input value={renderTweak} onChange={(e) => setRenderTweak(e.target.value)} placeholder="Change something — 'grey tiles', 'walk-in shower instead of the bath'…" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak); } }} />
-                        <Button variant="secondary" onClick={() => renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak)} disabled={!!(data.render_allowance && data.render_allowance.remaining === 0)}><SparklesIcon size={13} color="currentColor" /> Again</Button>
-                      </div>
-                    )}
-                    <div className="sr-render__foot">An AI concept of the work described, not to scale — it goes in the report marked as such.{renderAllowanceText ? ' ' + renderAllowanceText : ''}</div>
-                  </div>
-                ) : (photos.some((p) => p.kind !== 'render') && data.max_enabled && (
-                  <button type="button" className="ph-cta" style={{ alignSelf: 'stretch' }} onClick={() => renderRoom(photos.find((p) => p.kind === 'corner') || photos.find((p) => p.kind !== 'render'), '')} disabled={!!(data.render_allowance && data.render_allowance.remaining === 0)}>
-                    <SparklesIcon size={22} /> Show the finished room<small>{(room.work_wanted || '').trim() ? 'Paints the work the customer wants onto a photo, in about 20 seconds' + (renderAllowanceText ? ' · ' + renderAllowanceText : '') : 'Fill in what the customer wants (Work step) first'}</small>
-                  </button>
-                ))}
               </div>
             </div>
           )}

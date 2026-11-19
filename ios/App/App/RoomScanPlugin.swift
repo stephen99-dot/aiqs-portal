@@ -129,12 +129,17 @@ public class RoomScanPlugin: CAPPlugin, CAPBridgedPlugin {
 // Apple's own scanning UI (the live wireframe that draws itself over the room)
 // with a Done and a Cancel over the top of it.
 @available(iOS 16.0, *)
-final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate {
+final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
 
     var onFinish: ((CapturedRoom?, Error?) -> Void)?
 
     private var captureView: RoomCaptureView!
     private var finished = false
+    private var started = false
+    // Shown over the black until the camera is live. ARKit takes a second or
+    // two to bring the camera up, and a black screen with two buttons looks
+    // like nothing is happening.
+    private let starting = UIView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -143,15 +148,81 @@ final class RoomScanViewController: UIViewController, RoomCaptureViewDelegate {
         captureView = RoomCaptureView(frame: view.bounds)
         captureView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         captureView.delegate = self
+        captureView.captureSession.delegate = self
         view.addSubview(captureView)
 
+        addStartingScreen()
         addButton(title: "Done", action: #selector(doneTapped), alignRight: true)
         addButton(title: "Cancel", action: #selector(cancelTapped), alignRight: false)
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
+    // Start as the screen slides in, not after it has arrived: the camera is
+    // then warming up during the animation instead of after it.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard !started else { return }
+        started = true
         captureView.captureSession.run(configuration: RoomCaptureSession.Configuration())
+        // Whatever the delegate reports, the feed is up well inside this.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in self?.hideStartingScreen() }
+    }
+
+    private func addStartingScreen() {
+        starting.backgroundColor = .black
+        starting.frame = view.bounds
+        starting.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(starting)
+
+        let spinner = UIActivityIndicatorView(style: .large)
+        spinner.color = .white
+        spinner.startAnimating()
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+
+        let title = UILabel()
+        title.text = "Starting the scanner"
+        title.textColor = .white
+        title.font = .systemFont(ofSize: 20, weight: .semibold)
+        title.textAlignment = .center
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        let tip = UILabel()
+        tip.text = "Hold the phone up and turn slowly. Keep the whole room in view — doors, windows and corners."
+        tip.textColor = UIColor.white.withAlphaComponent(0.75)
+        tip.font = .systemFont(ofSize: 15)
+        tip.textAlignment = .center
+        tip.numberOfLines = 0
+        tip.translatesAutoresizingMaskIntoConstraints = false
+
+        starting.addSubview(spinner)
+        starting.addSubview(title)
+        starting.addSubview(tip)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: starting.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: starting.centerYAnchor, constant: -40),
+            title.topAnchor.constraint(equalTo: spinner.bottomAnchor, constant: 18),
+            title.leadingAnchor.constraint(equalTo: starting.leadingAnchor, constant: 32),
+            title.trailingAnchor.constraint(equalTo: starting.trailingAnchor, constant: -32),
+            tip.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 8),
+            tip.leadingAnchor.constraint(equalTo: starting.leadingAnchor, constant: 32),
+            tip.trailingAnchor.constraint(equalTo: starting.trailingAnchor, constant: -32)
+        ])
+    }
+
+    private func hideStartingScreen() {
+        guard starting.superview != nil else { return }
+        UIView.animate(withDuration: 0.35, animations: { self.starting.alpha = 0 }) { _ in
+            self.starting.removeFromSuperview()
+        }
+    }
+
+    // RoomCaptureSessionDelegate — the camera is live once the session has
+    // started; the first room update is the belt to that brace.
+    func captureSession(_ session: RoomCaptureSession, didStartWith configuration: RoomCaptureSession.Configuration) {
+        DispatchQueue.main.async { self.hideStartingScreen() }
+    }
+
+    func captureSession(_ session: RoomCaptureSession, didUpdate room: CapturedRoom) {
+        DispatchQueue.main.async { self.hideStartingScreen() }
     }
 
     private func addButton(title: String, action: Selector, alignRight: Bool) {
