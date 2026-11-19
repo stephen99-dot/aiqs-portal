@@ -1278,49 +1278,80 @@ async function generateBuilderPack(parsed, opts = {}) {
   }
   tsHdr.height = 24;
 
-  let projectTotal = parsed.grand.total * labourMult; // approx; we recompute after applying materials markup separately
-  projectTotal = parsed.sections.reduce(
-    (acc, s) => acc + s.subtotal.labour * labourMult + s.subtotal.materials * matMult,
-    0
-  );
+  // Provisional sums are carried at cost, exactly as the bill lists them —
+  // no builder margin, no materials markup — as their own block under the
+  // priced sections, with every line on the Provisional Sums tab. Folded in
+  // with the trades they were marked up like materials, and the builder
+  // could not see what was in them.
+  const round2 = (v) => Math.round(v * 100) / 100;
+  const fmtAmt = (v) => round2(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // A line's money: labour + materials, or the composite total when there is no split.
+  const lineMoney = (it) => { const lm = (it.labour || 0) + (it.materials || 0); return lm !== 0 ? lm : (it.total || 0); };
+  const measured = (parsed.sections || []).filter((s) => !s.provisional);
+  const provisionalSections = (parsed.sections || []).filter((s) => s.provisional);
+  const subtotalOf = (s) => s.subtotal || (s.items || []).reduce(
+    (acc, it) => ({ labour: acc.labour + (it.labour || 0), materials: acc.materials + (it.materials || 0), total: acc.total + lineMoney(it) }),
+    { labour: 0, materials: 0, total: 0 });
+  const sectionFigures = (s) => {
+    const sub = subtotalOf(s);
+    if (s.provisional) return { labour: sub.labour || 0, materials: sub.materials || 0, total: sub.total || 0 };
+    const labour = (sub.labour || 0) * labourMult;
+    const materials = (sub.materials || 0) * matMult;
+    return { labour, materials, total: labour + materials };
+  };
+  const sumFigures = (list) => list.reduce((acc, s) => {
+    const f = sectionFigures(s);
+    return { labour: acc.labour + f.labour, materials: acc.materials + f.materials, total: acc.total + f.total };
+  }, { labour: 0, materials: 0, total: 0 });
+  const netFigures = sumFigures(measured);
+  const provFigures = sumFigures(provisionalSections);
+  const projectTotal = netFigures.total + provFigures.total;
 
   let r = 6;
-  parsed.sections.forEach((s, idx) => {
-    const labour = s.subtotal.labour * labourMult;
-    const materials = s.subtotal.materials * matMult;
-    const total = labour + materials;
+  const writeTsRow = (no, label, f, style = {}) => {
     const row = ts.getRow(r++);
-    row.getCell(1).value = idx + 1;
-    row.getCell(2).value = sanitizeXmlText(s.title);
-    row.getCell(3).value = Math.round(labour * 100) / 100;
-    row.getCell(4).value = Math.round(materials * 100) / 100;
-    row.getCell(5).value = Math.round(total * 100) / 100;
-    row.getCell(6).value = projectTotal > 0 ? total / projectTotal : 0;
+    row.getCell(1).value = no;
+    row.getCell(2).value = sanitizeXmlText(label);
+    row.getCell(3).value = round2(f.labour);
+    row.getCell(4).value = round2(f.materials);
+    row.getCell(5).value = round2(f.total);
+    row.getCell(6).value = projectTotal > 0 ? f.total / projectTotal : 0;
     for (let c = 1; c <= 6; c++) {
       row.getCell(c).border = allBorders;
-      row.getCell(c).font = { name: 'Arial', size: 10 };
+      row.getCell(c).font = { name: 'Arial', size: style.bold ? 11 : 10, bold: !!style.bold };
+      if (style.fill) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: style.fill } };
       if (c >= 3 && c <= 5) row.getCell(c).numFmt = currFmt;
       if (c === 6) row.getCell(c).numFmt = '0.0%';
       if (c === 1 || c === 6) row.getCell(c).alignment = { horizontal: 'center' };
       if (c === 3 || c === 4 || c === 5) row.getCell(c).alignment = { horizontal: 'right' };
     }
-  });
+    return row;
+  };
+  const bannerRow = (ws, text, lastCol) => {
+    const n = r++;
+    ws.mergeCells('A' + n + ':' + lastCol + n);
+    const c = ws.getCell('A' + n);
+    c.value = text;
+    c.font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+    c.border = allBorders;
+    c.alignment = { wrapText: true, vertical: 'middle' };
+    ws.getRow(n).height = 22;
+  };
+
+  measured.forEach((s, idx) => writeTsRow(idx + 1, s.title, sectionFigures(s)));
+  if (provisionalSections.length) {
+    writeTsRow('', 'NET CONSTRUCTION — priced sections' + (builderMargin || materialsMarkup ? ', with your margin' : ''), netFigures, { bold: true, fill: SUBTOTAL_BG });
+    bannerRow(ts, 'PROVISIONAL SUMS — carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab.', 'F');
+    provisionalSections.forEach((s) => writeTsRow('PS', s.title, sectionFigures(s)));
+  }
 
   // Grand total
-  const gt = ts.getRow(r++);
-  gt.getCell(2).value = 'GRAND TOTAL';
-  gt.getCell(3).value = Math.round(parsed.grand.labour * labourMult * 100) / 100;
-  gt.getCell(4).value = Math.round(parsed.grand.materials * matMult * 100) / 100;
-  gt.getCell(5).value = Math.round(projectTotal * 100) / 100;
-  gt.getCell(6).value = 1;
-  for (let c = 1; c <= 6; c++) {
-    gt.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
-    gt.getCell(c).border = allBorders;
-    gt.getCell(c).font = { name: 'Arial', size: 11, bold: true };
-    if (c >= 3 && c <= 5) gt.getCell(c).numFmt = currFmt;
-    if (c === 6) gt.getCell(c).numFmt = '0.0%';
-    if (c === 3 || c === 4 || c === 5) gt.getCell(c).alignment = { horizontal: 'right' };
-  }
+  writeTsRow('', 'GRAND TOTAL', {
+    labour: netFigures.labour + provFigures.labour,
+    materials: netFigures.materials + provFigures.materials,
+    total: projectTotal,
+  }, { bold: true, fill: SUBTOTAL_BG });
 
   // ── By trade package ──────────────────────────────────────────────────────
   // The same lines regrouped as subcontract packages (electrician, plumber,
@@ -1328,7 +1359,10 @@ async function generateBuilderPack(parsed, opts = {}) {
   // out to price with subbies. Margins apply exactly as in the section table.
   {
     const { classifySections } = require('./boqTrades');
-    const tradeInfo = classifySections(parsed.sections.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
+    // Priced sections only: provisional sums are not a trade package. They
+    // follow the trades as one row, at cost, so ALL TRADES still equals the
+    // grand total.
+    const tradeInfo = classifySections(measured.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
     const byTrade = tradeInfo.by_trade || [];
     if (byTrade.length) {
       r++;
@@ -1360,9 +1394,17 @@ async function generateBuilderPack(parsed, opts = {}) {
         tradeGrand += total;
         return { ...t, labour, materials, total };
       });
+      if (provisionalSections.length) tradeGrand += provFigures.total;
+      if (provisionalSections.length) {
+        tradeRows.push({
+          trade: 'Provisional sums — at cost, no margin', item_count: 0,
+          sections: provisionalSections.map((s) => s.number).filter((n) => n != null && n !== ''),
+          labour: provFigures.labour, materials: provFigures.materials, total: provFigures.total, provisional: true,
+        });
+      }
       tradeRows.forEach((t, idx) => {
         const row = ts.getRow(r++);
-        row.getCell(1).value = idx + 1;
+        row.getCell(1).value = t.provisional ? 'PS' : idx + 1;
         row.getCell(2).value = sanitizeXmlText(t.trade + (t.sections.length ? ' (' + t.sections.join(', ') + ')' : ''));
         row.getCell(3).value = Math.round(t.labour * 100) / 100;
         row.getCell(4).value = Math.round(t.materials * 100) / 100;
@@ -1394,7 +1436,8 @@ async function generateBuilderPack(parsed, opts = {}) {
       const noteRow = r++;
       const note = ts.getRow(noteRow);
       ts.mergeCells('A' + noteRow + ':F' + noteRow);
-      note.getCell(1).value = 'Trades are assigned line by line from the description and section. Every job differs — treat this as a starting point for splitting subcontract packages.';
+      note.getCell(1).value = 'Trades are assigned line by line from the description and section. Every job differs — treat this as a starting point for splitting subcontract packages.'
+        + (provisionalSections.length ? ' Provisional sums are one row at cost, not split into trades.' : '');
       note.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
       note.getCell(1).alignment = { wrapText: true, vertical: 'top' };
       note.height = 28;
@@ -1428,7 +1471,7 @@ async function generateBuilderPack(parsed, opts = {}) {
 
   let mr = 6;
   let materialsRunning = 0;
-  parsed.sections.forEach((s) => {
+  measured.forEach((s) => {
     const itemsWithMat = s.items.filter((i) => (i.materials || 0) > 0);
     if (!itemsWithMat.length) return;
     // Section row
@@ -1494,6 +1537,15 @@ async function generateBuilderPack(parsed, opts = {}) {
       matGT.getCell(c).alignment = { horizontal: 'right' };
     }
   }
+  if (provisionalSections.length) {
+    const n = mr++;
+    ms.mergeCells('A' + n + ':E' + n);
+    const c = ms.getCell('A' + n);
+    c.value = 'Provisional sums (' + currency + fmtAmt(provFigures.total) + ') are not materials to order: they are allowances, carried at cost on the Provisional Sums tab.';
+    c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
+    c.alignment = { wrapText: true, vertical: 'top' };
+    ms.getRow(n).height = 28;
+  }
   ms.views = [{ state: 'frozen', ySplit: 5 }];
 
   // ─── Tab 3: Labour Schedule ───────────────────────────────────────────────
@@ -1521,7 +1573,7 @@ async function generateBuilderPack(parsed, opts = {}) {
 
   let lr = 6;
   let labourRunning = 0;
-  parsed.sections.forEach((s) => {
+  measured.forEach((s) => {
     const itemsWithLab = s.items.filter((i) => (i.labour || 0) > 0);
     if (!itemsWithLab.length) return;
     const sec = ls.getRow(lr++);
@@ -1585,10 +1637,110 @@ async function generateBuilderPack(parsed, opts = {}) {
       labGT.getCell(c).alignment = { horizontal: 'right' };
     }
   }
+  if (provisionalSections.length) {
+    const n = lr++;
+    ls.mergeCells('A' + n + ':E' + n);
+    const c = ls.getCell('A' + n);
+    c.value = 'Provisional sums (' + currency + fmtAmt(provFigures.total) + ') carry no labour here: they are allowances, carried at cost on the Provisional Sums tab.';
+    c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
+    c.alignment = { wrapText: true, vertical: 'top' };
+    ls.getRow(n).height = 28;
+  }
   ls.views = [{ state: 'frozen', ySplit: 5 }];
 
+  // ─── Tab 4: Provisional Sums (only when the bill carries any) ────────────
+  // Every provisional line as the bill lists it, at cost: the builder can see
+  // what the sums are for without opening the bill, and nothing here is
+  // marked up or mixed into the materials and labour schedules.
+  let ps = null;
+  if (provisionalSections.length) {
+    ps = wb.addWorksheet('Provisional Sums', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+    });
+    ps.columns = [
+      { key: 'item', width: 8 },
+      { key: 'desc', width: 60 },
+      { key: 'unit', width: 8 },
+      { key: 'qty', width: 10 },
+      { key: 'amt', width: 16 },
+    ];
+    titleBlock(ps, 'PROVISIONAL SUMS', 'E');
+    const psHdr = ps.getRow(5);
+    psHdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Amount (' + currency + ')'];
+    for (let c = 1; c <= 5; c++) {
+      const cell = psHdr.getCell(c);
+      cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+      cell.border = allBorders;
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    }
+    psHdr.height = 24;
+
+    let pr = 6;
+    let psRunning = 0;
+    const totalRow = (label, value, size) => {
+      const row = ps.getRow(pr++);
+      row.getCell(2).value = label;
+      row.getCell(5).value = round2(value);
+      for (let c = 1; c <= 5; c++) {
+        row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SUBTOTAL_BG } };
+        row.getCell(c).border = allBorders;
+        row.getCell(c).font = { name: 'Arial', size, bold: true };
+        if (c === 5) {
+          row.getCell(c).numFmt = currFmt;
+          row.getCell(c).alignment = { horizontal: 'right' };
+        }
+      }
+    };
+    for (const s of provisionalSections) {
+      const sec = ps.getRow(pr++);
+      ps.mergeCells('A' + (pr - 1) + ':E' + (pr - 1));
+      sec.getCell(1).value = sanitizeXmlText(s.title).toUpperCase();
+      sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
+      sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
+      sec.getCell(1).border = allBorders;
+      sec.height = 20;
+      let secTotal = 0;
+      for (const it of (s.items || [])) {
+        const amount = lineMoney(it);
+        secTotal += amount;
+        const row = ps.getRow(pr++);
+        row.getCell(1).value = sanitizeXmlText(it.itemRef || '');
+        row.getCell(2).value = sanitizeXmlText(it.description || '');
+        row.getCell(3).value = sanitizeXmlText(it.unit || '');
+        row.getCell(4).value = it.qty > 0 ? it.qty : null;
+        row.getCell(5).value = round2(amount);
+        for (let c = 1; c <= 5; c++) {
+          row.getCell(c).border = allBorders;
+          row.getCell(c).font = { name: 'Arial', size: 10 };
+          if (c === 5) {
+            row.getCell(c).numFmt = currFmt;
+            row.getCell(c).alignment = { horizontal: 'right' };
+          }
+          if (c === 1 || c === 3) row.getCell(c).alignment = { horizontal: 'center' };
+          if (c === 4) {
+            row.getCell(c).numFmt = '#,##0.00';
+            row.getCell(c).alignment = { horizontal: 'center' };
+          }
+          if (c === 2) row.getCell(c).alignment = { wrapText: true, vertical: 'top' };
+        }
+      }
+      psRunning += secTotal;
+      if (provisionalSections.length > 1) totalRow('Subtotal — ' + sanitizeXmlText(s.title), secTotal, 10);
+    }
+    totalRow('TOTAL PROVISIONAL SUMS (at cost)', psRunning, 11);
+    const n = pr++;
+    ps.mergeCells('A' + n + ':E' + n);
+    const c = ps.getCell('A' + n);
+    c.value = 'Carried at cost exactly as the bill lists them — no builder margin or materials markup. They sit as their own block on the Trade Summary and are in its grand total. Each is an allowance: the final figure is what that work actually comes to.';
+    c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
+    c.alignment = { wrapText: true, vertical: 'top' };
+    ps.getRow(n).height = 40;
+    ps.views = [{ state: 'frozen', ySplit: 5 }];
+  }
+
   // Footer on every tab
-  for (const tab of [ts, ms, ls]) {
+  for (const tab of [ts, ms, ls, ...(ps ? [ps] : [])]) {
     tab.headerFooter.oddFooter =
       '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N';
   }

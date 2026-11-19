@@ -799,3 +799,89 @@ test('a saved Builder Pack state gets back the provisional section the parser us
   assert.strictEqual(other.provisional_sum, 500);
   assert.strictEqual(other.sections.length, 2);
 });
+
+// ── Builder Pack: provisional sums kept separate ────────────────────────────
+// The bill's provisional sums used to be folded into the Builder Pack like
+// any other trade: marked up with the builder margin, listed on the Materials
+// Schedule as materials to order, split into trade packages. The client copy
+// separated them; the builder's own pack did not.
+test('the Builder Pack carries provisional sums at cost: their own block, their own tab, off the schedules', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const { generateBuilderPack } = require('./builderExports');
+  const psLines = [
+    { itemRef: 'L1', description: 'Foul drainage below ground, pending a drainage design', unit: 'item', qty: 1, rate: 3000, labour: 0, materials: 3000, total: 3000 },
+    { itemRef: 'L2', description: 'CCTV survey of existing drains', unit: 'item', qty: 1, rate: 300, labour: 0, materials: 300, total: 300 },
+  ];
+  const parsed = {
+    sections: [
+      { number: '1', title: 'Preliminaries', items: [
+        { itemRef: '1.1', description: 'Site supervision', unit: 'Item', qty: 1, rate: 2500, labour: 2500, materials: 0, total: 2500 },
+      ], subtotal: { labour: 2500, materials: 0, total: 2500 } },
+      { number: '2', title: 'Substructure', items: [
+        { itemRef: '2.1', description: 'Trench fill concrete to footings', unit: 'm3', qty: 10, rate: 200, labour: 800, materials: 1200, total: 2000 },
+      ], subtotal: { labour: 800, materials: 1200, total: 2000 } },
+      { number: 'L', title: 'PROVISIONAL SUMS (at cost, excluded from the total above)', provisional: true, items: psLines,
+        subtotal: { labour: 0, materials: 3300, total: 3300 } },
+    ],
+    grand: { labour: 3300, materials: 4500, total: 7800 },
+  };
+  const buf = await generateBuilderPack(parsed, { currency: '£', builder_margin: 10, materials_markup: 5, project_name: 'PS', client_name: 'Client' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const rowsOf = (ws, cols) => { const out = []; ws.eachRow((row) => out.push(cols.map((c) => row.getCell(c).value == null ? '' : row.getCell(c).value))); return out; };
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.02;
+
+  // Trade Summary: priced sections with the margin, a net line, the PS block
+  // at cost, a grand total that adds the two.
+  const ts = rowsOf(wb.getWorksheet('Trade Summary'), [1, 2, 3, 4, 5]);
+  const find = (re) => ts.find((r) => re.test(String(r[1])));
+  const net = find(/^NET CONSTRUCTION/);
+  assert.ok(net, 'a net construction line precedes the provisional block');
+  assert.ok(near(net[4], 3300 * 1.1 + 1200 * 1.15), 'net = priced labour × 1.10 + materials × 1.15');
+  const banner = ts.find((r) => /^PROVISIONAL SUMS — carried at cost/.test(String(r[0])));
+  assert.ok(banner, 'the provisional block is announced');
+  const psRow = find(/^PROVISIONAL SUMS \(at cost/);
+  assert.strictEqual(String(psRow[0]), 'PS');
+  assert.ok(near(psRow[4], 3300), 'the provisional section is at face value — no margin, no markup');
+  assert.ok(near(psRow[3], 3300), 'its amount is shown as the bill carries it');
+  const grand = find(/^GRAND TOTAL$/);
+  assert.ok(near(grand[4], 3300 * 1.1 + 1200 * 1.15 + 3300), 'grand total = net construction + provisional sums');
+  const tradePs = ts.find((r) => /^Provisional sums — at cost/.test(String(r[1])));
+  assert.ok(tradePs && near(tradePs[4], 3300), 'by trade: one provisional row at cost');
+  assert.match(String(tradePs[1]), /\(L\)/, 'the row names the section it comes from');
+  const allTrades = find(/^ALL TRADES$/);
+  assert.ok(near(allTrades[4], grand[4]), 'all trades still equals the grand total');
+  assert.ok(!ts.some((r) => /Fees & Provisional Sums/.test(String(r[1]))), 'the provisional lines are not a trade package');
+
+  // Materials Schedule: the provisional lines are not materials to order.
+  const ms = rowsOf(wb.getWorksheet('Materials Schedule'), [1, 2, 5]);
+  assert.ok(!ms.some((r) => /Foul drainage|CCTV/.test(String(r[1]))), 'provisional lines are off the materials schedule');
+  const totalMat = ms.find((r) => String(r[1]) === 'TOTAL MATERIALS');
+  assert.ok(near(totalMat[2], 1200 * 1.15), 'total materials is the priced materials only');
+  assert.ok(ms.some((r) => /Provisional sums \(£3,300\.00\).*Provisional Sums tab/.test(String(r[0]))), 'the schedule points to the tab');
+
+  // Labour Schedule: likewise.
+  const ls = rowsOf(wb.getWorksheet('Labour Schedule'), [1, 2, 5]);
+  assert.ok(!ls.some((r) => /Foul drainage|CCTV/.test(String(r[1]))));
+  assert.ok(near(ls.find((r) => String(r[1]) === 'TOTAL LABOUR')[2], 3300 * 1.1));
+
+  // Provisional Sums tab: every line, at cost, with the total.
+  const psTab = wb.getWorksheet('Provisional Sums');
+  assert.ok(psTab, 'a Provisional Sums tab is added');
+  const pt = rowsOf(psTab, [1, 2, 3, 4, 5]);
+  assert.deepStrictEqual(
+    pt.filter((r) => /^L\d/.test(String(r[0]))).map((r) => [r[0], r[2], r[3], Number(r[4])]),
+    [['L1', 'item', 1, 3000], ['L2', 'item', 1, 300]],
+    'each provisional line is listed as the bill has it'
+  );
+  assert.ok(pt.some((r) => /Foul drainage below ground, pending a drainage design/.test(String(r[1]))));
+  const psTotal = pt.find((r) => /^TOTAL PROVISIONAL SUMS/.test(String(r[1])));
+  assert.ok(psTotal && near(psTotal[4], 3300));
+  assert.strictEqual(psTab.headerFooter.oddFooter, '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N', 'the tab carries the pack footer');
+
+  // A bill with no provisional sums gets no tab and no net line.
+  const plain = await generateBuilderPack({ sections: parsed.sections.slice(0, 2), grand: { labour: 3300, materials: 1200, total: 4500 } }, { currency: '£', builder_margin: 10 });
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.load(plain);
+  assert.ok(!wb2.getWorksheet('Provisional Sums'));
+  assert.ok(!rowsOf(wb2.getWorksheet('Trade Summary'), [2]).some((r) => /^NET CONSTRUCTION/.test(String(r[0]))));
+});

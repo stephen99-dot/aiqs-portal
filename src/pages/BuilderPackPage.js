@@ -400,24 +400,38 @@ export default function BuilderPackPage() {
   const labourMult = 1 + builderMargin / 100;
   const matMult = 1 + builderMargin / 100 + materialsMarkup / 100;
   const builderRows = useMemo(
-    () => sections.map((s, i) => ({
-      number: s.number, title: s.title, item_count: s.items.length,
-      labour: sectionTotals[i].labour * labourMult,
-      materials: sectionTotals[i].materials * matMult,
-      // Composite lines take the blanket builder margin (no materials markup,
-      // since there's no identified materials portion to mark up).
-      total: sectionTotals[i].labour * labourMult + sectionTotals[i].materials * matMult + sectionTotals[i].composite * labourMult,
-    })),
+    () => sections.map((s, i) => {
+      const t = sectionTotals[i];
+      // Provisional sums are carried at cost, as the bill lists them — no
+      // builder margin, no materials markup — and shown as their own block.
+      if (s.provisional) {
+        return { number: s.number, title: s.title, item_count: s.items.length, provisional: true, labour: t.labour, materials: t.materials, total: t.total };
+      }
+      return {
+        number: s.number, title: s.title, item_count: s.items.length, provisional: false,
+        labour: t.labour * labourMult,
+        materials: t.materials * matMult,
+        // Composite lines take the blanket builder margin (no materials markup,
+        // since there's no identified materials portion to mark up).
+        total: t.labour * labourMult + t.materials * matMult + t.composite * labourMult,
+      };
+    }),
     [sections, sectionTotals, labourMult, matMult]
   );
   const builderGrand = builderRows.reduce(
     (a, r) => ({ labour: a.labour + r.labour, materials: a.materials + r.materials, total: a.total + r.total }),
     { labour: 0, materials: 0, total: 0 }
   );
+  // The provisional sums in the pack, at cost — their own line in the breakdown.
+  const builderProvisional = builderRows.filter((r) => r.provisional).reduce((a, r) => a + r.total, 0);
   // The net/true cost before the builder's own margin — so the breakdown can
   // show exactly what (if anything) has been added on top.
+  // Priced sections only: provisional sums take no margin and are shown on
+  // their own, so they are not part of the build cost the margin is worked on.
   const baseGrand = sectionTotals.reduce(
-    (a, t) => ({ labour: a.labour + t.labour, materials: a.materials + t.materials, total: a.total + t.total }),
+    (a, t, i) => (sections[i] && sections[i].provisional
+      ? a
+      : { labour: a.labour + t.labour, materials: a.materials + t.materials, total: a.total + t.total }),
     { labour: 0, materials: 0, total: 0 }
   );
 
@@ -702,11 +716,14 @@ export default function BuilderPackPage() {
         const t = acc[trade] || (acc[trade] = { trade, item_count: 0, labour: 0, materials: 0, total: 0, sections: {} });
         const ls = num(it.labour), ms = num(it.materials);
         const comp = (ls !== 0 || ms !== 0) ? 0 : num(it.total);
+        // A provisional section's lines are carried at cost — no margin.
+        const lm = s.provisional ? 1 : labourMult, mm = s.provisional ? 1 : matMult;
         t.item_count++;
-        t.labour += ls * labourMult;
-        t.materials += ms * matMult;
-        t.total += ls * labourMult + ms * matMult + comp * labourMult;
+        t.labour += ls * lm;
+        t.materials += ms * mm;
+        t.total += ls * lm + ms * mm + comp * lm;
         t.sections[String(s.number)] = true;
+        if (s.provisional) t.at_cost = true;
       }
     });
     const rank = (t) => { const i = order.indexOf(t); return i < 0 ? 999 : i; };
@@ -1095,7 +1112,7 @@ export default function BuilderPackPage() {
                       <div style={isMobile
                         ? { flex: '1 1 100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 66, marginTop: -4 }
                         : { display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}{s.provisional ? ' · provisional, at cost' : ''}</span>
                         <span style={{ fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--text-primary)', minWidth: 90, textAlign: 'right' }}>
                           {fmt(sym, t.total)}
                         </span>
@@ -1269,7 +1286,7 @@ export default function BuilderPackPage() {
               background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               {tab === 'builder'
-                ? <BuilderPreview rows={builderRows} tradeRows={tradeRows} totals={builderGrand} base={baseGrand}
+                ? <BuilderPreview rows={builderRows} tradeRows={tradeRows} totals={builderGrand} base={baseGrand} provisional={builderProvisional}
                     builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
@@ -1835,9 +1852,17 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, tradeRows = [], totals, base, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
+function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
   base = base || { labour: 0, materials: 0, total: 0 };
   const bm = num(builderMargin), mm = num(materialsMarkup);
+  // Provisional sums sit under the priced sections as their own block, at
+  // cost, after a net-construction line — the same shape as the workbook.
+  const measuredRows = rows.filter((s) => !s.provisional);
+  const provisionalRows = rows.filter((s) => s.provisional);
+  const net = measuredRows.reduce(
+    (a, s) => ({ labour: a.labour + s.labour, materials: a.materials + s.materials, total: a.total + s.total }),
+    { labour: 0, materials: 0, total: 0 }
+  );
   const primary = (branding && branding.primary_colour) || '#1B2A4A';
   const accent  = (branding && branding.accent_colour)  || '#F59E0B';
   const company = branding && branding.company_name;
@@ -1888,11 +1913,13 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, builderMargin, mat
         {bRow('True build cost (priced labour + materials)', fmt(sym, base.total, 2))}
         {bRow(`Your builder margin (${bm}% on all rates)`, (builderMarginAmt > 0 ? '+ ' : '') + fmt(sym, builderMarginAmt, 2), { muted: bm === 0 })}
         {bRow(`Your materials markup (extra ${mm}% on materials)`, (materialsMarkupAmt > 0 ? '+ ' : '') + fmt(sym, materialsMarkupAmt, 2), { muted: mm === 0 })}
+        {provisional > 0 && bRow('Provisional sums (carried at cost — no margin or markup)', '+ ' + fmt(sym, provisional, 2))}
         {bRow('Builder pack total', fmt(sym, totals.total, 2), { strong: true })}
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
           {totalAdded <= 0
             ? 'Nothing has been added on top — the total equals the priced build cost. Move the margin sliders on the left to add your markup, and you’ll see exactly how much it adds here.'
             : 'You’ve added ' + fmt(sym, totalAdded, 2) + ' on top of the priced build cost. The line figures below are the priced labour + materials; your margin is applied to them.'}
+          {provisional > 0 && ' Provisional sums are listed as their own block below, at cost, exactly as the bill carries them.'}
         </div>
       </div>
 
@@ -1907,19 +1934,42 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, builderMargin, mat
           <div style={{ textAlign: 'right' }}>%</div>
         </div>
         {rows.length === 0 && <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No priced sections in this BOQ.</div>}
-        {rows.map((s, i) => {
-          const pct = totals.total > 0 ? (s.total / totals.total) * 100 : 0;
+        {(() => {
+          const line = (s, key, no) => {
+            const pct = totals.total > 0 ? (s.total / totals.total) * 100 : 0;
+            return (
+              <div key={key} style={previewRowStyle}>
+                <div style={{ color: 'var(--text-muted)' }}>{no}</div>
+                <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items{s.provisional ? ' · at cost, no margin' : ''}</span></div>
+                <div style={moneyCell('#3B82F6')}>{fmt(sym, s.labour)}</div>
+                <div style={moneyCell('#A855F7')}>{fmt(sym, s.materials)}</div>
+                <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, s.total)}</div>
+                <div style={moneyCell('var(--text-muted)')}>{pct.toFixed(1)}%</div>
+              </div>
+            );
+          };
           return (
-            <div key={s.number + '-' + i} style={previewRowStyle}>
-              <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
-              <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items</span></div>
-              <div style={moneyCell('#3B82F6')}>{fmt(sym, s.labour)}</div>
-              <div style={moneyCell('#A855F7')}>{fmt(sym, s.materials)}</div>
-              <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, s.total)}</div>
-              <div style={moneyCell('var(--text-muted)')}>{pct.toFixed(1)}%</div>
-            </div>
+            <>
+              {measuredRows.map((s, i) => line(s, s.number + '-' + i, i + 1))}
+              {provisionalRows.length > 0 && (
+                <>
+                  <div style={{ ...previewRowStyle, background: 'rgba(27,42,74,0.05)', fontWeight: 700 }}>
+                    <div></div>
+                    <div>NET CONSTRUCTION<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 500 }}>priced sections{bm > 0 || mm > 0 ? ', with your margin' : ''}</span></div>
+                    <div style={moneyCell()}>{fmt(sym, net.labour)}</div>
+                    <div style={moneyCell()}>{fmt(sym, net.materials)}</div>
+                    <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, net.total)}</div>
+                    <div style={moneyCell('var(--text-muted)')}>{(totals.total > 0 ? (net.total / totals.total) * 100 : 0).toFixed(1)}%</div>
+                  </div>
+                  <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', background: 'rgba(168,85,247,0.06)', borderBottom: '1px solid var(--border)' }}>
+                    Provisional sums — carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab of the download.
+                  </div>
+                  {provisionalRows.map((s, i) => line(s, 'ps-' + s.number + '-' + i, 'PS'))}
+                </>
+              )}
+            </>
           );
-        })}
+        })()}
         <div style={{ ...previewRowStyle, background: 'rgba(245,158,11,0.08)', fontWeight: 700, fontSize: 13.5 }}>
           <div></div>
           <div>GRAND TOTAL</div>
@@ -1957,7 +2007,7 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, builderMargin, mat
                     <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
                     <div style={{ fontWeight: 500, minWidth: 0 }}>
                       {t.trade}
-                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{t.item_count} line{t.item_count === 1 ? '' : 's'}{t.sections.length ? ' · sections ' + t.sections.join(', ') : ''}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{t.item_count} line{t.item_count === 1 ? '' : 's'}{t.sections.length ? ' · sections ' + t.sections.join(', ') : ''}{t.at_cost ? ' · at cost, no margin' : ''}</span>
                     </div>
                     <div style={moneyCell('#3B82F6')}>{fmt(sym, t.labour)}</div>
                     <div style={moneyCell('#A855F7')}>{fmt(sym, t.materials)}</div>
