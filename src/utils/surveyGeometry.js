@@ -6,7 +6,7 @@
 export const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 export const r2 = (n) => Math.round(num(n) * 100) / 100;
 export const DEFAULT_HEIGHT = 2.4;
-export const WALL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+export const WALL_LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 export function wallsOf(room) {
   const H = num(room.height_m) || DEFAULT_HEIGHT;
@@ -116,6 +116,56 @@ export function outlineOf(room) {
     if (a > 0 && b > 0) return { points: [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: W - b }, { x: L - a, y: W - b }, { x: L - a, y: W }, { x: 0, y: W }], bounds: { w: L, h: W } };
   }
   return { points: [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: W }, { x: 0, y: W }], bounds: { w: L, h: W } };
+}
+
+export function polygonCentroid(pts) {
+  if (!pts || pts.length < 3) return pts && pts.length ? { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length } : { x: 0, y: 0 };
+  let twice = 0; let cx = 0; let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]; const q = pts[(i + 1) % pts.length];
+    const cross = p.x * q.y - q.x * p.y;
+    twice += cross; cx += (p.x + q.x) * cross; cy += (p.y + q.y) * cross;
+  }
+  if (Math.abs(twice) < 1e-9) return pts[0];
+  return { x: cx / (3 * twice), y: cy / (3 * twice) };
+}
+
+// Everything a drawing of the room needs, whichever way it was measured —
+// the mirror of sceneOf on the server. A scanned room arrives with its `plan`
+// from the server (walls in place, openings on them, furniture); a typed
+// rectangle or L-shape is built here from its sizes. Null when there is
+// nothing to draw yet.
+//   segments  [{ label, a, b, height_m, openings: [{ kind, from, to, width_m, height_m }] }]
+//   floor     the outline polygon; bounds { w, h } in metres; centroid; objects
+export function sceneOf(room) {
+  if (!room) return null;
+  const shape = room.shape || 'rectangular';
+  if (shape === 'custom') {
+    const plan = room.plan;
+    if (!plan || !Array.isArray(plan.walls) || !plan.walls.length) return null;
+    return {
+      kind: 'plan',
+      segments: plan.walls.map((w) => ({ label: w.label, a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings || [] })),
+      floor: plan.outline || [], bounds: plan.bounds, centroid: plan.centroid || polygonCentroid(plan.outline || []), objects: plan.objects || [],
+      floor_m2: plan.floor_m2, length_m: plan.bounds.w, width_m: plan.bounds.h, height_m: num(room.height_m) || plan.height_m || DEFAULT_HEIGHT,
+    };
+  }
+  const outline = outlineOf(room);
+  if (!outline) return null;
+  const walls = wallsOf(room);
+  const layout = layoutOpenings(room);
+  const n = outline.points.length;
+  const segments = outline.points.map((p, i) => {
+    const label = walls[i] ? walls[i].label : null;
+    return {
+      label, a: p, b: outline.points[(i + 1) % n], height_m: walls[i] ? walls[i].height_m : (num(room.height_m) || DEFAULT_HEIGHT),
+      openings: layout.filter((l) => l.wall === label).map((l) => ({ kind: l.opening.kind, from: l.from, to: l.to, width_m: l.opening.width_m, height_m: l.opening.height_m })),
+    };
+  });
+  return {
+    kind: 'outline', segments, floor: outline.points, bounds: outline.bounds, centroid: polygonCentroid(outline.points), objects: [],
+    floor_m2: r2(floorAreaOf(room)), length_m: num(room.length_m), width_m: num(room.width_m), height_m: num(room.height_m) || DEFAULT_HEIGHT,
+  };
 }
 
 export const SOURCE_LABEL = { measured: 'Measured', stated: 'Stated', estimated: 'Estimated from photos', unknown: 'No size yet' };

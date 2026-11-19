@@ -82,7 +82,10 @@ Three ways to a measured room: type the length, width and height (rectangular or
 reads the photos and fills in only what the builder has not already measured or typed; or
 **Scan with LiDAR** in the iOS app (`ios/App/App/RoomScanPlugin.swift`, Apple RoomPlan, see
 `docs/IOS_APP.md`) / **Import a scan** (a RoomPlan, Polycam or magicplan JSON export) which
-locks the outline and marks it *measured*.
+locks the outline and marks it *measured*. A scanned room is drawn from the scan itself — every
+wall where the scanner put it, doors and windows on the walls they were found in, the furniture
+it saw — in the plan sketch, the 3D view and the report (`planFromCapture` / `sceneOf` in
+`server/surveyGeometry.js`, mirrored on the client).
 
 **Price with MAX** hands the room to MAX's `price_small_job` tool with a quantities brief
 ("use these exactly … price only this"), so the estimate comes from the surveyed numbers and the
