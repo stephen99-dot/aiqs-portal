@@ -1216,7 +1216,7 @@ function MaxTab({ t }) {
         {data.voice && data.voice.stt ? (
           <p style={sub}>Dictation is <strong style={{ color: t.text }}>on</strong> via {data.voice.provider === 'deepgram' ? 'Deepgram' : 'OpenAI'}. Builders can talk to MAX and dictate survey notes in the app and on the web. MAX always replies in writing.</p>
         ) : (
-          <p style={sub}>Dictation is <strong style={{ color: '#EF4444' }}>off</strong>: the microphone in the app has nothing to turn speech into text. Add <code>OPENAI_API_KEY</code> (or <code>DEEPGRAM_API_KEY</code>) to the server's environment on Render and redeploy — nothing else to change. Until then the mic explains this when tapped, and typing works as normal. MAX always replies in writing.</p>
+          <p style={sub}>Server dictation is <strong style={{ color: t.text }}>off</strong> (no speech-to-text key). That is fine for the app: the iPhone's own speech recogniser handles talking to MAX and dictating notes there. On the website, Chrome, Edge and Safari use their own recogniser; other browsers show no mic. Adding <code>OPENAI_API_KEY</code> or <code>DEEPGRAM_API_KEY</code> on Render would cover those too. MAX always replies in writing.</p>
         )}
         {data.voice && !data.voice.ai_configured && <p style={{ ...sub, margin: 0, color: '#EF4444' }}>The Anthropic key is not set on this server, so MAX cannot answer at all.</p>}
       </div>

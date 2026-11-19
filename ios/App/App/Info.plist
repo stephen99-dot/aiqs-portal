@@ -32,6 +32,8 @@
 	<string>AI QS can save marked-up drawings and documents you share to your photo library.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AI QS uses the microphone when you talk to MAX or dictate a site note, and if you record a video of site conditions. Audio is turned into text and not kept.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AI QS turns what you say into text so you can talk to MAX and dictate site notes instead of typing.</string>
 	<key>UIRequiresFullScreen</key>
 	<false/>
 	<key>UIStatusBarStyle</key>

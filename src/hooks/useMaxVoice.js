@@ -1,25 +1,30 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { API_BASE, getToken } from '../utils/api';
 import { isNative } from '../native/platform';
+import { nativeSpeechStatus, requestSpeechPermission, startNativeListening } from '../native/speech';
 
 // ═══ useMaxVoice — the microphone ════════════════════════════════════════════
-// Speech in only: MAX does not talk back. The microphone is recorded with
-// MediaRecorder and sent to POST /api/transcribe (server speech-to-text —
-// OpenAI or Deepgram — the only path inside the app, where WKWebView has no
-// speech recogniser of its own). In a desktop browser with no server key,
-// the browser's own Web Speech API is the fallback.
+// Speech in only: MAX does not talk back. Three ways to hear, tried in order:
+//
+//   native   inside the iOS app, the iPhone's own speech recogniser through
+//            the app's Speech plugin (src/native/speech.js). Free, no key,
+//            words land as they are said.
+//   server   MediaRecorder audio posted to POST /api/transcribe (OpenAI or
+//            Deepgram, when the server has a key).
+//   web      a desktop browser's own Web Speech API. WKWebView exposes one
+//            that never actually works, so it is never used inside the app.
 //
 // Interaction: tap to talk, tap to stop, auto-stop after a short silence; the
 // live transcript and the input level are exposed so a page can show words as
 // they land and a waveform that moves with the voice.
 //
-// Privacy: audio never leaves memory on either side — the blob is posted,
-// transcribed and dropped; only the text goes into the thread.
+// Privacy: audio never leaves memory on either side — it is turned into text
+// and dropped; only the text goes into the thread.
 
 const SILENCE_MS = 1800;        // quiet this long after speech ends the recording
 const MAX_RECORD_MS = 60000;    // a forgotten mic never runs forever
 const SPEECH_LEVEL = 0.035;     // RMS above this counts as talking
-const NOT_ON = 'Voice isn\'t switched on for this portal yet — type for now. (Admins: add an OpenAI or Deepgram key for dictation.)';
+const NOT_ON = 'Voice isn\'t available in this version of the app yet — update the app, or type for now.';
 
 function authHeaders() {
   const h = {};
@@ -47,7 +52,7 @@ function pickMime() {
 }
 
 export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
-  const [mode, setMode] = useState(null);       // 'server' | 'web' | 'none' | null (checking)
+  const [mode, setMode] = useState(null);       // 'native' | 'server' | 'web' | 'none' | null (checking)
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [interim, setInterim] = useState('');
@@ -56,6 +61,8 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
   const recRef = useRef(null);        // MediaRecorder
   const streamRef = useRef(null);     // MediaStream
   const webRecRef = useRef(null);     // SpeechRecognition
+  const nativeStopRef = useRef(null); // () => stop the iPhone recogniser
+  const nativeTimerRef = useRef(null);
   const ctxRef = useRef(null);        // AudioContext for levels
   const rafRef = useRef(0);
   const onFinalRef = useRef(onFinal); onFinalRef.current = onFinal;
@@ -63,20 +70,23 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
   const onErrorRef = useRef(onError); onErrorRef.current = onError;
 
   const native = isNative();
-  // WKWebView exposes a SpeechRecognition object that never actually works, so
-  // inside the app the server is the only way.
   const webSupported = !native && typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   const canRecord = typeof window !== 'undefined' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
   useEffect(() => {
     let gone = false;
     (async () => {
+      if (native) {
+        const s = await nativeSpeechStatus();
+        if (gone) return;
+        if (s.available) { setMode('native'); return; }
+      }
       const server = canRecord && await serverSttAvailable();
       if (gone) return;
       setMode(server ? 'server' : (webSupported ? 'web' : 'none'));
     })();
     return () => { gone = true; };
-  }, [canRecord, webSupported]);
+  }, [native, canRecord, webSupported]);
 
   // Warm the audio path on a user gesture so the level meter can run.
   const unlock = useCallback(() => {
@@ -85,6 +95,39 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
       if (AC && !ctxRef.current) ctxRef.current = new AC();
       if (ctxRef.current && ctxRef.current.state === 'suspended') ctxRef.current.resume().catch(() => {});
     } catch (e) { /* fine */ }
+  }, []);
+
+  // ── Listening: the iPhone's own recogniser ────────────────────────────────
+  const startNative = useCallback(async () => {
+    const allowed = await requestSpeechPermission();
+    if (!allowed) { if (onErrorRef.current) onErrorRef.current('Allow the microphone and speech recognition for AI QS in the iPhone Settings, then try again.'); return; }
+    let latest = '';
+    let hard = null;
+    const clearTimers = () => { clearTimeout(nativeTimerRef.current); nativeTimerRef.current = null; clearTimeout(hard); };
+    const stop = await startNativeListening({
+      language: 'en-GB',
+      onPartial: (text) => {
+        latest = text;
+        setInterim(text); if (onInterimRef.current) onInterimRef.current(text);
+        setLevel(0.5);
+        // Nothing new for a while after some words → done.
+        clearTimeout(nativeTimerRef.current);
+        if (text.trim()) nativeTimerRef.current = setTimeout(() => { if (nativeStopRef.current) nativeStopRef.current(); }, SILENCE_MS);
+      },
+      onStopped: () => {
+        clearTimers();
+        nativeStopRef.current = null;
+        setListening(false); setLevel(0);
+        setInterim(''); if (onInterimRef.current) onInterimRef.current('');
+        const said = latest.replace(/\s+/g, ' ').trim();
+        if (said && onFinalRef.current) onFinalRef.current(said);
+        else if (!said && onErrorRef.current) onErrorRef.current('I didn\'t catch that — try again.');
+      },
+    });
+    nativeStopRef.current = stop;
+    hard = setTimeout(() => { if (nativeStopRef.current) nativeStopRef.current(); }, MAX_RECORD_MS);
+    setListening(true);
+    setInterim('');
   }, []);
 
   // ── Listening: server STT via MediaRecorder ───────────────────────────────
@@ -96,6 +139,7 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
   }, []);
 
   const stopListening = useCallback(() => {
+    if (nativeStopRef.current) { nativeStopRef.current(); }
     if (recRef.current && recRef.current.state !== 'inactive') { try { recRef.current.stop(); } catch (e) { /* ignore */ } }
     if (webRecRef.current) { try { webRecRef.current.stop(); } catch (e) { /* ignore */ } }
     setListening(false);
@@ -218,6 +262,15 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
   // Tap to talk.
   const startListening = useCallback(async () => {
     unlock();
+    if (mode === 'native') {
+      try { await startNative(); }
+      catch (e) {
+        const msg = e && e.message ? String(e.message) : '';
+        if (onErrorRef.current) onErrorRef.current(/Settings|allowed/i.test(msg) ? msg : (msg || 'Could not start the microphone.'));
+        setListening(false);
+      }
+      return;
+    }
     if (mode === 'server') {
       try { await startServerListening(); return; }
       catch (e) {
@@ -230,11 +283,11 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
     }
     if (mode === 'web' || webSupported) { startWebListening(); return; }
     if (onErrorRef.current) onErrorRef.current(mode === null ? 'One moment — checking the microphone…' : native ? NOT_ON : 'Voice isn\'t available in this browser — type to MAX instead.');
-  }, [mode, native, webSupported, unlock, startServerListening, startWebListening]);
+  }, [mode, native, webSupported, unlock, startNative, startServerListening, startWebListening]);
 
   const toggleListening = useCallback(() => { if (listening) stopListening(); else startListening(); }, [listening, startListening, stopListening]);
 
-  useEffect(() => () => { stopListening(); teardownRecording(); }, [stopListening, teardownRecording]);
+  useEffect(() => () => { stopListening(); teardownRecording(); clearTimeout(nativeTimerRef.current); }, [stopListening, teardownRecording]);
 
   return {
     // Inside the app the mic is always shown: a tap either records, or says
