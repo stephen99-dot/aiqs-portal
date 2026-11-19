@@ -22,7 +22,16 @@ const { PLANS, PLAN_KEYS } = require(path.join(__dirname, '..', 'server', 'maxPl
 
 async function main() {
   const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) { console.error('Set STRIPE_SECRET_KEY (sk_test_… or sk_live_…) and run again.'); process.exit(1); }
+  if (!key) {
+    console.error('No key given. Run it as ONE line, with the key and the command together:\n'
+      + '  STRIPE_SECRET_KEY=sk_live_… PORTAL_URL=https://theaiqs.co.uk node scripts/create-max-plans.js');
+    process.exit(1);
+  }
+  if (!/^(sk|rk)_(live|test)_/.test(key)) {
+    console.error('That is not a Stripe secret key (it should start with sk_live_ or sk_test_ and be about 100 characters).\n'
+      + 'Stripe → Developers → API keys → Create secret key, and copy it from the popup.');
+    process.exit(1);
+  }
   const portal = (process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com').replace(/\/$/, '');
   const stripe = require('stripe')(key);
   const mode = key.startsWith('sk_live') ? 'LIVE' : 'test';
