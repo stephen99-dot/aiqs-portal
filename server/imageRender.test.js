@@ -57,7 +57,7 @@ test('a request field the API no longer takes is dropped and the call tried agai
   const out = await IR.renderRoom({ buffer: Buffer.from('jpegbytes'), mime: 'image/jpeg', width: 1000, height: 1000, prompt: 'new bath' });
   assert.equal(calls.length, 3);
   assert.equal(calls[0].sent.input_fidelity, 'high');
-  assert.equal(calls[1].sent.input_fidelity, undefined); assert.equal(calls[1].sent.quality, 'medium');
+  assert.equal(calls[1].sent.input_fidelity, undefined); assert.equal(calls[1].sent.quality, 'high');
   assert.equal(calls[2].sent.quality, undefined);
   assert.equal(out.quality, 'default');
 });

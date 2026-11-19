@@ -391,7 +391,7 @@ test('a finished-room render: painted from a photo and the scope, kept with the 
     assert.equal(r.status, 201, JSON.stringify(r.body));
     assert.equal(r.body.photo.kind, 'render');
     assert.equal(r.body.photo.render_of, source.id);
-    assert.ok(/grey tiles, walk-in shower/.test(r.body.photo.render_prompt) && /Keep the camera angle/.test(r.body.photo.render_prompt), 'the prompt carries the tweak and the guard rails');
+    assert.ok(/grey tiles, walk-in shower/.test(r.body.photo.render_prompt) && /camera position, lens and angle/.test(r.body.photo.render_prompt) && /UK-style sockets/.test(r.body.photo.render_prompt), 'the prompt carries the tweak and the guard rails');
     assert.ok(/Finished room — grey tiles/.test(r.body.photo.caption));
     assert.ok(r.body.photo.thumb_url && r.body.photo.url);
     assert.equal(r.body.allowance.used, 1); assert.equal(r.body.allowance.remaining, 19);

@@ -9,7 +9,7 @@
 //
 //   OPENAI_API_KEY          enables it (the same key as dictation)
 //   OPENAI_IMAGE_MODEL      pins a model; unset = gpt-image-2.6-flare, or the newest the key has
-//   OPENAI_IMAGE_QUALITY    low | medium | high — default medium (a few pence)
+//   OPENAI_IMAGE_QUALITY    low | medium | high — default high (roughly 15p a render)
 //
 // The photo bytes go to OpenAI and come straight back as the edited image;
 // nothing is kept there, and nothing identifying the builder is sent.
@@ -19,10 +19,10 @@
 // 2026). The default is the current one; if it is ever refused, the server
 // asks OpenAI which image models the key can use and takes the newest, so a
 // retirement never leaves the button dead. OPENAI_IMAGE_MODEL pins one.
-const DEFAULT_MODEL = 'gpt-image-2.6-flare';
+const DEFAULT_MODEL = 'gpt-image-2.6-sunburst';   // the higher-quality one; -flare is the quick, cheaper sibling
 let discoveredModel = null;
 const MODEL = () => process.env.OPENAI_IMAGE_MODEL || discoveredModel || DEFAULT_MODEL;
-const QUALITY = () => (['low', 'medium', 'high'].includes(process.env.OPENAI_IMAGE_QUALITY) ? process.env.OPENAI_IMAGE_QUALITY : 'medium');
+const QUALITY = () => (['low', 'medium', 'high'].includes(process.env.OPENAI_IMAGE_QUALITY) ? process.env.OPENAI_IMAGE_QUALITY : 'high');
 const TIMEOUT_MS = 150000;
 // What a render costs, for the usage log (USD, 1024-ish output).
 const COST_USD = { low: 0.02, medium: 0.07, high: 0.19 };
@@ -42,7 +42,8 @@ async function discoverModel(signal) {
   const version = (id) => { const m = /^gpt-image-(\d+(?:\.\d+)?)/.exec(id); return m ? parseFloat(m[1]) : 0; };
   const candidates = ((body && body.data) || [])
     .filter((m) => m && typeof m.id === 'string' && /^gpt-image-/.test(m.id) && !/mini/.test(m.id))
-    .sort((a, b) => (version(b.id) - version(a.id)) || ((b.created || 0) - (a.created || 0)) || a.id.localeCompare(b.id));
+    // Highest version first; at the same version the quality tier (sunburst) over the quick one (flare).
+    .sort((a, b) => (version(b.id) - version(a.id)) || ((/sunburst/.test(b.id) ? 1 : 0) - (/sunburst/.test(a.id) ? 1 : 0)) || ((b.created || 0) - (a.created || 0)) || a.id.localeCompare(b.id));
   if (!candidates.length) throw new RenderError('This OpenAI key has no image model available.', 503);
   discoveredModel = candidates[0].id;
   console.log('[imageRender] using image model ' + discoveredModel);
@@ -51,14 +52,33 @@ async function discoverModel(signal) {
 
 // The instruction the model paints from. The scope is the builder's own words;
 // the rest keeps the picture honest.
-function promptFor({ scope, extra, roomName, finishes }) {
+// The brief the model paints from. Written like a brief to a visualiser:
+// what the room is and what is there now (so it knows what to take out),
+// the work in the builder's own words, then everything that must not change.
+//   current: { finishes: [{ part, type, condition }], hazards: [], condition: '' }
+function promptFor({ scope, extra, roomName, current }) {
+  const room = roomName ? String(roomName).toLowerCase().replace(/^the\s+/, '') : 'room';
+  const cur = current || {};
+  const now = [];
+  for (const f of cur.finishes || []) if (f && f.type) now.push(f.part + ': ' + f.type + (f.condition ? ' (' + f.condition + ' condition)' : ''));
   const lines = [
-    'This is a photograph taken during a site survey of ' + (roomName ? 'the ' + roomName.toLowerCase() : 'a room') + ' in a UK home. Edit the photograph to show the room after the following work has been done:',
+    'A photorealistic visualisation for a UK builder\'s customer. The attached photograph was taken during a site survey of the ' + room + ' of a UK home, as it is today. Produce the same photograph showing the ' + room + ' after the work below has been completed to a high standard by professional tradespeople.',
+    '',
+    'THE WORK TO SHOW DONE:',
     String(scope || '').trim(),
   ];
-  if (extra && String(extra).trim()) lines.push('Also: ' + String(extra).trim());
-  if (finishes && finishes.length) lines.push('Finishes to use: ' + finishes.join('; ') + '.');
-  lines.push('Keep the camera angle, the walls, the window and door positions and the proportions of the room exactly as in the photograph. Change only what the work describes; leave everything else as it is. Photorealistic, the same natural lighting as the photo, tidy and finished, no people, no text, no labels.');
+  if (extra && String(extra).trim()) lines.push('Specific choices for this picture: ' + String(extra).trim() + '.');
+  if (now.length || (cur.hazards || []).length || cur.condition) {
+    lines.push('', 'THE ROOM NOW (what the work replaces or puts right):');
+    if (now.length) lines.push('Existing finishes — ' + now.join('; ') + '.');
+    if ((cur.hazards || []).length) lines.push('Defects seen — ' + cur.hazards.join('; ') + ' — these are gone once the work is done.');
+    if (cur.condition) lines.push('Condition notes: ' + String(cur.condition).slice(0, 300));
+  }
+  lines.push(
+    '',
+    'WHAT MUST STAY EXACTLY AS IN THE PHOTOGRAPH: the camera position, lens and angle; the walls, ceiling line, floor plane and room proportions; the positions and sizes of the windows, doors and any built-in features; the daylight direction and overall exposure. Anything the work does not mention stays as it is.',
+    'HOW IT SHOULD LOOK: a finished, clean, newly completed room — plumb, level, neat joints and sealant, fresh paint, no dust sheets, tools, rubble or clutter. Correct for a UK home: UK-style sockets, switches, radiators and fittings. Materials to look real, with the same lighting, shadows and reflections as the photo; no stylised or showroom look, no wide-angle distortion, no added people, pets, text, labels or watermarks. If the work describes removing something, show the space it leaves made good.'
+  );
   return lines.join('\n');
 }
 

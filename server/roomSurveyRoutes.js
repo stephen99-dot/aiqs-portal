@@ -487,10 +487,11 @@ router.post('/rooms/:roomId/render', rollout.requireMax, renderAllowanceGate, as
     if (source.kind === 'render') return res.status(400).json({ error: 'Render from one of the real photos, not from another render.' });
     const fp = path.join(photosDir, path.basename(source.filename));
     if (!fs.existsSync(fp)) return res.status(404).json({ error: 'That photo file is missing.' });
+    // What the room is now goes in the brief so the model knows what the work
+    // replaces: the finishes and defects the survey recorded.
     const fin = G.parseJson(r.finishes, null);
-    const finishes = fin && typeof fin === 'object' ? ['floor', 'walls', 'ceiling', 'woodwork'].map((k) => (fin[k] && fin[k].type ? k + ': ' + fin[k].type : null)).filter(Boolean) : [];
-    const prompt = IR.promptFor({ scope, extra, roomName: r.room_type || r.name, finishes: [] });
-    void finishes; // the finishes on the room are what is THERE; the scope says what goes in
+    const finishes = fin && typeof fin === 'object' ? ['floor', 'walls', 'ceiling', 'woodwork'].map((k) => (fin[k] && (fin[k].type || fin[k].condition) ? { part: k, type: fin[k].type || '', condition: fin[k].condition || '' } : null)).filter(Boolean) : [];
+    const prompt = IR.promptFor({ scope, extra, roomName: r.room_type || r.name, current: { finishes, hazards: G.parseJson(r.hazards, []) || [], condition: r.condition_notes || '' } });
     const out = await IR.renderRoom({ buffer: fs.readFileSync(fp), mime: source.mime || 'image/jpeg', width: source.width, height: source.height, prompt });
     // Keep it as a JPEG beside the photos, with a thumbnail like any upload.
     const sharp = getSharp();
