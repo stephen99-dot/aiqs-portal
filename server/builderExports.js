@@ -281,6 +281,14 @@ const SUBTOTAL_RE = /\bSUB[\s-]?TOTALS?\b/;
 // The other common wording: "Section 1 total — PRELIMINARIES". Without this
 // the row is read as a priced line, exactly doubling every section.
 const SECTION_TOTAL_RE = /^SECTION\s+\S+\s+TOTALS?\b/;
+// The row that closes a provisional-sums block: "Total provisional sums",
+// "Provisional sums total (excluding VAT), not included in the total above".
+const PS_TOTAL_RE = /^TOTAL\s+(?:OF\s+)?PROVISIONAL\s+SUMS?\b|^PROVISIONAL\s+SUMS?\s*(?:[—–:-]\s*)?TOTALS?\b/;
+// Wording that makes a "provisional sums" row a total or carry row rather
+// than the heading that opens the block. Only this rules a heading out: a
+// heading is free to say what the sums are excluded from ("PROVISIONAL SUMS
+// (at cost, excluded from the total above)").
+const PS_TOTAL_WORDING_RE = /^TOTAL\b|\bSUMS?\s*(?:[—–:-]\s*)?TOTALS?\b|\bTO\s+(?:SUMMARY|COLLECTION)\b/;
 // Every other way a hand-built BOQ closes a section or a page: "Total —
 // Preliminaries", "Preliminaries total", "Total for section 2", "Carried to
 // summary", "Carried forward", "C/F", "Page total", "To collection". These rows
@@ -713,6 +721,24 @@ async function parseBOQ(filePath) {
       (/\d\s*%/.test(upperLabel) || pctFromRateCell() != null);
     if (!hasUnitOrQty && (rowTotal > 0 || pctOnlyAdder)) {
       let m;
+      // End of the provisional-sums block ("Total provisional sums",
+      // "Provisional sums total (excluding VAT), not included in the total
+      // above"). Handled first: it is the block's own total, never a document
+      // total, so it stays out of printed_totals / ex_vat_total. If we
+      // captured the lines themselves (see the block handler below), push
+      // them as a section and DON'T also record a lump — that would
+      // double-count. Only fall back to the flat lump when no individual
+      // lines were detected.
+      if (PS_TOTAL_RE.test(upperLabel)) {
+        if (inProvSums && provSection && provSection.items.length) {
+          sections.push(provSection);
+        } else {
+          sourceSummary.provisional_sum = numAt(row, cols.total);
+        }
+        inProvSums = false;
+        provSection = null;
+        return;
+      }
       // Every document-level total the bill prints, kept as a list: "Net
       // measured works" (which may exclude preliminaries), the summary's
       // "Sub-total", "Tender sum", "Contract sum"… A bill is reconciled
@@ -813,20 +839,6 @@ async function parseBOQ(filePath) {
         if (p != null) sourceSummary.vat_pct = p;
         return;
       }
-      // End of the provisional-sums block. If we captured the lines themselves
-      // (see the block handler below), push them as a section and DON'T also
-      // record a lump — that would double-count. Only fall back to the flat lump
-      // when no individual lines were detected.
-      if (/^TOTAL\s+PROVISIONAL\s+SUMS?\b/.test(upperLabel) || /^PROVISIONAL\s+SUMS?\s+TOTAL\b/.test(upperLabel)) {
-        if (inProvSums && provSection && provSection.items.length) {
-          sections.push(provSection);
-        } else {
-          sourceSummary.provisional_sum = numAt(row, cols.total);
-        }
-        inProvSums = false;
-        provSection = null;
-        return;
-      }
     }
 
     // ── Provisional sums block ──────────────────────────────────────────────
@@ -835,9 +847,15 @@ async function parseBOQ(filePath) {
     // SUMS" header and closes on its own total (handled in the summary block
     // above) or the net-total / VAT lines below. Each row is a label + a money
     // amount with no qty/unit (e.g. "J  Glazing & roof lanterns  60000").
+    // The heading may say what the sums are excluded from — "L | PROVISIONAL
+    // SUMS (at cost, excluded from the total above)" — so only total-shaped
+    // wording rules a row out, not the word "total" anywhere in it. Ruling out
+    // every mention dropped that block whole: the client copy showed a
+    // provisional-sums figure at the bottom with no section saying what was
+    // in it.
     const provTotalCell = numAt(row, cols.total);
     if (!inProvSums &&
-        /\bPROVISIONAL\s+SUMS?\b/.test(upperJoined) && !/\bTOTAL\b/.test(upperJoined) &&
+        /\bPROVISIONAL\s+SUMS?\b/.test(upperJoined) && !PS_TOTAL_WORDING_RE.test(upperJoined) &&
         provTotalCell <= 0 && !hasUnitOrQty) {
       inProvSums = true;
       // Keep the source document's own numbering when the header carries one
@@ -2322,7 +2340,7 @@ function reconcileParsed(parsed) {
   const basisOf = (pt) => (pt.label === 'ex_vat' ? 'ex_vat' : 'net');
   const pass = (pt, extra) => ({
     ok: true, printed: pt.value, printed_label: pt.label, parsed: parsedTotal, basis: basisOf(pt),
-    printed_all: printedAll, doc_total: docTotal, ...extra,
+    printed_all: printedAll, doc_total: docTotal, provisional: prov + lump, ...extra,
   });
 
   if (printedAll.length) {
@@ -2409,4 +2427,33 @@ function reconcileParsed(parsed) {
   return { ok: false, printed: nearest.value, printed_label: nearest.label, parsed: parsedTotal, basis: basisOf(nearest), printed_all: printedAll, doc_total: docTotal };
 }
 
-module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed };
+/**
+ * A Builder Pack working state saved while the parser still dropped the
+ * bill's provisional-sums block carries every measured section and no
+ * provisional one. The saved state is served over the fresh parse, so fixing
+ * the parser alone leaves the customer looking at a bill with the
+ * provisional-sums figure at the bottom and no section saying what is in it.
+ * Add back, after the saved sections, each provisional section the fresh
+ * parse reads that the state lacks (matched by number, else by title); the
+ * user's own edits to the sections they have are untouched. A flat lump the
+ * state carries for the same money (the parser's old fallback for exactly
+ * this block) is cleared so the sums are not shown twice.
+ */
+function addMissingProvisionalSections(saved, freshSections) {
+  if (!saved || !Array.isArray(saved.sections) || !saved.sections.length) return saved;
+  const key = (v) => String(v == null ? '' : v).trim().toUpperCase();
+  const has = (s) => saved.sections.some((t) => t && (
+    (key(t.number) && key(t.number) === key(s.number)) || (key(t.title) && key(t.title) === key(s.title))));
+  const missing = (freshSections || []).filter((s) => s && s.provisional && Array.isArray(s.items) && s.items.length && !has(s));
+  if (!missing.length) return saved;
+  const added = missing.map((s) => ({
+    number: s.number, title: s.title, provisional: true,
+    items: s.items.map((it) => ({ ...it })),
+  }));
+  const addedTotal = added.reduce((a, s) => a + s.items.reduce((b, it) => b + (it.total || 0), 0), 0);
+  const out = { ...saved, sections: saved.sections.concat(added) };
+  if (saved.provisional_sum > 0 && closeTo(saved.provisional_sum, addedTotal)) out.provisional_sum = 0;
+  return out;
+}
+
+module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed, addMissingProvisionalSections };

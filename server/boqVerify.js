@@ -39,7 +39,7 @@ const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDig
 // an older verifier is re-run on the next open, so a bill locked by a check
 // that has since been corrected unlocks itself after deploy — nobody has to
 // remember to press Re-verify on every affected project.
-const VERIFIER_VERSION = 7; // 7: section-by-section proof; OH&P on measured sections only; "Net before VAT"
+const VERIFIER_VERSION = 8; // 8: a provisional sums block headed "… (excluded from the total above)" is read, not dropped; 7: section-by-section proof; OH&P on measured sections only; "Net before VAT"
 
 function describePrinted(recon) {
   if (!recon) return 'printed total';
@@ -117,8 +117,13 @@ async function verifyBoqFile(filePath) {
         + ', the sum of the part totals the bill prints.',
     };
   }
-  const note = Math.abs(recon.printed - detail.parsed_total) > 5
-    ? ' (the lines total ' + fmt(detail.parsed_total) + '; the difference is the OH&P, contingency or preliminaries the bill states separately)'
+  // The gap between the lines and the printed figure: provisional sums the
+  // bill carries outside its total, else the OH&P / contingency it adds.
+  const gap = detail.parsed_total - recon.printed;
+  const provGap = recon.provisional > 0 && Math.abs(gap - recon.provisional) <= 5;
+  const note = Math.abs(gap) > 5
+    ? ' (the lines total ' + fmt(detail.parsed_total) + '; the difference is the '
+      + (provGap ? fmt(recon.provisional) + ' of provisional sums the bill carries outside that total' : 'OH&P, contingency or preliminaries the bill states separately') + ')'
     : '';
   return {
     ok: true, status: 'verified', detail,

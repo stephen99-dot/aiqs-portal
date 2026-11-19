@@ -11,12 +11,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-let ExcelJS, generateBOQExcel, parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem;
+let ExcelJS, generateBOQExcel, parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem, addMissingProvisionalSections;
 let DEPS_OK = true;
 try {
   ExcelJS = require('exceljs');
   ({ generateBOQExcel } = require('./boqGenerator'));
-  ({ parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem } = require('./builderExports'));
+  ({ parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem, addMissingProvisionalSections } = require('./builderExports'));
 } catch (e) {
   DEPS_OK = false;
 }
@@ -700,4 +700,102 @@ test('a percentage-only adder row becomes a summary percentage, not a £0 line',
   assert.strictEqual(parsed.source_summary.vat_pct, 20);
   assert.strictEqual(parsed.source_summary.net_total, 100);
   assert.ok(reconcileParsed(parsed).ok);
+});
+
+// ── Provisional sums printed after the summary (38 Spring Lane) ─────────────
+// A bill that prints its provisional sums AFTER the summary, under a heading
+// that says what they are excluded from — "L | PROVISIONAL SUMS (at cost,
+// excluded from the total above)" — each line with a quantity of 1 and the
+// unit "item", closed by "Provisional sums total (excluding VAT), not
+// included in the total above". The word "total" in the heading used to rule
+// the row out as a PS block, so the lines were dropped and only the lump
+// survived: the customer saw a provisional-sums figure at the bottom of the
+// client copy with no section saying what was in it.
+const OLNEY_HEADER = ['Item', 'Description', 'Qty', 'Unit', 'Labour £', 'Materials £', 'Rate £', 'Total £'];
+const OLNEY_ROWS = [
+  OLNEY_HEADER,
+  ['A', 'PRELIMINARIES'],
+  ['A1', 'Site management and supervision, 2 days per week over a 12 week programme', 24, 'day', 195, 0, 195, 4680],
+  ['A2', 'Temporary toilet, hire and servicing over 12 weeks', 12, 'week', 0, 40, 40, 480],
+  ['', 'Total carried to summary', '', '', '', '', '', 5160],
+  ['B', 'DEMOLITION AND STRIP-OUT'],
+  ['B1', 'Take down the conservatory and cart away', 1, 'item', 780, 60, 840, 840],
+  ['', 'Total carried to summary', '', '', '', '', '', 840],
+  ['', 'SUMMARY'],
+  ['A', 'PRELIMINARIES', '', '', '', '', '', 5160],
+  ['B', 'DEMOLITION AND STRIP-OUT', '', '', '', '', '', 840],
+  ['', 'NET TOTAL (excluding VAT)', '', '', '', '', '', 6000],
+  ['', 'VAT', '', '', '', '', 0.2, 1200],
+  ['', 'TOTAL (including VAT)', '', '', '', '', '', 7200],
+  ['L', 'PROVISIONAL SUMS (at cost, excluded from the total above)'],
+  ['L1', 'Foul drainage below ground, pending a drainage design', 1, 'item', 0, 3000, 3000, 3000],
+  ['L2', 'CCTV survey of existing drains', 1, 'item', 0, 300, 300, 300],
+  ['L3', 'Removal of asbestos if found (no survey seen)', 1, 'item', 0, 1000, 1000, 1000],
+  ['', 'Provisional sums total (excluding VAT), not included in the total above', '', '', '', '', '', 4300],
+];
+
+test('a provisional sums block headed "(excluded from the total above)" below the summary is read line by line', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows(OLNEY_ROWS);
+  assert.deepStrictEqual(
+    parsed.sections.map((s) => [s.number, s.title, !!s.provisional, s.items.length, s.subtotal.total]),
+    [
+      ['1', 'A PRELIMINARIES', false, 2, 5160],
+      ['2', 'B DEMOLITION AND STRIP-OUT', false, 1, 840],
+      ['L', 'PROVISIONAL SUMS (at cost, excluded from the total above)', true, 3, 4300],
+    ],
+    'the PS block is its own section, after the measured ones, with every line'
+  );
+  const ps = parsed.sections[2];
+  assert.deepStrictEqual(ps.items.map((i) => [i.itemRef, i.unit, i.qty, i.total]), [['L1', 'item', 1, 3000], ['L2', 'item', 1, 300], ['L3', 'item', 1, 1000]]);
+  assert.strictEqual(parsed.source_summary.provisional_sum, null, 'no flat lump on top of the itemised section');
+  assert.strictEqual(parsed.source_summary.net_total, 6000);
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 6000);
+  assert.strictEqual(parsed.source_summary.vat_pct, 20);
+  assert.ok(!parsed.source_summary.printed_totals.some((p) => /provisional/i.test(p.label)),
+    'the block\'s own closing total is not a document total');
+  assert.strictEqual(parsed.grand.total, 10300, 'grand = net 6000 + provisional 4300');
+  const recon = reconcileParsed(parsed);
+  assert.ok(recon.ok, 'the lines still reconcile to the printed net total');
+  assert.strictEqual(recon.printed, 6000);
+});
+
+test('a "Total provisional sums" row still records the lump when the block has no lines of its own', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    PLAIN_HEADER,
+    ['1', 'WORKS'],
+    ['1.1', 'A', 'nr', 2, 50, 60, 40, 100],
+    ['', 'Net construction cost', '', '', '', '', '', 100],
+    ['', 'Total provisional sums', '', '', '', '', '', 2500],
+    ['', 'Total (excl. VAT)', '', '', '', '', '', 2600],
+  ]);
+  assert.strictEqual(parsed.sections.length, 1);
+  assert.strictEqual(parsed.source_summary.provisional_sum, 2500, 'the lump is kept for a block with no lines');
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 2600, 'the PS total is not mistaken for the ex-VAT total');
+  assert.ok(reconcileParsed(parsed).ok);
+});
+
+test('a saved Builder Pack state gets back the provisional section the parser used to drop', { skip: !DEPS_OK && 'deps not installed' }, () => {
+  const psLine = { itemRef: 'L1', description: 'Foul drainage below ground', unit: 'item', qty: 1, rate: 3000, labour: 0, materials: 3000, total: 3000 };
+  const fresh = [
+    { number: '1', title: 'A PRELIMINARIES', items: [{ description: 'Site set-up', total: 100 }], subtotal: { labour: 0, materials: 0, total: 100 } },
+    { number: 'L', title: 'PROVISIONAL SUMS (at cost, excluded from the total above)', provisional: true, items: [psLine], subtotal: { labour: 0, materials: 3000, total: 3000 } },
+  ];
+  // Saved before the block was read: measured sections only (one line edited
+  // by the user), plus the flat lump the parser recorded for the same money.
+  const saved = { v: 1, sections: [{ number: '1', title: 'A PRELIMINARIES', items: [{ description: 'Site set-up', total: 120 }] }], provisional_sum: 3000 };
+  const out = addMissingProvisionalSections(saved, fresh);
+  assert.deepStrictEqual(out.sections.map((s) => [s.number, !!s.provisional, s.items.length]), [['1', false, 1], ['L', true, 1]]);
+  assert.strictEqual(out.sections[0].items[0].total, 120, 'the user\'s edits are untouched');
+  assert.strictEqual(out.provisional_sum, 0, 'the flat lump for the same money is cleared so the sums are not shown twice');
+  assert.deepStrictEqual(out.sections[1].items[0], psLine);
+  // Already there (by number or by title): nothing to add, the state is served as is.
+  assert.strictEqual(addMissingProvisionalSections(out, fresh), out);
+  const byTitle = { sections: [{ number: '9', title: 'provisional sums (at cost, excluded from the total above)', provisional: true, items: [psLine] }] };
+  assert.strictEqual(addMissingProvisionalSections(byTitle, fresh), byTitle);
+  assert.strictEqual(addMissingProvisionalSections(null, fresh), null);
+  assert.deepStrictEqual(addMissingProvisionalSections({ sections: [] }, fresh), { sections: [] });
+  // A lump for different money is the user's own figure and stays.
+  const other = addMissingProvisionalSections({ sections: saved.sections, provisional_sum: 500 }, fresh);
+  assert.strictEqual(other.provisional_sum, 500);
+  assert.strictEqual(other.sections.length, 2);
 });
