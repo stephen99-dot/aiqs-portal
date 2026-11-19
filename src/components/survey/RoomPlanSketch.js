@@ -96,7 +96,7 @@ export default function RoomPlanSketch({ room, width = 320, height = 240, mini =
         </>
       )}
       <text x={centre.x} y={centre.y + (mini ? 4 : 5)} textAnchor="middle" fontSize={mini ? 11 : 14} fontWeight={800} fill="var(--text-primary)" fontFamily="var(--font-mono)">{area} m²</text>
-      {!mini && (q.doors + q.windows > 0 || scene.kind === 'plan') && <text x={centre.x} y={centre.y + 20} textAnchor="middle" fontSize={9} fill="var(--text-muted)">{scene.kind === 'plan' ? 'LiDAR · ' + scene.segments.length + ' walls · ' : ''}{q.doors} door{q.doors === 1 ? '' : 's'} · {q.windows} window{q.windows === 1 ? '' : 's'}</text>}
+      {!mini && q.doors + q.windows > 0 && scene.bounds.h * scale > 80 && <text x={centre.x} y={centre.y + 20} textAnchor="middle" fontSize={9} fill="var(--text-muted)">{q.doors} door{q.doors === 1 ? '' : 's'} · {q.windows} window{q.windows === 1 ? '' : 's'}</text>}
     </svg>
   );
 }

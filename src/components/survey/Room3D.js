@@ -39,7 +39,9 @@ export default function Room3D({ room, height = 320 }) {
       // Plan (x right, y down) → world (x right, z towards the viewer), centred.
       const X = (p) => p.x - L / 2; const Z = (p) => -(p.y - W / 2);
       if (sc.floor && sc.floor.length >= 3) {
-        const shape = new THREE.Shape(sc.floor.map((p) => new THREE.Vector2(X(p), Z(p))));
+        // A Shape in the XY plane turned down by 90° lands with world z = −shape y,
+        // so the shape takes −Z to come out under the walls, not mirrored.
+        const shape = new THREE.Shape(sc.floor.map((p) => new THREE.Vector2(X(p), -Z(p))));
         const floor = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshStandardMaterial({ color: FLOOR, roughness: 0.9, side: THREE.DoubleSide }));
         floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; group.add(floor);
       }
@@ -47,7 +49,9 @@ export default function Room3D({ room, height = 320 }) {
       for (const seg of sc.segments) {
         const a = seg.a; const b = seg.b;
         const dx = b.x - a.x; const dy = b.y - a.y; const len = Math.hypot(dx, dy) || 1;
-        const ang = Math.atan2(-dy, dx);
+        // A box along +x turned by θ about the vertical points to (cos θ, 0, −sin θ);
+        // the wall runs (dx, 0, −dy) in world, so θ = atan2(dy, dx).
+        const ang = Math.atan2(dy, dx);
         const wallH = seg.height_m || H;
         const ops = (seg.openings || []).slice().sort((x, y) => x.from - y.from);
         // Wall runs between openings, full height; above and below the openings, part height.
