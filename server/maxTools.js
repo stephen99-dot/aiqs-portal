@@ -300,7 +300,9 @@ const TOOLS = [
       room_id: { type: 'string', description: 'A surveyed room (from get_room_survey) to price from — its floor, wall, ceiling and skirting quantities, openings and counted fittings become the measurements, so nothing is re-estimated' },
       location: { type: 'string', description: 'Site address or postcode when known (sets the regional rates)' },
       project_type: { type: 'string', description: 'Extension, Loft conversion, Refurbishment, Kitchen, Bathroom, Roofing, Landscaping, Groundworks, New build, Repairs & maintenance, Other' },
-      client_name: { type: 'string' }, client_email: { type: 'string' }, project_name: { type: 'string', description: 'What to call the estimate, e.g. "Patio, 12 Oak Lane"' },
+      client_name: { type: 'string', description: 'The customer\'s name, ONLY if the builder stated it for this job. Never guess one, and never reuse a name from an earlier job or from memory. Leave it out when not given.' },
+      client_email: { type: 'string', description: 'Only an address the builder gave. Never guess one.' },
+      project_name: { type: 'string', description: 'What to call the estimate, e.g. "Patio, 12 Oak Lane"' },
     }, required: ['description'] },
     run: async (input, api, ctx) => {
       const pricing = require('./maxPricing');
