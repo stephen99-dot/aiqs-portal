@@ -196,20 +196,117 @@ function outlineOf(room) {
 // plan coordinates (metres, x to the right, y down the page, origin at the
 // top-left of the scan) so the sketch, the 3D view and the PDF can draw it
 // the same way they draw a typed rectangle.
-function planFromCapture(capture, name) {
+// A capture may wrap its surfaces (Polycam / magicplan exports nest them).
+function flatCapture(capture) {
   if (!capture || typeof capture !== 'object') return null;
+  if (Array.isArray(capture.walls)) return capture;
+  const inner = capture.capturedRoom || capture.room;
+  return inner && typeof inner === 'object' && Array.isArray(inner.walls) ? inner : capture;
+}
+
+// Rotate a RoomPlan 4×4 transform (16 numbers, column-major) about the
+// vertical axis by phi radians: x' = cos·x + sin·z, z' = −sin·x + cos·z.
+function rotateTransform(m, phi) {
+  const c = Math.cos(phi); const s = Math.sin(phi);
+  const out = m.slice();
+  for (let col = 0; col < 4; col++) {
+    const x = num(m[col * 4]); const z = num(m[col * 4 + 2]);
+    out[col * 4] = c * x + s * z;
+    out[col * 4 + 2] = -s * x + c * z;
+  }
+  return out;
+}
+
+// ── Squaring a scan up ───────────────────────────────────────────────────────
+// A RoomPlan capture is in whatever frame the phone had when the scan began,
+// so a plain rectangular room usually arrives tilted. Rotate the whole capture
+// about the vertical axis so its longest wall runs left to right along the
+// top, and every scan reads like a drawing. The stored capture is left as the
+// phone sent it; this is applied on the way out, so it is always the same.
+function alignCapture(raw) {
+  const capture = flatCapture(raw);
+  if (!capture) return raw;
   const FP = require('./floorPlanGeometry');
-  let plan;
-  try { plan = FP.planOf(capture, name || 'Room'); } catch (e) { return null; }
+  const walls = FP.segmentsOf(capture.walls);
+  if (!walls.length) return capture;
+  const longest = walls.reduce((best, w) => (w.width > best.width ? w : best), walls[0]);
+  const phi = Math.atan2(longest.b.z - longest.a.z, longest.b.x - longest.a.x);
+  const turned = (angle) => {
+    const rot = (list) => (Array.isArray(list) ? list : []).map((s) => (s && Array.isArray(s.transform) && s.transform.length >= 16 ? { ...s, transform: rotateTransform(s.transform, angle) } : s));
+    return { ...capture, walls: rot(capture.walls), doors: rot(capture.doors), windows: rot(capture.windows), openings: rot(capture.openings), objects: rot(capture.objects) };
+  };
+  let out = turned(phi);
+  // Which way up: the wall with the door at the bottom, the way a plan is
+  // drawn with the way in nearest the reader; with no door, the longest wall
+  // along the top.
+  try {
+    const plan = FP.planOf(out, 'x');
+    const mid = (w) => (w.a.z + w.b.z) / 2;
+    const doorWall = plan.walls.find((w) => (w.openings || []).some((o) => o.kind === 'door'));
+    const lw = plan.walls.reduce((best, w) => (w.width > best.width ? w : best), plan.walls[0]);
+    const flip = doorWall ? mid(doorWall) < plan.centroid.z : mid(lw) > plan.centroid.z;
+    if (flip) out = turned(phi + Math.PI);
+  } catch (e) { /* keep the first turn */ }
+  return out;
+}
+
+// The walls in the order you would walk them clockwise from the top wall, each
+// pointing the way of the walk, so the letters read A, B, C… round the room
+// like a typed rectangle does. Openings keep their place when a wall is turned.
+function chainWalls(walls) {
+  if (!walls.length) return [];
+  const flip = (w) => ({ ...w, a: w.b, b: w.a, openings: (w.openings || []).map((o) => ({ ...o, from: 1 - o.to, to: 1 - o.from })).sort((p, q) => p.from - q.from) });
+  const d = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+  // Start at the top: the highest wall that runs roughly left to right
+  // (within 20°), the longest of those if several share the top.
+  const mid = (w) => (w.a.z + w.b.z) / 2;
+  const level = (w) => Math.abs(w.b.z - w.a.z) <= 0.364 * Math.abs(w.b.x - w.a.x);
+  const pool = walls.some(level) ? walls.filter(level) : walls;
+  let start = pool[0];
+  for (const w of pool) if (mid(w) < mid(start) - 0.05 || (Math.abs(mid(w) - mid(start)) <= 0.05 && w.width > start.width)) start = w;
+  const startIdx = walls.indexOf(start);
+  let first = walls[startIdx];
+  if (first.a.x > first.b.x) first = flip(first);
+  const used = new Set([startIdx]);
+  const out = [first];
+  let cursor = first.b;
+  while (used.size < walls.length) {
+    let best = -1; let bestD = Infinity; let bestFlip = false;
+    for (let i = 0; i < walls.length; i++) {
+      if (used.has(i)) continue;
+      const w = walls[i];
+      if (d(w.a, cursor) < bestD) { bestD = d(w.a, cursor); best = i; bestFlip = false; }
+      if (d(w.b, cursor) < bestD) { bestD = d(w.b, cursor); best = i; bestFlip = true; }
+    }
+    if (best < 0) break;
+    used.add(best);
+    const w = bestFlip ? flip(walls[best]) : walls[best];
+    out.push(w);
+    cursor = w.b;
+  }
+  return out;
+}
+
+function planFromCapture(raw, name) {
+  const capture = flatCapture(raw);
+  if (!capture) return null;
+  const FP = require('./floorPlanGeometry');
+  let aligned; let plan;
+  try { aligned = alignCapture(capture); plan = FP.planOf(aligned, name || 'Room'); } catch (e) { return null; }
   if (!plan || !plan.walls.length) return null;
   const ox = plan.bounds.minX; const oz = plan.bounds.minZ;
   const P = (p) => ({ x: Math.round((p.x - ox) * 1000) / 1000, y: Math.round((p.z - oz) * 1000) / 1000 });
-  const walls = plan.walls.map((w, i) => ({
+  const chain = chainWalls(plan.walls);
+  const walls = chain.map((w, i) => ({
     label: WALL_LABELS[i] || String(i + 1), a: P(w.a), b: P(w.b),
     length_m: r2(w.width), height_m: r2(w.height || plan.height || DEFAULT_HEIGHT), thickness_m: r2(w.thickness || 0.1),
     openings: (w.openings || []).map((o) => ({ kind: o.kind, from: Math.round(o.from * 1000) / 1000, to: Math.round(o.to * 1000) / 1000, width_m: r2(o.width), height_m: r2(o.height) })),
   }));
-  const objects = (Array.isArray(capture.objects) ? capture.objects : []).map((o) => {
+  // The outline from the walk when it closes; the geometry module's own when the scan left a gap.
+  const closes = chain.length >= 3 && Math.hypot(chain[chain.length - 1].b.x - chain[0].a.x, chain[chain.length - 1].b.z - chain[0].a.z) < 0.6;
+  const outlinePts = closes ? chain.map((w) => w.a) : plan.outline;
+  const outline = outlinePts.map(P);
+  const objects = (Array.isArray(aligned.objects) ? aligned.objects : []).map((o) => {
     const seg = FP.segmentOf(o);
     if (!seg) return null;
     const dims = o.dimensions || [];
@@ -221,7 +318,7 @@ function planFromCapture(capture, name) {
     };
   }).filter(Boolean);
   return {
-    walls, outline: plan.outline.map(P), centroid: P(plan.centroid),
+    walls, outline, centroid: outline.length >= 3 ? polygonCentroid(outline) : P(plan.centroid),
     bounds: { w: r2(plan.bounds.maxX - ox), h: r2(plan.bounds.maxZ - oz) }, objects,
     floor_m2: r2(plan.floorArea), perimeter_m: r2(plan.perimeter), height_m: r2(plan.height || DEFAULT_HEIGHT),
   };
@@ -308,4 +405,4 @@ function describeForPricing(room, q, survey) {
   return lines.join('\n');
 }
 
-module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, planFromCapture, sceneOf, polygonCentroid, describeForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };
+module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, planFromCapture, alignCapture, rotateTransform, sceneOf, polygonCentroid, describeForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };

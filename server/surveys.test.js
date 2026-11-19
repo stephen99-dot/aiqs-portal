@@ -297,6 +297,15 @@ test('a RoomPlan capture imports as measured walls, openings and area', async ()
   assert.ok(room.plan.walls.every((w) => w.a && w.b && typeof w.a.x === 'number' && w.a.x >= 0 && w.a.y >= 0), 'wall ends in plan coordinates from the top-left');
   assert.equal(room.plan.walls.filter((w) => w.openings.some((o) => o.kind === 'door')).length, 1, 'the door sits on one wall');
   assert.ok(room.openings.every((o) => o.wall), 'imported openings carry the wall letter the scanner placed them on: ' + JSON.stringify(room.openings.map((o) => [o.kind, o.wall])));
+  // Squared up and lettered clockwise from the top: A is the long top wall
+  // running left to right, B the right wall, C the bottom (where the door is),
+  // D the left. The window on the right wall is on B.
+  assert.deepEqual(room.plan.walls.map((w) => w.label), ['A', 'B', 'C', 'D']);
+  const A = room.plan.walls[0];
+  assert.ok(A.length_m === 5 && A.a.y < 0.05 && A.b.y < 0.05 && A.a.x < A.b.x, 'A runs along the top, left to right: ' + JSON.stringify(A));
+  assert.equal(room.openings.find((o) => o.kind === 'door').wall, 'C');
+  assert.equal(room.openings.find((o) => o.kind === 'window').wall, 'B');
+  assert.deepEqual(room.walls.map((w) => [w.label, w.length_m]), [['A', 5], ['B', 4], ['C', 5], ['D', 4]]);
   assert.deepEqual(room.outline.bounds, room.plan.bounds);
   const scene = G.sceneOf({ shape: 'custom', name: 'Kitchen', capture: JSON.stringify(capture) });
   assert.equal(scene.kind, 'plan'); assert.equal(scene.segments.length, 4); assert.equal(scene.objects.length, 0, 'objects without transforms are not drawn');
@@ -316,13 +325,45 @@ test('a RoomPlan capture imports as measured walls, openings and area', async ()
   await req('PATCH', '/surveys/rooms/' + room.id, tokenA, { openings: [...stripped, { kind: 'window', width_m: 0.6, height_m: 0.6, source: 'user' }], assumptions: ['Measured by LiDAR scan (4 walls). Openings are listed without a wall letter — assign them on the plan if you want them drawn in place.', 'Customer wants the door moved.'] });
   let check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
   assert.ok(check.body.room.openings.filter((o) => o.source === 'measured').every((o) => !o.wall), 'walls stripped for the test');
-  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 1, 'one room backfilled');
+  assert.equal(require('./roomSurveyRoutes')._internals.resyncScannedRooms(), 1, 'one room brought back in step');
   check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
   const measured = check.body.room.openings.filter((o) => o.source === 'measured');
   assert.equal(measured.length, 2); assert.ok(measured.every((o) => o.wall), 'measured openings back on their walls');
   assert.ok(check.body.room.openings.some((o) => o.source === 'user' && o.width_m === 0.6), 'the builder\'s own window kept');
   assert.ok(check.body.room.assumptions.some((a) => /placed on the walls/.test(a)) && check.body.room.assumptions.includes('Customer wants the door moved.'), JSON.stringify(check.body.room.assumptions));
-  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 0, 'nothing left to backfill');
+  assert.equal(require('./roomSurveyRoutes')._internals.resyncScannedRooms(), 0, 'nothing left to resync');
+});
+
+test('a tilted scan is squared up: same walls, same letters, same openings', async () => {
+  const transform = (x, z, deg) => { const a = deg * Math.PI / 180; const c = Math.cos(a); const s = Math.sin(a); return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, x, 0, z, 1]; };
+  // Rotate a RoomPlan transform about the vertical axis (column-major), then shift it.
+  const tilt = (m, deg, dx, dz) => { const a = deg * Math.PI / 180; const c = Math.cos(a); const s = Math.sin(a); const out = m.slice(); for (let col = 0; col < 4; col++) { const x = m[col * 4]; const z = m[col * 4 + 2]; out[col * 4] = c * x + s * z; out[col * 4 + 2] = -s * x + c * z; } out[12] += dx; out[14] += dz; return out; };
+  const T = (x, z, deg) => tilt(transform(x, z, deg), 37, 11.2, -4.6);
+  const capture = {
+    walls: [{ dimensions: [4, 2.4, 0.1], transform: T(2.5, 0, 90) }, { dimensions: [5, 2.4, 0.1], transform: T(0, 2, 0) }, { dimensions: [4, 2.4, 0.1], transform: T(-2.5, 0, 90) }, { dimensions: [5, 2.4, 0.1], transform: T(0, -2, 0) }],
+    doors: [{ dimensions: [0.9, 2.0, 0.1], transform: T(0, 2, 0) }], windows: [{ dimensions: [1.2, 1.1, 0.1], transform: T(2.5, 0, 90) }],
+    objects: [{ category: 'sofa', dimensions: [2, 0.8, 0.9], transform: T(-1, 1, 0) }],
+  };
+  const r0 = await req('POST', '/surveys/' + test.surveyId + '/rooms', tokenA, { name: 'Tilted' });
+  const r = await req('POST', '/surveys/rooms/' + r0.body.room.id + '/roomplan', tokenA, { json: capture });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const room = r.body.room;
+  assert.ok(Math.abs(room.plan.bounds.w - 5) < 0.05 && Math.abs(room.plan.bounds.h - 4) < 0.05, 'squared up to 5 × 4: ' + JSON.stringify(room.plan.bounds));
+  assert.ok(Math.abs(room.quantities.floor_m2 - 20) < 0.5);
+  assert.deepEqual(room.plan.walls.map((w) => [w.label, w.length_m]), [['A', 5], ['B', 4], ['C', 5], ['D', 4]]);
+  const top = room.plan.walls[0];
+  assert.ok(top.a.y < 0.05 && top.b.y < 0.05 && top.a.x < top.b.x, 'the long wall along the top: ' + JSON.stringify(top));
+  assert.ok(room.plan.walls.every((w) => w.a.x > -0.01 && w.a.y > -0.01 && w.b.x > -0.01 && w.b.y > -0.01), 'everything in the top-left frame');
+  // One wall of each pair is vertical, one horizontal, after the turn.
+  for (const w of room.plan.walls) assert.ok(Math.abs(w.a.x - w.b.x) < 0.05 || Math.abs(w.a.y - w.b.y) < 0.05, 'wall ' + w.label + ' is square: ' + JSON.stringify([w.a, w.b]));
+  assert.equal(room.openings.filter((o) => o.kind === 'door')[0].wall, 'C', 'the door is on the bottom wall whichever way the phone faced');
+  assert.equal(room.openings.filter((o) => o.kind === 'window')[0].wall, 'B');
+  assert.equal(room.plan.objects.length, 1);
+  const sofa = room.plan.objects[0];
+  assert.ok(sofa.centre.x > 0 && sofa.centre.x < 5 && sofa.centre.y > 0 && sofa.centre.y < 4, 'the sofa turned with the room: ' + JSON.stringify(sofa.centre));
+  const pdf = await req('GET', '/surveys/' + test.surveyId + '/plan.pdf', tokenA);
+  assert.equal(pdf.status, 200);
+  await req('DELETE', '/surveys/rooms/' + room.id, tokenA);
 });
 
 test('notes, the report PDF and the Excel schedule', async () => {
