@@ -16,11 +16,12 @@ function script(handlers) {
   global.fetch = async (url, init) => {
     const u = String(url);
     const sent = {};
-    if (init && init.body && typeof init.body.get === 'function') for (const k of ['model', 'prompt', 'size', 'quality', 'input_fidelity', 'n']) if (init.body.has(k)) sent[k] = init.body.get(k);
+    if (init && init.body && typeof init.body.get === 'function') for (const k of ['model', 'prompt', 'size', 'quality', 'input_fidelity', 'n', 'stream', 'partial_images']) if (init.body.has(k)) sent[k] = init.body.get(k);
     calls.push({ url: u, sent });
     const h = handlers.shift();
     const out = typeof h === 'function' ? h(u, sent) : h;
-    return { ok: out.status < 400, status: out.status, json: async () => out.body };
+    if (out.sse) return new Response(out.sse, { status: out.status, headers: { 'content-type': 'text/event-stream' } });
+    return { ok: out.status < 400, status: out.status, headers: { get: () => 'application/json' }, json: async () => out.body };
   };
   return calls;
 }
@@ -71,4 +72,32 @@ test('other failures come back as plain reasons, not retries forever', async () 
   const calls = script([{ status: 400, body: { error: { message: 'Something else entirely.' } } }]);
   await assert.rejects(() => IR.renderRoom({ buffer: Buffer.from('x'), mime: 'image/jpeg', prompt: 'p' }), (e) => e.status === 502 && /Something else/.test(e.message));
   assert.equal(calls.length, 1, 'an unrecognised 400 is not retried');
+});
+
+test('with a viewer watching, the picture is asked for as a stream and each rough pass is handed over', async () => {
+  IR._reset();
+  const b64 = PNG.toString('base64');
+  const sse = [
+    'event: image_edit.partial_image', 'data: ' + JSON.stringify({ type: 'image_edit.partial_image', b64_json: b64, partial_image_index: 0 }), '',
+    'event: image_edit.partial_image', 'data: ' + JSON.stringify({ type: 'image_edit.partial_image', b64_json: b64, partial_image_index: 1 }), '',
+    'event: image_edit.completed', 'data: ' + JSON.stringify({ type: 'image_edit.completed', b64_json: b64 }), '',
+  ].join('\n');
+  const calls = script([{ status: 200, sse }]);
+  const passes = [];
+  const out = await IR.renderRoom({ buffer: Buffer.from('jpegbytes'), mime: 'image/jpeg', width: 1200, height: 900, prompt: 'new tiles', onPartial: (buf, i) => passes.push([i, buf.length]) });
+  assert.equal(calls[0].sent.model, IR.DEFAULT_MODEL);
+  assert.deepEqual(passes, [[0, PNG.length], [1, PNG.length]]);
+  assert.equal(out.buffer.length, PNG.length);
+});
+
+test('an API that cannot stream gets the plain request instead', async () => {
+  IR._reset();
+  const calls = script([
+    { status: 400, body: { error: { message: 'Unknown parameter: stream.' } } },
+    (u, sent) => ({ status: 200, body: { data: [{ b64_json: PNG.toString('base64') }] } }),
+  ]);
+  const out = await IR.renderRoom({ buffer: Buffer.from('jpegbytes'), mime: 'image/jpeg', width: 1000, height: 1000, prompt: 'new bath', onPartial: () => {} });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].sent.model, IR.DEFAULT_MODEL);
+  assert.ok(out.buffer.length === PNG.length);
 });

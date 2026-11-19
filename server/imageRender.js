@@ -91,15 +91,45 @@ function sizeFor(width, height) {
   return '1024x1024';
 }
 
-async function call(form, signal) {
+// One request to the edits endpoint. With streaming on, OpenAI sends the
+// picture as it forms — a couple of rough passes, then the finished one — as
+// server-sent events; each rough pass goes to onPartial so the builder can
+// watch it appear. Either way the answer is shaped like the plain JSON reply.
+async function call(form, signal, onPartial) {
   const r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY }, body: form, signal });
+  const type = String((r.headers && r.headers.get && r.headers.get('content-type')) || '');
+  if (r.ok && /text\/event-stream/.test(type) && r.body) {
+    let final = null; let last = null; let error = null; let index = 0;
+    const handle = (line) => {
+      if (!line.startsWith('data:')) return;
+      let evt; try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { return; }
+      const kind = String(evt.type || '');
+      if (evt.error) error = evt.error;
+      if (!evt.b64_json) return;
+      if (/partial/.test(kind)) { last = Buffer.from(evt.b64_json, 'base64'); if (onPartial) { try { onPartial(last, index++); } catch (e) { /* the viewer's problem */ } } }
+      else if (/complet/.test(kind) || !kind) final = Buffer.from(evt.b64_json, 'base64');
+    };
+    const reader = r.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop() || '';
+      lines.forEach(handle);
+    }
+    if (buf) handle(buf);
+    if (error) return { status: 400, body: { error: typeof error === 'object' ? error : { message: String(error) } } };
+    const out = final || last;
+    return { status: out ? 200 : 502, body: out ? { data: [{ b64_json: out.toString('base64') }] } : null };
+  }
   let body = null;
   try { body = await r.json(); } catch (e) { body = null; }
   return { status: r.status, body };
 }
 
-// renderRoom({ buffer, mime, width, height, prompt }) → { buffer (PNG), model, quality, cost_usd }
-async function renderRoom({ buffer, mime, width, height, prompt }) {
+// renderRoom({ buffer, mime, width, height, prompt, onPartial }) → { buffer (PNG), model, quality, cost_usd }
+// onPartial(buffer, index) is called with each rough pass when the API streams them.
+async function renderRoom({ buffer, mime, width, height, prompt, onPartial }) {
   if (!isConfigured()) throw new RenderError('Finished-room renders are not switched on for this portal (no OPENAI_API_KEY).', 503);
   if (!buffer || !buffer.length) throw new RenderError('No photo to work from.', 400);
   const controller = new AbortController();
@@ -108,13 +138,14 @@ async function renderRoom({ buffer, mime, width, height, prompt }) {
     // The request as a set of fields, so a field the API no longer knows can
     // be dropped and the call tried again rather than failing the render.
     const params = { model: MODEL(), prompt, n: '1', size: sizeFor(width, height), quality: QUALITY(), input_fidelity: 'high' };
+    if (onPartial) { params.stream = 'true'; params.partial_images = '2'; }
     const build = () => {
       const form = new FormData();
       for (const [k, v] of Object.entries(params)) if (v != null) form.append(k, String(v));
       form.append('image', new Blob([buffer], { type: mime || 'image/jpeg' }), /png/.test(mime || '') ? 'room.png' : 'room.jpg');
       return form;
     };
-    let out = await call(build(), controller.signal);
+    let out = await call(build(), controller.signal, onPartial);
     let modelLookedUp = false;
     for (let attempt = 0; attempt < 4 && out.status === 400 && out.body && out.body.error; attempt++) {
       const msg = String(out.body.error.message || '');
@@ -124,11 +155,12 @@ async function renderRoom({ buffer, mime, width, height, prompt }) {
         params.model = await discoverModel(controller.signal);
       } else {
         // A parameter this version of the API does not take: send without it.
-        const dropped = ['input_fidelity', 'quality', 'size', 'n'].find((k) => params[k] != null && new RegExp('\\b' + k + '\\b', 'i').test(msg));
+        const dropped = ['input_fidelity', 'quality', 'size', 'n', 'partial_images', 'stream'].find((k) => params[k] != null && new RegExp('\\b' + k + '\\b', 'i').test(msg));
         if (!dropped) break;
         delete params[dropped];
+        if (dropped === 'stream') delete params.partial_images;
       }
-      out = await call(build(), controller.signal);
+      out = await call(build(), controller.signal, params.stream ? onPartial : null);
     }
     if (out.status === 401 || out.status === 403) throw new RenderError('The OpenAI key on this server was refused.', 503);
     if (out.status === 429) throw new RenderError('The image service is busy — try again in a minute.', 429);

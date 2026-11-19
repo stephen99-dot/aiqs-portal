@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { apiFetch, apiUpload, resolveUrl } from '../utils/api';
+import { apiFetch, apiUpload, resolveUrl, API_BASE, getToken } from '../utils/api';
 import compressImage from '../utils/compressImage';
 import downloadFile from '../utils/downloadFile';
 import useIsMobile from '../utils/useIsMobile';
@@ -16,6 +16,7 @@ import {
 import RoomPlanSketch from '../components/survey/RoomPlanSketch';
 import PhotoLightbox from '../components/survey/PhotoLightbox';
 import BeforeAfter from '../components/survey/BeforeAfter';
+import RenderProgress from '../components/survey/RenderProgress';
 import { quantities, wallsOf, sceneOf, SOURCE_LABEL, SOURCE_TONE, ROOM_TYPES, FLOOR_LEVELS, QUICK_FEATURES, HAZARD_PRESETS, OPENING_DEFAULTS, num } from '../utils/surveyGeometry';
 
 const Room3D = React.lazy(() => import('../components/survey/Room3D'));
@@ -35,7 +36,6 @@ const STEPS = [
 ];
 const STATUS = { draft: ['neutral', 'Capturing'], surveyed: ['info', 'Surveyed'], priced: ['success', 'Priced'] };
 const KIND_LABEL = { corner: 'Corner', wall: 'Wall', floor: 'Floor', ceiling: 'Ceiling', detail: 'Detail', general: '', render: 'Finished' };
-const RENDER_LINES = ['Reading the photo…', 'Painting the work in — the new finishes, the fittings…', 'Keeping the walls, window and camera angle as they are…', 'Nearly there…'];
 const BUSY_LINES = ['Looking at the photos…', 'Finding the walls, doors and windows…', 'Counting sockets, switches and lights…', 'Checking the finishes and their condition…', 'Working out the quantities…'];
 const FINISH_KEYS = [['floor', 'Floor'], ['walls', 'Walls'], ['ceiling', 'Ceiling'], ['woodwork', 'Woodwork']];
 const FINISH_HINTS = { floor: ['Laminate', 'Carpet', 'Tiles', 'Vinyl', 'Engineered wood', 'Floorboards', 'Concrete'], walls: ['Painted plaster', 'Wallpaper', 'Tiled', 'Bare plaster', 'Artex', 'Panelling'], ceiling: ['Painted plaster', 'Artex', 'Plasterboard', 'Coved', 'Lath and plaster'], woodwork: ['Painted', 'Stained', 'Varnished', 'Bare', 'MDF'] };
@@ -77,6 +77,7 @@ export default function SurveyRoomPage() {
   const [busy, setBusy] = useState(null);          // { title, line }
   const [priceResult, setPriceResult] = useState(null);
   const [renderTweak, setRenderTweak] = useState('');
+  const [gen, setGen] = useState(null);                 // the render in progress: { before, preview, target, note, done }
   const [renderPick, setRenderPick] = useState(null);     // the render shown in the before/after
   const [selOpening, setSelOpening] = useState(null);
   const [editOpening, setEditOpening] = useState(null);
@@ -183,19 +184,42 @@ export default function SurveyRoomPage() {
     if (!(roomRef.current.work_wanted || '').trim()) { toast.error('Say what work the customer wants first (the Work step) — that is what gets painted in.'); return; }
     await flush();
     setLightbox(-1);
-    let n = 0;
-    setBusy({ title: 'Showing the finished room', line: RENDER_LINES[0] });
-    const tick = setInterval(() => { n = Math.min(n + 1, RENDER_LINES.length - 1); setBusy((b) => (b ? { ...b, line: RENDER_LINES[n] } : b)); }, 6000);
+    const source = photo || (roomRef.current.photos || []).find((p) => p.kind === 'corner') || (roomRef.current.photos || []).find((p) => p.kind !== 'render');
+    setGen({ before: source ? source.url : '', preview: null, target: 4, note: 'Reading the photo…', done: false });
     try {
-      const r = await apiFetch('/surveys/rooms/' + roomId + '/render', { method: 'POST', body: JSON.stringify({ photo_id: photo ? photo.id : undefined, instructions: instructions || '' }) });
-      setRoom((cur) => (cur ? { ...cur, photos: r.photos, photo_count: r.photos.length } : cur));
-      setData((d) => (d ? { ...d, render_allowance: r.allowance } : d));
-      setRenderPick(r.photo.id);
+      const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+      const token = getToken(); if (token) headers.Authorization = 'Bearer ' + token;
+      const res = await fetch(API_BASE + '/surveys/rooms/' + roomId + '/render', { method: 'POST', headers, body: JSON.stringify({ photo_id: source ? source.id : undefined, instructions: instructions || '' }) });
+      let result = null; let failure = null;
+      if (/text\/event-stream/.test(res.headers.get('content-type') || '')) {
+        // The server streams: an estimate every couple of seconds, each rough
+        // pass of the picture as it forms, then the finished photo.
+        const reader = res.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+        const handle = (line) => {
+          if (!line.startsWith('data: ')) return;
+          let evt; try { evt = JSON.parse(line.slice(6)); } catch (e) { return; }
+          if (evt.type === 'progress') setGen((g) => (g ? { ...g, target: Math.max(g.target, evt.pct || 0), note: evt.note || g.note } : g));
+          else if (evt.type === 'partial') setGen((g) => (g ? { ...g, preview: evt.b64 || g.preview, target: Math.max(g.target, evt.pct || 0), note: 'Taking shape…' } : g));
+          else if (evt.type === 'done') result = evt;
+          else if (evt.type === 'error') failure = evt;
+        };
+        for (;;) { const { done, value } = await reader.read(); if (done) break; buf += decoder.decode(value, { stream: true }); const lines = buf.split('\n'); buf = lines.pop() || ''; lines.forEach(handle); }
+        if (buf) handle(buf);
+      } else {
+        const j = await res.json().catch(() => null);
+        if (!res.ok) failure = { error: (j && j.error) || 'Could not render the room.' }; else result = j;
+      }
+      if (failure || !result) throw new Error((failure && failure.error) || 'Could not render the room.');
+      // Snap into focus on the finished picture, then hand over to the slider.
+      setGen((g) => (g ? { ...g, preview: resolveUrl(result.photo.url), target: 100, done: true, note: '' } : g));
+      await new Promise((r) => setTimeout(r, 900));
+      setRoom((cur) => (cur ? { ...cur, photos: result.photos, photo_count: result.photos.length } : cur));
+      setData((d) => (d ? { ...d, render_allowance: result.allowance } : d));
+      setRenderPick(result.photo.id);
       setRenderTweak('');
-      toast.success('Here\'s the finished room. Slide to compare — it\'s a concept, not a drawing.');
       if (isMobile) setStep('photos');
     } catch (e) { toast.error(e.message || 'Could not render the room.'); }
-    finally { clearInterval(tick); setBusy(null); }
+    finally { setGen(null); }
   };
 
   // ── LiDAR / RoomPlan ───────────────────────────────────────────────────────
@@ -642,6 +666,7 @@ export default function SurveyRoomPage() {
       </div>
 
       {lightbox >= 0 && photos[lightbox] && <PhotoLightbox photos={photos} index={lightbox} onClose={() => setLightbox(-1)} onChange={(i) => { if (i >= 0 && i < photos.length) setLightbox(i); }} onSave={savePhoto} onDelete={deletePhoto} onRender={data.max_enabled ? (p) => renderRoom(p, '') : null} renderHint={renderAllowanceText} />}
+      {gen && <RenderProgress state={gen} />}
       {busy && <div className="sr-busy" role="status" aria-live="polite"><div className="sr-busy__card"><div className="sr-busy__ring" /><div className="sr-busy__title">{busy.title}</div><div className="sr-busy__sub">{busy.line}</div></div></div>}
       {confirmDel && (
         <Modal title="Delete this room?" onClose={() => setConfirmDel(false)} footer={<><Button variant="secondary" onClick={() => setConfirmDel(false)}>Keep it</Button><Button variant="danger" onClick={deleteRoom} busyLabel="Deleting…">Delete room</Button></>}>

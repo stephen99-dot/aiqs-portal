@@ -259,7 +259,25 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
       if (rm.work_wanted) y = paragraph(doc, 'Work wanted: ' + rm.work_wanted, y, W);
       for (const n of (Array.isArray(notes) ? notes : [])) y = paragraph(doc, '• ' + n.text, y, W);
     }
-    const photos = (r.photos || []).filter((p) => p.path && fs.existsSync(p.path)).slice(0, 8);
+    const allPhotos = (r.photos || []).filter((p) => p.path && fs.existsSync(p.path));
+    // The finished room: each render beside the photo it was painted from.
+    const renders = allPhotos.filter((p) => p.kind === 'render').slice(0, 4);
+    if (renders.length) {
+      const cellW = (W - 12) / 2; const cellH = 160;
+      renders.forEach((rp, i) => {
+        if (y + cellH + 44 > doc.page.height - 50) { doc.addPage(); y = 50; }
+        if (i === 0) y = sectionTitle(doc, 'The finished room — AI concept of the work described, not to scale', y);
+        const src = allPhotos.find((p) => p.id === rp.render_of) || allPhotos.find((p) => p.kind !== 'render');
+        if (src) { try { doc.image(src.path, 40, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable */ } }
+        try { doc.image(rp.path, 40 + cellW + 12, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable */ }
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(MUTED).text('NOW', 40, y + cellH + 3, { width: cellW });
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(INK).text('AFTER THE WORK', 40 + cellW + 12, y + cellH + 3, { width: cellW });
+        const note = String(rp.caption || '').replace(/^Finished room\s*[—-]?\s*/, '');
+        if (note) doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(note.slice(0, 160), 40 + cellW + 12, y + cellH + 12, { width: cellW, height: 10, ellipsis: true });
+        y += cellH + 30;
+      });
+    }
+    const photos = allPhotos.filter((p) => p.kind !== 'render').slice(0, 8);
     if (photos.length) {
       const cellW = (W - 12) / 2; const cellH = 150;
       photos.forEach((p, i) => {
@@ -267,10 +285,8 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
         if (i === 0 || (i % 2 === 0 && y === 50)) { if (i === 0) y = sectionTitle(doc, 'Photographs', y); }
         const x = 40 + (i % 2) * (cellW + 12);
         try { doc.image(p.path, x, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable image */ }
-        const label = p.kind === 'render'
-          ? ['FINISHED ROOM — AI concept of the work described, not to scale', p.caption].filter(Boolean).join(' · ')
-          : [(p.kind && p.kind !== 'general' ? p.kind : null), p.caption, p.ai_notes].filter(Boolean).join(' · ');
-        doc.font('Helvetica').fontSize(7).fillColor(p.kind === 'render' ? INK : MUTED).text(label.slice(0, 160) || 'Photo ' + (i + 1), x, y + cellH + 3, { width: cellW, height: 20, ellipsis: true });
+        const label = [(p.kind && p.kind !== 'general' ? p.kind : null), p.caption, p.ai_notes].filter(Boolean).join(' · ');
+        doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(label.slice(0, 160) || 'Photo ' + (i + 1), x, y + cellH + 3, { width: cellW, height: 20, ellipsis: true });
         if (i % 2 === 1 || i === photos.length - 1) y += cellH + 28;
       });
     }
