@@ -289,11 +289,40 @@ test('a RoomPlan capture imports as measured walls, openings and area', async ()
   assert.equal(room.quantities.doors, 1); assert.equal(room.quantities.windows, 1);
   assert.ok(room.features.some((f) => f.item === 'washer dryer' && f.source === 'measured'));
   assert.equal(room.has_capture, true);
+  // The plan the sketch, the 3D view and the PDF draw from: every wall where
+  // the scanner put it, the door and window on the walls they were found in.
+  assert.ok(room.plan && room.plan.walls.length === 4, 'plan with four walls');
+  assert.equal(room.plan.outline.length, 4, 'a closed four-corner outline');
+  assert.ok(Math.abs(room.plan.bounds.w - 5) < 0.2 && Math.abs(room.plan.bounds.h - 4) < 0.2, 'bounds 5 × 4: ' + JSON.stringify(room.plan.bounds));
+  assert.ok(room.plan.walls.every((w) => w.a && w.b && typeof w.a.x === 'number' && w.a.x >= 0 && w.a.y >= 0), 'wall ends in plan coordinates from the top-left');
+  assert.equal(room.plan.walls.filter((w) => w.openings.some((o) => o.kind === 'door')).length, 1, 'the door sits on one wall');
+  assert.ok(room.openings.every((o) => o.wall), 'imported openings carry the wall letter the scanner placed them on: ' + JSON.stringify(room.openings.map((o) => [o.kind, o.wall])));
+  assert.deepEqual(room.outline.bounds, room.plan.bounds);
+  const scene = G.sceneOf({ shape: 'custom', name: 'Kitchen', capture: JSON.stringify(capture) });
+  assert.equal(scene.kind, 'plan'); assert.equal(scene.segments.length, 4); assert.equal(scene.objects.length, 0, 'objects without transforms are not drawn');
+  const typed = G.sceneOf({ shape: 'rectangular', length_m: 4, width_m: 3, openings: [{ kind: 'door', width_m: 0.8, height_m: 2, wall: 'C' }] });
+  assert.equal(typed.kind, 'outline'); assert.equal(typed.segments.length, 4); assert.equal(typed.segments[2].openings.length, 1);
+  assert.ok(Math.abs(typed.centroid.x - 2) < 1e-9 && Math.abs(typed.centroid.y - 1.5) < 1e-9);
   const plan = await req('GET', '/surveys/' + test.surveyId + '/plan.pdf', tokenA);
   assert.equal(plan.status, 200);
   assert.equal(plan.headers['content-type'], 'application/pdf');
   const bad = await req('POST', '/surveys/rooms/' + r0.body.room.id + '/roomplan', tokenA, { json: { walls: [] } });
   assert.equal(bad.status, 400);
+
+  // A room scanned before openings were placed on walls (measured openings
+  // without a letter) gets them placed at startup, keeping anything the
+  // builder added by hand and refreshing the LiDAR note.
+  const stripped = room.openings.map((o) => ({ ...o, wall: null }));
+  await req('PATCH', '/surveys/rooms/' + room.id, tokenA, { openings: [...stripped, { kind: 'window', width_m: 0.6, height_m: 0.6, source: 'user' }], assumptions: ['Measured by LiDAR scan (4 walls). Openings are listed without a wall letter — assign them on the plan if you want them drawn in place.', 'Customer wants the door moved.'] });
+  let check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
+  assert.ok(check.body.room.openings.filter((o) => o.source === 'measured').every((o) => !o.wall), 'walls stripped for the test');
+  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 1, 'one room backfilled');
+  check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
+  const measured = check.body.room.openings.filter((o) => o.source === 'measured');
+  assert.equal(measured.length, 2); assert.ok(measured.every((o) => o.wall), 'measured openings back on their walls');
+  assert.ok(check.body.room.openings.some((o) => o.source === 'user' && o.width_m === 0.6), 'the builder\'s own window kept');
+  assert.ok(check.body.room.assumptions.some((a) => /placed on the walls/.test(a)) && check.body.room.assumptions.includes('Customer wants the door moved.'), JSON.stringify(check.body.room.assumptions));
+  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 0, 'nothing left to backfill');
 });
 
 test('notes, the report PDF and the Excel schedule', async () => {

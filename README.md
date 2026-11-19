@@ -56,9 +56,10 @@ early access (Users → the client → MAX). Admin → MAX switches it on for ev
 server is the authority: `/api/max/*` answers `403 MAX_NOT_ENABLED` for anyone else. A client
 MAX is on for can also use the estimator routes (`requireEstimator`), since MAX's estimates are
 quotes. A per-client daily allowance (default 300 turns) is enforced and shown on
-`GET /api/max/status`. Voice: speech-to-text needs `OPENAI_API_KEY` or `DEEPGRAM_API_KEY`
-(else the browser's own recogniser), spoken replies need `ELEVENLABS_API_KEY` (else the
-browser's voice). Tests: `server/max.test.js`.
+`GET /api/max/status`. Voice in, text out: talking to MAX (and dictating survey notes) needs
+`OPENAI_API_KEY` or `DEEPGRAM_API_KEY` for speech-to-text — inside the iOS app that is the only
+way, as WKWebView has no recogniser of its own; a desktop browser falls back to its own. MAX
+replies in writing only. Tests: `server/max.test.js`.
 
 ## Room surveys — "Scan a room"
 
@@ -82,7 +83,10 @@ Three ways to a measured room: type the length, width and height (rectangular or
 reads the photos and fills in only what the builder has not already measured or typed; or
 **Scan with LiDAR** in the iOS app (`ios/App/App/RoomScanPlugin.swift`, Apple RoomPlan, see
 `docs/IOS_APP.md`) / **Import a scan** (a RoomPlan, Polycam or magicplan JSON export) which
-locks the outline and marks it *measured*.
+locks the outline and marks it *measured*. A scanned room is drawn from the scan itself — every
+wall where the scanner put it, doors and windows on the walls they were found in, the furniture
+it saw — in the plan sketch, the 3D view and the report (`planFromCapture` / `sceneOf` in
+`server/surveyGeometry.js`, mirrored on the client).
 
 **Price with MAX** hands the room to MAX's `price_small_job` tool with a quantities brief
 ("use these exactly … price only this"), so the estimate comes from the surveyed numbers and the

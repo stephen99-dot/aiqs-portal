@@ -102,12 +102,15 @@ function roomOut(row, photos, token, extra) {
   out.quantities = q;
   out.status = statusOf(row, q);
   out.has_capture = !!row.capture;
+  // A scanned room carries its plan (walls in place, openings on them,
+  // furniture) so the sketch and the 3D view can draw the real shape.
+  out.plan = row.capture ? G.planFromCapture(G.parseJson(row.capture, null), row.name) : null;
   delete out.capture;
   out.photos = (photos || []).map((p) => photoOut(p, token));
   out.photo_count = out.photos.length;
   out.cover_thumb = out.photos.length ? out.photos[0].thumb_url : null;
   out.layout = G.layoutOpenings(row);
-  out.outline = G.outlineOf(row);
+  out.outline = out.plan ? { points: out.plan.outline, bounds: out.plan.bounds } : G.outlineOf(row);
   return { ...out, ...(extra || {}) };
 }
 function surveyTotals(rooms) {
@@ -482,15 +485,15 @@ function importRoomPlan(raw, room) {
   const dimsOf = (x) => { const d = x && (x.dimensions || x.dimension || x.size); if (Array.isArray(d) && d.length >= 2) return d.map(G.num); if (d && typeof d === 'object') return [G.num(d.x ?? d.width), G.num(d.y ?? d.height), G.num(d.z ?? d.depth)]; return null; };
   const wallDims = pick(['walls']).map(dimsOf).filter(Boolean);
   if (!wallDims.length) throw Object.assign(new Error('No walls found in that file — it needs to be a RoomPlan JSON export.'), { status: 400 });
-  let walls = []; let floorArea = 0; let height = 0; let bounds = null;
+  let walls = []; let floorArea = 0; let height = 0; let bounds = null; let plan = null;
   try {
-    const plan = require('./floorPlanGeometry').planOf(raw, room.name || 'Room');
+    plan = require('./floorPlanGeometry').planOf(raw, room.name || 'Room');
     if (plan.walls.length) {
       walls = plan.walls.map((w, i) => ({ label: G.WALL_LABELS[i] || String(i + 1), length_m: Math.round(w.width * 100) / 100, height_m: Math.round((w.height || plan.height) * 100) / 100 }));
       floorArea = plan.floorArea; height = plan.height;
       bounds = { w: plan.bounds.maxX - plan.bounds.minX, h: plan.bounds.maxZ - plan.bounds.minZ };
-    }
-  } catch (e) { walls = []; }
+    } else plan = null;
+  } catch (e) { walls = []; plan = null; }
   if (!walls.length) {
     // Dimensions only (no transforms): lengths and a rectangular assumption.
     walls = wallDims.filter((w) => w[0] > 0.1).map((w, i) => ({ label: G.WALL_LABELS[i] || String(i + 1), length_m: Math.round(w[0] * 100) / 100, height_m: Math.round((w[1] || 2.4) * 100) / 100 }));
@@ -500,9 +503,15 @@ function importRoomPlan(raw, room) {
     const L = widths[0] || 0; const W = per / 2 - L > 0.1 ? per / 2 - L : (widths[1] || L);
     floorArea = L * W; bounds = { w: L, h: W };
   }
+  // Doors and windows on the walls the scanner saw them in (the plan matched
+  // each to its nearest wall); any it could not place are kept without a wall.
   const openings = [];
+  const push = (kind, w, h, wall) => openings.push({ id: 'op' + (openings.length + 1), kind, width_m: Math.round(w * 100) / 100, height_m: Math.round(h * 100) / 100, count: 1, wall: wall || null, notes: '', source: 'measured' });
+  if (plan) plan.walls.forEach((w, i) => (w.openings || []).forEach((o) => push(o.kind, o.width, o.height, G.WALL_LABELS[i] || String(i + 1))));
   for (const [kind, key] of [['door', 'doors'], ['window', 'windows'], ['opening', 'openings']]) {
-    for (const d of pick([key]).map(dimsOf).filter(Boolean)) openings.push({ id: 'op' + openings.length + 1, kind, width_m: Math.round(d[0] * 100) / 100, height_m: Math.round(d[1] * 100) / 100, count: 1, wall: null, notes: '', source: 'measured' });
+    const all = pick([key]).map(dimsOf).filter(Boolean);
+    const placed = openings.filter((o) => o.kind === kind).length;
+    for (const d of all.slice(placed)) push(kind, d[0], d[1], null);
   }
   const counts = {};
   for (const o of pick(['objects'])) { const cat = String((o && (o.category || o.type || o.label)) || '').replace(/([A-Z])/g, ' $1').trim().toLowerCase() || 'object'; counts[cat] = (counts[cat] || 0) + 1; }
@@ -511,7 +520,7 @@ function importRoomPlan(raw, room) {
     shape: 'custom', walls, floor_area_override_m2: Math.round(floorArea * 100) / 100, height_m: Math.round(height * 100) / 100,
     length_m: bounds ? Math.round(bounds.w * 100) / 100 : null, width_m: bounds ? Math.round(bounds.h * 100) / 100 : null,
     dims_source: 'measured', openings, features, capture: raw,
-    assumptions: ['Measured by LiDAR scan (' + walls.length + ' walls). Openings are listed without a wall letter — assign them on the plan if you want them drawn in place.'],
+    assumptions: ['Measured by LiDAR scan (' + walls.length + ' walls' + (plan ? ', doors and windows placed on the walls the scanner saw them in' : '') + ').'],
   };
 }
 
@@ -617,5 +626,31 @@ router.get('/:id/plan.pdf', (req, res) => {
   } catch (err) { console.error('[Surveys] plan error:', err); if (!res.headersSent) res.status(500).json({ error: 'Could not draw the plan.' }); else res.end(); }
 });
 
+// ── One-off: rooms scanned before openings were placed on their walls ───────
+// Early imports stored every door and window without a wall letter. The scan
+// is still on the row, so re-derive the measured openings from it (keeping any
+// the builder or the AI added) and refresh the LiDAR note.
+function backfillScannedOpenings() {
+  let rows = [];
+  try { rows = db.prepare("SELECT * FROM survey_rooms WHERE capture IS NOT NULL AND capture != '' AND openings LIKE '%\"source\":\"measured\"%' AND openings LIKE '%\"wall\":null%'").all(); } catch (e) { return 0; }
+  let n = 0;
+  for (const r of rows) {
+    try {
+      const current = G.parseJson(r.openings, []) || [];
+      // The SQL above is only a coarse filter: it is the measured ones that must lack a wall.
+      if (!current.some((o) => o.source === 'measured' && !o.wall)) continue;
+      const fresh = importRoomPlan(G.parseJson(r.capture, null), r);
+      if (!fresh.openings.some((o) => o.wall)) continue;
+      const kept = current.filter((o) => o.source && o.source !== 'measured');
+      const assumptions = (G.parseJson(r.assumptions, []) || []).filter((a) => !/^Measured by LiDAR scan/.test(String(a)));
+      saveRoom(r, { openings: [...kept, ...fresh.openings], assumptions: [...fresh.assumptions, ...assumptions] });
+      n++;
+    } catch (e) { /* leave that room as it is */ }
+  }
+  if (n) console.log('[Surveys] placed the doors and windows of ' + n + ' scanned room' + (n === 1 ? '' : 's') + ' on their walls');
+  return n;
+}
+try { backfillScannedOpenings(); } catch (e) { /* never block startup */ }
+
 module.exports = router;
-module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir };
+module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir, backfillScannedOpenings };

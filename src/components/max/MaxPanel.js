@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { API_BASE, getToken, apiFetch, authedFetch } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import { announceDataChanged } from '../../hooks/useDataChanged';
-import useMaxVoice, { shortenForSpeech } from '../../hooks/useMaxVoice';
+import useMaxVoice from '../../hooks/useMaxVoice';
 import { MAX_OPEN_EVENT, fmtMoney2, fmtMoney0 } from '../../utils/max';
 import { saveBlob } from '../../native/saveFile';
 import { isNative } from '../../native/platform';
@@ -13,7 +13,7 @@ import MaxCharacter from './MaxCharacter';
 import { useToast } from '../../ui';
 import {
   XIcon, ArrowRightIcon, CheckIcon, AlertTriangleIcon, RefreshIcon, ChevronRightIcon, MicIcon, MicOffIcon,
-  Volume2Icon, VolumeXIcon, SparklesIcon, BrainIcon, MessageIcon, ShieldCheckIcon, UploadIcon,
+  SparklesIcon, BrainIcon, ShieldCheckIcon, UploadIcon,
 } from '../Icons';
 
 // ═══ MAX — the AI estimator and assistant, on every signed-in screen ════════
@@ -231,14 +231,11 @@ export default function MaxPanel() {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [status, setStatusInfo] = useState(null);   // /max/status
-  const [voiceTurn, setVoiceTurn] = useState(false);
   const transcriptRef = useRef((loadThread(userId) || { transcript: [] }).transcript);
   const threadIdRef = useRef((loadThread(userId) || {}).threadId || newThreadId());
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const sendRef = useRef(null);
-  const spokenRef = useRef({ got: false, reply: '' });
-  const voiceTurnRef = useRef(false);
 
   const allowed = !!user && !!user.maxEnabled;
   // No floating button where the page already has its own way in: the
@@ -266,18 +263,11 @@ export default function MaxPanel() {
     });
   }, [update]);
 
-  // ── Voice ─────────────────────────────────────────────────────────────────
+  // ── Voice in (MAX replies in writing only) ───────────────────────────────
   const voice = useMaxVoice({
-    onFinal: (text) => { voiceTurnRef.current = true; setVoiceTurn(true); if (sendRef.current) sendRef.current(text, { voice: true }); },
+    onFinal: (text) => { if (sendRef.current) sendRef.current(text, { voice: true }); },
     onError: (msg) => toast.error(msg),
   });
-
-  const speakReply = useCallback((text, spokenVersion) => {
-    if (!voiceTurnRef.current || voice.muted) return;
-    const say = spokenVersion || shortenForSpeech(text);
-    if (!say) return;
-    voice.speak(say, { then: voice.conversation ? () => voice.startListening() : null });
-  }, [voice]);
 
   const openPath = useCallback((path) => {
     navigate(path);
@@ -310,7 +300,6 @@ export default function MaxPanel() {
         break;
       case 'confirm':
         update((prev) => [...prev.map((it) => (it.kind === 'assistant' ? { ...it, streaming: false } : it)), { kind: 'confirm', id: Date.now() + Math.random(), token: evt.token, tool: evt.tool, title: evt.title, detail: evt.detail || '', card: evt.card || null, amount: evt.amount || 0, editable: evt.editable || [], state: 'open' }]);
-        if (voiceTurnRef.current) spokenRef.current.confirm = String(evt.title || 'Ready to go').replace(/\?$/, '') + '. Tap Approve on the card to go ahead — I can\'t take a yes by voice.';
         break;
       case 'sources':
         if (Array.isArray(evt.items) && evt.items.length) update((prev) => [...prev, { kind: 'sources', id: Date.now() + Math.random(), items: evt.items }]);
@@ -318,26 +307,20 @@ export default function MaxPanel() {
       case 'memories':
         if (Array.isArray(evt.items) && evt.items.length) update((prev) => [...prev, { kind: 'memories', id: Date.now() + Math.random(), items: evt.items }]);
         break;
-      case 'spoken':
-        spokenRef.current.got = true;
-        speakReply(spokenRef.current.reply, evt.text);
-        break;
       case 'error':
         update((prev) => [...prev.map((it) => (it.kind === 'assistant' ? { ...it, streaming: false } : it)), { kind: 'assistant', id: Date.now() + Math.random(), text: evt.message || 'Something went wrong.', tone: 'error', streaming: false }]);
         break;
       case 'done':
         if (Array.isArray(evt.messages)) transcriptRef.current = evt.messages;
-        spokenRef.current.reply = evt.reply || '';
         update((prev) => prev.map((it) => (it.kind === 'assistant' ? { ...it, streaming: false } : it)).filter((it) => !(it.kind === 'assistant' && !it.text)));
         setBusy(false);
         break;
       default: break;
     }
-  }, [appendText, navigate, update, speakReply]);
+  }, [appendText, navigate, update]);
 
   const stream = useCallback(async (path, body) => {
     setBusy(true);
-    spokenRef.current = { got: false, reply: '', confirm: null };
     try {
       const token = getToken();
       const headers = { 'Content-Type': 'application/json' };
@@ -352,24 +335,18 @@ export default function MaxPanel() {
       }
       await readEvents(res, handleEvent);
       handleEvent({ type: 'done', messages: null });
-      if (voiceTurnRef.current) {
-        if (spokenRef.current.confirm) voice.speak(spokenRef.current.confirm);
-        else if (!spokenRef.current.got && spokenRef.current.reply) speakReply(spokenRef.current.reply, null);
-      }
     } catch (e) {
       handleEvent({ type: 'error', message: 'Lost the connection — check your signal and try again.' });
       handleEvent({ type: 'done', messages: null });
     } finally {
       setBusy(false);
     }
-  }, [handleEvent, speakReply, voice]);
+  }, [handleEvent]);
 
   const send = useCallback((text, opts) => {
     const t = String(text || '').trim();
     if (!t || busy) return;
     const byVoice = !!(opts && opts.voice);
-    voiceTurnRef.current = byVoice;
-    setVoiceTurn(byVoice);
     setInput('');
     update((prev) => [...prev.map((it) => (it.kind === 'confirm' && it.state === 'open' ? { ...it, state: 'skipped' } : it)), { kind: 'user', id: Date.now() + Math.random(), text: t, voice: byVoice }]);
     stream('chat', { message: t, messages: transcriptRef.current, context: { path: location.pathname, threadId: threadIdRef.current, voice: byVoice } });
@@ -408,7 +385,6 @@ export default function MaxPanel() {
   }, [openPath, toast]);
 
   const reset = () => {
-    voice.stopSpeaking();
     transcriptRef.current = [];
     threadIdRef.current = newThreadId();
     update(() => []);
@@ -451,11 +427,11 @@ export default function MaxPanel() {
   }, [voice]);
 
   // Only `open` should re-run this: the voice object is stable for the panel's
-  // lifetime, and re-running on its state changes would stop a reply mid-word.
+  // lifetime, and re-running on its state changes would cut a recording short.
   const voiceRef = useRef(voice); voiceRef.current = voice;
   useEffect(() => {
     try { sessionStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch (e) { /* fine */ }
-    if (!open) { voiceRef.current.stopSpeaking(); voiceRef.current.stopListening(); return undefined; }
+    if (!open) { voiceRef.current.stopListening(); return undefined; }
     if (!isPhone()) { const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 60); return () => clearTimeout(t); }
     return undefined;
   }, [open]);
@@ -486,8 +462,8 @@ export default function MaxPanel() {
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input); }
   };
-  const state = voice.listening ? 'listening' : voice.transcribing ? 'thinking' : voice.speaking ? 'speaking' : busy ? 'working' : 'ready';
-  const stateText = { listening: 'Listening…', thinking: 'Got it — one sec…', speaking: 'Speaking', working: 'Working on it…', ready: 'Ready' }[state];
+  const state = voice.listening ? 'listening' : voice.transcribing ? 'thinking' : busy ? 'working' : 'ready';
+  const stateText = { listening: 'Listening…', thinking: 'Got it — one sec…', working: 'Working on it…', ready: 'Ready' }[state];
   const limits = status && status.limits;
 
   return (
@@ -507,10 +483,6 @@ export default function MaxPanel() {
               <div className="max__title">MAX</div>
               <div className={'max__status max__status--' + state}><span className="max__status-dot" aria-hidden="true" />{stateText}</div>
             </div>
-            {voice.supported && (
-              <button type="button" className={'max__icon' + (voice.conversation ? ' max__icon--on' : '')} onClick={() => voice.setConversation(!voice.conversation)} aria-pressed={voice.conversation} aria-label={voice.conversation ? 'Conversation mode on — MAX listens after each reply' : 'Conversation mode off'} title={voice.conversation ? 'Conversation mode: on' : 'Conversation mode: off'}><MessageIcon size={16} /></button>
-            )}
-            <button type="button" className={'max__icon' + (voice.muted ? ' max__icon--on' : '')} onClick={() => { if (!voice.muted) voice.stopSpeaking(); voice.setMuted(!voice.muted); }} aria-pressed={voice.muted} aria-label={voice.muted ? 'MAX is muted — tap to unmute' : 'Mute MAX\'s voice'} title={voice.muted ? 'Unmute' : 'Mute'}>{voice.muted ? <VolumeXIcon size={16} /> : <Volume2Icon size={16} />}</button>
             {items.length > 0 && (
               <button type="button" className="max__icon" onClick={reset} aria-label="Start a new conversation" title="New conversation" disabled={busy}><RefreshIcon size={16} /></button>
             )}
@@ -607,11 +579,11 @@ export default function MaxPanel() {
           <form className="max__composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
             {voice.supported && (
               <button type="button"
-                className={'max__mic' + (voice.listening ? ' max__mic--on' : '') + (voice.transcribing ? ' max__mic--busy' : '') + (voice.speaking ? ' max__mic--speaking' : '')}
+                className={'max__mic' + (voice.listening ? ' max__mic--on' : '') + (voice.transcribing ? ' max__mic--busy' : '')}
                 style={voice.listening ? { '--max-level': (4 + voice.level * 14) + 'px' } : undefined}
-                onClick={() => { if (voice.speaking) { voice.stopSpeaking(); voice.startListening(); } else voice.toggleListening(); }}
+                onClick={voice.toggleListening}
                 aria-pressed={voice.listening}
-                aria-label={voice.listening ? 'Stop listening' : voice.speaking ? 'Interrupt MAX and talk' : 'Talk to MAX'}
+                aria-label={voice.listening ? 'Stop listening' : 'Talk to MAX'}
                 title={voice.listening ? 'Tap when done' : 'Talk to MAX'}>
                 {voice.listening ? <MicOffIcon size={20} /> : <MicIcon size={20} />}
               </button>
@@ -620,7 +592,7 @@ export default function MaxPanel() {
               placeholder={busy ? 'Working on it…' : voice.listening ? 'Listening…' : 'Describe the job, or ask MAX…'} aria-label="Type to MAX" />
             <button type="submit" className="max__send" disabled={busy || !input.trim()} aria-label="Send"><ArrowRightIcon size={18} /></button>
           </form>
-          <div className="max__foot"><SparklesIcon size={11} /> Sending to a customer and deleting always wait for your tap. {voiceTurn && !voice.muted ? 'Replies are read aloud.' : ''}</div>
+          <div className="max__foot"><SparklesIcon size={11} /> Sending to a customer and deleting always wait for your tap.</div>
         </section>
       )}
     </>

@@ -47,33 +47,46 @@ function footer(doc, text) {
   doc.fillColor(INK);
 }
 
-// The plan sketch: the room outline to fit a box, openings cut into the walls,
-// door swings, window lines, overall dimensions.
+// The plan sketch: the room to fit a box — walls with the openings cut out,
+// door swings, window lines, the wall letters, the overall size and the area.
+// A scanned room is drawn from its capture (every wall where the scanner saw
+// it, with the furniture), a typed one from its rectangle or L-shape.
 function drawSketch(doc, room, q, box) {
-  const outline = G.outlineOf(room);
-  if (!outline) {
+  const scene = G.sceneOf(room);
+  if (!scene) {
     doc.save().lineWidth(0.6).strokeColor(HAIR).dash(3, { space: 3 }).rect(box.x, box.y, box.w, box.h).stroke().undash().restore();
     doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(room.shape === 'custom' ? (q.wall_count + ' walls · ' + fmt(q.perimeter_m, 2) + ' m perimeter') : 'No dimensions yet', box.x, box.y + box.h / 2 - 5, { width: box.w, align: 'center' });
     doc.fillColor(INK);
     return;
   }
   const pad = 26;
-  const scale = Math.min((box.w - pad * 2) / outline.bounds.w, (box.h - pad * 2) / outline.bounds.h);
-  const ox = box.x + (box.w - outline.bounds.w * scale) / 2;
-  const oy = box.y + (box.h - outline.bounds.h * scale) / 2;
+  const scale = Math.min((box.w - pad * 2) / Math.max(scene.bounds.w, 0.1), (box.h - pad * 2) / Math.max(scene.bounds.h, 0.1));
+  const ox = box.x + (box.w - scene.bounds.w * scale) / 2;
+  const oy = box.y + (box.h - scene.bounds.h * scale) / 2;
   const P = (p) => ({ x: ox + p.x * scale, y: oy + p.y * scale });
-  const pts = outline.points.map(P);
-  doc.save();
-  doc.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) doc.lineTo(pts[i].x, pts[i].y); doc.closePath();
-  doc.fillColor(FLOOR).fill();
-  doc.restore();
-  const layout = G.layoutOpenings(room);
-  const walls = G.wallsOf(room);
+  const centre = P(scene.centroid);
+  // The floor.
+  if (scene.floor && scene.floor.length >= 3) {
+    const pts = scene.floor.map(P);
+    doc.save();
+    doc.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) doc.lineTo(pts[i].x, pts[i].y); doc.closePath();
+    doc.fillColor(FLOOR).fill();
+    doc.restore();
+  }
+  // Furniture the scanner saw, drawn light so it never competes with the walls.
+  for (const o of scene.objects || []) {
+    const c = (o.corners || []).map(P);
+    if (c.length < 3) continue;
+    doc.save().lineWidth(0.4).strokeColor(HAIR).fillColor('#FFFFFF');
+    doc.moveTo(c[0].x, c[0].y); for (let i = 1; i < c.length; i++) doc.lineTo(c[i].x, c[i].y); doc.closePath().fillAndStroke();
+    doc.restore();
+    const wOnPaper = o.width_m * scale;
+    if (wOnPaper > 30) { const cc = P(o.centre); doc.font('Helvetica').fontSize(5).fillColor(HAIR).text(o.category, cc.x - wOnPaper / 2, cc.y - 3, { width: wOnPaper, align: 'center' }); }
+  }
   // Walls as thick lines with the openings left out.
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i]; const b = pts[(i + 1) % pts.length];
-    const label = walls[i] ? walls[i].label : null;
-    const ops = layout.filter((l) => l.wall === label).sort((x, y) => x.from - y.from);
+  for (const seg of scene.segments) {
+    const a = P(seg.a); const b = P(seg.b);
+    const ops = (seg.openings || []).slice().sort((x, y) => x.from - y.from);
     const runs = []; let cur = 0;
     for (const o of ops) { if (o.from > cur) runs.push([cur, o.from]); cur = Math.max(cur, o.to); }
     if (cur < 1) runs.push([cur, 1]);
@@ -81,15 +94,19 @@ function drawSketch(doc, room, q, box) {
     for (const [f, t] of runs) doc.moveTo(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f).lineTo(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t).stroke();
     doc.restore();
     const dx = b.x - a.x; const dy = b.y - a.y; const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len; const ny = dx / len; // normal pointing into the room for clockwise polygons (y down)
+    // The normal that points into the room: towards the centroid, whichever
+    // way round the scanner listed this wall.
+    let nx = -dy / len; let ny = dx / len;
+    const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
+    if ((centre.x - mx) * nx + (centre.y - my) * ny < 0) { nx = -nx; ny = -ny; }
     for (const o of ops) {
       const s = { x: a.x + dx * o.from, y: a.y + dy * o.from }; const e = { x: a.x + dx * o.to, y: a.y + dy * o.to };
       const span = Math.hypot(e.x - s.x, e.y - s.y);
       doc.save();
-      if (o.opening.kind === 'window') {
+      if (o.kind === 'window') {
         doc.lineWidth(1.2).strokeColor(GLASS).moveTo(s.x, s.y).lineTo(e.x, e.y).stroke();
         doc.lineWidth(0.5).strokeColor(INK).moveTo(s.x + nx * 1.5, s.y + ny * 1.5).lineTo(e.x + nx * 1.5, e.y + ny * 1.5).stroke().moveTo(s.x - nx * 1.5, s.y - ny * 1.5).lineTo(e.x - nx * 1.5, e.y - ny * 1.5).stroke();
-      } else if (o.opening.kind === 'door') {
+      } else if (o.kind === 'door') {
         const ox2 = s.x + nx * span; const oy2 = s.y + ny * span;
         doc.lineWidth(0.9).strokeColor(INK).moveTo(s.x, s.y).lineTo(ox2, oy2).stroke();
         doc.lineWidth(0.5).strokeColor(MUTED).dash(2, { space: 2 }).moveTo(ox2, oy2).bezierCurveTo(ox2 + (e.x - s.x) * 0.5523, oy2 + (e.y - s.y) * 0.5523, e.x + nx * span * 0.5523, e.y + ny * span * 0.5523, e.x, e.y).stroke().undash();
@@ -98,17 +115,18 @@ function drawSketch(doc, room, q, box) {
       }
       doc.restore();
     }
-    // Wall letter, just outside the wall.
-    if (label) {
-      const mx = (a.x + b.x) / 2 - nx * 9; const my = (a.y + b.y) / 2 - ny * 9;
-      doc.font('Helvetica-Bold').fontSize(6.5).fillColor(MUTED).text(label, mx - 6, my - 4, { width: 12, align: 'center' });
+    // Wall letter, just outside the wall (skipped on stubs too short to label).
+    if (seg.label && len > 14) {
+      const lx = mx - nx * 9; const ly = my - ny * 9;
+      doc.font('Helvetica-Bold').fontSize(6.5).fillColor(MUTED).text(seg.label, lx - 6, ly - 4, { width: 12, align: 'center' });
     }
   }
-  // Overall dimensions.
+  // Overall dimensions and the area.
   doc.font('Helvetica').fontSize(7).fillColor(MUTED);
-  doc.text(fmt(room.length_m, 2) + ' m', ox, oy - 14, { width: outline.bounds.w * scale, align: 'center' });
-  doc.save().translate(ox - 10, oy + outline.bounds.h * scale / 2).rotate(-90).text(fmt(room.width_m, 2) + ' m', -30, -3, { width: 60, align: 'center' }).restore();
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text(fmt(q.floor_m2, 1) + ' m²', ox, oy + outline.bounds.h * scale / 2 - 5, { width: outline.bounds.w * scale, align: 'center' });
+  doc.text(fmt(scene.length_m, 2) + ' m', ox, oy - 23, { width: scene.bounds.w * scale, align: 'center' });
+  doc.save().translate(ox - 19, oy + scene.bounds.h * scale / 2).rotate(-90).text(fmt(scene.width_m, 2) + ' m', -30, -3, { width: 60, align: 'center' }).restore();
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text(fmt(q.floor_m2, 1) + ' m²', centre.x - 40, centre.y - 5, { width: 80, align: 'center' });
+  if (scene.kind === 'plan') doc.font('Helvetica').fontSize(6).fillColor(MUTED).text('LiDAR scan · ' + scene.segments.length + ' walls', centre.x - 50, centre.y + 6, { width: 100, align: 'center' });
   doc.fillColor(INK);
 }
 
@@ -189,7 +207,7 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
     let ry = y;
     doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text('Quantities', 310, ry); ry += 14;
     ry = kv(doc, [
-      ['Length × width × height', q.complete ? fmt(rm.length_m, 2) + ' × ' + fmt(rm.width_m, 2) + ' × ' + fmt(q.height_m, 2) + ' m' : '—'],
+      [rm.shape === 'custom' ? 'Overall extent × height' : 'Length × width × height', q.complete ? fmt(rm.length_m, 2) + ' × ' + fmt(rm.width_m, 2) + ' × ' + fmt(q.height_m, 2) + ' m' : '—'],
       ['Floor area', fmt(q.floor_m2) + ' m²'], ['Ceiling area', fmt(q.ceiling_m2) + ' m²'],
       ['Wall area gross', fmt(q.wall_gross_m2) + ' m²'], ['Openings deducted', fmt(q.openings_m2) + ' m²'], ['Wall area net', fmt(q.wall_net_m2) + ' m²'],
       ['Perimeter', fmt(q.perimeter_m, 2) + ' m'], ['Skirting', fmt(q.skirting_m, 2) + ' m'], ['Coving / cornice', fmt(q.coving_m, 2) + ' m'],

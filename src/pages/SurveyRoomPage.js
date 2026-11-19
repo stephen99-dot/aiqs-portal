@@ -15,7 +15,7 @@ import {
 } from '../components/Icons';
 import RoomPlanSketch from '../components/survey/RoomPlanSketch';
 import PhotoLightbox from '../components/survey/PhotoLightbox';
-import { quantities, wallsOf, SOURCE_LABEL, SOURCE_TONE, ROOM_TYPES, FLOOR_LEVELS, QUICK_FEATURES, HAZARD_PRESETS, OPENING_DEFAULTS, num } from '../utils/surveyGeometry';
+import { quantities, wallsOf, sceneOf, SOURCE_LABEL, SOURCE_TONE, ROOM_TYPES, FLOOR_LEVELS, QUICK_FEATURES, HAZARD_PRESETS, OPENING_DEFAULTS, num } from '../utils/surveyGeometry';
 
 const Room3D = React.lazy(() => import('../components/survey/Room3D'));
 
@@ -224,8 +224,9 @@ export default function SurveyRoomPage() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const q = useMemo(() => (room ? quantities(room) : null), [room]);
-  const geom = useMemo(() => (room ? { name: room.name, shape: room.shape, length_m: room.length_m, width_m: room.width_m, height_m: room.height_m, notch_length_m: room.notch_length_m, notch_width_m: room.notch_width_m, openings: room.openings, walls: room.walls, floor_area_override_m2: room.floor_area_override_m2 } : null), [room]);
+  const geom = useMemo(() => (room ? { name: room.name, shape: room.shape, length_m: room.length_m, width_m: room.width_m, height_m: room.height_m, notch_length_m: room.notch_length_m, notch_width_m: room.notch_width_m, openings: room.openings, walls: room.walls, floor_area_override_m2: room.floor_area_override_m2, plan: room.plan } : null), [room]);
   const walls = useMemo(() => (room ? wallsOf(room) : []), [room]);
+  const scene = useMemo(() => (geom ? sceneOf(geom) : null), [geom]);
 
   if (error) return <div className="page"><EmptyState icon={ImageIcon} title="Room not found" body={error} action={<Button to={'/surveys/' + id}>Back to the survey</Button>} /></div>;
   if (!room || !data) return <div className="page"><SkeletonCard height={70} /><div style={{ height: 14 }} /><div className="sr"><div className="sr__main"><SkeletonCard height={220} /><SkeletonCard height={260} /></div><div className="sr__side"><SkeletonCard height={300} /></div></div></div>;
@@ -265,14 +266,14 @@ export default function SurveyRoomPage() {
     <div className="sr-sketch">
       <div className="sr-sketch__tabs">
         <button type="button" className={'sr-sketch__tab' + (view === 'plan' ? ' sr-sketch__tab--on' : '')} onClick={() => setView('plan')}><LayersIcon size={13} /> Plan</button>
-        <button type="button" className={'sr-sketch__tab' + (view === '3d' ? ' sr-sketch__tab--on' : '')} onClick={() => setView('3d')} disabled={!q.complete || room.shape === 'custom'}><OrbitIcon size={13} /> 3D</button>
+        <button type="button" className={'sr-sketch__tab' + (view === '3d' ? ' sr-sketch__tab--on' : '')} onClick={() => setView('3d')} disabled={!scene}><OrbitIcon size={13} /> 3D</button>
       </div>
-      {view === '3d' && q.complete && room.shape !== 'custom' ? (
+      {view === '3d' && scene ? (
         <Suspense fallback={<div className="sk-empty" style={{ width: '100%', height: 260 }}><strong>Building the room…</strong></div>}><div style={{ width: '100%' }}><Room3D room={geom} height={isMobile ? 240 : 280} /></div></Suspense>
       ) : (
         <RoomPlanSketch room={geom} width={isMobile ? 300 : 320} height={isMobile ? 220 : 240} selectedWall={selOpening ? (openings.find((o) => o.id === selOpening) || {}).wall : null} onWallClick={onWallClick} />
       )}
-      <div className="sr-sketch__note">{view === '3d' ? 'Drag to turn it, pinch to zoom.' : selOpening ? 'Tap a wall letter to put the selected opening on that wall.' : q.complete ? 'Walls A–' + walls[walls.length - 1].label + ' clockwise from the top. Tap an opening below, then a wall letter.' : 'Type the length and width and the plan draws itself.'}</div>
+      <div className="sr-sketch__note">{view === '3d' ? 'Drag to turn it, pinch to zoom.' : selOpening ? 'Tap a wall letter to put the selected opening on that wall.' : scene && scene.kind === 'plan' ? 'From the LiDAR scan — ' + scene.segments.length + ' walls as the scanner found them, doors and windows where it saw them.' : q.complete ? 'Walls A–' + walls[walls.length - 1].label + ' clockwise from the top. Tap an opening below, then a wall letter.' : 'Type the length and width and the plan draws itself.'}</div>
     </div>
   );
   const quantitiesPanel = (

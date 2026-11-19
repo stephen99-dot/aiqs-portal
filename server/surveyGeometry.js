@@ -23,7 +23,9 @@ const r2 = (n) => Math.round(num(n) * 100) / 100;
 const r1 = (n) => Math.round(num(n) * 10) / 10;
 
 const DEFAULT_HEIGHT = 2.4;
-const WALL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+// A scanned room can have a dozen or more wall segments (bays, chimney
+// breasts, boxed-in pipes), so the letters run the whole alphabet.
+const WALL_LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 function parseJson(v, fallback) {
   if (v == null || v === '') return fallback;
@@ -188,6 +190,92 @@ function outlineOf(room) {
   return { points: [{ x: 0, y: 0 }, { x: L, y: 0 }, { x: L, y: W }, { x: 0, y: W }], bounds: { w: L, h: W } };
 }
 
+// ── A measured room's plan, from its LiDAR capture ───────────────────────────
+// floorPlanGeometry turns the capture into wall segments with the doors and
+// windows placed on the walls the scanner saw them in. This puts that into
+// plan coordinates (metres, x to the right, y down the page, origin at the
+// top-left of the scan) so the sketch, the 3D view and the PDF can draw it
+// the same way they draw a typed rectangle.
+function planFromCapture(capture, name) {
+  if (!capture || typeof capture !== 'object') return null;
+  const FP = require('./floorPlanGeometry');
+  let plan;
+  try { plan = FP.planOf(capture, name || 'Room'); } catch (e) { return null; }
+  if (!plan || !plan.walls.length) return null;
+  const ox = plan.bounds.minX; const oz = plan.bounds.minZ;
+  const P = (p) => ({ x: Math.round((p.x - ox) * 1000) / 1000, y: Math.round((p.z - oz) * 1000) / 1000 });
+  const walls = plan.walls.map((w, i) => ({
+    label: WALL_LABELS[i] || String(i + 1), a: P(w.a), b: P(w.b),
+    length_m: r2(w.width), height_m: r2(w.height || plan.height || DEFAULT_HEIGHT), thickness_m: r2(w.thickness || 0.1),
+    openings: (w.openings || []).map((o) => ({ kind: o.kind, from: Math.round(o.from * 1000) / 1000, to: Math.round(o.to * 1000) / 1000, width_m: r2(o.width), height_m: r2(o.height) })),
+  }));
+  const objects = (Array.isArray(capture.objects) ? capture.objects : []).map((o) => {
+    const seg = FP.segmentOf(o);
+    if (!seg) return null;
+    const dims = o.dimensions || [];
+    const depth = num(dims[2]) || 0.4;
+    return {
+      category: String(o.category || 'object').replace(/([A-Z])/g, ' $1').trim().toLowerCase(),
+      centre: P(seg.centre), corners: FP.footprint(seg, depth).map(P),
+      width_m: r2(seg.width), depth_m: r2(depth), height_m: r2(num(dims[1]) || 0.75),
+    };
+  }).filter(Boolean);
+  return {
+    walls, outline: plan.outline.map(P), centroid: P(plan.centroid),
+    bounds: { w: r2(plan.bounds.maxX - ox), h: r2(plan.bounds.maxZ - oz) }, objects,
+    floor_m2: r2(plan.floorArea), perimeter_m: r2(plan.perimeter), height_m: r2(plan.height || DEFAULT_HEIGHT),
+  };
+}
+
+function polygonCentroid(pts) {
+  if (!pts || pts.length < 3) return pts && pts.length ? { x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length } : { x: 0, y: 0 };
+  let twice = 0; let cx = 0; let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]; const q = pts[(i + 1) % pts.length];
+    const cross = p.x * q.y - q.x * p.y;
+    twice += cross; cx += (p.x + q.x) * cross; cy += (p.y + q.y) * cross;
+  }
+  if (Math.abs(twice) < 1e-9) return pts[0];
+  return { x: cx / (3 * twice), y: cy / (3 * twice) };
+}
+
+// Everything a drawing of the room needs, whichever way it was measured:
+//   segments  the walls as { label, a, b, height_m, openings: [{ kind, from, to, width_m, height_m }] }
+//   floor     the outline polygon to tint
+//   bounds    { w, h } in metres; centroid; objects (furniture the scanner saw)
+// A typed rectangle or L-shape comes from outlineOf/layoutOpenings; a scanned
+// room from its capture (the row's JSON string, or an already-parsed object).
+// Null when there is nothing to draw yet.
+function sceneOf(room) {
+  const shape = room.shape || 'rectangular';
+  if (shape === 'custom') {
+    const plan = room.plan && typeof room.plan === 'object' ? room.plan : planFromCapture(parseJson(room.capture, null), room.name);
+    if (!plan) return null;
+    return {
+      kind: 'plan',
+      segments: plan.walls.map((w) => ({ label: w.label, a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings })),
+      floor: plan.outline, bounds: plan.bounds, centroid: plan.centroid, objects: plan.objects || [],
+      floor_m2: plan.floor_m2, length_m: plan.bounds.w, width_m: plan.bounds.h, height_m: num(room.height_m) || plan.height_m,
+    };
+  }
+  const outline = outlineOf(room);
+  if (!outline) return null;
+  const walls = wallsOf(room);
+  const layout = layoutOpenings(room);
+  const n = outline.points.length;
+  const segments = outline.points.map((p, i) => {
+    const label = walls[i] ? walls[i].label : null;
+    return {
+      label, a: p, b: outline.points[(i + 1) % n], height_m: walls[i] ? walls[i].height_m : (num(room.height_m) || DEFAULT_HEIGHT),
+      openings: layout.filter((l) => l.wall === label).map((l) => ({ kind: l.opening.kind, from: l.from, to: l.to, width_m: l.opening.width_m, height_m: l.opening.height_m })),
+    };
+  });
+  return {
+    kind: 'outline', segments, floor: outline.points, bounds: outline.bounds, centroid: polygonCentroid(outline.points), objects: [],
+    floor_m2: r2(floorAreaOf(room)), length_m: num(room.length_m), width_m: num(room.width_m), height_m: num(room.height_m) || DEFAULT_HEIGHT,
+  };
+}
+
 // A short, factual description of a room for the pricing take-off: the
 // quantities are stated as ground truth so the model measures nothing twice.
 function describeForPricing(room, q, survey) {
@@ -220,4 +308,4 @@ function describeForPricing(room, q, survey) {
   return lines.join('\n');
 }
 
-module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, describeForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };
+module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, planFromCapture, sceneOf, polygonCentroid, describeForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };

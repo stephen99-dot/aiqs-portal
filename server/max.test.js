@@ -19,7 +19,6 @@ process.env.ENABLE_WEB_SEARCH = '0';
 process.env.ANTHROPIC_API_KEY = 'test-key'; // the scripted model below answers every call
 delete process.env.OPENAI_API_KEY;
 delete process.env.DEEPGRAM_API_KEY;
-delete process.env.ELEVENLABS_API_KEY;
 
 // ── A scripted model ─────────────────────────────────────────────────────────
 const realClient = require('./anthropicClient');
@@ -430,12 +429,14 @@ test('search never crosses a tenant line and types narrow the results', async ()
   assert.ok(r.body.results.length >= 1 && r.body.results.every((x) => x.type === 'estimate'));
 });
 
-test('the voice endpoints fail closed without their keys', async () => {
+test('dictation fails closed without a speech-to-text key, and MAX has no voice of its own', async () => {
   let r = await req('GET', '/transcribe/status', tokenA);
   assert.equal(r.status, 200);
   assert.equal(r.body.available, false);
   r = await req('POST', '/max/tts', tokenA, { text: 'hello' });
-  assert.equal(r.status, 204);
+  assert.equal(r.status, 404, 'MAX does not speak: no text-to-speech route');
+  r = await req('GET', '/max/status', tokenA);
+  assert.deepEqual(Object.keys(r.body.voice), ['stt']);
 });
 
 // ── Transcript hygiene ──────────────────────────────────────────────────────
@@ -464,20 +465,4 @@ test('the transcript the panel sends back is cleaned, trimmed and closed', () =>
   assert.ok(/estimate Q-/.test(prompt), 'the page note names the estimate');
   assert.ok(/£100,000 ex VAT or more/.test(prompt), 'the limit is in the prompt');
   assert.ok(/Alice Anderson of Anderson Builders/.test(prompt));
-});
-
-// What MAX says aloud is the written reply's own words unless the model
-// rewrite is switched on, so the voice and the screen cannot disagree.
-test('the spoken reply is taken from the written reply, not rewritten', async () => {
-  const speech = require('./maxSpeech');
-  const written = 'Who should I send it to? I need the customer\'s email address. Once I have it I will show you the approval card.';
-  const before = process.env.MAX_SPOKEN_REWRITE;
-  delete process.env.MAX_SPOKEN_REWRITE;
-  try {
-    const spoken = await speech.spokenVersion(written, { userId: 'u1' });
-    assert.strictEqual(spoken, speech.shorten(written));
-    assert.ok(spoken.startsWith('Who should I send it to? I need the customer\'s email address.'));
-  } finally {
-    if (before === undefined) delete process.env.MAX_SPOKEN_REWRITE; else process.env.MAX_SPOKEN_REWRITE = before;
-  }
 });
