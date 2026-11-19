@@ -761,6 +761,16 @@ function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
     onUpdate({ ...user, max_access: enabled ? 1 : 0 });
     showSuccess(enabled ? 'MAX switched on for this client' : 'MAX early access turned off for this client');
   });
+  // A complimentary Visualiser (finished-room renders) on top of whatever plan they have.
+  const toggleVisualiser = () => doAction('visualiser', async () => {
+    const enabled = !user.visualiser_grant;
+    await apiFetch('/max/users/' + user.id + '/visualiser', { method: 'PUT', body: JSON.stringify({ enabled }) });
+    onUpdate({ ...user, visualiser_grant: enabled ? 1 : 0 });
+    showSuccess(enabled ? 'Visualiser switched on for this client' : 'Complimentary Visualiser turned off for this client');
+  });
+  const PLAN_NAMES = { max: 'AI QS MAX', max_visualiser: 'AI QS MAX + Visualiser' };
+  const planLive = !!user.max_plan && ['active', 'trialing', 'past_due'].includes(user.max_plan_status || 'active');
+  const fmtDay = (iso) => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
 
   const genMagicLink = () => doAction('magic', async () => {
     const res = await apiFetch('/admin/users/' + user.id + '/magic-link', { method: 'POST' });
@@ -1071,19 +1081,37 @@ function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
           {/* MAX early access */}
           <div style={{ padding: 14, borderRadius: 10, border: '1px solid ' + border, background: bg2 }}>
             <div style={lbl}><MessageSquare size={11} style={{ verticalAlign: 'middle', marginRight: 4, color: '#F59E0B' }} />MAX (AI estimator)</div>
+            {user.role !== 'admin' && (
+              <div style={{ fontSize: 12, color: planLive ? '#16A34A' : muted, margin: '6px 0 2px', lineHeight: 1.45, fontWeight: planLive ? 600 : 400 }}>
+                {planLive
+                  ? (PLAN_NAMES[user.max_plan] || user.max_plan) + ' — paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly')
+                    + (user.max_plan_cancels_at ? ', cancelled, ends ' + fmtDay(user.max_plan_cancels_at) : user.max_plan_renews_at ? ', renews ' + fmtDay(user.max_plan_renews_at) : '')
+                    + (user.max_plan_status === 'past_due' ? ' — payment overdue' : '') + '.'
+                  : user.max_plan_status === 'canceled' ? 'Their MAX package has ended.' : 'No paid MAX package.'}
+              </div>
+            )}
             <div style={{ fontSize: 12, color: muted, margin: '6px 0 10px', lineHeight: 1.45 }}>
               {user.role === 'admin'
-                ? 'Admins always have MAX.'
+                ? 'Admins always have MAX and the Visualiser.'
                 : user.max_access
-                  ? 'Early access is on — this client can use MAX now, whatever the rollout setting.'
-                  : 'No early access — they get MAX when the rollout is switched to everyone (Admin → MAX).'}
+                  ? 'Early access is on — this client can use MAX without paying, whatever the rollout setting.'
+                  : planLive ? 'MAX is on through the package above. Early access would keep it on if the package ended.' : 'No early access — they get MAX by buying a package, or when the rollout is switched to everyone (Admin → MAX).'}
             </div>
-            <button onClick={toggleMax} disabled={!!loading || user.role === 'admin'}
-              style={user.max_access
-                ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
-                : { ...btn('#F59E0B'), color: '#0F172A' }}>
-              <MessageSquare size={12} /> {user.max_access ? 'Turn off early access' : 'Give early access to MAX'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={toggleMax} disabled={!!loading || user.role === 'admin'}
+                style={user.max_access
+                  ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
+                  : { ...btn('#F59E0B'), color: '#0F172A' }}>
+                <MessageSquare size={12} /> {user.max_access ? 'Turn off early access' : 'Give early access to MAX'}
+              </button>
+              <button onClick={toggleVisualiser} disabled={!!loading || user.role === 'admin'}
+                title={user.max_plan === 'max_visualiser' && planLive ? 'They already have the Visualiser through their package; a grant keeps it on if that ends.' : 'Finished-room renders without the MAX + Visualiser package'}
+                style={user.visualiser_grant
+                  ? { ...outBtn, color: '#EF4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', opacity: user.role === 'admin' ? 0.5 : 1 }
+                  : outBtn}>
+                <Zap size={12} /> {user.visualiser_grant ? 'Turn off complimentary Visualiser' : 'Give the Visualiser free'}
+              </button>
+            </div>
           </div>
 
           {/* Tools */}
@@ -1595,6 +1623,12 @@ export default function UserManagementPage({ theme }) {
                             color:user.role==='admin'?'#2563EB':user.plan==='unlimited'?'#0891B2':user.plan==='premium'?'#A78BFA':user.plan==='professional'?'#10B981':user.plan==='custom'?'#F59E0B':(isDark?'#94A3B8':'#64748B')}}>
                             {user.role==='admin'?'Admin':(user.plan||'starter')}
                           </span>
+                          {user.role !== 'admin' && user.max_plan && ['active', 'trialing', 'past_due'].includes(user.max_plan_status || 'active') && (
+                            <span title={(user.max_plan === 'max_visualiser' ? 'AI QS MAX + Visualiser' : 'AI QS MAX') + ', paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly') + (user.max_plan_cancels_at ? ' — cancelled' : '')}
+                              style={{marginLeft:6,padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',background:'rgba(245,158,11,0.12)',color:'#D97706',whiteSpace:'nowrap'}}>
+                              {user.max_plan === 'max_visualiser' ? 'MAX+V' : 'MAX'}{user.max_plan_interval === 'year' ? ' · yr' : ''}{user.max_plan_cancels_at ? ' · ending' : ''}
+                            </span>
+                          )}
                         </td>
                         {/* Message usage bar in table */}
                         <td style={{padding:'12px 16px',minWidth:120}}>

@@ -15,6 +15,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
 import AdminPage from './pages/AdminPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import UpgradePage from './pages/UpgradePage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
@@ -142,6 +143,9 @@ function AppInner() {
           <Route path="/office-demo" element={<Navigate to="/dashboard" replace />} />
           <Route path="/ai-trades-pilot" element={<Navigate to="/dashboard" replace />} />
           <Route path="/branding" element={<BrandingPage />} />
+          {/* The MAX packages: buy, switch, cancel. /plans is the same page. */}
+          <Route path="/upgrade" element={<UpgradePage />} />
+          <Route path="/plans" element={<Navigate to="/upgrade" replace />} />
           <Route path="/payment-success" element={<PaymentSuccessPage />} />
         </Route>
         <Route path="*" element={<HomeRedirect />} />

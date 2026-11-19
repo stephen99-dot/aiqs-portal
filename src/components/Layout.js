@@ -7,7 +7,7 @@ import {
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon, CubeIcon,
   InboxIcon, FolderIcon, BrainIcon, MapPinIcon, BellIcon,
-  MicIcon, PoundIcon, CameraIcon,
+  MicIcon, PoundIcon, CameraIcon, SparklesIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
@@ -17,6 +17,7 @@ import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 import DeleteAccountModal from './DeleteAccountModal';
 import { selectionChanged } from '../native/haptics';
+import { canShowPurchases } from '../utils/purchases';
 import { pushAvailable, sendTestPush } from '../native/push';
 
 // Nav groups ("Settings") — expandable parents containing workflow pages.
@@ -95,8 +96,9 @@ export default function Layout() {
     { path: '/my-rates', label: 'My Rates' },
     { path: '/ai-memory', label: 'AI Memory' },
     { path: '/branding', label: 'Branding & Logo' },
+    { path: '/upgrade', label: 'My plan' },
   ];
-  const settingsRoutePrefixes = ['/my-rates', '/ai-memory', '/branding', '/onboarding'];
+  const settingsRoutePrefixes = ['/my-rates', '/ai-memory', '/branding', '/onboarding', '/upgrade'];
   const isSettingsRouteActive = settingsRoutePrefixes.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
 
   const navItems = [
@@ -112,6 +114,9 @@ export default function Layout() {
     // No standalone Variations entry: OiB users raise them from the job page,
     // everyone else from the project page (/project/:id/variations).
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+    // The MAX packages, for accounts without one. Website only: the iOS app
+    // sells nothing (App Store rule 3.1.1), so there it has no entry.
+    { path: '/upgrade', label: 'Upgrade to MAX', Icon: SparklesIcon, upsell: true, clientOnly: true },
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
     { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
@@ -124,6 +129,7 @@ export default function Layout() {
     if (item.adminOnly && !isAdmin) return false;
     if (item.clientOnly && isAdmin) return false;
     if (item.maxOnly && !maxEnabled) return false;
+    if (item.upsell && (maxEnabled || !canShowPurchases())) return false;
     return true;
   });
 

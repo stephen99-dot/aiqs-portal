@@ -6,6 +6,7 @@ import useDataChanged from '../hooks/useDataChanged';
 import { Button, Badge, PageHeader, EmptyState, SkeletonCard, Modal, Field, Input, useToast } from '../ui';
 import { CameraIcon, ImageIcon, HomeIcon, MeasureIcon, SparklesIcon, PoundIcon } from '../components/Icons';
 import RoomPlanSketch from '../components/survey/RoomPlanSketch';
+import MaxUpsell from '../components/max/MaxUpsell';
 
 // ═══ Room surveys — every property the builder has walked round ══════════════
 // Photos, sizes, openings, finishes, condition, notes and the price all live
@@ -60,11 +61,14 @@ export default function SurveysPage() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
   const [creating, setCreating] = useState(params.get('new') === '1');
+  // Scan a room is part of the MAX packages. Without one the page shows what
+  // it is and where to get it rather than asking the server (which would 403).
+  const locked = !!user && !user.maxEnabled;
 
-  const load = useCallback(() => apiFetch('/surveys')
+  const load = useCallback(() => (locked ? Promise.resolve().then(() => setLoading(false)) : apiFetch('/surveys')
     .then((r) => { setSurveys(r.surveys || []); setError(''); })
     .catch((e) => setError(e.message || 'Could not load your surveys.'))
-    .finally(() => setLoading(false)), []);
+    .finally(() => setLoading(false))), [locked]);
   useEffect(() => { load(); }, [load]);
   useDataChanged(load, ['surveys']);
   useEffect(() => { if (params.get('new') === '1') setCreating(true); }, [params]);
@@ -72,6 +76,28 @@ export default function SurveysPage() {
   const closeNew = () => { setCreating(false); if (params.get('new')) { params.delete('new'); setParams(params, { replace: true }); } };
   const shown = surveys.filter((s) => filter === 'all' || (filter === 'priced' ? s.totals.priced > 0 : s.totals.priced < Math.max(1, s.totals.rooms)));
   const grand = surveys.reduce((a, s) => ({ rooms: a.rooms + s.totals.rooms, floor: a.floor + s.totals.floor_m2, photos: a.photos + s.totals.photos, priced: a.priced + s.totals.priced }), { rooms: 0, floor: 0, photos: 0, priced: 0 });
+
+  if (locked) {
+    return (
+      <div className="page">
+        <PageHeader title="Room surveys" subtitle="Walk the room with your phone. Photos, sizes, openings, finishes and notes are kept per room, with the quantities worked out and a price from your rates." />
+        <MaxUpsell variant="max" />
+        <div className="sv-hero">
+          <div>
+            <h2 className="sv-hero__title">How a room survey works</h2>
+            <p className="sv-hero__sub">Two photos from opposite corners, the length and width (or a LiDAR scan on an iPhone Pro), and what the customer wants. The AI fills in the rest and MAX prices it from your rates. The report goes out as a branded PDF.</p>
+            <div className="sv-hero__steps">
+              <span className="sv-hero__step"><i>1</i> Photos</span>
+              <span className="sv-hero__step"><i>2</i> Size &amp; shape</span>
+              <span className="sv-hero__step"><i>3</i> What's wanted</span>
+              <span className="sv-hero__step"><i>4</i> Survey &amp; price</span>
+            </div>
+          </div>
+          <div className="sv-hero__art"><RoomPlanSketch room={{ name: 'Kitchen', length_m: 4.2, width_m: 3.1, openings: [{ kind: 'door', width_m: 0.84, height_m: 2, wall: 'C' }, { kind: 'window', width_m: 1.5, height_m: 1.2, wall: 'A' }] }} width={220} height={170} /></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">

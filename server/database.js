@@ -1046,6 +1046,14 @@ const migrations = [
   // remembering which photo it came from and the instruction it was painted from.
   { column: 'render_of', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_of TEXT' },
   { column: 'render_prompt', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_prompt TEXT' },
+  // The MAX packages (maxPlans.js): which plan the account pays for, its
+  // Stripe status and period, and the subscription it came from.
+  { column: 'max_plan', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan TEXT' },
+  { column: 'max_plan_status', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan_status TEXT' },
+  { column: 'max_plan_interval', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan_interval TEXT' },
+  { column: 'max_plan_renews_at', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan_renews_at TEXT' },
+  { column: 'max_plan_cancels_at', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan_cancels_at TEXT' },
+  { column: 'max_subscription_id', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_subscription_id TEXT' },
   { column: 'acceptance_signature', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_signature TEXT" },
   { column: 'acceptance_ip', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_ip TEXT" },
   { column: 'acceptance_user_agent', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_user_agent TEXT" },

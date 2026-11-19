@@ -157,6 +157,13 @@ app.use('/api/transcribe', require('./transcribeRoutes'));
 // Room surveys ("Scan a room"): property visits with rooms, photos, measured
 // quantities, AI analysis, exports and pricing through MAX. See roomSurveyRoutes.js.
 app.use('/api/surveys', require('./roomSurveyRoutes'));
+// The MAX packages: plans and prices, verify-after-checkout, switch, cancel,
+// resume, customer portal. Buying is a Stripe Payment Link; the webhook above
+// writes the plan onto the account. See maxPlans.js and billingRoutes.js.
+app.use('/api/billing', require('./billingRoutes'));
+// Accounts that had early access before the packages existed keep the
+// Visualiser as a grant (one-off; an admin can take it off per account).
+try { require('./maxPlans').backfillVisualiserGrants(); } catch (e) { console.warn('[MAX plans] backfill:', e.message); }
 // Health endpoint. Registered BEFORE the SPA catch-all, or it would be served
 // index.html and report healthy no matter what state the server was in.
 // Also reports whether the evidence layer came up, which is how you verify a

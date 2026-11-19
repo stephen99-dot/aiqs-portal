@@ -17,6 +17,7 @@ import RoomPlanSketch from '../components/survey/RoomPlanSketch';
 import PhotoLightbox from '../components/survey/PhotoLightbox';
 import BeforeAfter from '../components/survey/BeforeAfter';
 import RenderProgress from '../components/survey/RenderProgress';
+import MaxUpsell from '../components/max/MaxUpsell';
 import { quantities, wallsOf, sceneOf, SOURCE_LABEL, SOURCE_TONE, ROOM_TYPES, FLOOR_LEVELS, QUICK_FEATURES, HAZARD_PRESETS, OPENING_DEFAULTS, num } from '../utils/surveyGeometry';
 
 const Room3D = React.lazy(() => import('../components/survey/Room3D'));
@@ -97,7 +98,7 @@ export default function SurveyRoomPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(() => apiFetch('/surveys/rooms/' + roomId)
-    .then((r) => { setData({ survey: r.survey, estimate: r.estimate, pricing_brief: r.pricing_brief, max_enabled: r.max_enabled }); setRoom(r.room); setError(''); })
+    .then((r) => { setData({ survey: r.survey, estimate: r.estimate, pricing_brief: r.pricing_brief, max_enabled: r.max_enabled, visualiser: r.visualiser, render_allowance: r.render_allowance }); setRoom(r.room); setError(''); })
     .catch((e) => setError(e.message || 'Could not open that room.')), [roomId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { lidarStatus().then(setLidar).catch(() => {}); }, []);
@@ -322,7 +323,12 @@ export default function SurveyRoomPage() {
   const sourceForRender = photos.find((p) => p.kind === 'corner') || photos.find((p) => p.kind !== 'render') || null;
   const hasScope = !!(room.work_wanted || '').trim();
   const noRendersLeft = !!(data.render_allowance && data.render_allowance.remaining === 0);
-  const renderPanel = !data.max_enabled || !sourceForRender ? null : renders.length > 0 ? (
+  // The Visualiser is the MAX + Visualiser package (or a grant, or an admin).
+  // Without it the card is the package, with the room's own photo on it.
+  const canRender = !!data.visualiser;
+  const renderPanel = !data.max_enabled || !sourceForRender ? null : !canRender ? (
+    renders.length > 0 ? null : <MaxUpsell variant="visualiser" compact thumb={resolveUrl(sourceForRender.thumb_url)} />
+  ) : renders.length > 0 ? (
     <div className="sr-render">
       <div className="sr-render__head">
         <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
@@ -422,7 +428,7 @@ export default function SurveyRoomPage() {
         {priceCard}
         <div className="sr-actions">
           <Button onClick={analyse} disabled={!data.max_enabled || !photos.length} title={!photos.length ? 'Add photos first' : undefined} busyLabel="Surveying…"><SparklesIcon size={15} color="currentColor" /> {room.analysed_at ? 'Survey again with AI' : 'Survey with AI'}</Button>
-          {sourceForRender && <Button variant={renders.length ? 'secondary' : 'primary'} onClick={() => { if (!hasScope) { toast.error('Say what the customer wants first (Work step).'); if (isMobile) setStep('work'); return; } renderRoom(sourceForRender, ''); }} disabled={!data.max_enabled || noRendersLeft} title={!hasScope ? 'Say what work is wanted first' : undefined}><ImageIcon size={15} color="currentColor" /> {renders.length ? 'Render the finished room again' : 'Show the finished room'}</Button>}
+          {sourceForRender && canRender && <Button variant={renders.length ? 'secondary' : 'primary'} onClick={() => { if (!hasScope) { toast.error('Say what the customer wants first (Work step).'); if (isMobile) setStep('work'); return; } renderRoom(sourceForRender, ''); }} disabled={!data.max_enabled || noRendersLeft} title={!hasScope ? 'Say what work is wanted first' : undefined}><ImageIcon size={15} color="currentColor" /> {renders.length ? 'Render the finished room again' : 'Show the finished room'}</Button>}
           <Button onClick={price} disabled={!canPrice} variant={room.estimate_id ? 'secondary' : 'primary'} title={!q.complete ? 'Needs a size first' : !(room.work_wanted || '').trim() ? 'Say what work is wanted first' : undefined} busyLabel="Pricing…"><PoundIcon size={15} color="currentColor" /> {room.estimate_id ? 'Price again with MAX' : 'Price with MAX'}</Button>
           {data.estimate && <Button variant="secondary" to={'/estimates/' + data.estimate.id}><ExternalLinkIcon size={14} color="currentColor" /> Estimate {data.estimate.quote_number} · {fmtMoney2(data.estimate.grand_total)}</Button>}
           <Button variant="secondary" onClick={() => downloadFile('/api/surveys/' + id + '/report.pdf', (room.name || 'room').replace(/[^\w-]+/g, '_') + '_survey.pdf').catch((e) => toast.error(e.message))} busyLabel="Making PDF…"><FileTextIcon size={14} color="currentColor" /> Survey report PDF</Button>
@@ -681,7 +687,7 @@ export default function SurveyRoomPage() {
         )}
       </div>
 
-      {lightbox >= 0 && photos[lightbox] && <PhotoLightbox photos={photos} index={lightbox} onClose={() => setLightbox(-1)} onChange={(i) => { if (i >= 0 && i < photos.length) setLightbox(i); }} onSave={savePhoto} onDelete={deletePhoto} onRender={data.max_enabled ? (p) => renderRoom(p, '') : null} renderHint={renderAllowanceText} />}
+      {lightbox >= 0 && photos[lightbox] && <PhotoLightbox photos={photos} index={lightbox} onClose={() => setLightbox(-1)} onChange={(i) => { if (i >= 0 && i < photos.length) setLightbox(i); }} onSave={savePhoto} onDelete={deletePhoto} onRender={data.max_enabled && canRender ? (p) => renderRoom(p, '') : null} renderHint={renderAllowanceText} />}
       {gen && <RenderProgress state={gen} />}
       {busy && <div className="sr-busy" role="status" aria-live="polite"><div className="sr-busy__card"><div className="sr-busy__ring" /><div className="sr-busy__title">{busy.title}</div><div className="sr-busy__sub">{busy.line}</div></div></div>}
       {confirmDel && (

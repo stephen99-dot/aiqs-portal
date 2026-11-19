@@ -646,12 +646,17 @@ router.get('/auth/me', authMiddleware, (req, res) => {
   const planInfo = getUserPlanInfo(user);
   // MAX: whether this account can use it, and the small-job thresholds the
   // panel and the estimate page quote back to the builder.
-  let maxEnabled = false; let maxLimits = null;
+  let maxEnabled = false; let maxLimits = null; let visualiserEnabled = false; let maxPlan = null;
   try {
     maxEnabled = require('./maxRollout').isEnabledFor(user);
     if (maxEnabled) { const l = require('./maxSettings').limits(); maxLimits = { noticeGbp: l.notice_gbp, limitGbp: l.limit_gbp }; }
+    // The MAX package on the account (maxPlans.js): which plan, from where
+    // (subscription, early access, admin), and whether the Visualiser is on.
+    const e = require('./maxPlans').entitlements(user);
+    visualiserEnabled = e.visualiser;
+    maxPlan = { plan: e.plan, planName: e.plan_name, source: e.source, status: e.status, interval: e.interval, renewsAt: e.renews_at, cancelsAt: e.cancels_at, visualiserSource: e.visualiser_source };
   } catch (e) { maxEnabled = false; }
-  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator || maxEnabled, hasPassword: !!user.password_hash, maxEnabled, maxLimits, ...userCountryFields(user) });
+  res.json({ id: user.id, email: user.email, fullName: user.full_name, company: user.company, phone: user.phone, role: user.role, plan: planInfo.plan, planLabel: planInfo.planLabel, quota: planInfo.quota, used: planInfo.used, remaining: planInfo.remaining, isPayg: planInfo.isPayg, atLimit: planInfo.atLimit, hasEstimator: !!user.has_estimator || maxEnabled, hasPassword: !!user.password_hash, maxEnabled, maxLimits, visualiserEnabled, maxPlan, ...userCountryFields(user) });
 });
 
 // Delete my own account. App Store Review Guideline 5.1.1(v) requires any
@@ -1255,6 +1260,10 @@ router.get('/admin/users', authMiddleware, adminMiddleware, (req, res) => {
       has_estimator: u.has_estimator ? 1 : 0,
       // MAX early access while the rollout is admins-only (maxRollout.js).
       max_access: (() => { try { const o = JSON.parse(u.feature_overrides || '{}'); return o && o.max === true ? 1 : 0; } catch (e) { return 0; } })(),
+      // The paid MAX package (maxPlans.js) and a complimentary Visualiser grant.
+      max_plan: u.max_plan || null, max_plan_status: u.max_plan_status || null, max_plan_interval: u.max_plan_interval || null,
+      max_plan_renews_at: u.max_plan_renews_at || null, max_plan_cancels_at: u.max_plan_cancels_at || null,
+      visualiser_grant: (() => { try { const o = JSON.parse(u.feature_overrides || '{}'); return o && o.visualiser === true ? 1 : 0; } catch (e) { return 0; } })(),
       country: u.country || null, region: u.region || null, country_name: u.country_name || null,
       onboarding_completed_at: u.onboarding_completed_at || null,
       onboarding_reset_at: u.onboarding_reset_at || null,

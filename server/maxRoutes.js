@@ -11,6 +11,7 @@
 //   GET  /api/max/settings          admin: rollout mode, thresholds, allowance, usage
 //   PUT  /api/max/settings          admin: change them live — no redeploy
 //   PUT  /api/max/users/:id/access  admin: { enabled } early access for one client
+//   PUT  /api/max/users/:id/visualiser  admin: { enabled } complimentary Visualiser for one client
 //
 // Both SSE POSTs stream the events described in maxEngine.js, one JSON object
 // per `data:` line, and end after the `done` event (a `memories` event may
@@ -47,11 +48,16 @@ function rendersThisMonth(userId) {
     return db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE user_id = ? AND action = 'render' AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')").get(userId).c;
   } catch (e) { return 0; }
 }
+// `enabled` is the Visualiser entitlement (maxPlans.js): the MAX + Visualiser
+// package, a per-account grant, or an admin. Without it the allowance is
+// academic — the render route refuses before counting anything.
 function renderAllowance(user) {
   const monthly = settings.rendersPerMonth();
   const used = rendersThisMonth(user.id);
   const admin = user.role === 'admin';
-  return { monthly, used, remaining: admin ? null : Math.max(0, monthly - used), unlimited: admin, configured: (() => { try { return require('./imageRender').isConfigured(); } catch (e) { return false; } })() };
+  let enabled = admin;
+  try { enabled = require('./maxPlans').entitlements(user).visualiser; } catch (e) { enabled = admin; }
+  return { enabled, monthly, used, remaining: admin ? null : Math.max(0, monthly - used), unlimited: admin, configured: (() => { try { return require('./imageRender').isConfigured(); } catch (e) { return false; } })() };
 }
 function fairUse(req, res, next) {
   try {
@@ -132,13 +138,16 @@ router.get('/status', (req, res) => {
   try { stt = require('./stt').isConfigured(); } catch (e) { stt = false; }
   const cap = settings.dailyTurns();
   const used = enabled && req.user.role !== 'admin' ? usedToday(req.user.id) : 0;
+  let plan = null;
+  try { plan = require('./maxPlans').entitlements(req.user); } catch (e) { plan = null; }
   res.json({
     enabled,
-    reason: enabled ? null : "MAX isn't switched on for your account yet.",
+    reason: enabled ? null : 'MAX is part of the AI QS MAX package.',
     limits: { notice_gbp: lim.notice_gbp, limit_gbp: lim.limit_gbp },
     voice: { stt: enabled && stt },
     allowance: { daily_turns: cap, used_today: used, remaining_today: req.user.role === 'admin' ? null : Math.max(0, cap - used) },
     renders: enabled ? renderAllowance(req.user) : null,
+    plan,
     ai_configured: !!process.env.ANTHROPIC_API_KEY,
   });
 });
@@ -160,7 +169,19 @@ function adminSnapshot() {
   let renders = false;
   try { renders = require('./imageRender').isConfigured(); } catch (e) { renders = false; }
   try { usage.renders_30d = db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE action = 'render' AND created_at >= datetime('now', '-30 days')").get().c; } catch (e) { usage.renders_30d = 0; }
-  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage, voice: { stt: !!stt, provider: stt, ai_configured: !!process.env.ANTHROPIC_API_KEY, renders } };
+  // The packages: who pays for what, and whether Stripe is wired up for them.
+  let plansOut = null;
+  try {
+    const P = require('./maxPlans');
+    plansOut = {
+      subscribers: P.subscriberCounts(),
+      catalogue: P.catalogue().map((p) => ({ key: p.key, name: p.name, monthly_gbp: p.monthly_gbp, yearly_gbp: p.yearly_gbp })),
+      stripe: !!process.env.STRIPE_SECRET_KEY,
+      links: P.linksConfigured(),
+      price_ids: Object.keys(P.configuredPriceIds()).length,
+    };
+  } catch (e) { plansOut = null; }
+  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage, plans: plansOut, voice: { stt: !!stt, provider: stt, ai_configured: !!process.env.ANTHROPIC_API_KEY, renders } };
 }
 
 router.get('/settings', requireAdmin, (req, res) => {
@@ -215,10 +236,29 @@ router.put('/users/:id/access', requireAdmin, (req, res) => {
     try {
       require('./activityRoutes').logActivity({ event_type: 'max_access', title: (u.full_name || u.email) + (enabled ? ' — MAX early access on' : ' — MAX early access off'), user_id: u.id, user_name: u.full_name, user_email: u.email });
     } catch (e) { /* audit only */ }
-    res.json({ id: req.params.id, maxAccess: enabled, maxEnabled: rollout.isEnabledFor(db.prepare('SELECT role, feature_overrides FROM users WHERE id = ?').get(req.params.id)) });
+    res.json({ id: req.params.id, maxAccess: enabled, maxEnabled: rollout.isEnabledFor(db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id)) });
   } catch (err) {
     console.error('[max] access change failed:', err);
     res.status(500).json({ error: 'Could not change MAX access.' });
+  }
+});
+
+// A complimentary Visualiser for one account — on top of whatever plan it
+// has, or none. The demo account for App Review needs this, for instance.
+router.put('/users/:id/visualiser', requireAdmin, (req, res) => {
+  try {
+    const P = require('./maxPlans');
+    const enabled = req.body && (req.body.enabled === true || req.body.enabled === 'true');
+    const out = P.setVisualiserGrant(req.params.id, enabled);
+    if (!out) return res.status(404).json({ error: 'User not found' });
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+    try {
+      require('./activityRoutes').logActivity({ event_type: 'visualiser_grant', title: (u.full_name || u.email) + (enabled ? ' — Visualiser switched on (complimentary)' : ' — complimentary Visualiser turned off'), user_id: u.id, user_name: u.full_name, user_email: u.email });
+    } catch (e) { /* audit only */ }
+    res.json({ id: req.params.id, visualiserGrant: enabled, visualiserEnabled: P.entitlements(u).visualiser });
+  } catch (err) {
+    console.error('[max] visualiser change failed:', err);
+    res.status(500).json({ error: 'Could not change the Visualiser.' });
   }
 });
 

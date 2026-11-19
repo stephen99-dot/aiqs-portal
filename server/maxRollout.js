@@ -4,8 +4,9 @@
 // Who can use MAX right now. Two modes:
 //
 //   'admin'  (default)  admins only — plus any client an admin has given
-//                       feature_overrides {"max": true} for early access
-//   'all'               every signed-in client
+//                       feature_overrides {"max": true} for early access,
+//                       and every client paying for a MAX package (maxPlans.js)
+//   'all'               every signed-in client, paying or not
 //
 // The mode comes from the `max_rollout` row in app_settings when an admin has
 // set one (Admin → MAX → "MAX for everyone", or PUT /api/max/settings), and
@@ -74,7 +75,9 @@ function isEnabledFor(user) {
   if (user.role === 'admin') return true;
   if (mode() === 'all') return true;
   const o = parseOverrides(user.feature_overrides);
-  return o.max === true;
+  if (o.max === true) return true;
+  // A paid package. Lazy: maxPlans asks this module for the mode.
+  try { return require('./maxPlans').isSubscribed(user); } catch (e) { return false; }
 }
 
 function hasOverride(user) {
@@ -85,7 +88,7 @@ function requireMax(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'Authentication required' });
   if (isEnabledFor(req.user)) return next();
   return res.status(403).json({
-    error: "MAX isn't switched on for your account yet. It's rolling out shortly.",
+    error: 'This is part of AI QS MAX. Upgrade your account to switch it on.',
     code: 'MAX_NOT_ENABLED',
   });
 }

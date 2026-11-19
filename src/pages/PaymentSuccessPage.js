@@ -11,14 +11,33 @@ export default function PaymentSuccessPage() {
   const { refreshUser } = useAuth();
   const [status, setStatus] = useState('processing'); // processing, success, office, error
   const [project, setProject] = useState(null);
+  const [plan, setPlan] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('office') === '1') activateOfficeAddon();
+    else if (params.get('plan') === 'max') activateMaxPlan();
     else if (params.get('credits') === '1') confirmCredits();
     else activateProject();
   }, []);
+
+  // A MAX package (AI QS MAX or MAX + Visualiser): the webhook writes the plan
+  // onto the account; verify asks Stripe directly in case it is still on its
+  // way. Either way the account is refreshed so the menu shows MAX at once.
+  async function activateMaxPlan() {
+    for (let i = 0; i < 8; i++) {
+      try {
+        const r = await apiFetch('/billing/max/verify', { method: 'POST' });
+        if (r && r.activated) { const fresh = await refreshUser(); setPlan((r.current && r.current.plan_name) || (fresh && fresh.maxPlan && fresh.maxPlan.planName) || 'AI QS MAX'); setStatus('max'); return; }
+      } catch (e) { /* keep trying */ }
+      const fresh = await refreshUser();
+      if (fresh && fresh.maxPlan && fresh.maxPlan.source === 'subscription') { setPlan(fresh.maxPlan.planName || 'AI QS MAX'); setStatus('max'); return; }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    // Paid but not yet confirmed — say so, and send them on.
+    setPlan(''); setStatus('max');
+  }
 
   // Office in a Box subscription: verify directly with Stripe (reliable) and
   // fall back to polling /auth/me, until access switches on, then send them in.
@@ -111,6 +130,35 @@ export default function PaymentSuccessPage() {
                 color: '#0A0F1C', fontSize: 14, fontWeight: 700, textDecoration: 'none',
               }}>
                 Go to Dashboard
+              </Link>
+            </div>
+          </>
+        )}
+
+        {status === 'max' && (
+          <>
+            <div style={{ marginBottom: 16 }}><CheckCircleIcon size={56} /></div>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: t.text, margin: '0 0 8px' }}>
+              {plan ? plan + ' is on' : 'Payment received!'}
+            </h2>
+            <p style={{ fontSize: 14, color: t.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
+              {plan
+                ? 'MAX, Scan a room and LiDAR scanning are switched on for your account' + (/Visualiser/.test(plan) ? ', and so is the Visualiser' : '') + '. Ask MAX to price a job, or scan your first room.'
+                : 'Thanks — your payment went through. Your plan switches on within a minute or two; if the menu has not changed by then, sign out and back in, or email us.'}
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24, flexWrap: 'wrap' }}>
+              <Link to="/dashboard" style={{
+                padding: '12px 24px', borderRadius: 10,
+                background: 'linear-gradient(135deg, #F59E0B, #D97706)',
+                color: '#0A0F1C', fontSize: 14, fontWeight: 700, textDecoration: 'none',
+              }}>
+                Ask MAX
+              </Link>
+              <Link to="/surveys?new=1" style={{
+                padding: '12px 24px', borderRadius: 10, border: `1px solid ${t.border}`,
+                color: t.text, fontSize: 14, fontWeight: 700, textDecoration: 'none',
+              }}>
+                Scan a room
               </Link>
             </div>
           </>
