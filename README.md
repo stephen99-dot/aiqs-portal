@@ -51,9 +51,33 @@ take-off credits, find and read stored drawings/BOQs, and hand a job to Submit D
 typed or spoken "yes" is never approval. Every action, approval and refusal is written to
 `activity_log` (`max_*` events); each builder sees their own at `GET /api/max/activity`.
 
+**The packages (`server/maxPlans.js`).** MAX is sold as two subscriptions, bought on the website's
+Plans page (`/upgrade`) through Stripe Payment Links and managed there (switch, go yearly, cancel
+at period end, resume, Stripe's billing portal — `server/billingRoutes.js`, `/api/billing/max/*`):
+
+| Package | Monthly | Yearly (two months free) | Includes |
+|---|---|---|---|
+| **AI QS MAX** (`max`) | £59 | £590 | Ask MAX, estimates, Scan a room, LiDAR, AI survey, reports, voice |
+| **AI QS MAX + Visualiser** (`max_visualiser`) | £79 | £790 | everything above plus finished-room renders |
+
+The Stripe webhook writes the plan onto the user row (`max_plan`, `max_plan_status`,
+`max_plan_interval`, `max_plan_renews_at`, `max_plan_cancels_at`, `max_subscription_id`) on
+`checkout.session.completed` and keeps it in step on every `customer.subscription.updated` /
+`deleted` and `invoice.paid`. Prices are matched by id (`STRIPE_MAX_PRICE_IDS`,
+`STRIPE_MAX_VISUALISER_PRICE_IDS`) or, when those are unset, by amount and interval in GBP.
+`node scripts/create-max-plans.js` creates the products, prices and payment links at Stripe and
+prints the env vars (`MAX_PAYMENT_LINK_MONTHLY` / `_YEARLY`, `MAX_VISUALISER_PAYMENT_LINK_MONTHLY`
+/ `_YEARLY`). Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
+plan, early access or the rollout; **the Visualiser** only for an admin, the MAX + Visualiser plan
+or a complimentary grant (`feature_overrides {"visualiser": true}`, Users → the client → MAX).
+`/api/surveys/*` and `/api/max/*` need MAX; `POST …/render` additionally needs the Visualiser
+(`403 VISUALISER_REQUIRED`). Inside the iOS app nothing is sold or priced (App Store rule 3.1.1):
+the same pages show a neutral notice. Tests: `server/maxPlans.test.js`.
+
 Rollout (`server/maxRollout.js`): **admins only by default**, plus any client an admin gives
-early access (Users → the client → MAX). Admin → MAX switches it on for everyone, live. The
-server is the authority: `/api/max/*` answers `403 MAX_NOT_ENABLED` for anyone else. A client
+early access (Users → the client → MAX) and any client with a live package. Admin → MAX switches
+it on for everyone, live (the Visualiser still needs the package or a grant). The server is the
+authority: `/api/max/*` answers `403 MAX_NOT_ENABLED` for anyone else. A client
 MAX is on for can also use the estimator routes (`requireEstimator`), since MAX's estimates are
 quotes. A per-client daily allowance (default 300 turns) is enforced and shown on
 `GET /api/max/status`. Voice in, text out: inside the iOS app, talking to MAX and dictating

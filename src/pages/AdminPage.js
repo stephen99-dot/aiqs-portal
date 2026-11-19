@@ -1199,6 +1199,31 @@ function MaxTab({ t }) {
         <div style={{ marginTop: 10, fontSize: 12, color: t.textMuted }}>Live now: notice from {money(data.notice_gbp)}, limit {money(data.limit_gbp)}, {data.daily_turns} turns a day and {data.renders_per_month} finished-room renders a month per client{data.voice && data.voice.renders === false ? ' (renders need OPENAI_API_KEY on the server to run)' : ''}. 0 renders switches the feature off.</div>
       </div>
 
+      {data.plans && (
+        <div style={card}>
+          <h3 style={h3}>The MAX packages</h3>
+          <p style={sub}>
+            {data.plans.catalogue.map((p) => p.name + ' £' + p.monthly_gbp + ' a month or £' + p.yearly_gbp + ' a year').join('; ')} — two months free paid yearly. Bought on the website (Plans), through Stripe; the iOS app sells nothing.
+            A client with a package has MAX{' '}whatever the rollout setting. The Visualiser (finished-room renders) is only ever on for the MAX + Visualiser package, a complimentary grant (Users → the client → MAX), or an admin.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {[['MAX subscribers', data.plans.subscribers.max], ['MAX + Visualiser', data.plans.subscribers.max_visualiser], ['Paid yearly', data.plans.subscribers.yearly], ['Cancelling', data.plans.subscribers.cancelling], ['Visualiser free', data.plans.subscribers.visualiser_grants], ['Early access', data.plans.subscribers.early_access]].map(([k, v]) => (
+              <div key={k} style={{ padding: '12px 14px', borderRadius: 10, background: t.surfaceHover, border: '1px solid ' + t.border }}>
+                <div style={{ fontSize: 11, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: t.text, fontFamily: 'var(--font-mono)', marginTop: 4 }}>{v == null ? '—' : v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 12, color: data.plans.stripe && data.plans.links ? t.textMuted : '#EF4444', lineHeight: 1.5 }}>
+            {!data.plans.stripe
+              ? 'Stripe is not configured on this server (STRIPE_SECRET_KEY), so nothing can be bought yet.'
+              : !data.plans.links
+                ? 'The Plans page cannot sell yet: set the four payment links on Render (MAX_PAYMENT_LINK_MONTHLY / _YEARLY and MAX_VISUALISER_PAYMENT_LINK_MONTHLY / _YEARLY). Running scripts/create-max-plans.js with the Stripe key creates the products, prices and links and prints them.'
+                : 'Checkout is live. ' + (data.plans.price_ids ? data.plans.price_ids + ' Stripe price ids are pinned.' : 'Prices are matched on the amounts (£59 / £590 and £79 / £790) — set STRIPE_MAX_PRICE_IDS and STRIPE_MAX_VISUALISER_PRICE_IDS to pin them.')}
+          </div>
+        </div>
+      )}
+
       <div style={card}>
         <h3 style={h3}>Usage (last 30 days)</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>

@@ -1,5 +1,8 @@
 const db = require('./database');
 const { recordPendingCredit } = require('./pendingCredits');
+// The MAX packages (£59 MAX, £79 MAX + Visualiser): which Stripe price is
+// which plan, and the plan columns on the user row.
+const maxPlans = require('./maxPlans');
 
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
@@ -142,6 +145,39 @@ function resolveCheckoutUser(session, email) {
 }
 // Find the account behind an Office subscription event: by the stored
 // office_subscription_id first, then by the Stripe customer's email.
+// The account behind a MAX package event: the stored subscription id first,
+// then the Stripe customer's email.
+async function findUserForMaxSub(subscription, stripeSecret) {
+  let user = db.prepare('SELECT * FROM users WHERE max_subscription_id = ?').get(subscription.id);
+  if (user) return user;
+  if (subscription.customer) {
+    try {
+      const stripe = require('stripe')(stripeSecret);
+      const customer = await stripe.customers.retrieve(subscription.customer);
+      if (customer && customer.email) {
+        user = db.prepare('SELECT * FROM users WHERE email = ?').get(customer.email.toLowerCase());
+        if (user) return user;
+      }
+    } catch (err) {
+      console.error('[Stripe] MAX customer lookup failed:', err.message);
+    }
+  }
+  return null;
+}
+function logMaxPlanEvent(user, eventType, text) {
+  try {
+    require('./activityRoutes').logActivity({ event_type: eventType, title: (user.full_name || user.email) + ' — ' + text, user_id: user.id, user_name: user.full_name, user_email: user.email });
+  } catch (e) { /* audit only */ }
+}
+function maxPlanDetailLines(sub) {
+  const plan = maxPlans.PLANS[sub.plan];
+  const lines = [plan.visualiser
+    ? 'MAX, Scan a room, LiDAR scanning, survey reports and the finished-room Visualiser are now unlocked on your account.'
+    : 'MAX, Scan a room, LiDAR scanning and survey reports are now unlocked on your account.'];
+  if (sub.interval === 'year') lines.push('Paid yearly — two months free. It renews in twelve months.');
+  else lines.push('Paid monthly. Cancel any time from the Plans page in your account.');
+  return lines;
+}
 async function findUserForOfficeSub(subscription, stripeSecret) {
   let user = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
   if (user) return user;
@@ -316,6 +352,26 @@ async function handleCheckoutComplete(session, stripeSecret) {
         });
       }
       else console.error(`[Stripe] Office subscription paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
+      return;
+    }
+
+    // A MAX package — write the plan onto the account and stop.
+    const maxSub = maxPlans.fromStripe(subscription);
+    if (maxSub) {
+      const user = resolveCheckoutUser(session, customerEmail);
+      if (user) {
+        maxPlans.activate(user, maxSub);
+        logMaxPlanEvent(user, 'max_plan_started', maxPlans.PLANS[maxSub.plan].name + ' started (' + (maxSub.interval === 'year' ? 'yearly' : 'monthly') + ')');
+        sendPurchaseEmail({
+          email: user.email,
+          name: user.full_name,
+          packageName: maxPlans.PLANS[maxSub.plan].name,
+          detailLines: maxPlanDetailLines(maxSub),
+          amountTotal: session.amount_total,
+          currency: session.currency,
+        });
+      }
+      else console.error(`[Stripe] MAX package paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
       return;
     }
 
@@ -518,6 +574,19 @@ async function handleSubscriptionUpdate(subscription, stripeSecret) {
     return;
   }
 
+  // A MAX package: renewals, plan switches (MAX ⇄ MAX + Visualiser, monthly
+  // ⇄ yearly), cancellations at period end and failed payments all arrive here.
+  if (maxPlans.planForSubscription(subscription)) {
+    const user = await findUserForMaxSub(subscription, stripeSecret);
+    if (!user) { console.log(`[Stripe] MAX sub ${subscription.id} updated but no user matched`); return; }
+    const before = { plan: user.max_plan, cancels: user.max_plan_cancels_at || null };
+    const out = maxPlans.syncFromStripe(user, subscription);
+    if (out && out.plan && out.plan !== before.plan) logMaxPlanEvent(user, 'max_plan_changed', (before.plan ? maxPlans.PLANS[before.plan].name + ' → ' : '') + maxPlans.PLANS[out.plan].name);
+    else if (out && !out.plan) logMaxPlanEvent(user, 'max_plan_ended', 'MAX package ended (' + subscription.status + ')');
+    else if (out && subscription.cancel_at_period_end && !before.cancels) logMaxPlanEvent(user, 'max_plan_cancelled', 'MAX package cancelled — access ends ' + (maxPlans.fromStripe(subscription).cancels_at || '').slice(0, 10));
+    return;
+  }
+
   if (!priceId || !PRICE_TO_PLAN[priceId]) {
     console.error(`[Stripe] Unknown price ID on update: ${priceId} — subscription: ${subscription.id}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
     return;
@@ -547,6 +616,18 @@ async function handleSubscriptionUpdate(subscription, stripeSecret) {
 async function handleInvoicePaid(invoice, stripeSecret) {
   // Only handle subscription invoices (not one-off payments)
   if (!invoice.subscription) return;
+
+  // A MAX package renewing: refresh the period end and leave the legacy
+  // plan columns alone (they belong to the old chatbot plans).
+  const maxUser = db.prepare('SELECT * FROM users WHERE max_subscription_id = ?').get(invoice.subscription);
+  if (maxUser) {
+    try {
+      const stripe = require('stripe')(stripeSecret);
+      const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+      maxPlans.syncFromStripe(maxUser, subscription);
+    } catch (err) { console.error('[Stripe] MAX renewal sync failed:', err.message); }
+    return;
+  }
 
   // Find user by subscription ID first
   let user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(invoice.subscription);
@@ -610,6 +691,15 @@ async function handleSubscriptionCancelled(subscription) {
   // Office in a Box add-on cancellation — revoke access and stop.
   const officeUser = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
   if (officeUser) { deactivateOffice(officeUser); return; }
+
+  // A MAX package has ended (cancelled at period end, or Stripe gave up on the card).
+  const maxUser = db.prepare('SELECT * FROM users WHERE max_subscription_id = ?').get(subscription.id);
+  if (maxUser) {
+    maxPlans.deactivate(maxUser, 'canceled');
+    logMaxPlanEvent(maxUser, 'max_plan_ended', 'MAX package ended');
+    return;
+  }
+  if (maxPlans.planForSubscription(subscription)) { console.log(`[Stripe] MAX sub ${subscription.id} deleted but no user holds it`); return; }
 
   const user = db.prepare('SELECT * FROM users WHERE stripe_subscription_id = ?').get(subscription.id);
 

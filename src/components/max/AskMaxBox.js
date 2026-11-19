@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/api';
 import { openMax, fmtMoney0 } from '../../utils/max';
 import MaxCharacter from './MaxCharacter';
+import MaxUpsell from './MaxUpsell';
 import { MicIcon, ArrowRightIcon, CameraIcon } from '../Icons';
 
 // ═══ Ask MAX — the box at the top of the dashboard ══════════════════════════
@@ -28,7 +29,10 @@ export default function AskMaxBox() {
     return () => { gone = true; };
   }, []);
 
-  if (!user || !user.maxEnabled) return null;
+  if (!user) return null;
+  // Without MAX the box is the package itself: what it is and where to get it
+  // (and, inside the app, nothing — see MaxUpsell).
+  if (!user.maxEnabled) return user.role === 'admin' ? null : <MaxUpsell variant="max" />;
 
   const go = (e) => {
     if (e) e.preventDefault();

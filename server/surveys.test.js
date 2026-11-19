@@ -48,12 +48,15 @@ app.use('/api/surveys', require('./roomSurveyRoutes'));
 const server = app.listen(0);
 const PORT = server.address().port;
 
-for (const [id, email, name] of [['a', 'alice@t.t', 'Alice Anderson'], ['b', 'bob@t.t', 'Bob Builder']]) {
-  db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES (?, ?, 'x', ?, 'Co', 'client', 'GB')").run(id, email, name);
+// Alice and Bob have the Visualiser (a complimentary grant); Cara has nothing
+// beyond the rollout, which gives MAX but never the Visualiser.
+for (const [id, email, name, overrides] of [['a', 'alice@t.t', 'Alice Anderson', '{"visualiser":true}'], ['b', 'bob@t.t', 'Bob Builder', '{"visualiser":true}'], ['c', 'cara@t.t', 'Cara Cole', null]]) {
+  db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country, feature_overrides) VALUES (?, ?, 'x', ?, 'Co', 'client', 'GB', ?)").run(id, email, name, overrides);
 }
 db.prepare("INSERT INTO client_rate_library (id, user_id, category, item_key, display_name, value, unit) VALUES ('r1', 'a', 'decorating', 'emulsion_walls_two_coats', 'Mist and two coats to walls', 9.5, 'm²')").run();
 const tokenA = generateToken({ id: 'a', email: 'alice@t.t', role: 'client' });
 const tokenB = generateToken({ id: 'b', email: 'bob@t.t', role: 'client' });
+const tokenC = generateToken({ id: 'c', email: 'cara@t.t', role: 'client' });
 
 function req(method, url, token, body, headers) {
   return new Promise((resolve, reject) => {
@@ -419,6 +422,15 @@ test('a finished-room render: painted from a photo and the scope, kept with the 
     // Another account cannot render from this room's photo.
     r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenB, { photo_id: source.id });
     assert.equal(r.status, 404);
+    // Without the Visualiser (no MAX + Visualiser plan, no grant) the render
+    // is refused before anything else, and the room says so.
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenC, { photo_id: source.id });
+    assert.equal(r.status, 403); assert.equal(r.body.code, 'VISUALISER_REQUIRED');
+    let own = await req('POST', '/surveys', tokenC, { title: 'Cara\'s flat' });
+    own = await req('POST', '/surveys/' + own.body.id + '/rooms', tokenC, { name: 'Hall' });
+    own = await req('GET', '/surveys/rooms/' + own.body.room.id, tokenC);
+    assert.equal(own.body.max_enabled, true); assert.equal(own.body.visualiser, false); assert.equal(own.body.render_allowance.enabled, false);
+    assert.equal(after.body.visualiser, true, 'Alice has it');
     // The status endpoint shows the allowance too.
     r = await req('GET', '/max/status', tokenA);
     assert.equal(r.body.renders.used, 1);
@@ -478,4 +490,28 @@ test('mergeAnalysis on an empty room takes the AI\'s dimensions as estimated', (
   const ai = vision.normalise({ room_type: 'Bathroom', dimensions: { length_m: 2.4, width_m: 2.1, height_m: 2.4, source: 'estimated' }, openings: [], features: [], confidence: 'low' });
   const out = vision.mergeAnalysis({ dims_source: 'unknown', openings: '[]', features: '[]' }, ai);
   assert.equal(out.length_m, 2.4); assert.equal(out.dims_source, 'estimated'); assert.equal(out.room_type, 'Bathroom');
+});
+
+test('Scan a room is part of MAX: without it every survey route is refused, with the plan it opens', async () => {
+  const rollout = require('./maxRollout');
+  const P = require('./maxPlans');
+  rollout.setMode('admin', 'adm');
+  try {
+    let r = await req('GET', '/surveys', tokenC);
+    assert.equal(r.status, 403); assert.equal(r.body.code, 'MAX_NOT_ENABLED');
+    r = await req('POST', '/surveys', tokenC, { title: 'Nope' });
+    assert.equal(r.status, 403);
+    // A paid MAX plan opens it; the Visualiser is still the other package.
+    P.activate(db.prepare('SELECT * FROM users WHERE id = ?').get('c'), { plan: 'max', interval: 'month', status: 'active', subscription_id: 'sub_c' });
+    r = await req('GET', '/surveys', tokenC);
+    assert.equal(r.status, 200);
+    r = await req('GET', '/max/status', tokenC);
+    assert.equal(r.body.enabled, true); assert.equal(r.body.renders.enabled, false); assert.equal(r.body.plan.plan, 'max');
+    P.activate(db.prepare('SELECT * FROM users WHERE id = ?').get('c'), { plan: 'max_visualiser', interval: 'month', status: 'active', subscription_id: 'sub_c' });
+    r = await req('GET', '/max/status', tokenC);
+    assert.equal(r.body.renders.enabled, true);
+    P.deactivate(db.prepare('SELECT * FROM users WHERE id = ?').get('c'), 'canceled');
+    r = await req('GET', '/surveys', tokenC);
+    assert.equal(r.status, 403, 'the plan ended');
+  } finally { rollout.setMode('all', 'adm'); }
 });

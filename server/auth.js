@@ -32,7 +32,7 @@ function authMiddleware(req, res, next) {
   try {
     var decoded = jwt.verify(token, JWT_SECRET);
     var freshUser = db.prepare(
-      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company, has_estimator, country, region, country_name, feature_overrides FROM users WHERE id = ?'
+      'SELECT id, email, role, plan, suspended, suspended_reason, bonus_messages, bonus_docs, monthly_quota, monthly_boq_quota, full_name, company, has_estimator, country, region, country_name, feature_overrides, max_plan, max_plan_status, max_plan_interval, max_plan_renews_at, max_plan_cancels_at, max_subscription_id FROM users WHERE id = ?'
     ).get(decoded.id);
     if (!freshUser) return res.status(401).json({ error: 'User not found' });
     req.user = freshUser;

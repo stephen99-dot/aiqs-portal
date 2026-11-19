@@ -81,6 +81,10 @@ router.get('/photos/:id/file', photoAccess, (req, res) => streamFile(res, req.ph
 router.get('/photos/:id/thumb', photoAccess, (req, res) => streamFile(res, req.photo.thumb_filename || req.photo.filename, req.photo.thumb_filename ? 'image/jpeg' : req.photo.mime));
 
 router.use(authMiddleware);
+// Scan a room is part of the MAX packages (maxPlans.js): a signed-in account
+// without MAX gets a 403 with code MAX_NOT_ENABLED on everything from here on,
+// and the website shows the plans instead of the surveys.
+router.use(rollout.requireMax);
 
 // ── Row helpers ──────────────────────────────────────────────────────────────
 function getSurvey(id, userId) { return db.prepare('SELECT * FROM room_surveys WHERE id = ? AND user_id = ?').get(id, userId); }
@@ -299,7 +303,7 @@ router.get('/rooms/:roomId', (req, res) => {
     if (r.estimate_id) { try { estimate = db.prepare('SELECT id, quote_number, status, grand_total, net_total FROM quotes WHERE id = ? AND user_id = ?').get(r.estimate_id, req.user.id) || null; } catch (e) { estimate = null; } }
     let renders = null;
     try { if (rollout.isEnabledFor(req.user)) renders = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { renders = null; }
-    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user), render_allowance: renders });
+    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user), visualiser: !!(renders && renders.enabled), render_allowance: renders });
   } catch (err) { console.error('[Surveys] room get error:', err); res.status(500).json({ error: 'Could not open that room.' }); }
 });
 
@@ -464,6 +468,7 @@ function renderAllowanceGate(req, res, next) {
   try {
     if (!req.user || req.user.role === 'admin') return next();
     const a = require('./maxRoutes')._internals.renderAllowance(req.user);
+    if (!a.enabled) return res.status(403).json({ error: 'Showing the finished room is part of MAX + Visualiser. Upgrade your plan to switch it on.', code: 'VISUALISER_REQUIRED' });
     if (a.monthly <= 0) return res.status(403).json({ error: 'Finished-room renders are not included on this account.', code: 'RENDERS_OFF' });
     if (a.remaining <= 0) return res.status(429).json({ error: 'You have used this month\'s ' + a.monthly + ' finished-room renders. More next month — or ask us to raise it.', code: 'RENDER_ALLOWANCE' });
     next();

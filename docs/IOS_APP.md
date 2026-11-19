@@ -221,6 +221,15 @@ the app. Three ways to handle this:
 in the app (they open in an in-app Safari sheet). Use that only for an
 internal TestFlight build that is never submitted.
 
+The MAX packages (£59 MAX, £79 MAX + Visualiser; `server/maxPlans.js`) follow
+the same rule. On the website the dashboard, Scan a room and the room page
+show an "upgrade" card and the Plans page sells the two packages. In the app
+the same spots show a neutral notice ("part of the AI QS MAX package — it
+switches on here as soon as MAX is on your account"), the Plans page shows
+the current plan and the feature lists with no prices or links, and the
+"Upgrade to MAX" menu entry is not there at all (`MaxUpsell.js`,
+`UpgradePage.js`, both ask `canShowPurchases()`).
+
 **Sign in — rule 4.8.** If an app offers Google sign-in it must also offer
 Sign in with Apple. Google also refuses OAuth inside embedded web views. So
 the app hides the Google button; email + password and magic links need
