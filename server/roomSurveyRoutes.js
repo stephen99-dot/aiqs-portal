@@ -39,7 +39,9 @@ if (!fs.existsSync(photosDir)) fs.mkdirSync(photosDir, { recursive: true });
 
 const MAX_PHOTOS_PER_ROOM = 24;
 const LINK_TTL = 2 * 60 * 60;
-const KINDS = ['corner', 'wall', 'floor', 'ceiling', 'detail', 'general'];
+const KINDS = ['corner', 'wall', 'floor', 'ceiling', 'detail', 'general', 'render'];
+// 'render' is made by the server (a finished-room render of another photo), never uploaded as such.
+const UPLOAD_KINDS = KINDS.filter((k) => k !== 'render');
 const JSON_COLS = ['walls', 'openings', 'features', 'finishes', 'hazards', 'assumptions', 'notes', 'quantities', 'capture'];
 
 let _sharp;
@@ -93,7 +95,7 @@ function statusOf(row, q) {
 }
 function photoOut(p, token) {
   const t = token ? '?t=' + encodeURIComponent(token) : '';
-  return { id: p.id, room_id: p.room_id, kind: p.kind || 'general', caption: p.caption || '', ai_notes: p.ai_notes || '', width: p.width, height: p.height, file_size: p.file_size, created_at: p.created_at, url: '/api/surveys/photos/' + p.id + '/file' + t, thumb_url: '/api/surveys/photos/' + p.id + '/thumb' + t };
+  return { id: p.id, room_id: p.room_id, kind: p.kind || 'general', caption: p.caption || '', ai_notes: p.ai_notes || '', width: p.width, height: p.height, file_size: p.file_size, created_at: p.created_at, render_of: p.render_of || null, render_prompt: p.render_prompt || null, url: '/api/surveys/photos/' + p.id + '/file' + t, thumb_url: '/api/surveys/photos/' + p.id + '/thumb' + t };
 }
 function roomOut(row, photos, token, extra) {
   const q = G.quantities(row);
@@ -295,7 +297,9 @@ router.get('/rooms/:roomId', (req, res) => {
     const brief = G.describeForPricing(r, room.quantities, s);
     let estimate = null;
     if (r.estimate_id) { try { estimate = db.prepare('SELECT id, quote_number, status, grand_total, net_total FROM quotes WHERE id = ? AND user_id = ?').get(r.estimate_id, req.user.id) || null; } catch (e) { estimate = null; } }
-    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user) });
+    let renders = null;
+    try { if (rollout.isEnabledFor(req.user)) renders = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { renders = null; }
+    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user), render_allowance: renders });
   } catch (err) { console.error('[Surveys] room get error:', err); res.status(500).json({ error: 'Could not open that room.' }); }
 });
 
@@ -356,7 +360,7 @@ router.post('/rooms/:roomId/photos', handleUpload, async (req, res) => {
     if (!files.length) return res.status(400).json({ error: 'No photos received — try again.' });
     const have = db.prepare('SELECT COUNT(*) AS c FROM survey_photos WHERE room_id = ?').get(r.id).c;
     if (have + files.length > MAX_PHOTOS_PER_ROOM) { for (const f of files) fs.unlink(f.path, () => {}); return res.status(400).json({ error: 'A room holds up to ' + MAX_PHOTOS_PER_ROOM + ' photos.' }); }
-    const kind = KINDS.includes(req.body && req.body.kind) ? req.body.kind : 'general';
+    const kind = UPLOAD_KINDS.includes(req.body && req.body.kind) ? req.body.kind : 'general';
     const caption = clean(req.body && req.body.caption, 300);
     const ins = db.prepare('INSERT INTO survey_photos (id, room_id, survey_id, user_id, filename, thumb_filename, mime, file_size, width, height, kind, caption, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const created = [];
@@ -380,7 +384,7 @@ router.patch('/photos/:id', (req, res) => {
     const b = req.body || {};
     const sets = []; const vals = [];
     if ('caption' in b) { sets.push('caption = ?'); vals.push(clean(b.caption, 300)); }
-    if ('kind' in b && KINDS.includes(b.kind)) { sets.push('kind = ?'); vals.push(b.kind); }
+    if ('kind' in b && UPLOAD_KINDS.includes(b.kind) && p.kind !== 'render') { sets.push('kind = ?'); vals.push(b.kind); }
     if ('sort_order' in b) { sets.push('sort_order = ?'); vals.push(Math.max(0, Math.round(G.num(b.sort_order)))); }
     if (sets.length) { vals.push(p.id); db.prepare('UPDATE survey_photos SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     res.json({ photo: photoOut(db.prepare('SELECT * FROM survey_photos WHERE id = ?').get(p.id), linkFor(p.survey_id)) });
@@ -449,6 +453,75 @@ router.post('/rooms/:roomId/analyse', rollout.requireMax, fairUse, async (req, r
     if (err && err.status) return res.status(err.status).json({ error: err.message });
     console.error('[Surveys] analyse error:', err);
     res.status(500).json({ error: 'Could not survey the room just now.' });
+  }
+});
+
+// ── AI: the finished room, painted onto one of its photos ───────────────────
+// POST /rooms/:roomId/render { photo_id, instructions? } → a new photo of kind
+// 'render' (kept with the room like any other), the allowance left, and the
+// prompt it was painted from. Counts against the monthly render allowance.
+function renderAllowanceGate(req, res, next) {
+  try {
+    if (!req.user || req.user.role === 'admin') return next();
+    const a = require('./maxRoutes')._internals.renderAllowance(req.user);
+    if (a.monthly <= 0) return res.status(403).json({ error: 'Finished-room renders are not included on this account.', code: 'RENDERS_OFF' });
+    if (a.remaining <= 0) return res.status(429).json({ error: 'You have used this month\'s ' + a.monthly + ' finished-room renders. More next month — or ask us to raise it.', code: 'RENDER_ALLOWANCE' });
+    next();
+  } catch (e) { next(); }
+}
+
+router.post('/rooms/:roomId/render', rollout.requireMax, renderAllowanceGate, async (req, res) => {
+  try {
+    const r = getRoom(req.params.roomId, req.user.id);
+    if (!r) return res.status(404).json({ error: 'Room not found.' });
+    const IR = require('./imageRender');
+    if (!IR.isConfigured()) return res.status(503).json({ error: 'Finished-room renders are not switched on for this portal yet.', code: 'RENDERS_UNAVAILABLE' });
+    const scope = clean(req.body && req.body.work_wanted, 1000) || r.work_wanted;
+    if (!scope) return res.status(400).json({ error: 'Say what work is wanted in this room first — that is what gets painted in.' });
+    if (scope !== r.work_wanted) saveRoom(r, { work_wanted: scope });
+    const extra = clean(req.body && req.body.instructions, 400) || '';
+    const photoId = req.body && req.body.photo_id ? String(req.body.photo_id) : null;
+    const all = roomPhotos(r.id);
+    const source = photoId ? all.find((p) => p.id === photoId) : all.find((p) => p.kind !== 'render');
+    if (!source) return res.status(400).json({ error: 'Add a photo of the room first, then render the finished room from it.' });
+    if (source.kind === 'render') return res.status(400).json({ error: 'Render from one of the real photos, not from another render.' });
+    const fp = path.join(photosDir, path.basename(source.filename));
+    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'That photo file is missing.' });
+    const fin = G.parseJson(r.finishes, null);
+    const finishes = fin && typeof fin === 'object' ? ['floor', 'walls', 'ceiling', 'woodwork'].map((k) => (fin[k] && fin[k].type ? k + ': ' + fin[k].type : null)).filter(Boolean) : [];
+    const prompt = IR.promptFor({ scope, extra, roomName: r.room_type || r.name, finishes: [] });
+    void finishes; // the finishes on the room are what is THERE; the scope says what goes in
+    const out = await IR.renderRoom({ buffer: fs.readFileSync(fp), mime: source.mime || 'image/jpeg', width: source.width, height: source.height, prompt });
+    // Keep it as a JPEG beside the photos, with a thumbnail like any upload.
+    const sharp = getSharp();
+    const id = uuidv4();
+    const filename = id + '.jpg';
+    const target = path.join(photosDir, filename);
+    let width = null; let height = null;
+    if (sharp) {
+      const img = sharp(out.buffer);
+      const meta = await img.metadata(); width = meta.width || null; height = meta.height || null;
+      await img.jpeg({ quality: 88 }).toFile(target);
+    } else fs.writeFileSync(target, out.buffer);
+    const t = await makeThumb({ path: target, filename });
+    const order = all.length;
+    const caption = 'Finished room' + (extra ? ' — ' + extra : '') + (source.caption ? ' (from: ' + source.caption + ')' : '');
+    db.prepare('INSERT INTO survey_photos (id, room_id, survey_id, user_id, filename, thumb_filename, mime, file_size, width, height, kind, caption, sort_order, render_of, render_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, r.id, r.survey_id, req.user.id, filename, t.thumb, 'image/jpeg', fs.statSync(target).size, width || t.width, height || t.height, 'render', caption.slice(0, 300), order, source.id, prompt.slice(0, 2000));
+    touchSurvey(r.survey_id);
+    try {
+      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, 0, 0, ?)')
+        .run(uuidv4(), req.user.id, 'render', JSON.stringify({ room_id: r.id, photo_id: source.id, quality: out.quality }), out.model, out.cost_usd || 0);
+    } catch (e) { /* metering only */ }
+    try { require('./activityRoutes').logActivity({ event_type: 'survey_rendered', title: 'Finished-room render: ' + (r.name || 'Room'), detail: JSON.stringify({ room_id: r.id, survey_id: r.survey_id, photo_id: source.id, render_id: id }), user_id: req.user.id, user_name: req.user.full_name, user_email: req.user.email }); } catch (e) { /* audit only */ }
+    const token = linkFor(r.survey_id);
+    let allowance = null;
+    try { allowance = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { allowance = null; }
+    res.status(201).json({ photo: photoOut(db.prepare('SELECT * FROM survey_photos WHERE id = ?').get(id), token), photos: roomPhotos(r.id).map((p) => photoOut(p, token)), allowance });
+  } catch (err) {
+    if (err && err.name === 'RenderError') return res.status(err.status || 502).json({ error: err.message });
+    console.error('[Surveys] render error:', err);
+    res.status(500).json({ error: 'Could not render the room just now.' });
   }
 });
 

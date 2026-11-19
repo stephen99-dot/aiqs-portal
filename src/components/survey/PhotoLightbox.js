@@ -5,7 +5,7 @@ import { XIcon, ChevronRightIcon, ArrowLeftIcon, TrashIcon, CheckIcon } from '..
 const KINDS = [['corner', 'Corner'], ['wall', 'Wall'], ['floor', 'Floor'], ['ceiling', 'Ceiling'], ['detail', 'Detail'], ['general', 'General']];
 
 // ═══ Full-screen photo viewer with the caption, the kind and what the AI saw ═
-export default function PhotoLightbox({ photos, index, onClose, onChange, onSave, onDelete, readOnly }) {
+export default function PhotoLightbox({ photos, index, onClose, onChange, onSave, onDelete, onRender, renderHint, readOnly }) {
   const photo = photos[index];
   const [caption, setCaption] = useState(photo ? photo.caption || '' : '');
   const [kind, setKind] = useState(photo ? photo.kind || 'general' : 'general');
@@ -29,11 +29,13 @@ export default function PhotoLightbox({ photos, index, onClose, onChange, onSave
       <button type="button" className="lb__nav lb__nav--next" disabled={index >= photos.length - 1} onClick={(e) => { e.stopPropagation(); onChange(index + 1); }} aria-label="Next"><ChevronRightIcon size={22} /></button>
       <div className="lb__foot" onClick={(e) => e.stopPropagation()}>
         {photo.ai_notes && <div className="lb__ai">AI saw: {photo.ai_notes}</div>}
+        {photo.kind === 'render' && <div className="lb__ai">Finished-room render — an AI concept of the work described, not to scale.</div>}
         {!readOnly && (
           <div className="lb__edit">
-            <select className="lb__select" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="What the photo shows">{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+            {photo.kind !== 'render' && <select className="lb__select" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="What the photo shows">{KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>}
             <input className="lb__caption" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption — e.g. north wall, by the window" />
-            <button type="button" className="ui-btn ui-btn--primary ui-btn--sm" disabled={!dirty} onClick={() => onSave(photo, { caption, kind })}><CheckIcon size={13} /> Save</button>
+            <button type="button" className="ui-btn ui-btn--primary ui-btn--sm" disabled={!dirty} onClick={() => onSave(photo, photo.kind === 'render' ? { caption } : { caption, kind })}><CheckIcon size={13} /> Save</button>
+            {onRender && photo.kind !== 'render' && <button type="button" className="ui-btn ui-btn--secondary ui-btn--sm" onClick={() => onRender(photo)} title={renderHint || 'Paint the work described onto this photo'}>✨ Show the finished room</button>}
             <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm lb__del" onClick={() => onDelete(photo)}><TrashIcon size={13} /> Delete</button>
           </div>
         )}

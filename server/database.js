@@ -1042,6 +1042,10 @@ const migrations = [
   { column: 'accepted_at', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN accepted_at DATETIME" },
   { column: 'acceptance_name', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_name TEXT" },
   { column: 'acceptance_email', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_email TEXT" },
+  // Finished-room renders: an AI-edited copy of a survey photo (kind 'render'),
+  // remembering which photo it came from and the instruction it was painted from.
+  { column: 'render_of', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_of TEXT' },
+  { column: 'render_prompt', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_prompt TEXT' },
   { column: 'acceptance_signature', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_signature TEXT" },
   { column: 'acceptance_ip', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_ip TEXT" },
   { column: 'acceptance_user_agent', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN acceptance_user_agent TEXT" },

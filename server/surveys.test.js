@@ -366,6 +366,65 @@ test('a tilted scan is squared up: same walls, same letters, same openings', asy
   await req('DELETE', '/surveys/rooms/' + room.id, tokenA);
 });
 
+test('a finished-room render: painted from a photo and the scope, kept with the room, counted against the month', async () => {
+  const IR = require('./imageRender');
+  const origRender = IR.renderRoom; const origConfigured = IR.isConfigured;
+  const settings = require('./maxSettings');
+  const sharp = require('sharp');
+  try {
+    // Without a key the button tells the truth and nothing is charged.
+    IR.isConfigured = () => false;
+    let r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, {});
+    assert.equal(r.status, 503); assert.ok(/not switched on/i.test(r.body.error));
+    // A scripted image service: what comes back is "the room, done".
+    IR.isConfigured = () => true;
+    const seen = [];
+    IR.renderRoom = async ({ buffer, mime, width, height, prompt }) => {
+      seen.push({ bytes: buffer.length, mime, width, height, prompt });
+      return { buffer: await sharp({ create: { width: 640, height: 480, channels: 3, background: '#a8c0a0' } }).png().toBuffer(), model: 'stub-image', quality: 'medium', cost_usd: 0.07 };
+    };
+    const before = await req('GET', '/surveys/rooms/' + test.roomId, tokenA);
+    const source = before.body.room.photos.find((p) => p.kind !== 'render');
+    assert.ok(source, 'the room has a real photo to render from');
+    assert.ok(before.body.render_allowance && before.body.render_allowance.monthly === 20 && before.body.render_allowance.used === 0, JSON.stringify(before.body.render_allowance));
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: source.id, instructions: 'grey tiles, walk-in shower' });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.photo.kind, 'render');
+    assert.equal(r.body.photo.render_of, source.id);
+    assert.ok(/grey tiles, walk-in shower/.test(r.body.photo.render_prompt) && /Keep the camera angle/.test(r.body.photo.render_prompt), 'the prompt carries the tweak and the guard rails');
+    assert.ok(/Finished room — grey tiles/.test(r.body.photo.caption));
+    assert.ok(r.body.photo.thumb_url && r.body.photo.url);
+    assert.equal(r.body.allowance.used, 1); assert.equal(r.body.allowance.remaining, 19);
+    assert.equal(seen.length, 1); assert.ok(seen[0].bytes > 100 && /image\//.test(seen[0].mime));
+    assert.ok(/full redecoration|skim|coats/i.test(seen[0].prompt), 'the scope of work is what gets painted: ' + seen[0].prompt.slice(0, 120));
+    // The render is served like any photo, with its thumbnail, and sits in the room's photo list.
+    const file = await req('GET', '/surveys/photos/' + r.body.photo.id + '/thumb?t=' + encodeURIComponent(before.body.photo_token), null);
+    assert.equal(file.status, 200); assert.equal(file.headers['content-type'], 'image/jpeg');
+    const after = await req('GET', '/surveys/rooms/' + test.roomId, tokenA);
+    assert.ok(after.body.room.photos.some((p) => p.id === r.body.photo.id && p.kind === 'render'));
+    assert.equal(after.body.render_allowance.used, 1);
+    // A render cannot be re-rendered, and its kind cannot be changed into a plain photo.
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: after.body.room.photos.find((p) => p.kind === 'render').id });
+    assert.equal(r.status, 400);
+    r = await req('PATCH', '/surveys/photos/' + after.body.room.photos.find((p) => p.kind === 'render').id, tokenA, { kind: 'wall', caption: 'Bathroom, done' });
+    assert.equal(r.body.photo.kind, 'render'); assert.equal(r.body.photo.caption, 'Bathroom, done');
+    // The monthly allowance holds: at the cap the next one is refused with a plain reason.
+    settings.writeNumber('max_renders_per_month', 1, 'test');
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: source.id });
+    assert.equal(r.status, 429); assert.ok(/this month/i.test(r.body.error));
+    settings.writeNumber('max_renders_per_month', 0, 'test');
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: source.id });
+    assert.equal(r.status, 403);
+    settings.writeNumber('max_renders_per_month', 20, 'test');
+    // Another account cannot render from this room's photo.
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenB, { photo_id: source.id });
+    assert.equal(r.status, 404);
+    // The status endpoint shows the allowance too.
+    r = await req('GET', '/max/status', tokenA);
+    assert.equal(r.body.renders.used, 1);
+  } finally { IR.renderRoom = origRender; IR.isConfigured = origConfigured; }
+});
+
 test('notes, the report PDF and the Excel schedule', async () => {
   let r = await req('POST', '/surveys/rooms/' + test.roomId + '/notes', tokenA, { text: 'Customer wants the radiator moved to the window wall', source: 'voice' });
   assert.equal(r.status, 201);

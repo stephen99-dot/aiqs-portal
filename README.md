@@ -89,6 +89,15 @@ wall where the scanner put it, doors and windows on the walls they were found in
 it saw — in the plan sketch, the 3D view and the report (`planFromCapture` / `sceneOf` in
 `server/surveyGeometry.js`, mirrored on the client).
 
+**Show the finished room** (`POST /api/surveys/rooms/:id/render`, `server/imageRender.js`) paints
+the work the customer wants onto one of the room's photos with OpenAI's image model, keeping the
+camera angle and the room's shape: new tiles, a new bath, the walls painted. The result is kept
+with the room as a photo of kind `render` with a before/after slider, goes in the report marked
+"AI concept, not to scale", and can be re-run with a tweak ("grey tiles, walk-in shower"). Needs
+`OPENAI_API_KEY` (`OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY` optional). Each client gets a
+monthly allowance (Admin → MAX, default 20; 0 switches it off), metered in `usage_log` as
+`render` with a cost estimate.
+
 **Price with MAX** hands the room to MAX's `price_small_job` tool with a quantities brief
 ("use these exactly … price only this"), so the estimate comes from the surveyed numbers and the
 builder's rates; the same small-job limit and over-limit card apply, and the estimate is linked
