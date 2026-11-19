@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { apiFetch, apiUpload, resolveUrl } from '../utils/api';
+import { apiFetch, apiUpload, resolveUrl, API_BASE, getToken } from '../utils/api';
 import compressImage from '../utils/compressImage';
 import downloadFile from '../utils/downloadFile';
 import useIsMobile from '../utils/useIsMobile';
@@ -16,6 +16,7 @@ import {
 import RoomPlanSketch from '../components/survey/RoomPlanSketch';
 import PhotoLightbox from '../components/survey/PhotoLightbox';
 import BeforeAfter from '../components/survey/BeforeAfter';
+import RenderProgress from '../components/survey/RenderProgress';
 import { quantities, wallsOf, sceneOf, SOURCE_LABEL, SOURCE_TONE, ROOM_TYPES, FLOOR_LEVELS, QUICK_FEATURES, HAZARD_PRESETS, OPENING_DEFAULTS, num } from '../utils/surveyGeometry';
 
 const Room3D = React.lazy(() => import('../components/survey/Room3D'));
@@ -35,7 +36,6 @@ const STEPS = [
 ];
 const STATUS = { draft: ['neutral', 'Capturing'], surveyed: ['info', 'Surveyed'], priced: ['success', 'Priced'] };
 const KIND_LABEL = { corner: 'Corner', wall: 'Wall', floor: 'Floor', ceiling: 'Ceiling', detail: 'Detail', general: '', render: 'Finished' };
-const RENDER_LINES = ['Reading the photo…', 'Painting the work in — the new finishes, the fittings…', 'Keeping the walls, window and camera angle as they are…', 'Nearly there…'];
 const BUSY_LINES = ['Looking at the photos…', 'Finding the walls, doors and windows…', 'Counting sockets, switches and lights…', 'Checking the finishes and their condition…', 'Working out the quantities…'];
 const FINISH_KEYS = [['floor', 'Floor'], ['walls', 'Walls'], ['ceiling', 'Ceiling'], ['woodwork', 'Woodwork']];
 const FINISH_HINTS = { floor: ['Laminate', 'Carpet', 'Tiles', 'Vinyl', 'Engineered wood', 'Floorboards', 'Concrete'], walls: ['Painted plaster', 'Wallpaper', 'Tiled', 'Bare plaster', 'Artex', 'Panelling'], ceiling: ['Painted plaster', 'Artex', 'Plasterboard', 'Coved', 'Lath and plaster'], woodwork: ['Painted', 'Stained', 'Varnished', 'Bare', 'MDF'] };
@@ -77,6 +77,7 @@ export default function SurveyRoomPage() {
   const [busy, setBusy] = useState(null);          // { title, line }
   const [priceResult, setPriceResult] = useState(null);
   const [renderTweak, setRenderTweak] = useState('');
+  const [gen, setGen] = useState(null);                 // the render in progress: { before, preview, target, note, done }
   const [renderPick, setRenderPick] = useState(null);     // the render shown in the before/after
   const [selOpening, setSelOpening] = useState(null);
   const [editOpening, setEditOpening] = useState(null);
@@ -183,19 +184,42 @@ export default function SurveyRoomPage() {
     if (!(roomRef.current.work_wanted || '').trim()) { toast.error('Say what work the customer wants first (the Work step) — that is what gets painted in.'); return; }
     await flush();
     setLightbox(-1);
-    let n = 0;
-    setBusy({ title: 'Showing the finished room', line: RENDER_LINES[0] });
-    const tick = setInterval(() => { n = Math.min(n + 1, RENDER_LINES.length - 1); setBusy((b) => (b ? { ...b, line: RENDER_LINES[n] } : b)); }, 6000);
+    const source = photo || (roomRef.current.photos || []).find((p) => p.kind === 'corner') || (roomRef.current.photos || []).find((p) => p.kind !== 'render');
+    setGen({ before: source ? source.url : '', preview: null, target: 4, note: 'Reading the photo…', done: false });
     try {
-      const r = await apiFetch('/surveys/rooms/' + roomId + '/render', { method: 'POST', body: JSON.stringify({ photo_id: photo ? photo.id : undefined, instructions: instructions || '' }) });
-      setRoom((cur) => (cur ? { ...cur, photos: r.photos, photo_count: r.photos.length } : cur));
-      setData((d) => (d ? { ...d, render_allowance: r.allowance } : d));
-      setRenderPick(r.photo.id);
+      const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+      const token = getToken(); if (token) headers.Authorization = 'Bearer ' + token;
+      const res = await fetch(API_BASE + '/surveys/rooms/' + roomId + '/render', { method: 'POST', headers, body: JSON.stringify({ photo_id: source ? source.id : undefined, instructions: instructions || '' }) });
+      let result = null; let failure = null;
+      if (/text\/event-stream/.test(res.headers.get('content-type') || '')) {
+        // The server streams: an estimate every couple of seconds, each rough
+        // pass of the picture as it forms, then the finished photo.
+        const reader = res.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+        const handle = (line) => {
+          if (!line.startsWith('data: ')) return;
+          let evt; try { evt = JSON.parse(line.slice(6)); } catch (e) { return; }
+          if (evt.type === 'progress') setGen((g) => (g ? { ...g, target: Math.max(g.target, evt.pct || 0), note: evt.note || g.note } : g));
+          else if (evt.type === 'partial') setGen((g) => (g ? { ...g, preview: evt.b64 || g.preview, target: Math.max(g.target, evt.pct || 0), note: 'Taking shape…' } : g));
+          else if (evt.type === 'done') result = evt;
+          else if (evt.type === 'error') failure = evt;
+        };
+        for (;;) { const { done, value } = await reader.read(); if (done) break; buf += decoder.decode(value, { stream: true }); const lines = buf.split('\n'); buf = lines.pop() || ''; lines.forEach(handle); }
+        if (buf) handle(buf);
+      } else {
+        const j = await res.json().catch(() => null);
+        if (!res.ok) failure = { error: (j && j.error) || 'Could not render the room.' }; else result = j;
+      }
+      if (failure || !result) throw new Error((failure && failure.error) || 'Could not render the room.');
+      // Snap into focus on the finished picture, then hand over to the slider.
+      setGen((g) => (g ? { ...g, preview: resolveUrl(result.photo.url), target: 100, done: true, note: '' } : g));
+      await new Promise((r) => setTimeout(r, 900));
+      setRoom((cur) => (cur ? { ...cur, photos: result.photos, photo_count: result.photos.length } : cur));
+      setData((d) => (d ? { ...d, render_allowance: result.allowance } : d));
+      setRenderPick(result.photo.id);
       setRenderTweak('');
-      toast.success('Here\'s the finished room. Slide to compare — it\'s a concept, not a drawing.');
       if (isMobile) setStep('photos');
     } catch (e) { toast.error(e.message || 'Could not render the room.'); }
-    finally { clearInterval(tick); setBusy(null); }
+    finally { setGen(null); }
   };
 
   // ── LiDAR / RoomPlan ───────────────────────────────────────────────────────
@@ -289,6 +313,37 @@ export default function SurveyRoomPage() {
   const addHazard = () => { const t = hazardText.trim(); if (t && !hazards.includes(t)) update({ hazards: [...hazards, t] }); setHazardText(''); };
   const deleteNote = async (nid) => { try { const r = await apiFetch('/surveys/rooms/' + roomId + '/notes/' + nid, { method: 'DELETE' }); setRoom((cur) => ({ ...cur, notes: r.notes })); } catch (e) { toast.error('Could not delete the note.'); } };
 
+  // The finished room: the before/after once a render exists, otherwise a
+  // card inviting one — at the top of the Photos step, where a thumb lands.
+  const sourceForRender = photos.find((p) => p.kind === 'corner') || photos.find((p) => p.kind !== 'render') || null;
+  const hasScope = !!(room.work_wanted || '').trim();
+  const noRendersLeft = !!(data.render_allowance && data.render_allowance.remaining === 0);
+  const renderPanel = !data.max_enabled || !sourceForRender ? null : renders.length > 0 ? (
+    <div className="sr-render">
+      <div className="sr-render__head">
+        <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
+        {renders.length > 1 && <select className="ui-select" style={{ width: 'auto', minWidth: 0, padding: '5px 28px 5px 9px', fontSize: 12.5 }} value={shownRender.id} onChange={(e) => setRenderPick(e.target.value)} aria-label="Which render">{renders.map((p, i) => <option key={p.id} value={p.id}>{'Render ' + (i + 1) + (p.caption ? ' — ' + p.caption.replace(/^Finished room\s*[—-]?\s*/, '').slice(0, 40) : '')}</option>)}</select>}
+      </div>
+      <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || sourceForRender} after={shownRender} height={isMobile ? 240 : 300} />
+      <div className="sr-render__sub">{shownRender.caption}</div>
+      <div className="sr-render__row">
+        <Input value={renderTweak} onChange={(e) => setRenderTweak(e.target.value)} placeholder="Change something — 'grey tiles', 'walk-in shower instead of the bath'…" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak); } }} />
+        <Button onClick={() => renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak)} disabled={noRendersLeft}><SparklesIcon size={13} color="currentColor" /> Again</Button>
+      </div>
+      <div className="sr-render__foot">An AI concept of the work described, not to scale — it goes in the report marked as such.{renderAllowanceText ? ' ' + renderAllowanceText : ''}</div>
+    </div>
+  ) : (
+    <button type="button" className={'sr-magic' + (noRendersLeft ? ' sr-magic--off' : '')} onClick={() => { if (noRendersLeft) return; if (!hasScope) { toast.show('Say what the customer wants first — that is what gets painted in.'); setStep('work'); return; } renderRoom(sourceForRender, ''); }} aria-label="Show the finished room">
+      <span className="sr-magic__thumb"><img src={resolveUrl(sourceForRender.thumb_url)} alt="" /><span className="sr-magic__spark"><SparklesIcon size={14} color="#fff" /></span></span>
+      <span className="sr-magic__text">
+        <span className="sr-magic__title">Show the finished room</span>
+        <span className="sr-magic__sub">{noRendersLeft ? 'This month\'s renders are used up.' : hasScope ? 'Paints what the customer wants onto this photo — about 20 seconds.' : 'Add what the customer wants on the Work step, then tap here.'}</span>
+        {renderAllowanceText && !noRendersLeft && <span className="sr-magic__meta">{renderAllowanceText}</span>}
+      </span>
+      <span className="sr-magic__go"><ArrowRightIcon size={18} color="currentColor" /></span>
+    </button>
+  );
+
   const sketchPanel = (
     <div className="sr-sketch">
       <div className="sr-sketch__tabs">
@@ -363,6 +418,7 @@ export default function SurveyRoomPage() {
         {priceCard}
         <div className="sr-actions">
           <Button onClick={analyse} disabled={!data.max_enabled || !photos.length} title={!photos.length ? 'Add photos first' : undefined} busyLabel="Surveying…"><SparklesIcon size={15} color="currentColor" /> {room.analysed_at ? 'Survey again with AI' : 'Survey with AI'}</Button>
+          {sourceForRender && <Button variant={renders.length ? 'secondary' : 'primary'} onClick={() => { if (!hasScope) { toast.error('Say what the customer wants first (Work step).'); if (isMobile) setStep('work'); return; } renderRoom(sourceForRender, ''); }} disabled={!data.max_enabled || noRendersLeft} title={!hasScope ? 'Say what work is wanted first' : undefined}><ImageIcon size={15} color="currentColor" /> {renders.length ? 'Render the finished room again' : 'Show the finished room'}</Button>}
           <Button onClick={price} disabled={!canPrice} variant={room.estimate_id ? 'secondary' : 'primary'} title={!q.complete ? 'Needs a size first' : !(room.work_wanted || '').trim() ? 'Say what work is wanted first' : undefined} busyLabel="Pricing…"><PoundIcon size={15} color="currentColor" /> {room.estimate_id ? 'Price again with MAX' : 'Price with MAX'}</Button>
           {data.estimate && <Button variant="secondary" to={'/estimates/' + data.estimate.id}><ExternalLinkIcon size={14} color="currentColor" /> Estimate {data.estimate.quote_number} · {fmtMoney2(data.estimate.grand_total)}</Button>}
           <Button variant="secondary" onClick={() => downloadFile('/api/surveys/' + id + '/report.pdf', (room.name || 'room').replace(/[^\w-]+/g, '_') + '_survey.pdf').catch((e) => toast.error(e.message))} busyLabel="Making PDF…"><FileTextIcon size={14} color="currentColor" /> Survey report PDF</Button>
@@ -411,7 +467,8 @@ export default function SurveyRoomPage() {
                 {photos.length === 0 && (
                   <div className="sr-tip"><LightbulbIcon size={16} /><span><strong>Stand in a corner</strong> and shoot the opposite corner so two walls, the floor and the ceiling are in frame. Do the same from the corner opposite. Then one of each wall, the floor, the ceiling and anything odd — damp, cracks, a boxed-in pipe.</span></div>
                 )}
-                <div className="ph-actions">
+                {renderPanel}
+                <div className={'ph-actions' + (photos.length > 0 ? ' ph-actions--compact' : '')}>
                   <button type="button" className="ph-cta" onClick={() => camRef.current && camRef.current.click()}><CameraIcon size={22} /> Take a photo<small>Opens the camera</small></button>
                   <button type="button" className="ph-cta ph-cta--plain" onClick={() => galRef.current && galRef.current.click()}><ImageIcon size={22} /> From the gallery<small>Pick several at once</small></button>
                   {lidar.available
@@ -432,27 +489,6 @@ export default function SurveyRoomPage() {
                   </div>
                 )}
                 {photos.length > 0 && <div className="sr-sec__hint">Tap a photo to caption it, say what it shows, or delete it. Photos stay with the room until you remove them.</div>}
-                {renders.length > 0 ? (
-                  <div className="sr-render">
-                    <div className="sr-render__head">
-                      <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
-                      {renders.length > 1 && <select className="ui-select" style={{ width: 'auto', minWidth: 0, padding: '5px 28px 5px 9px', fontSize: 12.5 }} value={shownRender.id} onChange={(e) => setRenderPick(e.target.value)} aria-label="Which render">{renders.map((p, i) => <option key={p.id} value={p.id}>{'Render ' + (i + 1) + (p.caption ? ' — ' + p.caption.replace(/^Finished room\s*[—-]?\s*/, '').slice(0, 40) : '')}</option>)}</select>}
-                    </div>
-                    <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || photos.find((p) => p.kind !== 'render')} after={shownRender} height={isMobile ? 240 : 300} />
-                    <div className="sr-render__sub">{shownRender.caption}</div>
-                    {data.max_enabled && (
-                      <div className="sr-render__row">
-                        <Input value={renderTweak} onChange={(e) => setRenderTweak(e.target.value)} placeholder="Change something — 'grey tiles', 'walk-in shower instead of the bath'…" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak); } }} />
-                        <Button variant="secondary" onClick={() => renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak)} disabled={!!(data.render_allowance && data.render_allowance.remaining === 0)}><SparklesIcon size={13} color="currentColor" /> Again</Button>
-                      </div>
-                    )}
-                    <div className="sr-render__foot">An AI concept of the work described, not to scale — it goes in the report marked as such.{renderAllowanceText ? ' ' + renderAllowanceText : ''}</div>
-                  </div>
-                ) : (photos.some((p) => p.kind !== 'render') && data.max_enabled && (
-                  <button type="button" className="ph-cta" style={{ alignSelf: 'stretch' }} onClick={() => renderRoom(photos.find((p) => p.kind === 'corner') || photos.find((p) => p.kind !== 'render'), '')} disabled={!!(data.render_allowance && data.render_allowance.remaining === 0)}>
-                    <SparklesIcon size={22} /> Show the finished room<small>{(room.work_wanted || '').trim() ? 'Paints the work the customer wants onto a photo, in about 20 seconds' + (renderAllowanceText ? ' · ' + renderAllowanceText : '') : 'Fill in what the customer wants (Work step) first'}</small>
-                  </button>
-                ))}
               </div>
             </div>
           )}
@@ -642,6 +678,7 @@ export default function SurveyRoomPage() {
       </div>
 
       {lightbox >= 0 && photos[lightbox] && <PhotoLightbox photos={photos} index={lightbox} onClose={() => setLightbox(-1)} onChange={(i) => { if (i >= 0 && i < photos.length) setLightbox(i); }} onSave={savePhoto} onDelete={deletePhoto} onRender={data.max_enabled ? (p) => renderRoom(p, '') : null} renderHint={renderAllowanceText} />}
+      {gen && <RenderProgress state={gen} />}
       {busy && <div className="sr-busy" role="status" aria-live="polite"><div className="sr-busy__card"><div className="sr-busy__ring" /><div className="sr-busy__title">{busy.title}</div><div className="sr-busy__sub">{busy.line}</div></div></div>}
       {confirmDel && (
         <Modal title="Delete this room?" onClose={() => setConfirmDel(false)} footer={<><Button variant="secondary" onClick={() => setConfirmDel(false)}>Keep it</Button><Button variant="danger" onClick={deleteRoom} busyLabel="Deleting…">Delete room</Button></>}>

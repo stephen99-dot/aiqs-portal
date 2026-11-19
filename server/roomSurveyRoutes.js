@@ -470,59 +470,108 @@ function renderAllowanceGate(req, res, next) {
   } catch (e) { next(); }
 }
 
-router.post('/rooms/:roomId/render', rollout.requireMax, renderAllowanceGate, async (req, res) => {
-  try {
-    const r = getRoom(req.params.roomId, req.user.id);
-    if (!r) return res.status(404).json({ error: 'Room not found.' });
-    const IR = require('./imageRender');
-    if (!IR.isConfigured()) return res.status(503).json({ error: 'Finished-room renders are not switched on for this portal yet.', code: 'RENDERS_UNAVAILABLE' });
-    const scope = clean(req.body && req.body.work_wanted, 1000) || r.work_wanted;
-    if (!scope) return res.status(400).json({ error: 'Say what work is wanted in this room first — that is what gets painted in.' });
-    if (scope !== r.work_wanted) saveRoom(r, { work_wanted: scope });
-    const extra = clean(req.body && req.body.instructions, 400) || '';
-    const photoId = req.body && req.body.photo_id ? String(req.body.photo_id) : null;
-    const all = roomPhotos(r.id);
-    const source = photoId ? all.find((p) => p.id === photoId) : all.find((p) => p.kind !== 'render');
-    if (!source) return res.status(400).json({ error: 'Add a photo of the room first, then render the finished room from it.' });
-    if (source.kind === 'render') return res.status(400).json({ error: 'Render from one of the real photos, not from another render.' });
-    const fp = path.join(photosDir, path.basename(source.filename));
-    if (!fs.existsSync(fp)) return res.status(404).json({ error: 'That photo file is missing.' });
-    const fin = G.parseJson(r.finishes, null);
-    const finishes = fin && typeof fin === 'object' ? ['floor', 'walls', 'ceiling', 'woodwork'].map((k) => (fin[k] && fin[k].type ? k + ': ' + fin[k].type : null)).filter(Boolean) : [];
-    const prompt = IR.promptFor({ scope, extra, roomName: r.room_type || r.name, finishes: [] });
-    void finishes; // the finishes on the room are what is THERE; the scope says what goes in
-    const out = await IR.renderRoom({ buffer: fs.readFileSync(fp), mime: source.mime || 'image/jpeg', width: source.width, height: source.height, prompt });
-    // Keep it as a JPEG beside the photos, with a thumbnail like any upload.
-    const sharp = getSharp();
-    const id = uuidv4();
-    const filename = id + '.jpg';
-    const target = path.join(photosDir, filename);
-    let width = null; let height = null;
-    if (sharp) {
-      const img = sharp(out.buffer);
-      const meta = await img.metadata(); width = meta.width || null; height = meta.height || null;
-      await img.jpeg({ quality: 88 }).toFile(target);
-    } else fs.writeFileSync(target, out.buffer);
-    const t = await makeThumb({ path: target, filename });
-    const order = all.length;
-    const caption = 'Finished room' + (extra ? ' — ' + extra : '') + (source.caption ? ' (from: ' + source.caption + ')' : '');
-    db.prepare('INSERT INTO survey_photos (id, room_id, survey_id, user_id, filename, thumb_filename, mime, file_size, width, height, kind, caption, sort_order, render_of, render_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, r.id, r.survey_id, req.user.id, filename, t.thumb, 'image/jpeg', fs.statSync(target).size, width || t.width, height || t.height, 'render', caption.slice(0, 300), order, source.id, prompt.slice(0, 2000));
-    touchSurvey(r.survey_id);
+// The render itself, shared by the JSON and the streaming forms of the route.
+// progress(evt) gets { type: 'partial', b64, index } as rough passes arrive.
+async function performRender(req, progress) {
+  const r = getRoom(req.params.roomId, req.user.id);
+  if (!r) throw Object.assign(new Error('Room not found.'), { status: 404 });
+  const IR = require('./imageRender');
+  if (!IR.isConfigured()) throw Object.assign(new Error('Finished-room renders are not switched on for this portal yet.'), { status: 503, code: 'RENDERS_UNAVAILABLE' });
+  const scope = clean(req.body && req.body.work_wanted, 1000) || r.work_wanted;
+  if (!scope) throw Object.assign(new Error('Say what work is wanted in this room first — that is what gets painted in.'), { status: 400 });
+  if (scope !== r.work_wanted) saveRoom(r, { work_wanted: scope });
+  const extra = clean(req.body && req.body.instructions, 400) || '';
+  const photoId = req.body && req.body.photo_id ? String(req.body.photo_id) : null;
+  const all = roomPhotos(r.id);
+  const source = photoId ? all.find((p) => p.id === photoId) : all.find((p) => p.kind !== 'render');
+  if (!source) throw Object.assign(new Error('Add a photo of the room first, then render the finished room from it.'), { status: 400 });
+  if (source.kind === 'render') throw Object.assign(new Error('Render from one of the real photos, not from another render.'), { status: 400 });
+  const fp = path.join(photosDir, path.basename(source.filename));
+  if (!fs.existsSync(fp)) throw Object.assign(new Error('That photo file is missing.'), { status: 404 });
+  // What the room is now goes in the brief so the model knows what the work
+  // replaces: the finishes and defects the survey recorded.
+  const fin = G.parseJson(r.finishes, null);
+  const finishes = fin && typeof fin === 'object' ? ['floor', 'walls', 'ceiling', 'woodwork'].map((k) => (fin[k] && (fin[k].type || fin[k].condition) ? { part: k, type: fin[k].type || '', condition: fin[k].condition || '' } : null)).filter(Boolean) : [];
+  const prompt = IR.promptFor({ scope, extra, roomName: r.room_type || r.name, current: { finishes, hazards: G.parseJson(r.hazards, []) || [], condition: r.condition_notes || '' } });
+  const sharp = getSharp();
+  // Each rough pass goes to the viewer small (it is only on screen for seconds).
+  const onPartial = progress ? async (buf, index) => {
     try {
-      db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, 0, 0, ?)')
-        .run(uuidv4(), req.user.id, 'render', JSON.stringify({ room_id: r.id, photo_id: source.id, quality: out.quality }), out.model, out.cost_usd || 0);
-    } catch (e) { /* metering only */ }
-    try { require('./activityRoutes').logActivity({ event_type: 'survey_rendered', title: 'Finished-room render: ' + (r.name || 'Room'), detail: JSON.stringify({ room_id: r.id, survey_id: r.survey_id, photo_id: source.id, render_id: id }), user_id: req.user.id, user_name: req.user.full_name, user_email: req.user.email }); } catch (e) { /* audit only */ }
-    const token = linkFor(r.survey_id);
-    let allowance = null;
-    try { allowance = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { allowance = null; }
-    res.status(201).json({ photo: photoOut(db.prepare('SELECT * FROM survey_photos WHERE id = ?').get(id), token), photos: roomPhotos(r.id).map((p) => photoOut(p, token)), allowance });
-  } catch (err) {
-    if (err && err.name === 'RenderError') return res.status(err.status || 502).json({ error: err.message });
-    console.error('[Surveys] render error:', err);
-    res.status(500).json({ error: 'Could not render the room just now.' });
+      const small = sharp ? await sharp(buf).resize({ width: 720, withoutEnlargement: true }).jpeg({ quality: 72 }).toBuffer() : buf;
+      progress({ type: 'partial', index, b64: 'data:image/jpeg;base64,' + small.toString('base64') });
+    } catch (e) { /* a preview is a nicety */ }
+  } : null;
+  const out = await IR.renderRoom({ buffer: fs.readFileSync(fp), mime: source.mime || 'image/jpeg', width: source.width, height: source.height, prompt, onPartial });
+  // Keep it as a JPEG beside the photos, with a thumbnail like any upload.
+  const id = uuidv4();
+  const filename = id + '.jpg';
+  const target = path.join(photosDir, filename);
+  let width = null; let height = null;
+  if (sharp) {
+    const img = sharp(out.buffer);
+    const meta = await img.metadata(); width = meta.width || null; height = meta.height || null;
+    await img.jpeg({ quality: 88 }).toFile(target);
+  } else fs.writeFileSync(target, out.buffer);
+  const t = await makeThumb({ path: target, filename });
+  const order = all.length;
+  const caption = 'Finished room' + (extra ? ' — ' + extra : '') + (source.caption ? ' (from: ' + source.caption + ')' : '');
+  db.prepare('INSERT INTO survey_photos (id, room_id, survey_id, user_id, filename, thumb_filename, mime, file_size, width, height, kind, caption, sort_order, render_of, render_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, r.id, r.survey_id, req.user.id, filename, t.thumb, 'image/jpeg', fs.statSync(target).size, width || t.width, height || t.height, 'render', caption.slice(0, 300), order, source.id, prompt.slice(0, 2000));
+  touchSurvey(r.survey_id);
+  try {
+    db.prepare('INSERT INTO usage_log (id, user_id, action, detail, model_used, tokens_in, tokens_out, cost_estimate) VALUES (?, ?, ?, ?, ?, 0, 0, ?)')
+      .run(uuidv4(), req.user.id, 'render', JSON.stringify({ room_id: r.id, photo_id: source.id, quality: out.quality }), out.model, out.cost_usd || 0);
+  } catch (e) { /* metering only */ }
+  try { require('./activityRoutes').logActivity({ event_type: 'survey_rendered', title: 'Finished-room render: ' + (r.name || 'Room'), detail: JSON.stringify({ room_id: r.id, survey_id: r.survey_id, photo_id: source.id, render_id: id }), user_id: req.user.id, user_name: req.user.full_name, user_email: req.user.email }); } catch (e) { /* audit only */ }
+  const token = linkFor(r.survey_id);
+  let allowance = null;
+  try { allowance = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { allowance = null; }
+  return { photo: photoOut(db.prepare('SELECT * FROM survey_photos WHERE id = ?').get(id), token), photos: roomPhotos(r.id).map((p) => photoOut(p, token)), allowance };
+}
+
+// JSON by default. With `Accept: text/event-stream` the same call streams:
+//   { type: 'progress', pct, note }   every couple of seconds, an estimate
+//   { type: 'partial', index, b64 }   a rough pass of the picture, as a data URL
+//   { type: 'done', photo, photos, allowance } | { type: 'error', error, status }
+router.post('/rooms/:roomId/render', rollout.requireMax, renderAllowanceGate, async (req, res) => {
+  const wantsStream = /text\/event-stream/.test(String(req.headers.accept || ''));
+  if (!wantsStream) {
+    try { res.status(201).json(await performRender(req, null)); }
+    catch (err) {
+      if (err && (err.status || err.name === 'RenderError')) return res.status(err.status || 502).json({ error: err.message, code: err.code });
+      console.error('[Surveys] render error:', err);
+      res.status(500).json({ error: 'Could not render the room just now.' });
+    }
+    return;
   }
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  const emit = (evt) => { if (!res.writableEnded) res.write('data: ' + JSON.stringify(evt) + '\n\n'); };
+  // A render takes 20–40 s. Until the first rough pass arrives there is nothing
+  // to show but time passing, so the estimate climbs and never quite arrives.
+  const started = Date.now();
+  const notes = ['Reading the photo…', 'Working out what stays and what goes…', 'Painting the new finishes in…', 'Placing the fittings…', 'Matching the light and the shadows…', 'Finishing the detail…'];
+  let pct = 0;
+  const ticker = setInterval(() => {
+    const t = (Date.now() - started) / 1000;
+    pct = Math.max(pct, Math.min(88, Math.round(100 * (1 - Math.exp(-t / 22)))));
+    emit({ type: 'progress', pct, note: notes[Math.min(notes.length - 1, Math.floor(t / 7))] });
+  }, 1500);
+  try {
+    const result = await performRender(req, (evt) => {
+      if (evt.type === 'partial') { pct = Math.max(pct, 40 + evt.index * 28); emit({ ...evt, pct }); }
+    });
+    clearInterval(ticker);
+    emit({ type: 'done', pct: 100, ...result });
+  } catch (err) {
+    clearInterval(ticker);
+    if (!(err && (err.status || err.name === 'RenderError'))) console.error('[Surveys] render error:', err);
+    emit({ type: 'error', error: err && err.message ? err.message : 'Could not render the room just now.', status: (err && err.status) || 500 });
+  }
+  res.end();
 });
 
 // ── AI: price the room through MAX's small-job pricer ────────────────────────
@@ -634,7 +683,7 @@ function reportRooms(s) {
   return surveyRooms(s.id).map((r) => {
     const room = { ...r };
     const q = G.quantities(r);
-    const photos = roomPhotos(r.id).map((p) => ({ path: path.join(photosDir, path.basename(p.thumb_filename || p.filename)), caption: p.caption, kind: p.kind, ai_notes: p.ai_notes }));
+    const photos = roomPhotos(r.id).map((p) => ({ id: p.id, render_of: p.render_of || null, path: path.join(photosDir, path.basename(p.thumb_filename || p.filename)), caption: p.caption, kind: p.kind, ai_notes: p.ai_notes }));
     return { room, quantities: q, photos };
   });
 }

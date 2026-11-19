@@ -8,15 +8,21 @@
 // for the customer, not a drawing: the report says so.
 //
 //   OPENAI_API_KEY          enables it (the same key as dictation)
-//   OPENAI_IMAGE_MODEL      default gpt-image-1
-//   OPENAI_IMAGE_QUALITY    low | medium | high — default medium (a few pence)
+//   OPENAI_IMAGE_MODEL      pins a model; unset = gpt-image-2.6-flare, or the newest the key has
+//   OPENAI_IMAGE_QUALITY    low | medium | high — default high (roughly 15p a render)
 //
 // The photo bytes go to OpenAI and come straight back as the edited image;
 // nothing is kept there, and nothing identifying the builder is sent.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const MODEL = () => process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
-const QUALITY = () => (['low', 'medium', 'high'].includes(process.env.OPENAI_IMAGE_QUALITY) ? process.env.OPENAI_IMAGE_QUALITY : 'medium');
+// OpenAI retires image models every few months (gpt-image-1 went in October
+// 2026). The default is the current one; if it is ever refused, the server
+// asks OpenAI which image models the key can use and takes the newest, so a
+// retirement never leaves the button dead. OPENAI_IMAGE_MODEL pins one.
+const DEFAULT_MODEL = 'gpt-image-2.6-sunburst';   // the higher-quality one; -flare is the quick, cheaper sibling
+let discoveredModel = null;
+const MODEL = () => process.env.OPENAI_IMAGE_MODEL || discoveredModel || DEFAULT_MODEL;
+const QUALITY = () => (['low', 'medium', 'high'].includes(process.env.OPENAI_IMAGE_QUALITY) ? process.env.OPENAI_IMAGE_QUALITY : 'high');
 const TIMEOUT_MS = 150000;
 // What a render costs, for the usage log (USD, 1024-ish output).
 const COST_USD = { low: 0.02, medium: 0.07, high: 0.19 };
@@ -27,16 +33,52 @@ class RenderError extends Error {
 
 function isConfigured() { return !!process.env.OPENAI_API_KEY; }
 
+// The newest image model this key can use, from OpenAI's own list: ids that
+// start gpt-image-, not the mini ones, highest version then newest first.
+async function discoverModel(signal) {
+  const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY }, signal });
+  if (!r.ok) throw new RenderError('Could not list the image models on this key (status ' + r.status + ').', 502);
+  const body = await r.json();
+  const version = (id) => { const m = /^gpt-image-(\d+(?:\.\d+)?)/.exec(id); return m ? parseFloat(m[1]) : 0; };
+  const candidates = ((body && body.data) || [])
+    .filter((m) => m && typeof m.id === 'string' && /^gpt-image-/.test(m.id) && !/mini/.test(m.id))
+    // Highest version first; at the same version the quality tier (sunburst) over the quick one (flare).
+    .sort((a, b) => (version(b.id) - version(a.id)) || ((/sunburst/.test(b.id) ? 1 : 0) - (/sunburst/.test(a.id) ? 1 : 0)) || ((b.created || 0) - (a.created || 0)) || a.id.localeCompare(b.id));
+  if (!candidates.length) throw new RenderError('This OpenAI key has no image model available.', 503);
+  discoveredModel = candidates[0].id;
+  console.log('[imageRender] using image model ' + discoveredModel);
+  return discoveredModel;
+}
+
 // The instruction the model paints from. The scope is the builder's own words;
 // the rest keeps the picture honest.
-function promptFor({ scope, extra, roomName, finishes }) {
+// The brief the model paints from. Written like a brief to a visualiser:
+// what the room is and what is there now (so it knows what to take out),
+// the work in the builder's own words, then everything that must not change.
+//   current: { finishes: [{ part, type, condition }], hazards: [], condition: '' }
+function promptFor({ scope, extra, roomName, current }) {
+  const room = roomName ? String(roomName).toLowerCase().replace(/^the\s+/, '') : 'room';
+  const cur = current || {};
+  const now = [];
+  for (const f of cur.finishes || []) if (f && f.type) now.push(f.part + ': ' + f.type + (f.condition ? ' (' + f.condition + ' condition)' : ''));
   const lines = [
-    'This is a photograph taken during a site survey of ' + (roomName ? 'the ' + roomName.toLowerCase() : 'a room') + ' in a UK home. Edit the photograph to show the room after the following work has been done:',
+    'A photorealistic visualisation for a UK builder\'s customer. The attached photograph was taken during a site survey of the ' + room + ' of a UK home, as it is today. Produce the same photograph showing the ' + room + ' after the work below has been completed to a high standard by professional tradespeople.',
+    '',
+    'THE WORK TO SHOW DONE:',
     String(scope || '').trim(),
   ];
-  if (extra && String(extra).trim()) lines.push('Also: ' + String(extra).trim());
-  if (finishes && finishes.length) lines.push('Finishes to use: ' + finishes.join('; ') + '.');
-  lines.push('Keep the camera angle, the walls, the window and door positions and the proportions of the room exactly as in the photograph. Change only what the work describes; leave everything else as it is. Photorealistic, the same natural lighting as the photo, tidy and finished, no people, no text, no labels.');
+  if (extra && String(extra).trim()) lines.push('Specific choices for this picture: ' + String(extra).trim() + '.');
+  if (now.length || (cur.hazards || []).length || cur.condition) {
+    lines.push('', 'THE ROOM NOW (what the work replaces or puts right):');
+    if (now.length) lines.push('Existing finishes — ' + now.join('; ') + '.');
+    if ((cur.hazards || []).length) lines.push('Defects seen — ' + cur.hazards.join('; ') + ' — these are gone once the work is done.');
+    if (cur.condition) lines.push('Condition notes: ' + String(cur.condition).slice(0, 300));
+  }
+  lines.push(
+    '',
+    'WHAT MUST STAY EXACTLY AS IN THE PHOTOGRAPH: the camera position, lens and angle; the walls, ceiling line, floor plane and room proportions; the positions and sizes of the windows, doors and any built-in features; the daylight direction and overall exposure. Anything the work does not mention stays as it is.',
+    'HOW IT SHOULD LOOK: a finished, clean, newly completed room — plumb, level, neat joints and sealant, fresh paint, no dust sheets, tools, rubble or clutter. Correct for a UK home: UK-style sockets, switches, radiators and fittings. Materials to look real, with the same lighting, shadows and reflections as the photo; no stylised or showroom look, no wide-angle distortion, no added people, pets, text, labels or watermarks. If the work describes removing something, show the space it leaves made good.'
+  );
   return lines.join('\n');
 }
 
@@ -49,34 +91,77 @@ function sizeFor(width, height) {
   return '1024x1024';
 }
 
-async function call(form, signal) {
+// One request to the edits endpoint. With streaming on, OpenAI sends the
+// picture as it forms — a couple of rough passes, then the finished one — as
+// server-sent events; each rough pass goes to onPartial so the builder can
+// watch it appear. Either way the answer is shaped like the plain JSON reply.
+async function call(form, signal, onPartial) {
   const r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY }, body: form, signal });
+  const type = String((r.headers && r.headers.get && r.headers.get('content-type')) || '');
+  if (r.ok && /text\/event-stream/.test(type) && r.body) {
+    let final = null; let last = null; let error = null; let index = 0;
+    const handle = (line) => {
+      if (!line.startsWith('data:')) return;
+      let evt; try { evt = JSON.parse(line.slice(5).trim()); } catch (e) { return; }
+      const kind = String(evt.type || '');
+      if (evt.error) error = evt.error;
+      if (!evt.b64_json) return;
+      if (/partial/.test(kind)) { last = Buffer.from(evt.b64_json, 'base64'); if (onPartial) { try { onPartial(last, index++); } catch (e) { /* the viewer's problem */ } } }
+      else if (/complet/.test(kind) || !kind) final = Buffer.from(evt.b64_json, 'base64');
+    };
+    const reader = r.body.getReader(); const decoder = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop() || '';
+      lines.forEach(handle);
+    }
+    if (buf) handle(buf);
+    if (error) return { status: 400, body: { error: typeof error === 'object' ? error : { message: String(error) } } };
+    const out = final || last;
+    return { status: out ? 200 : 502, body: out ? { data: [{ b64_json: out.toString('base64') }] } : null };
+  }
   let body = null;
   try { body = await r.json(); } catch (e) { body = null; }
   return { status: r.status, body };
 }
 
-// renderRoom({ buffer, mime, width, height, prompt }) → { buffer (PNG), model, quality, cost_usd }
-async function renderRoom({ buffer, mime, width, height, prompt }) {
+// renderRoom({ buffer, mime, width, height, prompt, onPartial }) → { buffer (PNG), model, quality, cost_usd }
+// onPartial(buffer, index) is called with each rough pass when the API streams them.
+async function renderRoom({ buffer, mime, width, height, prompt, onPartial }) {
   if (!isConfigured()) throw new RenderError('Finished-room renders are not switched on for this portal (no OPENAI_API_KEY).', 503);
   if (!buffer || !buffer.length) throw new RenderError('No photo to work from.', 400);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const build = (withFidelity) => {
+    // The request as a set of fields, so a field the API no longer knows can
+    // be dropped and the call tried again rather than failing the render.
+    const params = { model: MODEL(), prompt, n: '1', size: sizeFor(width, height), quality: QUALITY(), input_fidelity: 'high' };
+    if (onPartial) { params.stream = 'true'; params.partial_images = '2'; }
+    const build = () => {
       const form = new FormData();
-      form.append('model', MODEL());
-      form.append('prompt', prompt);
-      form.append('n', '1');
-      form.append('size', sizeFor(width, height));
-      form.append('quality', QUALITY());
-      if (withFidelity) form.append('input_fidelity', 'high');
+      for (const [k, v] of Object.entries(params)) if (v != null) form.append(k, String(v));
       form.append('image', new Blob([buffer], { type: mime || 'image/jpeg' }), /png/.test(mime || '') ? 'room.png' : 'room.jpg');
       return form;
     };
-    let out = await call(build(true), controller.signal);
-    // Older API versions do not know input_fidelity; the render still works without it.
-    if (out.status === 400 && out.body && out.body.error && /input_fidelity/i.test(String(out.body.error.message || ''))) out = await call(build(false), controller.signal);
+    let out = await call(build(), controller.signal, onPartial);
+    let modelLookedUp = false;
+    for (let attempt = 0; attempt < 4 && out.status === 400 && out.body && out.body.error; attempt++) {
+      const msg = String(out.body.error.message || '');
+      if (!modelLookedUp && !process.env.OPENAI_IMAGE_MODEL && /model/i.test(msg) && /(does not exist|not found|deprecated|no longer|unsupported|invalid)/i.test(msg)) {
+        // The model has been retired: ask which ones this key has and use the newest.
+        modelLookedUp = true;
+        params.model = await discoverModel(controller.signal);
+      } else {
+        // A parameter this version of the API does not take: send without it.
+        const dropped = ['input_fidelity', 'quality', 'size', 'n', 'partial_images', 'stream'].find((k) => params[k] != null && new RegExp('\\b' + k + '\\b', 'i').test(msg));
+        if (!dropped) break;
+        delete params[dropped];
+        if (dropped === 'stream') delete params.partial_images;
+      }
+      out = await call(build(), controller.signal, params.stream ? onPartial : null);
+    }
     if (out.status === 401 || out.status === 403) throw new RenderError('The OpenAI key on this server was refused.', 503);
     if (out.status === 429) throw new RenderError('The image service is busy — try again in a minute.', 429);
     if (out.status >= 400 || !out.body) {
@@ -86,7 +171,7 @@ async function renderRoom({ buffer, mime, width, height, prompt }) {
     }
     const first = out.body.data && out.body.data[0];
     if (!first || !first.b64_json) throw new RenderError('The image service sent nothing back.', 502);
-    return { buffer: Buffer.from(first.b64_json, 'base64'), model: MODEL(), quality: QUALITY(), cost_usd: COST_USD[QUALITY()] || 0.07 };
+    return { buffer: Buffer.from(first.b64_json, 'base64'), model: params.model, quality: params.quality || 'default', cost_usd: COST_USD[params.quality] || 0.07 };
   } catch (err) {
     if (err instanceof RenderError) throw err;
     if (err && err.name === 'AbortError') throw new RenderError('The render took too long — try again.', 504);
@@ -94,4 +179,4 @@ async function renderRoom({ buffer, mime, width, height, prompt }) {
   } finally { clearTimeout(timer); }
 }
 
-module.exports = { isConfigured, renderRoom, promptFor, sizeFor, RenderError, COST_USD };
+module.exports = { isConfigured, renderRoom, promptFor, sizeFor, discoverModel, RenderError, COST_USD, DEFAULT_MODEL, _reset: () => { discoveredModel = null; } };

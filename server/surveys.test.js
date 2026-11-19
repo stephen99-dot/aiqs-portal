@@ -391,7 +391,7 @@ test('a finished-room render: painted from a photo and the scope, kept with the 
     assert.equal(r.status, 201, JSON.stringify(r.body));
     assert.equal(r.body.photo.kind, 'render');
     assert.equal(r.body.photo.render_of, source.id);
-    assert.ok(/grey tiles, walk-in shower/.test(r.body.photo.render_prompt) && /Keep the camera angle/.test(r.body.photo.render_prompt), 'the prompt carries the tweak and the guard rails');
+    assert.ok(/grey tiles, walk-in shower/.test(r.body.photo.render_prompt) && /camera position, lens and angle/.test(r.body.photo.render_prompt) && /UK-style sockets/.test(r.body.photo.render_prompt), 'the prompt carries the tweak and the guard rails');
     assert.ok(/Finished room — grey tiles/.test(r.body.photo.caption));
     assert.ok(r.body.photo.thumb_url && r.body.photo.url);
     assert.equal(r.body.allowance.used, 1); assert.equal(r.body.allowance.remaining, 19);
@@ -422,6 +422,26 @@ test('a finished-room render: painted from a photo and the scope, kept with the 
     // The status endpoint shows the allowance too.
     r = await req('GET', '/max/status', tokenA);
     assert.equal(r.body.renders.used, 1);
+    // Asked for a stream, the same route sends progress, each rough pass as a
+    // small data URL, then the finished photo.
+    IR.renderRoom = async ({ onPartial }) => {
+      const rough = await sharp({ create: { width: 320, height: 240, channels: 3, background: '#777' } }).png().toBuffer();
+      if (onPartial) { await onPartial(rough, 0); await onPartial(rough, 1); }
+      return { buffer: await sharp({ create: { width: 640, height: 480, channels: 3, background: '#a8c0a0' } }).png().toBuffer(), model: 'stub-image', quality: 'high', cost_usd: 0.19 };
+    };
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: source.id }, { Accept: 'text/event-stream' });
+    assert.equal(r.status, 200); assert.ok(/text\/event-stream/.test(r.headers['content-type']));
+    const events = r.raw.toString('utf8').split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6)));
+    const partials = events.filter((e) => e.type === 'partial');
+    assert.equal(partials.length, 2); assert.ok(/^data:image\/jpeg;base64,/.test(partials[0].b64)); assert.ok(partials[1].pct > partials[0].pct);
+    const done = events.find((e) => e.type === 'done');
+    assert.ok(done && done.photo.kind === 'render' && done.pct === 100 && Array.isArray(done.photos), 'the stream ends with the finished photo');
+    assert.equal(done.allowance.used, 2);
+    // A failure mid-stream is an event, not a dropped connection.
+    IR.renderRoom = async () => { throw Object.assign(new Error('The image service would not edit that photo.'), { name: 'RenderError', status: 422 }); };
+    r = await req('POST', '/surveys/rooms/' + test.roomId + '/render', tokenA, { photo_id: source.id }, { Accept: 'text/event-stream' });
+    const errEvt = r.raw.toString('utf8').split('\n').filter((l) => l.startsWith('data: ')).map((l) => JSON.parse(l.slice(6))).find((e) => e.type === 'error');
+    assert.ok(errEvt && errEvt.status === 422 && /would not edit/.test(errEvt.error));
   } finally { IR.renderRoom = origRender; IR.isConfigured = origConfigured; }
 });
 
