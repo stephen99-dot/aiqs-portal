@@ -1136,14 +1136,14 @@ function SurveyTab({ t }) {
 // the authority: a client MAX is off for gets a 403 whatever the UI shows.
 function MaxTab({ t }) {
   const [data, setData] = useState(null);
-  const [form, setForm] = useState({ notice_gbp: '', limit_gbp: '', daily_turns: '' });
+  const [form, setForm] = useState({ notice_gbp: '', limit_gbp: '', daily_turns: '', renders_per_month: '' });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [activity, setActivity] = useState([]);
 
   function flash(text, type) { setMsg({ text, type: type || 'success' }); setTimeout(() => setMsg(null), 4000); }
   const load = useCallback(() => {
-    apiFetch('/max/settings').then((d) => { setData(d); setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns }); }).catch((e) => flash(e.message || 'Could not load MAX settings', 'error'));
+    apiFetch('/max/settings').then((d) => { setData(d); setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns, renders_per_month: d.renders_per_month }); }).catch((e) => flash(e.message || 'Could not load MAX settings', 'error'));
     apiFetch('/admin/activity?type=max_over_limit&limit=8').then((r) => setActivity(r.activities || [])).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -1153,7 +1153,7 @@ function MaxTab({ t }) {
     try {
       const d = await apiFetch('/max/settings', { method: 'PUT', body: JSON.stringify(changes) });
       setData(d);
-      setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns });
+      setForm({ notice_gbp: d.notice_gbp, limit_gbp: d.limit_gbp, daily_turns: d.daily_turns, renders_per_month: d.renders_per_month });
       flash(d.changes && d.changes.length ? 'Saved: ' + d.changes.join('; ') : 'Nothing changed');
     } catch (e) { flash(e.message || 'Could not save', 'error'); }
     finally { setSaving(false); }
@@ -1193,15 +1193,16 @@ function MaxTab({ t }) {
           <label style={label}>Notice from (£ ex VAT)<input style={input} inputMode="numeric" value={form.notice_gbp} onChange={(e) => setForm((f) => ({ ...f, notice_gbp: e.target.value }))} /></label>
           <label style={label}>Limit — MAX stops at (£ ex VAT)<input style={input} inputMode="numeric" value={form.limit_gbp} onChange={(e) => setForm((f) => ({ ...f, limit_gbp: e.target.value }))} /></label>
           <label style={label}>MAX turns per client per day<input style={input} inputMode="numeric" value={form.daily_turns} onChange={(e) => setForm((f) => ({ ...f, daily_turns: e.target.value }))} /></label>
-          <button style={btn(true)} disabled={saving} onClick={() => save({ notice_gbp: form.notice_gbp, limit_gbp: form.limit_gbp, daily_turns: form.daily_turns })}>{saving ? 'Saving…' : 'Save limits'}</button>
+          <label style={label}>Finished-room renders per client per month<input style={input} inputMode="numeric" value={form.renders_per_month} onChange={(e) => setForm((f) => ({ ...f, renders_per_month: e.target.value }))} /></label>
+          <button style={btn(true)} disabled={saving} onClick={() => save({ notice_gbp: form.notice_gbp, limit_gbp: form.limit_gbp, daily_turns: form.daily_turns, renders_per_month: form.renders_per_month })}>{saving ? 'Saving…' : 'Save limits'}</button>
         </div>
-        <div style={{ marginTop: 10, fontSize: 12, color: t.textMuted }}>Live now: notice from {money(data.notice_gbp)}, limit {money(data.limit_gbp)}, {data.daily_turns} turns a day per client.</div>
+        <div style={{ marginTop: 10, fontSize: 12, color: t.textMuted }}>Live now: notice from {money(data.notice_gbp)}, limit {money(data.limit_gbp)}, {data.daily_turns} turns a day and {data.renders_per_month} finished-room renders a month per client{data.voice && data.voice.renders === false ? ' (renders need OPENAI_API_KEY on the server to run)' : ''}. 0 renders switches the feature off.</div>
       </div>
 
       <div style={card}>
         <h3 style={h3}>Usage (last 30 days)</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-          {[['MAX turns (24h)', u.turns_24h], ['MAX turns (30d)', u.turns_30d], ['Estimates drafted', u.estimates_30d], ['Over the limit', u.over_limit_30d], ['AI cost (USD)', '$' + (u.cost_30d_usd || 0).toFixed(2)]].map(([k, v]) => (
+          {[['MAX turns (24h)', u.turns_24h], ['MAX turns (30d)', u.turns_30d], ['Estimates drafted', u.estimates_30d], ['Over the limit', u.over_limit_30d], ['Room renders', u.renders_30d], ['AI cost (USD)', '$' + (u.cost_30d_usd || 0).toFixed(2)]].map(([k, v]) => (
             <div key={k} style={{ padding: '12px 14px', borderRadius: 10, background: t.surfaceHover, border: '1px solid ' + t.border }}>
               <div style={{ fontSize: 11, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k}</div>
               <div style={{ fontSize: 20, fontWeight: 700, color: t.text, fontFamily: 'var(--font-mono)', marginTop: 4 }}>{v == null ? '—' : v}</div>

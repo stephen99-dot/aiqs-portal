@@ -267,7 +267,10 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
         if (i === 0 || (i % 2 === 0 && y === 50)) { if (i === 0) y = sectionTitle(doc, 'Photographs', y); }
         const x = 40 + (i % 2) * (cellW + 12);
         try { doc.image(p.path, x, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable image */ }
-        doc.font('Helvetica').fontSize(7).fillColor(MUTED).text([(p.kind && p.kind !== 'general' ? p.kind : null), p.caption, p.ai_notes].filter(Boolean).join(' · ').slice(0, 160) || 'Photo ' + (i + 1), x, y + cellH + 3, { width: cellW, height: 20, ellipsis: true });
+        const label = p.kind === 'render'
+          ? ['FINISHED ROOM — AI concept of the work described, not to scale', p.caption].filter(Boolean).join(' · ')
+          : [(p.kind && p.kind !== 'general' ? p.kind : null), p.caption, p.ai_notes].filter(Boolean).join(' · ');
+        doc.font('Helvetica').fontSize(7).fillColor(p.kind === 'render' ? INK : MUTED).text(label.slice(0, 160) || 'Photo ' + (i + 1), x, y + cellH + 3, { width: cellW, height: 20, ellipsis: true });
         if (i % 2 === 1 || i === photos.length - 1) y += cellH + 28;
       });
     }

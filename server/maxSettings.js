@@ -23,6 +23,8 @@ const DEFAULTS = {
   max_small_job_notice_gbp: { env: 'MAX_SMALL_JOB_NOTICE_GBP', value: 80000, min: 0, max: 10000000 },
   max_small_job_limit_gbp: { env: 'MAX_SMALL_JOB_LIMIT_GBP', value: 100000, min: 1000, max: 10000000 },
   max_daily_turns: { env: 'MAX_DAILY_TURNS', value: 300, min: 1, max: 100000 },
+  // Finished-room renders a client may make in a calendar month (0 = off).
+  max_renders_per_month: { env: 'MAX_RENDERS_PER_MONTH', value: 20, min: 0, max: 100000 },
 };
 
 function readNumber(key) {
@@ -76,9 +78,11 @@ function verdictFor(priceExVat, lim) {
 }
 
 // Everything the admin screen shows, in one shape.
+function rendersPerMonth() { return readNumber('max_renders_per_month'); }
+
 function snapshot() {
   const l = limits();
-  return { ...l, daily_turns: dailyTurns() };
+  return { ...l, daily_turns: dailyTurns(), renders_per_month: rendersPerMonth() };
 }
 
 function update(changes, actorId) {
@@ -86,7 +90,8 @@ function update(changes, actorId) {
   if (c.notice_gbp !== undefined) writeNumber('max_small_job_notice_gbp', c.notice_gbp, actorId);
   if (c.limit_gbp !== undefined) writeNumber('max_small_job_limit_gbp', c.limit_gbp, actorId);
   if (c.daily_turns !== undefined) writeNumber('max_daily_turns', c.daily_turns, actorId);
+  if (c.renders_per_month !== undefined) writeNumber('max_renders_per_month', c.renders_per_month, actorId);
   return snapshot();
 }
 
-module.exports = { DEFAULTS, limits, dailyTurns, verdictFor, snapshot, update, readNumber, writeNumber };
+module.exports = { DEFAULTS, limits, dailyTurns, rendersPerMonth, verdictFor, snapshot, update, readNumber, writeNumber };

@@ -41,6 +41,18 @@ function usedToday(userId) {
     return db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE user_id = ? AND action = 'max' AND created_at >= datetime('now', '-1 day')").get(userId).c;
   } catch (e) { return 0; }
 }
+// Finished-room renders this calendar month, and what is left of the allowance.
+function rendersThisMonth(userId) {
+  try {
+    return db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE user_id = ? AND action = 'render' AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')").get(userId).c;
+  } catch (e) { return 0; }
+}
+function renderAllowance(user) {
+  const monthly = settings.rendersPerMonth();
+  const used = rendersThisMonth(user.id);
+  const admin = user.role === 'admin';
+  return { monthly, used, remaining: admin ? null : Math.max(0, monthly - used), unlimited: admin, configured: (() => { try { return require('./imageRender').isConfigured(); } catch (e) { return false; } })() };
+}
 function fairUse(req, res, next) {
   try {
     if (!req.user || req.user.role === 'admin') return next();
@@ -126,6 +138,7 @@ router.get('/status', (req, res) => {
     limits: { notice_gbp: lim.notice_gbp, limit_gbp: lim.limit_gbp },
     voice: { stt: enabled && stt },
     allowance: { daily_turns: cap, used_today: used, remaining_today: req.user.role === 'admin' ? null : Math.max(0, cap - used) },
+    renders: enabled ? renderAllowance(req.user) : null,
     ai_configured: !!process.env.ANTHROPIC_API_KEY,
   });
 });
@@ -144,7 +157,10 @@ function adminSnapshot() {
   } catch (e) { /* counters only */ }
   let stt = null;
   try { stt = require('./stt').provider(); } catch (e) { stt = null; }
-  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage, voice: { stt: !!stt, provider: stt, ai_configured: !!process.env.ANTHROPIC_API_KEY } };
+  let renders = false;
+  try { renders = require('./imageRender').isConfigured(); } catch (e) { renders = false; }
+  try { usage.renders_30d = db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE action = 'render' AND created_at >= datetime('now', '-30 days')").get().c; } catch (e) { usage.renders_30d = 0; }
+  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage, voice: { stt: !!stt, provider: stt, ai_configured: !!process.env.ANTHROPIC_API_KEY, renders } };
 }
 
 router.get('/settings', requireAdmin, (req, res) => {
@@ -163,7 +179,7 @@ router.put('/settings', requireAdmin, (req, res) => {
       if (before !== wanted) changes.push('rollout ' + before + ' → ' + wanted);
     }
     const numeric = {};
-    for (const k of ['notice_gbp', 'limit_gbp', 'daily_turns']) {
+    for (const k of ['notice_gbp', 'limit_gbp', 'daily_turns', 'renders_per_month']) {
       if (b[k] !== undefined && b[k] !== null && b[k] !== '') {
         if (!Number.isFinite(Number(b[k]))) return res.status(400).json({ error: k + ' must be a number.' });
         numeric[k] = Number(b[k]);
@@ -298,4 +314,4 @@ router.get('/activity', (req, res) => {
 });
 
 module.exports = router;
-module.exports._internals = { fairUse, usedToday, cleanContext, loopbackBase, forwardedHeaders };
+module.exports._internals = { fairUse, usedToday, rendersThisMonth, renderAllowance, cleanContext, loopbackBase, forwardedHeaders };
