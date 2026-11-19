@@ -1,31 +1,25 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { API_BASE, getToken } from '../utils/api';
+import { isNative } from '../native/platform';
 
-// ═══ useMaxVoice — MAX's ears and voice ══════════════════════════════════════
-// Speech in:  the microphone is recorded with MediaRecorder and sent to
-//             POST /api/transcribe (server STT — Whisper or Deepgram — the
-//             primary path, and the only reliable one inside the app shell).
-//             Where the server has no STT key (503 dictation_unavailable), or
-//             the browser cannot record, it falls back to the browser's own Web
-//             Speech API. Neither available → `supported` is false and the
-//             panel hides the mic.
-// Speech out: POST /api/max/tts streams an mp3 of the MAX voice; a 204 means
-//             "use the browser voice" and speechSynthesis takes over with the
-//             best en-GB voice it has.
+// ═══ useMaxVoice — the microphone ════════════════════════════════════════════
+// Speech in only: MAX does not talk back. The microphone is recorded with
+// MediaRecorder and sent to POST /api/transcribe (server speech-to-text —
+// OpenAI or Deepgram — the only path inside the app, where WKWebView has no
+// speech recogniser of its own). In a desktop browser with no server key,
+// the browser's own Web Speech API is the fallback.
+//
 // Interaction: tap to talk, tap to stop, auto-stop after a short silence; the
-//             live transcript and the input level are exposed so the panel can
-//             show words as they land and a waveform that moves with the voice.
-//             Barge-in: starting to listen stops MAX speaking at once.
-//             Conversation mode (off by default) listens again after each
-//             spoken reply. Mute is remembered per device.
-// Privacy:    audio never leaves memory on either side — the blob is posted,
-//             transcribed and dropped; only the text goes into the thread.
+// live transcript and the input level are exposed so a page can show words as
+// they land and a waveform that moves with the voice.
+//
+// Privacy: audio never leaves memory on either side — the blob is posted,
+// transcribed and dropped; only the text goes into the thread.
 
-const MUTE_KEY = 'aiqs_max_muted';
-const CONVO_KEY = 'aiqs_max_conversation';
 const SILENCE_MS = 1800;        // quiet this long after speech ends the recording
 const MAX_RECORD_MS = 60000;    // a forgotten mic never runs forever
 const SPEECH_LEVEL = 0.035;     // RMS above this counts as talking
+const NOT_ON = 'Voice isn\'t switched on for this portal yet — type for now. (Admins: add an OpenAI or Deepgram key for dictation.)';
 
 function authHeaders() {
   const h = {};
@@ -52,44 +46,26 @@ function pickMime() {
   return '';
 }
 
-function voiceScore(v) {
-  const name = (v.name || '').toLowerCase();
-  let score = 0;
-  if (/en-gb/i.test(v.lang)) score += 20; else if (/^en/i.test(v.lang)) score += 5; else return -1;
-  if (/siri|daniel|arthur|oliver|ryan|thomas|george|kate|serena|sonia|libby|maisie|google uk/.test(name)) score += 8;
-  if (/compact|espeak|fred|zarvox|albert|bad news|bells|boing|bubbles|cellos|deranged|good news|hysterical|junior|organ|trinoids|whisper|wobble/.test(name)) score -= 50;
-  if (v.localService === false) score += 3;
-  return score;
-}
-function pickBrowserVoice() {
-  if (!window.speechSynthesis) return null;
-  const ranked = (window.speechSynthesis.getVoices() || []).map((v) => ({ v, score: voiceScore(v) })).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score);
-  return ranked.length ? ranked[0].v : null;
-}
-
 export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
   const [mode, setMode] = useState(null);       // 'server' | 'web' | 'none' | null (checking)
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [interim, setInterim] = useState('');
   const [level, setLevel] = useState(0);
-  const [speaking, setSpeaking] = useState(false);
-  const [muted, setMutedState] = useState(() => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; } });
-  const [conversation, setConversationState] = useState(() => { try { return localStorage.getItem(CONVO_KEY) === '1'; } catch (e) { return false; } });
 
   const recRef = useRef(null);        // MediaRecorder
   const streamRef = useRef(null);     // MediaStream
   const webRecRef = useRef(null);     // SpeechRecognition
-  const ctxRef = useRef(null);        // AudioContext for levels / playback unlock
+  const ctxRef = useRef(null);        // AudioContext for levels
   const rafRef = useRef(0);
-  const audioRef = useRef(null);      // <audio> for mp3 playback
-  const genRef = useRef(0);           // speech generation; bumping it cancels a reply mid-sentence
   const onFinalRef = useRef(onFinal); onFinalRef.current = onFinal;
   const onInterimRef = useRef(onInterim); onInterimRef.current = onInterim;
   const onErrorRef = useRef(onError); onErrorRef.current = onError;
-  const afterSpeakRef = useRef(null); // conversation mode: what to do when MAX stops talking
 
-  const webSupported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const native = isNative();
+  // WKWebView exposes a SpeechRecognition object that never actually works, so
+  // inside the app the server is the only way.
+  const webSupported = !native && typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   const canRecord = typeof window !== 'undefined' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) && typeof MediaRecorder !== 'undefined';
 
   useEffect(() => {
@@ -102,79 +78,12 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
     return () => { gone = true; };
   }, [canRecord, webSupported]);
 
-  const setMuted = useCallback((on) => {
-    setMutedState(!!on);
-    try { localStorage.setItem(MUTE_KEY, on ? '1' : '0'); } catch (e) { /* fine */ }
-  }, []);
-  const setConversation = useCallback((on) => {
-    setConversationState(!!on);
-    try { localStorage.setItem(CONVO_KEY, on ? '1' : '0'); } catch (e) { /* fine */ }
-  }, []);
-
-  // ── Speaking ──────────────────────────────────────────────────────────────
-  const stopSpeaking = useCallback(() => {
-    genRef.current += 1;
-    if (audioRef.current) { try { audioRef.current.pause(); audioRef.current.src = ''; } catch (e) { /* ignore */ } audioRef.current = null; }
-    if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
-    setSpeaking(false);
-    afterSpeakRef.current = null;
-  }, []);
-
-  const speakBrowser = useCallback((text, gen) => new Promise((resolve) => {
-    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return resolve(false);
-    const u = new SpeechSynthesisUtterance(text);
-    const v = pickBrowserVoice();
-    if (v) u.voice = v;
-    u.lang = 'en-GB'; u.rate = 1.0; u.pitch = 1.0;
-    let done = false;
-    const finish = () => { if (!done) { done = true; resolve(gen === genRef.current); } };
-    u.onend = finish; u.onerror = finish;
-    window.speechSynthesis.speak(u);
-    setTimeout(finish, Math.min(60000, 4000 + text.length * 90)); // Safari sometimes never fires onend
-  }), []);
-
-  // speak(text) → resolves true if it finished, false if cut off or muted.
-  const speak = useCallback(async (text, { then } = {}) => {
-    const clean = String(text || '').trim();
-    if (!clean || muted) return false;
-    stopSpeaking();
-    const gen = genRef.current;
-    setSpeaking(true);
-    afterSpeakRef.current = then || null;
-    let finished = false;
-    try {
-      const r = await fetch(API_BASE + '/max/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ text: clean }) });
-      if (gen !== genRef.current) return false;
-      if (r.status === 200) {
-        const url = URL.createObjectURL(await r.blob());
-        finished = await new Promise((resolve) => {
-          const a = new Audio(url);
-          audioRef.current = a;
-          a.onended = () => { URL.revokeObjectURL(url); resolve(gen === genRef.current); };
-          a.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
-          a.play().catch(() => resolve(false));
-        });
-      } else {
-        finished = await speakBrowser(clean, gen);
-      }
-    } catch (e) {
-      finished = await speakBrowser(clean, gen);
-    }
-    if (gen === genRef.current) {
-      setSpeaking(false);
-      const after = afterSpeakRef.current; afterSpeakRef.current = null;
-      if (finished && typeof after === 'function') after();
-    }
-    return finished;
-  }, [muted, stopSpeaking, speakBrowser]);
-
-  // Warm the audio path on a user gesture so autoplay rules don't mute us.
+  // Warm the audio path on a user gesture so the level meter can run.
   const unlock = useCallback(() => {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC && !ctxRef.current) ctxRef.current = new AC();
       if (ctxRef.current && ctxRef.current.state === 'suspended') ctxRef.current.resume().catch(() => {});
-      if (window.speechSynthesis) window.speechSynthesis.getVoices();
     } catch (e) { /* fine */ }
   }, []);
 
@@ -200,7 +109,12 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
       fd.append('context', 'max');
       fd.append('seconds', String(Math.round(seconds || 0)));
       const r = await fetch(API_BASE + '/transcribe', { method: 'POST', headers: authHeaders(), body: fd });
-      if (r.status === 503) { serverSttKnown = false; setMode(webSupported ? 'web' : 'none'); if (onErrorRef.current) onErrorRef.current('Server dictation is not set up — using the browser\'s voice recognition instead.'); return; }
+      if (r.status === 503) {
+        serverSttKnown = false;
+        setMode(webSupported ? 'web' : 'none');
+        if (onErrorRef.current) onErrorRef.current(webSupported ? 'Server dictation is not set up — using the browser\'s voice recognition instead.' : NOT_ON);
+        return;
+      }
       if (!r.ok) { let msg = 'Could not transcribe that.'; try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) { /* keep */ } if (onErrorRef.current) onErrorRef.current(msg); return; }
       const j = await r.json();
       const text = String((j && (j.cleaned || j.raw)) || '').trim();
@@ -263,7 +177,7 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
     setInterim('');
   }, [teardownRecording, transcribe]);
 
-  // ── Listening: Web Speech fallback (push-to-talk) ─────────────────────────
+  // ── Listening: Web Speech fallback (desktop browsers, push-to-talk) ───────
   const startWebListening = useCallback(() => {
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRec) return;
@@ -301,14 +215,13 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
     try { rec.start(); } catch (e) { setListening(false); if (onErrorRef.current) onErrorRef.current('Could not start the microphone.'); }
   }, []);
 
-  // Tap to talk. Starting to listen always cuts MAX off (barge-in).
+  // Tap to talk.
   const startListening = useCallback(async () => {
-    stopSpeaking();
     unlock();
     if (mode === 'server') {
       try { await startServerListening(); return; }
       catch (e) {
-        if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) { if (onErrorRef.current) onErrorRef.current('Microphone blocked — allow the mic for this site and try again.'); return; }
+        if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) { if (onErrorRef.current) onErrorRef.current(native ? 'Microphone blocked — allow it for AI QS in the iPhone Settings and try again.' : 'Microphone blocked — allow the mic for this site and try again.'); return; }
         // Recording failed for another reason: try the browser recogniser.
         if (webSupported) { startWebListening(); return; }
         if (onErrorRef.current) onErrorRef.current('Could not start the microphone.');
@@ -316,53 +229,18 @@ export default function useMaxVoice({ onFinal, onInterim, onError } = {}) {
       }
     }
     if (mode === 'web' || webSupported) { startWebListening(); return; }
-    if (onErrorRef.current) onErrorRef.current('Voice isn\'t available on this device — type to MAX instead.');
-  }, [mode, webSupported, stopSpeaking, unlock, startServerListening, startWebListening]);
+    if (onErrorRef.current) onErrorRef.current(mode === null ? 'One moment — checking the microphone…' : native ? NOT_ON : 'Voice isn\'t available in this browser — type to MAX instead.');
+  }, [mode, native, webSupported, unlock, startServerListening, startWebListening]);
 
   const toggleListening = useCallback(() => { if (listening) stopListening(); else startListening(); }, [listening, startListening, stopListening]);
 
-  useEffect(() => () => { stopListening(); stopSpeaking(); teardownRecording(); }, [stopListening, stopSpeaking, teardownRecording]);
+  useEffect(() => () => { stopListening(); teardownRecording(); }, [stopListening, teardownRecording]);
 
   return {
-    supported: mode !== 'none', mode, checking: mode === null,
-    listening, transcribing, interim, level, speaking,
-    muted, setMuted, conversation, setConversation,
-    startListening, stopListening, toggleListening, speak, stopSpeaking, unlock,
+    // Inside the app the mic is always shown: a tap either records, or says
+    // plainly what is missing. In a browser it is hidden when nothing can hear.
+    supported: mode !== 'none' || native, mode, checking: mode === null,
+    listening, transcribing, interim, level,
+    startListening, stopListening, toggleListening, unlock,
   };
-}
-
-// A spoken version of a written reply when the server didn't send one: strip
-// the markdown, keep the first couple of sentences, say pounds as words.
-export function shortenForSpeech(text) {
-  let s = String(text || '')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/^\s*[#>*-]+\s*/gm, '')
-    .replace(/\*\*|__|`/g, '')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const sentences = s.split(/(?<=[.!?])\s+/).filter(Boolean);
-  let out = '';
-  for (const sent of sentences) { if ((out + ' ' + sent).length > 260) break; out = (out + ' ' + sent).trim(); if (out.split(/(?<=[.!?])\s+/).length >= 2) break; }
-  if (!out) out = s.slice(0, 260);
-  if (sentences.length > 2 || /\n\s*[-*]/.test(text || '')) out += ' The details are on screen.';
-  return out.replace(/£\s?([\d,]+(?:\.\d{1,2})?)/g, (m, n) => poundsInWords(n)).replace(/(\d+(?:\.\d+)?)\s?%/g, '$1 per cent');
-}
-
-const ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
-const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-function words(n) {
-  if (n < 20) return ONES[n];
-  if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : '');
-  if (n < 1000) return ONES[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' and ' + words(n % 100) : '');
-  if (n < 1000000) return words(Math.floor(n / 1000)) + ' thousand' + (n % 1000 ? (n % 1000 < 100 ? ' and ' : ' ') + words(n % 1000) : '');
-  return words(Math.floor(n / 1000000)) + ' million' + (n % 1000000 ? ' ' + words(n % 1000000) : '');
-}
-export function poundsInWords(numStr) {
-  const n = parseFloat(String(numStr).replace(/,/g, ''));
-  if (!Number.isFinite(n)) return '£' + numStr;
-  const pounds = Math.floor(n); const pence = Math.round((n - pounds) * 100);
-  let out = pounds === 0 ? 'zero pounds' : words(pounds) + (pounds === 1 ? ' pound' : ' pounds');
-  if (pence) out += ' ' + words(pence) + (pence === 1 ? ' penny' : ' pence');
-  return out;
 }

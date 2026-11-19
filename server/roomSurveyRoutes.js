@@ -626,5 +626,31 @@ router.get('/:id/plan.pdf', (req, res) => {
   } catch (err) { console.error('[Surveys] plan error:', err); if (!res.headersSent) res.status(500).json({ error: 'Could not draw the plan.' }); else res.end(); }
 });
 
+// ── One-off: rooms scanned before openings were placed on their walls ───────
+// Early imports stored every door and window without a wall letter. The scan
+// is still on the row, so re-derive the measured openings from it (keeping any
+// the builder or the AI added) and refresh the LiDAR note.
+function backfillScannedOpenings() {
+  let rows = [];
+  try { rows = db.prepare("SELECT * FROM survey_rooms WHERE capture IS NOT NULL AND capture != '' AND openings LIKE '%\"source\":\"measured\"%' AND openings LIKE '%\"wall\":null%'").all(); } catch (e) { return 0; }
+  let n = 0;
+  for (const r of rows) {
+    try {
+      const current = G.parseJson(r.openings, []) || [];
+      // The SQL above is only a coarse filter: it is the measured ones that must lack a wall.
+      if (!current.some((o) => o.source === 'measured' && !o.wall)) continue;
+      const fresh = importRoomPlan(G.parseJson(r.capture, null), r);
+      if (!fresh.openings.some((o) => o.wall)) continue;
+      const kept = current.filter((o) => o.source && o.source !== 'measured');
+      const assumptions = (G.parseJson(r.assumptions, []) || []).filter((a) => !/^Measured by LiDAR scan/.test(String(a)));
+      saveRoom(r, { openings: [...kept, ...fresh.openings], assumptions: [...fresh.assumptions, ...assumptions] });
+      n++;
+    } catch (e) { /* leave that room as it is */ }
+  }
+  if (n) console.log('[Surveys] placed the doors and windows of ' + n + ' scanned room' + (n === 1 ? '' : 's') + ' on their walls');
+  return n;
+}
+try { backfillScannedOpenings(); } catch (e) { /* never block startup */ }
+
 module.exports = router;
-module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir };
+module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir, backfillScannedOpenings };

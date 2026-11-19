@@ -56,9 +56,10 @@ early access (Users → the client → MAX). Admin → MAX switches it on for ev
 server is the authority: `/api/max/*` answers `403 MAX_NOT_ENABLED` for anyone else. A client
 MAX is on for can also use the estimator routes (`requireEstimator`), since MAX's estimates are
 quotes. A per-client daily allowance (default 300 turns) is enforced and shown on
-`GET /api/max/status`. Voice: speech-to-text needs `OPENAI_API_KEY` or `DEEPGRAM_API_KEY`
-(else the browser's own recogniser), spoken replies need `ELEVENLABS_API_KEY` (else the
-browser's voice). Tests: `server/max.test.js`.
+`GET /api/max/status`. Voice in, text out: talking to MAX (and dictating survey notes) needs
+`OPENAI_API_KEY` or `DEEPGRAM_API_KEY` for speech-to-text — inside the iOS app that is the only
+way, as WKWebView has no recogniser of its own; a desktop browser falls back to its own. MAX
+replies in writing only. Tests: `server/max.test.js`.
 
 ## Room surveys — "Scan a room"
 

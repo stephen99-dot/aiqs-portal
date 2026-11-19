@@ -7,7 +7,6 @@
 //   GET  /api/max/suggestions       ?path=                                  → JSON
 //   GET  /api/max/search?q=         find anything the builder has stored
 //   GET  /api/max/activity          what MAX did and what the builder approved
-//   POST /api/max/tts               MAX speaks — streams mp3, 204 = use the browser voice
 //
 //   GET  /api/max/settings          admin: rollout mode, thresholds, allowance, usage
 //   PUT  /api/max/settings          admin: change them live — no redeploy
@@ -117,16 +116,15 @@ function openStream(res) {
 router.get('/status', (req, res) => {
   const enabled = rollout.isEnabledFor(req.user);
   const lim = settings.limits();
-  let stt = false; let tts = false;
+  let stt = false;
   try { stt = require('./stt').isConfigured(); } catch (e) { stt = false; }
-  try { tts = require('./tts').isConfigured(); } catch (e) { tts = false; }
   const cap = settings.dailyTurns();
   const used = enabled && req.user.role !== 'admin' ? usedToday(req.user.id) : 0;
   res.json({
     enabled,
     reason: enabled ? null : "MAX isn't switched on for your account yet.",
     limits: { notice_gbp: lim.notice_gbp, limit_gbp: lim.limit_gbp },
-    voice: { stt: enabled && stt, tts: enabled && tts },
+    voice: { stt: enabled && stt },
     allowance: { daily_turns: cap, used_today: used, remaining_today: req.user.role === 'admin' ? null : Math.max(0, cap - used) },
     ai_configured: !!process.env.ANTHROPIC_API_KEY,
   });
@@ -144,7 +142,9 @@ function adminSnapshot() {
     usage.over_limit_30d = db.prepare("SELECT COUNT(*) AS c FROM activity_log WHERE event_type = 'max_over_limit' AND created_at >= datetime('now', '-30 days')").get().c;
     usage.early_access = db.prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"max\":true%'").get().c;
   } catch (e) { /* counters only */ }
-  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage };
+  let stt = null;
+  try { stt = require('./stt').provider(); } catch (e) { stt = null; }
+  return { rollout: rollout.mode(), rollout_source: rollout.storedMode() ? 'setting' : 'env', env_default: rollout.envMode(), ...snap, usage, voice: { stt: !!stt, provider: stt, ai_configured: !!process.env.ANTHROPIC_API_KEY } };
 }
 
 router.get('/settings', requireAdmin, (req, res) => {
@@ -294,25 +294,6 @@ router.get('/activity', (req, res) => {
   } catch (err) {
     console.error('[max] activity failed:', err);
     res.status(500).json({ error: 'Could not load MAX activity.' });
-  }
-});
-
-// POST /api/max/tts { text } → audio/mpeg, or 204 when ElevenLabs is not set up
-// (the panel then uses the browser's own voice).
-router.post('/tts', async (req, res) => {
-  const tts = require('./tts');
-  if (!tts.isConfigured()) return res.status(204).end();
-  const text = String((req.body && req.body.text) || '').slice(0, 1200).trim();
-  if (!text) return res.status(400).json({ error: 'Nothing to say' });
-  try {
-    const buf = await tts.synthesize(text, { speed: 1.0 });
-    if (!buf) return res.status(204).end();
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Cache-Control', 'no-store');
-    res.end(buf);
-  } catch (err) {
-    console.error('[max] tts failed:', err.message);
-    res.status(204).end(); // the browser voice carries on
   }
 });
 

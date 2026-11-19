@@ -1211,6 +1211,16 @@ function MaxTab({ t }) {
         <p style={{ ...sub, margin: '12px 0 0' }}>Every MAX action, approval and refusal is in the Activity Log (event types starting <code>max_</code>). Model usage is in Costs under the actions <code>max</code> and <code>max_takeoff</code>.</p>
       </div>
 
+      <div style={card}>
+        <h3 style={h3}>Talking to MAX</h3>
+        {data.voice && data.voice.stt ? (
+          <p style={sub}>Dictation is <strong style={{ color: t.text }}>on</strong> via {data.voice.provider === 'deepgram' ? 'Deepgram' : 'OpenAI'}. Builders can talk to MAX and dictate survey notes in the app and on the web. MAX always replies in writing.</p>
+        ) : (
+          <p style={sub}>Dictation is <strong style={{ color: '#EF4444' }}>off</strong>: the microphone in the app has nothing to turn speech into text. Add <code>OPENAI_API_KEY</code> (or <code>DEEPGRAM_API_KEY</code>) to the server's environment on Render and redeploy — nothing else to change. Until then the mic explains this when tapped, and typing works as normal. MAX always replies in writing.</p>
+        )}
+        {data.voice && !data.voice.ai_configured && <p style={{ ...sub, margin: 0, color: '#EF4444' }}>The Anthropic key is not set on this server, so MAX cannot answer at all.</p>}
+      </div>
+
       {activity.length > 0 && (
         <div style={card}>
           <h3 style={h3}>Jobs MAX refused as over the limit</h3>

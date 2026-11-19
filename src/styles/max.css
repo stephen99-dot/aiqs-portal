@@ -27,7 +27,6 @@
 .max__status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .max__status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
 .max__status--listening .max__status-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); animation: max-pulse 1.1s ease-in-out infinite; }
-.max__status--speaking .max__status-dot { background: var(--info); animation: max-pulse 0.9s ease-in-out infinite; }
 .max__status--working .max__status-dot { background: var(--warning); animation: max-pulse 1.1s ease-in-out infinite; }
 @keyframes max-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.5); } }
 .max__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; }
@@ -154,7 +153,6 @@
 .max__mic { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--border-light); background: var(--bg-primary); color: var(--text-primary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; position: relative; transition: background 0.15s ease, transform 0.1s ease; }
 .max__mic--on { background: var(--gradient-amber); color: #0A0F1C; border-color: transparent; box-shadow: 0 0 0 var(--max-level, 4px) var(--accent-glow); }
 .max__mic--busy { opacity: 0.6; }
-.max__mic--speaking { border-color: var(--border-accent); color: var(--accent); }
 .max__listen { align-self: stretch; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--accent-glow); border: 1px solid var(--border-accent); color: var(--text-primary); font-size: 13.5px; }
 .max__listen-wave { display: inline-flex; align-items: center; gap: 3px; height: 26px; }
 .max__listen-wave i { width: 3px; border-radius: 2px; background: var(--accent); height: calc(6px + var(--max-level, 0) * 20px); transition: height 0.08s ease; }

@@ -308,6 +308,21 @@ test('a RoomPlan capture imports as measured walls, openings and area', async ()
   assert.equal(plan.headers['content-type'], 'application/pdf');
   const bad = await req('POST', '/surveys/rooms/' + r0.body.room.id + '/roomplan', tokenA, { json: { walls: [] } });
   assert.equal(bad.status, 400);
+
+  // A room scanned before openings were placed on walls (measured openings
+  // without a letter) gets them placed at startup, keeping anything the
+  // builder added by hand and refreshing the LiDAR note.
+  const stripped = room.openings.map((o) => ({ ...o, wall: null }));
+  await req('PATCH', '/surveys/rooms/' + room.id, tokenA, { openings: [...stripped, { kind: 'window', width_m: 0.6, height_m: 0.6, source: 'user' }], assumptions: ['Measured by LiDAR scan (4 walls). Openings are listed without a wall letter — assign them on the plan if you want them drawn in place.', 'Customer wants the door moved.'] });
+  let check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
+  assert.ok(check.body.room.openings.filter((o) => o.source === 'measured').every((o) => !o.wall), 'walls stripped for the test');
+  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 1, 'one room backfilled');
+  check = await req('GET', '/surveys/rooms/' + room.id, tokenA);
+  const measured = check.body.room.openings.filter((o) => o.source === 'measured');
+  assert.equal(measured.length, 2); assert.ok(measured.every((o) => o.wall), 'measured openings back on their walls');
+  assert.ok(check.body.room.openings.some((o) => o.source === 'user' && o.width_m === 0.6), 'the builder\'s own window kept');
+  assert.ok(check.body.room.assumptions.some((a) => /placed on the walls/.test(a)) && check.body.room.assumptions.includes('Customer wants the door moved.'), JSON.stringify(check.body.room.assumptions));
+  assert.equal(require('./roomSurveyRoutes')._internals.backfillScannedOpenings(), 0, 'nothing left to backfill');
 });
 
 test('notes, the report PDF and the Excel schedule', async () => {
