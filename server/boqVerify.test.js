@@ -422,3 +422,32 @@ test('sub-totals and a second table under an "ELEMENTAL SUMMARY" are not lines (
   assert.strictEqual(v.status, 'verified', v.message);
   assert.strictEqual(v.detail.parsed_total, 10000);
 });
+
+test('a bill whose provisional sums sit below the summary under "(excluded from the total above)" verifies, block included (38 Spring Lane)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const v = await check([
+    ['Item', 'Description', 'Qty', 'Unit', 'Labour £', 'Materials £', 'Rate £', 'Total £'],
+    ['A', 'PRELIMINARIES'],
+    ['A1', 'Site management and supervision', 24, 'day', 195, 0, 195, 4680],
+    ['A2', 'Temporary toilet, hire and servicing', 12, 'week', 0, 40, 40, 480],
+    ['', 'Total carried to summary', '', '', '', '', '', 5160],
+    ['B', 'DEMOLITION AND STRIP-OUT'],
+    ['B1', 'Take down the conservatory and cart away', 1, 'item', 780, 60, 840, 840],
+    ['', 'Total carried to summary', '', '', '', '', '', 840],
+    ['', 'SUMMARY'],
+    ['A', 'PRELIMINARIES', '', '', '', '', '', 5160],
+    ['B', 'DEMOLITION AND STRIP-OUT', '', '', '', '', '', 840],
+    ['', 'NET TOTAL (excluding VAT)', '', '', '', '', '', 6000],
+    ['', 'VAT', '', '', '', '', 0.2, 1200],
+    ['', 'TOTAL (including VAT)', '', '', '', '', '', 7200],
+    ['L', 'PROVISIONAL SUMS (at cost, excluded from the total above)'],
+    ['L1', 'Foul drainage below ground, pending a drainage design', 1, 'item', 0, 3000, 3000, 3000],
+    ['L2', 'CCTV survey of existing drains', 1, 'item', 0, 300, 300, 300],
+    ['', 'Provisional sums total (excluding VAT), not included in the total above', '', '', '', '', '', 3300],
+  ]);
+  assert.strictEqual(v.status, 'verified', v.message);
+  assert.strictEqual(v.detail.sections, 3, 'the provisional block is a section of its own');
+  assert.strictEqual(v.detail.items, 5);
+  assert.strictEqual(v.detail.parsed_total, 9300, 'lines = net 6000 + provisional 3300');
+  assert.strictEqual(v.detail.printed_total, 6000, 'checked against the bill\'s own net total');
+  assert.ok(!v.detail.printed_all.some((p) => /provisional/i.test(p.label)), 'the block\'s closing total is not a document total');
+});

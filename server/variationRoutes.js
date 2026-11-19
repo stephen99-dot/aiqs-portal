@@ -7,7 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack, generateClientCopyProSafe, isTotalRowItem, reconcileParsed } = require('./builderExports');
+const { parseBOQ, generateBuilderPack, generateClientCopyProSafe, isTotalRowItem, reconcileParsed, addMissingProvisionalSections } = require('./builderExports');
 const { resolveProjectBoq, ensureBoqVerified, boqGate, auditAll, readStored: readBoqVerification } = require('./boqVerify');
 const { adminMiddleware } = require('./auth');
 const { writeXlsxBuffer } = require('./docTemplates');
@@ -934,7 +934,10 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       // freshly-parsed BOQ so the user picks up exactly where they left off.
       // Dropped automatically when the project's BOQ has been reissued since
       // the state was saved — the fresh document must win over stale edits.
-      saved_state: savedStateForProject(project),
+      // A state saved while the parser still dropped the bill's provisional
+      // sums block gets that block back from the fresh parse; the user's own
+      // edits stay (addMissingProvisionalSections).
+      saved_state: addMissingProvisionalSections(savedStateForProject(project), parsed.sections),
     });
   } catch (err) {
     console.error('[BuilderPack] breakdown error:', err);

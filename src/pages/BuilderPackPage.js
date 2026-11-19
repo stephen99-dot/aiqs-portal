@@ -254,7 +254,10 @@ export default function BuilderPackPage() {
           if (Array.isArray(saved.sections) && saved.sections.length) {
             setSections(saved.sections.map((s) => ({
               ...s,
-              items: (s.items || []).map((it) => ({ ...it, _id: it._id || uid() })),
+              // Saved lines keep their per-unit rates; a section the server
+              // added back from the fresh parse (a provisional block the
+              // state pre-dates) arrives without them, so derive them.
+              items: (s.items || []).map((it) => ({ ...it, _id: it._id || uid(), ...unitRates(it) })),
             })));
           }
           if (saved.builder_margin != null) setBuilderMargin(saved.builder_margin);
