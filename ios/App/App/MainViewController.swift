@@ -14,6 +14,7 @@ import Capacitor
 // Main.storyboard points at it too for the same reason.
 class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
-        bridge?.registerPluginInstance(RoomScanPlugin())
+        bridge?.registerPluginInstance(RoomScanPlugin())   // LiDAR room scanning
+        bridge?.registerPluginInstance(SpeechPlugin())     // dictation (talk to MAX, site notes)
     }
 }
