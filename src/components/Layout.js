@@ -12,6 +12,7 @@ import {
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
 import MaxPanel from './max/MaxPanel';
+import MaxLaunch from './max/MaxLaunch';
 import { openMax } from '../utils/max';
 import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
@@ -436,6 +437,10 @@ export default function Layout() {
 
       {/* Trustpilot review ask — every non-admin user, once. */}
       {!isAdmin && <TrustpilotPopup />}
+
+      {/* MAX has arrived — what it does and the plans, once per account
+          (admins see it with ?launch=1 on any page). */}
+      <MaxLaunch />
 
       {/* Country: asked once of anyone who hasn't set it (onboarding sets it
           itself, so it isn't asked twice there). */}
