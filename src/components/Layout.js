@@ -112,9 +112,7 @@ export default function Layout() {
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
     { path: '/estimates', label: 'Estimates', Icon: PoundIcon, maxOnly: true },
     { path: '/surveys', label: 'Scan a room', Icon: CameraIcon, badge: 'New' },
-    // No standalone Variations entry: OiB users raise them from the job page,
-    // everyone else from the project page (/project/:id/variations).
-    { path: '/chat', label: 'AI Chat', Icon: ChatIcon, badge: 'Beta' },
+    { path: '/chat', label: 'AI Chat', Icon: ChatIcon },
     // The MAX packages, for accounts without one. Website only: the iOS app
     // sells nothing (App Store rule 3.1.1), so there it has no entry.
     { path: '/upgrade', label: 'Upgrade to MAX', Icon: SparklesIcon, upsell: true, clientOnly: true },
@@ -167,7 +165,7 @@ export default function Layout() {
             { path: '/chat', label: 'Chat', Icon: ChatIcon },
           ]);
   const bottomNavRoutes = [
-    '/dashboard', '/submit-drawings', '/variations', '/estimates', '/surveys',
+    '/dashboard', '/submit-drawings', '/estimates', '/surveys',
     '/my-rates', '/ai-memory', '/branding',
     '/admin', '/admin/users', '/admin/submissions',
   ];

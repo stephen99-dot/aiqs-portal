@@ -401,6 +401,10 @@ picker so the saved quote appears on its job's page.
 
 ## Variations & Change Orders (Wave 4)
 
+> **Retired from the portal UI** (November 2026): the Variations button on the project page, the
+> `/variations` hub and `/project/:id/variations` are gone (old links redirect). The customer
+> approval page `/v/:token` and the API below still work for variations already sent.
+
 Priced change orders against a job, with a defensible client e-approval audit
 trail. Two new tables, `estimator_variations` and `estimator_variation_lines`,
 created by the idempotent schema block in `server/database.js`. Named with the

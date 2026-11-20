@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { apiFetch, resolveUrl } from '../utils/api';
 import { saveBlob } from '../native/saveFile';
 import DeliverablesPanel from '../components/DeliverablesPanel';
-import { ClipboardIcon, EditIcon } from '../components/Icons';
+import { EditIcon } from '../components/Icons';
 import PROJECT_TYPE_SUGGESTIONS from '../utils/projectTypes';
 import {
   Button, IconButton, Card, Badge, StatusBadge, PageHeader, EmptyState, Skeleton, useToast, Input,
@@ -227,14 +227,7 @@ export default function ProjectDetailPage() {
             new Date(project.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
           ].filter(Boolean).join(' · ')
         }
-        actions={
-          <>
-            <Button variant="secondary" size="sm" to={`/project/${id}/variations`}>
-              <ClipboardIcon size={15} style={{ verticalAlign: 'middle' }} /> Variations
-            </Button>
-            <StatusBadge status={project.status} />
-          </>
-        }
+        actions={<StatusBadge status={project.status} />}
       />
 
       {/* Progress tracker */}

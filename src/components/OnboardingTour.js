@@ -22,7 +22,7 @@ const TOUR_STEPS = [
   {
     target: '[data-tour="projects-list"]',
     title: 'Everything comes back to My Projects',
-    description: 'Track your submission while it is with our QS team, and when it is ready your BOQ, Findings Report and any marked-up drawings appear here. Open a project to download everything or raise a Variation when the scope changes.',
+    description: 'Track your submission while it is with our QS team, and when it is ready your BOQ, Findings Report and any marked-up drawings appear here. Open a project to download everything.',
     position: 'top',
     icon: '☰',
   },
