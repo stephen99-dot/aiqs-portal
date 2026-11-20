@@ -21,7 +21,6 @@ const brandingRoutes = require('./brandingRoutes');
 const findingsRoutes = require('./findingsRoutes');
 const enhanceBrief = require('./enhance-brief');
 const memoryRoutes = require('./memoryRoutes');
-const superBrainRoutes = require('./superBrainRoutes');
 const surveyRoutes = require('./surveyRoutes');
 const agentRoutes = require('./agentRoutes');
 const estimatorRoutes = require('./estimatorRoutes');
@@ -84,9 +83,8 @@ app.use('/api', deliverableRoutes);
 app.use('/api', brandingRoutes);
 app.use('/api', findingsRoutes);
 app.use('/api', memoryRoutes);
-app.use('/api', superBrainRoutes);
-// Account link for AI Trades Pilot (see partnerRoutes.js). Same shared key as
-// the Super Brain exchange; off until SUPER_BRAIN_KEY is set.
+// Account link for AI Trades Pilot (see partnerRoutes.js). Off until the
+// shared key (SUPER_BRAIN_KEY) is set.
 {
   const partner = require('./partnerRoutes');
   if (partner.router) app.use('/api', partner.router);
@@ -140,9 +138,6 @@ app.use('/api/materials', materialsRoutes);
 // Box users — the router gates itself with authMiddleware + requireEstimator.
 // See BUILD_SCHEDULE_SPEC.md.
 app.use('/api/schedule', require('./scheduleRoutes'));
-// 3D Builder (Phase 1) — parametric building -> priced take-off. Admin-only
-// for now (the router gates itself with authMiddleware + adminMiddleware).
-app.use('/api/builder3d', require('./builder3dRoutes'));
 // Planning Leads (preview) — scan councils for recently-granted domestic
 // applications and draft a headed intro letter. Locked to a single account
 // (the router gates itself with authMiddleware + an email allowlist).

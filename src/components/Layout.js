@@ -5,8 +5,8 @@ import { useTheme } from '../context/ThemeContext';
 import {
   NewProjectIcon, ClientsIcon, ChatIcon,
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
-  UploadIcon, SettingsIcon, CubeIcon,
-  InboxIcon, FolderIcon, BrainIcon, MapPinIcon, BellIcon,
+  UploadIcon, SettingsIcon,
+  InboxIcon, FolderIcon, MapPinIcon, BellIcon,
   MicIcon, PoundIcon, CameraIcon, SparklesIcon,
 } from './Icons';
 import { Badge } from '../ui';
@@ -117,10 +117,8 @@ export default function Layout() {
     // sells nothing (App Store rule 3.1.1), so there it has no entry.
     { path: '/upgrade', label: 'Upgrade to MAX', Icon: SparklesIcon, upsell: true, clientOnly: true },
     { group: 'settings', label: 'Settings', Icon: SettingsIcon, children: settingsChildren, tour: 'settings' },
-    { path: '/builder3d', label: '3D Builder', Icon: CubeIcon, adminOnly: true, badge: 'Preview' },
     { path: '/admin/submissions', label: 'Submissions Inbox', Icon: ClientsIcon, adminOnly: true, badge: 'New' },
     { path: '/admin/users', label: 'Users', Icon: ClientsIcon, adminOnly: true },
-    { path: '/super-brain', label: 'Super Brain', Icon: BrainIcon, adminOnly: true, badge: 'New' },
     { path: '/admin', label: 'Admin Dashboard', Icon: SettingsIcon, adminOnly: true },
   ];
 

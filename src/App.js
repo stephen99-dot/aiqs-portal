@@ -19,7 +19,6 @@ import UpgradePage from './pages/UpgradePage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
 import AIMemoryPage from './pages/AIMemoryPage';
-import SuperBrainPage from './pages/SuperBrainPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import TeamInvitePage from './pages/TeamInvitePage';
@@ -30,7 +29,6 @@ import FindingsEditorPage from './pages/FindingsEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
 import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
 import InvoicePublicPage from './pages/InvoicePublicPage';
-import Builder3DPage from './pages/Builder3DPage';
 import BrandingPage from './pages/BrandingPage';
 import OAuthSuccessPage from './pages/OAuthSuccessPage';
 import EstimatesPage from './pages/EstimatesPage';
@@ -114,7 +112,6 @@ function AppInner() {
           <Route path="/surveys/:id/rooms/:roomId" element={<SurveyRoomPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />
           <Route path="/ai-memory" element={<AIMemoryPage />} />
-          <Route path="/super-brain" element={<SuperBrainPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
@@ -126,8 +123,6 @@ function AppInner() {
           <Route path="/project/:id/variations" element={<ProjectVariationsRedirect />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
-          {/* 3D Builder — admin-only preview (page self-guards on role). */}
-          <Route path="/builder3d" element={<Builder3DPage />} />
           {/* Office in a Box is retired. Old bookmarks land on the dashboard
               rather than anywhere that sells a second product — signing up
               here and then again somewhere else is what confused people. */}
