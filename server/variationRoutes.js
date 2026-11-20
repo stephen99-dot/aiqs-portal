@@ -854,9 +854,11 @@ function rebuildFromEdits(editedSections) {
         title: String(s.title || 'Section ' + (idx + 1)),
         items,
         subtotal,
-        // Preserve the provisional-sums marker through an edit/re-export so the
-        // block stays exclusive of OH&P and isn't double-counted.
+        // Preserve the provisional-sums and optional-extras markers through an
+        // edit/re-export so both blocks stay exclusive of OH&P, out of the
+        // total, and aren't double-counted.
         provisional: !!s.provisional,
+        optional: !!s.optional && !s.provisional,
       };
     })
     .filter((s) => s.items.length > 0);
@@ -906,7 +908,8 @@ router.get('/projects/:projectId/builder-breakdown', authMiddleware, async (req,
       sections: parsed.sections.map((s) => ({
         number: s.number,
         title: s.title,
-        provisional: !!s.provisional, // carried verbatim, exclusive of OH&P
+        provisional: !!s.provisional, // carried verbatim, exclusive of OH&P, below the total
+        optional: !!s.optional,       // optional extras — likewise, the client's choice
         item_count: s.items.length,
         subtotal: s.subtotal,
         items: s.items, // full editable line items (each now carries .trade)
@@ -1167,11 +1170,14 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
 // acceptance link (branded page, PDF, ask-a-question, accept with typed
 // signature). The maths mirrors generateClientCopyPro line for line —
 // overhead × profit compounded into the rates (per-trade override wins),
-// provisional sums carried at face value, prelims / day-rate as their own
-// lines, contingency and VAT at quote level — so the quote's bottom line is
-// the preview's bottom line. Re-sharing after edits refreshes the SAME quote
-// (projects.client_quote_id) so the client's link stays live; an accepted
-// quote is never mutated — a fresh quote is issued instead.
+// prelims / day-rate as their own lines, contingency and VAT at quote level —
+// so the quote's bottom line is the preview's bottom line. Provisional sums
+// and optional extras are listed at face value under sections that say they
+// are not in the total, and are left out of the net and the grand total the
+// client accepts, exactly as the client copy shows them. Re-sharing after
+// edits refreshes the SAME quote (projects.client_quote_id) so the client's
+// link stays live; an accepted quote is never mutated — a fresh quote is
+// issued instead.
 router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res) => {
   try {
     const project = loadProjectForUser(req);
@@ -1210,19 +1216,22 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     // line — same philosophy as the Client Copy); labour/materials stay at raw
     // cost so the Finance budget seeded on acceptance reflects cost, not price.
     const lines = [];
+    const separateLines = []; // provisional sums and optional extras — listed, not totalled
     let originalNet = 0; // pre-uplift construction net — contingency/prelims-% basis
     const hasProvSection = parsed.sections.some((s) => s.provisional);
+    const isSeparate = (s) => !!(s.provisional || s.optional);
+    const separateLabel = (s) => (s.provisional ? ' (provisional sums — not included in the total)' : ' (optional extras — not included in the total)');
     for (const s of parsed.sections) {
       const sectionLabel = (s.number ? s.number + ' — ' : '') + (s.title || 'Section');
-      const factor = s.provisional ? 1 : factorFor(s.number);
+      const factor = isSeparate(s) ? 1 : factorFor(s.number);
       for (const it of s.items) {
         if (!(it.description || '').trim()) continue;
         const base = ((num(it.labour)) + (num(it.materials))) || num(it.total);
-        if (!s.provisional) originalNet += base;
-        const lineTotal = s.provisional ? num(it.total) : roundMoney(base * factor);
+        if (!isSeparate(s)) originalNet += base;
+        const lineTotal = isSeparate(s) ? num(it.total) : roundMoney(base * factor);
         const qty = num(it.qty) > 0 ? num(it.qty) : 1;
-        lines.push({
-          section: sectionLabel + (s.provisional ? ' (provisional, excl. OH&P)' : ''),
+        (isSeparate(s) ? separateLines : lines).push({
+          section: sectionLabel + (isSeparate(s) ? separateLabel(s) : ''),
           item: it.itemRef || '', description: it.description, unit: it.unit || 'item',
           qty, rate: round2(lineTotal / qty), labour: num(it.labour), materials: num(it.materials),
           line_total: round2(lineTotal),
@@ -1245,13 +1254,17 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     // provisional section (mirrors the preview: never both).
     const provisionalSum = num(b.provisional_sum);
     if (!hasProvSection && provisionalSum > 0) {
-      lines.push({ section: 'Provisional sums (excl. OH&P)', item: '', description: 'Provisional sums (carried from tender)', unit: 'item', qty: 1, rate: round2(provisionalSum), labour: 0, materials: 0, line_total: round2(provisionalSum) });
+      separateLines.push({ section: 'Provisional sums (provisional sums — not included in the total)', item: '', description: 'Provisional sums (carried from tender)', unit: 'item', qty: 1, rate: round2(provisionalSum), labour: 0, materials: 0, line_total: round2(provisionalSum) });
     }
 
+    // The total the client accepts is the construction cost alone; the
+    // provisional sums and optional extras follow the priced lines so the
+    // client sees them, under sections that say they are not in the total.
     const net = lines.reduce((a, l) => a + l.line_total, 0);
     const cont = originalNet * (contingencyPct / 100);
     const vatAmount = (net + cont) * (vatPct / 100);
     const grand = net + cont + vatAmount;
+    lines.push(...separateLines);
 
     const clientName = String(b.client_name || '').trim().slice(0, 200) || null;
     const clientEmail = String(b.client_email || '').trim().slice(0, 200) || null;

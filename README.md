@@ -259,18 +259,28 @@ each section's trade, and the Builder tab and the Builder Pack xlsx's Trade Summ
 ("10% on the electrician and plumber"), `section_uplift` and `remember_trade_markup`, which the
 page saves to the pricing preferences on Apply.
 
-**Provisional sums in a delivered bill.** `parseBOQ` reads a provisional-sums block wherever the
-bill prints it — including after the summary, under a heading such as *L PROVISIONAL SUMS (at
-cost, excluded from the total above)* — as its own section (`provisional: true`). The client copy lists it
-line by line with a PS badge and carries it at face value, exclusive of OH&P, on its own
-*Provisional sums* summary line. The Builder Pack keeps it apart the same way: a *Net
-construction* line, then the block at cost (no builder margin or materials markup) on the Trade
-Summary and the by-trade table, every line on its own *Provisional Sums* tab, and nothing from it
-on the materials or labour schedules. Only the block's own closing total
-(*Total provisional sums*, *Provisional sums total …*) ends it, and that row is never a document
-total; a block that cannot be itemised falls back to the flat `provisional_sum` lump. A Builder
-Pack working state saved before the block was read gets it back on the next open
-(`addMissingProvisionalSections`), the user's own edits untouched.
+**Provisional sums and optional extras: below the total, never in it.** `parseBOQ` reads a
+provisional-sums block wherever the bill prints it — including after the summary, under a heading
+such as *L PROVISIONAL SUMS (at cost, excluded from the total above)* — as its own section
+(`provisional: true`). Every bill on the Builder Pack page also carries an *Optional extras*
+section (`optional: true`, number `OE`): empty until the builder adds the work the client can
+choose to take, and printed only when it has lines. Both kinds are carried at face value — no
+OH&P, contingency, prelims % or builder margin — and sit **below** the total as their own
+elements, so the figure the client reads as the total is the construction cost alone. The client
+copy (xlsx, on-screen preview and the shared quote's totals) reads *Net construction cost → Total
+(excl. VAT) → VAT → Total (incl. VAT)*, then a *Not included in the total above* block: *Provisional
+sums*, its own VAT line and incl.-VAT figure, then *Optional extras* the same way; the masthead
+says what is not in the headline. The Builder Pack's Trade Summary prints the priced sections and
+*GRAND TOTAL — net construction*, then each block at cost closed by its own total (*TOTAL
+PROVISIONAL SUMS*, *TOTAL OPTIONAL EXTRAS*); the by-trade table carries them as memo rows after
+*ALL TRADES* (which equals the grand total); every line is on its own *Provisional Sums* / *Optional
+Extras* tab, and nothing from either reaches the materials or labour schedules. Only the block's
+own closing total (*Total provisional sums*, *Provisional sums total …*) ends a parsed PS block,
+and that row is never a document total; a block that cannot be itemised falls back to the flat
+`provisional_sum` lump, shown the same way. The "Update this bill" assistant adds to the optional
+section by its `section_number`, can create one with `new_sections[].optional`, and refuses to
+uplift either kind. A Builder Pack working state saved before the block was read gets it back on
+the next open (`addMissingProvisionalSections`), the user's own edits untouched.
 
 **Same layout every time.** Section titles from the model ("1. Substructure & Foundations",
 "SUBSTRUCTURE", "Substructure") normalise to one canonical name (`canonicalSectionName`,
