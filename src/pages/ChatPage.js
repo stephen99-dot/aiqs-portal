@@ -1409,7 +1409,7 @@ export default function ChatPage() {
             {messages.length === 0 && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', margin:'auto 0', textAlign:'center', padding:'0 16px' }}>
                 <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:18 }}><RulerIcon size={30} /></div>
-                <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>AI Chat — beta</h3>
+                <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>AI Chat</h3>
                 <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 14px', maxWidth:460, lineHeight:1.65 }}>
                   {CHAT_PRICING
                     ? 'Ask questions, sense-check costs, or explore your drawings — the chat is still in its testing phase, so treat its numbers as a guide.'

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, BrowserRouter } from 'react-router-dom';
+import { Navigate, Route, Routes, BrowserRouter, useParams } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ToastProvider } from './ui';
@@ -23,11 +23,9 @@ import SuperBrainPage from './pages/SuperBrainPage';
 import OnboardingPage from './pages/OnboardingPage';
 import MagicLinkPage from './pages/MagicLinkPage';
 import TeamInvitePage from './pages/TeamInvitePage';
-import VariationsPage from './pages/VariationsPage';
 import SubmitDrawingsPage from './pages/SubmitDrawingsPage';
 import SubmissionsInboxPage from './pages/SubmissionsInboxPage';
 import BuilderPackPage from './pages/BuilderPackPage';
-import VariationsHubPage from './pages/VariationsHubPage';
 import FindingsEditorPage from './pages/FindingsEditorPage';
 import VariationApprovalPage from './pages/VariationApprovalPage';
 import QuoteAcceptancePage from './pages/QuoteAcceptancePage';
@@ -61,6 +59,11 @@ function GuestRoute({ children }) {
 
 // Everyone lands on the BOQ-pipeline dashboard. Used for the catch-all and
 // post-login redirect.
+function ProjectVariationsRedirect() {
+  const { id } = useParams();
+  return <Navigate to={'/project/' + id} replace />;
+}
+
 function HomeRedirect() {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
@@ -116,10 +119,11 @@ function AppInner() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/admin/users" element={<UserManagementPage theme={t} />} />
           <Route path="/admin/submissions" element={<SubmissionsInboxPage />} />
-          {/* Variations live on the project: raised from the project page,
-              scanned across projects from the hub. */}
-          <Route path="/variations" element={<VariationsHubPage />} />
-          <Route path="/project/:id/variations" element={<VariationsPage />} />
+          {/* Variations are retired. Old bookmarks land on the dashboard or the
+              project; the customer's approval page (/v/:token) still works for
+              links already sent. */}
+          <Route path="/variations" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/project/:id/variations" element={<ProjectVariationsRedirect />} />
           <Route path="/project/:id/builder-pack" element={<BuilderPackPage />} />
           <Route path="/project/:id/findings" element={<FindingsEditorPage />} />
           {/* 3D Builder — admin-only preview (page self-guards on role). */}
