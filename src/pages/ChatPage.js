@@ -15,6 +15,8 @@ import ProjectIntakeModal from '../components/ProjectIntakeModal';
 import BoqTable from '../components/BoqTable';
 import AgentPanel from '../components/AgentPanel';
 import DeliverySummary from '../components/DeliverySummary';
+import MaxUpsell from '../components/max/MaxUpsell';
+import { openMax } from '../utils/max';
 import {
   RulerIcon, BrainIcon, SettingsIcon, AlertTriangleIcon, EditIcon,
   UserIcon, CheckIcon, StarIcon, CrownIcon, ChatIcon, SearchIcon,
@@ -23,6 +25,14 @@ import {
 } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
 import { gbp } from '../utils/planPrice';
+
+// AI Chat no longer prices work: pricing is MAX's job (the AI QS MAX package)
+// and the QS team's (Submit Drawings). The server refuses a price, cost,
+// estimate or BOQ ask with a MAX reply (server/chatPricing.js); this mirrors
+// it so drawings are not uploaded to be measured and the page sells MAX
+// instead. CHAT_PRICING=1 on the server restores the old behaviour, and this
+// flag goes with it.
+const CHAT_PRICING = false;
 
 // ── Thinking stage icons ───────────────────────────────────────────────
 const ICONS = {
@@ -650,6 +660,17 @@ export default function ChatPage() {
     // no active takeoff/agent run yet, route to the BOQ agent. This is the
     // one-button UX: upload + send = full tender-grade BOQ pipeline.
     // Typed-only messages (no files) go through the fast chat path below.
+    if (!CHAT_PRICING && files.length > 0) {
+      const hasMax = !!(user && user.maxEnabled);
+      const userMsg = { role: 'user', content: textToSend || ('Uploaded ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '.'), files: files.map(f => ({ name: f.name, size: f.size })), timestamp: new Date().toISOString() };
+      const reply = "I don't measure or price drawings in this chat any more. For a priced bill of quantities from drawings, use **Submit Drawings** — the AI QS team measures and prices it and it comes back to your portal, usually within 24 hours. "
+        + (hasMax ? 'For a small job, **Ask MAX** and it prices from your rates in minutes.' : 'For small jobs there is **MAX**, the AI estimator in the AI QS MAX package, which prices from your own rates in minutes.')
+        + '\n\nDescribe what is on the drawings in words and I can still help with the specification, the method or the regulations.';
+      setMessages([...baseMessages, userMsg, { role: 'assistant', content: reply, maxUpsell: true, maxEnabled: hasMax, timestamp: new Date().toISOString() }]);
+      if (overrideText == null) setInput('');
+      setFiles([]);
+      return;
+    }
     if (files.length > 0 && !currentTakeoffId && !agentRunId && overrideText == null) {
       await startAgent();
       return;
@@ -741,6 +762,8 @@ export default function ChatPage() {
           capturedMemories: data.captured_memories || null,
           sources: data.sources || null,
           delivery: data.delivery || null,
+          maxUpsell: !!data.max_upsell,
+          maxEnabled: !!data.max_enabled,
           timestamp: new Date().toISOString(),
         };
         setMessages(p => [...p, aiMsg]);
@@ -1075,6 +1098,21 @@ export default function ChatPage() {
               <span style={{ display: 'inline-block', width: 7, height: 14, background: c.amber, marginLeft: 2, verticalAlign: 'text-bottom', animation: 'pulse 1s infinite' }} />
             )}
 
+            {/* Pricing has moved to MAX: the package, or for an account that
+                has MAX, a button that takes the same words to MAX. */}
+            {!isUser && msg.maxUpsell && (
+              (msg.maxEnabled || (user && user.maxEnabled)) ? (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button type="button" className="ui-btn ui-btn--primary ui-btn--sm" onClick={() => { const prev = messages[idx - 1]; const t = prev && prev.role === 'user' && typeof prev.content === 'string' ? prev.content : ''; openMax(t ? { prompt: t } : { open: true, keyboard: true }); }}>
+                    Ask MAX to price it
+                  </button>
+                  <Link to="/submit-drawings" style={{ fontSize: 12.5, fontWeight: 600, color: c.textMuted, textDecoration: 'none' }}>or Submit Drawings for a full BOQ</Link>
+                </div>
+              ) : (
+                <MaxUpsell variant="max" compact style={{ marginTop: 12, marginBottom: 0 }} />
+              )
+            )}
+
             {/* Web search source chips */}
             {!isUser && msg.sources && msg.sources.length > 0 && (
               <div style={{ marginTop: 10 }}>
@@ -1324,7 +1362,7 @@ export default function ChatPage() {
           <div style={{ width:1, height:18, background:c.topBorder, flexShrink:0 }}/>
           <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:14, fontWeight:700, color:c.text, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>AI Quantity Surveyor</span>
-            {!mobile && <span style={{ fontSize:12, color:c.textMuted, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>Beta — for a QS-checked BOQ, use Submit Drawings</span>}
+            {!mobile && <span style={{ fontSize:12, color:c.textMuted, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{CHAT_PRICING ? 'Beta — for a QS-checked BOQ, use Submit Drawings' : 'Specs, methods, regs — pricing is MAX\'s job'}</span>}
             {!mobile && currentTakeoffId && <TakeoffBanner/>}
           </div>
           {quotaInfo && quotaInfo.messages_limit > 0 && (() => {
@@ -1371,8 +1409,11 @@ export default function ChatPage() {
                 <div style={{ width:68, height:68, borderRadius:18, background:dark?'#0F1520':'#F1F5F9', border:`1px solid ${c.topBorder}`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:18 }}><RulerIcon size={30} /></div>
                 <h3 style={{ fontSize: mobile?17:20, fontWeight:700, color:c.text, margin:'0 0 8px' }}>AI Chat — beta</h3>
                 <p style={{ fontSize: mobile?13:14, color:c.textSub, margin:'0 0 14px', maxWidth:460, lineHeight:1.65 }}>
-                  Ask questions, sense-check costs, or explore your drawings — the chat is still in its testing phase, so treat its numbers as a guide.
+                  {CHAT_PRICING
+                    ? 'Ask questions, sense-check costs, or explore your drawings — the chat is still in its testing phase, so treat its numbers as a guide.'
+                    : 'Ask about specifications, methods, building regs, risks or what a job involves. Pricing is MAX\'s job: MAX prices small jobs from your own rates in minutes, and Submit Drawings gets you a QS-checked bill of quantities.'}
                 </p>
+                {!CHAT_PRICING && !(user && user.maxEnabled) && <MaxUpsell variant="max" compact style={{ maxWidth: 520, textAlign: 'left', marginBottom: 16 }} />}
                 <div style={{
                   display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', justifyContent:'center',
                   padding:'12px 16px', borderRadius:10, margin:'0 0 24px', maxWidth:520,
@@ -1391,12 +1432,23 @@ export default function ChatPage() {
                   </Link>
                 </div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', maxWidth:520 }}>
-                  {[
+                  {!CHAT_PRICING && user && user.maxEnabled && (
+                    <button type="button" className="chip" onClick={() => openMax({ open: true, keyboard: true })}
+                      style={{ background:'linear-gradient(135deg,#F59E0B,#D97706)', border:'1px solid transparent', borderRadius:10, padding:'9px 15px', fontSize:13, color:'#0A0F1C', fontWeight:700, cursor:'pointer' }}>
+                      <CoinsIcon size={14} style={{ verticalAlign:'middle' }} /> Price it with MAX
+                    </button>
+                  )}
+                  {(CHAT_PRICING ? [
                     [RulerIcon,'Extract quantities','Please extract all quantities from these drawings with full working shown.'],
                     [CoinsIcon,'Cost estimate','Can you give me a rough cost estimate for this project?'],
                     [AlertTriangleIcon,'Identify risks','What are the key risks or issues you can see?'],
                     [ClipboardIcon,'Building regs','What building regulations apply to this project?'],
-                  ].map(([Ico,label,text],i) => (
+                  ] : [
+                    [ClipboardIcon,'Building regs','What building regulations apply to a single-storey rear extension, and what needs a building control inspection?'],
+                    [RulerIcon,'Spec a job','What is a sound specification for a flat roof on a rear extension — build-up, insulation and falls?'],
+                    [AlertTriangleIcon,'Identify risks','What are the common risks and things that get missed on a loft conversion?'],
+                    [FileTextIcon,'Sequence the work','In what order should the trades run on a full bathroom refit, and where are the hold-ups?'],
+                  ]).map(([Ico,label,text],i) => (
                     <button key={i} className="chip" onClick={() => setInput(text)}
                       style={{ background:dark?'#0F1520':'#F8FAFC', border:`1px solid ${c.topBorder}`, borderRadius:10, padding:'9px 15px', fontSize:13, color:c.text, cursor:'pointer', transition:'all 0.15s' }}>
                       <Ico size={14} style={{ verticalAlign:'middle' }} /> {label}
@@ -1578,13 +1630,13 @@ export default function ChatPage() {
                     : currentTakeoffId
                     ? 'Review quantities above — say "confirm" to lock, or ask to adjust...'
                     : files.length > 0
-                      ? 'Scope notes (optional) — press Send to run Atlas on these drawings...'
-                      : 'Upload drawings or ask a QS question...'
+                      ? (CHAT_PRICING ? 'Scope notes (optional) — press Send to run Atlas on these drawings...' : 'Ask about what is on these files — specs, construction, scope (not prices)...')
+                      : (CHAT_PRICING ? 'Upload drawings or ask a QS question...' : 'Ask a QS question — specs, methods, regs, what a job involves...')
                 }
                 rows={1} disabled={sending}
                 style={{ flex:1, background:'transparent', border:'none', padding:'6px 4px', fontSize:14, color:c.text, resize:'none', outline:'none', fontFamily:'inherit', lineHeight:1.55, maxHeight:140 }}/>
               <button type="submit" disabled={sending || agentStarting || (!input.trim() && files.length === 0)}
-                title={files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run Atlas on uploaded files (3-6 min)' : 'Send'}
+                title={CHAT_PRICING && files.length > 0 && !currentTakeoffId && !agentRunId ? 'Run Atlas on uploaded files (3-6 min)' : 'Send'}
                 style={{ background:c.accent, border:'none', borderRadius:10, padding:'8px 10px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, opacity: sending||agentStarting||(!input.trim()&&files.length===0)?0.35:1, transition:'opacity 0.15s' }}>
                 {agentStarting
                   ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={readableOn(c.accent)} strokeWidth="2.2"><circle cx="12" cy="12" r="9" strokeDasharray="42" strokeDashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite"/></circle></svg>
@@ -1597,8 +1649,8 @@ export default function ChatPage() {
                 : currentTakeoffId
                 ? `Draft takeoff (${currentTakeoffId.slice(0,12)}) · Review quantities then say "confirm" to lock`
                 : files.length > 0
-                  ? 'Send runs Atlas — inspects every drawing, prices, generates Excel + Word (3-6 min)'
-                  : 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = Atlas'}
+                  ? (CHAT_PRICING ? 'Send runs Atlas — inspects every drawing, prices, generates Excel + Word (3-6 min)' : 'Drawings are measured and priced by Submit Drawings, not here')
+                  : (CHAT_PRICING ? 'Drag & drop · ZIP, PDF, Excel, PNG supported · Upload + Send = Atlas' : 'Pricing is MAX\'s job · a QS-checked BOQ comes from Submit Drawings')}
             </div>
           </div>
         </div>

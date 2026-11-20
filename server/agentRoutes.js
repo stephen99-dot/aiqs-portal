@@ -83,7 +83,13 @@ async function prepareTmpDir(files) {
 }
 
 // ── POST /api/agent — start a run ─────────────────────────────────────
+// Atlas (measure + price + generate from drawings) runs only when the chat
+// prices (CHAT_PRICING=1). Otherwise drawings go to Submit Drawings and small
+// jobs to MAX — see chatPricing.js.
 router.post('/agent', authMiddleware, (req, res, next) => {
+  if (!require('./chatPricing').enabled()) return require('./chatPricing').refuse(res);
+  next();
+}, (req, res, next) => {
   upload.array('files', 10)(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'Upload failed: ' + err.message });
     next();
