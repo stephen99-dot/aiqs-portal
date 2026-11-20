@@ -36,7 +36,10 @@
 // per-account grant, or an admin.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const db = require('./database');
+// The database is opened on first use, not on load: scripts/create-max-plans.js
+// reads the catalogue from this file and must not create a scratch database.
+let _db = null;
+function db() { if (!_db) _db = require('./database'); return _db; }
 
 const PLANS = {
   max: {
@@ -145,7 +148,7 @@ function activate(user, sub) {
   if (!user || !sub || !PLANS[sub.plan]) return null;
   const status = LIVE_STATUSES.includes(sub.status) ? sub.status : (sub.status || 'active');
   const interval = INTERVALS.includes(sub.interval) ? sub.interval : null;
-  db.prepare(
+  db().prepare(
     'UPDATE users SET max_plan = ?, max_plan_status = ?, max_plan_interval = ?, max_plan_renews_at = ?, max_plan_cancels_at = ?, '
     + 'max_subscription_id = COALESCE(?, max_subscription_id), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).run(sub.plan, status, interval, sub.renews_at || null, sub.cancels_at || null, sub.subscription_id || null, user.id);
@@ -156,7 +159,7 @@ function activate(user, sub) {
 // The subscription has ended: the plan comes off, the id stays for the record.
 function deactivate(user, status) {
   if (!user) return;
-  db.prepare(
+  db().prepare(
     'UPDATE users SET max_plan = NULL, max_plan_status = ?, max_plan_cancels_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).run(DEAD_STATUSES.includes(status) ? status : 'canceled', user.id);
   console.log(`[MAX plans] plan ended for ${user.email} (${status || 'canceled'})`);
@@ -223,11 +226,11 @@ function entitlements(user) {
 
 // Admin: a complimentary Visualiser for one account, whatever its plan.
 function setVisualiserGrant(userId, enabled) {
-  const row = db.prepare('SELECT id, feature_overrides FROM users WHERE id = ?').get(userId);
+  const row = db().prepare('SELECT id, feature_overrides FROM users WHERE id = ?').get(userId);
   if (!row) return null;
   const o = parseOverrides(row.feature_overrides);
   if (enabled) o.visualiser = true; else delete o.visualiser;
-  db.prepare('UPDATE users SET feature_overrides = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+  db().prepare('UPDATE users SET feature_overrides = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(Object.keys(o).length ? JSON.stringify(o) : null, userId);
   return { userId, enabled: !!enabled };
 }
@@ -239,15 +242,15 @@ function hasVisualiserGrant(user) {
 function subscriberCounts() {
   const out = { max: 0, max_visualiser: 0, monthly: 0, yearly: 0, cancelling: 0, visualiser_grants: 0, early_access: 0 };
   try {
-    const rows = db.prepare("SELECT max_plan, max_plan_status, max_plan_interval, max_plan_cancels_at FROM users WHERE max_plan IS NOT NULL AND role != 'admin'").all();
+    const rows = db().prepare("SELECT max_plan, max_plan_status, max_plan_interval, max_plan_cancels_at FROM users WHERE max_plan IS NOT NULL AND role != 'admin'").all();
     for (const r of rows) {
       if (!LIVE_STATUSES.includes(r.max_plan_status || 'active')) continue;
       if (out[r.max_plan] !== undefined) out[r.max_plan] += 1;
       if (r.max_plan_interval === 'year') out.yearly += 1; else out.monthly += 1;
       if (r.max_plan_cancels_at) out.cancelling += 1;
     }
-    out.visualiser_grants = db.prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"visualiser\":true%' AND role != 'admin'").get().c;
-    out.early_access = db.prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"max\":true%' AND role != 'admin'").get().c;
+    out.visualiser_grants = db().prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"visualiser\":true%' AND role != 'admin'").get().c;
+    out.early_access = db().prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"max\":true%' AND role != 'admin'").get().c;
   } catch (e) { /* counters only */ }
   return out;
 }
@@ -258,17 +261,17 @@ function subscriberCounts() {
 function backfillVisualiserGrants() {
   const KEY = 'max_visualiser_backfill';
   try {
-    if (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(KEY)) return 0;
-    const rows = db.prepare("SELECT id, feature_overrides FROM users WHERE feature_overrides LIKE '%\"max\":true%' AND role != 'admin'").all();
+    if (db().prepare('SELECT value FROM app_settings WHERE key = ?').get(KEY)) return 0;
+    const rows = db().prepare("SELECT id, feature_overrides FROM users WHERE feature_overrides LIKE '%\"max\":true%' AND role != 'admin'").all();
     let n = 0;
     for (const r of rows) {
       const o = parseOverrides(r.feature_overrides);
       if (o.max !== true || o.visualiser !== undefined) continue;
       o.visualiser = true;
-      db.prepare('UPDATE users SET feature_overrides = ? WHERE id = ?').run(JSON.stringify(o), r.id);
+      db().prepare('UPDATE users SET feature_overrides = ? WHERE id = ?').run(JSON.stringify(o), r.id);
       n += 1;
     }
-    db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(KEY, String(n));
+    db().prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)').run(KEY, String(n));
     if (n) console.log(`[MAX plans] ${n} early-access account(s) keep the Visualiser as a grant`);
     return n;
   } catch (e) { console.warn('[MAX plans] visualiser backfill skipped:', e.message); return 0; }

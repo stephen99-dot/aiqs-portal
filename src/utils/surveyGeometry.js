@@ -146,6 +146,7 @@ export function sceneOf(room) {
     return {
       kind: 'plan',
       segments: plan.walls.map((w) => ({ label: w.label, a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings || [] })),
+      interior: (plan.interior || []).map((w) => ({ a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings || [] })),
       floor: plan.outline || [], bounds: plan.bounds, centroid: plan.centroid || polygonCentroid(plan.outline || []), objects: plan.objects || [],
       floor_m2: plan.floor_m2, length_m: plan.bounds.w, width_m: plan.bounds.h, height_m: num(room.height_m) || plan.height_m || DEFAULT_HEIGHT,
     };

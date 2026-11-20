@@ -79,6 +79,10 @@
 .sr { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
 .sr__main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .sr__side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; padding-right: 2px; scrollbar-width: thin; }
+/* The column scrolls; the cards never squash. Without this a card (overflow
+   hidden) shrinks to make the column fit the screen, and Quantities ends up
+   a header with its tiles cut off underneath. */
+.sr__side > * { flex-shrink: 0; }
 .sr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .sr-head__left { min-width: 0; flex: 1; }
 .sr-head__kicker { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 4px; }

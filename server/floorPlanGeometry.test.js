@@ -159,3 +159,62 @@ test('the room is centred inside the drawing area', () => {
   const rightGap = (A4_AREA.x + A4_AREA.width) - br.x;
   assert.ok(Math.abs(leftGap - rightGap) < 0.5, 'equal margins left and right');
 });
+
+// ── The outline when the scanner saw more than the room ──────────────────────
+const { traceOutline, roomOutline } = require('./floorPlanGeometry');
+const segs = (walls) => require('./floorPlanGeometry').segmentsOf(walls);
+const wall = (x, z, len, deg) => ({ dimensions: [len, 2.4, 0.1], transform: transform(x, z, deg) });
+const area = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i]; const q = pts[(i + 1) % pts.length]; s += p.x * q.z - q.x * p.z; } return Math.abs(s) / 2; };
+
+test('a wardrobe front read as a wall is left inside the room, not stitched into the outline', () => {
+  // 7 × 4 room; a 2.4 m "wall" 0.6 m in from the back wall, both ends loose.
+  const walls = segs([wall(0, -2, 7, 0), wall(3.5, 0, 4, 90), wall(0, 2, 7, 0), wall(-3.5, 0, 4, 90), wall(2, -1.4, 2.4, 0)]);
+  const t = traceOutline(walls);
+  assert.equal(t.closed, true);
+  assert.deepEqual(t.interior, [4]);
+  assert.equal(t.order.length, 4);
+  assert.ok(Math.abs(area(t.points) - 28) < 0.05, 'the floor is the whole room: ' + area(t.points));
+  assert.ok(Math.abs(polygonArea(walls) - 28) < 0.05);
+});
+
+test('a wall cutting across with both ends on corners is skipped by the walk round the outside', () => {
+  const walls = segs([wall(0, -2, 7, 0), wall(3.5, 0, 4, 90), wall(0, 2, 7, 0), wall(-3.5, 0, 4, 90), wall(0, 0, 4, 90)]);
+  const t = traceOutline(walls);
+  assert.equal(t.closed, true);
+  assert.deepEqual(t.interior, [4]);
+  assert.ok(Math.abs(area(t.points) - 28) < 0.05);
+});
+
+test('a chimney breast — 30 cm jogs — stays in the outline', () => {
+  // Back wall split round a breast 1.2 m wide and 0.3 m deep.
+  const walls = segs([
+    wall(-2.4, -2, 2.2, 0), wall(-1.3, -1.85, 0.3, 90), wall(-0.7, -1.7, 1.2, 0), wall(-0.1, -1.85, 0.3, 90), wall(1.7, -2, 3.6, 0),
+    wall(3.5, 0, 4, 90), wall(0, 2, 7, 0), wall(-3.5, 0, 4, 90),
+  ]);
+  const t = traceOutline(walls);
+  assert.equal(t.closed, true);
+  assert.deepEqual(t.interior, []);
+  assert.equal(t.order.length, 8);
+  assert.ok(Math.abs(area(t.points) - (28 - 1.2 * 0.3)) < 0.05, area(t.points));
+});
+
+test('a corner the scanner left 60 cm open still closes, and a real gap falls back to chaining', () => {
+  const open = segs([wall(0, -2, 7, 0), wall(3.5, 0.3, 3.4, 90), wall(0, 2, 7, 0), wall(-3.5, 0, 4, 90)]);
+  const t = traceOutline(open);
+  assert.equal(t.closed, true);
+  assert.ok(t.tolerance >= 0.7, 'needed the loose tolerance: ' + t.tolerance);
+  assert.ok(Math.abs(area(t.points) - 28) < 1.5);
+  const gap = segs([wall(0, -2, 7, 0), wall(3.5, 1, 2, 90), wall(0, 2, 7, 0), wall(-3.5, 0, 4, 90)]);
+  const g = traceOutline(gap);
+  assert.equal(g.closed, false);
+  assert.equal(g.order.length, 4, 'every wall is still drawn');
+  assert.equal(roomOutline(gap).length, 4);
+});
+
+test('an L-shaped room with a loose stub where the scan began', () => {
+  const walls = segs([wall(2, 0, 4, 0), wall(4, 1, 2, 90), wall(3, 2, 2, 0), wall(2, 3, 2, 90), wall(1, 4, 2, 0), wall(0, 2, 4, 90), wall(1, 1, 0.8, 45)]);
+  const t = traceOutline(walls);
+  assert.equal(t.closed, true);
+  assert.deepEqual(t.interior, [6]);
+  assert.ok(Math.abs(area(t.points) - 12) < 0.05, area(t.points));
+});

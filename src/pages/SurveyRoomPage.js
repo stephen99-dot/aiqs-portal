@@ -365,7 +365,7 @@ export default function SurveyRoomPage() {
       ) : (
         <RoomPlanSketch room={geom} width={isMobile ? 300 : 320} height={isMobile ? 220 : 240} selectedWall={selOpening ? (openings.find((o) => o.id === selOpening) || {}).wall : null} onWallClick={onWallClick} />
       )}
-      <div className="sr-sketch__note">{view === '3d' ? 'Drag to turn it, pinch to zoom.' : selOpening ? 'Tap a wall letter to put the selected opening on that wall.' : scene && scene.kind === 'plan' ? 'From the LiDAR scan — ' + scene.segments.length + ' walls as the scanner found them, doors and windows where it saw them.' : q.complete ? 'Walls A–' + walls[walls.length - 1].label + ' clockwise from the top. Tap an opening below, then a wall letter.' : 'Type the length and width and the plan draws itself.'}</div>
+      <div className="sr-sketch__note">{view === '3d' ? 'Drag to turn it, pinch to zoom.' : selOpening ? 'Tap a wall letter to put the selected opening on that wall.' : scene && scene.kind === 'plan' ? 'From the LiDAR scan — ' + scene.segments.length + ' walls round the room' + (scene.interior && scene.interior.length ? ', ' + scene.interior.length + ' the scanner saw inside it (dashed)' : '') + ', doors and windows where it saw them.' : q.complete ? 'Walls A–' + walls[walls.length - 1].label + ' clockwise from the top. Tap an opening below, then a wall letter.' : 'Type the length and width and the plan draws itself.'}</div>
     </div>
   );
   const quantitiesPanel = (
