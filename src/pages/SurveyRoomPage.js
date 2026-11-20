@@ -334,7 +334,7 @@ export default function SurveyRoomPage() {
         <span className="sr-render__title"><SparklesIcon size={15} /> The finished room</span>
         {renders.length > 1 && <select className="ui-select" style={{ width: 'auto', minWidth: 0, padding: '5px 28px 5px 9px', fontSize: 12.5 }} value={shownRender.id} onChange={(e) => setRenderPick(e.target.value)} aria-label="Which render">{renders.map((p, i) => <option key={p.id} value={p.id}>{'Render ' + (i + 1) + (p.caption ? ' — ' + p.caption.replace(/^Finished room\s*[—-]?\s*/, '').slice(0, 40) : '')}</option>)}</select>}
       </div>
-      <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || sourceForRender} after={shownRender} height={isMobile ? 240 : 300} />
+      <BeforeAfter before={photos.find((p) => p.id === shownRender.render_of) || sourceForRender} after={shownRender} maxHeight={isMobile ? 380 : 440} />
       <div className="sr-render__sub">{shownRender.caption}</div>
       <div className="sr-render__row">
         <Input value={renderTweak} onChange={(e) => setRenderTweak(e.target.value)} placeholder="Change something — 'grey tiles', 'walk-in shower instead of the bath'…" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); renderRoom(photos.find((p) => p.id === shownRender.render_of) || null, renderTweak); } }} />

@@ -352,7 +352,10 @@ async function makeThumb(file) {
     const meta = await img.metadata();
     const thumbName = path.basename(file.filename, path.extname(file.filename)) + '-thumb.jpg';
     await img.resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(path.join(photosDir, thumbName));
-    return { thumb: thumbName, width: meta.width || null, height: meta.height || null };
+    // The size as the photo is seen, not as the pixels are stored: an iPhone
+    // photo's orientation flag can turn it on its side.
+    const swapped = [5, 6, 7, 8].includes(Number(meta.orientation));
+    return { thumb: thumbName, width: (swapped ? meta.height : meta.width) || null, height: (swapped ? meta.width : meta.height) || null };
   } catch (e) { return { thumb: null, width: null, height: null }; }
 }
 
@@ -475,6 +478,27 @@ function renderAllowanceGate(req, res, next) {
   } catch (e) { next(); }
 }
 
+// The photo as the image service should see it: upright, and cropped (cover,
+// centred) to the size the render will come back at. Without sharp, the file
+// as stored.
+async function renderInput(fp, source, sharp) {
+  const raw = fs.readFileSync(fp);
+  const fallback = { buffer: raw, mime: source.mime || 'image/jpeg', width: source.width, height: source.height };
+  if (!sharp) return fallback;
+  try {
+    const IR = require('./imageRender');
+    const meta = await sharp(raw).metadata();
+    const swapped = [5, 6, 7, 8].includes(Number(meta.orientation));
+    const w = swapped ? meta.height : meta.width; const h = swapped ? meta.width : meta.height;
+    const size = IR.sizeFor(w, h);
+    const m = /^(\d+)x(\d+)$/.exec(size);
+    if (!m) { const buffer = await sharp(raw).rotate().jpeg({ quality: 92 }).toBuffer(); return { buffer, mime: 'image/jpeg', width: w, height: h }; }
+    const tw = Number(m[1]); const th = Number(m[2]);
+    const buffer = await sharp(raw).rotate().resize(tw, th, { fit: 'cover', position: 'centre' }).jpeg({ quality: 92 }).toBuffer();
+    return { buffer, mime: 'image/jpeg', width: tw, height: th };
+  } catch (e) { return fallback; }
+}
+
 // The render itself, shared by the JSON and the streaming forms of the route.
 // progress(evt) gets { type: 'partial', b64, index } as rough passes arrive.
 async function performRender(req, progress) {
@@ -506,7 +530,13 @@ async function performRender(req, progress) {
       progress({ type: 'partial', index, b64: 'data:image/jpeg;base64,' + small.toString('base64') });
     } catch (e) { /* a preview is a nicety */ }
   } : null;
-  const out = await IR.renderRoom({ buffer: fs.readFileSync(fp), mime: source.mime || 'image/jpeg', width: source.width, height: source.height, prompt, onPartial });
+  // What the image service gets: the photo the right way up (an iPhone photo
+  // carries an orientation flag that browsers honour and the service does
+  // not — sent raw, the render came back on its side), cropped to the exact
+  // frame the render will have. The before/after then lines up to the pixel:
+  // the browser's own centre crop of the photo into the render's frame is the
+  // same crop the service was given.
+  const out = await IR.renderRoom({ ...(await renderInput(fp, source, sharp)), prompt, onPartial });
   // Keep it as a JPEG beside the photos, with a thumbnail like any upload.
   const id = uuidv4();
   const filename = id + '.jpg';
@@ -788,4 +818,4 @@ function resyncScannedRooms() {
 try { resyncScannedRooms(); } catch (e) { /* never block startup */ }
 
 module.exports = router;
-module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir, resyncScannedRooms };
+module.exports._internals = { importRoomPlan, roomFieldsFrom, statusOf, surveyTotals, photosDir, resyncScannedRooms, renderInput };
