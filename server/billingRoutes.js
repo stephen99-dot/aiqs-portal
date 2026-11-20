@@ -61,28 +61,39 @@ router.get('/max', (req, res) => {
   });
 });
 
-// Just back from Stripe. Look the subscription up by email (a buyer may have
-// more than one customer record) and switch the plan on.
+// A live MAX subscription at Stripe under this account's email, switched on.
+// A buyer may have more than one customer record there. Used just after a
+// checkout (the webhook usually beats it), when an account is created by
+// someone who paid first, and when the Plans page opens with no plan on the
+// account. Returns the plan activated, or null.
+async function attachByEmail(user) {
+  if (!user || plans.isSubscribed(user)) return null;
+  const stripe = stripeClient();
+  if (!stripe) return null;
+  const customers = await stripe.customers.list({ email: user.email, limit: 5 });
+  for (const customer of customers.data) {
+    const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
+    for (const sub of subs.data) {
+      if (!plans.LIVE_STATUSES.includes(sub.status)) continue;
+      const match = plans.fromStripe(sub);
+      if (!match) continue;
+      plans.activate(user, match);
+      logEvent(user, 'max_plan_started', plans.PLANS[match.plan].name + ' started (found at Stripe under ' + user.email + ')');
+      return match;
+    }
+  }
+  return null;
+}
+
+// Just back from Stripe: look the subscription up and switch the plan on.
 router.post('/max/verify', async (req, res) => {
   try {
     const user = freshUser(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (plans.isSubscribed(user)) return res.json({ activated: true, current: current(user) });
-    const stripe = stripeClient();
-    if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
-    const customers = await stripe.customers.list({ email: user.email, limit: 5 });
-    for (const customer of customers.data) {
-      const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
-      for (const sub of subs.data) {
-        if (!plans.LIVE_STATUSES.includes(sub.status)) continue;
-        const match = plans.fromStripe(sub);
-        if (!match) continue;
-        plans.activate(user, match);
-        logEvent(user, 'max_plan_started', plans.PLANS[match.plan].name + ' started (verified at Stripe)');
-        return res.json({ activated: true, current: current(freshUser(user.id)) });
-      }
-    }
-    res.json({ activated: false, current: current(user) });
+    if (!stripeClient()) return res.status(500).json({ error: 'Stripe not configured' });
+    const match = await attachByEmail(user);
+    res.json({ activated: !!match, current: current(freshUser(user.id)) });
   } catch (err) {
     console.error('[billing] MAX verify failed:', err);
     res.status(500).json({ error: 'Could not check the subscription with Stripe.' });
@@ -194,3 +205,4 @@ router.post('/max/portal', async (req, res) => {
 
 module.exports = router;
 module.exports._internals = { priceFor, current };
+module.exports.attachByEmail = attachByEmail;

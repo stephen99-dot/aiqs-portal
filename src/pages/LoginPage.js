@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { rememberNext, takeNext } from '../utils/next';
 import { useAuth } from '../context/AuthContext';
 import TrustpilotReviewCarousel from '../components/TrustpilotReviewCarousel';
 import { isNative } from '../native/platform';
@@ -30,6 +31,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    rememberNext(params.get('next'));
     const err = params.get('error');
     if (err === 'google_denied') setError('Google sign-in was cancelled.');
     else if (err === 'account_suspended') setError('Your account has been suspended. Please contact support.');
@@ -40,7 +42,7 @@ export default function LoginPage() {
     e.preventDefault(); setError(''); setLoading(true);
     try {
       const result = await login(email, password);
-      navigate(result && result.forcePasswordChange ? '/change-password' : '/dashboard');
+      navigate(result && result.forcePasswordChange ? '/change-password' : takeNext('/dashboard'));
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }

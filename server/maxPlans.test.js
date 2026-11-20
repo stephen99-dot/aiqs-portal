@@ -336,3 +336,14 @@ test('accounts with early access before the packages keep the Visualiser as a gr
   assert.equal(P.backfillVisualiserGrants(), 0, 'it never runs twice');
   assert.equal(P.entitlements(row('a')).visualiser, false);
 });
+
+test('a package bought under an email before the account existed attaches when the Plans page asks', async () => {
+  rollout.setMode('admin', 'adm');
+  // Dana paid on the website; her account is created afterwards.
+  stripeState.customers.cus_4 = { id: 'cus_4', email: 'dana@t.t' };
+  stripeState.subs.sub_dana = sub('sub_dana', stripeState.prices.find((x) => x.id === 'p_vis_m'), { customer: 'cus_4' });
+  db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES ('d', 'dana@t.t', 'x', 'Dana', 'Co', 'client', 'GB')").run();
+  const match = await require('./billingRoutes').attachByEmail(row('d'));
+  assert.deepEqual([match.plan, match.interval, row('d').max_plan, row('d').max_subscription_id], ['max_visualiser', 'month', 'max_visualiser', 'sub_dana']);
+  assert.equal(await require('./billingRoutes').attachByEmail(row('d')), null, 'nothing to do the second time');
+});

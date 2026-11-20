@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCountries } from '../components/CountryPicker';
 import { Link, useNavigate } from 'react-router-dom';
+import { rememberNext } from '../utils/next';
 import { useAuth } from '../context/AuthContext';
 import { isNative } from '../native/platform';
 import { resolveUrl } from '../utils/api';
@@ -38,6 +39,10 @@ export default function RegisterPage() {
   function updateField(field, value) {
     setForm(prev => ({ ...prev, [field]: value }));
   }
+
+  // A destination from the website ("Start with MAX" → /upgrade) is kept
+  // through registration and onboarding.
+  useEffect(() => { try { rememberNext(new URLSearchParams(window.location.search).get('next')); } catch (e) { /* no url */ } }, []);
 
   async function handleSubmit(e) {
     e.preventDefault(); setError(''); setLoading(true);

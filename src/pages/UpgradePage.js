@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch } from '../utils/api';
@@ -43,6 +43,15 @@ export default function UpgradePage() {
 
   const load = useCallback(() => apiFetch('/billing/max').then((d) => { setData(d); setError(''); }).catch((e) => setError(e.message || 'Could not load the plans.')), []);
   useEffect(() => { load(); }, [load]);
+  // No plan on the account but Stripe is wired up: ask once whether a package
+  // was bought under this email (from the website, before the account existed).
+  const checked = useRef(false);
+  useEffect(() => {
+    if (!data || checked.current || !data.stripe || !data.stripe.configured) return;
+    if (data.current && (data.current.max || data.current.visualiser)) return;
+    checked.current = true;
+    apiFetch('/billing/max/verify', { method: 'POST' }).then((r) => { if (r && r.activated) { setData((d) => ({ ...d, current: r.current })); refreshUser(); } }).catch(() => {});
+  }, [data, refreshUser]);
 
   const cur = data && data.current;
   const subscribed = !!(cur && cur.source === 'subscription' && cur.plan);
