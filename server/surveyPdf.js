@@ -83,6 +83,11 @@ function drawSketch(doc, room, q, box) {
     const wOnPaper = o.width_m * scale;
     if (wOnPaper > 30) { const cc = P(o.centre); doc.font('Helvetica').fontSize(5).fillColor(HAIR).text(o.category, cc.x - wOnPaper / 2, cc.y - 3, { width: wOnPaper, align: 'center' }); }
   }
+  // Walls the scanner saw inside the room: faint and dashed, not the outline.
+  for (const seg of scene.interior || []) {
+    const a = P(seg.a); const b = P(seg.b);
+    doc.save().moveTo(a.x, a.y).lineTo(b.x, b.y).lineWidth(0.6).dash(2, { space: 1.5 }).strokeColor(HAIR).stroke().undash().restore();
+  }
   // Walls as thick lines with the openings left out.
   for (const seg of scene.segments) {
     const a = P(seg.a); const b = P(seg.b);
@@ -126,7 +131,7 @@ function drawSketch(doc, room, q, box) {
   doc.text(fmt(scene.length_m, 2) + ' m', ox, oy - 23, { width: scene.bounds.w * scale, align: 'center' });
   doc.save().translate(ox - 19, oy + scene.bounds.h * scale / 2).rotate(-90).text(fmt(scene.width_m, 2) + ' m', -30, -3, { width: 60, align: 'center' }).restore();
   doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text(fmt(q.floor_m2, 1) + ' m²', centre.x - 40, centre.y - 5, { width: 80, align: 'center' });
-  if (scene.kind === 'plan') doc.font('Helvetica').fontSize(6).fillColor(MUTED).text('LiDAR scan · ' + scene.segments.length + ' walls', centre.x - 50, centre.y + 6, { width: 100, align: 'center' });
+  if (scene.kind === 'plan') doc.font('Helvetica').fontSize(6).fillColor(MUTED).text('LiDAR scan · ' + scene.segments.length + ' walls' + (scene.interior && scene.interior.length ? ' · ' + scene.interior.length + ' inside' : ''), centre.x - 50, centre.y + 6, { width: 100, align: 'center' });
   doc.fillColor(INK);
 }
 

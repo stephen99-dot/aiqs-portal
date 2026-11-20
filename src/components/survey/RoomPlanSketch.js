@@ -39,6 +39,12 @@ export default function RoomPlanSketch({ room, width = 320, height = 240, mini =
     const cc = P(o.centre);
     els.push(<g key={'ob' + i}><path d={d} fill="var(--bg-card)" stroke="var(--border)" strokeWidth={0.8} />{!mini && wOn > 34 && <text x={cc.x} y={cc.y + 3} textAnchor="middle" fontSize={7} fill="var(--text-muted)">{o.category}</text>}</g>);
   });
+  // Walls the scanner saw inside the room (a wardrobe front, a partition):
+  // a faint dashed line, so they are there to see but never read as the room.
+  (scene.interior || []).forEach((seg, i) => {
+    const a = P(seg.a); const b = P(seg.b);
+    els.push(<line key={'in' + i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--text-muted)" strokeWidth={1.2} strokeDasharray="4 3" opacity={0.5} />);
+  });
   scene.segments.forEach((seg, i) => {
     const a = P(seg.a); const b = P(seg.b);
     const ops = (seg.openings || []).slice().sort((x, y) => x.from - y.from);

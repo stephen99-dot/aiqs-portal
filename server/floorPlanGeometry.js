@@ -196,53 +196,173 @@ function planOf(room, label) {
   };
 }
 
-// Two wall ends this close together are the same corner. Generous enough for
-// RoomPlan's corners, which rarely meet exactly, and still far tighter than
-// any two genuinely different corners of a room.
-const CORNER_TOLERANCE_M = 0.4;
+// Two wall ends this close together are the same corner. RoomPlan's corners
+// rarely meet exactly; the outline is tried at the tightest tolerance first
+// (so a 30 cm chimney-breast jog survives) and loosened only when nothing
+// closes at it.
+const CORNER_TOLERANCES_M = [0.25, 0.4, 0.7, 1.0];
+const CORNER_TOLERANCE_M = CORNER_TOLERANCES_M[1];
 
 function dist(p, q) { return Math.hypot(p.x - q.x, p.z - q.z); }
 
 /**
- * The outline of the room, as the corners in the order you'd walk them.
+ * The outline of a scanned room: which walls go round it, in walking order,
+ * and which the scanner saw inside it.
  *
- * RoomPlan lists walls in whatever order they were scanned, so the walls are
- * chained by their ends: each wall leads to whichever unused wall starts
- * nearest to where it finished. That recovers the true outline, including for
- * an L-shape, where sorting corners by angle around the middle would cut the
- * corner off.
+ * RoomPlan lists walls in whatever order they were scanned, with corners that
+ * rarely meet exactly, and it often throws in walls that are not part of the
+ * outline at all: the front of a built-in wardrobe read as a wall, a
+ * half-height partition, a stub where the scan began. Chaining nearest ends
+ * blindly stitches those in, the walk crosses itself and the floor is drawn
+ * (and measured) as a figure of eight.
+ *
+ * So the outline is found the way a drawing is read. Wall ends within a corner
+ * tolerance are one corner. A wall with a loose end — nothing meets it — is
+ * inside the room, not round it, and so is anything that only hangs off such
+ * a wall. Where a wall still cuts across the room with both ends on corners,
+ * the walk round the outside keeps to the outside: at each corner it takes the
+ * outermost turn. When nothing closes at any tolerance the scan left a gap,
+ * and the walls are simply chained by nearest ends as a best effort.
+ *
+ * Returns { points, order, interior, closed }: the corners in walking order;
+ * the walls in that order as { index, reversed }; the indices of walls left
+ * out of the outline; whether the outline closed.
+ */
+function traceOutline(walls) {
+  const list = Array.isArray(walls) ? walls : [];
+  for (const tol of CORNER_TOLERANCES_M) {
+    const found = traceAt(list, tol);
+    if (found) return found;
+  }
+  return greedyOutline(list);
+}
+
+function traceAt(walls, tol) {
+  const n = walls.length;
+  if (n < 3) return null;
+  // Corners: wall ends within the tolerance of each other, merged transitively.
+  const ends = [];
+  walls.forEach((w, i) => { ends.push({ w: i, p: w.a }); ends.push({ w: i, p: w.b }); });
+  const parent = ends.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      if (ends[i].w === ends[j].w) continue;
+      if (dist(ends[i].p, ends[j].p) <= tol) parent[find(i)] = find(j);
+    }
+  }
+  const nodeOf = new Map();
+  const nodes = [];
+  ends.forEach((e, i) => {
+    const root = find(i);
+    if (!nodeOf.has(root)) { nodeOf.set(root, nodes.length); nodes.push({ x: 0, z: 0, count: 0 }); }
+    const node = nodes[nodeOf.get(root)];
+    node.x += e.p.x; node.z += e.p.z; node.count += 1;
+  });
+  for (const node of nodes) { node.x /= node.count; node.z /= node.count; }
+  const endNode = (i) => nodeOf.get(find(i));
+  // Each wall is an edge between two corners. A wall whose ends fell into the
+  // same corner is shorter than the tolerance: a stub, left out.
+  const edges = [];
+  for (let i = 0; i < n; i++) {
+    const u = endNode(i * 2); const v = endNode(i * 2 + 1);
+    if (u !== v) edges.push({ wall: i, u, v, alive: true });
+  }
+  // Peel off anything with a loose end, and whatever is left hanging after it.
+  let peeled = true;
+  while (peeled) {
+    peeled = false;
+    const degree = new Map();
+    for (const e of edges) if (e.alive) { degree.set(e.u, (degree.get(e.u) || 0) + 1); degree.set(e.v, (degree.get(e.v) || 0) + 1); }
+    for (const e of edges) if (e.alive && ((degree.get(e.u) || 0) < 2 || (degree.get(e.v) || 0) < 2)) { e.alive = false; peeled = true; }
+  }
+  const live = edges.filter((e) => e.alive);
+  if (live.length < 3) return null;
+  // Walk round the outside. Start at the leftmost corner (which must be on
+  // the outline) as if arriving from further left, and at every corner take
+  // the edge that is the smallest turn clockwise from the way back.
+  const at = new Map();
+  for (const e of live) {
+    if (!at.has(e.u)) at.set(e.u, []);
+    if (!at.has(e.v)) at.set(e.v, []);
+    at.get(e.u).push({ e, to: e.v, reversed: false });
+    at.get(e.v).push({ e, to: e.u, reversed: true });
+  }
+  let start = null;
+  for (const id of at.keys()) if (start === null || nodes[id].x < nodes[start].x - 1e-9 || (Math.abs(nodes[id].x - nodes[start].x) <= 1e-9 && nodes[id].z < nodes[start].z)) start = id;
+  const angle = (from, to) => Math.atan2(nodes[to].z - nodes[from].z, nodes[to].x - nodes[from].x);
+  const turn = (back, a) => { let t = back - a; while (t < 0) t += 2 * Math.PI; while (t >= 2 * Math.PI) t -= 2 * Math.PI; return t; };
+  const order = []; const points = [];
+  let here = start; let back = Math.PI; let arrived = null;
+  for (let step = 0; step <= live.length; step++) {
+    const options = at.get(here).filter((o) => o.e !== arrived || at.get(here).length === 1);
+    if (!options.length) return null;
+    let best = options[0]; let bestTurn = Infinity;
+    for (const o of options) { const t = turn(back, angle(here, o.to)); if (t < bestTurn) { bestTurn = t; best = o; } }
+    if (order.some((x) => x.index === best.e.wall)) return null;   // looped without closing
+    points.push({ x: nodes[here].x, z: nodes[here].z });
+    order.push({ index: best.e.wall, reversed: best.reversed });
+    back = angle(best.to, here); arrived = best.e; here = best.to;
+    if (here === start) break;
+  }
+  if (here !== start || order.length < 3) return null;
+  if (selfIntersects(points)) return null;
+  const onOutline = new Set(order.map((o) => o.index));
+  const interior = [];
+  for (let i = 0; i < n; i++) if (!onOutline.has(i)) interior.push(i);
+  return { points, order, interior, closed: true, tolerance: tol };
+}
+
+// Does the polygon cross itself? Only non-adjacent sides are compared.
+function selfIntersects(pts) {
+  const n = pts.length;
+  const cross = (o, a, b) => (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
+  const crosses = (p, q, r, s) => {
+    const d1 = cross(r, s, p); const d2 = cross(r, s, q); const d3 = cross(p, q, r); const d4 = cross(p, q, s);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  };
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (crosses(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+    }
+  }
+  return false;
+}
+
+// Nothing closed: chain every wall by its nearest end, as a best effort, and
+// say so (closed: false). The old behaviour, kept for scans with a gap.
+function greedyOutline(walls) {
+  const n = walls.length;
+  if (!n) return { points: [], order: [], interior: [], closed: false };
+  const used = new Set([0]);
+  const order = [{ index: 0, reversed: false }];
+  const points = [walls[0].a];
+  let cursor = walls[0].b;
+  while (used.size < n) {
+    let best = -1; let bestD = Infinity; let reversed = false;
+    for (let i = 0; i < n; i++) {
+      if (used.has(i)) continue;
+      if (dist(walls[i].a, cursor) < bestD) { bestD = dist(walls[i].a, cursor); best = i; reversed = false; }
+      if (dist(walls[i].b, cursor) < bestD) { bestD = dist(walls[i].b, cursor); best = i; reversed = true; }
+    }
+    if (best < 0) break;
+    used.add(best);
+    const w = walls[best];
+    points.push(reversed ? w.b : w.a);
+    order.push({ index: best, reversed });
+    cursor = reversed ? w.a : w.b;
+  }
+  return { points, order, interior: [], closed: false };
+}
+
+/**
+ * The outline of the room, as the corners in the order you'd walk them.
+ * See traceOutline; this is just its corners.
  */
 function roomOutline(walls) {
-  if (walls.length < 3) return [];
-  const used = new Set([0]);
-  const outline = [walls[0].a, walls[0].b];
-  let cursor = walls[0].b;
-
-  for (let step = 1; step < walls.length; step++) {
-    let bestIndex = -1;
-    let bestDistance = CORNER_TOLERANCE_M;
-    let bestFarEnd = null;
-    for (let i = 0; i < walls.length; i++) {
-      if (used.has(i)) continue;
-      const w = walls[i];
-      // A wall can be listed either way round, so try both of its ends.
-      if (dist(w.a, cursor) < bestDistance) { bestDistance = dist(w.a, cursor); bestIndex = i; bestFarEnd = w.b; }
-      if (dist(w.b, cursor) < bestDistance) { bestDistance = dist(w.b, cursor); bestIndex = i; bestFarEnd = w.a; }
-    }
-    if (bestIndex < 0) break;   // the scan left a gap — measure what we have
-    used.add(bestIndex);
-    outline.push(bestFarEnd);
-    cursor = bestFarEnd;
-  }
-
-  // The last wall arrives back where the first one started, so the closing
-  // corner is in the list twice. Harmless for area — the shoelace formula
-  // closes the loop itself — but it doubles that corner's weight when
-  // averaging, which drags the room's label off to one side of centre.
-  while (outline.length > 2 && dist(outline[outline.length - 1], outline[0]) < CORNER_TOLERANCE_M) {
-    outline.pop();
-  }
-  return outline;
+  if (!walls || walls.length < 3) return [];
+  return traceOutline(walls).points;
 }
 
 /**
@@ -295,4 +415,4 @@ function polygonArea(walls) {
   return Math.abs(sum) / 2;
 }
 
-module.exports = { planOf, segmentOf, segmentsOf, polygonArea, projectOnto, roomOutline, footprint, objectsOf, centroidOf };
+module.exports = { planOf, segmentOf, segmentsOf, polygonArea, projectOnto, roomOutline, traceOutline, footprint, objectsOf, centroidOf, CORNER_TOLERANCE_M };

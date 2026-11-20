@@ -253,38 +253,39 @@ function alignCapture(raw) {
 // The walls in the order you would walk them clockwise from the top wall, each
 // pointing the way of the walk, so the letters read A, B, C… round the room
 // like a typed rectangle does. Openings keep their place when a wall is turned.
+// Which walls are round the room, and which the scanner saw inside it, is
+// floorPlanGeometry.traceOutline's call; this only picks where to start.
 function chainWalls(walls) {
-  if (!walls.length) return [];
+  if (!walls.length) return { outline: [], interior: [], points: [], closed: false };
+  const FP = require('./floorPlanGeometry');
   const flip = (w) => ({ ...w, a: w.b, b: w.a, openings: (w.openings || []).map((o) => ({ ...o, from: 1 - o.to, to: 1 - o.from })).sort((p, q) => p.from - q.from) });
-  const d = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+  const trace = FP.traceOutline(walls);
+  let cycle = trace.order.map((o) => (o.reversed ? flip(walls[o.index]) : walls[o.index]));
+  let points = trace.points.slice();
+  if (!cycle.length) return { outline: [], interior: [], points: [], closed: false };
   // Start at the top: the highest wall that runs roughly left to right
-  // (within 20°), the longest of those if several share the top.
+  // (within 20°), the longest of those if several share the top — and walk
+  // clockwise, so that wall reads left to right.
   const mid = (w) => (w.a.z + w.b.z) / 2;
   const level = (w) => Math.abs(w.b.z - w.a.z) <= 0.364 * Math.abs(w.b.x - w.a.x);
-  const pool = walls.some(level) ? walls.filter(level) : walls;
+  const pool = cycle.some(level) ? cycle.filter(level) : cycle;
   let start = pool[0];
   for (const w of pool) if (mid(w) < mid(start) - 0.05 || (Math.abs(mid(w) - mid(start)) <= 0.05 && w.width > start.width)) start = w;
-  const startIdx = walls.indexOf(start);
-  let first = walls[startIdx];
-  if (first.a.x > first.b.x) first = flip(first);
-  const used = new Set([startIdx]);
-  const out = [first];
-  let cursor = first.b;
-  while (used.size < walls.length) {
-    let best = -1; let bestD = Infinity; let bestFlip = false;
-    for (let i = 0; i < walls.length; i++) {
-      if (used.has(i)) continue;
-      const w = walls[i];
-      if (d(w.a, cursor) < bestD) { bestD = d(w.a, cursor); best = i; bestFlip = false; }
-      if (d(w.b, cursor) < bestD) { bestD = d(w.b, cursor); best = i; bestFlip = true; }
-    }
-    if (best < 0) break;
-    used.add(best);
-    const w = bestFlip ? flip(walls[best]) : walls[best];
-    out.push(w);
-    cursor = w.b;
+  let k = cycle.indexOf(start);
+  if (start.a.x > start.b.x && trace.closed) {
+    // Walking the other way round: reverse the cycle and every wall in it.
+    cycle = cycle.slice().reverse().map(flip);
+    points = points.slice().reverse();
+    // Reversed, the corner before each wall is the wall's new a-end: rotate the
+    // corners one step so points[i] is still where cycle[i] starts.
+    points.unshift(points.pop());
+    k = cycle.indexOf(cycle.find((w) => w.a === start.b && w.b === start.a) || cycle[0]);
+  } else if (start.a.x > start.b.x) {
+    cycle[k] = flip(start);
   }
-  return out;
+  const outline = cycle.slice(k).concat(cycle.slice(0, k));
+  const corners = trace.closed ? points.slice(k).concat(points.slice(0, k)) : outline.map((w) => w.a);
+  return { outline, interior: trace.interior.map((i) => walls[i]), points: corners, closed: trace.closed };
 }
 
 function planFromCapture(raw, name) {
@@ -297,15 +298,21 @@ function planFromCapture(raw, name) {
   const ox = plan.bounds.minX; const oz = plan.bounds.minZ;
   const P = (p) => ({ x: Math.round((p.x - ox) * 1000) / 1000, y: Math.round((p.z - oz) * 1000) / 1000 });
   const chain = chainWalls(plan.walls);
-  const walls = chain.map((w, i) => ({
-    label: WALL_LABELS[i] || String(i + 1), a: P(w.a), b: P(w.b),
+  const wallOut = (w, i) => ({
+    label: i == null ? null : WALL_LABELS[i] || String(i + 1), a: P(w.a), b: P(w.b),
     length_m: r2(w.width), height_m: r2(w.height || plan.height || DEFAULT_HEIGHT), thickness_m: r2(w.thickness || 0.1),
     openings: (w.openings || []).map((o) => ({ kind: o.kind, from: Math.round(o.from * 1000) / 1000, to: Math.round(o.to * 1000) / 1000, width_m: r2(o.width), height_m: r2(o.height) })),
-  }));
-  // The outline from the walk when it closes; the geometry module's own when the scan left a gap.
-  const closes = chain.length >= 3 && Math.hypot(chain[chain.length - 1].b.x - chain[0].a.x, chain[chain.length - 1].b.z - chain[0].a.z) < 0.6;
-  const outlinePts = closes ? chain.map((w) => w.a) : plan.outline;
-  const outline = outlinePts.map(P);
+  });
+  const walls = chain.outline.map(wallOut);
+  // Walls the scanner saw inside the room (a wardrobe front, a partition, a
+  // stub): drawn faintly, not part of the outline, not counted as wall area.
+  const interior = chain.interior.map((w) => wallOut(w, null));
+  const outline = chain.points.map(P);
+  // The floor is the outline's own area when it closed; the geometry module's
+  // best effort when the scan left a gap.
+  const shoelace = (pts) => { let s2 = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i]; const q = pts[(i + 1) % pts.length]; s2 += p.x * q.y - q.x * p.y; } return Math.abs(s2) / 2; };
+  const floorArea = chain.closed && outline.length >= 3 ? shoelace(outline) : plan.floorArea;
+  const perimeter = walls.reduce((s2, w) => s2 + w.length_m, 0);
   const objects = (Array.isArray(aligned.objects) ? aligned.objects : []).map((o) => {
     const seg = FP.segmentOf(o);
     if (!seg) return null;
@@ -318,9 +325,9 @@ function planFromCapture(raw, name) {
     };
   }).filter(Boolean);
   return {
-    walls, outline, centroid: outline.length >= 3 ? polygonCentroid(outline) : P(plan.centroid),
+    walls, interior, outline, closed: chain.closed, centroid: outline.length >= 3 ? polygonCentroid(outline) : P(plan.centroid),
     bounds: { w: r2(plan.bounds.maxX - ox), h: r2(plan.bounds.maxZ - oz) }, objects,
-    floor_m2: r2(plan.floorArea), perimeter_m: r2(plan.perimeter), height_m: r2(plan.height || DEFAULT_HEIGHT),
+    floor_m2: r2(floorArea), perimeter_m: r2(perimeter), height_m: r2(plan.height || DEFAULT_HEIGHT),
   };
 }
 
@@ -351,6 +358,7 @@ function sceneOf(room) {
     return {
       kind: 'plan',
       segments: plan.walls.map((w) => ({ label: w.label, a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings })),
+      interior: (plan.interior || []).map((w) => ({ a: w.a, b: w.b, height_m: w.height_m, thickness_m: w.thickness_m, openings: w.openings || [] })),
       floor: plan.outline, bounds: plan.bounds, centroid: plan.centroid, objects: plan.objects || [],
       floor_m2: plan.floor_m2, length_m: plan.bounds.w, width_m: plan.bounds.h, height_m: num(room.height_m) || plan.height_m,
     };
@@ -368,7 +376,7 @@ function sceneOf(room) {
     };
   });
   return {
-    kind: 'outline', segments, floor: outline.points, bounds: outline.bounds, centroid: polygonCentroid(outline.points), objects: [],
+    kind: 'outline', segments, interior: [], floor: outline.points, bounds: outline.bounds, centroid: polygonCentroid(outline.points), objects: [],
     floor_m2: r2(floorAreaOf(room)), length_m: num(room.length_m), width_m: num(room.width_m), height_m: num(room.height_m) || DEFAULT_HEIGHT,
   };
 }

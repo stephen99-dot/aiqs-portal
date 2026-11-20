@@ -650,7 +650,7 @@ function importRoomPlan(raw, room) {
     shape: 'custom', walls, floor_area_override_m2: Math.round(floorArea * 100) / 100, height_m: Math.round(height * 100) / 100,
     length_m: bounds ? Math.round(bounds.w * 100) / 100 : null, width_m: bounds ? Math.round(bounds.h * 100) / 100 : null,
     dims_source: 'measured', openings, features, capture: raw,
-    assumptions: ['Measured by LiDAR scan (' + walls.length + ' walls' + (plan ? ', doors and windows placed on the walls the scanner saw them in' : '') + ').'],
+    assumptions: ['Measured by LiDAR scan (' + walls.length + ' walls' + (plan && plan.interior && plan.interior.length ? ', ' + plan.interior.length + ' more the scanner saw inside the room and left out of the outline' : '') + (plan ? ', doors and windows placed on the walls the scanner saw them in' : '') + ').'],
   };
 }
 
