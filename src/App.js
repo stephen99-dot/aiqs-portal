@@ -33,6 +33,7 @@ import InvoicePublicPage from './pages/InvoicePublicPage';
 import Builder3DPage from './pages/Builder3DPage';
 import BrandingPage from './pages/BrandingPage';
 import OAuthSuccessPage from './pages/OAuthSuccessPage';
+import DeleteAccountInfoPage from './pages/DeleteAccountInfoPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
 import AdminNotifications from './components/AdminNotifications';
 import OfflineBanner from './components/OfflineBanner';
@@ -79,6 +80,8 @@ function AppInner() {
         {/* Where the server lands the browser after Google sign-in (?token=) */}
         <Route path="/auth/google/success" element={<OAuthSuccessPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
+        {/* Public: how to delete an account (linked from the Play / App Store listings). */}
+        <Route path="/delete-account" element={<DeleteAccountInfoPage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
         {/* Public quote/invoice views — kept so links already sent to

@@ -23,6 +23,7 @@ const DEFAULT_BUNDLE_ID = 'uk.co.theaiqs.portal';
 // excluded so a tapped download link never tries to open the app.
 const APP_PATHS = [
   { '/': '/api/*', exclude: true, comment: 'API responses stay in the browser' },
+  { '/': '/delete-account', exclude: true, comment: 'plain web page, stays in the browser' },
   { '/': '/magic', comment: 'magic sign-in link' },
   { '/': '/team-invite', comment: 'authorised-email invite' },
   { '/': '/auth/google/success', comment: 'Google sign-in return' },
