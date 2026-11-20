@@ -515,3 +515,26 @@ test('Scan a room is part of MAX: without it every survey route is refused, with
     assert.equal(r.status, 403, 'the plan ended');
   } finally { rollout.setMode('all', 'adm'); }
 });
+
+test('a render is painted from the photo the right way up, cropped to the frame the render comes back in', async () => {
+  const sharp = require('sharp');
+  const { renderInput } = require('./roomSurveyRoutes')._internals;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aiqs-render-in-'));
+  // An iPhone photo: 1200 × 900 pixels stored, flagged to be shown turned — a portrait picture.
+  const phone = path.join(dir, 'phone.jpg');
+  fs.writeFileSync(phone, await sharp({ create: { width: 1200, height: 900, channels: 3, background: '#7a8' } }).jpeg().withMetadata({ orientation: 6 }).toBuffer());
+  let input = await renderInput(phone, { mime: 'image/jpeg', width: 1200, height: 900 }, sharp);
+  assert.deepEqual([input.width, input.height, input.mime], [1024, 1536, 'image/jpeg'], 'portrait frame for a portrait picture');
+  let meta = await sharp(input.buffer).metadata();
+  assert.deepEqual([meta.width, meta.height, meta.orientation], [1024, 1536, undefined], 'upright pixels, no flag left to confuse the service');
+  // A plain landscape photo: the wide frame, centre-cropped.
+  const plain = path.join(dir, 'plain.jpg');
+  fs.writeFileSync(plain, await sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#88a' } }).jpeg().toBuffer());
+  input = await renderInput(plain, { mime: 'image/jpeg', width: 1600, height: 1200 }, sharp);
+  meta = await sharp(input.buffer).metadata();
+  assert.deepEqual([input.width, input.height, meta.width, meta.height], [1536, 1024, 1536, 1024]);
+  // Without sharp the file goes as it is.
+  input = await renderInput(plain, { mime: 'image/jpeg', width: 1600, height: 1200 }, null);
+  assert.deepEqual([input.width, input.height], [1600, 1200]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
