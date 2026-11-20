@@ -125,6 +125,21 @@ function applyItemPatch(cur, patch) {
   return merged;
 }
 
+// Provisional sums and optional extras are "separate" sections: carried as
+// entered (no margin, no uplift) and shown BELOW the total, each with its own
+// VAT line, so they never move the figure the client reads as the total.
+// Provisional sums come from the bill; optional extras are work the client
+// can choose to add, so every bill carries an Optional extras section — empty
+// until the builder offers something, and printed only when it has lines.
+const OPTIONAL_EXTRAS_NUMBER = 'OE';
+function isSeparateSection(s) {
+  return !!(s && (s.provisional || s.optional));
+}
+function withOptionalExtras(list) {
+  if (list.some((s) => s.optional)) return list;
+  return list.concat([{ number: OPTIONAL_EXTRAS_NUMBER, title: 'Optional extras', provisional: false, optional: true, items: [] }]);
+}
+
 export default function BuilderPackPage() {
   const { id } = useParams();
   const isMobile = useIsMobile();
@@ -215,15 +230,16 @@ export default function BuilderPackPage() {
       .then(([proj, bd, br]) => {
         if (cancelled) return;
         setProject(proj);
-        const seeded = (bd.sections || []).map((s) => ({
+        const seeded = withOptionalExtras((bd.sections || []).map((s) => ({
           number: s.number,
           title: s.title,
           provisional: !!s.provisional,
+          optional: !!s.optional && !s.provisional,
           items: (s.items || []).map((it) => {
             const { unitLabour, unitMaterials } = unitRates(it);
             return { ...it, _id: it._id || uid(), unitLabour, unitMaterials };
           }),
-        }));
+        })));
         setSections(seeded);
         setOriginalSections(JSON.parse(JSON.stringify(seeded)));
         if (seeded.length) setOpenSectionIds({ [seeded[0].number]: true });
@@ -252,13 +268,14 @@ export default function BuilderPackPage() {
         const saved = bd.saved_state;
         if (saved && typeof saved === 'object') {
           if (Array.isArray(saved.sections) && saved.sections.length) {
-            setSections(saved.sections.map((s) => ({
+            setSections(withOptionalExtras(saved.sections.map((s) => ({
               ...s,
+              optional: !!s.optional && !s.provisional,
               // Saved lines keep their per-unit rates; a section the server
               // added back from the fresh parse (a provisional block the
               // state pre-dates) arrives without them, so derive them.
               items: (s.items || []).map((it) => ({ ...it, _id: it._id || uid(), ...unitRates(it) })),
-            })));
+            }))));
           }
           if (saved.builder_margin != null) setBuilderMargin(saved.builder_margin);
           if (saved.materials_markup != null) setMaterialsMarkup(saved.materials_markup);
@@ -402,13 +419,14 @@ export default function BuilderPackPage() {
   const builderRows = useMemo(
     () => sections.map((s, i) => {
       const t = sectionTotals[i];
-      // Provisional sums are carried at cost, as the bill lists them — no
-      // builder margin, no materials markup — and shown as their own block.
-      if (s.provisional) {
-        return { number: s.number, title: s.title, item_count: s.items.length, provisional: true, labour: t.labour, materials: t.materials, total: t.total };
+      // Provisional sums and optional extras are carried at cost, as entered —
+      // no builder margin, no materials markup — and shown as their own blocks
+      // below the grand total, which they are not part of.
+      if (isSeparateSection(s)) {
+        return { number: s.number, title: s.title, item_count: s.items.length, provisional: !!s.provisional, optional: !!s.optional && !s.provisional, labour: t.labour, materials: t.materials, total: t.total };
       }
       return {
-        number: s.number, title: s.title, item_count: s.items.length, provisional: false,
+        number: s.number, title: s.title, item_count: s.items.length, provisional: false, optional: false,
         labour: t.labour * labourMult,
         materials: t.materials * matMult,
         // Composite lines take the blanket builder margin (no materials markup,
@@ -418,18 +436,21 @@ export default function BuilderPackPage() {
     }),
     [sections, sectionTotals, labourMult, matMult]
   );
-  const builderGrand = builderRows.reduce(
+  // The grand total is the priced sections alone.
+  const builderGrand = builderRows.filter((r) => !r.provisional && !r.optional).reduce(
     (a, r) => ({ labour: a.labour + r.labour, materials: a.materials + r.materials, total: a.total + r.total }),
     { labour: 0, materials: 0, total: 0 }
   );
-  // The provisional sums in the pack, at cost — their own line in the breakdown.
+  // The blocks below the total, at cost — their own lines in the breakdown.
   const builderProvisional = builderRows.filter((r) => r.provisional).reduce((a, r) => a + r.total, 0);
+  const builderOptional = builderRows.filter((r) => r.optional).reduce((a, r) => a + r.total, 0);
   // The net/true cost before the builder's own margin — so the breakdown can
   // show exactly what (if anything) has been added on top.
-  // Priced sections only: provisional sums take no margin and are shown on
-  // their own, so they are not part of the build cost the margin is worked on.
+  // Priced sections only: provisional sums and optional extras take no margin
+  // and are shown on their own, so they are not part of the build cost the
+  // margin is worked on.
   const baseGrand = sectionTotals.reduce(
-    (a, t, i) => (sections[i] && sections[i].provisional
+    (a, t, i) => (isSeparateSection(sections[i])
       ? a
       : { labour: a.labour + t.labour, materials: a.materials + t.materials, total: a.total + t.total }),
     { labour: 0, materials: 0, total: 0 }
@@ -441,24 +462,27 @@ export default function BuilderPackPage() {
   const baseUplift = (1 + defaultOhp / 100) * (1 + profit / 100);
   const clientRows = useMemo(
     () => sections.map((s, i) => {
-      // Provisional sections are carried verbatim, exclusive of OH&P (factor 1).
-      const factor = s.provisional
+      // Provisional sums and optional extras are carried verbatim, exclusive
+      // of OH&P (factor 1).
+      const factor = isSeparateSection(s)
         ? 1
         : (Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
             ? 1 + num(perTradeOhp[s.number]) / 100
             : baseUplift);
       const base = sectionTotals[i].total;
       const subtotal = roundMoney(rounding, base * factor);
-      return { number: s.number, title: s.title, provisional: !!s.provisional, item_count: s.items.length, uplift: factor, base, subtotal };
+      return { number: s.number, title: s.title, provisional: !!s.provisional, optional: !!s.optional && !s.provisional, item_count: s.items.length, uplift: factor, base, subtotal };
     }),
     [sections, sectionTotals, perTradeOhp, baseUplift, rounding]
   );
-  // Net construction excludes provisional sections — they get their own line.
-  const netConstruction = clientRows.filter((r) => !r.provisional).reduce((a, r) => a + r.subtotal, 0);
+  // Net construction excludes provisional sums and optional extras — each is
+  // its own block below the total, with its own VAT line.
+  const netConstruction = clientRows.filter((r) => !r.provisional && !r.optional).reduce((a, r) => a + r.subtotal, 0);
   const provisionalFromSections = clientRows.filter((r) => r.provisional).reduce((a, r) => a + r.subtotal, 0);
+  const optionalFromSections = clientRows.filter((r) => r.optional).reduce((a, r) => a + r.subtotal, 0);
   // Contingency / prelims-% are charged on the construction net (pre-uplift,
-  // excluding provisional sums), matching how the delivered tender computes them.
-  const originalNet = sections.reduce((a, s, i) => a + (s.provisional ? 0 : sectionTotals[i].total), 0);
+  // excluding the separate blocks), matching how the delivered tender computes them.
+  const originalNet = sections.reduce((a, s, i) => a + (isSeparateSection(s) ? 0 : sectionTotals[i].total), 0);
 
   const ohpApplied = baseUplift > 1.0001 || Object.keys(perTradeOhp).length > 0;
   let runningTotal = netConstruction;
@@ -480,13 +504,6 @@ export default function BuilderPackPage() {
     });
     runningTotal += v;
   }
-  // Provisional sums = itemised provisional sections + any legacy flat lump
-  // (only one of the two is ever non-zero, so they never double up).
-  const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : provisionalSum);
-  if (provisionalTotal > 0) {
-    summaryLines.push({ label: 'Provisional sums', value: provisionalTotal, key: 'provisional' });
-    runningTotal += provisionalTotal;
-  }
   if (contingency > 0) {
     const v = originalNet * (contingency / 100);
     summaryLines.push({ label: `Contingency (${contingency}% of net)`, value: v, key: 'contingency' });
@@ -495,11 +512,18 @@ export default function BuilderPackPage() {
   const exVat = runningTotal;
   const vatVal = vat > 0 ? exVat * (vat / 100) : 0;
   const inclVat = exVat + vatVal;
+  // Below the total, not in it: provisional sums (the itemised section, or the
+  // legacy flat lump when the bill wasn't itemised — never both) and optional
+  // extras. Each prints with its own VAT line.
+  const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : provisionalSum);
+  const separateBlocks = [];
+  if (provisionalTotal > 0) separateBlocks.push({ key: 'provisional', label: 'Provisional sums', value: provisionalTotal });
+  if (optionalFromSections > 0) separateBlocks.push({ key: 'optional', label: 'Optional extras', value: optionalFromSections });
 
   // ─── Downloads ───────────────────────────────────────────────────────────
   function editsForBody() {
     return sections.map((s) => ({
-      number: s.number, title: s.title, provisional: !!s.provisional,
+      number: s.number, title: s.title, provisional: !!s.provisional, optional: !!s.optional && !s.provisional,
       items: s.items.map((it) => ({
         itemRef: it.itemRef, description: it.description, unit: it.unit,
         qty: num(it.qty), labour: num(it.labour), materials: num(it.materials),
@@ -670,7 +694,7 @@ export default function BuilderPackPage() {
       }
       for (const ns of (p.new_sections || [])) {
         next.push({
-          number: ns.number, title: ns.title, provisional: !!ns.provisional,
+          number: ns.number, title: ns.title, provisional: !!ns.provisional, optional: !!ns.optional && !ns.provisional,
           items: (ns.items || []).map(buildNewItem),
         });
       }
@@ -710,20 +734,20 @@ export default function BuilderPackPage() {
     const order = (pricingPrefs && Array.isArray(pricingPrefs.trades)) ? pricingPrefs.trades : [];
     const acc = {};
     sections.forEach((s) => {
-      const secTrade = s.provisional ? 'Fees & Provisional Sums' : ((sectionTrades[String(s.number)] || {}).trade || 'General Building');
+      // Provisional sums and optional extras are not trade packages: they sit
+      // below the total as their own blocks, so ALL TRADES equals the grand total.
+      if (isSeparateSection(s)) return;
+      const secTrade = (sectionTrades[String(s.number)] || {}).trade || 'General Building';
       for (const it of s.items) {
-        const trade = s.provisional ? 'Fees & Provisional Sums' : (it.trade || secTrade);
+        const trade = it.trade || secTrade;
         const t = acc[trade] || (acc[trade] = { trade, item_count: 0, labour: 0, materials: 0, total: 0, sections: {} });
         const ls = num(it.labour), ms = num(it.materials);
         const comp = (ls !== 0 || ms !== 0) ? 0 : num(it.total);
-        // A provisional section's lines are carried at cost — no margin.
-        const lm = s.provisional ? 1 : labourMult, mm = s.provisional ? 1 : matMult;
         t.item_count++;
-        t.labour += ls * lm;
-        t.materials += ms * mm;
-        t.total += ls * lm + ms * mm + comp * lm;
+        t.labour += ls * labourMult;
+        t.materials += ms * matMult;
+        t.total += ls * labourMult + ms * matMult + comp * labourMult;
         t.sections[String(s.number)] = true;
-        if (s.provisional) t.at_cost = true;
       }
     });
     const rank = (t) => { const i = order.indexOf(t); return i < 0 ? 999 : i; };
@@ -733,6 +757,7 @@ export default function BuilderPackPage() {
   }, [sections, sectionTrades, pricingPrefs, labourMult, matMult]);
 
   const totalItemCount = sections.reduce((a, s) => a + s.items.length, 0);
+  const tradeCount = sections.filter((s) => !isSeparateSection(s)).length;
   const isDirty = useMemo(() =>
     JSON.stringify(sections) !== JSON.stringify(originalSections),
     [sections, originalSections]
@@ -841,7 +866,7 @@ export default function BuilderPackPage() {
         </div>
         {project && (
           <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '4px 0 0' }}>
-            {project.title} · {project.project_type} · {totalItemCount} item{totalItemCount === 1 ? '' : 's'} across {sections.length} trade{sections.length === 1 ? '' : 's'}
+            {project.title} · {project.project_type} · {totalItemCount} item{totalItemCount === 1 ? '' : 's'} across {tradeCount} trade{tradeCount === 1 ? '' : 's'}
           </p>
         )}
       </div>
@@ -1112,7 +1137,7 @@ export default function BuilderPackPage() {
                       <div style={isMobile
                         ? { flex: '1 1 100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 66, marginTop: -4 }
                         : { display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}{s.provisional ? ' · provisional, at cost' : ''}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{s.items.length} item{s.items.length === 1 ? '' : 's'}{s.provisional ? ' · provisional sums — below the total, at cost' : s.optional ? ' · optional extras — below the total, the client’s choice' : ''}</span>
                         <span style={{ fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: 'var(--text-primary)', minWidth: 90, textAlign: 'right' }}>
                           {fmt(sym, t.total)}
                         </span>
@@ -1257,6 +1282,12 @@ export default function BuilderPackPage() {
                           </tbody>
                         </table>
                         )}
+                        {s.optional && s.items.length === 0 && (
+                          <div style={{ padding: '10px 12px', fontSize: 12, lineHeight: 1.5, color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
+                            Nothing offered yet. Add the items your client can choose to include — they print below the total on the
+                            client copy and the Builder Pack, with their own VAT line, and never move the total itself.
+                          </div>
+                        )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-primary)', flexWrap: 'wrap', gap: 8 }}>
                           <button
                             onClick={() => addItem(sIdx)}
@@ -1286,11 +1317,13 @@ export default function BuilderPackPage() {
               background: 'var(--bg-card)', border: '1px solid var(--border)',
             }}>
               {tab === 'builder'
-                ? <BuilderPreview rows={builderRows} tradeRows={tradeRows} totals={builderGrand} base={baseGrand} provisional={builderProvisional}
+                ? <BuilderPreview rows={builderRows} tradeRows={tradeRows} totals={builderGrand} base={baseGrand}
+                    provisional={builderProvisional} optional={builderOptional}
                     builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
                 : <ClientPreview rows={clientRows} sym={sym}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
+                    extras={separateBlocks}
                     ohpApplied={ohpApplied}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''}
                     projectType={project ? project.project_type : ''} />
@@ -1579,10 +1612,10 @@ function BuilderControls({
       <Slider label="Builder margin (all rates)" value={builderMargin} onChange={setBuilderMargin} max={40} hint="Applies to labour and materials" />
       <Slider label="Materials markup (extra)" value={materialsMarkup} onChange={setMaterialsMarkup} max={40} hint="Stacks on top of builder margin, materials only" />
       <button onClick={onDownload} disabled={downloading || disabled} style={primaryBtn('#F59E0B', downloading || disabled)}>
-        {downloading ? 'Generating…' : 'Download Builder Pack (3 tabs)'}
+        {downloading ? 'Generating…' : 'Download Builder Pack'}
       </button>
       <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '8px 0 0', textAlign: 'center' }}>
-        Trade Summary (by section and by trade package) · Materials Schedule · Labour Schedule
+        Trade Summary (by section and by trade package) · Materials Schedule · Labour Schedule · a Provisional Sums tab and an Optional Extras tab when the bill has them
       </p>
     </>
   );
@@ -1676,7 +1709,7 @@ function ClientControls({
           onChange={(e) => setProvisionalSum(parseFloat(e.target.value) || 0)}
           placeholder="e.g. 200250" style={inputStyle} />
         <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
-          Lump sum carried from the tender, added flat (no OH&P) — VAT still applies.
+          Only for a bill that doesn’t itemise them: a lump carried from the tender (no OH&P), shown below the total with its own VAT line — never in the total.
         </div>
       </Field>
 
@@ -1754,10 +1787,10 @@ function ClientControls({
                   <span style={{ fontSize: 11.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.number}. {s.title}
                   </span>
-                  {(s.provisional || tInfo.trade) && (
+                  {(s.provisional || s.optional || tInfo.trade) && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       title={Array.isArray(tInfo.trades) ? tInfo.trades.map((t) => t.trade + ' ' + t.share_pct + '%').join(' · ') : ''}>
-                      {s.provisional ? 'Provisional — not uplifted' : tInfo.trade + (mixed ? ' (mixed)' : '')}
+                      {s.provisional ? 'Provisional sums — below the total, not uplifted' : s.optional ? 'Optional extras — below the total, not uplifted' : tInfo.trade + (mixed ? ' (mixed)' : '')}
                     </span>
                   )}
                 </span>
@@ -1852,17 +1885,21 @@ function moneyCell(color) {
   };
 }
 
-function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
+function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, optional = 0, builderMargin, materialsMarkup, sym, branding, logoUrl, projectName }) {
   base = base || { labour: 0, materials: 0, total: 0 };
   const bm = num(builderMargin), mm = num(materialsMarkup);
-  // Provisional sums sit under the priced sections as their own block, at
-  // cost, after a net-construction line — the same shape as the workbook.
-  const measuredRows = rows.filter((s) => !s.provisional);
+  // Provisional sums and optional extras sit BELOW the grand total as their
+  // own blocks, at cost, each closed by its own total — the same shape as the
+  // workbook. Neither is in the grand total.
+  const measuredRows = rows.filter((s) => !s.provisional && !s.optional);
   const provisionalRows = rows.filter((s) => s.provisional);
-  const net = measuredRows.reduce(
+  const optionalRows = rows.filter((s) => s.optional);
+  const sumRows = (list) => list.reduce(
     (a, s) => ({ labour: a.labour + s.labour, materials: a.materials + s.materials, total: a.total + s.total }),
     { labour: 0, materials: 0, total: 0 }
   );
+  const provTotals = sumRows(provisionalRows);
+  const optTotals = sumRows(optionalRows);
   const primary = (branding && branding.primary_colour) || '#1B2A4A';
   const accent  = (branding && branding.accent_colour)  || '#F59E0B';
   const company = branding && branding.company_name;
@@ -1913,13 +1950,19 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, b
         {bRow('True build cost (priced labour + materials)', fmt(sym, base.total, 2))}
         {bRow(`Your builder margin (${bm}% on all rates)`, (builderMarginAmt > 0 ? '+ ' : '') + fmt(sym, builderMarginAmt, 2), { muted: bm === 0 })}
         {bRow(`Your materials markup (extra ${mm}% on materials)`, (materialsMarkupAmt > 0 ? '+ ' : '') + fmt(sym, materialsMarkupAmt, 2), { muted: mm === 0 })}
-        {provisional > 0 && bRow('Provisional sums (carried at cost — no margin or markup)', '+ ' + fmt(sym, provisional, 2))}
         {bRow('Builder pack total', fmt(sym, totals.total, 2), { strong: true })}
+        {(provisional > 0 || optional > 0) && (
+          <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 2 }}>Not in the total above</div>
+            {provisional > 0 && bRow('Provisional sums (at cost — no margin or markup)', fmt(sym, provisional, 2), { muted: true })}
+            {optional > 0 && bRow('Optional extras (the client’s choice — no margin or markup)', fmt(sym, optional, 2), { muted: true })}
+          </div>
+        )}
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.5 }}>
           {totalAdded <= 0
             ? 'Nothing has been added on top — the total equals the priced build cost. Move the margin sliders on the left to add your markup, and you’ll see exactly how much it adds here.'
             : 'You’ve added ' + fmt(sym, totalAdded, 2) + ' on top of the priced build cost. The line figures below are the priced labour + materials; your margin is applied to them.'}
-          {provisional > 0 && ' Provisional sums are listed as their own block below, at cost, exactly as the bill carries them.'}
+          {(provisional > 0 || optional > 0) && ' Provisional sums and optional extras are listed as their own blocks below the grand total, at cost, and are not part of it.'}
         </div>
       </div>
 
@@ -1935,49 +1978,57 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, b
         </div>
         {rows.length === 0 && <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-muted)' }}>No priced sections in this BOQ.</div>}
         {(() => {
-          const line = (s, key, no) => {
+          const separate = provisionalRows.length > 0 || optionalRows.length > 0;
+          const line = (s, key, no, outside) => {
             const pct = totals.total > 0 ? (s.total / totals.total) * 100 : 0;
             return (
               <div key={key} style={previewRowStyle}>
                 <div style={{ color: 'var(--text-muted)' }}>{no}</div>
-                <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items{s.provisional ? ' · at cost, no margin' : ''}</span></div>
+                <div style={{ fontWeight: 500 }}>{s.title}<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{s.item_count} items{outside ? ' · at cost, no margin' : ''}</span></div>
                 <div style={moneyCell('#3B82F6')}>{fmt(sym, s.labour)}</div>
                 <div style={moneyCell('#A855F7')}>{fmt(sym, s.materials)}</div>
                 <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, s.total)}</div>
-                <div style={moneyCell('var(--text-muted)')}>{pct.toFixed(1)}%</div>
+                <div style={moneyCell('var(--text-muted)')}>{outside ? <span style={{ fontSize: 10.5, fontStyle: 'italic' }}>not in total</span> : pct.toFixed(1) + '%'}</div>
               </div>
             );
           };
+          // A block below the grand total: a banner, its rows, its own total.
+          const block = (keyPrefix, banner, list, t, totalLabel, no) => (
+            <React.Fragment key={keyPrefix}>
+              <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', background: 'rgba(168,85,247,0.06)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                {banner}
+              </div>
+              {list.map((s, i) => line(s, keyPrefix + '-' + s.number + '-' + i, no, true))}
+              <div style={{ ...previewRowStyle, background: 'rgba(27,42,74,0.05)', fontWeight: 700 }}>
+                <div></div>
+                <div>{totalLabel}</div>
+                <div style={moneyCell()}>{fmt(sym, t.labour)}</div>
+                <div style={moneyCell()}>{fmt(sym, t.materials)}</div>
+                <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, t.total)}</div>
+                <div style={moneyCell('var(--text-muted)')}><span style={{ fontSize: 10.5, fontStyle: 'italic' }}>not in total</span></div>
+              </div>
+            </React.Fragment>
+          );
           return (
             <>
-              {measuredRows.map((s, i) => line(s, s.number + '-' + i, i + 1))}
-              {provisionalRows.length > 0 && (
-                <>
-                  <div style={{ ...previewRowStyle, background: 'rgba(27,42,74,0.05)', fontWeight: 700 }}>
-                    <div></div>
-                    <div>NET CONSTRUCTION<span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 500 }}>priced sections{bm > 0 || mm > 0 ? ', with your margin' : ''}</span></div>
-                    <div style={moneyCell()}>{fmt(sym, net.labour)}</div>
-                    <div style={moneyCell()}>{fmt(sym, net.materials)}</div>
-                    <div style={{ ...moneyCell(), fontWeight: 700 }}>{fmt(sym, net.total)}</div>
-                    <div style={moneyCell('var(--text-muted)')}>{(totals.total > 0 ? (net.total / totals.total) * 100 : 0).toFixed(1)}%</div>
-                  </div>
-                  <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', background: 'rgba(168,85,247,0.06)', borderBottom: '1px solid var(--border)' }}>
-                    Provisional sums — carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab of the download.
-                  </div>
-                  {provisionalRows.map((s, i) => line(s, 'ps-' + s.number + '-' + i, 'PS'))}
-                </>
-              )}
+              {measuredRows.map((s, i) => line(s, s.number + '-' + i, i + 1, false))}
+              <div style={{ ...previewRowStyle, background: 'rgba(245,158,11,0.08)', fontWeight: 700, fontSize: 13.5 }}>
+                <div></div>
+                <div>GRAND TOTAL{separate && <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8, fontWeight: 500 }}>net construction{bm > 0 || mm > 0 ? ', with your margin' : ''}</span>}</div>
+                <div style={moneyCell()}>{fmt(sym, totals.labour)}</div>
+                <div style={moneyCell()}>{fmt(sym, totals.materials)}</div>
+                <div style={moneyCell('#F59E0B')}>{fmt(sym, totals.total)}</div>
+                <div style={moneyCell()}>100%</div>
+              </div>
+              {provisionalRows.length > 0 && block('ps',
+                'Provisional sums — not included in the grand total above. Carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab of the download.',
+                provisionalRows, provTotals, 'TOTAL PROVISIONAL SUMS (at cost)', 'PS')}
+              {optionalRows.length > 0 && block('opt',
+                'Optional extras — not included in the grand total above. Work the client can choose to add, carried as entered; no builder margin or materials markup. Every line is on the Optional Extras tab of the download.',
+                optionalRows, optTotals, 'TOTAL OPTIONAL EXTRAS', 'OPT')}
             </>
           );
         })()}
-        <div style={{ ...previewRowStyle, background: 'rgba(245,158,11,0.08)', fontWeight: 700, fontSize: 13.5 }}>
-          <div></div>
-          <div>GRAND TOTAL</div>
-          <div style={moneyCell()}>{fmt(sym, totals.labour)}</div>
-          <div style={moneyCell()}>{fmt(sym, totals.materials)}</div>
-          <div style={moneyCell('#F59E0B')}>{fmt(sym, totals.total)}</div>
-          <div style={moneyCell()}>100%</div>
-        </div>
         </div>
       </div>
 
@@ -2007,7 +2058,7 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, b
                     <div style={{ color: 'var(--text-muted)' }}>{i + 1}</div>
                     <div style={{ fontWeight: 500, minWidth: 0 }}>
                       {t.trade}
-                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{t.item_count} line{t.item_count === 1 ? '' : 's'}{t.sections.length ? ' · sections ' + t.sections.join(', ') : ''}{t.at_cost ? ' · at cost, no margin' : ''}</span>
+                      <span style={{ fontSize: 10.5, color: 'var(--text-muted)', marginLeft: 8 }}>{t.item_count} line{t.item_count === 1 ? '' : 's'}{t.sections.length ? ' · sections ' + t.sections.join(', ') : ''}</span>
                     </div>
                     <div style={moneyCell('#3B82F6')}>{fmt(sym, t.labour)}</div>
                     <div style={moneyCell('#A855F7')}>{fmt(sym, t.materials)}</div>
@@ -2024,6 +2075,20 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, b
                 <div style={moneyCell('#F59E0B')}>{fmt(sym, tradeTotal)}</div>
                 <div style={moneyCell()}>100%</div>
               </div>
+              {/* Memo rows: outside the trades and the total, at cost. */}
+              {[
+                provisionalRows.length > 0 ? { key: 'ps', no: 'PS', label: 'Provisional sums — at cost, not in the total above', t: provTotals } : null,
+                optionalRows.length > 0 ? { key: 'opt', no: 'OPT', label: 'Optional extras — not in the total above', t: optTotals } : null,
+              ].filter(Boolean).map((m) => (
+                <div key={m.key} style={{ ...previewRowStyle, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  <div>{m.no}</div>
+                  <div>{m.label}</div>
+                  <div style={moneyCell('var(--text-muted)')}>{fmt(sym, m.t.labour)}</div>
+                  <div style={moneyCell('var(--text-muted)')}>{fmt(sym, m.t.materials)}</div>
+                  <div style={moneyCell('var(--text-muted)')}>{fmt(sym, m.t.total)}</div>
+                  <div style={moneyCell('var(--text-muted)')}><span style={{ fontSize: 10.5 }}>not in total</span></div>
+                </div>
+              ))}
               </div>
             </div>
           </>
@@ -2037,18 +2102,19 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, b
 // with sample figures, and it mirrors the XLSX layout line for line. The
 // client never sees an OH&P column — the margin is baked into the rates —
 // so the preview doesn't show one either.
-function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, ohpApplied, branding, logoUrl, projectName, projectType }) {
+function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, extras = [], ohpApplied, branding, logoUrl, projectName, projectType }) {
   return (
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
         This is what your client will see — the same layout as the sheet they download. Your margin is baked into the rates; nothing is shown separately.
+        {extras.length > 0 && ' Provisional sums and optional extras sit below the total, each with its own VAT line, and are not part of it.'}
       </p>
       <ClientCopySheet
         branding={branding} logoUrl={logoUrl}
         projectName={projectName} projectType={projectType}
         sym={sym} rows={rows} summaryLines={summaryLines}
-        exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat} ohpApplied={ohpApplied}
+        exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat} extras={extras} ohpApplied={ohpApplied}
       />
     </>
   );

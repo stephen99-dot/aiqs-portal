@@ -1278,23 +1278,29 @@ async function generateBuilderPack(parsed, opts = {}) {
   }
   tsHdr.height = 24;
 
-  // Provisional sums are carried at cost, exactly as the bill lists them —
-  // no builder margin, no materials markup — as their own block under the
-  // priced sections, with every line on the Provisional Sums tab. Folded in
-  // with the trades they were marked up like materials, and the builder
-  // could not see what was in them.
+  // Provisional sums and optional extras are carried at cost, exactly as the
+  // bill lists them — no builder margin, no materials markup — and sit BELOW
+  // the grand total as their own blocks, each with its own total and its own
+  // tab. Neither is in the grand total: provisional sums are allowances that
+  // may never be spent, optional extras are work the client may never order.
+  // Folded in with the trades they were marked up like materials, and the
+  // builder could not see what was in them.
   const round2 = (v) => Math.round(v * 100) / 100;
   const fmtAmt = (v) => round2(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // A line's money: labour + materials, or the composite total when there is no split.
   const lineMoney = (it) => { const lm = (it.labour || 0) + (it.materials || 0); return lm !== 0 ? lm : (it.total || 0); };
-  const measured = (parsed.sections || []).filter((s) => !s.provisional);
+  const isSeparate = (s) => !!(s.provisional || s.optional);
+  const measured = (parsed.sections || []).filter((s) => !isSeparate(s));
   const provisionalSections = (parsed.sections || []).filter((s) => s.provisional);
+  // An empty optional-extras section (nothing offered yet) prints nothing.
+  const optionalSections = (parsed.sections || []).filter((s) => s.optional && !s.provisional && (s.items || []).length);
+  const separateSections = provisionalSections.concat(optionalSections);
   const subtotalOf = (s) => s.subtotal || (s.items || []).reduce(
     (acc, it) => ({ labour: acc.labour + (it.labour || 0), materials: acc.materials + (it.materials || 0), total: acc.total + lineMoney(it) }),
     { labour: 0, materials: 0, total: 0 });
   const sectionFigures = (s) => {
     const sub = subtotalOf(s);
-    if (s.provisional) return { labour: sub.labour || 0, materials: sub.materials || 0, total: sub.total || 0 };
+    if (isSeparate(s)) return { labour: sub.labour || 0, materials: sub.materials || 0, total: sub.total || 0 };
     const labour = (sub.labour || 0) * labourMult;
     const materials = (sub.materials || 0) * matMult;
     return { labour, materials, total: labour + materials };
@@ -1305,7 +1311,9 @@ async function generateBuilderPack(parsed, opts = {}) {
   }, { labour: 0, materials: 0, total: 0 });
   const netFigures = sumFigures(measured);
   const provFigures = sumFigures(provisionalSections);
-  const projectTotal = netFigures.total + provFigures.total;
+  const optFigures = sumFigures(optionalSections);
+  // The grand total is the priced sections alone.
+  const projectTotal = netFigures.total;
 
   let r = 6;
   const writeTsRow = (no, label, f, style = {}) => {
@@ -1315,13 +1323,16 @@ async function generateBuilderPack(parsed, opts = {}) {
     row.getCell(3).value = round2(f.labour);
     row.getCell(4).value = round2(f.materials);
     row.getCell(5).value = round2(f.total);
-    row.getCell(6).value = projectTotal > 0 ? f.total / projectTotal : 0;
+    // A row outside the grand total has no share of it.
+    row.getCell(6).value = style.noPct ? 'not in total' : (projectTotal > 0 ? f.total / projectTotal : 0);
     for (let c = 1; c <= 6; c++) {
       row.getCell(c).border = allBorders;
-      row.getCell(c).font = { name: 'Arial', size: style.bold ? 11 : 10, bold: !!style.bold };
+      row.getCell(c).font = (c === 6 && style.noPct)
+        ? { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } }
+        : { name: 'Arial', size: style.bold ? 11 : 10, bold: !!style.bold };
       if (style.fill) row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: style.fill } };
       if (c >= 3 && c <= 5) row.getCell(c).numFmt = currFmt;
-      if (c === 6) row.getCell(c).numFmt = '0.0%';
+      if (c === 6 && !style.noPct) row.getCell(c).numFmt = '0.0%';
       if (c === 1 || c === 6) row.getCell(c).alignment = { horizontal: 'center' };
       if (c === 3 || c === 4 || c === 5) row.getCell(c).alignment = { horizontal: 'right' };
     }
@@ -1340,18 +1351,24 @@ async function generateBuilderPack(parsed, opts = {}) {
   };
 
   measured.forEach((s, idx) => writeTsRow(idx + 1, s.title, sectionFigures(s)));
-  if (provisionalSections.length) {
-    writeTsRow('', 'NET CONSTRUCTION — priced sections' + (builderMargin || materialsMarkup ? ', with your margin' : ''), netFigures, { bold: true, fill: SUBTOTAL_BG });
-    bannerRow(ts, 'PROVISIONAL SUMS — carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab.', 'F');
-    provisionalSections.forEach((s) => writeTsRow('PS', s.title, sectionFigures(s)));
-  }
 
-  // Grand total
-  writeTsRow('', 'GRAND TOTAL', {
-    labour: netFigures.labour + provFigures.labour,
-    materials: netFigures.materials + provFigures.materials,
-    total: projectTotal,
-  }, { bold: true, fill: SUBTOTAL_BG });
+  // Grand total — the priced sections (net construction), with the margin.
+  writeTsRow('', 'GRAND TOTAL' + (separateSections.length ? ' — net construction' + (builderMargin || materialsMarkup ? ', with your margin' : '') : ''), netFigures, { bold: true, fill: SUBTOTAL_BG });
+
+  // Below the grand total: provisional sums, then optional extras, each as
+  // its own block closed by its own total. Neither is in the figure above.
+  if (provisionalSections.length) {
+    r++;
+    bannerRow(ts, 'PROVISIONAL SUMS — not included in the grand total above. Carried at cost as the bill lists them; no builder margin or materials markup. Every line is on the Provisional Sums tab.', 'F');
+    provisionalSections.forEach((s) => writeTsRow('PS', s.title, sectionFigures(s), { noPct: true }));
+    writeTsRow('', 'TOTAL PROVISIONAL SUMS (at cost)', provFigures, { bold: true, fill: SUBTOTAL_BG, noPct: true });
+  }
+  if (optionalSections.length) {
+    r++;
+    bannerRow(ts, 'OPTIONAL EXTRAS — not included in the grand total above. Work the client can choose to add, carried as entered; no builder margin or materials markup. Every line is on the Optional Extras tab.', 'F');
+    optionalSections.forEach((s) => writeTsRow('OPT', s.title, sectionFigures(s), { noPct: true }));
+    writeTsRow('', 'TOTAL OPTIONAL EXTRAS', optFigures, { bold: true, fill: SUBTOTAL_BG, noPct: true });
+  }
 
   // ── By trade package ──────────────────────────────────────────────────────
   // The same lines regrouped as subcontract packages (electrician, plumber,
@@ -1359,9 +1376,9 @@ async function generateBuilderPack(parsed, opts = {}) {
   // out to price with subbies. Margins apply exactly as in the section table.
   {
     const { classifySections } = require('./boqTrades');
-    // Priced sections only: provisional sums are not a trade package. They
-    // follow the trades as one row, at cost, so ALL TRADES still equals the
-    // grand total.
+    // Priced sections only: provisional sums and optional extras are not trade
+    // packages and are not in the grand total, so ALL TRADES equals it. They
+    // follow ALL TRADES as memo rows, at cost.
     const tradeInfo = classifySections(measured.map((s) => ({ ...s, items: (s.items || []).map((it) => ({ ...it })) })));
     const byTrade = tradeInfo.by_trade || [];
     if (byTrade.length) {
@@ -1394,17 +1411,9 @@ async function generateBuilderPack(parsed, opts = {}) {
         tradeGrand += total;
         return { ...t, labour, materials, total };
       });
-      if (provisionalSections.length) tradeGrand += provFigures.total;
-      if (provisionalSections.length) {
-        tradeRows.push({
-          trade: 'Provisional sums — at cost, no margin', item_count: 0,
-          sections: provisionalSections.map((s) => s.number).filter((n) => n != null && n !== ''),
-          labour: provFigures.labour, materials: provFigures.materials, total: provFigures.total, provisional: true,
-        });
-      }
       tradeRows.forEach((t, idx) => {
         const row = ts.getRow(r++);
-        row.getCell(1).value = t.provisional ? 'PS' : idx + 1;
+        row.getCell(1).value = idx + 1;
         row.getCell(2).value = sanitizeXmlText(t.trade + (t.sections.length ? ' (' + t.sections.join(', ') + ')' : ''));
         row.getCell(3).value = Math.round(t.labour * 100) / 100;
         row.getCell(4).value = Math.round(t.materials * 100) / 100;
@@ -1433,11 +1442,31 @@ async function generateBuilderPack(parsed, opts = {}) {
         if (c === 6) tg.getCell(c).numFmt = '0.0%';
         if (c >= 3 && c <= 5) tg.getCell(c).alignment = { horizontal: 'right' };
       }
+      // Memo rows: what sits outside the trades and the total, at cost.
+      const memoRow = (no, label, f) => {
+        const row = ts.getRow(r++);
+        row.getCell(1).value = no;
+        row.getCell(2).value = label;
+        row.getCell(3).value = round2(f.labour);
+        row.getCell(4).value = round2(f.materials);
+        row.getCell(5).value = round2(f.total);
+        row.getCell(6).value = 'not in total';
+        for (let c = 1; c <= 6; c++) {
+          row.getCell(c).border = allBorders;
+          row.getCell(c).font = { name: 'Arial', size: 10, italic: true, color: { argb: '64748B' } };
+          if (c >= 3 && c <= 5) row.getCell(c).numFmt = currFmt;
+          if (c === 1 || c === 6) row.getCell(c).alignment = { horizontal: 'center' };
+          if (c >= 3 && c <= 5) row.getCell(c).alignment = { horizontal: 'right' };
+        }
+      };
+      const sectionList = (list) => { const n = list.map((s) => s.number).filter((v) => v != null && v !== ''); return n.length ? ' (' + n.join(', ') + ')' : ''; };
+      if (provisionalSections.length) memoRow('PS', 'Provisional sums — at cost, not in the total above' + sectionList(provisionalSections), provFigures);
+      if (optionalSections.length) memoRow('OPT', 'Optional extras — not in the total above' + sectionList(optionalSections), optFigures);
       const noteRow = r++;
       const note = ts.getRow(noteRow);
       ts.mergeCells('A' + noteRow + ':F' + noteRow);
       note.getCell(1).value = 'Trades are assigned line by line from the description and section. Every job differs — treat this as a starting point for splitting subcontract packages.'
-        + (provisionalSections.length ? ' Provisional sums are one row at cost, not split into trades.' : '');
+        + (separateSections.length ? ' Provisional sums and optional extras are not split into trades and are not in the total.' : '');
       note.getCell(1).font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
       note.getCell(1).alignment = { wrapText: true, vertical: 'top' };
       note.height = 28;
@@ -1537,11 +1566,17 @@ async function generateBuilderPack(parsed, opts = {}) {
       matGT.getCell(c).alignment = { horizontal: 'right' };
     }
   }
-  if (provisionalSections.length) {
+  // What the schedules leave out, and where it is.
+  const separateNote = (kind) => [
+    provisionalSections.length ? 'Provisional sums (' + currency + fmtAmt(provFigures.total) + ') are allowances, not ' + kind + ' to order — see the Provisional Sums tab.' : '',
+    optionalSections.length ? 'Optional extras (' + currency + fmtAmt(optFigures.total) + ') are not ordered unless the client chooses them — see the Optional Extras tab.' : '',
+    separateSections.length ? 'Neither is in the total.' : '',
+  ].filter(Boolean).join(' ');
+  if (separateSections.length) {
     const n = mr++;
     ms.mergeCells('A' + n + ':E' + n);
     const c = ms.getCell('A' + n);
-    c.value = 'Provisional sums (' + currency + fmtAmt(provFigures.total) + ') are not materials to order: they are allowances, carried at cost on the Provisional Sums tab.';
+    c.value = separateNote('materials');
     c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
     c.alignment = { wrapText: true, vertical: 'top' };
     ms.getRow(n).height = 28;
@@ -1637,49 +1672,48 @@ async function generateBuilderPack(parsed, opts = {}) {
       labGT.getCell(c).alignment = { horizontal: 'right' };
     }
   }
-  if (provisionalSections.length) {
+  if (separateSections.length) {
     const n = lr++;
     ls.mergeCells('A' + n + ':E' + n);
     const c = ls.getCell('A' + n);
-    c.value = 'Provisional sums (' + currency + fmtAmt(provFigures.total) + ') carry no labour here: they are allowances, carried at cost on the Provisional Sums tab.';
+    c.value = separateNote('labour');
     c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
     c.alignment = { wrapText: true, vertical: 'top' };
     ls.getRow(n).height = 28;
   }
   ls.views = [{ state: 'frozen', ySplit: 5 }];
 
-  // ─── Tab 4: Provisional Sums (only when the bill carries any) ────────────
-  // Every provisional line as the bill lists it, at cost: the builder can see
-  // what the sums are for without opening the bill, and nothing here is
-  // marked up or mixed into the materials and labour schedules.
-  let ps = null;
-  if (provisionalSections.length) {
-    ps = wb.addWorksheet('Provisional Sums', {
+  // ─── Tabs 4 & 5: Provisional Sums, Optional Extras (only when the bill has them)
+  // Every line as the bill lists it, at cost: the builder can see what the
+  // sums are for without opening the bill, and nothing here is marked up or
+  // mixed into the materials and labour schedules.
+  const addSeparateTab = (sheetName, heading, list, totalLabel, footNote) => {
+    const tab = wb.addWorksheet(sheetName, {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
     });
-    ps.columns = [
+    tab.columns = [
       { key: 'item', width: 8 },
       { key: 'desc', width: 60 },
       { key: 'unit', width: 8 },
       { key: 'qty', width: 10 },
       { key: 'amt', width: 16 },
     ];
-    titleBlock(ps, 'PROVISIONAL SUMS', 'E');
-    const psHdr = ps.getRow(5);
-    psHdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Amount (' + currency + ')'];
+    titleBlock(tab, heading, 'E');
+    const hdr = tab.getRow(5);
+    hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Amount (' + currency + ')'];
     for (let c = 1; c <= 5; c++) {
-      const cell = psHdr.getCell(c);
+      const cell = hdr.getCell(c);
       cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
       cell.border = allBorders;
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
     }
-    psHdr.height = 24;
+    hdr.height = 24;
 
     let pr = 6;
-    let psRunning = 0;
+    let running = 0;
     const totalRow = (label, value, size) => {
-      const row = ps.getRow(pr++);
+      const row = tab.getRow(pr++);
       row.getCell(2).value = label;
       row.getCell(5).value = round2(value);
       for (let c = 1; c <= 5; c++) {
@@ -1692,9 +1726,9 @@ async function generateBuilderPack(parsed, opts = {}) {
         }
       }
     };
-    for (const s of provisionalSections) {
-      const sec = ps.getRow(pr++);
-      ps.mergeCells('A' + (pr - 1) + ':E' + (pr - 1));
+    for (const s of list) {
+      const sec = tab.getRow(pr++);
+      tab.mergeCells('A' + (pr - 1) + ':E' + (pr - 1));
       sec.getCell(1).value = sanitizeXmlText(s.title).toUpperCase();
       sec.getCell(1).font = { name: 'Arial', size: 10, bold: true, color: { argb: '1B2A4A' } };
       sec.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SECTION_BG } };
@@ -1704,7 +1738,7 @@ async function generateBuilderPack(parsed, opts = {}) {
       for (const it of (s.items || [])) {
         const amount = lineMoney(it);
         secTotal += amount;
-        const row = ps.getRow(pr++);
+        const row = tab.getRow(pr++);
         row.getCell(1).value = sanitizeXmlText(it.itemRef || '');
         row.getCell(2).value = sanitizeXmlText(it.description || '');
         row.getCell(3).value = sanitizeXmlText(it.unit || '');
@@ -1725,22 +1759,32 @@ async function generateBuilderPack(parsed, opts = {}) {
           if (c === 2) row.getCell(c).alignment = { wrapText: true, vertical: 'top' };
         }
       }
-      psRunning += secTotal;
-      if (provisionalSections.length > 1) totalRow('Subtotal — ' + sanitizeXmlText(s.title), secTotal, 10);
+      running += secTotal;
+      if (list.length > 1) totalRow('Subtotal — ' + sanitizeXmlText(s.title), secTotal, 10);
     }
-    totalRow('TOTAL PROVISIONAL SUMS (at cost)', psRunning, 11);
+    totalRow(totalLabel, running, 11);
     const n = pr++;
-    ps.mergeCells('A' + n + ':E' + n);
-    const c = ps.getCell('A' + n);
-    c.value = 'Carried at cost exactly as the bill lists them — no builder margin or materials markup. They sit as their own block on the Trade Summary and are in its grand total. Each is an allowance: the final figure is what that work actually comes to.';
+    tab.mergeCells('A' + n + ':E' + n);
+    const c = tab.getCell('A' + n);
+    c.value = footNote;
     c.font = { name: 'Arial', size: 9, italic: true, color: { argb: '64748B' } };
     c.alignment = { wrapText: true, vertical: 'top' };
-    ps.getRow(n).height = 40;
-    ps.views = [{ state: 'frozen', ySplit: 5 }];
+    tab.getRow(n).height = 40;
+    tab.views = [{ state: 'frozen', ySplit: 5 }];
+    return tab;
+  };
+  const extraTabs = [];
+  if (provisionalSections.length) {
+    extraTabs.push(addSeparateTab('Provisional Sums', 'PROVISIONAL SUMS', provisionalSections, 'TOTAL PROVISIONAL SUMS (at cost)',
+      'Carried at cost exactly as the bill lists them — no builder margin or materials markup. They sit below the grand total on the Trade Summary and are not in it. Each is an allowance: the final figure is what that work actually comes to, if it is needed at all.'));
+  }
+  if (optionalSections.length) {
+    extraTabs.push(addSeparateTab('Optional Extras', 'OPTIONAL EXTRAS', optionalSections, 'TOTAL OPTIONAL EXTRAS',
+      'Work the client can choose to add, carried as entered — no builder margin or materials markup. They sit below the grand total on the Trade Summary and are not in it; nothing here is ordered or priced into the job unless the client takes it up.'));
   }
 
   // Footer on every tab
-  for (const tab of [ts, ms, ls, ...(ps ? [ps] : [])]) {
+  for (const tab of [ts, ms, ls, ...extraTabs]) {
     tab.headerFooter.oddFooter =
       '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N';
   }
@@ -1765,10 +1809,16 @@ async function generateBuilderPack(parsed, opts = {}) {
  *   prelims_amount:  number  (£ flat — appears as a separate summary line)
  *   prelims_pct:     number  (% of net — alternative to flat amount)
  *   provisional_sum: number  (£ flat lump carried from the tender, exclusive of
- *                             OH&P — appears as its own summary line; VAT applies)
+ *                             OH&P — shown below the total with its own VAT line)
  *   day_rate:        { label: string, days: number, rate_per_day: number }
  *   rounding:        0 | 1 | 10 | 100  (round each item total to nearest)
  *   project_name, client_name
+ *
+ * Sections flagged `provisional: true` (the bill's provisional sums) or
+ * `optional: true` (optional extras the client can choose to add) are carried
+ * at face value — no uplift, contingency or prelims % — and sit BELOW the
+ * total, each as its own block with its own VAT line. The total the client
+ * reads is the construction cost alone.
  */
 async function generateClientCopyPro(parsed, opts = {}) {
   const currency = opts.currency || '£';
@@ -1833,21 +1883,43 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // We need totals to pass to the cover renderer up-front. Compute the full
   // ex-VAT figure (construction net + prelims + day-rate + contingency) so the
   // headline on the cover matches the bottom of the BOQ.
-  // Provisional sums carried as their own section (line by line) are exclusive
-  // of OH&P and must not attract the rate uplift, contingency or prelims %. When
-  // present they supersede any flat provisional lump so the block isn't counted
-  // twice.
+  //
+  // Provisional sums and optional extras are carried as their own sections,
+  // line by line, exclusive of OH&P: no rate uplift, contingency or prelims %.
+  // Neither is in the total. Provisional sums are allowances for work nobody
+  // can price yet; optional extras are work the client can choose to add. Each
+  // block sits below the total with its own VAT line, so the figure the client
+  // reads as "the total" is the construction cost and nothing else. An
+  // itemised provisional section supersedes any flat provisional lump so the
+  // block isn't counted twice.
+  const isSeparate = (s) => !!(s && (s.provisional || s.optional));
+  const isOptional = (s) => !!(s && s.optional && !s.provisional);
+  // A line's money: labour + materials, or the composite total when there is
+  // no split (a credit line's split is negative and still counts).
+  const lineMoney = (it) => {
+    const lm = (parseFloat(it.labour) || 0) + (parseFloat(it.materials) || 0);
+    return lm !== 0 ? lm : (parseFloat(it.total) || 0);
+  };
   const hasProvSection = (parsed.sections || []).some((s) => s.provisional);
-  let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0, preProvisional = 0;
+  // Measured sections first, then the provisional block, then the optional
+  // extras — the order the summary reads in, whatever order the bill had.
+  // An optional-extras section with nothing in it (the page always carries
+  // one, until the builder offers something) prints nothing.
+  const orderedSections = [
+    ...(parsed.sections || []).filter((s) => !isSeparate(s)),
+    ...(parsed.sections || []).filter((s) => s.provisional),
+    ...(parsed.sections || []).filter((s) => isOptional(s) && (s.items || []).length),
+  ];
+  let preNet = 0, preNetOriginal = 0, preLabour = 0, preMaterials = 0, preItemCount = 0, preProvisional = 0, preOptional = 0;
   // Per-section client totals, computed once here with the same maths as the
   // item rows below, so the "where the money goes" block at the top of the
   // sheet and the sub-totals further down can never disagree.
   const preSections = [];
-  for (const s of (parsed.sections || [])) {
-    if (s.provisional) {
+  for (const s of orderedSections) {
+    if (isSeparate(s)) {
       let t = 0;
-      for (const it of (s.items || [])) { t += (parseFloat(it.total) || 0); preItemCount++; }
-      preProvisional += t;
+      for (const it of (s.items || [])) { t += roundMoney(lineMoney(it)); preItemCount++; }
+      if (s.provisional) preProvisional += t; else preOptional += t;
       preSections.push({ section: s, total: t });
       continue;
     }
@@ -1856,7 +1928,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
     for (const it of (s.items || [])) {
       preLabour += (parseFloat(it.labour) || 0);
       preMaterials += (parseFloat(it.materials) || 0);
-      const base = (parseFloat(it.labour) || 0) + (parseFloat(it.materials) || 0) || (parseFloat(it.total) || 0);
+      const base = lineMoney(it);
       preNetOriginal += base;
       t += roundMoney(base * factor);
       preItemCount++;
@@ -1865,13 +1937,14 @@ async function generateClientCopyPro(parsed, opts = {}) {
     preSections.push({ section: s, total: t });
   }
   const totalProvisional = preProvisional + (hasProvSection ? 0 : provisionalSum);
+  const totalOptional = preOptional;
   let preExVat = preNet;
   if (prelimsAmount > 0) preExVat += prelimsAmount;
   if (prelimsPct > 0)    preExVat += preNetOriginal * (prelimsPct / 100);
-  if (totalProvisional > 0) preExVat += totalProvisional;
   if (dayRate)           preExVat += dayRate.days * dayRate.rate_per_day;
   if (contingency > 0)   preExVat += preNetOriginal * (contingency / 100);
   const preInclVat = preExVat * (1 + (vat / 100));
+  const withVat = (v) => v * (1 + (vat / 100));
 
   // ── Cover sheet ───────────────────────────────────────────────────────────
   // TEMPORARILY DISABLED. The branded cover (renderCoverSheet) produces a sheet
@@ -1913,7 +1986,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // ##### when a number outgrows its column). Rate is a little narrower.
   const widestFigure = Math.max(
     ...preSections.map((x) => fmtMoney(x.total).length),
-    fmtMoney(preExVat).length, fmtMoney(preInclVat).length, fmtMoney(preNet).length, 8,
+    fmtMoney(preExVat).length, fmtMoney(preInclVat).length, fmtMoney(preNet).length,
+    fmtMoney(withVat(totalProvisional)).length, fmtMoney(withVat(totalOptional)).length, 8,
   );
   const totalColW = Math.max(14, widestFigure + 3);
   const rateColW = Math.max(12, totalColW - 2);
@@ -2017,11 +2091,21 @@ async function generateClientCopyPro(parsed, opts = {}) {
   heroSub.alignment = { horizontal: 'left', vertical: 'top', indent: 1 };
   r++;
 
-  // Row 5: prepared-for line (left) · brand block continues (right)
+  // Row 5: prepared-for line (left) · what sits outside the total (right)
   ws.getRow(r).height = 16;
   ws.mergeCells('A' + r + ':C' + r);
   ws.mergeCells('D' + r + ':F' + r);
   fillRange(r, 3, 5, PRIMARY);
+  if (totalProvisional > 0 || totalOptional > 0) {
+    // The headline is the construction cost alone; say so where it is read.
+    const parts = [];
+    if (totalProvisional > 0) parts.push('provisional sums ' + currency + fmtMoney(totalProvisional));
+    if (totalOptional > 0) parts.push('optional extras ' + currency + fmtMoney(totalOptional));
+    const sep = ws.getCell('D' + r);
+    sep.value = 'Not in this total: ' + parts.join(' · ') + ' (shown below)';
+    sep.font = { name: bodyFont, size: 8.5, color: { argb: ON_PRIMARY } };
+    sep.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
+  }
   const prep = ws.getCell('A' + r);
   prep.value = 'Prepared for ' + tidyClient + '   ·   ' + issued + (companyName ? '   ·   Issued by ' + companyName : '');
   prep.font = { name: bodyFont, size: 10, color: { argb: TEXT_MUTED } };
@@ -2061,7 +2145,14 @@ async function generateClientCopyPro(parsed, opts = {}) {
   r++;
   ws.getRow(r).height = 16;
   ws.mergeCells('A' + r + ':B' + r); ws.mergeCells('C' + r + ':E' + r);
-  metaValue('A' + r, preItemCount + ' items in ' + preSections.length + (preSections.length === 1 ? ' trade' : ' trades'), { size: 9, muted: true });
+  {
+    // Counts cover the priced trades; the blocks outside the total are named.
+    const measuredOnly = preSections.filter((x) => !isSeparate(x.section));
+    const measuredItems = measuredOnly.reduce((a, x) => a + (x.section.items || []).length, 0);
+    const extras = [totalProvisional > 0 ? 'provisional sums' : '', totalOptional > 0 ? 'optional extras' : ''].filter(Boolean);
+    metaValue('A' + r, measuredItems + ' items in ' + measuredOnly.length + (measuredOnly.length === 1 ? ' trade' : ' trades')
+      + (extras.length ? ' · plus ' + extras.join(' and ') : ''), { size: 9, muted: true });
+  }
   metaValue('C' + r, companyAddress || docTpl.cleanText(branding.footer_text) || '', { size: 9, muted: true });
   for (let c = 0; c < 6; c++) ws.getCell(cols[c] + r).border = hairBottom;
   r++;
@@ -2069,7 +2160,11 @@ async function generateClientCopyPro(parsed, opts = {}) {
   r++;
 
   // ── Where the money goes ──
-  const allSectionsTotal = preSections.reduce((a, x) => a + x.total, 0);
+  // The share bar and percentages cover the sections that make up the total.
+  // Provisional sums and optional extras are listed after them, marked as
+  // outside the total, with no share.
+  const measuredPre = preSections.filter((x) => !isSeparate(x.section));
+  const allSectionsTotal = measuredPre.reduce((a, x) => a + x.total, 0);
   ws.getRow(r).height = 16;
   ws.mergeCells('A' + r + ':C' + r); ws.mergeCells('D' + r + ':F' + r);
   const wh = ws.getCell('A' + r);
@@ -2088,9 +2183,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // is plain cell content, so it survives every viewer that opens the file.
   const tintSteps = [0, 0.2, 0.4, 0.6, 0.75];
   const tradeTint = (i) => docTpl.hexToArgb(docTpl.tintHex(style.primaryHex, tintSteps[i % tintSteps.length])) || PRIMARY;
-  if (allSectionsTotal > 0 && preSections.length > 0) {
+  if (allSectionsTotal > 0 && measuredPre.length > 0) {
     const BAR_LEN = 96;
-    let counts = preSections.map((x) => Math.max(x.total > 0 ? 1 : 0, Math.round(x.total / allSectionsTotal * BAR_LEN)));
+    let counts = measuredPre.map((x) => Math.max(x.total > 0 ? 1 : 0, Math.round(x.total / allSectionsTotal * BAR_LEN)));
     let over = counts.reduce((a, c) => a + c, 0) - BAR_LEN;
     while (over > 0) { const i = counts.indexOf(Math.max(...counts)); counts[i]--; over--; }
     const runs = [];
@@ -2107,24 +2202,37 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // Row of each trade in this list — filled with live formulas once the
   // sub-total cells further down exist.
   const moneyRows = [];
+  const SEPARATE_BADGE_BG = 'FFE2E8F0';
+  const separateSuffix = (s) => {
+    if (s.provisional) return /provisional/i.test(s.title) ? '' : '  (provisional)';
+    if (isOptional(s)) return /optional/i.test(s.title) ? '' : '  (optional extras)';
+    return '';
+  };
   preSections.forEach((x, i) => {
     const row = ws.getRow(r);
     moneyRows.push(r);
     row.height = 16;
+    const separate = isSeparate(x.section);
+    const badgeBg = separate ? SEPARATE_BADGE_BG : tradeTint(i);
     const sw = row.getCell(1);
-    sw.value = x.section.provisional ? 'PS' : String(x.section.number || i + 1);
-    sw.fill = fillOf(tradeTint(i));
-    sw.font = { name: bodyFont, size: 9, bold: true, color: { argb: docTpl.idealTextOn(tradeTint(i)) } };
+    sw.value = x.section.provisional ? 'PS' : isOptional(x.section) ? 'OPT' : String(x.section.number || i + 1);
+    sw.fill = fillOf(badgeBg);
+    sw.font = { name: bodyFont, size: 9, bold: true, color: { argb: docTpl.idealTextOn(badgeBg) } };
     sw.alignment = { horizontal: 'center', vertical: 'middle' };
     ws.mergeCells('B' + r + ':C' + r);
     const nm = row.getCell(2);
-    nm.value = sanitizeXmlText(x.section.title) + (x.section.provisional && !/provisional/i.test(x.section.title) ? '  (provisional)' : '');
-    nm.font = { name: bodyFont, size: 10, color: { argb: TEXT_DARK } };
+    nm.value = sanitizeXmlText(x.section.title) + separateSuffix(x.section);
+    nm.font = { name: bodyFont, size: 10, color: { argb: separate ? TEXT_MUTED : TEXT_DARK } };
     nm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1, shrinkToFit: true };
     const pc = row.getCell(4);
-    pc.value = allSectionsTotal > 0 ? x.total / allSectionsTotal : 0;
-    pc.numFmt = '0.0%';
-    pc.font = { name: bodyFont, size: 10, color: { argb: TEXT_MUTED } };
+    if (separate) {
+      pc.value = 'not in total';
+      pc.font = { name: bodyFont, size: 8.5, italic: true, color: { argb: TEXT_MUTED } };
+    } else {
+      pc.value = allSectionsTotal > 0 ? x.total / allSectionsTotal : 0;
+      pc.numFmt = '0.0%';
+      pc.font = { name: bodyFont, size: 10, color: { argb: TEXT_MUTED } };
+    }
     pc.alignment = { horizontal: 'right', vertical: 'middle' };
     const am = row.getCell(6);
     am.value = x.total;
@@ -2163,15 +2271,16 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // (labour + materials) × (1 + ohp/100), rounded as configured.
   const sectionTotals = []; // post-uplift per section
   let originalNet = 0;      // pre-uplift construction net (contingency base)
-  parsed.sections.forEach((s, idx) => {
-    // Provisional sums are carried verbatim, exclusive of OH&P — never uplifted.
-    const sectionFactor = s.provisional ? 1 : upliftFactorForSection(s.number);
+  orderedSections.forEach((s, idx) => {
+    // Provisional sums and optional extras are carried verbatim, exclusive of
+    // OH&P — never uplifted.
+    const sectionFactor = isSeparate(s) ? 1 : upliftFactorForSection(s.number);
 
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
     ws.mergeCells('A' + r + ':F' + r);
-    sec.getCell(1).value = s.provisional
-      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + (/provisional/i.test(s.title) ? '' : '   (provisional)')
+    sec.getCell(1).value = isSeparate(s)
+      ? '   ' + sanitizeXmlText(s.title).toUpperCase() + separateSuffix(s).toUpperCase().replace(/^ +/, '   ')
       : '   ' + s.number + '.   ' + sanitizeXmlText(s.title).toUpperCase();
     sec.getCell(1).font = { name: headingFont, size: 11, bold: true, color: { argb: f.sectionText } };
     if (f.sectionFill !== style.WHITE) {
@@ -2188,8 +2297,8 @@ async function generateClientCopyPro(parsed, opts = {}) {
     let sectionTotal = 0;
     const itemRowStart = r;
     for (const it of s.items) {
-      const baseLineTotal = (it.labour || 0) + (it.materials || 0) || (it.total || 0);
-      if (!s.provisional) originalNet += baseLineTotal;
+      const baseLineTotal = lineMoney(it);
+      if (!isSeparate(s)) originalNet += baseLineTotal;
       const upliftedTotal = roundMoney(baseLineTotal * sectionFactor);
       sectionTotal += upliftedTotal;
       const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionFactor;
@@ -2252,25 +2361,34 @@ async function generateClientCopyPro(parsed, opts = {}) {
     sectionTotals.push({ section: s, total: sectionTotal, subRow });
   });
 
-  // "Where the money goes" now points at the sub-totals it summarises.
+  // "Where the money goes" now points at the sub-totals it summarises. The
+  // shares are worked over the measured sections, which the ordering above
+  // keeps together at the top of the list; the separate blocks carry no share.
   if (moneyRows.length === sectionTotals.length && moneyRows.length > 0) {
-    const first = moneyRows[0], last = moneyRows[moneyRows.length - 1];
-    const listTotal = sectionTotals.reduce((a, x) => a + x.total, 0);
+    const measuredIdx = sectionTotals.map((x, i) => i).filter((i) => !isSeparate(sectionTotals[i].section));
+    const first = measuredIdx.length ? moneyRows[measuredIdx[0]] : null;
+    const last = measuredIdx.length ? moneyRows[measuredIdx[measuredIdx.length - 1]] : null;
+    const listTotal = measuredIdx.reduce((a, i) => a + sectionTotals[i].total, 0);
     sectionTotals.forEach((x, i) => {
       const row = ws.getRow(moneyRows[i]);
       row.getCell(6).value = { formula: 'F' + x.subRow, result: x.total };
-      row.getCell(4).value = { formula: 'IF(SUM(F' + first + ':F' + last + ')=0,0,F' + moneyRows[i] + '/SUM(F' + first + ':F' + last + '))', result: listTotal > 0 ? x.total / listTotal : 0 };
+      if (first != null && !isSeparate(x.section)) {
+        row.getCell(4).value = { formula: 'IF(SUM(F' + first + ':F' + last + ')=0,0,F' + moneyRows[i] + '/SUM(F' + first + ':F' + last + '))', result: listTotal > 0 ? x.total / listTotal : 0 };
+      }
     });
   }
 
   // ── Summary block ──────────────────────────────────────────────────────
-  // Net construction excludes provisional sections — those are shown on their
-  // own summary line (exclusive of OH&P), matching the source tender.
+  // Net construction, the adders, the total and its VAT. Provisional sums and
+  // optional extras are not in it: each follows the total as its own block
+  // with its own VAT line (see below), so the client reads one construction
+  // total and, separately, what may or may not be added to it.
   // Each line is a live formula over the cells above it wherever the maths
   // allows; the cached result is the exact figure so viewers that don't
   // recalculate show the same numbers.
-  const netConstruction = sectionTotals.filter((x) => !x.section.provisional).reduce((a, x) => a + x.total, 0);
+  const netConstruction = sectionTotals.filter((x) => !isSeparate(x.section)).reduce((a, x) => a + x.total, 0);
   const provisionalFromSections = sectionTotals.filter((x) => x.section.provisional).reduce((a, x) => a + x.total, 0);
+  const optionalFromSections = sectionTotals.filter((x) => isOptional(x.section)).reduce((a, x) => a + x.total, 0);
   const refsOf = (pred) => sectionTotals.filter(pred).map((x) => 'F' + x.subRow);
   const sumRefs = (refs, result) => (refs.length ? { formula: refs.length === 1 ? refs[0] : 'SUM(' + refs.join(',') + ')', result } : result);
   // Contingency and prelims-% are charged on the pre-uplift net, which the
@@ -2318,7 +2436,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // tendered net, so don't claim they include OH&P.
   const ohpApplied = baseUpliftFactor > 1.0001 || Object.keys(perTradeOhp).length > 0;
   netRow = r;
-  addSummaryLine('Net construction cost', sumRefs(refsOf((x) => !x.section.provisional), netConstruction));
+  addSummaryLine('Net construction cost', sumRefs(refsOf((x) => !isSeparate(x.section)), netConstruction));
   const preUpliftNet = (pct) => (uniformUplift ? { formula: 'F' + netRow + '/' + upliftConst + '*' + pct + '/100', result: originalNet * (pct / 100) } : originalNet * (pct / 100));
 
   let runningTotal = netConstruction;
@@ -2330,11 +2448,6 @@ async function generateClientCopyPro(parsed, opts = {}) {
   if (prelimsPct > 0) {
     addSummaryLine('Preliminaries (' + prelimsPct + '% of net)', preUpliftNet(prelimsPct));
     runningTotal += originalNet * (prelimsPct / 100);
-  }
-  const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
-  if (provisionalDisplay > 0) {
-    addSummaryLine('Provisional sums', hasProvSection ? sumRefs(refsOf((x) => x.section.provisional), provisionalDisplay) : provisionalDisplay);
-    runningTotal += provisionalDisplay;
   }
   if (dayRate) {
     const v = dayRate.days * dayRate.rate_per_day;
@@ -2373,17 +2486,71 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // Recalculate on open so every viewer shows the formulas' live results.
   wb.calcProperties = { ...(wb.calcProperties || {}), fullCalcOnLoad: true };
 
+  // ── Below the total: provisional sums, then optional extras ──────────────
+  // Each is its own element with its own VAT line, and neither moves the total
+  // above. A provisional block comes from the bill's own section (or the flat
+  // lump when the bill could not be itemised); optional extras are the items
+  // the builder has offered for the client to choose.
+  const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
+  const separateBlocks = [];
+  if (provisionalDisplay > 0) {
+    separateBlocks.push({
+      label: 'Provisional sums', amount: provisionalDisplay,
+      value: hasProvSection ? sumRefs(refsOf((x) => x.section.provisional), provisionalDisplay) : provisionalDisplay,
+    });
+  }
+  if (optionalFromSections > 0) {
+    separateBlocks.push({
+      label: 'Optional extras', amount: optionalFromSections,
+      value: sumRefs(refsOf((x) => isOptional(x.section)), optionalFromSections),
+    });
+  }
+  if (separateBlocks.length) {
+    r++; // breathing space after the total
+    const sepHdr = ws.getRow(r);
+    sepHdr.height = 16;
+    ws.mergeCells('C' + r + ':F' + r);
+    sepHdr.getCell(3).value = 'NOT INCLUDED IN THE TOTAL ABOVE';
+    sepHdr.getCell(3).font = { name: headingFont, size: 9, bold: true, color: { argb: PRIMARY } };
+    sepHdr.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    sepHdr.getCell(3).border = { bottom: { style: 'medium', color: { argb: PRIMARY } } };
+    r++;
+    for (const blk of separateBlocks) {
+      const blkRow = r;
+      if (vat > 0) {
+        addSummaryLine(blk.label, blk.value);
+        const vRow = r;
+        addSummaryLine('VAT @ ' + vat + '% on ' + blk.label.toLowerCase(), { formula: 'F' + blkRow + '*' + vat + '/100', result: blk.amount * (vat / 100) });
+        addSummaryLine(blk.label + ' (incl. VAT)', { formula: 'F' + blkRow + '+F' + vRow, result: withVat(blk.amount) }, { tone: 'total' });
+      } else {
+        addSummaryLine(blk.label + ' (excl. VAT)', blk.value, { tone: 'total' });
+      }
+      r++; // a gap between blocks
+    }
+    const sepNote = ws.getRow(r - 1);
+    ws.mergeCells('C' + (r - 1) + ':F' + (r - 1));
+    sepNote.height = 38;
+    sepNote.getCell(3).value = [
+      provisionalDisplay > 0 ? 'Provisional sums are allowances for work that cannot be priced yet; they are only spent if that work is needed.' : '',
+      optionalFromSections > 0 ? 'Optional extras are work you can choose to add.' : '',
+      'Neither is included in the total above.',
+    ].filter(Boolean).join(' ');
+    sepNote.getCell(3).font = { name: bodyFont, size: 8.5, italic: true, color: { argb: TEXT_MUTED } };
+    sepNote.getCell(3).alignment = { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true };
+  }
+
   // Footer note
   r++;
   const note = ws.getRow(r);
   ws.mergeCells('A' + r + ':F' + r);
   note.getCell(1).alignment = { horizontal: 'left', vertical: 'top', indent: 1, wrapText: true };
   note.height = 26;
-  note.getCell(1).value = ohpApplied
+  note.getCell(1).value = (ohpApplied
     ? 'This document is prepared for client use. Rates are fixed and fully inclusive'
       + (vat > 0 ? ', with VAT as shown' : '') + '.'
     : 'This document is prepared for client use. Rates are as tendered'
-      + (vat > 0 ? '. VAT is shown where applicable' : '') + '.';
+      + (vat > 0 ? '. VAT is shown where applicable' : '') + '.')
+    + (separateBlocks.length ? ' Provisional sums and optional extras are shown separately and are not included in the total.' : '');
   note.getCell(1).font = { name: bodyFont, size: 9, italic: true, color: { argb: TEXT_MUTED } };
 
   const footerLeft = branding.footer_text || branding.company_name || 'The AI QS';
@@ -2443,7 +2610,9 @@ function reconcileParsed(parsed) {
   if (!parsed || !parsed.sections) return null;
   const ss = parsed.source_summary || {};
   const sum = (pred) => parsed.sections.filter(pred).reduce((a, s) => a + ((s.subtotal && s.subtotal.total) || 0), 0);
-  const net = sum((s) => !s.provisional);
+  // Optional extras are the builder's own additions, never part of the bill's
+  // printed figures, so they take no part in the check.
+  const net = sum((s) => !s.provisional && !s.optional);
   const prov = sum((s) => !!s.provisional);
   const within = (a, b) => Math.abs(a - b) <= Math.max(Math.abs(b) * 0.01, 5);
 
@@ -2551,7 +2720,7 @@ function reconcileParsed(parsed) {
   // whole of "A" beneath A.06), and may be the lines plus the OH&P the
   // section itself states. Every measured section has to fall under a total
   // that checks out.
-  const measured = parsed.sections.filter((s) => !s.provisional);
+  const measured = parsed.sections.filter((s) => !s.provisional && !s.optional);
   let groups = 0;
   let run = 0;
   let open = false;

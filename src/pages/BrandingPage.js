@@ -468,13 +468,14 @@ const SAMPLE_ROWS = [
 const SAMPLE_NET = SAMPLE_ROWS.reduce((a, r) => a + r.subtotal, 0);
 const SAMPLE_PROVISIONAL = 2500;
 const SAMPLE_CONTINGENCY = SAMPLE_NET * 0.05;
-const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_PROVISIONAL + SAMPLE_CONTINGENCY;
+const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_CONTINGENCY;
 const SAMPLE_VAT = SAMPLE_EX_VAT * 0.2;
 const SAMPLE_SUMMARY = [
   { key: 'net', label: 'Net construction cost', value: SAMPLE_NET },
-  { key: 'provisional', label: 'Provisional sums', value: SAMPLE_PROVISIONAL },
   { key: 'contingency', label: 'Contingency (5% of net)', value: SAMPLE_CONTINGENCY },
 ];
+// Provisional sums sit below the total with their own VAT line, not in it.
+const SAMPLE_EXTRAS = [{ key: 'provisional', label: 'Provisional sums', value: SAMPLE_PROVISIONAL }];
 
 function DocPreview({ branding, logoUrl }) {
   return (
@@ -485,6 +486,7 @@ function DocPreview({ branding, logoUrl }) {
       clientName="Mr & Mrs A. Okafor"
       sym="£" rows={SAMPLE_ROWS} summaryLines={SAMPLE_SUMMARY}
       exVat={SAMPLE_EX_VAT} vat={20} vatVal={SAMPLE_VAT} inclVat={SAMPLE_EX_VAT + SAMPLE_VAT}
+      extras={SAMPLE_EXTRAS}
       ohpApplied
     />
   );

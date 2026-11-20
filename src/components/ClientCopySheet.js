@@ -12,8 +12,10 @@ import {
  * summary. Used by the Builder Pack page (live figures) and the Branding page
  * (sample figures) so both previews show what will actually be downloaded.
  *
- * rows: [{ number, title, provisional, item_count, subtotal }]
+ * rows: [{ number, title, provisional, optional, item_count, subtotal }]
  * summaryLines: [{ key, label, value }] — the lines between net and total ex-VAT
+ * extras: [{ key, label, value }] — provisional sums and optional extras: shown
+ *   BELOW the total, each with its own VAT line, and never part of it
  */
 const DEFAULT_PRIMARY = '#1B2A4A';
 const DEFAULT_ACCENT = '#F59E0B';
@@ -30,7 +32,7 @@ const num = { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
 
 export default function ClientCopySheet({
   branding, logoUrl, projectName, projectType, clientName,
-  sym = '£', rows = [], summaryLines = [], exVat = 0, vat = 0, vatVal = 0, inclVat = 0, ohpApplied = true,
+  sym = '£', rows = [], summaryLines = [], exVat = 0, vat = 0, vatVal = 0, inclVat = 0, extras = [], ohpApplied = true,
 }) {
   const b = branding || {};
   const primary = safeHex(b.primary_colour, DEFAULT_PRIMARY);
@@ -55,13 +57,22 @@ export default function ClientCopySheet({
 
   const heroIsIncl = vat > 0;
   const heroText = money(sym, heroIsIncl ? inclVat : exVat);
-  const allTotal = rows.reduce((a, r) => a + (r.subtotal || 0), 0);
-  const itemCount = rows.reduce((a, r) => a + (r.item_count || 0), 0);
-  const trades = rows.map((r, i) => {
+  // The share bar and percentages cover the trades that make up the total.
+  // Provisional sums and optional extras follow them, marked as outside it.
+  const isSeparate = (r) => !!(r.provisional || r.optional);
+  const measured = rows.filter((r) => !isSeparate(r));
+  const separateRows = rows.filter(isSeparate);
+  const allTotal = measured.reduce((a, r) => a + (r.subtotal || 0), 0);
+  const itemCount = measured.reduce((a, r) => a + (r.item_count || 0), 0);
+  const trades = measured.map((r, i) => {
     const pct = allTotal > 0 ? (r.subtotal || 0) / allTotal * 100 : 0;
     const bg = tradeTint(primary, i);
     return { ...r, pct, bg, fg: idealTextOn(bg), barLabel: pct >= 8 ? Math.round(pct) + '%' : '' };
   });
+  const extrasShown = (extras || []).filter((x) => x && x.value > 0);
+  const extrasNote = extrasShown.length
+    ? extrasShown.map((x) => x.label.toLowerCase() + ' ' + money(sym, x.value)).join(' · ')
+    : '';
   // Phones: masthead stacks, the money list is one column, labels left-aligned.
   // The XLSX keeps its own layout; this is the readable on-screen version.
   const compact = useIsMobile(600);
@@ -107,6 +118,9 @@ export default function ClientCopySheet({
           <div style={{ fontSize: 11, opacity: 0.9 }}>
             {heroIsIncl ? `${money(sym, exVat)} excl. VAT · VAT @ ${vat}% ${money(sym, vatVal)}` : 'VAT not applied to this copy'}
           </div>
+          {extrasNote && (
+            <div style={{ fontSize: 10, opacity: 0.85, lineHeight: 1.35 }}>Not in this total: {extrasNote} (shown below)</div>
+          )}
         </div>
       </div>
 
@@ -115,7 +129,10 @@ export default function ClientCopySheet({
         <div style={{ minWidth: 0 }}>
           <div style={label}>Prepared for</div>
           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clientName || 'Your client'}</div>
-          <div style={{ fontSize: 11, color: MUTED }}>{itemCount} item{itemCount === 1 ? '' : 's'} in {rows.length} trade{rows.length === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: 11, color: MUTED }}>
+            {itemCount} item{itemCount === 1 ? '' : 's'} in {measured.length} trade{measured.length === 1 ? '' : 's'}
+            {extrasShown.length > 0 && ' · plus ' + extrasShown.map((x) => x.label.toLowerCase()).join(' and ')}
+          </div>
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={label}>Prepared by</div>
@@ -154,16 +171,31 @@ export default function ClientCopySheet({
             }}>
               {trades.map((t, i) => (
                 <div key={String(t.number) + '-' + i} style={{ display: 'grid', gridTemplateColumns: '18px minmax(0, 1fr) 44px auto', gap: 8, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid ' + HAIRLINE }}>
-                  <div style={{ height: 16, borderRadius: 3, background: t.bg, color: t.fg, fontSize: 8.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.provisional ? 'PS' : (i + 1)}</div>
-                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'normal' : 'nowrap', lineHeight: 1.25 }}>
-                    {t.title}{t.provisional && !/provisional/i.test(t.title) && <span style={{ fontSize: 10, color: MUTED, marginLeft: 6 }}>provisional</span>}
-                  </div>
+                  <div style={{ height: 16, borderRadius: 3, background: t.bg, color: t.fg, fontSize: 8.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</div>
+                  <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'normal' : 'nowrap', lineHeight: 1.25 }}>{t.title}</div>
                   <div style={{ ...num, textAlign: 'right', color: MUTED }}>{t.pct.toFixed(1)}%</div>
                   <div style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{money(sym, t.subtotal)}</div>
                 </div>
               ))}
             </div>
           </>
+        )}
+        {/* Outside the total: listed after the trades, with no share of it */}
+        {separateRows.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' }}>
+            {separateRows.map((t, i) => (
+              <div key={'sep-' + String(t.number) + '-' + i} style={{ display: 'grid', gridTemplateColumns: '24px minmax(0, 1fr) 64px auto', gap: 8, alignItems: 'center', padding: '4px 0', borderBottom: '1px solid ' + HAIRLINE, color: MUTED }}>
+                <div style={{ height: 16, borderRadius: 3, background: '#E2E8F0', color: INK, fontSize: 8, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.provisional ? 'PS' : 'OPT'}</div>
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'normal' : 'nowrap', lineHeight: 1.25 }}>
+                  {t.title}
+                  {t.provisional && !/provisional/i.test(t.title) && <span style={{ fontSize: 10, marginLeft: 6 }}>provisional</span>}
+                  {t.optional && !t.provisional && !/optional/i.test(t.title) && <span style={{ fontSize: 10, marginLeft: 6 }}>optional extras</span>}
+                </div>
+                <div style={{ textAlign: 'right', fontSize: 10, fontStyle: 'italic' }}>not in total</div>
+                <div style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{money(sym, t.subtotal)}</div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -193,6 +225,44 @@ export default function ClientCopySheet({
             </>
           ) : (
             <div style={{ fontSize: 10.5, color: MUTED, fontStyle: 'italic', padding: '6px 10px 0', textAlign: 'right' }}>VAT not applied to this copy.</div>
+          )}
+
+          {/* Below the total, not in it: provisional sums, then optional extras,
+              each with its own VAT line — the same shape as the XLSX. */}
+          {extrasShown.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ ...label, color: primary, fontSize: 9.5, padding: '0 10px 4px', borderBottom: '2px solid ' + primary }}>Not included in the total above</div>
+              {extrasShown.map((x) => (
+                <div key={x.key} style={{ marginTop: 6 }}>
+                  {heroIsIncl ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 10px', borderBottom: '1px solid ' + HAIRLINE }}>
+                        <span style={{ color: '#3D4552' }}>{x.label}</span>
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{money(sym, x.value)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 10px', borderBottom: '1px solid ' + HAIRLINE }}>
+                        <span style={{ color: '#3D4552' }}>VAT @ {vat}% on {x.label.toLowerCase()}</span>
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{money(sym, x.value * vat / 100)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 10px', fontWeight: 700, background: tintBg, color: primary }}>
+                        <span>{x.label} (incl. VAT)</span>
+                        <span style={{ whiteSpace: 'nowrap' }}>{money(sym, x.value * (1 + vat / 100))}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 10px', fontWeight: 700, background: tintBg, color: primary }}>
+                      <span>{x.label} (excl. VAT)</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{money(sym, x.value)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{ fontSize: 10, color: MUTED, fontStyle: 'italic', padding: '6px 10px 0', lineHeight: 1.4 }}>
+                {extrasShown.some((x) => x.key === 'provisional') && 'Provisional sums are allowances for work that cannot be priced yet; they are only spent if that work is needed. '}
+                {extrasShown.some((x) => x.key === 'optional') && 'Optional extras are work you can choose to add. '}
+                Neither is included in the total above.
+              </div>
+            </div>
           )}
         </div>
       </div>

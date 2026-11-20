@@ -102,11 +102,17 @@ function snapshotForPrompt(project, sections, controls, extra = {}) {
   for (const f of flat) {
     if (f.section !== lastSection) {
       const tr = tradeBySection[String(f.section.number)];
-      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${tr ? ' [trade: ' + tr + ']' : ''}${f.section.provisional ? ' (PROVISIONAL — carried excl. OH&P)' : ''} — ${(f.section.items || []).length} lines, subtotal £${sectionSubtotal(f.section)}`);
+      out.push(`-- Section ${f.section.number || ''}: ${f.section.title || 'Untitled'}${tr ? ' [trade: ' + tr + ']' : ''}${separateMarker(f.section)} — ${(f.section.items || []).length} lines, subtotal £${sectionSubtotal(f.section)}`);
       lastSection = f.section;
     }
     const it = f.item;
     out.push(`${f.ref} | ${f.section.number || ''} | ${it.itemRef || ''} | ${String(it.description || '').slice(0, 160)} | ${num(it.qty)} | ${it.unit || ''} | ${num(it.labour)} | ${num(it.materials)} | ${round2(lineValue(it))}`);
+  }
+  // Sections with no lines yet (the Optional extras section the page always
+  // carries, until something is offered) — named so new_lines can target them.
+  for (const sec of sections) {
+    if ((sec.items || []).length) continue;
+    out.push(`-- Section ${sec.number || ''}: ${sec.title || 'Untitled'}${separateMarker(sec)} — no lines yet (add to it with new_lines, section_number "${sec.number || ''}")`);
   }
   out.push('');
   // The computed section subtotals, in one place. These are the page's own
@@ -119,16 +125,28 @@ function snapshotForPrompt(project, sections, controls, extra = {}) {
   const client = clientCopyExVat(sections, c);
   if (client) {
     out.push(`Client copy total (excl. VAT) with the controls above: £${client.ex_vat}${num(c.vat_pct) > 0 ? ` (+VAT @ ${num(c.vat_pct)}% = £${round2(client.ex_vat * (1 + num(c.vat_pct) / 100))})` : ''}`);
+    if (client.provisional > 0 || client.optional > 0) {
+      out.push(`Shown BELOW that total and not in it, each with its own VAT line: provisional sums £${client.provisional}, optional extras £${client.optional}.`);
+    }
   }
   return out.join('\n');
+}
+
+// How a section outside the total is announced in the snapshot.
+function separateMarker(sec) {
+  if (sec.provisional) return ' (PROVISIONAL SUMS — shown below the client copy total, not in it; carried excl. OH&P)';
+  if (sec.optional) return ' (OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it)';
+  return '';
 }
 
 // ─── Client copy total ───────────────────────────────────────────────────────
 // What the customer's price comes to under a set of client-copy controls —
 // the same maths as the Builder Pack page (uplift baked into each section,
-// provisional sections at face value, prelims / day-rate / contingency on the
-// summary), so a proposal can say what it does to the price the client sees
-// and not only to the net build cost, which markup changes never move.
+// prelims / day-rate / contingency on the summary), so a proposal can say what
+// it does to the price the client sees and not only to the net build cost,
+// which markup changes never move. Provisional sums and optional extras are
+// not in that total: they sit below it, each with its own VAT line, and are
+// returned separately.
 function clientCopyExVat(sections, controls) {
   const c = controls || {};
   if (!Array.isArray(sections) || !sections.length) return null;
@@ -137,10 +155,11 @@ function clientCopyExVat(sections, controls) {
   const overrides = c.per_trade_ohp && typeof c.per_trade_ohp === 'object' ? c.per_trade_ohp : {};
   const rounding = [1, 10, 100].includes(parseInt(c.rounding, 10)) ? parseInt(c.rounding, 10) : 0;
   const roundMoney = (v) => (rounding ? Math.round(v / rounding) * rounding : v);
-  let net = 0, provisional = 0, originalNet = 0;
+  let net = 0, provisional = 0, optional = 0, originalNet = 0;
   for (const sec of sections) {
     const base = (sec.items || []).reduce((a, it) => a + lineValue(it), 0);
     if (sec.provisional) { provisional += base; continue; }
+    if (sec.optional) { optional += base; continue; }
     originalNet += base;
     const key = String(sec.number);
     const factor = Object.prototype.hasOwnProperty.call(overrides, key) && overrides[key] !== null && overrides[key] !== ''
@@ -153,10 +172,13 @@ function clientCopyExVat(sections, controls) {
   if (prelimsMode === 'pct' && num(c.prelims_pct) > 0) running += originalNet * (num(c.prelims_pct) / 100);
   const dr = c.day_rate && typeof c.day_rate === 'object' ? c.day_rate : null;
   if (c.day_rate_on && dr && num(dr.days) > 0 && num(dr.rate_per_day) > 0) running += num(dr.days) * num(dr.rate_per_day);
-  const provTotal = provisional + (provisional > 0 ? 0 : num(c.provisional_sum));
-  if (provTotal > 0) running += provTotal;
   if (num(c.contingency_pct) > 0) running += originalNet * (num(c.contingency_pct) / 100);
-  return { ex_vat: round2(running), net_construction: round2(net), original_net: round2(originalNet) };
+  // The itemised provisional section supersedes the flat lump — never both.
+  const provTotal = provisional + (provisional > 0 ? 0 : num(c.provisional_sum));
+  return {
+    ex_vat: round2(running), net_construction: round2(net), original_net: round2(originalNet),
+    provisional: round2(provTotal), optional: round2(optional),
+  };
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
@@ -188,7 +210,7 @@ const UPDATE_TOOL = {
       },
       new_lines: {
         type: 'array',
-        description: 'Brand new items to add to an EXISTING section. ALWAYS set section_number (from the ITEMS list). For a section that does not exist yet, use new_sections instead. Give each item its money: labour + materials line totals, or `total` alone for a composite value.',
+        description: 'Brand new items to add to an EXISTING section. ALWAYS set section_number (from the ITEMS list). For a section that does not exist yet, use new_sections instead. To offer something as an optional extra (the client\'s choice, shown below the total), add it to the Optional extras section named in the snapshot. Give each item its money: labour + materials line totals, or `total` alone for a composite value.',
         items: {
           type: 'object',
           properties: {
@@ -210,7 +232,8 @@ const UPDATE_TOOL = {
           type: 'object',
           properties: {
             title: { type: 'string' },
-            provisional: { type: 'boolean', description: 'true if the whole section is a provisional sum (carried excl. OH&P)' },
+            provisional: { type: 'boolean', description: 'true if the whole section is a provisional sum (carried excl. OH&P, shown below the total with its own VAT line)' },
+            optional: { type: 'boolean', description: 'true if the whole section is optional extras — work the client can choose to add; shown below the total with its own VAT line, never in the total. Only when the bill has no Optional extras section already.' },
             items: {
               type: 'array',
               items: {
@@ -275,6 +298,9 @@ Typical requests:
 - "Set VAT to 20%" / "add 10% contingency" → change the client-copy controls.
 - "Put 10% on the electrician and plumber, 20% on everything else" → controls.trade_markup {"Electrical": 10, "Plumbing & Heating": 10} plus overhead_pct 20 (profit 0) for the rest. Each section is tagged [trade: …] in the snapshot; a trade with no section on this bill can't be uplifted, say so. "Always"/"from now on" → also remember_trade_markup: true.
 - "Put 25% on the roof section" → controls.section_uplift {"4": 25} using the section number.
+- "Offer the garden room lighting as an optional extra at £1,200" → a new_line in the Optional extras section (its section_number is in the snapshot). Only if the bill has no such section, create one with new_sections optional: true.
+
+PROVISIONAL SUMS AND OPTIONAL EXTRAS sit BELOW the client copy total, each as its own element with its own VAT line, and are never in that total. Provisional sums are allowances for work nobody can price yet; optional extras are work the client can choose to add. Neither takes overhead, profit, contingency or a trade uplift — they are carried as entered.
 
 HOW TO BEHAVE:
 1. QUALIFYING QUESTIONS: if the request is ambiguous — you can't tell which items it means, whether an uploaded quote includes VAT, whether it's supply-only or supply-and-fit, or whether it replaces or adds to existing items — ask 1-3 short questions in plain text and DO NOT call propose_pack_update yet. Never guess on money.
@@ -363,6 +389,7 @@ function validateAndPreview(input, project, sections, controls) {
       number: String(baseSectionNo + newSections.length + 1),
       title: String(ns.title).slice(0, 120),
       provisional: !!ns.provisional,
+      optional: !!ns.optional && !ns.provisional,
       items: ns.items.filter(it => it && it.description != null).map(cleanNewItem),
     });
   }
@@ -419,7 +446,8 @@ function validateAndPreview(input, project, sections, controls) {
       for (const [n, v] of Object.entries(su)) {
         const sec = sections.find((s) => String(s.number) === String(n).trim());
         if (!sec) { errors.push(`unknown section number ${n}`); continue; }
-        if (sec.provisional) { errors.push(`section ${n} is provisional sums — carried excl. OH&P, not uplifted`); continue; }
+        if (sec.provisional) { errors.push(`section ${n} is provisional sums — shown below the total, carried excl. OH&P, not uplifted`); continue; }
+        if (sec.optional) { errors.push(`section ${n} is optional extras — shown below the total, carried as entered, not uplifted`); continue; }
         if (v === null || v === '') { delete merged[String(sec.number)]; touched = true; upliftChanges.push({ kind: 'header', label: `Section ${sec.number} (${String(sec.title || '').slice(0, 30)}) uplift → default` }); continue; }
         const pct = Math.max(0, Math.min(100, round2(num(v))));
         merged[String(sec.number)] = pct; touched = true;
@@ -466,8 +494,8 @@ function validateAndPreview(input, project, sections, controls) {
   }
   for (const ns of newSections) {
     const value = round2(ns.items.reduce((a, it) => a + it.total, 0));
-    changes.push({ kind: 'add', label: `New section ${ns.number}: ${ns.title} — ${ns.items.length} item${ns.items.length === 1 ? '' : 's'} (£${value})${ns.provisional ? ', provisional' : ''}` });
-    work.push({ number: ns.number, title: ns.title, provisional: ns.provisional, items: ns.items.map(it => ({ ...it })) });
+    changes.push({ kind: 'add', label: `New section ${ns.number}: ${ns.title} — ${ns.items.length} item${ns.items.length === 1 ? '' : 's'} (£${value})${ns.provisional ? ', provisional sums (below the total)' : ns.optional ? ', optional extras (below the total)' : ''}` });
+    work.push({ number: ns.number, title: ns.title, provisional: ns.provisional, optional: ns.optional, items: ns.items.map(it => ({ ...it })) });
   }
   if (controlChanges) {
     const pretty = { overhead_pct: 'Overhead %', profit_pct: 'Profit %', contingency_pct: 'Contingency %', vat_pct: 'VAT %', provisional_sum: 'Provisional sums £' };
@@ -504,7 +532,8 @@ function validateAndPreview(input, project, sections, controls) {
       totals_note: 'Net build cost before overhead, profit, contingency and VAT.',
       client_before: clientBefore ? clientBefore.ex_vat : null,
       client_after: clientAfter ? clientAfter.ex_vat : null,
-      client_note: 'Client copy total excl. VAT' + (vatPct > 0 ? ` (VAT @ ${vatPct}% on top)` : '') + ' — what your customer\'s price does.',
+      client_note: 'Client copy total excl. VAT' + (vatPct > 0 ? ` (VAT @ ${vatPct}% on top)` : '') + ' — what your customer\'s price does.'
+        + ((clientAfter && (clientAfter.provisional > 0 || clientAfter.optional > 0)) ? ' Provisional sums and optional extras sit below it and are not included.' : ''),
       currency: project.currency || 'GBP',
     },
     warnings: errors,
