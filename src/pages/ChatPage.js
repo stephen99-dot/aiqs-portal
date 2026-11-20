@@ -622,7 +622,9 @@ export default function ChatPage() {
       const next = [...p, ...Array.from(fl)].slice(0, 5);
       // First time files are attached to a fresh chat → open intake modal.
       // Only open once per session: skip if already done or already has messages.
-      if (next.length > 0 && p.length === 0 && !intakeDone && messages.length === 0 && !currentSessionId) {
+      // The questions feed the BOQ pipeline, so with pricing off there is no
+      // point asking them.
+      if (CHAT_PRICING && next.length > 0 && p.length === 0 && !intakeDone && messages.length === 0 && !currentSessionId) {
         setIntakeOpen(true);
       }
       return next;
