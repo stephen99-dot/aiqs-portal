@@ -4,6 +4,12 @@
 //
 //   STRIPE_SECRET_KEY=sk_live_… PORTAL_URL=https://theaiqs.co.uk node scripts/create-max-plans.js
 //
+// Made the links already and want them to send customers somewhere else
+// after paying? This updates the four links in place (nothing new is made,
+// the link URLs do not change, Render needs no change):
+//
+//   STRIPE_SECRET_KEY=sk_live_… node scripts/create-max-plans.js --redirect https://aiqs-portal.onrender.com
+//
 // Run it once per Stripe mode (test, then live). It never deletes or changes
 // anything that exists: run twice and you get a second set, so set the env
 // vars from the run you keep. Prices and names come from server/maxPlans.js,
@@ -32,9 +38,11 @@ async function main() {
       + 'Stripe → Developers → API keys → Create secret key, and copy it from the popup.');
     process.exit(1);
   }
-  const portal = (process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com').replace(/\/$/, '');
   const stripe = require('stripe')(key);
   const mode = key.startsWith('sk_live') ? 'LIVE' : 'test';
+  const redirectArg = process.argv.indexOf('--redirect');
+  if (redirectArg !== -1) return redirectLinks(stripe, mode, process.argv[redirectArg + 1]);
+  const portal = (process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com').replace(/\/$/, '');
   console.log(`Creating the MAX packages at Stripe (${mode} mode)…\n`);
 
   const env = {};
@@ -75,6 +83,28 @@ async function main() {
   console.log('\nSet these on Render (Environment → Add) and the Plans page goes live on the next deploy:\n');
   for (const [k, v] of Object.entries(env)) console.log(`${k}=${v}`);
   console.log('\nThe success URL on every link is ' + portal + '/payment-success?plan=max — change PORTAL_URL if the website lives elsewhere.');
+}
+
+// Point every MAX payment link (the ones this script made, found by the
+// aiqs_plan tag on them) at <site>/payment-success?plan=max.
+async function redirectLinks(stripe, mode, site) {
+  const base = String(site || '').trim().replace(/\/$/, '');
+  if (!/^https:\/\/[^/\s]+$/.test(base)) {
+    console.error('Give the website address after --redirect, e.g. --redirect https://aiqs-portal.onrender.com (no path, no trailing slash).');
+    process.exit(1);
+  }
+  const url = base + '/payment-success?plan=max';
+  console.log(`Pointing the MAX payment links at ${url} (${mode} mode)…\n`);
+  const links = [];
+  for await (const link of stripe.paymentLinks.list({ limit: 100 })) if (link.active && link.metadata && link.metadata.aiqs_plan) links.push(link);
+  if (!links.length) { console.error('No MAX payment links found in this Stripe mode. Create them first (run without --redirect).'); process.exit(1); }
+  for (const link of links) {
+    const was = link.after_completion && link.after_completion.redirect && link.after_completion.redirect.url;
+    if (was === url) { console.log(`  ${link.url}  already right`); continue; }
+    await stripe.paymentLinks.update(link.id, { after_completion: { type: 'redirect', redirect: { url } } });
+    console.log(`  ${link.url}  ${link.metadata.aiqs_plan} ${link.metadata.aiqs_interval || ''}  ${was || '(confirmation page)'} → ${url}`);
+  }
+  console.log(`\nDone: ${links.length} link(s). The link URLs are unchanged, so Render needs nothing.`);
 }
 
 main().catch((err) => { console.error('\nStripe said:', err.message); process.exit(1); });

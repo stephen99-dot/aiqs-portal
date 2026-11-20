@@ -74,6 +74,17 @@ or a complimentary grant (`feature_overrides {"visualiser": true}`, Users → th
 (`403 VISUALISER_REQUIRED`). Inside the iOS app nothing is sold or priced (App Store rule 3.1.1):
 the same pages show a neutral notice. Tests: `server/maxPlans.test.js`.
 
+**AI Chat does not price.** Since the packages went live the older AI Chat (`/chat`,
+`server/chat.js`) refuses any price, cost, estimate, quote, rate, budget or BOQ ask — and any
+drawings uploaded to be measured — with a short reply pointing at MAX (or Submit Drawings for a
+full take-off), with no model call and no message credit spent (`server/chatPricing.js`). Its
+persona carries no rate library and no cost benchmarks and is told plainly never to give a
+figure; the routes that priced a take-off and the Atlas pipeline answer `403 PRICING_MOVED`. The
+chat page shows a MAX card under such a reply (or an "Ask MAX to price it" button for an account
+that has MAX) and no longer runs Atlas on an upload. `CHAT_PRICING=1` on the server restores the
+old behaviour, together with the matching flag at the top of `src/pages/ChatPage.js`. Tests:
+`server/chatPricing.test.js`.
+
 Rollout (`server/maxRollout.js`): **admins only by default**, plus any client an admin gives
 early access (Users → the client → MAX) and any client with a live package. Admin → MAX switches
 it on for everyone, live (the Visualiser still needs the package or a grant). The server is the
