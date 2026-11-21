@@ -544,6 +544,13 @@ router.post('/auth/register', async (req, res) => {
 
     // If they paid for a BOQ pack before creating their account, grant it now.
     claimPendingCredits({ id, email: email.toLowerCase(), full_name: fullName });
+    // Someone who bought a MAX package on the website before creating the
+    // account: the subscription is at Stripe under this email, so attach it
+    // (best effort, in the background — the sign-up never waits on Stripe).
+    try {
+      const u0 = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      require('./billingRoutes').attachByEmail(u0).catch((e) => console.warn('[signup] MAX attach skipped:', e.message));
+    } catch (e) { /* best effort */ }
     const newUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     const token = generateToken(newUser);
     const planInfo = getUserPlanInfo(newUser);

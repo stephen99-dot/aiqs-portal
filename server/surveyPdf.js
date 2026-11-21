@@ -1,12 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROOM SURVEYS — server/surveyPdf.js
 //
-// The survey report: a branded PDF of a property visit — a cover with the
-// totals, then a page per room with its plan sketch, quantities, openings,
-// what was counted, finishes and condition, the builder's notes, and the
-// photographs. The document a builder hands a customer or sends to the AI QS
-// team with the drawings. Pure rendering: the caller passes rows it has
-// already authorised.
+// The survey report: a branded PDF of a property visit. The plans come first:
+// a property with several rooms opens with every room's plan, the totals and
+// a room table; a single room opens with the room itself. Then each room in
+// turn — its plan sketch beside its quantities, openings, what was counted,
+// finishes and condition, the builder's notes, the finished-room renders and
+// the photographs — one after another down the page, turning the page only
+// when the next block will not fit, so no page is left half empty. Every page
+// carries the disclaimer and its number in the footer. The document a builder
+// hands a customer or sends to the AI QS team with the drawings. Pure
+// rendering: the caller passes rows it has already authorised.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const path = require('path');
@@ -42,8 +46,22 @@ function header(doc, branding, userInfo, title, subtitle) {
   doc.fillColor(INK);
 }
 
-function footer(doc, text) {
-  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED).text(text, 40, doc.page.height - 34, { width: doc.page.width - 80 });
+// A slim band on every page after the first: who, which survey, which room.
+function runningHeader(doc, primary, company, title, roomName) {
+  doc.rect(0, 0, doc.page.width, 26).fill(primary);
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8).text(company, 40, 9, { width: 230, height: 10, ellipsis: true });
+  doc.font('Helvetica').fontSize(8).text([title, roomName].filter(Boolean).join(' — '), 280, 9, { width: doc.page.width - 320, height: 10, align: 'right', ellipsis: true });
+  doc.fillColor(INK);
+}
+
+// The disclaimer and the page number, inside the bottom margin. Text that
+// starts below the margin makes pdfkit turn the page, so both are given a
+// height, which pins them where they are.
+function footer(doc, text, pageNo, pageCount) {
+  const y = doc.page.height - 40;
+  doc.font('Helvetica').fontSize(6.5).fillColor(MUTED);
+  doc.text(text, 40, y, { width: doc.page.width - 150, height: 18 });
+  doc.text('Page ' + pageNo + ' of ' + pageCount, doc.page.width - 100, y, { width: 60, align: 'right', height: 10 });
   doc.fillColor(INK);
 }
 
@@ -153,9 +171,8 @@ function sectionTitle(doc, text, y) {
 
 function paragraph(doc, text, y, width) {
   doc.font('Helvetica').fontSize(8.5).fillColor(INK);
-  const h = doc.heightOfString(text, { width });
   doc.text(text, 40, y, { width });
-  return y + h + 6;
+  return doc.y + 6;
 }
 
 // rooms: [{ room (parsed), quantities, photos: [{ path, caption, kind, ai_notes }] }]
@@ -163,106 +180,146 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
   const safe = String(survey.title || 'survey').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="' + safe + '-survey.pdf"');
-  const doc = new PDFDocument({ size: 'A4', margin: 40, info: { Title: 'Room survey — ' + (survey.title || '') } });
+  const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true, info: { Title: 'Room survey — ' + (survey.title || '') } });
   doc.pipe(res);
   const W = doc.page.width - 80;
+  const BOTTOM = doc.page.height - 44;   // content stops here; the footer sits below
+  const CONT_TOP = 44;                   // the first line under the running header
   const DISCLAIMER = 'Dimensions marked estimated were read from photographs by AI and are a guide only; stated dimensions were given by the surveyor; measured dimensions came from a LiDAR scan. Check critical dimensions on site before ordering or cutting.';
+  const primary = (branding && branding.primary_colour) || '#1B2A4A';
+  const company = (branding && branding.company_name) || (userInfo && (userInfo.company || userInfo.full_name)) || 'Room survey';
+  const title = survey.title || 'Room survey';
+  let roomName = '';
+  let y = 0;
+  doc.on('pageAdded', () => runningHeader(doc, primary, company, title, roomName));
 
-  // ── Cover ──
+  // Room for h more points on this page, or a fresh page. True when the page turned.
+  const ensure = (h) => { if (y + h > BOTTOM) { doc.addPage(); y = CONT_TOP; return true; } return false; };
+  // A section heading that is never left alone at the foot of a page.
+  const section = (text, needed) => { ensure(20 + (needed || 40)); y = sectionTitle(doc, text, y); };
+  const para = (text) => { ensure(24); y = paragraph(doc, text, y, W); };
+  // What a paragraph will take, so a heading reserves the room it needs
+  // rather than a guess — a two-line note no longer turns the page on its own.
+  const paraH = (text) => { doc.font('Helvetica').fontSize(8.5); return Math.min(doc.heightOfString(String(text), { width: W }), 80); };
+  const size = (rm, q) => fmt(rm.length_m, 2) + ' × ' + fmt(rm.width_m, 2) + ' × ' + fmt(q.height_m, 2);
+
+  // ── Page one: the survey, then the plans ──
   header(doc, branding, userInfo, 'Room survey', when(survey.created_at));
-  let y = 100;
-  doc.font('Helvetica-Bold').fontSize(20).fillColor(INK).text(survey.title || 'Room survey', 40, y, { width: W });
-  y += doc.heightOfString(survey.title || 'Room survey', { width: W }) + 4;
+  y = 96;
+  doc.font('Helvetica-Bold').fontSize(20).fillColor(INK).text(title, 40, y, { width: W });
+  y = doc.y + 2;
   doc.font('Helvetica').fontSize(10).fillColor(MUTED);
   for (const line of [survey.address, survey.customer_name ? 'Customer: ' + survey.customer_name : null, 'Surveyed ' + when(survey.created_at) + (rooms.length ? ' · ' + rooms.length + ' room' + (rooms.length === 1 ? '' : 's') : '')].filter(Boolean)) { doc.text(line, 40, y, { width: W }); y += 14; }
-  y += 10;
-  const totals = rooms.reduce((t, r) => { const q = r.quantities || {}; t.floor += q.floor_m2 || 0; t.wall += q.wall_net_m2 || 0; t.ceiling += q.ceiling_m2 || 0; t.perimeter += q.perimeter_m || 0; t.doors += q.doors || 0; t.windows += q.windows || 0; t.photos += (r.photos || []).length; return t; }, { floor: 0, wall: 0, ceiling: 0, perimeter: 0, doors: 0, windows: 0, photos: 0 });
-  y = sectionTitle(doc, 'Totals across the property', y);
-  y = kv(doc, [['Floor area', fmt(totals.floor) + ' m²'], ['Ceiling area', fmt(totals.ceiling) + ' m²'], ['Wall area (net of openings)', fmt(totals.wall) + ' m²'], ['Perimeter / skirting run', fmt(totals.perimeter) + ' m'], ['Doors / windows', totals.doors + ' / ' + totals.windows], ['Photographs', String(totals.photos)]], 40, y, W * 0.6);
-  y += 12;
-  y = sectionTitle(doc, 'Rooms', y);
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(MUTED);
-  const cols = [['Room', 0, 150], ['Floor', 150, 60], ['Size (m)', 210, 90], ['Floor m²', 300, 55], ['Walls m²', 355, 55], ['Doors/Win', 410, 55], ['Status', 465, 50]];
-  for (const [t, x, w] of cols) doc.text(t, 40 + x, y, { width: w, align: x > 200 ? 'right' : 'left' });
-  y += 12;
-  doc.font('Helvetica').fontSize(8).fillColor(INK);
-  for (const r of rooms) {
-    const q = r.quantities || {}; const rm = r.room;
-    const vals = [rm.name || 'Room', rm.floor_level || '—', q.complete ? fmt(rm.length_m, 2) + ' × ' + fmt(rm.width_m, 2) + ' × ' + fmt(q.height_m, 2) : '—', q.complete ? fmt(q.floor_m2) : '—', q.complete ? fmt(q.wall_net_m2) : '—', (q.doors || 0) + ' / ' + (q.windows || 0), (rm.dims_source || 'unknown').replace('unknown', 'no size')];
-    cols.forEach(([t, x, w], i) => doc.text(vals[i], 40 + x, y, { width: w, align: x > 200 ? 'right' : 'left', ellipsis: true, height: 11 }));
-    y += 13;
-    if (y > doc.page.height - 80) { doc.addPage(); y = 50; }
-  }
-  if (survey.notes) { y += 10; y = sectionTitle(doc, 'Notes', y); y = paragraph(doc, String(survey.notes).slice(0, 2000), y, W); }
-  footer(doc, DISCLAIMER);
+  y += 6;
 
-  // ── One page (or more) per room ──
-  for (const r of rooms) {
+  if (rooms.length > 1) {
+    // Every room's plan, two to a row, before anything else.
+    section('Floor plans', 180);
+    const cellW = (W - 12) / 2; const cellH = 150; const capH = 26;
+    let rowY = y;
+    rooms.forEach((r, i) => {
+      const col = i % 2; const q = r.quantities || {};
+      if (col === 0) { ensure(cellH + capH); rowY = y; }
+      const x = 40 + col * (cellW + 12);
+      drawSketch(doc, r.room, q, { x, y: rowY, w: cellW, h: cellH });
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(INK).text(r.room.name || 'Room', x, rowY + cellH + 4, { width: cellW, height: 11, ellipsis: true });
+      doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(q.complete ? size(r.room, q) + ' m · ' + fmt(q.floor_m2) + ' m² floor · ' + fmt(q.wall_net_m2) + ' m² walls' : 'No dimensions yet', x, rowY + cellH + 15, { width: cellW, height: 9, ellipsis: true });
+      if (col === 1 || i === rooms.length - 1) y = rowY + cellH + capH + 4;
+    });
+    const totals = rooms.reduce((t, r) => { const q = r.quantities || {}; t.floor += q.floor_m2 || 0; t.wall += q.wall_net_m2 || 0; t.ceiling += q.ceiling_m2 || 0; t.perimeter += q.perimeter_m || 0; t.doors += q.doors || 0; t.windows += q.windows || 0; t.photos += (r.photos || []).length; return t; }, { floor: 0, wall: 0, ceiling: 0, perimeter: 0, doors: 0, windows: 0, photos: 0 });
+    section('Totals across the property', 90);
+    y = kv(doc, [['Floor area', fmt(totals.floor) + ' m²'], ['Ceiling area', fmt(totals.ceiling) + ' m²'], ['Wall area (net of openings)', fmt(totals.wall) + ' m²'], ['Perimeter / skirting run', fmt(totals.perimeter) + ' m'], ['Doors / windows', totals.doors + ' / ' + totals.windows], ['Photographs', String(totals.photos)]], 40, y, W * 0.6);
+    y += 8;
+    section('Rooms', 40);
+    const cols = [['Room', 0, 150], ['Floor', 150, 60], ['Size (m)', 210, 90], ['Floor m²', 300, 55], ['Walls m²', 355, 55], ['Doors/Win', 410, 55], ['Status', 465, 50]];
+    const tableHead = () => { doc.font('Helvetica-Bold').fontSize(7.5).fillColor(MUTED); for (const [t, x, w] of cols) doc.text(t, 40 + x, y, { width: w, align: x > 200 ? 'right' : 'left' }); y += 12; };
+    tableHead();
+    for (const r of rooms) {
+      if (ensure(13)) tableHead();
+      const q = r.quantities || {}; const rm = r.room;
+      const vals = [rm.name || 'Room', rm.floor_level || '—', q.complete ? size(rm, q) : '—', q.complete ? fmt(q.floor_m2) : '—', q.complete ? fmt(q.wall_net_m2) : '—', (q.doors || 0) + ' / ' + (q.windows || 0), (rm.dims_source || 'unknown').replace('unknown', 'no size')];
+      doc.font('Helvetica').fontSize(8).fillColor(INK);
+      cols.forEach(([t, x, w], i) => doc.text(vals[i], 40 + x, y, { width: w, align: x > 200 ? 'right' : 'left', ellipsis: true, height: 11 }));
+      y += 13;
+    }
+    y += 4;
+  }
+  if (survey.notes) { const t = String(survey.notes).slice(0, 2000); section('Notes', paraH(t)); para(t); }
+  if (!rooms.length) para('No rooms have been added to this survey yet.');
+
+  // ── The rooms, one after another ──
+  rooms.forEach((r) => {
     const rm = r.room; const q = r.quantities || {};
-    doc.addPage();
-    header(doc, branding, userInfo, (survey.title || 'Room survey') + ' — ' + (rm.name || 'Room'), [rm.room_type, rm.floor_level ? rm.floor_level + ' floor' : null].filter(Boolean).join(' · '));
-    y = 96;
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text(rm.name || 'Room', 40, y, { width: W * 0.6 });
+    roomName = rm.name || 'Room';
+    // The name, the plan and the quantities stay together; a rule divides
+    // this room from whatever is above it on the page.
+    if (!ensure(230)) { y += 6; doc.save().lineWidth(0.5).strokeColor(HAIR).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke().restore(); y += 14; }
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text(roomName, 40, y, { width: W * 0.6, height: 20, ellipsis: true });
+    const meta = [rm.room_type, rm.floor_level ? rm.floor_level + ' floor' : null].filter(Boolean).join(' · ');
+    if (meta) doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(meta, 40 + W * 0.6, y + 6, { width: W * 0.4, align: 'right', height: 11, ellipsis: true });
     const srcLabel = { measured: 'Measured (LiDAR)', stated: 'Dimensions stated', estimated: 'Estimated from photos', unknown: 'No dimensions' }[rm.dims_source || 'unknown'];
     doc.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(srcLabel + (rm.confidence ? ' · AI confidence ' + rm.confidence : ''), 40, y + 20, { width: W * 0.6 });
-    y += 40;
+    y += 34;
     // Sketch left, quantities right.
-    const box = { x: 40, y, w: 250, h: 190 };
+    const box = { x: 40, y, w: 250, h: 176 };
     drawSketch(doc, rm, q, box);
     let ry = y;
     doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text('Quantities', 310, ry); ry += 14;
     ry = kv(doc, [
-      [rm.shape === 'custom' ? 'Overall extent × height' : 'Length × width × height', q.complete ? fmt(rm.length_m, 2) + ' × ' + fmt(rm.width_m, 2) + ' × ' + fmt(q.height_m, 2) + ' m' : '—'],
+      [rm.shape === 'custom' ? 'Overall extent × height' : 'Length × width × height', q.complete ? size(rm, q) + ' m' : '—'],
       ['Floor area', fmt(q.floor_m2) + ' m²'], ['Ceiling area', fmt(q.ceiling_m2) + ' m²'],
       ['Wall area gross', fmt(q.wall_gross_m2) + ' m²'], ['Openings deducted', fmt(q.openings_m2) + ' m²'], ['Wall area net', fmt(q.wall_net_m2) + ' m²'],
       ['Perimeter', fmt(q.perimeter_m, 2) + ' m'], ['Skirting', fmt(q.skirting_m, 2) + ' m'], ['Coving / cornice', fmt(q.coving_m, 2) + ' m'],
       ['Volume', fmt(q.volume_m3) + ' m³'], ['Doors / windows / openings', (q.doors || 0) + ' / ' + (q.windows || 0) + ' / ' + (q.openings || 0)],
     ], 310, ry, W - 270, { lineHeight: 12.5 });
-    y = Math.max(box.y + box.h, ry) + 14;
+    y = Math.max(box.y + box.h, ry) + 10;
 
     const openings = G.openingsOf(rm);
     if (openings.length) {
-      y = sectionTitle(doc, 'Openings', y);
-      doc.font('Helvetica').fontSize(8).fillColor(INK);
-      for (const o of openings) { doc.text(o.count + ' × ' + o.kind + ' — ' + fmt(o.width_m, 2) + ' × ' + fmt(o.height_m, 2) + ' m' + (o.wall ? ' on wall ' + o.wall : '') + (o.notes ? ' · ' + o.notes : '') + (o.source === 'ai' ? '  (AI)' : o.source === 'measured' ? '  (measured)' : ''), 48, y, { width: W - 8 }); y += 12; }
-      y += 6;
+      section('Openings', 12 * Math.min(openings.length, 3));
+      for (const o of openings) {
+        ensure(12);
+        doc.font('Helvetica').fontSize(8).fillColor(INK).text(o.count + ' × ' + o.kind + ' — ' + fmt(o.width_m, 2) + ' × ' + fmt(o.height_m, 2) + ' m' + (o.wall ? ' on wall ' + o.wall : '') + (o.notes ? ' · ' + o.notes : '') + (o.source === 'ai' ? '  (AI)' : o.source === 'measured' ? '  (measured)' : ''), 48, y, { width: W - 8, height: 11, ellipsis: true });
+        y += 12;
+      }
+      y += 4;
     }
     const features = G.parseJson(rm.features, []);
     if (Array.isArray(features) && features.length) {
-      y = sectionTitle(doc, 'Counted in the room', y);
-      doc.font('Helvetica').fontSize(8).fillColor(INK);
-      const colW = (W - 8) / 2; let col = 0; const startY = y;
-      features.forEach((f, i) => {
-        const x = 48 + col * colW; const yy = startY + Math.floor(i / 2) * 12;
-        doc.text(Math.round(G.num(f.count)) + ' × ' + f.item + (f.notes ? ' — ' + f.notes : ''), x, yy, { width: colW - 10, height: 11, ellipsis: true });
-        col = (col + 1) % 2;
-      });
-      y = startY + Math.ceil(features.length / 2) * 12 + 6;
+      const rowsN = Math.ceil(features.length / 2);
+      section('Counted in the room', 12 * Math.min(rowsN, 3));
+      const colW = (W - 8) / 2;
+      for (let row = 0; row < rowsN; row++) {
+        ensure(12);
+        for (let c = 0; c < 2; c++) {
+          const f = features[row * 2 + c];
+          if (f) doc.font('Helvetica').fontSize(8).fillColor(INK).text(Math.round(G.num(f.count)) + ' × ' + f.item + (f.notes ? ' — ' + f.notes : ''), 48 + c * colW, y, { width: colW - 10, height: 11, ellipsis: true });
+        }
+        y += 12;
+      }
+      y += 4;
     }
     const fin = G.parseJson(rm.finishes, null);
     const hazards = G.parseJson(rm.hazards, []);
     if ((fin && typeof fin === 'object') || (Array.isArray(hazards) && hazards.length) || rm.condition_notes) {
-      if (y > doc.page.height - 160) { doc.addPage(); y = 50; }
-      y = sectionTitle(doc, 'Finishes and condition', y);
       const rows = [];
       if (fin) for (const k of ['floor', 'walls', 'ceiling', 'woodwork']) if (fin[k] && (fin[k].type || fin[k].condition)) rows.push([k.charAt(0).toUpperCase() + k.slice(1), [fin[k].type, fin[k].condition, fin[k].notes].filter(Boolean).join(' · ')]);
+      section('Finishes and condition', rows.length * 13 + (hazards.length ? paraH('Watch-outs: ' + hazards.join('; ')) : rm.condition_notes ? paraH(rm.condition_notes) : 0));
       if (rows.length) y = kv(doc, rows, 40, y, W);
-      if (Array.isArray(hazards) && hazards.length) y = paragraph(doc, 'Watch-outs: ' + hazards.join('; ') + '.', y + 2, W);
-      if (rm.condition_notes) y = paragraph(doc, String(rm.condition_notes), y, W);
+      if (Array.isArray(hazards) && hazards.length) { y += 2; para('Watch-outs: ' + hazards.join('; ') + '.'); }
+      if (rm.condition_notes) para(String(rm.condition_notes));
     }
     const assumptions = G.parseJson(rm.assumptions, []);
     if (rm.ai_summary || (Array.isArray(assumptions) && assumptions.length)) {
-      if (y > doc.page.height - 140) { doc.addPage(); y = 50; }
-      y = sectionTitle(doc, 'Survey notes', y);
-      if (rm.ai_summary) y = paragraph(doc, rm.ai_summary, y, W);
-      if (Array.isArray(assumptions) && assumptions.length) y = paragraph(doc, 'Assumptions: ' + assumptions.join(' '), y, W);
+      section('Survey notes', paraH(rm.ai_summary || 'Assumptions: ' + assumptions.join(' ')));
+      if (rm.ai_summary) para(rm.ai_summary);
+      if (Array.isArray(assumptions) && assumptions.length) para('Assumptions: ' + assumptions.join(' '));
     }
     const notes = G.parseJson(rm.notes, []);
     if (rm.work_wanted || (Array.isArray(notes) && notes.length)) {
-      if (y > doc.page.height - 140) { doc.addPage(); y = 50; }
-      y = sectionTitle(doc, 'Builder\'s notes', y);
-      if (rm.work_wanted) y = paragraph(doc, 'Work wanted: ' + rm.work_wanted, y, W);
-      for (const n of (Array.isArray(notes) ? notes : [])) y = paragraph(doc, '• ' + n.text, y, W);
+      section('Builder\'s notes', paraH(rm.work_wanted ? 'Work wanted: ' + rm.work_wanted : (notes[0] && notes[0].text) || ''));
+      if (rm.work_wanted) para('Work wanted: ' + rm.work_wanted);
+      for (const n of (Array.isArray(notes) ? notes : [])) para('• ' + n.text);
     }
     const allPhotos = (r.photos || []).filter((p) => p.path && fs.existsSync(p.path));
     // The finished room: each render beside the photo it was painted from.
@@ -270,7 +327,7 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
     if (renders.length) {
       const cellW = (W - 12) / 2; const cellH = 160;
       renders.forEach((rp, i) => {
-        if (y + cellH + 44 > doc.page.height - 50) { doc.addPage(); y = 50; }
+        ensure(cellH + 44 + (i === 0 ? 20 : 0));
         if (i === 0) y = sectionTitle(doc, 'The finished room — AI concept of the work described, not to scale', y);
         const src = allPhotos.find((p) => p.id === rp.render_of) || allPhotos.find((p) => p.kind !== 'render');
         if (src) { try { doc.image(src.path, 40, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable */ } }
@@ -286,8 +343,8 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
     if (photos.length) {
       const cellW = (W - 12) / 2; const cellH = 150;
       photos.forEach((p, i) => {
-        if (i % 2 === 0 && y + cellH + 30 > doc.page.height - 50) { doc.addPage(); y = 50; }
-        if (i === 0 || (i % 2 === 0 && y === 50)) { if (i === 0) y = sectionTitle(doc, 'Photographs', y); }
+        if (i % 2 === 0) ensure(cellH + 30 + (i === 0 ? 20 : 0));
+        if (i === 0) y = sectionTitle(doc, 'Photographs', y);
         const x = 40 + (i % 2) * (cellW + 12);
         try { doc.image(p.path, x, y, { fit: [cellW, cellH], align: 'center', valign: 'center' }); } catch (e) { /* unreadable image */ }
         const label = [(p.kind && p.kind !== 'general' ? p.kind : null), p.caption, p.ai_notes].filter(Boolean).join(' · ');
@@ -295,8 +352,11 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
         if (i % 2 === 1 || i === photos.length - 1) y += cellH + 28;
       });
     }
-    footer(doc, DISCLAIMER);
-  }
+  });
+
+  // The footer on every page, now the count is known.
+  const range = doc.bufferedPageRange();
+  for (let i = 0; i < range.count; i++) { doc.switchToPage(range.start + i); footer(doc, DISCLAIMER, i + 1, range.count); }
   doc.end();
 }
 

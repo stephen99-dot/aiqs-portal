@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { takeNext } from '../utils/next';
 import { useTheme } from '../context/ThemeContext';
 import { apiFetch, getToken, resolveUrl } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -238,7 +239,7 @@ export default function OnboardingPage() {
     setSaving(true);
     try {
       await apiFetch('/onboarding', { method: 'POST', body: JSON.stringify({ skipped: true }) });
-      navigate('/dashboard');
+      navigate(takeNext('/dashboard'));
     } catch (e) {
       alert(e.message || 'Failed to save.');
     } finally {
@@ -290,7 +291,7 @@ export default function OnboardingPage() {
           Your answers live in AI Memory. Your day rate{totalFilled > 0 ? ` and the ${totalFilled} rate${totalFilled === 1 ? '' : 's'} you filled in` : ''} are in My Rates — both editable any time.
         </p>
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate(takeNext('/dashboard'))}
           style={{
             padding: '11px 26px', borderRadius: 8,
             background: 'linear-gradient(135deg, #F59E0B, #D97706)',

@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes, BrowserRouter, useParams } from 'react-router-dom';
+import { Navigate, Route, Routes, BrowserRouter, useParams, useLocation } from 'react-router-dom';
+import { nextFromUrl, takeNext } from './utils/next';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { ToastProvider } from './ui';
@@ -43,15 +44,21 @@ import NativeBridge from './native/NativeBridge';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    // Come back here after signing in (the website links straight to
+    // /upgrade?plan=…, for instance).
+    const here = location.pathname + location.search;
+    return <Navigate to={here && here !== '/' ? '/login?next=' + encodeURIComponent(here) : '/login'} replace />;
+  }
   return children;
 }
 
 function GuestRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to={nextFromUrl() || takeNext('/dashboard')} replace />;
   return children;
 }
 
