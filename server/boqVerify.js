@@ -39,7 +39,7 @@ const fmt = (v) => '£' + round2(v).toLocaleString('en-GB', { minimumFractionDig
 // an older verifier is re-run on the next open, so a bill locked by a check
 // that has since been corrected unlocks itself after deploy — nobody has to
 // remember to press Re-verify on every affected project.
-const VERIFIER_VERSION = 8; // 8: a provisional sums block headed "… (excluded from the total above)" is read, not dropped; 7: section-by-section proof; OH&P on measured sections only; "Net before VAT"
+const VERIFIER_VERSION = 9; // 9: a bill whose logo drawing ExcelJS can't parse (openpyxl) is read without it, not locked as unreadable; 8: a provisional sums block headed "… (excluded from the total above)" is read, not dropped; 7: section-by-section proof; OH&P on measured sections only; "Net before VAT"
 
 function describePrinted(recon) {
   if (!recon) return 'printed total';

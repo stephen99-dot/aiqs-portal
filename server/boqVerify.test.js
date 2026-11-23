@@ -451,3 +451,45 @@ test('a bill whose provisional sums sit below the summary under "(excluded from 
   assert.strictEqual(v.detail.printed_total, 6000, 'checked against the bill\'s own net total');
   assert.ok(!v.detail.printed_all.some((p) => /provisional/i.test(p.label)), 'the block\'s closing total is not a document total');
 });
+
+test('a bill carrying a logo in openpyxl\'s unprefixed drawing XML is read, not locked as unreadable (7 The Green, Newick)', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const AdmZip = require('adm-zip');
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('BOQ');
+  for (const r of [
+    HEADER,
+    ['', 'SECTION 1  -  PRELIMINARIES'],
+    ['1.1', 'Site management and supervision', 'wk', 3, 175, 525, 0, 525],
+    ['1.2', 'Skips, 8-yard', 'nr', 2, 365, 0, 730, 730],
+    ['', 'Total carried to summary - Section 1', '', '', '', '', '', 1255],
+    ['', 'Net total, Sections 1-1', '', '', '', '', '', 1255],
+  ]) ws.addRow(r);
+  // A 1x1 PNG as the logo, anchored top right as the QS's template does.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  ws.addImage(wb.addImage({ buffer: png, extension: 'png' }), { tl: { col: 7, row: 0 }, ext: { width: 60, height: 80 } });
+  const zip = new AdmZip(Buffer.from(await wb.xlsx.writeBuffer()));
+  const drawing = zip.getEntries().find((e) => /^xl\/drawings\/drawing\d+\.xml$/.test(e.entryName));
+  assert.ok(drawing, 'the workbook carries a drawing part');
+  const rels = zip.getEntry('xl/drawings/_rels/' + drawing.entryName.split('/').pop() + '.rels').getData().toString('utf8');
+  const rId = rels.match(/Id="(rId\d+)"[^>]*\/media\//) || rels.match(/\/media\/[^"]*"[^>]*Id="(rId\d+)"/);
+  // The drawing as openpyxl writes it: default namespace, no "xdr:" prefix.
+  zip.updateFile(drawing.entryName, Buffer.from(
+    '<wsDr xmlns="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><twoCellAnchor editAs="oneCell">'
+    + '<from><col>7</col><colOff>0</colOff><row>0</row><rowOff>0</rowOff></from>'
+    + '<to><col>7</col><colOff>685440</colOff><row>2</row><rowOff>85320</rowOff></to>'
+    + '<pic><nvPicPr><cNvPr id="0" name="Image 1" descr="Picture"/><cNvPicPr/></nvPicPr>'
+    + '<blipFill><a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="' + (rId ? rId[1] : 'rId1') + '"/></blipFill>'
+    + '<spPr><a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="rect"><avLst/></a:prstGeom></spPr>'
+    + '</pic><clientData/></twoCellAnchor></wsDr>', 'utf8'));
+  const file = path.join(os.tmpdir(), `verify-${process.pid}-${Math.random().toString(36).slice(2)}.xlsx`);
+  fs.writeFileSync(file, zip.toBuffer());
+  try {
+    // The precondition this test exists for: ExcelJS on its own cannot open it.
+    await assert.rejects(new ExcelJS.Workbook().xlsx.readFile(file), /anchors/);
+    const v = await verifyBoqFile(file);
+    assert.strictEqual(v.status, 'verified', v.message);
+    assert.strictEqual(v.detail.items, 2);
+    assert.strictEqual(v.detail.parsed_total, 1255);
+    assert.strictEqual(v.detail.printed_total, 1255);
+  } finally { try { fs.unlinkSync(file); } catch (e) { /* ignore */ } }
+});

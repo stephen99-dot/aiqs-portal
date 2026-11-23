@@ -552,6 +552,54 @@ function pickBillSheet(wb) {
   return { ws: wb.worksheets[0] || null, headerRow: null };
 }
 
+// An empty drawing part, in the prefixed form ExcelJS parses.
+const EMPTY_DRAWING_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+  + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"'
+  + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"/>';
+
+// The workbook as a buffer with every picture/shape drawing emptied out. The
+// drawing parts and every relationship to them stay in place (the sheets
+// still point at them), so the package stays whole — it just has nothing on
+// it. Comment drawings (vmlDrawingN.vml) are left alone. null if nothing changed.
+function withEmptyDrawings(buf) {
+  const zip = new AdmZip(buf);
+  let changed = false;
+  for (const e of zip.getEntries()) {
+    if (e.isDirectory || !/^xl\/drawings\/[^/]+\.xml$/i.test(e.entryName)) continue;
+    zip.updateFile(e.entryName, Buffer.from(EMPTY_DRAWING_XML, 'utf8'));
+    changed = true;
+  }
+  return changed ? zip.toBuffer() : null;
+}
+
+/**
+ * Open a delivered workbook to READ it (cells, merges, styles — never images).
+ *
+ * ExcelJS cannot open some workbooks other tools write. openpyxl, for one,
+ * writes a logo's drawing part with a default namespace (<wsDr xmlns=…>)
+ * instead of the "xdr:" prefix ExcelJS matches tags on, so the drawing parses
+ * to nothing and the whole load dies with "Cannot read properties of undefined
+ * (reading 'anchors')" — a perfectly good bill locked as unreadable because it
+ * carries a logo (7 The Green, Newick). Reading a bill needs none of its
+ * pictures, so when the plain load fails, retry with the drawings emptied. A
+ * file that still won't open throws the original error.
+ */
+async function readWorkbookFile(filePath) {
+  const wb = new ExcelJS.Workbook();
+  try {
+    await wb.xlsx.readFile(filePath);
+    return wb;
+  } catch (err) {
+    let stripped = null;
+    try { stripped = withEmptyDrawings(fs.readFileSync(filePath)); } catch (e) { stripped = null; }
+    if (!stripped) throw err;
+    const retry = new ExcelJS.Workbook();
+    try { await retry.xlsx.load(stripped); } catch (e) { throw err; }
+    console.warn('[BOQ] ' + path.basename(filePath) + ': opened without its drawings (' + (err.message || err) + ')');
+    return retry;
+  }
+}
+
 /**
  * Cheap look at an uploaded workbook: is this a bill of quantities? Used to
  * choose which .xlsx in a delivery batch becomes the project's BOQ, so a
@@ -560,8 +608,7 @@ function pickBillSheet(wb) {
  *   → { looks_like_boq, sheet, header_row, named_sheet }
  */
 async function sniffBOQ(filePath) {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  const wb = await readWorkbookFile(filePath);
   const { ws, headerRow } = pickBillSheet(wb);
   return {
     looks_like_boq: headerRow != null,
@@ -572,8 +619,7 @@ async function sniffBOQ(filePath) {
 }
 
 async function parseBOQ(filePath) {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  const wb = await readWorkbookFile(filePath);
   const { ws, headerRow: detectedHeaderRow } = pickBillSheet(wb);
   if (!ws) throw new Error('BOQ worksheet not found');
 
@@ -2777,4 +2823,4 @@ function addMissingProvisionalSections(saved, freshSections) {
   return out;
 }
 
-module.exports = { parseBOQ, sniffBOQ, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed, addMissingProvisionalSections };
+module.exports = { parseBOQ, sniffBOQ, readWorkbookFile, generateBuilderPack, generateClientCopyPro, generateClientCopyProSafe, mediaAllValid, isTotalRowItem, reconcileParsed, addMissingProvisionalSections };
