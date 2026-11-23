@@ -347,3 +347,69 @@ test('a package bought under an email before the account existed attaches when t
   assert.deepEqual([match.plan, match.interval, row('d').max_plan, row('d').max_subscription_id], ['max_visualiser', 'month', 'max_visualiser', 'sub_dana']);
   assert.equal(await require('./billingRoutes').attachByEmail(row('d')), null, 'nothing to do the second time');
 });
+
+// ── The free trial ───────────────────────────────────────────────────────────
+
+test('the free trial: its length, a trial checkout, the email, the Plans page and the counts', async () => {
+  rollout.setMode('admin', 'adm');
+  // The length: 7 days unless MAX_TRIAL_DAYS says otherwise; nonsense is ignored.
+  delete process.env.MAX_TRIAL_DAYS;
+  assert.equal(P.trialDays(), 7);
+  for (const [v, want] of [['14', 14], ['0', 0], ['', 7], ['seven', 7], ['-3', 7], ['2.5', 7]]) {
+    process.env.MAX_TRIAL_DAYS = v;
+    assert.equal(P.trialDays(), want, 'MAX_TRIAL_DAYS=' + JSON.stringify(v));
+  }
+  delete process.env.MAX_TRIAL_DAYS;
+
+  // Eve starts the trial on MAX yearly: on straight away, nothing paid, and
+  // the date the first £590 is taken is the day the trial ends.
+  const trialEnd = 1764806400; // 4 December 2025
+  db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES ('e', 'eve@t.t', 'x', 'Eve Evans', 'Co', 'client', 'GB')").run();
+  const tokenE = generateToken({ id: 'e', email: 'eve@t.t', role: 'client' });
+  stripeState.customers.cus_5 = { id: 'cus_5', email: 'eve@t.t' };
+  stripeState.subs.sub_eve = sub('sub_eve', stripeState.prices.find((x) => x.id === 'p_max_y') || price('p_max_y', 59000, 'year'), { customer: 'cus_5', status: 'trialing', trial_end: trialEnd, current_period_end: trialEnd });
+  const sent = [];
+  const routes = require('./routes');
+  const realSend = routes.sendEmail;
+  routes.sendEmail = async (m) => { sent.push(m); };
+  let r;
+  try {
+    r = await event('checkout.session.completed', { id: 'cs_trial', mode: 'subscription', subscription: 'sub_eve', client_reference_id: 'e', customer_details: { email: 'eve@t.t' }, amount_total: 0, currency: 'gbp' });
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally { routes.sendEmail = realSend; }
+  assert.equal(r.status, 200);
+  const e = row('e');
+  assert.deepEqual([e.max_plan, e.max_plan_status, e.max_plan_interval, e.max_plan_renews_at], ['max', 'trialing', 'year', '2025-12-04T00:00:00.000Z']);
+  assert.equal(P.entitlements(e).max, true, 'MAX is on during the trial');
+  const mail = sent.find((m) => m.to === 'eve@t.t');
+  assert.ok(mail, 'the trial email went out');
+  assert.match(mail.subject, /free trial has started/i);
+  assert.match(mail.html, /Free trial until 4 December 2025/);
+  assert.match(mail.html, /£590 a year/);
+  assert.doesNotMatch(mail.html, /Amount paid/, 'no "£0.00 paid" line on a trial');
+  assert.ok(db.prepare("SELECT COUNT(*) AS c FROM activity_log WHERE event_type = 'max_plan_started' AND user_id = 'e' AND title LIKE '%free trial until 2025-12-04%'").get().c >= 1);
+
+  // The Plans page knows the trial length and that Eve is on one.
+  r = await req('GET', '/billing/max', tokenE);
+  assert.equal(r.body.trial_days, 7);
+  assert.deepEqual([r.body.current.plan, r.body.current.status, r.body.current.renews_at], ['max', 'trialing', '2025-12-04T00:00:00.000Z']);
+
+  // A subscription event without the period end still has the trial's end.
+  const noPeriod = { ...stripeState.subs.sub_eve };
+  delete noPeriod.current_period_end;
+  assert.equal(P.fromStripe(noPeriod).renews_at, '2025-12-04T00:00:00.000Z');
+  assert.equal(P.fromStripe(noPeriod).trial_ends_at, '2025-12-04T00:00:00.000Z');
+  assert.equal(P.fromStripe({ ...stripeState.subs.sub_eve, status: 'active' }).trial_ends_at, null);
+
+  // The admin counts show who is on a trial.
+  r = await req('GET', '/max/settings', tokenAdmin);
+  assert.equal(r.body.plans.subscribers.trialing, 1);
+
+  // The trial ends and the first payment goes through: an ordinary yearly plan.
+  stripeState.subs.sub_eve = { ...stripeState.subs.sub_eve, status: 'active', current_period_end: trialEnd + 365 * 86400 };
+  await event('customer.subscription.updated', stripeState.subs.sub_eve);
+  assert.deepEqual([row('e').max_plan_status, row('e').max_plan_renews_at], ['active', '2026-12-04T00:00:00.000Z']);
+  r = await req('GET', '/max/settings', tokenAdmin);
+  assert.equal(r.body.plans.subscribers.trialing, 0);
+  delete stripeState.subs.sub_eve;
+});

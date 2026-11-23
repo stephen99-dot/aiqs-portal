@@ -1207,7 +1207,7 @@ function MaxTab({ t }) {
             A client with a package has MAX{' '}whatever the rollout setting. The Visualiser (finished-room renders) is only ever on for the MAX + Visualiser package, a complimentary grant (Users → the client → MAX), or an admin.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {[['MAX subscribers', data.plans.subscribers.max], ['MAX + Visualiser', data.plans.subscribers.max_visualiser], ['Paid yearly', data.plans.subscribers.yearly], ['Cancelling', data.plans.subscribers.cancelling], ['Visualiser free', data.plans.subscribers.visualiser_grants], ['Early access', data.plans.subscribers.early_access]].map(([k, v]) => (
+            {[['MAX subscribers', data.plans.subscribers.max], ['MAX + Visualiser', data.plans.subscribers.max_visualiser], ['Paid yearly', data.plans.subscribers.yearly], ['On free trial', data.plans.subscribers.trialing || 0], ['Cancelling', data.plans.subscribers.cancelling], ['Visualiser free', data.plans.subscribers.visualiser_grants], ['Early access', data.plans.subscribers.early_access]].map(([k, v]) => (
               <div key={k} style={{ padding: '12px 14px', borderRadius: 10, background: t.surfaceHover, border: '1px solid ' + t.border }}>
                 <div style={{ fontSize: 11, color: t.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{k}</div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: t.text, fontFamily: 'var(--font-mono)', marginTop: 4 }}>{v == null ? '—' : v}</div>

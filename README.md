@@ -67,7 +67,11 @@ The Stripe webhook writes the plan onto the user row (`max_plan`, `max_plan_stat
 `STRIPE_MAX_VISUALISER_PRICE_IDS`) or, when those are unset, by amount and interval in GBP.
 `node scripts/create-max-plans.js` creates the products, prices and payment links at Stripe and
 prints the env vars (`MAX_PAYMENT_LINK_MONTHLY` / `_YEARLY`, `MAX_VISUALISER_PAYMENT_LINK_MONTHLY`
-/ `_YEARLY`). Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
+/ `_YEARLY`). Every plan starts with a **7-day free trial** (`TRIAL_DAYS` in `server/maxPlans.js`,
+or `MAX_TRIAL_DAYS` on Render; `0` turns it off). The trial lives on the payment links:
+`node scripts/create-max-plans.js --trial` (in the Render shell) puts it on the four existing
+links in place, and the Plans page, the welcome email and the admin counts show it (status
+`trialing`, with `max_plan_renews_at` the day the first payment is taken). Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
 plan, early access or the rollout; **the Visualiser** only for an admin, the MAX + Visualiser plan
 or a complimentary grant (`feature_overrides {"visualiser": true}`, Users → the client → MAX).
 `/api/surveys/*` and `/api/max/*` need MAX; `POST …/render` additionally needs the Visualiser
