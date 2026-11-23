@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiFetch, authedFetch, portalOrigin } from '../utils/api';
 import { saveBlob } from '../native/saveFile';
+import { SendingFromNote } from '../components/EmailSenderCard';
 import useIsMobile from '../utils/useIsMobile';
 import useDataChanged from '../hooks/useDataChanged';
 import { openMax, fmtMoney2, fmtMoney0 } from '../utils/max';
@@ -354,6 +355,7 @@ export default function EstimatePage() {
             Your customer gets a branded page with the price breakdown you chose to show, the PDF, and an Accept button. Internal costs and your rates are never shown. {fmtMoney2(totals.grand, currency)} inc VAT.
           </p>
           <Field label="Customer email" hint="Leave blank to get a link to share by WhatsApp or text instead."><Input type="email" value={sendEmail} onChange={(e) => setSendEmail(e.target.value)} placeholder="customer@example.com" /></Field>
+          {sendEmail.trim() && <SendingFromNote style={{ marginTop: -4, marginBottom: 10 }} />}
           {quote.status !== 'draft' && <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem', color: 'var(--text-muted)' }}><CheckCircleIcon size={13} color="var(--success)" /> Already sent{quote.sent_at ? ' on ' + new Date(quote.sent_at).toLocaleDateString('en-GB') : ''} — this resends the same link.</div>}
         </Modal>
       )}
