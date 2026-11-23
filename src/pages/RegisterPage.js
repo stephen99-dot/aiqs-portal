@@ -33,6 +33,8 @@ export default function RegisterPage() {
   }));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Started MAX on the website first: the plan is waiting for this email.
+  const fromMax = new URLSearchParams(window.location.search).get('from') === 'max';
   const countries = useCountries();
   const chosenCountry = countries.find(c => c.code === form.country);
 
@@ -110,6 +112,11 @@ export default function RegisterPage() {
               <h1>Create your account</h1>
               <p>Start getting professional BOQs in hours</p>
             </div>
+            {fromMax && (
+              <div style={{ margin: '0 0 18px', padding: '12px 14px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)', fontSize: 14, lineHeight: 1.55 }}>
+                <strong>Your MAX plan is waiting.</strong> Create your account with the email you used at checkout and it switches on straight away.
+              </div>
+            )}
             {error && <div className="auth-error">{error}</div>}
             {!isNative() && (<>
               <a href={resolveUrl('/api/auth/google')} style={styles.googleBtn}>

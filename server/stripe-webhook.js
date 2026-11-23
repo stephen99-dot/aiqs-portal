@@ -3,6 +3,7 @@ const { recordPendingCredit } = require('./pendingCredits');
 // The MAX packages (£59 MAX, £79 MAX + Visualiser): which Stripe price is
 // which plan, and the plan columns on the user row.
 const maxPlans = require('./maxPlans');
+const maxEmails = require('./maxEmails');
 
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
@@ -47,9 +48,7 @@ function deactivateOffice(user) {
 // Portal-branded ("AI QS" sender) thank-you sent to the buyer whenever a
 // checkout completes — plan upgrade, Office in a Box, or a BOQ credit pack.
 // Fire-and-forget: a mail failure must never affect webhook handling.
-// subject / heading / intro replace the purchase wording, e.g. for a free
-// trial, where nothing has been paid yet.
-function sendPurchaseEmail({ email, name, packageName, detailLines, amountTotal, currency, subject, heading, intro }) {
+function sendPurchaseEmail({ email, name, packageName, detailLines, amountTotal, currency }) {
   try {
     const { sendEmail } = require('./routes'); // lazy — avoids any load-order tangle
     if (!email || typeof sendEmail !== 'function') return;
@@ -66,15 +65,15 @@ function sendPurchaseEmail({ email, name, packageName, detailLines, amountTotal,
       .join('');
     sendEmail({
       to: email,
-      subject: subject || `Purchase confirmed — ${packageName}`,
+      subject: `Purchase confirmed — ${packageName}`,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="font-size:28px;font-weight:800;color:#0F172A;">AI <span style="color:#F59E0B;">QS</span></div>
             <div style="font-size:10px;letter-spacing:3px;color:#94A3B8;text-transform:uppercase;margin-top:2px;">Quantity Surveying</div>
           </div>
-          <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">${heading || 'Thanks for your purchase'}, ${firstName}!</h2>
-          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">${intro || `You've purchased <strong>${packageName}</strong>. It's live on your account now — no action needed.`}</p>
+          <h2 style="font-size:20px;color:#0F172A;margin:0 0 12px;">Thanks for your purchase, ${firstName}!</h2>
+          <p style="font-size:15px;color:#475569;line-height:1.6;margin:0 0 20px;">You've purchased <strong>${packageName}</strong>. It's live on your account now — no action needed.</p>
           <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:18px;margin:0 0 24px;">
             ${detailHtml}
           </div>
@@ -171,22 +170,9 @@ function logMaxPlanEvent(user, eventType, text) {
     require('./activityRoutes').logActivity({ event_type: eventType, title: (user.full_name || user.email) + ' — ' + text, user_id: user.id, user_name: user.full_name, user_email: user.email });
   } catch (e) { /* audit only */ }
 }
-function maxPlanDetailLines(sub) {
-  const plan = maxPlans.PLANS[sub.plan];
-  const lines = [plan.visualiser
-    ? 'MAX, Scan a room, LiDAR scanning, survey reports and the finished-room Visualiser are now unlocked on your account.'
-    : 'MAX, Scan a room, LiDAR scanning and survey reports are now unlocked on your account.'];
-  if (sub.status === 'trialing') {
-    const ends = sub.trial_ends_at || sub.renews_at;
-    const day = ends ? new Date(ends).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'the end of the trial';
-    const price = '£' + (sub.interval === 'year' ? plan.yearly_gbp + ' a year (two months free)' : plan.monthly_gbp + ' a month');
-    lines.push(`Free trial until ${day} — nothing has been charged.`);
-    lines.push(`After that it is ${price}, taken on ${day}. Cancel from the Plans page in your account before then and you pay nothing.`);
-    return lines;
-  }
-  if (sub.interval === 'year') lines.push('Paid yearly — two months free. It renews in twelve months.');
-  else lines.push('Paid monthly. Cancel any time from the Plans page in your account.');
-  return lines;
+// An admin bell notification, never allowed to break the webhook.
+function notifyAdminSafe(n) {
+  try { const { notifyAdmin } = require('./routes'); if (typeof notifyAdmin === 'function') notifyAdmin(n); } catch (e) { /* notification only */ }
 }
 async function findUserForOfficeSub(subscription, stripeSecret) {
   let user = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
@@ -369,26 +355,29 @@ async function handleCheckoutComplete(session, stripeSecret) {
     const maxSub = maxPlans.fromStripe(subscription);
     if (maxSub) {
       const user = resolveCheckoutUser(session, customerEmail);
+      const planName = maxPlans.PLANS[maxSub.plan].name;
+      const trial = maxSub.status === 'trialing';
+      const how = (maxSub.interval === 'year' ? 'yearly' : 'monthly') + (trial ? ', free trial until ' + String(maxSub.trial_ends_at || maxSub.renews_at || '').slice(0, 10) : '');
       if (user) {
+        // Bought from the website while already subscribed: Stripe now bills
+        // two subscriptions. The newest one goes on the account; tell the admin
+        // so the older one can be cancelled.
+        const earlier = maxPlans.isSubscribed(user) && user.max_subscription_id && user.max_subscription_id !== subscription.id ? user.max_subscription_id : null;
         maxPlans.activate(user, maxSub);
-        const trial = maxSub.status === 'trialing';
-        const planName = maxPlans.PLANS[maxSub.plan].name;
-        logMaxPlanEvent(user, 'max_plan_started', planName + ' started (' + (maxSub.interval === 'year' ? 'yearly' : 'monthly') + (trial ? ', free trial until ' + String(maxSub.trial_ends_at || maxSub.renews_at || '').slice(0, 10) : '') + ')');
-        sendPurchaseEmail({
-          email: user.email,
-          name: user.full_name,
-          packageName: planName,
-          detailLines: maxPlanDetailLines(maxSub),
-          amountTotal: trial ? null : session.amount_total,
-          currency: session.currency,
-          ...(trial ? {
-            subject: `Your free trial has started — ${planName}`,
-            heading: 'Your free trial has started',
-            intro: `<strong>${planName}</strong> is live on your account now — no action needed.`,
-          } : {}),
-        });
+        logMaxPlanEvent(user, 'max_plan_started', planName + ' started (' + how + ')');
+        if (earlier) {
+          console.warn(`[Stripe] ${user.email} started ${subscription.id} while ${earlier} was still live — two MAX subscriptions at Stripe`);
+          notifyAdminSafe({ type: 'max_duplicate', title: `Two MAX subscriptions: ${user.full_name || user.email}`, detail: `${user.email} checked out again while already subscribed. New: ${subscription.id}. Earlier (still billing at Stripe): ${earlier} — cancel one in Stripe.`, icon: 'alert' });
+        }
+        maxEmails.sendStarted({ user, sub: maxSub });
+      } else {
+        // Bought on the website with an email that has no account. The
+        // subscription waits at Stripe under that email and attaches when an
+        // account is created with it (billingRoutes.attachByEmail at sign-up).
+        console.log(`[Stripe] ${planName} started (${subscription.id}) by ${customerEmail} with no portal account yet — sent the create-account email`);
+        maxEmails.sendCreateAccount({ email: customerEmail, name: session.customer_details && session.customer_details.name, sub: maxSub });
+        notifyAdminSafe({ type: 'max_no_account', title: `${planName} started — no account yet`, detail: `${customerEmail} (${how}). They have been emailed a link to create their account; MAX switches on when they do.`, icon: 'user-plus' });
       }
-      else console.error(`[Stripe] MAX package paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
       return;
     }
 

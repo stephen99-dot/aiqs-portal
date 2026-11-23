@@ -71,7 +71,15 @@ prints the env vars (`MAX_PAYMENT_LINK_MONTHLY` / `_YEARLY`, `MAX_VISUALISER_PAY
 or `MAX_TRIAL_DAYS` on Render; `0` turns it off). The trial lives on the payment links:
 `node scripts/create-max-plans.js --trial` (in the Render shell) puts it on the four existing
 links in place, and the Plans page, the welcome email and the admin counts show it (status
-`trialing`, with `max_plan_renews_at` the day the first payment is taken). Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
+`trialing`, with `max_plan_renews_at` the day the first payment is taken). The website's package buttons go straight
+to Stripe through `/api/public/max/start?plan=&interval=` (it redirects to the payment link
+set on Render). After checkout an existing account gets the "MAX is unlocked" email; an email
+with no account gets a "create your account" email (`server/maxEmails.js`), and the plan attaches
+itself when the account is made, by email or Google. A buyer who is not signed in lands on
+`/max-welcome`, which reads the checkout (`/api/public/max/checkout?session_id=`) and says
+"log in" or "create your account with you@…" — run
+`node scripts/create-max-plans.js --redirect https://aiqs-portal.onrender.com` once so the links
+pass the checkout id back. Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
 plan, early access or the rollout; **the Visualiser** only for an admin, the MAX + Visualiser plan
 or a complimentary grant (`feature_overrides {"visualiser": true}`, Users → the client → MAX).
 `/api/surveys/*` and `/api/max/*` need MAX; `POST …/render` additionally needs the Visualiser

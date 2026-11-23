@@ -1052,6 +1052,9 @@ router.get('/auth/google/callback', async (req, res) => {
       seedDefaultRates(id);
       grantSignupCredits({ id, email, role });
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      // A MAX package bought on the website under this email switches on now,
+      // as it does for an email sign-up.
+      require('./billingRoutes').attachByEmail(user).catch((e) => console.warn('[signup] MAX attach skipped:', e.message));
 
       logActivity({ event_type: 'signup', title: fullName + ' signed up via Google', detail: email, user_id: id, user_name: fullName, user_email: email });
       if (role !== 'admin') {

@@ -114,6 +114,9 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 // A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
 // links), rate-limited inside the router.
 app.use('/api/public/quotes', quotePublicRoutes);
+// The website's MAX buttons and the page after checkout (billingRoutes.js).
+// Mounted before the site chat, whose rate limit covers all of /api/public.
+app.use('/api/public/max', require('./billingRoutes').publicRouter);
 // The chat widget on the marketing site (theaiqs.co.uk). Unauthenticated by
 // design — a stranger asking a question before they sign up — and rate-limited
 // per IP inside the router.
