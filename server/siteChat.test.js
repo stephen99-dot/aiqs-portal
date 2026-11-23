@@ -159,3 +159,10 @@ test('the Anthropic block content shape is flattened rather than dropped', () =>
   const out = sanitiseHistory([{ role: 'user', content: [{ type: 'text', text: 'block form' }] }]);
   assert.deepStrictEqual(out, [{ role: 'user', content: 'block form' }]);
 });
+
+test('the assistant knows about the MAX free trial, at the length checkout gives', () => {
+  const { SYSTEM_PROMPT: prompt, MAX_TRIAL_DAYS: days } = require('./siteChat');
+  assert.strictEqual(days, require('./maxPlans').trialDays());
+  if (days > 0) assert.ok(prompt.includes(`${days}-day free trial`), 'the trial is in the prompt');
+  else assert.ok(!/free trial/.test(prompt), 'no trial is offered when there is none');
+});

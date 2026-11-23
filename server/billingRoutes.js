@@ -22,13 +22,77 @@
 // (utils/stripeLinks withUserRef), so checkout.session.completed carries the
 // account id. Everything here runs as the signed-in account and only ever
 // touches that account's own subscription.
+//
+// Two public routes (publicRouter, mounted at /api/public/max) serve the
+// website, where the visitor is not signed in:
+//
+//   GET /api/public/max/start?plan=&interval=   straight to that plan's Stripe
+//                                               Payment Link (the links live
+//                                               in Render's environment, so
+//                                               the website never holds them)
+//   GET /api/public/max/checkout?session_id=    after checkout: which plan,
+//                                               the email it was bought with
+//                                               and whether that email has an
+//                                               account yet — so the landing
+//                                               page can say "log in" or
+//                                               "create your account"
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const express = require('express');
 const db = require('./database');
 const { authMiddleware } = require('./auth');
 const plans = require('./maxPlans');
+const { rateLimit } = require('./publicRateLimit');
 
+function portalUrl() { return String(process.env.PORTAL_URL || 'https://aiqs-portal.onrender.com').replace(/\/+$/, ''); }
+
+// ── Public: the website ──────────────────────────────────────────────────────
+const publicRouter = express.Router();
+publicRouter.use(rateLimit({ windowMs: 60_000, max: 30 }));
+
+publicRouter.get('/start', (req, res) => {
+  const plan = plans.PLANS[req.query.plan] ? String(req.query.plan) : 'max';
+  const interval = plans.INTERVALS.includes(req.query.interval) ? String(req.query.interval) : 'month';
+  const link = plans.paymentLinks()[plan][interval];
+  // No link configured: the Plans page in the portal still sells the package.
+  if (!link) return res.redirect(302, portalUrl() + '/register?next=' + encodeURIComponent('/upgrade?plan=' + plan + '&interval=' + interval));
+  res.redirect(302, link);
+});
+
+// Checkout sessions are only looked up for a week: long enough to come back to
+// the page, short enough that an old link stops saying anything.
+const SESSION_MAX_AGE_S = 7 * 24 * 3600;
+publicRouter.get('/checkout', async (req, res) => {
+  const id = String(req.query.session_id || '');
+  if (!/^cs_(test|live)_[A-Za-z0-9]{10,}$/.test(id)) return res.status(400).json({ error: 'That is not a checkout.' });
+  const stripe = stripeClient();
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+  try {
+    const session = await stripe.checkout.sessions.retrieve(id);
+    if (!session || session.mode !== 'subscription' || !session.subscription) return res.status(404).json({ error: 'Checkout not found.' });
+    if (session.created && Date.now() / 1000 - session.created > SESSION_MAX_AGE_S) return res.status(404).json({ error: 'Checkout not found.' });
+    const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
+    const sub = await stripe.subscriptions.retrieve(subId);
+    const match = plans.fromStripe(sub);
+    if (!match) return res.status(404).json({ error: 'Not a MAX checkout.' });
+    const email = String((session.customer_details && session.customer_details.email) || session.customer_email || '').trim().toLowerCase();
+    const account = email ? db.prepare('SELECT id FROM users WHERE email = ?').get(email) : null;
+    res.json({
+      email,
+      has_account: !!account,
+      plan: match.plan,
+      plan_name: plans.PLANS[match.plan].name,
+      interval: match.interval,
+      status: match.status,
+      trial_ends_at: match.trial_ends_at || null,
+    });
+  } catch (err) {
+    console.warn('[billing] checkout lookup failed:', err.message);
+    res.status(404).json({ error: 'Checkout not found.' });
+  }
+});
+
+// ── Signed in: the Plans page ────────────────────────────────────────────────
 const router = express.Router();
 router.use(authMiddleware);
 
@@ -208,3 +272,4 @@ router.post('/max/portal', async (req, res) => {
 module.exports = router;
 module.exports._internals = { priceFor, current };
 module.exports.attachByEmail = attachByEmail;
+module.exports.publicRouter = publicRouter;

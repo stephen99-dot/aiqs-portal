@@ -24,7 +24,8 @@ const GoogleIcon = () => (
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  // Pre-filled when the page after a MAX checkout sends someone here to log in.
+  const [email, setEmail] = useState(() => { try { return new URLSearchParams(window.location.search).get('email') || ''; } catch (e) { return ''; } });
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

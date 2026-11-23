@@ -6,7 +6,10 @@
 //
 // Made the links already and want them to send customers somewhere else
 // after paying? This updates the four links in place (nothing new is made,
-// the link URLs do not change, Render needs no change):
+// the link URLs do not change, Render needs no change). It also adds the
+// checkout id to the address, which lets the page after checkout greet a
+// buyer from the website who is not signed in — "create your account with
+// you@example.com" or "log in":
 //
 //   STRIPE_SECRET_KEY=sk_live_… node scripts/create-max-plans.js --redirect https://aiqs-portal.onrender.com
 //
@@ -42,6 +45,11 @@ const { PLANS, PLAN_KEYS, trialDays, paymentLinks } = require(path.join(__dirnam
 // version, newer than the one the installed library defaults to. Only the
 // --trial run asks for it; nothing else here changes.
 const TRIAL_API_VERSION = '2024-12-18.acacia';
+
+// Where a buyer lands after checkout. Stripe fills in {CHECKOUT_SESSION_ID}.
+function successUrl(site) {
+  return String(site).replace(/\/$/, '') + '/payment-success?plan=max&session_id={CHECKOUT_SESSION_ID}';
+}
 
 async function main() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -90,7 +98,7 @@ async function main() {
       const link = await stripe.paymentLinks.create({
         line_items: [{ price: price.id, quantity: 1 }],
         allow_promotion_codes: true,
-        after_completion: { type: 'redirect', redirect: { url: `${portal}/payment-success?plan=max` } },
+        after_completion: { type: 'redirect', redirect: { url: successUrl(portal) } },
         ...(trial ? { subscription_data: { trial_period_days: trial } } : {}),
         metadata: { aiqs_plan: k, aiqs_interval: interval },
       });
@@ -103,27 +111,31 @@ async function main() {
 
   console.log('\nSet these on Render (Environment → Add) and the Plans page goes live on the next deploy:\n');
   for (const [k, v] of Object.entries(env)) console.log(`${k}=${v}`);
-  console.log('\nThe success URL on every link is ' + portal + '/payment-success?plan=max — change PORTAL_URL if the website lives elsewhere.');
+  console.log('\nThe success URL on every link is ' + successUrl(portal) + ' — change PORTAL_URL if the portal lives elsewhere.');
 }
 
 // Point every MAX payment link (the ones this script made, found by the
-// aiqs_plan tag on them) at <site>/payment-success?plan=max.
+// aiqs_plan tag on them, and the ones set on Render) at
+// <site>/payment-success?plan=max&session_id={CHECKOUT_SESSION_ID}.
 async function redirectLinks(stripe, mode, site) {
   const base = String(site || '').trim().replace(/\/$/, '');
   if (!/^https:\/\/[^/\s]+$/.test(base)) {
     console.error('Give the website address after --redirect, e.g. --redirect https://aiqs-portal.onrender.com (no path, no trailing slash).');
     process.exit(1);
   }
-  const url = base + '/payment-success?plan=max';
+  const url = successUrl(base);
   console.log(`Pointing the MAX payment links at ${url} (${mode} mode)…\n`);
+  const configured = new Set();
+  const pl = paymentLinks();
+  for (const k of PLAN_KEYS) for (const i of ['month', 'year']) if (pl[k] && pl[k][i]) configured.add(pl[k][i].trim());
   const links = [];
-  for await (const link of stripe.paymentLinks.list({ limit: 100 })) if (link.active && link.metadata && link.metadata.aiqs_plan) links.push(link);
+  for await (const link of stripe.paymentLinks.list({ limit: 100 })) if (link.active && ((link.metadata && link.metadata.aiqs_plan) || configured.has(link.url))) links.push(link);
   if (!links.length) { console.error('No MAX payment links found in this Stripe mode. Create them first (run without --redirect).'); process.exit(1); }
   for (const link of links) {
     const was = link.after_completion && link.after_completion.redirect && link.after_completion.redirect.url;
     if (was === url) { console.log(`  ${link.url}  already right`); continue; }
     await stripe.paymentLinks.update(link.id, { after_completion: { type: 'redirect', redirect: { url } } });
-    console.log(`  ${link.url}  ${link.metadata.aiqs_plan} ${link.metadata.aiqs_interval || ''}  ${was || '(confirmation page)'} → ${url}`);
+    console.log(`  ${link.url}  ${(link.metadata && link.metadata.aiqs_plan) || ''} ${(link.metadata && link.metadata.aiqs_interval) || ''}  ${was || '(confirmation page)'} → ${url}`);
   }
   console.log(`\nDone: ${links.length} link(s). The link URLs are unchanged, so Render needs nothing.`);
 }
