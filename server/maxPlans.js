@@ -6,8 +6,13 @@
 //   max              AI QS MAX                 £59 a month / £590 a year
 //   max_visualiser   AI QS MAX + Visualiser    £79 a month / £790 a year
 //
-// Yearly is "two months free": twelve months for the price of ten. The Stripe
-// side is four recurring prices on two products. A paid subscription arrives
+// Yearly is "two months free": twelve months for the price of ten. Every plan
+// starts with a free trial (TRIAL_DAYS, or MAX_TRIAL_DAYS on Render): the card
+// is taken at checkout and nothing is charged until the trial ends. The trial
+// itself lives on the four Stripe Payment Links — scripts/create-max-plans.js
+// --trial puts this length on them, so the Plans page and Stripe agree.
+//
+// The Stripe side is four recurring prices on two products. A subscription arrives
 // through stripe-webhook.js (checkout.session.completed, then every
 // customer.subscription.updated / deleted) and is written onto the user row:
 //
@@ -78,6 +83,19 @@ const PLANS = {
 };
 const PLAN_KEYS = Object.keys(PLANS);
 const INTERVALS = ['month', 'year'];
+
+// Days free before the first payment. MAX_TRIAL_DAYS overrides it without a
+// rebuild (0 means no trial); the Payment Links must match — run
+// scripts/create-max-plans.js --trial after changing either.
+const TRIAL_DAYS = 7;
+function trialDays() {
+  const raw = process.env.MAX_TRIAL_DAYS;
+  if (raw !== undefined && String(raw).trim() !== '') {
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= 0 && n <= 730) return n;
+  }
+  return TRIAL_DAYS;
+}
 
 // Statuses that keep the account's access. past_due stays on while Stripe
 // retries the card (it cancels the subscription itself if every retry fails).
@@ -169,12 +187,16 @@ function deactivate(user, status) {
 function fromStripe(subscription) {
   const match = planForSubscription(subscription);
   if (!match) return null;
+  // On a free trial the current period is the trial, so renews_at is the day
+  // the first payment is taken.
+  const trialEnds = subscription.status === 'trialing' ? iso(subscription.trial_end) : null;
   return {
     plan: match.plan,
     interval: match.interval,
     status: subscription.status,
     subscription_id: subscription.id,
-    renews_at: iso(subscription.current_period_end),
+    trial_ends_at: trialEnds,
+    renews_at: iso(subscription.current_period_end) || trialEnds,
     cancels_at: subscription.cancel_at_period_end ? iso(subscription.cancel_at || subscription.current_period_end) : iso(subscription.cancel_at),
   };
 }
@@ -240,13 +262,14 @@ function hasVisualiserGrant(user) {
 
 // Admin: how many accounts are on each plan.
 function subscriberCounts() {
-  const out = { max: 0, max_visualiser: 0, monthly: 0, yearly: 0, cancelling: 0, visualiser_grants: 0, early_access: 0 };
+  const out = { max: 0, max_visualiser: 0, monthly: 0, yearly: 0, trialing: 0, cancelling: 0, visualiser_grants: 0, early_access: 0 };
   try {
     const rows = db().prepare("SELECT max_plan, max_plan_status, max_plan_interval, max_plan_cancels_at FROM users WHERE max_plan IS NOT NULL AND role != 'admin'").all();
     for (const r of rows) {
       if (!LIVE_STATUSES.includes(r.max_plan_status || 'active')) continue;
       if (out[r.max_plan] !== undefined) out[r.max_plan] += 1;
       if (r.max_plan_interval === 'year') out.yearly += 1; else out.monthly += 1;
+      if (r.max_plan_status === 'trialing') out.trialing += 1;
       if (r.max_plan_cancels_at) out.cancelling += 1;
     }
     out.visualiser_grants = db().prepare("SELECT COUNT(*) AS c FROM users WHERE feature_overrides LIKE '%\"visualiser\":true%' AND role != 'admin'").get().c;
@@ -278,7 +301,7 @@ function backfillVisualiserGrants() {
 }
 
 module.exports = {
-  PLANS, PLAN_KEYS, INTERVALS, LIVE_STATUSES, DEAD_STATUSES,
+  PLANS, PLAN_KEYS, INTERVALS, LIVE_STATUSES, DEAD_STATUSES, TRIAL_DAYS, trialDays,
   catalogue, paymentLinks, linksConfigured, priceIds, configuredPriceIds,
   planForPrice, planForSubscription, fromStripe, activate, deactivate, syncFromStripe,
   isSubscribed, entitlements, setVisualiserGrant, hasVisualiserGrant, subscriberCounts, backfillVisualiserGrants,

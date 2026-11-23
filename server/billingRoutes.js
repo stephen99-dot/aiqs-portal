@@ -2,7 +2,8 @@
 // MAX packages — server/billingRoutes.js   (mounted at /api/billing)
 //
 //   GET  /api/billing/max           the two plans, their prices and payment
-//                                   links, and what this account has now
+//                                   links, the free-trial length, and what
+//                                   this account has now
 //   POST /api/billing/max/verify    just paid: find the subscription at Stripe
 //                                   by the account's email and switch it on
 //                                   (the webhook usually beats this; it is the
@@ -56,6 +57,7 @@ router.get('/max', (req, res) => {
     plans: plans.catalogue(),
     links: plans.paymentLinks(),
     yearly_note: 'Two months free — twelve months for the price of ten.',
+    trial_days: plans.trialDays(),
     current: current(user),
     stripe: { configured: !!process.env.STRIPE_SECRET_KEY, links: plans.linksConfigured() },
   });
