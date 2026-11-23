@@ -399,7 +399,12 @@ async function handleCheckoutComplete(session, stripeSecret) {
         currency: session.currency,
       });
     } else {
-      console.error(`[Stripe] Unknown price ID: ${priceId} — customer: ${customerEmail}, amount: ${session.amount_total}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
+      // Nothing was switched on for someone who has just checked out — say so
+      // where it will be seen, not only in the log.
+      const price = subscription.items.data[0] && subscription.items.data[0].price;
+      const what = price ? `${String(price.currency || '').toUpperCase()} ${(Number(price.unit_amount) / 100).toFixed(2)}${price.recurring ? ' a ' + price.recurring.interval : ''}` : 'unknown amount';
+      console.error(`[Stripe] Subscription checkout ${session.id} from ${customerEmail}: price ${priceId} (${what}) is not MAX, Office in a Box or a legacy plan — nothing switched on`);
+      notifyAdminSafe({ type: 'checkout_unmatched', title: `Checkout not switched on: ${customerEmail}`, detail: `${customerEmail} started a subscription (${subscription.id}, price ${priceId}, ${what}) that the portal does not recognise, so nothing was switched on for them. Check the price in Stripe.`, icon: 'alert' });
     }
   }
 

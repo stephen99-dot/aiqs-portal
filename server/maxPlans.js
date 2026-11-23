@@ -24,9 +24,13 @@
 //   max_subscription_id  the Stripe subscription
 //
 // Which Stripe price is which plan: STRIPE_MAX_PRICE_IDS and
-// STRIPE_MAX_VISUALISER_PRICE_IDS (comma-separated, monthly and yearly). When
-// neither is set the amount is matched instead — £59/£590 and £79/£790 in GBP
-// — so creating the prices with those exact amounts is enough to go live.
+// STRIPE_MAX_VISUALISER_PRICE_IDS (comma-separated, monthly and yearly) name
+// prices outright. Any other GBP price at exactly £59 / £590 (MAX) or £79 /
+// £790 (MAX + Visualiser) a month / year is matched on its amount as well:
+// editing a product or setting up a trial in the Stripe dashboard makes new
+// prices, and a buyer on one of those must still get the plan they paid for.
+// No other subscription is sold at those amounts (Office in a Box is £100 /
+// £199 / £249, the old plans more).
 //
 // Entitlements (what an account can actually do) come from entitlements(user):
 //
@@ -131,16 +135,13 @@ function linksConfigured() {
   return !!(l.max.month && l.max.year && l.max_visualiser.month && l.max_visualiser.year);
 }
 
-// Which plan a Stripe price is. By id when the ids are configured, otherwise
-// by amount and interval. Returns { plan, interval } or null.
+// Which plan a Stripe price is: a configured id first, then the amount and
+// interval. Returns { plan, interval } or null.
 function planForPrice(price) {
   if (!price) return null;
   const interval = price.recurring && price.recurring.interval;
-  const byId = configuredPriceIds();
-  if (Object.keys(byId).length) {
-    const plan = byId[price.id];
-    return plan ? { plan, interval: INTERVALS.includes(interval) ? interval : null } : null;
-  }
+  const pinned = configuredPriceIds()[price.id];
+  if (pinned) return { plan: pinned, interval: INTERVALS.includes(interval) ? interval : null };
   if (!INTERVALS.includes(interval)) return null;
   if (price.currency && String(price.currency).toLowerCase() !== 'gbp') return null;
   const amount = Number(price.unit_amount);
