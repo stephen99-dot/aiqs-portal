@@ -3,6 +3,7 @@ import { apiFetch, getToken, resolveUrl } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
 import { Button, Card, Banner, Field, Input, Textarea, PageHeader, Skeleton, SkeletonCard } from '../ui';
 import ClientCopySheet from '../components/ClientCopySheet';
+import EmailSenderCard from '../components/EmailSenderCard';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -208,7 +209,7 @@ export default function BrandingPage() {
     <div className="page" style={{ maxWidth: 1280, paddingBottom: 60 }}>
       <PageHeader
         title="Branding"
-        subtitle="Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate."
+        subtitle="Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate, and the email address your quotes are sent from."
       />
 
       {error && (
@@ -227,6 +228,9 @@ export default function BrandingPage() {
       <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(360px, 460px)', gap: 18 }}>
         {/* Settings */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Which address client emails come from */}
+          <EmailSenderCard />
+
           {/* Logo */}
           <Card>
             <Card.Header title="Logo" />

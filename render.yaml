@@ -30,6 +30,14 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Connect your email (docs/EMAIL_CONNECTION.md). Gmail reuses the
+      # Google sign-in client; Outlook needs its own Entra app. All optional.
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
+      - key: EMAIL_TOKEN_KEY
+        sync: false
       # iOS app — push notifications (docs/IOS_APP.md §9). All optional: with
       # none set the app still works and customers still get the emails.
       - key: APPLE_TEAM_ID

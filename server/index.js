@@ -127,6 +127,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
 // Native Xero connection — one-button OAuth2, pushes invoices straight in.
 app.use('/api/xero', require('./xeroRoutes'));
+// Connect your email — builders send client mail from their own Gmail / Outlook.
+app.use('/api/email-connection', require('./emailConnectionRoutes'));
 // Wave 5: Documents & Compliance — fillable templates -> branded PDF.
 app.use('/api/documents', documentsRoutes);
 // AI Project Manager — deterministic alerts engine (Part A) + LLM-grounded Q&A (Part B).

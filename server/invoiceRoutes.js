@@ -454,7 +454,7 @@ router.post('/:id/send', async (req, res) => {
     const link = mailer.BASE_URL + '/i/' + token;
 
     let attachments = [];
-    if (fresh.client_email && mailer.isConfigured()) {
+    if (fresh.client_email && mailer.canSend(req.user.id)) {
       try {
         const pdf = await invoicePdfBuffer(fresh, getInvoiceLines(fresh.id), branding, userInfo);
         attachments = [{ filename: (fresh.invoice_number || 'invoice') + '.pdf', content: pdf }];
@@ -683,7 +683,7 @@ router.post('/:id/chase-draft', async (req, res) => {
     res.json({
       subject: String(result.json.subject || '').slice(0, 200),
       body: String(result.json.body || '').slice(0, 4000),
-      can_email: !!(inv.client_email && mailer.isConfigured()),
+      can_email: !!(inv.client_email && mailer.canSend(req.user.id)),
       client_email: inv.client_email || null,
       days_overdue: daysOverdue,
     });
@@ -702,7 +702,7 @@ router.post('/:id/chase-send', async (req, res) => {
     if (!inv) return res.status(404).json({ error: 'Invoice not found.' });
     if (inv.status === 'paid') return res.status(400).json({ error: 'This invoice is already paid.' });
     if (!inv.client_email) return res.status(400).json({ error: "Add the client's email to the invoice first." });
-    if (!mailer.isConfigured()) return res.status(503).json({ error: 'Email is not set up on the server — copy the message and send it by WhatsApp or text instead.', code: 'MAIL_NOT_CONFIGURED' });
+    if (!mailer.canSend(req.user.id)) return res.status(503).json({ error: 'Email is not set up on the server — copy the message and send it by WhatsApp or text instead.', code: 'MAIL_NOT_CONFIGURED' });
 
     const b = req.body || {};
     const subject = String(b.subject || '').trim().slice(0, 200);
@@ -794,7 +794,7 @@ router.post('/_export/email', async (req, res) => {
     if (!settings.accountant_email) {
       return res.status(400).json({ error: "No accountant email saved yet — add it in Settings under 'Tax & CIS'." });
     }
-    if (!mailer.isConfigured()) {
+    if (!mailer.canSend(req.user.id)) {
       return res.status(503).json({ error: 'Email is not set up on the server — download the file and send it yourself instead.', code: 'MAIL_NOT_CONFIGURED' });
     }
     const b = req.body || {};
