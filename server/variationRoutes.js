@@ -7,7 +7,7 @@ const multer = require('multer');
 const db = require('./database');
 const { callModel, MODELS } = require('./anthropicClient');
 const { authMiddleware } = require('./auth');
-const { parseBOQ, generateBuilderPack, generateClientCopyProSafe, isTotalRowItem, reconcileParsed, addMissingProvisionalSections } = require('./builderExports');
+const { parseBOQ, readWorkbookFile, generateBuilderPack, generateClientCopyProSafe, isTotalRowItem, reconcileParsed, addMissingProvisionalSections } = require('./builderExports');
 const { resolveProjectBoq, ensureBoqVerified, boqGate, auditAll, readStored: readBoqVerification } = require('./boqVerify');
 const { adminMiddleware } = require('./auth');
 const { writeXlsxBuffer } = require('./docTemplates');
@@ -671,8 +671,7 @@ router.post('/projects/:projectId/client-copy', authMiddleware, async (req, res)
     // then VAT applies to the combined sum — matches deterministicPricer.js formula
     const multiplier = (1 + contingency / 100 + ohp / 100) * (1 + vat / 100);
 
-    const srcWb = new ExcelJS.Workbook();
-    await srcWb.xlsx.readFile(originalPath);
+    const srcWb = await readWorkbookFile(originalPath);
 
     const srcWs = srcWb.getWorksheet('BOQ') || srcWb.worksheets[0];
     if (!srcWs) return res.status(500).json({ error: 'Could not read BOQ worksheet' });
