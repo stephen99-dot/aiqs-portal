@@ -124,12 +124,15 @@ test('a Stripe price is matched to a plan by amount and interval, or by the conf
   assert.equal(P.planForPrice({ ...price('x', 5900, 'month'), currency: 'eur' }), null, 'only GBP');
   assert.equal(P.planForPrice(price('x', 19900, 'month')), null, 'Office in a Box is not a MAX plan');
   assert.equal(P.planForSubscription(sub('s', price('x', 5900, 'month'))).plan, 'max');
-  // Configured ids win, and then amounts are ignored.
+  // Configured ids win whatever the amount; a price made later in the Stripe
+  // dashboard (a trial set up there, say) is still matched on its amount.
   process.env.STRIPE_MAX_PRICE_IDS = 'price_m1, price_m2';
   process.env.STRIPE_MAX_VISUALISER_PRICE_IDS = 'price_v1,price_v2';
   try {
     assert.deepEqual(P.planForPrice({ id: 'price_v2', unit_amount: 1, currency: 'usd', recurring: { interval: 'year' } }), { plan: 'max_visualiser', interval: 'year' });
-    assert.equal(P.planForPrice(price('x', 5900, 'month')), null);
+    assert.deepEqual(P.planForPrice(price('price_new_max_m', 5900, 'month')), { plan: 'max', interval: 'month' });
+    assert.deepEqual(P.planForPrice(price('price_new_vis_m', 7900, 'month')), { plan: 'max_visualiser', interval: 'month' });
+    assert.equal(P.planForPrice(price('price_other', 19900, 'month')), null, 'still nothing else');
     assert.equal(Object.keys(P.configuredPriceIds()).length, 4);
   } finally { delete process.env.STRIPE_MAX_PRICE_IDS; delete process.env.STRIPE_MAX_VISUALISER_PRICE_IDS; }
   // The catalogue is what the website sells.
@@ -492,4 +495,28 @@ test('the website: straight to Stripe, and a buyer with no account is asked to c
   r = await req('GET', '/public/max/checkout?session_id=' + session.id);
   assert.equal(r.body.has_account, true, 'now the page says "log in"');
   delete stripeState.subs.sub_fay;
+});
+
+test('a MAX price made after the ids were pinned still switches the plan on; an unknown price is flagged', async () => {
+  // As on 23 Nov 2026: the four original prices pinned on Render, the payment
+  // links moved onto new prices when the trial was set up in Stripe.
+  process.env.STRIPE_MAX_PRICE_IDS = 'price_old_m,price_old_y';
+  process.env.STRIPE_MAX_VISUALISER_PRICE_IDS = 'price_old_vm,price_old_vy';
+  try {
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES ('g', 'gus@gmail.com', 'x', 'Gus Grant', 'Co', 'client', 'GB')").run();
+    stripeState.customers.cus_7 = { id: 'cus_7', email: 'gus@gmail.com' };
+    stripeState.subs.sub_gus = sub('sub_gus', price('price_1Udr20EOVz3JQx7AMo2bksU9', 5900, 'month'), { customer: 'cus_7', status: 'trialing', trial_end: 1764806400, current_period_end: 1764806400 });
+    const sent = await capturingEmail(() => event('checkout.session.completed', { id: 'cs_gus', mode: 'subscription', subscription: 'sub_gus', customer_details: { email: 'gus@gmail.com' }, amount_total: 0, currency: 'gbp' }));
+    assert.deepEqual([row('g').max_plan, row('g').max_plan_status, row('g').max_subscription_id], ['max', 'trialing', 'sub_gus']);
+    assert.ok(sent.some((m) => m.to === 'gus@gmail.com' && /free trial of AI QS MAX/.test(m.subject)), 'he gets the "unlocked" email');
+
+    // A subscription at a price nothing knows: nothing switches on, and the admin is told.
+    stripeState.subs.sub_odd = sub('sub_odd', price('price_odd', 4500, 'month'), { customer: 'cus_7' });
+    await capturingEmail(() => event('checkout.session.completed', { id: 'cs_odd', mode: 'subscription', subscription: 'sub_odd', customer_details: { email: 'gus@gmail.com' }, amount_total: 4500, currency: 'gbp' }));
+    assert.equal(row('g').max_subscription_id, 'sub_gus');
+    assert.ok(db.prepare("SELECT COUNT(*) AS c FROM notifications WHERE type = 'checkout_unmatched' AND detail LIKE '%price_odd%' AND detail LIKE '%GBP 45.00 a month%'").get().c >= 1);
+  } finally {
+    delete process.env.STRIPE_MAX_PRICE_IDS; delete process.env.STRIPE_MAX_VISUALISER_PRICE_IDS;
+    delete stripeState.subs.sub_gus; delete stripeState.subs.sub_odd;
+  }
 });
