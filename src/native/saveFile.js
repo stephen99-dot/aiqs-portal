@@ -65,7 +65,7 @@ export async function saveBlob(blob, filename) {
   try {
     await Share.share({
       title: name,
-      url: written.uri,
+      files: [written.uri],
       dialogTitle: `Save or share ${name}`,
     });
     return { method: 'share', uri: written.uri };

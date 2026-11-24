@@ -13,6 +13,9 @@ A client-facing web app for AI-powered quantity surveying. Customers can create 
   **[docs/IOS_APP.md](docs/IOS_APP.md)** — including the App Store rules the app is shaped around
   (no in-app Stripe links, no Google button in the app, in-app account deletion) and the device
   matrix with the iPhone Duo.
+- **Android app:** the same build wrapped for Google Play (`android/`). `npm run android` builds,
+  syncs and opens Android Studio; signing, versions and the Play upload are in
+  **[docs/ANDROID_APP.md](docs/ANDROID_APP.md)**.
 
 ## Job tracking
 

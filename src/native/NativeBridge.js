@@ -20,6 +20,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { Keyboard } from '@capacitor/keyboard';
 import { isNative, isIOS, platform } from './platform';
+import { light, dark } from '../theme/tokens';
 import { openExternal, isExternalHref, opensAnotherApp } from './openExternal';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -70,12 +71,32 @@ export default function NativeBridge() {
     return () => { if (handle) handle.remove(); };
   }, [navigate]);
 
-  // Status bar text colour follows the theme (the bar itself is transparent
-  // over our own header, see capacitor.config.json).
+  // Status bar follows the theme. iOS: the bar is transparent over our own
+  // header, so only the text colour changes. Android: the bar is its own strip
+  // above the web view, so it takes the header's surface colour as well.
   useEffect(() => {
-    if (!isIOS()) return;
+    if (!isNative()) return;
     StatusBar.setStyle({ style: isDark ? Style.Dark : Style.Light }).catch(() => {});
+    if (platform() === 'android') {
+      StatusBar.setBackgroundColor({ color: (isDark ? dark : light).surface }).catch(() => {});
+    }
   }, [isDark]);
+
+  // Android hardware/gesture back: step back through the app's own history,
+  // and from a top-level screen hand back to the home screen rather than
+  // killing the app (so the session survives).
+  useEffect(() => {
+    if (platform() !== 'android') return undefined;
+    let handle;
+    CapApp.addListener('backButton', () => {
+      const idx = window.history.state && typeof window.history.state.idx === 'number' ? window.history.state.idx : 0;
+      const open = document.querySelector('.ui-modal-overlay, .modal-overlay');
+      if (open) { const close = open.querySelector('[aria-label="Close"]'); if (close) { close.click(); return; } }
+      if (idx > 0) navigate(-1);
+      else CapApp.minimizeApp().catch(() => {});
+    }).then((h) => { handle = h; });
+    return () => { if (handle) handle.remove(); };
+  }, [navigate]);
 
   // Splash stays up until we know whether there is a session.
   useEffect(() => {

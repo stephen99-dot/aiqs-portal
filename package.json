@@ -13,9 +13,14 @@
     "ios:assets": "node scripts/build-app-icons.js && capacitor-assets generate --ios --splashBackgroundColor \"#F5F7FA\" --splashBackgroundColorDark \"#141C2E\"",
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
-    "ios": "npm run ios:sync && cap open ios"
+    "ios": "npm run ios:sync && cap open ios",
+    "android:assets": "node scripts/build-app-icons.js && capacitor-assets generate --android --iconBackgroundColor \"#F59E0B\" --splashBackgroundColor \"#F5F7FA\" --splashBackgroundColorDark \"#141C2E\"",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android": "npm run android:sync && cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
     "@capacitor/app": "^8.1.2",
     "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.6.0",

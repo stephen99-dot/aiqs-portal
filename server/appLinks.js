@@ -50,7 +50,31 @@ function buildAASA({ teamId, bundleId } = {}) {
   };
 }
 
+/**
+ * Android's equivalent: Digital Asset Links. Needs the app's package name and
+ * the SHA-256 fingerprint of the signing certificate — for an app on Google
+ * Play that is the *app signing* key fingerprint shown in Play Console →
+ * Test and release → App integrity (not the upload key). Several
+ * fingerprints may be given, comma-separated (e.g. Play's key plus a debug
+ * key for testing).
+ */
+function buildAssetLinks({ packageName, sha256 } = {}) {
+  const pkg = String(packageName || DEFAULT_BUNDLE_ID).trim();
+  const prints = String(sha256 || '').split(',').map((s) => s.trim().toUpperCase()).filter((s) => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(s));
+  if (!prints.length) return null;
+  return [{
+    relation: ['delegate_permission/common.handle_all_urls', 'delegate_permission/common.get_login_creds'],
+    target: { namespace: 'android_app', package_name: pkg, sha256_cert_fingerprints: prints },
+  }];
+}
+
 const router = express.Router();
+router.get('/.well-known/assetlinks.json', (req, res) => {
+  const body = buildAssetLinks({ packageName: process.env.ANDROID_PACKAGE, sha256: process.env.ANDROID_SHA256_CERT });
+  if (!body) return res.status(404).json({ error: 'Android app links are not configured (ANDROID_SHA256_CERT)' });
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.type('application/json').send(JSON.stringify(body));
+});
 router.get(['/.well-known/apple-app-site-association', '/apple-app-site-association'], (req, res) => {
   const body = buildAASA({ teamId: process.env.APPLE_TEAM_ID, bundleId: process.env.IOS_BUNDLE_ID });
   if (!body) return res.status(404).json({ error: 'Universal links are not configured (APPLE_TEAM_ID)' });
@@ -58,4 +82,4 @@ router.get(['/.well-known/apple-app-site-association', '/apple-app-site-associat
   res.type('application/json').send(JSON.stringify(body));
 });
 
-module.exports = { router, buildAASA, APP_PATHS, DEFAULT_BUNDLE_ID };
+module.exports = { router, buildAASA, buildAssetLinks, APP_PATHS, DEFAULT_BUNDLE_ID };

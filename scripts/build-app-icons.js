@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Renders the app icon and launch-screen artwork from one SVG definition.
 //
-//   node scripts/build-app-icons.js
+//   node scripts/build-app-icons.js              # keeps an existing resources/icon-only.png
+//   node scripts/build-app-icons.js --regenerate # replaces it with the built-in artwork
 //
 // Writes:
 //   resources/icon-only.png      1024×1024  — source for @capacitor/assets (iOS app icon)
@@ -50,6 +51,22 @@ function iconSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1000 1000">${tileSvg()}</svg>`;
 }
 
+// Android adaptive icon: the foreground is the "QS" on a transparent sheet,
+// inset to the 66% safe zone, and the background is the amber gradient. The
+// launcher masks them into a circle, squircle or whatever the phone uses.
+function androidForegroundSvg(size) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1000 1000">
+    <text x="500" y="610" text-anchor="middle" font-family="DM Serif Display, DejaVu Serif, Liberation Serif, Georgia, serif"
+          font-weight="700" font-size="330" letter-spacing="-12" fill="${INK}">QS</text>
+  </svg>`;
+}
+function androidBackgroundSvg(size) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1000 1000">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${AMBER_A}"/><stop offset="1" stop-color="${AMBER_B}"/></linearGradient></defs>
+    <rect width="1000" height="1000" fill="url(#g)"/>
+  </svg>`;
+}
+
 // Maskable / PWA icons keep the artwork inside the safe zone (80%).
 function maskableSvg(size) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 1000 1000">
@@ -80,8 +97,34 @@ async function png(svg, out, size) {
   console.log('wrote', path.relative(ROOT, out));
 }
 
+// A logo of your own: drop a 1024×1024 PNG at resources/icon-only.png. This
+// script never overwrites a file that is already there (pass --regenerate to
+// start again from the built-in artwork), and it derives the Android adaptive
+// icon from whatever icon-only.png holds, so one file drives both stores.
+async function androidFromCustomIcon(iconPath) {
+  const inset = Math.round(1024 * 0.66);
+  const fg = await sharp(iconPath).resize(inset, inset, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: fg, gravity: 'centre' }]).png().toFile(path.join(ROOT, 'resources/icon-foreground.png'));
+  // Background: the icon's own top-left pixel colour, so the masked edges blend in.
+  const { data } = await sharp(iconPath).resize(1, 1, { fit: 'cover', position: 'left top' }).raw().toBuffer({ resolveWithObject: true });
+  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: { r: data[0], g: data[1], b: data[2], alpha: 1 } } })
+    .png().toFile(path.join(ROOT, 'resources/icon-background.png'));
+  console.log('wrote resources/icon-foreground.png and icon-background.png from your icon-only.png');
+}
+
 (async () => {
-  await png(iconSvg(1024), path.join(ROOT, 'resources/icon-only.png'), 1024);
+  const regenerate = process.argv.includes('--regenerate');
+  const iconPath = path.join(ROOT, 'resources/icon-only.png');
+  const custom = fs.existsSync(iconPath) && !regenerate;
+  if (custom) {
+    console.log('keeping existing resources/icon-only.png (pass --regenerate to replace it with the built-in artwork)');
+    await androidFromCustomIcon(iconPath);
+  } else {
+    await png(iconSvg(1024), iconPath, 1024);
+    await png(androidForegroundSvg(1024), path.join(ROOT, 'resources/icon-foreground.png'), 1024);
+    await png(androidBackgroundSvg(1024), path.join(ROOT, 'resources/icon-background.png'), 1024);
+  }
   await png(splashSvg(2732, false), path.join(ROOT, 'resources/splash.png'), 2732);
   await png(splashSvg(2732, true), path.join(ROOT, 'resources/splash-dark.png'), 2732);
   await png(iconSvg(512), path.join(ROOT, 'public/icons/icon-512.png'), 512);
