@@ -9,6 +9,7 @@
 // report.
 //
 //   Surveys    GET /, POST /, GET /:id, PATCH /:id, DELETE /:id
+//              POST /:id/price   (MAX prices the whole job: the brief plus the measured rooms)
 //   Rooms      POST /:id/rooms, GET /rooms/:roomId, PATCH /rooms/:roomId, DELETE /rooms/:roomId
 //   Photos     POST /rooms/:roomId/photos (multipart photos[]), PATCH/DELETE /photos/:id,
 //              GET /photos/:id/file|thumb?t=   (link-token, so <img src> works)
@@ -130,6 +131,10 @@ function surveyTotals(rooms) {
   for (const k of ['floor_m2', 'wall_net_m2', 'ceiling_m2', 'perimeter_m']) t[k] = Math.round(t[k] * 100) / 100;
   return t;
 }
+function estimateOf(s, userId) {
+  if (!s || !s.estimate_id) return null;
+  try { return db.prepare('SELECT id, quote_number, status, grand_total, net_total FROM quotes WHERE id = ? AND user_id = ?').get(s.estimate_id, userId) || null; } catch (e) { return null; }
+}
 function touchSurvey(id) { try { db.prepare('UPDATE room_surveys SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id); } catch (e) { /* fine */ } }
 
 // Write a room's fields (JSON columns stringified), recompute the quantities, return the fresh row.
@@ -222,8 +227,8 @@ router.post('/', (req, res) => {
     let projectId = null;
     if (b.project_id && db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(String(b.project_id), req.user.id)) projectId = String(b.project_id);
     const title = clean(b.title, 120) || clean(b.address, 120) || 'Survey ' + new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    db.prepare('INSERT INTO room_surveys (id, user_id, title, address, customer_name, customer_email, project_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, req.user.id, title, clean(b.address, 200), clean(b.customer_name, 120), clean(b.customer_email, 200), projectId, clean(b.notes, 2000));
+    db.prepare('INSERT INTO room_surveys (id, user_id, title, address, customer_name, customer_email, project_id, notes, brief, visualise) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, req.user.id, title, clean(b.address, 200), clean(b.customer_name, 120), clean(b.customer_email, 200), projectId, clean(b.notes, 2000), clean(b.brief, 2000), b.visualise ? 1 : 0);
     res.status(201).json({ id, ...getSurvey(id, req.user.id) });
   } catch (err) { console.error('[Surveys] create error:', err); res.status(500).json({ error: 'Could not start the survey.' }); }
 });
@@ -234,7 +239,7 @@ router.get('/:id', (req, res) => {
     if (!s) return res.status(404).json({ error: 'Survey not found.' });
     const token = linkFor(s.id);
     const rooms = surveyRooms(s.id).map((r) => roomOut(r, roomPhotos(r.id), token));
-    res.json({ survey: s, rooms, totals: surveyTotals(rooms), photo_token: token });
+    res.json({ survey: s, rooms, totals: surveyTotals(rooms), estimate: estimateOf(s, req.user.id), photo_token: token });
   } catch (err) { console.error('[Surveys] get error:', err); res.status(500).json({ error: 'Could not open that survey.' }); }
 });
 
@@ -250,6 +255,9 @@ router.patch('/:id', (req, res) => {
     if ('customer_name' in b) put('customer_name', clean(b.customer_name, 120));
     if ('customer_email' in b) put('customer_email', clean(b.customer_email, 200));
     if ('notes' in b) put('notes', clean(b.notes, 2000));
+    if ('brief' in b) put('brief', clean(b.brief, 2000));
+    if ('visualise' in b) put('visualise', b.visualise ? 1 : 0);
+    if ('estimate_id' in b) put('estimate_id', b.estimate_id && db.prepare('SELECT id FROM quotes WHERE id = ? AND user_id = ?').get(String(b.estimate_id), req.user.id) ? String(b.estimate_id) : null);
     if ('status' in b && ['open', 'complete', 'archived'].includes(b.status)) put('status', b.status);
     if ('project_id' in b) put('project_id', b.project_id && db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(String(b.project_id), req.user.id) ? String(b.project_id) : null);
     if (sets.length) { put('updated_at', new Date().toISOString().replace('T', ' ').slice(0, 19)); vals.push(s.id); db.prepare('UPDATE room_surveys SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
@@ -286,7 +294,10 @@ router.post('/:id/rooms', (req, res) => {
     const name = f.name || clean(b.room_type, 60) || 'Room ' + (count + 1);
     db.prepare('INSERT INTO survey_rooms (id, survey_id, user_id, name, room_type, floor_level, shape, length_m, width_m, height_m, dims_source, openings, features, notes, sort_order, quantities) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, s.id, req.user.id, name, f.room_type || null, f.floor_level || null, f.shape || 'rectangular', f.length_m ?? null, f.width_m ?? null, f.height_m ?? null, f.length_m && f.width_m ? (f.dims_source || 'stated') : 'unknown', JSON.stringify(f.openings || []), JSON.stringify(f.features || []), '[]', count, '{}');
-    const row = saveRoom(getRoom(id, req.user.id), {});
+    // Whatever else came with it — the work wanted, finishes, walls — goes on
+    // with the same write a PATCH would make.
+    const { name: n0, room_type: t0, floor_level: fl0, shape: sh0, length_m: l0, width_m: w0, height_m: h0, dims_source: d0, openings: o0, features: f0, ...rest } = f;
+    const row = saveRoom(getRoom(id, req.user.id), rest);
     res.status(201).json({ room: roomOut(row, [], linkFor(s.id)) });
   } catch (err) { console.error('[Surveys] room create error:', err); res.status(500).json({ error: 'Could not add the room.' }); }
 });
@@ -303,7 +314,7 @@ router.get('/rooms/:roomId', (req, res) => {
     if (r.estimate_id) { try { estimate = db.prepare('SELECT id, quote_number, status, grand_total, net_total FROM quotes WHERE id = ? AND user_id = ?').get(r.estimate_id, req.user.id) || null; } catch (e) { estimate = null; } }
     let renders = null;
     try { if (rollout.isEnabledFor(req.user)) renders = require('./maxRoutes')._internals.renderAllowance(req.user); } catch (e) { renders = null; }
-    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user), visualiser: !!(renders && renders.enabled), render_allowance: renders });
+    res.json({ room, survey: s ? { id: s.id, title: s.title, address: s.address, customer_name: s.customer_name, customer_email: s.customer_email, project_id: s.project_id, brief: s.brief || null, visualise: !!s.visualise } : null, pricing_brief: brief, estimate, photo_token: token, max_enabled: rollout.isEnabledFor(req.user), visualiser: !!(renders && renders.enabled), render_allowance: renders });
   } catch (err) { console.error('[Surveys] room get error:', err); res.status(500).json({ error: 'Could not open that room.' }); }
 });
 
@@ -632,6 +643,35 @@ router.post('/rooms/:roomId/price', rollout.requireMax, fairUse, async (req, res
   } catch (err) {
     console.error('[Surveys] price error:', err);
     res.status(500).json({ error: err && err.message ? err.message : 'Could not price the room just now.' });
+  }
+});
+
+// ── AI: price the whole job — the brief and every measured room ──────────────
+// What the New job flow calls when the builder skips the plans, and the job
+// page's "Price with MAX". The estimate is linked to the job.
+router.post('/:id/price', fairUse, async (req, res) => {
+  try {
+    const s0 = getSurvey(req.params.id, req.user.id);
+    if (!s0) return res.status(404).json({ error: 'Survey not found.' });
+    const brief = clean(req.body && req.body.brief, 2000);
+    if (brief && brief !== s0.brief) db.prepare('UPDATE room_surveys SET brief = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(brief, s0.id);
+    const s = getSurvey(s0.id, req.user.id);
+    if (!s.brief && !surveyRooms(s.id).some((r) => r.work_wanted)) return res.status(400).json({ error: 'Say what needs done first — e.g. "strip and re-tile the bathroom, new suite, two coats throughout".' });
+    const engine = require('./maxEngine');
+    const MI = require('./maxRoutes')._internals;
+    const api = engine.makeApi({ baseUrl: MI.loopbackBase(req), headers: MI.forwardedHeaders(req) });
+    const tool = engine.TOOL_INDEX.price_small_job;
+    const ctx = { user: req.user, context: { path: '/surveys/' + s.id }, audit: { ip: req.ip || null, userAgent: String(req.headers['user-agent'] || '').slice(0, 300) } };
+    const out = await tool.run({ survey_id: s.id, description: clean(req.body && req.body.extra, 600) || '' }, api, ctx);
+    if (out.result && out.result.error) return res.status(400).json({ error: out.result.error });
+    if (out.result && !out.result.over_limit) {
+      try { require('./activityRoutes').logActivity({ event_type: 'max_action', title: out.summary || 'Priced a job', detail: JSON.stringify({ tool: 'price_small_job', survey_id: s.id, estimate_id: out.result.estimate_id }), user_id: req.user.id, user_name: req.user.full_name, user_email: req.user.email }); } catch (e) { /* audit only */ }
+    }
+    const fresh = getSurvey(s.id, req.user.id);
+    res.json({ result: out.result, cards: out.cards || [], path: out.path || null, survey: fresh, estimate: estimateOf(fresh, req.user.id) });
+  } catch (err) {
+    console.error('[Surveys] job price error:', err);
+    res.status(500).json({ error: err && err.message ? err.message : 'Could not price the job just now.' });
   }
 });
 

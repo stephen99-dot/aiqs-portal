@@ -109,9 +109,25 @@ needed); on the web a desktop browser's own recogniser is used, or the server's 
 when `OPENAI_API_KEY` or `DEEPGRAM_API_KEY` is set. MAX replies in writing only. Tests:
 `server/max.test.js`.
 
-## Room surveys — "Scan a room"
+## Jobs and room surveys — "Scan a room"
 
-**Scan a room** (menu, the dashboard chip, `/surveys`) is the site visit, kept. A survey is one
+**New job** (`/jobs/new`; the **Jobs** menu entry, the dashboard chip, and where the old
+`/surveys?new=1` links land) is three questions, one a screen: *where is it* (address, customer),
+*what needs done* (typed or spoken; MAX prices this), and *draw up the floor plans?* The last
+offers what the package allows — draw up the rooms, or draw them up **and show the finished
+room** with the Visualiser (MAX + Visualiser only; a MAX-only account sees a one-line pointer to
+the package on the website, nothing inside the iOS app), or no plans at all. Nothing is saved
+until that answer. Plans: the job (a survey) and its first room are created, the brief goes in
+as the room's *work wanted*, and the capture flow opens. No plans: `POST /api/surveys/:id/price`
+has MAX price the job from the brief alone and the flow lands on the estimate, or on the
+over-limit card. A job keeps its `brief`, whether the Visualiser was asked for (`visualise`),
+and the estimate MAX made for the whole job (`estimate_id`). The job page shows the brief and a
+**Price with MAX** button (the brief plus every measured room's quantities —
+`describeJobForPricing` in `server/surveyGeometry.js`; MAX's `price_small_job` takes a
+`survey_id` the same way, and `get_room_survey` returns the brief), and the survey report opens
+with "What needs done".
+
+**Scan a room** (`/surveys`, the Jobs list) is the site visit, kept. A survey is one
 property; each room under it keeps everything the builder captured, for as long as the account
 does: photographs (stored with thumbnails, captions and what the AI saw in each), the room's
 shape and sizes with where they came from (*measured* by LiDAR, *stated* by the builder,

@@ -36,6 +36,7 @@ import OAuthSuccessPage from './pages/OAuthSuccessPage';
 import EstimatesPage from './pages/EstimatesPage';
 import EstimatePage from './pages/EstimatePage';
 import SurveysPage from './pages/SurveysPage';
+import NewJobPage from './pages/NewJobPage';
 import SurveyPage from './pages/SurveyPage';
 import SurveyRoomPage from './pages/SurveyRoomPage';
 import WhatsAppWidget from './components/WhatsAppWidget';
@@ -123,6 +124,8 @@ function AppInner() {
           <Route path="/estimates" element={<EstimatesPage />} />
           <Route path="/estimates/:id" element={<EstimatePage />} />
           <Route path="/surveys" element={<SurveysPage />} />
+          <Route path="/jobs/new" element={<NewJobPage />} />
+          <Route path="/surveys/new" element={<NewJobPage />} />
           <Route path="/surveys/:id" element={<SurveyPage />} />
           <Route path="/surveys/:id/rooms/:roomId" element={<SurveyRoomPage />} />
           <Route path="/my-rates" element={<MyRatesPage />} />

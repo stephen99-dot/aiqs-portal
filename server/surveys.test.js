@@ -263,6 +263,58 @@ test('pricing a surveyed room goes through MAX with the quantities as the measur
   assert.equal(rr.body.estimate.quote_number, q.quote_number);
 });
 
+test('a job: the brief is kept, MAX prices the whole job from it and the measured rooms, and the estimate is linked', async () => {
+  let r = await req('POST', '/surveys', tokenA, { address: '3 Mill Lane, Leeds LS1 1AA', customer_name: 'Mr Mill', brief: 'Full redecoration of the lounge: skim, two coats, new skirting', visualise: 1 });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.title, '3 Mill Lane, Leeds LS1 1AA', 'the address names the job');
+  assert.equal(r.body.brief, 'Full redecoration of the lounge: skim, two coats, new skirting');
+  assert.equal(r.body.visualise, 1);
+  const sid = r.body.id;
+  // The first room from the flow carries the brief as its work wanted.
+  r = await req('POST', '/surveys/' + sid + '/rooms', tokenA, { name: 'Lounge', room_type: 'Living room', length_m: 5, width_m: 4, height_m: 2.4, work_wanted: 'Skim, two coats, new skirting' });
+  assert.equal(r.status, 201);
+  assert.equal(r.body.room.work_wanted, 'Skim, two coats, new skirting');
+  r = await req('GET', '/surveys/rooms/' + r.body.room.id, tokenA);
+  assert.equal(r.body.survey.visualise, true, 'the room page knows the job asked for the Visualiser');
+  assert.ok(/Full redecoration/.test(r.body.survey.brief));
+  // Priced as one job.
+  script = [forced({
+    project_name: 'Lounge redecoration', project_type: 'Refurbishment', confidence: 'high',
+    items: [{ section: 'Finishes', item: 'Mist and two coats to walls', description: 'Prepare and paint walls', unit: 'm2', qty: 43.2, working: 'from survey: wall gross', key: 'emulsion_walls_two_coats' }],
+    assumptions: [], exclusions: [], missing_info: [],
+  })];
+  r = await req('POST', '/surveys/' + sid + '/price', tokenA, {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.result.estimate_created, true);
+  assert.equal(r.body.survey.estimate_id, r.body.result.estimate_id, 'the estimate is linked to the job');
+  assert.equal(r.body.estimate.id, r.body.result.estimate_id);
+  const msg = JSON.stringify(calls.at(-1).messages);
+  assert.ok(/WHAT NEEDS DONE \(price this\): Full redecoration/.test(msg), 'the brief leads the take-off');
+  assert.ok(/ROOMS SURVEYED \(1\)/.test(msg) && /ROOM SURVEY: Lounge/.test(msg) && /Floor area 20 m²/.test(msg), 'the measured room follows with its quantities');
+  const q = db.prepare('SELECT * FROM quotes WHERE id = ?').get(r.body.result.estimate_id);
+  assert.equal(q.location, '3 Mill Lane, Leeds LS1 1AA');
+  assert.equal(q.client_name, 'Mr Mill');
+  assert.equal(JSON.parse(q.max_meta).survey_id, sid);
+  r = await req('GET', '/surveys/' + sid, tokenA);
+  assert.equal(r.body.estimate.quote_number, q.quote_number);
+  r = await req('GET', '/surveys', tokenA);
+  assert.equal(r.body.surveys.find((s) => s.id === sid).estimate_id, q.id, 'the list shows the job as priced');
+  // A job with nothing said yet is refused plainly; another account cannot price it.
+  const r2 = await req('POST', '/surveys', tokenA, { address: 'Nowhere Yet' });
+  const p = await req('POST', '/surveys/' + r2.body.id + '/price', tokenA, {});
+  assert.equal(p.status, 400);
+  assert.ok(/what needs done/i.test(p.body.error));
+  assert.equal((await req('POST', '/surveys/' + sid + '/price', tokenB, {})).status, 404);
+  // The brief can be changed on the way in and is kept.
+  script = [forced({ project_name: 'Lounge', project_type: 'Refurbishment', confidence: 'high', items: [{ section: 'Finishes', item: 'Paint ceiling', description: 'Two coats to the ceiling', unit: 'm2', qty: 20, working: 'ceiling', key: null, assumed_rate: 7 }], assumptions: [], exclusions: [], missing_info: [] })];
+  r = await req('POST', '/surveys/' + sid + '/price', tokenA, { brief: 'Just the ceiling, two coats' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.survey.brief, 'Just the ceiling, two coats');
+  assert.ok(/Just the ceiling/.test(JSON.stringify(calls.at(-1).messages)));
+  await req('DELETE', '/surveys/' + r2.body.id, tokenA);
+  await req('DELETE', '/surveys/' + sid, tokenA);
+});
+
 test('a room without a size or work wanted is refused for pricing with a plain reason', async () => {
   const r0 = await req('POST', '/surveys/' + test.surveyId + '/rooms', tokenA, { name: 'Box room' });
   let r = await req('POST', '/surveys/rooms/' + r0.body.room.id + '/price', tokenA, {});

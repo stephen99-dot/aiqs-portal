@@ -111,7 +111,8 @@ export default function Layout() {
     { path: '/submit-drawings', label: 'Submit Drawings', Icon: UploadIcon },
     { path: '/dashboard', label: 'My Projects', Icon: NewProjectIcon },
     { path: '/estimates', label: 'Estimates', Icon: PoundIcon, maxOnly: true },
-    { path: '/surveys', label: 'Scan a room', Icon: CameraIcon, badge: 'New' },
+    // Jobs: the New job flow, the rooms scanned on site and the price from MAX.
+    { path: '/surveys', label: 'Jobs', Icon: CameraIcon, badge: 'New' },
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon },
     // The MAX packages, for accounts without one. Website only: the iOS app
     // sells nothing (App Store rule 3.1.1), so there it has no entry.
@@ -152,13 +153,14 @@ export default function Layout() {
       ]
     : (maxEnabled
         ? [
-            { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
-            { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
+            { path: '/dashboard', label: 'Projects', Icon: FolderIcon },
+            { path: '/surveys', label: 'Jobs', Icon: CameraIcon },
             { action: 'max', label: 'MAX', Icon: MicIcon },
             { path: '/estimates', label: 'Estimates', Icon: PoundIcon },
+            { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
           ]
         : [
-            { path: '/dashboard', label: 'Jobs', Icon: FolderIcon },
+            { path: '/dashboard', label: 'Projects', Icon: FolderIcon },
             { path: '/submit-drawings', label: 'Submit', Icon: UploadIcon },
             { path: '/chat', label: 'Chat', Icon: ChatIcon },
           ]);

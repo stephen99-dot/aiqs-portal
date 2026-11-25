@@ -369,6 +369,9 @@ db.exec(`
     customer_email TEXT,
     project_id TEXT,                       -- a drawings job, when the survey supports one
     notes TEXT,
+    brief TEXT,                            -- what needs done, in the builder's words
+    visualise INTEGER DEFAULT 0,           -- 1: show the customer the finished rooms (the Visualiser)
+    estimate_id TEXT,                      -- quotes.id once the whole job is priced by MAX
     status TEXT DEFAULT 'open',            -- open | complete | archived
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1064,6 +1067,11 @@ const migrations = [
   // remembering which photo it came from and the instruction it was painted from.
   { column: 'render_of', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_of TEXT' },
   { column: 'render_prompt', table: 'survey_photos', sql: 'ALTER TABLE survey_photos ADD COLUMN render_prompt TEXT' },
+  // A job (survey) carries its brief, whether the Visualiser was asked for,
+  // and the estimate MAX made for the whole job.
+  { column: 'brief', table: 'room_surveys', sql: 'ALTER TABLE room_surveys ADD COLUMN brief TEXT' },
+  { column: 'visualise', table: 'room_surveys', sql: 'ALTER TABLE room_surveys ADD COLUMN visualise INTEGER DEFAULT 0' },
+  { column: 'estimate_id', table: 'room_surveys', sql: 'ALTER TABLE room_surveys ADD COLUMN estimate_id TEXT' },
   // The MAX packages (maxPlans.js): which plan the account pays for, its
   // Stripe status and period, and the subscription it came from.
   { column: 'max_plan', table: 'users', sql: 'ALTER TABLE users ADD COLUMN max_plan TEXT' },

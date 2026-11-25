@@ -413,4 +413,25 @@ function describeForPricing(room, q, survey) {
   return lines.join('\n');
 }
 
-module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, planFromCapture, alignCapture, rotateTransform, sceneOf, polygonCentroid, describeForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };
+// The whole job for MAX: what needs done, then every measured room with its
+// quantities (describeForPricing) so area-based work is priced from the
+// survey rather than re-estimated. Rooms with no size yet are named, so MAX
+// prices their work from the description and says what it assumed.
+function describeJobForPricing(survey, rooms) {
+  const lines = [];
+  lines.push('JOB: ' + (survey.title || 'Job') + (survey.address && survey.address !== survey.title ? ', at ' + survey.address : '') + (survey.customer_name ? ', for ' + survey.customer_name : '') + '.');
+  if (survey.brief) lines.push('WHAT NEEDS DONE (price this): ' + String(survey.brief).slice(0, 2000));
+  if (survey.notes) lines.push('Site notes: ' + String(survey.notes).slice(0, 600));
+  const list = Array.isArray(rooms) ? rooms : [];
+  const measured = list.filter((r) => quantities(r).complete);
+  const unmeasured = list.filter((r) => !quantities(r).complete);
+  if (measured.length) {
+    lines.push('');
+    lines.push('ROOMS SURVEYED (' + measured.length + ') — use these quantities exactly for any area or length based item; do not re-measure:');
+    for (const r of measured) { lines.push(''); lines.push(describeForPricing(r, quantities(r), null)); }
+  }
+  if (unmeasured.length) lines.push('Rooms not measured yet: ' + unmeasured.map((r) => (r.name || 'Room') + (r.work_wanted ? ' (' + String(r.work_wanted).slice(0, 200) + ')' : '')).join('; ') + '. Price their work from the description and state the sizes assumed.');
+  return lines.join('\n');
+}
+
+module.exports = { quantities, wallsOf, openingsOf, layoutOpenings, outlineOf, floorAreaOf, planFromCapture, alignCapture, rotateTransform, sceneOf, polygonCentroid, describeForPricing, describeJobForPricing, parseJson, DEFAULT_HEIGHT, WALL_LABELS, num, r2, r1 };

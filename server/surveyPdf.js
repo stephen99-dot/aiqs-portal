@@ -211,6 +211,7 @@ function streamSurveyPdf(res, { survey, rooms, branding, userInfo }) {
   doc.font('Helvetica').fontSize(10).fillColor(MUTED);
   for (const line of [survey.address, survey.customer_name ? 'Customer: ' + survey.customer_name : null, 'Surveyed ' + when(survey.created_at) + (rooms.length ? ' · ' + rooms.length + ' room' + (rooms.length === 1 ? '' : 's') : '')].filter(Boolean)) { doc.text(line, 40, y, { width: W }); y += 14; }
   y += 6;
+  if (survey.brief) { const t = String(survey.brief).slice(0, 2000); section('What needs done', paraH(t)); para(t); }
 
   if (rooms.length > 1) {
     // Every room's plan, two to a row, before anything else.
