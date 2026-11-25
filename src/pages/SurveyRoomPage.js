@@ -448,7 +448,7 @@ export default function SurveyRoomPage() {
 
       <div className="sr-head">
         <div className="sr-head__left">
-          <div className="sr-head__kicker"><Link to={'/surveys/' + id}><ArrowLeftIcon size={13} /> {data.survey ? data.survey.title : 'Survey'}</Link>{data.survey && data.survey.address && data.survey.address !== data.survey.title && <span>· {data.survey.address}</span>}</div>
+          <div className="sr-head__kicker"><Link to={'/surveys/' + id}><ArrowLeftIcon size={13} /> {data.survey ? data.survey.title : 'Job'}</Link>{data.survey && data.survey.address && data.survey.address !== data.survey.title && <span>· {data.survey.address}</span>}</div>
           <input className="sp-inline sp-inline--title" value={room.name || ''} onChange={(e) => update({ name: e.target.value })} placeholder="Room name" aria-label="Room name" />
           <div className="sr-head__badges">
             <Badge tone={stTone} size="sm">{stLabel}</Badge>
@@ -476,6 +476,9 @@ export default function SurveyRoomPage() {
               <div className="sr-sec__body">
                 {photos.length === 0 && (
                   <div className="sr-tip"><LightbulbIcon size={16} /><span><strong>Stand in a corner</strong> and shoot the opposite corner so two walls, the floor and the ceiling are in frame. Do the same from the corner opposite. Then one of each wall, the floor, the ceiling and anything odd — damp, cracks, a boxed-in pipe.</span></div>
+                )}
+                {data.survey && data.survey.visualise && canRender && photos.length > 0 && renders.length === 0 && (room.work_wanted || '').trim() && (
+                  <div className="sr-tip"><ImageIcon size={16} /><span><strong>Show the customer the finished room.</strong> Tap the wand and the Visualiser paints in what's wanted — {room.work_wanted.trim().slice(0, 90)}{room.work_wanted.trim().length > 90 ? '…' : ''}</span></div>
                 )}
                 {renderPanel}
                 <div className={'ph-actions' + (photos.length > 0 ? ' ph-actions--compact' : '')}>

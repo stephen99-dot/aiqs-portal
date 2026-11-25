@@ -200,7 +200,7 @@ const TOOLS = [
   },
   {
     name: 'get_room_survey', read: true, label: 'Opening the survey',
-    description: 'One survey in full: every room with its dimensions (and whether they were measured, stated or estimated), floor / wall / ceiling / skirting quantities, openings, counted fittings, finishes, condition, notes and whether it has been priced. Give the survey or room by name; the room ids returned are what price_small_job takes as room_id.',
+    description: 'One job (survey) in full: its brief (what needs done) and every room with its dimensions (and whether they were measured, stated or estimated), floor / wall / ceiling / skirting quantities, openings, counted fittings, finishes, condition, notes and whether it has been priced. Give the survey or room by name; the room ids returned are what price_small_job takes as room_id.',
     input_schema: { type: 'object', properties: { survey: { type: 'string', description: 'Survey id, property title, address or customer' }, room: { type: 'string', description: 'Narrow to one room by name' } }, required: ['survey'] },
     run: async (input, api) => {
       const { surveys } = await api.get('/surveys');
@@ -211,7 +211,7 @@ const TOOLS = [
       if (input.room) { const q = norm(input.room); const hit = rooms.filter((x) => norm(x.name).includes(q) || norm(x.room_type).includes(q)); if (hit.length) rooms = hit; }
       return {
         result: {
-          survey: { id: d.survey.id, title: d.survey.title, address: d.survey.address, customer: d.survey.customer_name, notes: d.survey.notes || null, totals: d.totals },
+          survey: { id: d.survey.id, title: d.survey.title, address: d.survey.address, customer: d.survey.customer_name, brief: d.survey.brief || null, visualiser_wanted: !!d.survey.visualise, notes: d.survey.notes || null, totals: d.totals, estimate_id: d.survey.estimate_id || null },
           rooms: rooms.map((x) => ({ id: x.id, name: x.name, room_type: x.room_type, floor: x.floor_level, status: x.status, dims_source: x.dims_source, length_m: x.length_m, width_m: x.width_m, height_m: x.quantities.height_m, shape: x.shape, quantities: { floor_m2: x.quantities.floor_m2, ceiling_m2: x.quantities.ceiling_m2, wall_net_m2: x.quantities.wall_net_m2, perimeter_m: x.quantities.perimeter_m, skirting_m: x.quantities.skirting_m, doors: x.quantities.doors, windows: x.quantities.windows }, openings: x.openings, features: x.features.map((f) => f.count + ' × ' + f.item), finishes: x.finishes, hazards: x.hazards, condition: x.condition_notes || null, work_wanted: x.work_wanted || null, notes: (x.notes || []).map((n) => n.text), photos: x.photo_count, estimate_id: x.estimate_id || null })),
         },
         path: input.room && rooms.length === 1 ? '/surveys/' + d.survey.id + '/rooms/' + rooms[0].id : '/surveys/' + d.survey.id,
@@ -298,6 +298,7 @@ const TOOLS = [
     input_schema: { type: 'object', properties: {
       description: { type: 'string', description: 'The work, in the builder\'s words — size, materials, finishes, what is being removed, anything that affects price. With room_id, just the work wanted: the room\'s measured quantities are added automatically.' },
       room_id: { type: 'string', description: 'A surveyed room (from get_room_survey) to price from — its floor, wall, ceiling and skirting quantities, openings and counted fittings become the measurements, so nothing is re-estimated' },
+      survey_id: { type: 'string', description: 'A whole job (a survey, from list_room_surveys) to price: its brief and every measured room\'s quantities become the description, and the estimate is linked to the job. Use this when the builder asks to price a job or property rather than one room.' },
       location: { type: 'string', description: 'Site address or postcode when known (sets the regional rates)' },
       project_type: { type: 'string', description: 'Extension, Loft conversion, Refurbishment, Kitchen, Bathroom, Roofing, Landscaping, Groundworks, New build, Repairs & maintenance, Other' },
       client_name: { type: 'string', description: 'The customer\'s name, ONLY if the builder stated it for this job. Never guess one, and never reuse a name from an earlier job or from memory. Leave it out when not given.' },
@@ -308,7 +309,20 @@ const TOOLS = [
       const pricing = require('./maxPricing');
       let description = String(input.description || '').trim();
       let location = input.location; let projectName = input.project_name; let clientName = input.client_name; let clientEmail = input.client_email;
-      let roomId = null;
+      let roomId = null; let surveyId = null;
+      // A whole job: the brief plus every measured room's quantities.
+      if (input.survey_id && !input.room_id) {
+        let d;
+        try { d = await api.get('/surveys/' + encodeURIComponent(String(input.survey_id))); } catch (e) { return { result: { error: 'I could not find that job — use list_room_surveys to check the id.' } }; }
+        if (!d.survey.brief && !(d.rooms || []).some((r) => r.work_wanted)) return { result: { error: 'That job has no brief yet. Ask the builder what needs done, then price it.' } };
+        surveyId = d.survey.id;
+        const extra = description ? '\nThe builder adds: ' + description : '';
+        description = require('./surveyGeometry').describeJobForPricing(d.survey, d.rooms || []) + extra;
+        if (!location && d.survey.address) location = d.survey.address;
+        if (!projectName) projectName = d.survey.title;
+        if (!clientName && d.survey.customer_name) clientName = d.survey.customer_name;
+        if (!clientEmail && d.survey.customer_email) clientEmail = d.survey.customer_email;
+      }
       // A surveyed room: its quantities are the measurements.
       if (input.room_id) {
         let rd;
@@ -331,6 +345,7 @@ const TOOLS = [
         return { result: { error: err.message || 'I could not price that just now.' } };
       }
       if (roomId) out.meta.room_id = roomId;
+      if (surveyId) out.meta.survey_id = surveyId;
       input = { ...input, location, project_name: projectName, client_name: clientName, client_email: clientEmail };
       const { takeoff, priced, meta } = out;
       const verdict = priced.verdict;
@@ -375,6 +390,7 @@ const TOOLS = [
       };
       const { id, quote_number } = await api.post('/estimator/quotes', body);
       if (roomId) { try { await api.patch('/surveys/rooms/' + encodeURIComponent(roomId), { estimate_id: id }); } catch (e) { /* the estimate stands; the link is a nicety */ } }
+      if (surveyId) { try { await api.patch('/surveys/' + encodeURIComponent(surveyId), { estimate_id: id }); } catch (e) { /* as above */ } }
       const saved = await api.get('/estimator/quotes/' + id);
       const q = saved.quote || { id, quote_number, ...body, net_total: priced.totals.net_total, ohp_amount: priced.totals.ohp_amount, contingency_amount: priced.totals.contingency_amount, grand_total: priced.totals.grand_total };
       const card = estimateCard(q, saved.lines || priced.lines, meta, { fresh: true });
@@ -390,7 +406,7 @@ const TOOLS = [
           instruction: 'The estimate is on screen with every line. Reply with the price ex VAT and inc VAT, where the rates came from (own / library / estimated), the assumptions in a line or two, the lines to check (estimated rates), and any open question. Do not list every line.',
         },
         cards: [card], summary: 'Drafted estimate ' + quote_number + ' at ' + fmtMoney2(priced.price_ex_vat) + ' ex VAT (' + priced.lines.length + ' lines)',
-        path: '/estimates/' + id, changed: ['estimates'],
+        path: '/estimates/' + id, changed: roomId || surveyId ? ['estimates', 'surveys'] : ['estimates'],
       };
     },
   },

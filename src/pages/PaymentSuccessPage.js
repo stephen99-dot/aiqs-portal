@@ -154,11 +154,11 @@ export default function PaymentSuccessPage() {
               }}>
                 Ask MAX
               </Link>
-              <Link to="/surveys?new=1" style={{
+              <Link to="/jobs/new" style={{
                 padding: '12px 24px', borderRadius: 10, border: `1px solid ${t.border}`,
                 color: t.text, fontSize: 14, fontWeight: 700, textDecoration: 'none',
               }}>
-                Scan a room
+                Start a job
               </Link>
             </div>
           </>
