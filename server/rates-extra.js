@@ -384,7 +384,10 @@ router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
       LEFT JOIN client_rate_library r ON r.id = c.rate_id
       WHERE c.user_id = ? ORDER BY c.created_at DESC LIMIT 20
     `).all(user.id);
-    const recent = require('./rateHistory').recentChanges(db, user.id);
+    // The recent-changes list is a nicety on top of the library: if it
+    // fails for any reason the library still comes back, with a flag.
+    let recent = { changes: [], truncated: false, days: 30 }; let recentError = null;
+    try { recent = require('./rateHistory').recentChanges(db, user.id); } catch (e) { recentError = e.message; console.error('[AdminRates] recent changes failed for ' + user.id + ':', e); }
     res.json({
       user: { id: user.id, email: user.email, full_name: user.full_name, own_rates_added_at: user.own_rates_added_at || null },
       rates,
@@ -398,6 +401,7 @@ router.get('/admin/users/:id/rates', authMiddleware, function(req, res) {
       recent: recent.changes,
       recent_truncated: recent.truncated,
       recent_days: recent.days,
+      recent_error: recentError,
     });
   } catch (e) {
     console.error('[AdminRates] view error:', e);

@@ -184,19 +184,20 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg, au
   const [loadingRates, setLoadingRates] = useState(false);
   const [ownOnly, setOwnOnly] = useState(true);
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const border = isDark ? '#1C2A44' : '#E2E8F0';
   const text = isDark ? '#E8EDF5' : '#0F172A';
   const muted = isDark ? '#5A6E87' : '#94A3B8';
   const headBg = isDark ? '#0D1320' : '#F1F5F9';
 
   const load = async () => {
-    setLoadingRates(true);
+    setLoadingRates(true); setLoadError('');
     try {
       const res = await apiFetch('/admin/users/' + user.id + '/rates');
       setData(res);
       // Default to "their own" when they have any; otherwise show everything.
       setOwnOnly((res.stats.custom + res.stats.edited) > 0);
-    } catch (e) { setErrorMsg(e.message || 'Failed to load rate library'); }
+    } catch (e) { setLoadError(e.message || 'Failed to load rate library'); setErrorMsg(e.message || 'Failed to load rate library'); }
     finally { setLoadingRates(false); }
   };
   const toggle = () => { const next = !open; setOpen(next); if (next && !data) load(); };
@@ -244,7 +245,9 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg, au
       {open && (
         loadingRates ? (
           <div style={{ fontSize: 12, color: muted, marginTop: 10 }}>Loading rates…</div>
-        ) : !data ? null : (
+        ) : !data ? (
+          loadError ? <div style={{ fontSize: 12, color: '#EF4444', marginTop: 10 }}>Could not load this client's rates: {loadError}. <button type="button" onClick={load} style={{ ...outBtn, marginLeft: 8 }}>Try again</button></div> : null
+        ) : (
           <div style={{ marginTop: 10 }}>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10, fontSize: 12, color: muted }}>
               <span><strong style={{ color: text }}>{data.stats.total}</strong> active</span>
@@ -264,7 +267,9 @@ function ClientRatesCard({ user, isDark, cardStyle, lbl, outBtn, setErrorMsg, au
                 <span>Recent changes · last {recentDays} days</span>
                 <span>{recent.length}{data.recent_truncated ? '+' : ''}</span>
               </div>
-              {recent.length === 0 ? (
+              {data.recent_error ? (
+                <div style={{ fontSize: 12, color: '#EF4444' }}>The recent-changes list could not be built ({data.recent_error}); the library below is complete.</div>
+              ) : recent.length === 0 ? (
                 <div style={{ padding: '9px 10px', fontSize: 12, color: muted, fontStyle: 'italic' }}>Nothing added, changed or removed in the last {recentDays} days.</div>
               ) : recentShown.map(ch => {
                 const k = KIND[ch.kind] || KIND.updated;
