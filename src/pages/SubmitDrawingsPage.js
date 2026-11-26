@@ -10,6 +10,7 @@ import {
   FileSpreadsheetIcon, FileArchiveIcon, ZapIcon, ArrowRightIcon, SparklesIcon,
 } from '../components/Icons';
 import TermsTick from '../components/TermsTick';
+import WatchHow from '../components/learn/WatchHow';
 import {
   Button, IconButton, Card, Banner, Badge, PageHeader,
   Field, Input, Select, Textarea, Modal,
@@ -317,6 +318,7 @@ export default function SubmitDrawingsPage() {
       <PageHeader
         title="Submit Drawings for BOQ"
         subtitle="Upload your plans, elevations, and specs. We'll produce a professional Bill of Quantities and Findings Report — typically within 24 hours."
+        actions={<WatchHow video="submit" label="Watch how it works" />}
       />
 
       {/* What happens next — sets the expectation that everything comes back here */}

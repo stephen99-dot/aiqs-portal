@@ -152,6 +152,7 @@ export const BurstIcon = (p) => <Icon {...p}><path d="M12 2l2.4 5.2L20 6l-2.8 5L
 export const ShopIcon = (p) => <Icon {...p}><path d="M3 9l1.5-5h15L21 9M4 9v11a1 1 0 001 1h14a1 1 0 001-1V9M3 9h18M9 21v-6h6v6"/></Icon>;
 
 // Room surveys
+export const PlayIcon = (p) => <Icon {...p}><polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/></Icon>;
 export const CameraIcon = (p) => <Icon {...p}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></Icon>;
 export const ScanIcon = (p) => <Icon {...p}><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><path d="M7 12h10M12 7v10"/></Icon>;
 export const OrbitIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5z"/></Icon>;

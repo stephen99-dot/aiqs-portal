@@ -7,6 +7,7 @@ import { Button, Badge, PageHeader, EmptyState, SkeletonCard } from '../ui';
 import { CameraIcon, ImageIcon, HomeIcon, MeasureIcon, SparklesIcon, PoundIcon, PlusIcon } from '../components/Icons';
 import RoomPlanSketch from '../components/survey/RoomPlanSketch';
 import MaxUpsell from '../components/max/MaxUpsell';
+import WatchHow from '../components/learn/WatchHow';
 
 // ═══ Jobs — every job the builder has started on site ═══════════════════════
 // A job is one property: what needs done (the brief), the rooms walked round
@@ -67,7 +68,7 @@ export default function SurveysPage() {
   if (locked) {
     return (
       <div className="page">
-        <PageHeader title="Jobs" subtitle="Say where it is and what needs done, draw up the rooms if you want to, and MAX prices it from your rates." />
+        <PageHeader title="Jobs" subtitle="Say where it is and what needs done, draw up the rooms if you want to, and MAX prices it from your rates." actions={<WatchHow video="job" />} />
         <MaxUpsell variant="max" />
         <Hero title="How a job works" sub="Three questions to start: where, what needs done, and whether to draw up the rooms (a LiDAR scan on an iPhone Pro, or just the sizes). MAX prices the job from your rates, and the report goes out as a branded PDF." />
       </div>
@@ -77,7 +78,7 @@ export default function SurveysPage() {
   return (
     <div className="page">
       <PageHeader title="Jobs" subtitle="Every job you've started on site: what needs done, the rooms, the plans and the price from your rates."
-        actions={<Button to="/jobs/new" data-tour="survey-new"><PlusIcon size={15} color="currentColor" /> New job</Button>} />
+        actions={<><WatchHow video="job" /><Button to="/jobs/new" data-tour="survey-new"><PlusIcon size={15} color="currentColor" /> New job</Button></>} />
 
       {!loading && surveys.length === 0 && !error && (
         <Hero title="Your first job" sub={'Say where it is and what needs done. Draw up the rooms if you want the quantities measured, then MAX prices it from your rates' + (user && user.maxLimits ? ' — up to £' + Math.round(user.maxLimits.limitGbp).toLocaleString('en-GB') + ' ex VAT' : '') + '.'} />

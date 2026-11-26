@@ -697,6 +697,14 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  -- How-to videos a builder has ticked off (server/learn.js).
+  CREATE TABLE IF NOT EXISTS video_views (
+    user_id TEXT NOT NULL,
+    video_key TEXT NOT NULL,
+    watched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, video_key)
+  );
+
   CREATE TABLE IF NOT EXISTS user_branding (
     user_id          TEXT PRIMARY KEY,
     logo_filename    TEXT,
