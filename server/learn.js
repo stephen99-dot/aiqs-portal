@@ -16,16 +16,16 @@ const plans = require('./maxPlans');
 // package: 'all' | 'max' | 'visualiser' — who the video is for (everyone
 // sees every video; the label says which package a feature belongs to).
 const VIDEOS = [
-  { key: 'around', title: 'Around the portal', blurb: 'Where everything lives: the menu, your projects, MAX, jobs and estimates. One minute — start here.', page: '/dashboard', package: 'all', seconds: 65 },
-  { key: 'submit', title: 'Get a BOQ: submit your drawings', blurb: 'Pick the project type, add the address and the drawings, say what the job is. The QS team prices it and it lands in My Projects.', page: '/submit-drawings', package: 'all', seconds: 67 },
-  { key: 'max', title: 'Price a small job with MAX', blurb: 'Describe the job in a sentence and MAX prices it from your rates, with every quantity, rate and assumption on screen.', page: '/dashboard', package: 'max', seconds: 46 },
-  { key: 'job', title: 'Start a job: three questions', blurb: 'Where it is, what needs done, and whether to draw up the rooms. The brief carries through to the first room and the price.', page: '/jobs/new', package: 'max', seconds: 62 },
-  { key: 'room', title: 'Scan a room: photos, sizes, openings', blurb: 'Photos from the corners, the length and width (or a LiDAR scan on an iPhone Pro), the doors and windows, what the customer wants. The plan draws itself and the quantities come off it.', page: '/surveys', package: 'max', seconds: 73 },
-  { key: 'visualiser', title: 'Show the customer the finished room', blurb: 'One photo and what is wanted: the Visualiser paints the finished room onto it. Slide between before and after; it goes in the report.', page: '/surveys', package: 'visualiser', seconds: 51 },
-  { key: 'estimate', title: 'Edit an estimate and send it as a quote', blurb: 'Change a quantity or a rate, save, and send the quote to the customer with your logo on it.', page: '/estimates', package: 'max', seconds: 55 },
-  { key: 'report', title: 'The report, the Excel schedule and the plans', blurb: 'Three exports from any job: a branded PDF report, a schedule in Excel, and scaled floor plans from a scan.', page: '/surveys', package: 'max', seconds: 46 },
-  { key: 'rates', title: 'Your rates: how MAX prices from them', blurb: 'Your own rates come first, then the library adjusted for the site. Search, correct and import them here.', page: '/my-rates', package: 'all', seconds: 39 },
-  { key: 'branding', title: 'Your logo and colours on every document', blurb: 'Upload the logo and pick your colours once; estimates, reports and client copies all wear them.', page: '/branding', package: 'all', seconds: 30 },
+  { key: 'around', title: 'Around the portal', blurb: 'Where everything lives: the menu, your projects, MAX, jobs and estimates. One minute — start here.', page: '/dashboard', package: 'all', seconds: 69 },
+  { key: 'submit', title: 'Get a BOQ: submit your drawings', blurb: 'Pick the project type, add the address and the drawings, say what the job is. The QS team prices it and it lands in My Projects.', page: '/submit-drawings', package: 'all', seconds: 69 },
+  { key: 'max', title: 'Price a small job with MAX', blurb: 'Describe the job in a sentence and MAX prices it from your rates, with every quantity, rate and assumption on screen.', page: '/dashboard', package: 'max', seconds: 49 },
+  { key: 'job', title: 'Start a job: three questions', blurb: 'Where it is, what needs done, and whether to draw up the rooms. The brief carries through to the first room and the price.', page: '/jobs/new', package: 'max', seconds: 65 },
+  { key: 'room', title: 'Scan a room: photos, sizes, openings', blurb: 'Photos from the corners, the length and width (or a LiDAR scan on an iPhone Pro), the doors and windows, what the customer wants. The plan draws itself and the quantities come off it.', page: '/surveys', package: 'max', seconds: 77 },
+  { key: 'visualiser', title: 'Show the customer the finished room', blurb: 'One photo and what is wanted: the Visualiser paints the finished room onto it. Slide between before and after; it goes in the report.', page: '/surveys', package: 'visualiser', seconds: 54 },
+  { key: 'estimate', title: 'Edit an estimate and send it as a quote', blurb: 'Change a quantity or a rate, save, and send the quote to the customer with your logo on it.', page: '/estimates', package: 'max', seconds: 58 },
+  { key: 'report', title: 'The report, the Excel schedule and the plans', blurb: 'Three exports from any job: a branded PDF report, a schedule in Excel, and scaled floor plans from a scan.', page: '/surveys', package: 'max', seconds: 49 },
+  { key: 'rates', title: 'Your rates: how MAX prices from them', blurb: 'Your own rates come first, then the library adjusted for the site. Search, correct and import them here.', page: '/my-rates', package: 'all', seconds: 42 },
+  { key: 'branding', title: 'Your logo and colours on every document', blurb: 'Upload the logo and pick your colours once; estimates, reports and client copies all wear them.', page: '/branding', package: 'all', seconds: 34 },
 ];
 const KEYS = new Set(VIDEOS.map((v) => v.key));
 // The one-time "here are the videos" prompt, kept in the same table under a
