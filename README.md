@@ -324,9 +324,11 @@ provisional-sums block wherever the bill prints it — including after the summa
 such as *L PROVISIONAL SUMS (at cost, excluded from the total above)* — as its own section
 (`provisional: true`). Every bill on the Builder Pack page also carries an *Optional extras*
 section (`optional: true`, number `OE`): empty until the builder adds the work the client can
-choose to take, and printed only when it has lines. Both kinds are carried at face value — no
-OH&P, contingency, prelims % or builder margin — and sit **below** the total as their own
-elements, so the figure the client reads as the total is the construction cost alone. The client
+choose to take, and printed only when it has lines. On the client copy both kinds take the same
+overhead and profit uplift as the priced sections (and a per-section override, when one is set),
+but no contingency or prelims %; on the Builder Pack they are carried at cost, with no builder
+margin or materials markup. Both sit **below** the total as their own elements, so the figure
+the client reads as the total is the construction cost alone. The client
 copy (xlsx, on-screen preview and the shared quote's totals) reads *Net construction cost → Total
 (excl. VAT) → VAT → Total (incl. VAT)*, then a *Not included in the total above* block: *Provisional
 sums*, its own VAT line and incl.-VAT figure, then *Optional extras* the same way; the masthead
@@ -338,9 +340,9 @@ Extras* tab, and nothing from either reaches the materials or labour schedules. 
 own closing total (*Total provisional sums*, *Provisional sums total …*) ends a parsed PS block,
 and that row is never a document total; a block that cannot be itemised falls back to the flat
 `provisional_sum` lump, shown the same way. The "Update this bill" assistant adds to the optional
-section by its `section_number`, can create one with `new_sections[].optional`, and refuses to
-uplift either kind. A Builder Pack working state saved before the block was read gets it back on
-the next open (`addMissingProvisionalSections`), the user's own edits untouched.
+section by its `section_number`, can create one with `new_sections[].optional`, and can set a
+per-section uplift on either kind. A Builder Pack working state saved before the block was read
+gets it back on the next open (`addMissingProvisionalSections`), the user's own edits untouched.
 
 **Same layout every time.** Section titles from the model ("1. Substructure & Foundations",
 "SUBSTRUCTURE", "Substructure") normalise to one canonical name (`canonicalSectionName`,

@@ -134,8 +134,8 @@ function snapshotForPrompt(project, sections, controls, extra = {}) {
 
 // How a section outside the total is announced in the snapshot.
 function separateMarker(sec) {
-  if (sec.provisional) return ' (PROVISIONAL SUMS — shown below the client copy total, not in it; carried excl. OH&P)';
-  if (sec.optional) return ' (OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it)';
+  if (sec.provisional) return ' (PROVISIONAL SUMS — shown below the client copy total, not in it; takes the overhead and profit uplift)';
+  if (sec.optional) return ' (OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it; takes the overhead and profit uplift)';
   return '';
 }
 
@@ -144,9 +144,9 @@ function separateMarker(sec) {
 // the same maths as the Builder Pack page (uplift baked into each section,
 // prelims / day-rate / contingency on the summary), so a proposal can say what
 // it does to the price the client sees and not only to the net build cost,
-// which markup changes never move. Provisional sums and optional extras are
-// not in that total: they sit below it, each with its own VAT line, and are
-// returned separately.
+// which markup changes never move. Provisional sums and optional extras take
+// the same uplift but are not in that total: they sit below it, each with its
+// own VAT line, and are returned separately.
 function clientCopyExVat(sections, controls) {
   const c = controls || {};
   if (!Array.isArray(sections) || !sections.length) return null;
@@ -158,13 +158,14 @@ function clientCopyExVat(sections, controls) {
   let net = 0, provisional = 0, optional = 0, originalNet = 0;
   for (const sec of sections) {
     const base = (sec.items || []).reduce((a, it) => a + lineValue(it), 0);
-    if (sec.provisional) { provisional += base; continue; }
-    if (sec.optional) { optional += base; continue; }
-    originalNet += base;
     const key = String(sec.number);
     const factor = Object.prototype.hasOwnProperty.call(overrides, key) && overrides[key] !== null && overrides[key] !== ''
       ? 1 + num(overrides[key]) / 100 : baseUplift;
-    net += roundMoney(base * factor);
+    const uplifted = roundMoney(base * factor);
+    if (sec.provisional) { provisional += uplifted; continue; }
+    if (sec.optional) { optional += uplifted; continue; }
+    originalNet += base;
+    net += uplifted;
   }
   let running = net;
   const prelimsMode = c.prelims_mode || 'off';
@@ -173,8 +174,9 @@ function clientCopyExVat(sections, controls) {
   const dr = c.day_rate && typeof c.day_rate === 'object' ? c.day_rate : null;
   if (c.day_rate_on && dr && num(dr.days) > 0 && num(dr.rate_per_day) > 0) running += num(dr.days) * num(dr.rate_per_day);
   if (num(c.contingency_pct) > 0) running += originalNet * (num(c.contingency_pct) / 100);
-  // The itemised provisional section supersedes the flat lump — never both.
-  const provTotal = provisional + (provisional > 0 ? 0 : num(c.provisional_sum));
+  // The itemised provisional section supersedes the flat lump — never both;
+  // the lump takes the uplift like the rest.
+  const provTotal = provisional + (provisional > 0 ? 0 : roundMoney(num(c.provisional_sum) * baseUplift));
   return {
     ex_vat: round2(running), net_construction: round2(net), original_net: round2(originalNet),
     provisional: round2(provTotal), optional: round2(optional),
@@ -300,7 +302,7 @@ Typical requests:
 - "Put 25% on the roof section" → controls.section_uplift {"4": 25} using the section number.
 - "Offer the garden room lighting as an optional extra at £1,200" → a new_line in the Optional extras section (its section_number is in the snapshot). Only if the bill has no such section, create one with new_sections optional: true.
 
-PROVISIONAL SUMS AND OPTIONAL EXTRAS sit BELOW the client copy total, each as its own element with its own VAT line, and are never in that total. Provisional sums are allowances for work nobody can price yet; optional extras are work the client can choose to add. Neither takes overhead, profit, contingency or a trade uplift — they are carried as entered.
+PROVISIONAL SUMS AND OPTIONAL EXTRAS sit BELOW the client copy total, each as its own element with its own VAT line, and are never in that total. Provisional sums are allowances for work nobody can price yet; optional extras are work the client can choose to add. Both take the overhead and profit uplift (or a section uplift) like every other section; neither takes contingency or prelims %.
 
 HOW TO BEHAVE:
 1. QUALIFYING QUESTIONS: if the request is ambiguous — you can't tell which items it means, whether an uploaded quote includes VAT, whether it's supply-only or supply-and-fit, or whether it replaces or adds to existing items — ask 1-3 short questions in plain text and DO NOT call propose_pack_update yet. Never guess on money.
@@ -446,8 +448,6 @@ function validateAndPreview(input, project, sections, controls) {
       for (const [n, v] of Object.entries(su)) {
         const sec = sections.find((s) => String(s.number) === String(n).trim());
         if (!sec) { errors.push(`unknown section number ${n}`); continue; }
-        if (sec.provisional) { errors.push(`section ${n} is provisional sums — shown below the total, carried excl. OH&P, not uplifted`); continue; }
-        if (sec.optional) { errors.push(`section ${n} is optional extras — shown below the total, carried as entered, not uplifted`); continue; }
         if (v === null || v === '') { delete merged[String(sec.number)]; touched = true; upliftChanges.push({ kind: 'header', label: `Section ${sec.number} (${String(sec.title || '').slice(0, 30)}) uplift → default` }); continue; }
         const pct = Math.max(0, Math.min(100, round2(num(v))));
         merged[String(sec.number)] = pct; touched = true;

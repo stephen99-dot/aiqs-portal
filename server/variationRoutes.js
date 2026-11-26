@@ -1171,9 +1171,10 @@ router.post('/projects/:projectId/client-copy-pro', authMiddleware, async (req, 
 // overhead × profit compounded into the rates (per-trade override wins),
 // prelims / day-rate as their own lines, contingency and VAT at quote level —
 // so the quote's bottom line is the preview's bottom line. Provisional sums
-// and optional extras are listed at face value under sections that say they
-// are not in the total, and are left out of the net and the grand total the
-// client accepts, exactly as the client copy shows them. Re-sharing after
+// and optional extras take the same uplift as the priced lines, are listed
+// under sections that say they are not in the total, and are left out of the
+// net and the grand total the client accepts, exactly as the client copy
+// shows them. Re-sharing after
 // edits refreshes the SAME quote (projects.client_quote_id) so the client's
 // link stays live; an accepted quote is never mutated — a fresh quote is
 // issued instead.
@@ -1222,12 +1223,14 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     const separateLabel = (s) => (s.provisional ? ' (provisional sums — not included in the total)' : ' (optional extras — not included in the total)');
     for (const s of parsed.sections) {
       const sectionLabel = (s.number ? s.number + ' — ' : '') + (s.title || 'Section');
-      const factor = isSeparate(s) ? 1 : factorFor(s.number);
+      // Every section takes its uplift, the blocks below the total included;
+      // only the contingency / prelims-% base leaves them out.
+      const factor = factorFor(s.number);
       for (const it of s.items) {
         if (!(it.description || '').trim()) continue;
         const base = ((num(it.labour)) + (num(it.materials))) || num(it.total);
         if (!isSeparate(s)) originalNet += base;
-        const lineTotal = isSeparate(s) ? num(it.total) : roundMoney(base * factor);
+        const lineTotal = roundMoney(base * factor);
         const qty = num(it.qty) > 0 ? num(it.qty) : 1;
         (isSeparate(s) ? separateLines : lines).push({
           section: sectionLabel + (isSeparate(s) ? separateLabel(s) : ''),
@@ -1253,7 +1256,8 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     // provisional section (mirrors the preview: never both).
     const provisionalSum = num(b.provisional_sum);
     if (!hasProvSection && provisionalSum > 0) {
-      separateLines.push({ section: 'Provisional sums (provisional sums — not included in the total)', item: '', description: 'Provisional sums (carried from tender)', unit: 'item', qty: 1, rate: round2(provisionalSum), labour: 0, materials: 0, line_total: round2(provisionalSum) });
+      const lumpValue = round2(roundMoney(provisionalSum * baseUplift)); // the lump takes the uplift too
+      separateLines.push({ section: 'Provisional sums (provisional sums — not included in the total)', item: '', description: 'Provisional sums (carried from tender)', unit: 'item', qty: 1, rate: lumpValue, labour: 0, materials: 0, line_total: lumpValue });
     }
 
     // The total the client accepts is the construction cost alone; the

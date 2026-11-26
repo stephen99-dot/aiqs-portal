@@ -1035,6 +1035,23 @@ test('the client copy shows net → VAT → total, then provisional sums and opt
   assert.deepStrictEqual(headings.map((h) => h.trim().split(/\s+/)[0]), ['1.', '2.', 'PROVISIONAL', 'OPTIONAL']);
   assert.ok(rows.some((r) => /^Sub-total — Optional extras/.test(String(r.c)) || /^Sub-total — Optional extras/.test(String(r.d))) || true);
 
+  // Overhead and profit go on the provisional sums and optional extras too —
+  // the builder's margin is on that work — and a per-section override wins;
+  // contingency stays on the construction net alone.
+  const uplifted = await load(await generateClientCopyPro(parsed, { vat: 20, overhead_pct: 10, contingency: 5, per_trade_ohp: { OE: 0 }, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+  const upSummary = uplifted.afterSummary.filter((r) => typeof r.c === 'string' && typeof r.f === 'number').map((r) => [r.c, r.f]);
+  const upFigure = (label) => upSummary.find((x) => x[0] === label)[1];
+  assert.ok(near(upFigure('Net construction cost'), 4500 * 1.1));
+  assert.ok(near(upFigure('Contingency (5% of net)'), 4500 * 0.05), 'contingency on the construction net, not the blocks');
+  assert.ok(near(upFigure('Total (incl. VAT)'), (4500 * 1.1 + 225) * 1.2));
+  assert.ok(near(upFigure('Provisional sums'), 3300 * 1.1), 'the provisional sums carry the 10% uplift');
+  assert.ok(near(upFigure('VAT @ 20% on provisional sums'), 3300 * 1.1 * 0.2));
+  assert.ok(near(upFigure('Provisional sums (incl. VAT)'), 3300 * 1.1 * 1.2));
+  assert.ok(near(upFigure('Optional extras'), 1200), 'the optional section\'s own override (0%) wins over the default uplift');
+  // The item rows carry the uplifted rates too, so the sheet reconciles live.
+  const psLine = uplifted.rows.find((r) => String(r.a) === 'L1');
+  assert.ok(near(psLine.f, 3000 * 1.1));
+
   // No VAT: each block is one tinted line, and the headline is the ex-VAT total.
   const noVat = await load(await generateClientCopyPro(parsed, { vat: 0, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
   const nvLabels = noVat.afterSummary.map((r) => r.c).filter((c) => typeof c === 'string');
@@ -1043,12 +1060,12 @@ test('the client copy shows net → VAT → total, then provisional sums and opt
   assert.ok(near(val(noVat.ws.getCell('D3').value), 4500));
 
   // A bill that could not be itemised still carries its flat provisional lump
-  // below the total, not in it.
+  // below the total, not in it — uplifted like the rest.
   const lump = await load(await generateClientCopyPro({ sections: priced, grand: { labour: 3300, materials: 1200, total: 4500 } },
-    { vat: 20, provisional_sum: 500, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+    { vat: 20, overhead_pct: 10, provisional_sum: 500, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
   const lumpSummary = lump.afterSummary.filter((r) => typeof r.c === 'string' && typeof r.f === 'number').map((r) => [r.c, r.f]);
-  assert.ok(near(lumpSummary.find((x) => x[0] === 'Total (incl. VAT)')[1], 5400));
-  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums')[1], 500));
-  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums (incl. VAT)')[1], 600));
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Total (incl. VAT)')[1], 4500 * 1.1 * 1.2));
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums')[1], 550));
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums (incl. VAT)')[1], 660));
   assert.ok(!lump.rows.some((r) => /Optional extras/.test(String(r.c))), 'no optional extras, no optional block');
 });
