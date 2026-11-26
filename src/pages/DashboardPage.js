@@ -5,8 +5,8 @@ import { apiFetch } from '../utils/api';
 import { withUserRef } from '../utils/stripeLinks';
 import { canShowPurchases } from '../utils/purchases';
 import NativePurchaseNotice from '../components/NativePurchaseNotice';
-import OnboardingTour, { TOUR_VERSION } from '../components/OnboardingTour';
 import AskMaxBox from '../components/max/AskMaxBox';
+import LearnCard from '../components/learn/LearnCard';
 import {
   Button, IconButton, Card, Banner, Badge, StatusBadge,
   Input, PageHeader, Stat, EmptyState, SkeletonRows, ProgressBar, useToast,
@@ -240,64 +240,6 @@ function SubmissionsTracker({ submissions }) {
   );
 }
 
-function GettingStarted({ projects }) {
-  const steps = [
-    { key: 'account', label: 'Create your account', done: true, icon: CheckCircleIcon },
-    { key: 'submit', label: 'Submit your drawings — our QS team takes it from there', done: projects.length > 0, icon: UploadIcon },
-    { key: 'boq', label: 'Receive your BOQ & Findings here, typically within 24 hours', done: projects.some(p => p.status === 'completed' || p.status === 'delivered'), icon: DownloadIcon },
-  ];
-  const [dismissed, setDismissed] = useState(false);
-  useEffect(() => { try { if (localStorage.getItem('aiqs_checklist_dismissed') === 'true') setDismissed(true); } catch {} }, []);
-  if (dismissed || steps.every(s => s.done)) return null;
-  const completedCount = steps.filter(s => s.done).length;
-  const pct = (completedCount / steps.length) * 100;
-
-  return (
-    <Card style={{ marginBottom: 16 }}>
-      <Card.Body style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 1 }}>Getting Started</div>
-            <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{completedCount} of {steps.length} complete</div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => { setDismissed(true); try { localStorage.setItem('aiqs_checklist_dismissed', 'true'); } catch {} }}>
-            Dismiss
-          </Button>
-        </div>
-        <ProgressBar value={pct} tone="gradient" height={3} style={{ marginBottom: 14 }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {steps.map(s => (
-            <div key={s.key} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '9px 10px', borderRadius: 8,
-              background: s.done ? 'var(--success-bg)' : 'var(--surface-hover)',
-              opacity: s.done ? 0.65 : 1,
-            }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                background: s.done ? 'var(--success-bg)' : 'var(--accent-glow)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {s.done ? <CheckCircleIcon size={13} color="var(--success)" /> : <s.icon size={13} color="var(--accent)" />}
-              </div>
-              <span style={{
-                fontSize: '0.84rem', fontWeight: 500,
-                color: s.done ? 'var(--text-muted)' : 'var(--text-primary)',
-                textDecoration: s.done ? 'line-through' : 'none',
-              }}>{s.label}</span>
-            </div>
-          ))}
-        </div>
-        {projects.length === 0 && (
-          <Button to="/chat" full style={{ marginTop: 12 }}>
-            Start Your First Project <ArrowRightIcon size={13} color="currentColor" />
-          </Button>
-        )}
-      </Card.Body>
-    </Card>
-  );
-}
-
 // The dashboard's job is to answer "what needs me right now?" — one row per
 // project with an action waiting on the user, each a single click to the
 // place the action happens. Renders nothing when the user is all caught up.
@@ -414,7 +356,6 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState([]);
   const [usage, setUsage] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showTour, setShowTour] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [adminMessages, setAdminMessages] = useState([]);
   const [onboardingStatus, setOnboardingStatus] = useState(null);
@@ -512,27 +453,6 @@ export default function DashboardPage() {
     }
   }
 
-  const [showWhatsNew, setShowWhatsNew] = useState(false);
-
-  useEffect(() => {
-    if (!loading && !mustOnboard) {
-      const tourKey = `aiqs_tour_complete_${user?.id || 'default'}`;
-      const whatsNewKey = `aiqs_whats_new_v5_${user?.id || 'default'}`;
-      try {
-        const seen = localStorage.getItem(tourKey);
-        // The stored value is the TOUR_VERSION the user last completed.
-        // Bumping TOUR_VERSION re-shows the tour so existing users see new
-        // features (intake, editable BOQ, AI Memory, Variations).
-        const seenVersion = seen ? parseInt(seen, 10) : 0;
-        if (seenVersion < TOUR_VERSION) {
-          setShowTour(true);
-        } else if (!localStorage.getItem(whatsNewKey)) {
-          // Existing user who hasn't seen the latest updates — show What's New banner
-          setShowWhatsNew(true);
-        }
-      } catch {}
-    }
-  }, [loading, user?.id, mustOnboard]);
 
   const needsOnboarding = onboardingStatus
     && !onboardingStatus.completed_at
@@ -546,8 +466,6 @@ export default function DashboardPage() {
 
   return (
     <div className="page" data-tour="welcome">
-      {showTour && <OnboardingTour userId={user?.id} onComplete={() => setShowTour(false)} />}
-
       {/* Persistent AI profile prompt — shows until user completes or skips */}
       {needsOnboarding && (
         <Banner tone="accent" style={{ padding: '16px 20px' }}>
@@ -575,33 +493,6 @@ export default function DashboardPage() {
         </Banner>
       )}
 
-      {showWhatsNew && (
-        <Banner tone="accent">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ZapIcon size={14} color="var(--accent)" /> What's New
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.86rem', color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-                <li>
-                  <strong style={{ color: 'var(--text-primary)' }}>Submit Drawings is now the main way to get a BOQ</strong> — our QS team prices your job and delivers it straight back to this portal, typically within 24 hours.{' '}
-                  <Link to="/submit-drawings" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Submit drawings →</Link>
-                </li>
-                <li><strong style={{ color: 'var(--text-primary)' }}>AI Chat is in a testing phase</strong> — feel free to explore it, but use Submit Drawings when you need numbers you can rely on</li>
-                <li><strong style={{ color: 'var(--text-primary)' }}>Client Copy with your logo</strong> — open any delivered project to amend the numbers and download a branded copy to send to your client</li>
-                <li>
-                  <strong style={{ color: 'var(--text-primary)' }}>Your branding</strong> — upload your logo and pick your colours once, and every document wears them.{' '}
-                  <Link to="/branding" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>Set up branding →</Link>
-                </li>
-              </ul>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => {
-              setShowWhatsNew(false);
-              try { localStorage.setItem(`aiqs_whats_new_v5_${user?.id || 'default'}`, 'true'); } catch {}
-            }}>Dismiss</Button>
-          </div>
-        </Banner>
-      )}
 
       {adminMessages.length > 0 && adminMessages.map(msg => (
         <Banner key={msg.id} tone="info">
@@ -642,7 +533,7 @@ export default function DashboardPage() {
       <NeedsAttention projects={projectList} userId={user && user.id} />
       <UsageBar usage={usage} user={user} />
       <MessageUsageBar usage={usage} />
-      <GettingStarted projects={projectList} />
+      <LearnCard />
       <SubmissionsTracker submissions={submissions} />
 
       <div className="stats-row" data-tour="stats">

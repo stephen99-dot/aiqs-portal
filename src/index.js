@@ -13,6 +13,7 @@ import '@fontsource/jetbrains-mono/500.css';
 import './styles.css';
 import './styles/max.css';
 import './styles/survey.css';
+import './styles/learn.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);

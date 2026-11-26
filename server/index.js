@@ -91,6 +91,10 @@ app.use('/api', memoryRoutes);
   else console.error('[partner] routes not mounted:', partner.routerError && partner.routerError.message);
 }
 app.use('/api', surveyRoutes);
+// How-to videos: the catalogue and what each account has watched. The files
+// are served from videos/ at the repo root (see learn.js), not from the build.
+app.use('/api/learn', require('./learnRoutes'));
+app.use('/videos', express.static(path.join(__dirname, '..', 'videos'), { maxAge: '1d' }));
 // Trustpilot reviews for the sign-in page: /api/public/trustpilot (read) and
 // the admin sync / listing under /api/admin/trustpilot.
 app.use('/api', require('./trustpilotReviews').router);

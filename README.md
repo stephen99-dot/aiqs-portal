@@ -109,6 +109,27 @@ needed); on the web a desktop browser's own recogniser is used, or the server's 
 when `OPENAI_API_KEY` or `DEEPGRAM_API_KEY` is set. MAX replies in writing only. Tests:
 `server/max.test.js`.
 
+## How-to videos
+
+Written instructions are gone from the portal; in their place, short screen recordings of the
+portal doing each thing. **How-to videos** (`/learn`, the menu entry) lists them with a progress
+bar, a "watched" tick on each (a video ticks itself off when it finishes; the tick can be
+undone), and **next steps** worked out from what the account has actually done — first drawings
+not submitted yet, no job started, no rates, no logo — each with the page to do it on and the
+video that shows it. The dashboard carries the same thing as a card (the next video to watch
+and the top three steps; "Hide" puts it away), and the Jobs and Submit Drawings pages have a
+**Watch how** button. The first time an account opens the portal after this went live (and a
+new account's first dashboard), one card says the videos exist and offers the first; it is
+recorded on the account the moment it shows (`POST /api/learn/intro/seen`), so it shows once and
+never again, on any device. That card replaced the sign-in tour and the MAX showcase popup.
+
+The catalogue and the next-step rules are `server/learn.js`; `GET /api/learn` returns the
+videos with this account's ticks, the steps, the progress and the entitlements, and
+`POST /api/learn/:key/watched` ticks one off (`video_views`). The files live in `videos/` at
+the repo root — `<key>.mp4` (H.264, silent, captioned on screen) and `<key>.jpg` — served at
+`/videos` by the server rather than bundled, so an app update stays small; drop in an mp4 with
+the same name to replace one. Tests: `server/learn.test.js`.
+
 ## Jobs and room surveys — "Scan a room"
 
 **New job** (`/jobs/new`; the **Jobs** menu entry, the dashboard chip, and where the old

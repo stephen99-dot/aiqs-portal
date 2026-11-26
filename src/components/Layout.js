@@ -7,12 +7,12 @@ import {
   SunIcon, MoonIcon, LogOutIcon, MenuIcon, XIcon,
   UploadIcon, SettingsIcon,
   InboxIcon, FolderIcon, MapPinIcon, BellIcon,
-  MicIcon, PoundIcon, CameraIcon, SparklesIcon,
+  MicIcon, PoundIcon, CameraIcon, SparklesIcon, PlayIcon,
 } from './Icons';
 import { Badge } from '../ui';
 import NotificationBell from './NotificationBell';
 import MaxPanel from './max/MaxPanel';
-import MaxLaunch from './max/MaxLaunch';
+import LearnWelcome from './learn/LearnWelcome';
 import { openMax } from '../utils/max';
 import TrustpilotPopup from './TrustpilotPopup';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
@@ -114,6 +114,8 @@ export default function Layout() {
     // Jobs: the New job flow, the rooms scanned on site and the price from MAX.
     { path: '/surveys', label: 'Jobs', Icon: CameraIcon, badge: 'New' },
     { path: '/chat', label: 'AI Chat', Icon: ChatIcon },
+    // Short videos of the portal doing each thing, ticked off as they go.
+    { path: '/learn', label: 'How-to videos', Icon: PlayIcon },
     // The MAX packages, for accounts without one. Website only: the iOS app
     // sells nothing (App Store rule 3.1.1), so there it has no entry.
     { path: '/upgrade', label: 'Upgrade to MAX', Icon: SparklesIcon, upsell: true, clientOnly: true },
@@ -165,7 +167,7 @@ export default function Layout() {
             { path: '/chat', label: 'Chat', Icon: ChatIcon },
           ]);
   const bottomNavRoutes = [
-    '/dashboard', '/submit-drawings', '/estimates', '/surveys',
+    '/dashboard', '/submit-drawings', '/estimates', '/surveys', '/learn',
     '/my-rates', '/ai-memory', '/branding',
     '/admin', '/admin/users', '/admin/submissions',
   ];
@@ -438,7 +440,8 @@ export default function Layout() {
 
       {/* MAX has arrived — what it does and the plans, once per account
           (admins see it with ?launch=1 on any page). */}
-      <MaxLaunch />
+      {/* Once per account: the how-to videos exist. In place of the old tour and MAX showcase. */}
+      <LearnWelcome />
 
       {/* Country: asked once of anyone who hasn't set it (onboarding sets it
           itself, so it isn't asked twice there). */}
