@@ -114,7 +114,8 @@ never again, on any device. That card replaced the sign-in tour and the MAX show
 The catalogue and the next-step rules are `server/learn.js`; `GET /api/learn` returns the
 videos with this account's ticks, the steps, the progress and the entitlements, and
 `POST /api/learn/:key/watched` ticks one off (`video_views`). The files live in `videos/` at
-the repo root — `<key>.mp4` (H.264, silent, captioned on screen) and `<key>.jpg` — served at
+the repo root — `<key>.mp4` (H.264, captioned on screen and narrated by OpenAI text-to-speech
+reading the same captions, over a quiet bed) and `<key>.jpg` — served at
 `/videos` by the server rather than bundled, so an app update stays small; drop in an mp4 with
 the same name to replace one. Tests: `server/learn.test.js`.
 
