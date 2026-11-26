@@ -462,13 +462,12 @@ export default function BuilderPackPage() {
   const baseUplift = (1 + defaultOhp / 100) * (1 + profit / 100);
   const clientRows = useMemo(
     () => sections.map((s, i) => {
-      // Provisional sums and optional extras are carried verbatim, exclusive
-      // of OH&P (factor 1).
-      const factor = isSeparateSection(s)
-        ? 1
-        : (Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
-            ? 1 + num(perTradeOhp[s.number]) / 100
-            : baseUplift);
+      // Every section takes the overhead and profit uplift, or its own
+      // per-section override — the provisional sums and optional extras below
+      // the total included. Only the contingency / prelims-% base leaves them out.
+      const factor = Object.prototype.hasOwnProperty.call(perTradeOhp, s.number)
+        ? 1 + num(perTradeOhp[s.number]) / 100
+        : baseUplift;
       const base = sectionTotals[i].total;
       const subtotal = roundMoney(rounding, base * factor);
       return { number: s.number, title: s.title, provisional: !!s.provisional, optional: !!s.optional && !s.provisional, item_count: s.items.length, uplift: factor, base, subtotal };
@@ -513,9 +512,9 @@ export default function BuilderPackPage() {
   const vatVal = vat > 0 ? exVat * (vat / 100) : 0;
   const inclVat = exVat + vatVal;
   // Below the total, not in it: provisional sums (the itemised section, or the
-  // legacy flat lump when the bill wasn't itemised — never both) and optional
-  // extras. Each prints with its own VAT line.
-  const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : provisionalSum);
+  // legacy flat lump when the bill wasn't itemised — never both; the lump
+  // takes the uplift too) and optional extras. Each prints with its own VAT line.
+  const provisionalTotal = provisionalFromSections + (provisionalFromSections > 0 ? 0 : roundMoney(rounding, provisionalSum * baseUplift));
   const separateBlocks = [];
   if (provisionalTotal > 0) separateBlocks.push({ key: 'provisional', label: 'Provisional sums', value: provisionalTotal });
   if (optionalFromSections > 0) separateBlocks.push({ key: 'optional', label: 'Optional extras', value: optionalFromSections });
@@ -1709,7 +1708,7 @@ function ClientControls({
           onChange={(e) => setProvisionalSum(parseFloat(e.target.value) || 0)}
           placeholder="e.g. 200250" style={inputStyle} />
         <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
-          Only for a bill that doesn’t itemise them: a lump carried from the tender (no OH&P), shown below the total with its own VAT line — never in the total.
+          Only for a bill that doesn’t itemise them: a lump carried from the tender. Takes your overhead and profit like the rest, and shows below the total with its own VAT line — never in the total.
         </div>
       </Field>
 
@@ -1790,7 +1789,7 @@ function ClientControls({
                   {(s.provisional || s.optional || tInfo.trade) && (
                     <span style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       title={Array.isArray(tInfo.trades) ? tInfo.trades.map((t) => t.trade + ' ' + t.share_pct + '%').join(' · ') : ''}>
-                      {s.provisional ? 'Provisional sums — below the total, not uplifted' : s.optional ? 'Optional extras — below the total, not uplifted' : tInfo.trade + (mixed ? ' (mixed)' : '')}
+                      {s.provisional ? 'Provisional sums — below the total; takes the uplift' : s.optional ? 'Optional extras — below the total; takes the uplift' : tInfo.trade + (mixed ? ' (mixed)' : '')}
                     </span>
                   )}
                 </span>

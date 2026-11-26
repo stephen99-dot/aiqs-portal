@@ -162,13 +162,14 @@ test('trade_markup maps onto per-section uplift overrides and merges with existi
   assert.ok(v.warnings.some((w) => /no section on this bill is Roofing/.test(w)));
 });
 
-test('section_uplift sets or clears one section by number, and refuses provisional sections', () => {
+test('section_uplift sets or clears one section by number, provisional sections included', () => {
   const sections = SECTIONS.concat([{ number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] }]);
   const controls = { ...CONTROLS, per_trade_ohp: { '1': 41, '2': 10 } };
   const v = validateAndPreview({ summary: 'x', controls: { section_uplift: { '1': 30, '2': null, '9': 5, '42': 1 } } }, PROJECT, sections, controls);
   assert.equal(v.ok, true);
-  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 30 });
-  assert.ok(v.warnings.some((w) => /section 9 is provisional/.test(w)));
+  // A provisional section takes the uplift like any other, so it can carry its own.
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 30, '9': 5 });
+  assert.ok(!v.warnings.some((w) => /section 9/.test(w)));
   assert.ok(v.warnings.some((w) => /unknown section number 42/.test(w)));
 });
 
@@ -218,16 +219,20 @@ test('client copy total honours prelims, day rate, contingency and rounding like
   // Neither the provisional sums nor the optional extras are in the total.
   const expected = netConstruction + 1000 + 600 + (prelimsBase + elecBase) * 0.05;
   assert.ok(Math.abs(r.ex_vat - expected) < 0.02, `${r.ex_vat} vs ${expected}`);
-  assert.equal(r.provisional, 500, 'the itemised provisional sums, reported separately');
-  assert.equal(r.optional, 1200, 'the optional extras, reported separately');
-  // Only a bill with no itemised provisional section falls back to the flat lump.
+  // Both take the overhead and profit uplift like the priced sections.
+  assert.equal(r.provisional, 550, 'the itemised provisional sums with the 10% uplift, reported separately');
+  assert.equal(r.optional, 1320, 'the optional extras with the 10% uplift, reported separately');
+  // Only a bill with no itemised provisional section falls back to the flat lump — uplifted too.
   assert.equal(clientCopyExVat(SECTIONS, { provisional_sum: 999 }).provisional, 999);
+  assert.equal(clientCopyExVat(SECTIONS, { provisional_sum: 1000, overhead_pct: 10 }).provisional, 1100);
+  // A per-section override on the provisional section wins over the default uplift.
+  assert.equal(clientCopyExVat(sections, { overhead_pct: 10, per_trade_ohp: { '9': 0 } }).provisional, 500);
   assert.equal(clientCopyExVat([], {}), null);
 });
 
 // Optional extras: a section the client can choose to add. The assistant can
 // create one, add to the page's standing one, and never uplifts it.
-test('optional extras: a new optional section is flagged, an uplift on it is refused, and the snapshot names it', () => {
+test('optional extras: a new optional section is flagged, it can take its own uplift, and the snapshot names it', () => {
   const sections = SECTIONS.concat([{ number: 'OE', title: 'Optional extras', optional: true, items: [] }]);
   const v = validateAndPreview({
     summary: 'Offer the lighting as an optional extra',
@@ -240,13 +245,15 @@ test('optional extras: a new optional section is flagged, an uplift on it is ref
   assert.equal(v.proposal.new_sections[0].optional, true);
   assert.equal(v.proposal.new_sections[0].provisional, false);
   assert.ok(v.proposal.changes.some((c) => /Optional landscaping.*optional extras \(below the total\)/.test(c.label)));
-  assert.ok(v.warnings.some((w) => /section OE is optional extras/.test(w)));
+  // The optional section takes the uplift like any other, so it can carry its own.
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { OE: 10 });
+  assert.ok(!v.warnings.some((w) => /section OE/.test(w)));
   // The total the client sees is unmoved by optional work; the note says so.
   assert.equal(v.proposal.client_after, v.proposal.client_before);
   assert.match(v.proposal.client_note, /Provisional sums and optional extras sit below it/);
 
   const snap = snapshotForPrompt(PROJECT, sections, CONTROLS);
-  assert.match(snap, /Section OE: Optional extras \(OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it\) — no lines yet/);
+  assert.match(snap, /Section OE: Optional extras \(OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it; takes the overhead and profit uplift\) — no lines yet/);
   const withLine = sections.map((s) => (s.number === 'OE' ? { ...s, items: [{ description: 'Lighting', labour: 400, materials: 800, total: 1200 }] } : s));
   assert.match(snapshotForPrompt(PROJECT, withLine, CONTROLS), /Shown BELOW that total and not in it, each with its own VAT line: provisional sums £0, optional extras £1200\./);
 });

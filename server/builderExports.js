@@ -1815,8 +1815,9 @@ async function generateBuilderPack(parsed, opts = {}) {
  *   project_name, client_name
  *
  * Sections flagged `provisional: true` (the bill's provisional sums) or
- * `optional: true` (optional extras the client can choose to add) are carried
- * at face value — no uplift, contingency or prelims % — and sit BELOW the
+ * `optional: true` (optional extras the client can choose to add) take the
+ * same overhead and profit uplift as the priced sections (and a per-section
+ * override, when set) but no contingency or prelims %, and sit BELOW the
  * total, each as its own block with its own VAT line. The total the client
  * reads is the construction cost alone.
  */
@@ -1885,13 +1886,14 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // headline on the cover matches the bottom of the BOQ.
   //
   // Provisional sums and optional extras are carried as their own sections,
-  // line by line, exclusive of OH&P: no rate uplift, contingency or prelims %.
-  // Neither is in the total. Provisional sums are allowances for work nobody
-  // can price yet; optional extras are work the client can choose to add. Each
-  // block sits below the total with its own VAT line, so the figure the client
-  // reads as "the total" is the construction cost and nothing else. An
-  // itemised provisional section supersedes any flat provisional lump so the
-  // block isn't counted twice.
+  // line by line. Their rates take the same overhead and profit uplift as the
+  // priced sections (the builder's margin is on that work too), but neither
+  // attracts contingency or prelims %, and neither is in the total.
+  // Provisional sums are allowances for work nobody can price yet; optional
+  // extras are work the client can choose to add. Each block sits below the
+  // total with its own VAT line, so the figure the client reads as "the total"
+  // is the construction cost and nothing else. An itemised provisional section
+  // supersedes any flat provisional lump so the block isn't counted twice.
   const isSeparate = (s) => !!(s && (s.provisional || s.optional));
   const isOptional = (s) => !!(s && s.optional && !s.provisional);
   // A line's money: labour + materials, or the composite total when there is
@@ -1916,14 +1918,16 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // sheet and the sub-totals further down can never disagree.
   const preSections = [];
   for (const s of orderedSections) {
+    const factor = upliftFactorForSection(s.number);
     if (isSeparate(s)) {
+      // Below the total, but priced like the rest: the uplift goes on every
+      // line, and nothing here feeds the contingency / prelims-% base.
       let t = 0;
-      for (const it of (s.items || [])) { t += roundMoney(lineMoney(it)); preItemCount++; }
+      for (const it of (s.items || [])) { t += roundMoney(lineMoney(it) * factor); preItemCount++; }
       if (s.provisional) preProvisional += t; else preOptional += t;
       preSections.push({ section: s, total: t });
       continue;
     }
-    const factor = upliftFactorForSection(s.number);
     let t = 0;
     for (const it of (s.items || [])) {
       preLabour += (parseFloat(it.labour) || 0);
@@ -1936,7 +1940,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
     preNet += t;
     preSections.push({ section: s, total: t });
   }
-  const totalProvisional = preProvisional + (hasProvSection ? 0 : provisionalSum);
+  // The flat lump (a bill that could not be itemised) takes the uplift too.
+  const provisionalLump = hasProvSection ? 0 : roundMoney(provisionalSum * baseUpliftFactor);
+  const totalProvisional = preProvisional + provisionalLump;
   const totalOptional = preOptional;
   let preExVat = preNet;
   if (prelimsAmount > 0) preExVat += prelimsAmount;
@@ -2272,9 +2278,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
   const sectionTotals = []; // post-uplift per section
   let originalNet = 0;      // pre-uplift construction net (contingency base)
   orderedSections.forEach((s, idx) => {
-    // Provisional sums and optional extras are carried verbatim, exclusive of
-    // OH&P — never uplifted.
-    const sectionFactor = isSeparate(s) ? 1 : upliftFactorForSection(s.number);
+    // Every section takes its uplift — the provisional sums and optional
+    // extras below the total included; only the contingency / prelims-% base
+    // (originalNet) leaves them out.
+    const sectionFactor = upliftFactorForSection(s.number);
 
     // Section header — same flavour-driven treatment as boqGenerator
     const sec = ws.getRow(r);
@@ -2491,7 +2498,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   // above. A provisional block comes from the bill's own section (or the flat
   // lump when the bill could not be itemised); optional extras are the items
   // the builder has offered for the client to choose.
-  const provisionalDisplay = provisionalFromSections + (hasProvSection ? 0 : provisionalSum);
+  const provisionalDisplay = provisionalFromSections + provisionalLump;
   const separateBlocks = [];
   if (provisionalDisplay > 0) {
     separateBlocks.push({
