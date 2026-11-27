@@ -48,6 +48,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), webho
 app.use(express.json());
 app.use('/api/black-friday', BF.router);
 app.use('/api/public/black-friday', BF.publicRouter);
+app.use('/api', require('./routes')); // sign-up, for the website buyer who has no account yet
 const server = app.listen(0);
 const PORT = server.address().port;
 
@@ -255,6 +256,29 @@ test('the website chat is told the sale prices and that the free first job is pa
   try { assert.equal(BF.chatNote(), '', 'nothing once the sale is over'); } finally { process.env.BLACK_FRIDAY_ENDS_AT = saved; }
   delete process.env.BLACK_FRIDAY_ENDS_AT;
   try { assert.equal(BF.endsText(), '23:59 on Monday 30 November (UK time)'); } finally { process.env.BLACK_FRIDAY_ENDS_AT = saved; }
+});
+
+// The website's checkout carries no account (nobody is signed in there), so
+// these are the same as the existing Payment Links: matched by the email paid
+// with, or held for that email until the account exists.
+test('bought on the website by an existing customer: the jobs land on their account by email, automatically', async () => {
+  const before = credits('u2');
+  const mail = await paid({ id: 'cs_test_site_existing', amount_total: 34900, customer_details: { email: 'EVE@t.t', name: 'Eve Earth' }, metadata: { promo: 'black_friday_2026', deal: 'bf_10', boq_credits: '10', source: 'website' } });
+  assert.equal(credits('u2'), before + 10, 'matched to eve@t.t whatever the case she typed');
+  assert.ok(mail.some((m) => m.to === 'eve@t.t' && /Black Friday/.test(m.subject || '')), 'and she is sent the purchase confirmation');
+});
+
+test('bought on the website by someone new: the jobs are waiting the moment they sign up with that email', async () => {
+  const mail = await paid({ id: 'cs_test_site_newbuyer', amount_total: 22900, customer_details: { email: 'Gary.Groundworks@gmail.com', name: 'Gary Groundworks' }, metadata: { promo: 'black_friday_2026', deal: 'bf_5', boq_credits: '5', source: 'website' } });
+  assert.ok(mail.some((m) => m.to === 'gary.groundworks@gmail.com' && /create your AI QS account/.test(m.subject || '')), 'he is emailed to create his account with that email');
+
+  const r = await quietly(() => req('POST', '/auth/register', null, { email: 'gary.groundworks@gmail.com', password: 'long-enough-1', fullName: 'Gary Groundworks', company: 'GG Ltd' }));
+  const gary = db.prepare("SELECT free_credits FROM users WHERE email = 'gary.groundworks@gmail.com'").get();
+  assert.ok(gary, 'account created');
+  assert.equal(gary.free_credits, 5, 'the 5 jobs he paid for — and no extra free signup credit, as he bought first');
+  const pending = db.prepare("SELECT claimed_at FROM pending_credits WHERE stripe_session_id = 'cs_test_site_newbuyer'").get();
+  assert.ok(pending.claimed_at, 'the held credits are marked as claimed');
+  assert.ok(r, 'sign-up answered');
 });
 
 test('a stamp that is not a sensible number of jobs is ignored', () => {
