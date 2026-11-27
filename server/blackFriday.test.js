@@ -25,8 +25,12 @@ process.env.BLACK_FRIDAY_ENDS_AT = new Date(Date.now() + 86400e3).toISOString();
 
 // ── A pretend Stripe: only Checkout Sessions are created ───────────────────
 const created = [];
+const paidSessions = {};
 const fakeStripe = {
-  checkout: { sessions: { create: async (params) => { created.push(params); return { id: 'cs_test_bf' + created.length, url: 'https://checkout.stripe.test/' + created.length }; } } },
+  checkout: { sessions: {
+    create: async (params) => { created.push(params); return { id: 'cs_test_bf' + created.length, url: 'https://checkout.stripe.test/' + created.length }; },
+    retrieve: async (id) => { if (!paidSessions[id]) throw new Error('No such checkout.session'); return paidSessions[id]; },
+  } },
   customers: { retrieve: async (id) => ({ id, email: null }) },
 };
 const stripePath = require.resolve('stripe');
@@ -43,6 +47,8 @@ const app = express();
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), webhook);
 app.use(express.json());
 app.use('/api/black-friday', BF.router);
+app.use('/api/public/black-friday', BF.publicRouter);
+app.use('/api', require('./routes')); // sign-up, for the website buyer who has no account yet
 const server = app.listen(0);
 const PORT = server.address().port;
 
@@ -131,9 +137,17 @@ test('checkout opens a Stripe session for the deal, stamped with the account and
   assert.equal(s.customer_email, 'dan@t.t');
   assert.equal(s.line_items[0].price_data.unit_amount, 34900);
   assert.equal(s.line_items[0].price_data.currency, 'gbp');
-  assert.deepEqual(s.metadata, { promo: 'black_friday_2026', deal: 'bf_10', boq_credits: '10', user_id: 'u1' });
+  assert.deepEqual(s.metadata, { promo: 'black_friday_2026', deal: 'bf_10', boq_credits: '10', source: 'portal', user_id: 'u1' });
   assert.equal(s.success_url, 'https://portal.test/payment-success?credits=1');
   assert.equal(s.cancel_url, 'https://portal.test/dashboard?deals=1');
+  // Named like the normal packs, and everything a trade buyer needs for their books.
+  assert.equal(s.line_items[0].price_data.product_data.name, 'BOQ Credit Pack (10 credits) — Black Friday');
+  assert.equal(s.billing_address_collection, 'required');
+  assert.deepEqual(s.tax_id_collection, { enabled: true }, 'company name and VAT number');
+  assert.equal(s.customer_creation, 'always');
+  assert.equal(s.invoice_creation.enabled, true, 'a paid invoice afterwards');
+  assert.deepEqual(s.invoice_creation.invoice_data.metadata, s.metadata);
+  assert.match(s.invoice_creation.invoice_data.description, /^BOQ Credit Pack \(10 credits\) — Black Friday: /);
 
   assert.equal((await req('POST', '/black-friday/checkout', token, { deal: 'bf_1000' })).status, 400, 'no such deal');
   assert.equal((await req('POST', '/black-friday/checkout', token, { deal: 'bf_10', price: 1 })).status, 200, 'the price is never taken from the request');
@@ -181,6 +195,111 @@ test('paid under an email with no account yet: the 20 jobs wait for them', async
   await paid({ id: 'cs_test_bf_new', amount_total: 58900, customer_details: { email: 'new@t.t' }, metadata: { promo: 'black_friday_2026', deal: 'bf_20', boq_credits: '20' } });
   const row = db.prepare('SELECT credits, reason FROM pending_credits WHERE stripe_session_id = ?').get('cs_test_bf_new');
   assert.deepEqual({ ...row }, { credits: 20, reason: 'user_not_found' });
+});
+
+// A GET that does not follow redirects, for the website's links.
+function raw(pathname) {
+  return new Promise((resolve, reject) => {
+    http.get({ port: PORT, path: pathname }, (res) => { res.resume(); resolve({ status: res.statusCode, location: res.headers.location }); }).on('error', reject);
+  });
+}
+
+test('from the website: a deal link goes straight to Stripe, with no account needed', async () => {
+  const r = await raw('/api/public/black-friday/start?deal=bf_20');
+  assert.equal(r.status, 303);
+  assert.match(r.location, /^https:\/\/checkout\.stripe\.test\//);
+  const s = created[created.length - 1];
+  assert.equal(s.line_items[0].price_data.unit_amount, 58900);
+  assert.deepEqual(s.metadata, { promo: 'black_friday_2026', deal: 'bf_20', boq_credits: '20', source: 'website' });
+  assert.equal(s.client_reference_id, undefined, 'nobody is signed in on the website');
+  assert.equal(s.customer_email, undefined, 'Stripe asks for the email');
+  assert.equal(s.line_items[0].price_data.product_data.name, 'BOQ Credit Pack (20 credits) — Black Friday');
+  assert.equal(s.billing_address_collection, 'required');
+  assert.deepEqual(s.tax_id_collection, { enabled: true });
+  assert.equal(s.invoice_creation.enabled, true);
+  assert.equal(s.success_url, 'https://portal.test/api/public/black-friday/done?session_id={CHECKOUT_SESSION_ID}');
+  assert.equal(s.cancel_url, 'https://theaiqs.co.uk/#pricing');
+
+  const bad = await raw('/api/public/black-friday/start?deal=nope');
+  assert.equal(bad.status, 302);
+  assert.equal(bad.location, 'https://theaiqs.co.uk/#pricing', 'an unknown deal goes back to the prices');
+});
+
+test('from the website, after the sale: the link goes back to the prices and opens nothing', async () => {
+  const saved = process.env.BLACK_FRIDAY_ENDS_AT;
+  process.env.BLACK_FRIDAY_ENDS_AT = new Date(Date.now() - 1000).toISOString();
+  try {
+    const before = created.length;
+    const r = await raw('/api/public/black-friday/start?deal=bf_10');
+    assert.equal(r.status, 302);
+    assert.equal(r.location, 'https://theaiqs.co.uk/#pricing');
+    assert.equal(created.length, before);
+  } finally { process.env.BLACK_FRIDAY_ENDS_AT = saved; }
+});
+
+test('back from Stripe: an existing customer logs in, a new one creates the account with that email', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  paidSessions.cs_test_existingA0001 = { id: 'cs_test_existingA0001', created: now, metadata: { promo: 'black_friday_2026' }, customer_details: { email: 'Dan@T.T' } };
+  paidSessions.cs_test_brandnewA0001 = { id: 'cs_test_brandnewA0001', created: now, metadata: { promo: 'black_friday_2026' }, customer_details: { email: 'fresh@t.t' } };
+  paidSessions.cs_test_notoursA00001 = { id: 'cs_test_notoursA00001', created: now, metadata: {}, customer_details: { email: 'fresh@t.t' } };
+  paidSessions.cs_test_toooldA000001 = { id: 'cs_test_toooldA000001', created: now - 8 * 86400, metadata: { promo: 'black_friday_2026' }, customer_details: { email: 'fresh@t.t' } };
+  const next = encodeURIComponent('/payment-success?credits=1');
+
+  const a = await raw('/api/public/black-friday/done?session_id=cs_test_existingA0001');
+  assert.equal(a.status, 302);
+  assert.equal(a.location, 'https://portal.test/login?email=dan%40t.t&next=' + next);
+
+  const b = await raw('/api/public/black-friday/done?session_id=cs_test_brandnewA0001');
+  assert.equal(b.location, 'https://portal.test/register?email=fresh%40t.t&from=blackfriday&next=' + next);
+
+  for (const id of ['cs_test_notoursA00001', 'cs_test_toooldA000001', 'cs_test_missingA00001', 'nonsense']) {
+    const r = await raw('/api/public/black-friday/done?session_id=' + id);
+    assert.equal(r.location, 'https://portal.test/login?next=' + next, id + ' says nothing about any email');
+  }
+});
+
+test('the website chat is told the sale prices and that the free first job is paused', () => {
+  const note = BF.chatNote();
+  assert.match(note, /BLACK FRIDAY SALE/);
+  assert.match(note, /free first job is paused/);
+  for (const p of ['£99', '£229', '£349', '£589', '£29.45']) assert.ok(note.includes(p), p);
+  const saved = process.env.BLACK_FRIDAY_ENDS_AT;
+  process.env.BLACK_FRIDAY_ENDS_AT = new Date(Date.now() - 1000).toISOString();
+  try { assert.equal(BF.chatNote(), '', 'nothing once the sale is over'); } finally { process.env.BLACK_FRIDAY_ENDS_AT = saved; }
+  delete process.env.BLACK_FRIDAY_ENDS_AT;
+  try { assert.equal(BF.endsText(), '23:59 on Monday 30 November (UK time)'); } finally { process.env.BLACK_FRIDAY_ENDS_AT = saved; }
+});
+
+// The website's checkout carries no account (nobody is signed in there), so
+// these are the same as the existing Payment Links: matched by the email paid
+// with, or held for that email until the account exists.
+test('bought on the website by an existing customer: the jobs land on their account by email, automatically', async () => {
+  const before = credits('u2');
+  const mail = await paid({ id: 'cs_test_site_existing', amount_total: 34900, customer_details: { email: 'EVE@t.t', name: 'Eve Earth' }, metadata: { promo: 'black_friday_2026', deal: 'bf_10', boq_credits: '10', source: 'website' } });
+  assert.equal(credits('u2'), before + 10, 'matched to eve@t.t whatever the case she typed');
+  assert.ok(mail.some((m) => m.to === 'eve@t.t' && /Black Friday/.test(m.subject || '')), 'and she is sent the purchase confirmation');
+});
+
+test('bought on the website by someone new: the jobs are waiting the moment they sign up with that email', async () => {
+  const mail = await paid({ id: 'cs_test_site_newbuyer', amount_total: 22900, customer_details: { email: 'Gary.Groundworks@gmail.com', name: 'Gary Groundworks' }, metadata: { promo: 'black_friday_2026', deal: 'bf_5', boq_credits: '5', source: 'website' } });
+  assert.ok(mail.some((m) => m.to === 'gary.groundworks@gmail.com' && /create your AI QS account/.test(m.subject || '')), 'he is emailed to create his account with that email');
+
+  const r = await quietly(() => req('POST', '/auth/register', null, { email: 'gary.groundworks@gmail.com', password: 'long-enough-1', fullName: 'Gary Groundworks', company: 'GG Ltd' }));
+  const gary = db.prepare("SELECT free_credits FROM users WHERE email = 'gary.groundworks@gmail.com'").get();
+  assert.ok(gary, 'account created');
+  assert.equal(gary.free_credits, 5, 'the 5 jobs he paid for — and no extra free signup credit, as he bought first');
+  const pending = db.prepare("SELECT claimed_at FROM pending_credits WHERE stripe_session_id = 'cs_test_site_newbuyer'").get();
+  assert.ok(pending.claimed_at, 'the held credits are marked as claimed');
+  assert.ok(r, 'sign-up answered');
+});
+
+test("the sale's invoice (no subscription) changes nothing on any account when Stripe reports it paid", async () => {
+  const before = db.prepare("SELECT free_credits, stripe_subscription_id, plan FROM users WHERE id = 'u2'").get();
+  await quietly(() => req('POST', '/stripe/webhook', null, { id: 'evt_inv', type: 'invoice.paid', data: { object: {
+    id: 'in_bf_1', subscription: null, customer: 'cus_bf', customer_email: 'eve@t.t', amount_paid: 34900, metadata: { promo: 'black_friday_2026', boq_credits: '10' },
+  } } }));
+  const after = db.prepare("SELECT free_credits, stripe_subscription_id, plan FROM users WHERE id = 'u2'").get();
+  assert.deepEqual({ ...after }, { ...before }, 'credits come once, from the checkout — not again from the invoice');
 });
 
 test('a stamp that is not a sensible number of jobs is ignored', () => {

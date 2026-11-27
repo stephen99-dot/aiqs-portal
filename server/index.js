@@ -167,6 +167,8 @@ app.use('/api/surveys', require('./roomSurveyRoutes'));
 app.use('/api/billing', require('./billingRoutes'));
 // Black Friday 2026: the deals and a Stripe Checkout stamped with the credits.
 app.use('/api/black-friday', require('./blackFriday').router);
+// …and for the website, where the visitor isn't signed in.
+app.use('/api/public/black-friday', require('./blackFriday').publicRouter);
 // Accounts that had early access before the packages existed keep the
 // Visualiser as a grant (one-off; an admin can take it off per account).
 try { require('./maxPlans').backfillVisualiserGrants(); } catch (e) { console.warn('[MAX plans] backfill:', e.message); }
