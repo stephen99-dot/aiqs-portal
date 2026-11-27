@@ -102,6 +102,7 @@ export default function TrustpilotPopup() {
 
   return (
     <div
+      data-overlay="trustpilot"
       onClick={(e) => { if (e.target === e.currentTarget) snooze(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,

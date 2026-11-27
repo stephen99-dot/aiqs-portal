@@ -15,6 +15,8 @@ import {
   Field, Input, Select, Textarea, Modal, ProgressBar,
 } from '../ui';
 import { gbp } from '../utils/planPrice';
+import { useBlackFriday } from '../utils/blackFriday';
+import { BlackFridayDealList } from '../components/BlackFriday';
 
 const PROJECT_TYPES = [
   'Residential Extension',
@@ -84,6 +86,7 @@ function OfferRow({ href, icon, iconBg, tintBg, tintBorder, title, subtitle, pri
 }
 
 function LimitReachedModal({ usage, user, onClose }) {
+  const blackFriday = useBlackFriday(user);
   return (
     <Modal title="Monthly Limit Reached" onClose={onClose}>
       <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -109,7 +112,7 @@ function LimitReachedModal({ usage, user, onClose }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 22 }}>
-        {canShowPurchases() ? (<>
+        {canShowPurchases() && blackFriday ? <BlackFridayDealList sale={blackFriday} /> : canShowPurchases() ? (<>
         {/* Buy Extra Project — always shown */}
         <OfferRow
           href={withUserRef(STRIPE_PAYG_LINK, user)}

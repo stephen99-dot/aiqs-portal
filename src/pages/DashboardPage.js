@@ -19,6 +19,8 @@ import {
 } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
 import { gbp, billingNote } from '../utils/planPrice';
+import { useBlackFriday, openBlackFriday } from '../utils/blackFriday';
+import { BlackFridayBanner, BlackFridayButtons } from '../components/BlackFriday';
 
 const STRIPE = {
   starter_payg: 'https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g',  // £150 PAYG single BOQ
@@ -32,7 +34,10 @@ const STRIPE = {
 // The bundle buy-links, rendered identically wherever they appear (PAYG bar,
 // at-limit prompt). One primary action; bundles as quiet secondaries.
 function BuyBoqButtons({ user, compact = false }) {
+  const sale = useBlackFriday(user);
   if (!canShowPurchases()) return <NativePurchaseNotice compact={compact} />;
+  // Black Friday: the sale prices, not the full-price Payment Links.
+  if (sale) return <BlackFridayButtons sale={sale} />;
   const size = compact ? 'sm' : 'sm';
   const ext = { target: '_blank', rel: 'noopener noreferrer' };
   return (
@@ -55,6 +60,7 @@ function BuyBoqButtons({ user, compact = false }) {
 }
 
 function UsageBar({ usage, user }) {
+  const sale = useBlackFriday(user);
   if (!usage) return null;
   // Pull BOQ-specific fields from /usage. Fall back to legacy quota/used/remaining
   // (which were really project counts) only if the new fields aren't present yet.
@@ -90,7 +96,7 @@ function UsageBar({ usage, user }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Badge tone="warning" size="sm"><ZapIcon size={11} color="currentColor" /> Pay As You Go</Badge>
             <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-              <strong style={{ color: 'var(--text-primary)' }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · {gbp(150)} per BOQ
+              <strong style={{ color: 'var(--text-primary)' }}>{remaining}</strong> BOQ{remaining !== 1 ? 's' : ''} available · {sale ? <>Black Friday: from {gbp(29.45)} per BOQ</> : <>{gbp(150)} per BOQ</>}
             </span>
           </div>
           <BuyBoqButtons user={user} compact />
@@ -142,7 +148,15 @@ function UsageBar({ usage, user }) {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
           }}>
             <span>Only {remaining} BOQ{remaining !== 1 ? 's' : ''} left</span>
-            {canShowPurchases() && <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
+            {sale ? (
+              <button type="button" onClick={openBlackFriday} style={{
+                border: 0, background: 'none', padding: 0, cursor: 'pointer', font: 'inherit',
+                fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)',
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+              }}>
+                Black Friday: 10 jobs for {gbp(349)} <ArrowRightIcon size={11} color="currentColor" />
+              </button>
+            ) : canShowPurchases() && <a href={withUserRef(STRIPE.boq_5_pack, user)} target="_blank" rel="noopener noreferrer" style={{
               fontSize: '0.78rem', fontWeight: 600, color: 'var(--accent)', textDecoration: 'none',
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>
@@ -526,6 +540,9 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {/* Black Friday 2026 — reopens the scratch-card deals while the sale runs. */}
+      <BlackFridayBanner />
 
       {/* Ask MAX — text or voice; renders nothing until MAX is on for the account. */}
       <AskMaxBox />

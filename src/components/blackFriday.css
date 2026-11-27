@@ -1,0 +1,272 @@
+/* ═══ Black Friday 2026 — components/BlackFriday.js ═══════════════════════════
+   Black and sale-yellow, as the campaign artwork. Cards and text follow the
+   portal's theme variables, so light and dark both work. */
+
+.bf-overlay {
+  --bf-yellow: #F8D45C;
+  --bf-yellow-hover: #F3C833;
+  --bf-ink: #111111;
+  --bf-gold: #D4A62A;
+  --bf-green: color-mix(in srgb, var(--success) 70%, var(--text-primary));
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(8, 10, 16, 0.72); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  padding-top: calc(16px + var(--safe-top, 0px));
+  padding-bottom: calc(16px + var(--safe-bottom, 0px));
+}
+.bf-modal {
+  position: relative;
+  width: min(760px, 100%);
+  outline: none;
+  max-height: 100%; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--bg-primary); color: var(--text-primary);
+  border-radius: 18px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-body);
+  animation: bf-pop 0.38s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+@keyframes bf-pop { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+
+/* ── Header: black, with the scratch card ── */
+.bf-head {
+  position: relative;
+  background: var(--bf-ink); color: #fff;
+  text-align: center;
+  padding: 26px 24px 22px;
+  border-radius: 18px 18px 0 0;
+}
+.bf-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: rgba(255, 255, 255, 0.1); color: #fff;
+  font-size: 15px; cursor: pointer;
+}
+.bf-close:hover { background: rgba(255, 255, 255, 0.18); }
+.bf-close:focus-visible, .bf-skip:focus-visible, .bf-buy:focus-visible,
+.bf-ticket:focus-visible, .bf-banner:focus-visible, .bf-mini:focus-visible,
+.bf-row__buy:focus-visible, .bf-buttons__tag:focus-visible {
+  outline: 3px solid var(--bf-yellow, #F8D45C); outline-offset: 2px;
+}
+.bf-brand { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+.bf-sale { margin-top: 8px; font-size: 17px; font-weight: 800; letter-spacing: 0.05em; color: var(--bf-yellow); }
+
+.bf-ticket-wrap { position: relative; max-width: 600px; margin: 18px auto 0; }
+.bf-ticket {
+  position: relative; height: 172px;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  border-radius: 14px; overflow: hidden;
+  border: 2px dashed rgba(248, 212, 92, 0.55);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(248, 212, 92, 0.16), transparent 60%),
+    #1A1A1A;
+  outline: none;
+}
+.bf-prize {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 12px 18px;
+}
+.bf-prize__big {
+  font-size: clamp(22px, 4.6vw, 36px); font-weight: 800;
+  line-height: 1.08; letter-spacing: -0.01em; text-transform: uppercase;
+  text-wrap: balance;
+}
+.bf-prize__save { margin-top: 12px; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; color: var(--bf-yellow); text-transform: uppercase; }
+.bf-ticket--revealed .bf-prize { animation: bf-zoom 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
+@keyframes bf-zoom { from { transform: scale(0.85); } to { transform: none; } }
+
+.bf-foil {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  touch-action: none; cursor: crosshair;
+  transition: opacity 0.6s ease;
+}
+.bf-foil--gone { opacity: 0; pointer-events: none; }
+/* A glint that sweeps the foil so it reads as something to touch. */
+.bf-shine {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+  background-size: 250% 100%;
+  animation: bf-shine 2.8s ease-in-out infinite;
+  mix-blend-mode: soft-light;
+}
+.bf-ticket .bf-foil { z-index: 1; }
+@keyframes bf-shine { 0% { background-position: 120% 0; } 60%, 100% { background-position: -120% 0; } }
+
+.bf-sub { margin-top: 14px; font-size: 15px; color: rgba(255, 255, 255, 0.8); }
+.bf-skip {
+  margin-top: 12px; border: 0; background: none; padding: 4px 6px;
+  color: rgba(255, 255, 255, 0.7); font: inherit; font-size: 13.5px;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.bf-skip:hover { color: #fff; }
+.bf-clock {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 12px; padding: 6px 13px; border-radius: 999px;
+  background: rgba(248, 212, 92, 0.12); color: var(--bf-yellow);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.bf-clock__dot { width: 7px; height: 7px; border-radius: 50%; background: #EF4444; animation: bf-blink 1.2s ease-in-out infinite; }
+@keyframes bf-blink { 50% { opacity: 0.25; } }
+
+/* ── Confetti on reveal ── */
+.bf-confetti { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
+.bf-confetti i {
+  position: absolute; left: 0; top: 0; border-radius: 1px; opacity: 0;
+  animation: bf-burst 1.3s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+@keyframes bf-burst {
+  0% { transform: translate(-50%, -50%) rotate(0deg) scale(0.6); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 70px)) rotate(var(--rot)) scale(1); opacity: 0; }
+}
+
+/* ── The four deals ── */
+.bf-locked-hint { padding: 16px 18px 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.bf-deals { position: relative; transition: filter 0.5s ease, opacity 0.5s ease; }
+.bf-deals--locked { filter: blur(7px) saturate(0.6); opacity: 0.55; pointer-events: none; user-select: none; }
+.bf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px; }
+.bf-deal {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 18px 16px 16px; text-align: center;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  animation: bf-rise 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.bf-deals--locked .bf-deal { animation: none; }
+@keyframes bf-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.bf-deal--featured { border: 2px solid var(--bf-gold); box-shadow: 0 8px 26px rgba(212, 166, 42, 0.2); }
+.bf-deal__tag { font-size: 13px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-secondary); }
+.bf-deal__jobs { font-size: 20px; font-weight: 700; text-transform: uppercase; }
+.bf-deal__was { font-size: 16px; color: var(--text-muted); }
+.bf-deal__price { font-size: 36px; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+.bf-deal__save { font-size: 16px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--bf-green); }
+.bf-deal__per { font-size: 14px; color: var(--text-secondary); }
+.bf-buy {
+  width: 100%; margin-top: 8px; padding: 13px 12px;
+  border: 0; border-radius: 8px;
+  background: var(--bf-yellow); color: var(--bf-ink);
+  font: inherit; font-size: 16px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+  cursor: pointer; transition: background 0.15s, transform 0.1s;
+}
+.bf-buy:hover:not(:disabled) { background: var(--bf-yellow-hover); }
+.bf-buy:active:not(:disabled) { transform: translateY(1px); }
+.bf-buy:disabled { opacity: 0.7; cursor: progress; }
+.bf-error {
+  margin: 14px 18px 0; padding: 10px 12px; border-radius: 8px;
+  background: var(--danger-bg); color: var(--danger); font-size: 13.5px; font-weight: 600;
+}
+.bf-foot { padding: 0 22px 20px; text-align: center; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
+
+/* Wide screens: all four deals in one row, so none is below the fold. */
+@media (min-width: 1000px) {
+  .bf-modal { width: min(980px, 100%); }
+  .bf-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bf-deal__price { font-size: 34px; }
+  .bf-buy { font-size: 15px; padding: 12px 8px; }
+}
+
+/* Phones: one deal per row, laid out sideways so all four fit. */
+@media (max-width: 560px) {
+  .bf-overlay { padding: 8px; padding-top: calc(8px + var(--safe-top, 0px)); padding-bottom: calc(8px + var(--safe-bottom, 0px)); }
+  .bf-head { padding: 22px 14px 18px; }
+  .bf-brand { font-size: 17px; }
+  .bf-sale { font-size: 15px; }
+  .bf-ticket { height: 152px; }
+  .bf-prize__save { font-size: 15px; margin-top: 8px; }
+  .bf-grid { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
+  .bf-deal {
+    display: grid; gap: 2px 10px; padding: 12px 14px;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "tag was" "jobs price" "save per" "buy buy";
+    text-align: left; align-items: baseline;
+  }
+  .bf-deal__tag { grid-area: tag; font-size: 11.5px; }
+  .bf-deal__jobs { grid-area: jobs; font-size: 18px; }
+  .bf-deal__was { grid-area: was; justify-self: end; font-size: 14px; }
+  .bf-deal__price { grid-area: price; justify-self: end; font-size: 28px; }
+  .bf-deal__save { grid-area: save; font-size: 14px; }
+  .bf-deal__per { grid-area: per; justify-self: end; font-size: 13px; }
+  .bf-buy { grid-area: buy; margin-top: 8px; padding: 11px; font-size: 15px; }
+  .bf-foot { padding: 0 14px 16px; }
+}
+
+/* ── Dashboard banner ── */
+.bf-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+  width: 100%; margin-bottom: 16px; padding: 12px 16px;
+  border: 0; border-radius: var(--radius, 12px);
+  background: #111111; color: #fff; text-align: left;
+  font: inherit; cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.bf-banner:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24); }
+.bf-banner__tag {
+  padding: 4px 9px; border-radius: 6px;
+  background: #F8D45C; color: #111;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.bf-banner__text { flex: 1 1 220px; font-size: 14.5px; }
+.bf-banner__save { color: rgba(255, 255, 255, 0.75); }
+.bf-banner__clock { font-size: 13px; font-weight: 700; color: #F8D45C; font-variant-numeric: tabular-nums; }
+.bf-banner__cta { font-size: 13.5px; font-weight: 700; color: #fff; white-space: nowrap; }
+
+/* ── Sale-priced buy buttons ── */
+.bf-buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bf-buttons__tag {
+  padding: 5px 9px; border-radius: 6px; border: 0; cursor: pointer;
+  background: #111; color: #F8D45C;
+  font: inherit; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.bf-mini {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  background: #F8D45C; color: #111;
+  font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.bf-mini s { opacity: 0.55; font-weight: 500; }
+.bf-mini strong { font-weight: 800; }
+.bf-mini:hover:not(:disabled) { background: #F3C833; }
+.bf-mini:disabled { opacity: 0.7; cursor: progress; }
+.bf-mini--featured { box-shadow: 0 0 0 2px #D4A62A; }
+.bf-error--inline { margin: 0; padding: 4px 8px; width: 100%; font-size: 12px; }
+
+/* ── Compact rows ── */
+.bf-list { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--bg-card); text-align: left; }
+.bf-list__head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  padding: 10px 12px; background: #111; color: #fff; font-size: 13.5px;
+}
+.bf-list__sale { color: #F8D45C; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; font-size: 12px; }
+.bf-list__title { flex: 1 1 auto; font-weight: 700; }
+.bf-list__clock { font-size: 12px; color: #F8D45C; font-variant-numeric: tabular-nums; }
+.bf-row {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
+  padding: 10px 12px; border-top: 1px solid var(--border);
+  color: var(--text-primary); font-size: 13.5px;
+}
+.bf-row:first-of-type { border-top: 0; }
+.bf-row--featured { background: color-mix(in srgb, #D4A62A 9%, transparent); }
+.bf-row__tag { margin-left: 4px; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+.bf-row__per { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.bf-row__price { white-space: nowrap; }
+.bf-row__price s { color: var(--text-muted); font-size: 12px; margin-right: 3px; }
+.bf-row__price strong { font-size: 15px; font-weight: 800; }
+.bf-row__buy {
+  padding: 7px 14px; border-radius: 7px; border: 0; cursor: pointer;
+  background: #F8D45C; color: #111; font: inherit; font-size: 13px; font-weight: 800;
+}
+.bf-row__buy:hover:not(:disabled) { background: #F3C833; }
+.bf-row__buy:disabled { opacity: 0.7; cursor: progress; }
+.bf-list .bf-error { margin: 0; border-radius: 0; }
+@media (max-width: 420px) {
+  .bf-row { grid-template-columns: 1fr auto; }
+  .bf-row__buy { grid-column: 1 / -1; padding: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bf-modal, .bf-deal, .bf-ticket--revealed .bf-prize, .bf-shine, .bf-clock__dot { animation: none; }
+  .bf-foil, .bf-deals, .bf-banner { transition: none; }
+}
