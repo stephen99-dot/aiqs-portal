@@ -202,6 +202,8 @@ export default function BuilderPackPage() {
   const [dayRateOn, setDayRateOn] = useState(false);
   const [dayRate, setDayRate] = useState({ label: 'Project management', days: 0, rate_per_day: 0 });
   const [rounding, setRounding] = useState(0);
+  // What the client sees: every line ('full'), or one price per section ('sections').
+  const [detail, setDetail] = useState('full');
   // Provisional sums carried by the source tender (a lump block, exclusive of
   // OH&P). Added flat to the bottom line so the client copy matches the tender.
   const [provisionalSum, setProvisionalSum] = useState(0);
@@ -290,6 +292,7 @@ export default function BuilderPackPage() {
           if (saved.day_rate_on != null) setDayRateOn(saved.day_rate_on);
           if (saved.day_rate && typeof saved.day_rate === 'object') setDayRate(saved.day_rate);
           if (saved.rounding != null) setRounding(saved.rounding);
+          if (saved.detail === 'sections' || saved.detail === 'full') setDetail(saved.detail);
           if (saved.provisional_sum != null) setProvisionalSum(saved.provisional_sum);
         }
         // First visit to this bill (nothing saved yet): pre-fill the per-section
@@ -569,7 +572,7 @@ export default function BuilderPackPage() {
           prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
           provisional_sum: provisionalSum,
           day_rate: dayRateOn ? dayRate : null,
-          rounding,
+          rounding, detail,
           edited_sections: editsForBody(),
         }),
       });
@@ -615,7 +618,7 @@ export default function BuilderPackPage() {
           prelims_pct:    prelimsMode === 'pct'  ? prelimsPct    : 0,
           provisional_sum: provisionalSum,
           day_rate: dayRateOn ? dayRate : null,
-          rounding,
+          rounding, detail,
           edited_sections: editsForBody(),
         }),
       });
@@ -652,6 +655,7 @@ export default function BuilderPackPage() {
       day_rate_on: dayRateOn,
       day_rate: dayRate,
       rounding,
+      detail,
     },
   });
 
@@ -1018,6 +1022,7 @@ export default function BuilderPackPage() {
                 contingency={contingency} setContingency={setContingency}
                 vat={vat} setVat={setVat}
                 rounding={rounding} setRounding={setRounding}
+                detail={detail} setDetail={setDetail}
                 prelimsMode={prelimsMode} setPrelimsMode={setPrelimsMode}
                 prelimsAmount={prelimsAmount} setPrelimsAmount={setPrelimsAmount}
                 prelimsPct={prelimsPct} setPrelimsPct={setPrelimsPct}
@@ -1320,7 +1325,7 @@ export default function BuilderPackPage() {
                     provisional={builderProvisional} optional={builderOptional}
                     builderMargin={builderMargin} materialsMarkup={materialsMarkup} sym={sym}
                     branding={branding} logoUrl={logoUrl} projectName={project ? project.title : ''} />
-                : <ClientPreview rows={clientRows} sym={sym}
+                : <ClientPreview rows={clientRows} sym={sym} detail={detail}
                     summaryLines={summaryLines} exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat}
                     extras={separateBlocks}
                     ohpApplied={ohpApplied}
@@ -1622,7 +1627,7 @@ function BuilderControls({
 
 function ClientControls({
   defaultOhp, setDefaultOhp, profit, setProfit, contingency, setContingency, vat, setVat,
-  rounding, setRounding, prelimsMode, setPrelimsMode,
+  rounding, setRounding, detail = 'full', setDetail, prelimsMode, setPrelimsMode,
   prelimsAmount, setPrelimsAmount, prelimsPct, setPrelimsPct,
   dayRateOn, setDayRateOn, dayRate, setDayRate,
   provisionalSum, setProvisionalSum,
@@ -1674,6 +1679,28 @@ function ClientControls({
         <select value={rounding} onChange={(e) => setRounding(parseInt(e.target.value, 10))} style={selectStyle}>
           {ROUNDING_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      </Field>
+
+      <Field label="What the client sees">
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          {[{ v: 'full', l: 'Full breakdown' }, { v: 'sections', l: 'Section totals only' }].map((o) => (
+            <button key={o.v} type="button" onClick={() => setDetail && setDetail(o.v)}
+              style={{
+                flex: 1, padding: '6px 8px', borderRadius: 6,
+                fontSize: 11.5, fontWeight: 700,
+                background: detail === o.v ? '#A855F7' : 'transparent',
+                color: detail === o.v ? '#fff' : 'var(--text-muted)',
+                border: '1px solid ' + (detail === o.v ? '#A855F7' : 'var(--border)'),
+                cursor: 'pointer',
+              }}
+            >{o.l}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          {detail === 'sections'
+            ? 'One price per section and nothing underneath it: no quantities, rates or line items. The download, the preview and the link you share all follow. The bottom line is the same either way.'
+            : 'Every line with its quantity and rate, your margin baked in.'}
+        </div>
       </Field>
 
       <Field label="Preliminaries">
@@ -2106,7 +2133,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, e
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        This is what your client will see — the same layout as the sheet they download. Your margin is baked into the rates; nothing is shown separately.
+        This is what your client will see — the same layout as the sheet they download. Your margin is baked into the rates; nothing is shown separately.{detail === 'sections' ? ' Section totals only: the download and the shared link carry one price per section, with no line items.' : ''}
         {extras.length > 0 && ' Provisional sums and optional extras sit below the total, each with its own VAT line, and are not part of it.'}
       </p>
       <ClientCopySheet

@@ -1221,22 +1221,34 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     const hasProvSection = parsed.sections.some((s) => s.provisional);
     const isSeparate = (s) => !!(s.provisional || s.optional);
     const separateLabel = (s) => (s.provisional ? ' (provisional sums — not included in the total)' : ' (optional extras — not included in the total)');
+    // detail 'sections': one priced line per section, nothing underneath — the
+    // same totals as the full breakdown, so the bottom line never moves.
+    const sectionsOnly = b.detail === 'sections';
     for (const s of parsed.sections) {
       const sectionLabel = (s.number ? s.number + ' — ' : '') + (s.title || 'Section');
       // Every section takes its uplift, the blocks below the total included;
       // only the contingency / prelims-% base leaves them out.
       const factor = factorFor(s.number);
+      let secTotal = 0; let secLabour = 0; let secMaterials = 0;
       for (const it of s.items) {
         if (!(it.description || '').trim()) continue;
         const base = ((num(it.labour)) + (num(it.materials))) || num(it.total);
         if (!isSeparate(s)) originalNet += base;
         const lineTotal = roundMoney(base * factor);
         const qty = num(it.qty) > 0 ? num(it.qty) : 1;
+        if (sectionsOnly) { secTotal += lineTotal; secLabour += num(it.labour); secMaterials += num(it.materials); continue; }
         (isSeparate(s) ? separateLines : lines).push({
           section: sectionLabel + (isSeparate(s) ? separateLabel(s) : ''),
           item: it.itemRef || '', description: it.description, unit: it.unit || 'item',
           qty, rate: round2(lineTotal / qty), labour: num(it.labour), materials: num(it.materials),
           line_total: round2(lineTotal),
+        });
+      }
+      if (sectionsOnly && secTotal !== 0) {
+        (isSeparate(s) ? separateLines : lines).push({
+          section: sectionLabel + (isSeparate(s) ? separateLabel(s) : ''),
+          item: s.number ? String(s.number) : '', description: 'All work in this section, as described in the bill of quantities', unit: 'item',
+          qty: 1, rate: round2(secTotal), labour: round2(secLabour), materials: round2(secMaterials), line_total: round2(secTotal),
         });
       }
     }
