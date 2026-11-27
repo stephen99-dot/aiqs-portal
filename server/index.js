@@ -165,6 +165,8 @@ app.use('/api/surveys', require('./roomSurveyRoutes'));
 // resume, customer portal. Buying is a Stripe Payment Link; the webhook above
 // writes the plan onto the account. See maxPlans.js and billingRoutes.js.
 app.use('/api/billing', require('./billingRoutes'));
+// Black Friday 2026: the deals and a Stripe Checkout stamped with the credits.
+app.use('/api/black-friday', require('./blackFriday').router);
 // Accounts that had early access before the packages existed keep the
 // Visualiser as a grant (one-off; an admin can take it off per account).
 try { require('./maxPlans').backfillVisualiserGrants(); } catch (e) { console.warn('[MAX plans] backfill:', e.message); }

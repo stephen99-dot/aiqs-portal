@@ -16,6 +16,8 @@ import {
   Field, Input, Select, Textarea, Modal,
 } from '../ui';
 import { gbp } from '../utils/planPrice';
+import { useBlackFriday } from '../utils/blackFriday';
+import { BlackFridayDealList } from '../components/BlackFriday';
 
 const BOQ_5_PACK_LINK = 'https://buy.stripe.com/00w7sLgjSenSdZ6aig73G0h';
 const BOQ_10_PACK_LINK = 'https://buy.stripe.com/9B628raZy2Fa4ow62073G0f';
@@ -138,6 +140,7 @@ function PackCard({ name, price, priceColor, tintBg, tintBorder, blurb, cta }) {
 
 export default function SubmitDrawingsPage() {
   const { user } = useAuth();
+  const blackFriday = useBlackFriday(user);
   const [credits, setCredits] = useState(null);
   const [projectType, setProjectType] = useState('');
   const [siteAddress, setSiteAddress] = useState('');
@@ -720,6 +723,7 @@ export default function SubmitDrawingsPage() {
             You're out of BOQ credits. Top up with a one-off pack — no subscription, no commitment.
           </div>
 
+          {blackFriday ? <BlackFridayDealList sale={blackFriday} /> : (<>
           <PackCard
             name="5 BOQ pack" price={`${gbp(349)}`} priceColor="var(--accent)"
             tintBg="linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))"
@@ -771,6 +775,7 @@ export default function SubmitDrawingsPage() {
               }
             />
           </div>
+          </>)}
 
           <Button variant="ghost" size="sm" full style={{ marginTop: 12 }} onClick={() => setShowTopUpModal(false)}>
             Maybe later

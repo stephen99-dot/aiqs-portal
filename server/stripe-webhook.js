@@ -471,6 +471,10 @@ function handleInvoicePaymentComplete(session) {
 // on top at checkout). Overridable via STRIPE_BOQ_PACKS env var as JSON,
 // e.g. '{"15000":1,"34900":5,"58000":10}'.
 function resolvePackCredits(session) {
+  // A checkout this server created (the Black Friday deals) says exactly how
+  // many credits it is for — trust that before the amount, which can collide:
+  // the sale's 10 jobs for £349 is the same amount as the normal 5-pack.
+  const stamped = require('./blackFriday').creditsFromMetadata(session);
   // Pence -> BOQ credits. Keep in step with the live pack prices:
   //   £150 single = 1, £349 five-pack = 5, £580 ten-pack = 10, £980 twenty-pack = 20.
   // The £79/£99/£300 entries are legacy/subscriber prices kept for back-compat.
@@ -483,6 +487,7 @@ function resolvePackCredits(session) {
       console.error('[Stripe] Bad STRIPE_BOQ_PACKS JSON, using defaults:', e.message);
     }
   }
+  if (stamped) return { credits: stamped, PACKS };
   const credits = PACKS[session.amount_total] || (session.amount_subtotal ? PACKS[session.amount_subtotal] : 0) || 0;
   return { credits, PACKS };
 }
@@ -554,7 +559,8 @@ function grantPackCredits(session, customerEmail) {
   // Both sides of the sale get told. The BUYER gets the branded purchase
   // confirmation; the ADMIN inbox gets the sale notification with the
   // resulting balance. Fire-and-forget — never blocks the webhook.
-  const packName = credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`;
+  const packName = (credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`)
+    + (session.metadata && session.metadata.promo === require('./blackFriday').PROMO ? ' — Black Friday' : '');
   sendPurchaseEmail({
     email: user.email,
     name: user.full_name,
