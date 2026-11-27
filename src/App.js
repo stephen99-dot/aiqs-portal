@@ -16,6 +16,7 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import ChatPage from './pages/ChatPage';
 import AdminPage from './pages/AdminPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import MaxWelcomePage from './pages/MaxWelcomePage';
 import UpgradePage from './pages/UpgradePage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyRatesPage from './pages/MyRatesPage';
@@ -49,6 +50,11 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
   if (loading) return <div className="loading-screen"><div className="loading-mark">QS</div></div>;
   if (!user) {
+    // Back from a MAX checkout on the website, not signed in: say what was
+    // bought and whether to log in or create the account, not a bare login.
+    if (location.pathname === '/payment-success' && new URLSearchParams(location.search).get('plan') === 'max') {
+      return <Navigate to={'/max-welcome' + location.search} replace />;
+    }
     // Come back here after signing in (the website links straight to
     // /upgrade?plan=…, for instance).
     const here = location.pathname + location.search;
@@ -99,6 +105,8 @@ function AppInner() {
         {/* Where the server lands the browser after Google sign-in (?token=) */}
         <Route path="/auth/google/success" element={<OAuthSuccessPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
+        {/* After a MAX checkout from the website, not signed in — public. */}
+        <Route path="/max-welcome" element={<MaxWelcomePage />} />
         {/* Public variation approval — outside ProtectedRoute on purpose. */}
         <Route path="/v/:token" element={<VariationApprovalPage />} />
         {/* Public quote/invoice views — kept so links already sent to

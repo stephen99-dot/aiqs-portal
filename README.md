@@ -67,7 +67,19 @@ The Stripe webhook writes the plan onto the user row (`max_plan`, `max_plan_stat
 `STRIPE_MAX_VISUALISER_PRICE_IDS`) or, when those are unset, by amount and interval in GBP.
 `node scripts/create-max-plans.js` creates the products, prices and payment links at Stripe and
 prints the env vars (`MAX_PAYMENT_LINK_MONTHLY` / `_YEARLY`, `MAX_VISUALISER_PAYMENT_LINK_MONTHLY`
-/ `_YEARLY`). Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
+/ `_YEARLY`). Every plan starts with a **7-day free trial** (`TRIAL_DAYS` in `server/maxPlans.js`,
+or `MAX_TRIAL_DAYS` on Render; `0` turns it off). The trial lives on the payment links:
+`node scripts/create-max-plans.js --trial` (in the Render shell) puts it on the four existing
+links in place, and the Plans page, the welcome email and the admin counts show it (status
+`trialing`, with `max_plan_renews_at` the day the first payment is taken). The website's package buttons go straight
+to Stripe through `/api/public/max/start?plan=&interval=` (it redirects to the payment link
+set on Render). After checkout an existing account gets the "MAX is unlocked" email; an email
+with no account gets a "create your account" email (`server/maxEmails.js`), and the plan attaches
+itself when the account is made, by email or Google. A buyer who is not signed in lands on
+`/max-welcome`, which reads the checkout (`/api/public/max/checkout?session_id=`) and says
+"log in" or "create your account with you@…" — run
+`node scripts/create-max-plans.js --redirect https://aiqs-portal.onrender.com` once so the links
+pass the checkout id back. Entitlements come from `maxPlans.entitlements(user)`: **MAX** for an admin, a live
 plan, early access or the rollout; **the Visualiser** only for an admin, the MAX + Visualiser plan
 or a complimentary grant (`feature_overrides {"visualiser": true}`, Users → the client → MAX).
 `/api/surveys/*` and `/api/max/*` need MAX; `POST …/render` additionally needs the Visualiser
@@ -307,6 +319,31 @@ each section's trade, and the Builder tab and the Builder Pack xlsx's Trade Summ
 *By trade package* table. The "Update this bill" assistant accepts `controls.trade_markup`
 ("10% on the electrician and plumber"), `section_uplift` and `remember_trade_markup`, which the
 page saves to the pricing preferences on Apply.
+
+**Provisional sums and optional extras: below the total, never in it.** `parseBOQ` reads a
+provisional-sums block wherever the bill prints it — including after the summary, under a heading
+such as *L PROVISIONAL SUMS (at cost, excluded from the total above)* — as its own section
+(`provisional: true`). Every bill on the Builder Pack page also carries an *Optional extras*
+section (`optional: true`, number `OE`): empty until the builder adds the work the client can
+choose to take, and printed only when it has lines. On the client copy both kinds take the same
+overhead and profit uplift as the priced sections (and a per-section override, when one is set),
+but no contingency or prelims %; on the Builder Pack they are carried at cost, with no builder
+margin or materials markup. Both sit **below** the total as their own elements, so the figure
+the client reads as the total is the construction cost alone. The client
+copy (xlsx, on-screen preview and the shared quote's totals) reads *Net construction cost → Total
+(excl. VAT) → VAT → Total (incl. VAT)*, then a *Not included in the total above* block: *Provisional
+sums*, its own VAT line and incl.-VAT figure, then *Optional extras* the same way; the masthead
+says what is not in the headline. The Builder Pack's Trade Summary prints the priced sections and
+*GRAND TOTAL — net construction*, then each block at cost closed by its own total (*TOTAL
+PROVISIONAL SUMS*, *TOTAL OPTIONAL EXTRAS*); the by-trade table carries them as memo rows after
+*ALL TRADES* (which equals the grand total); every line is on its own *Provisional Sums* / *Optional
+Extras* tab, and nothing from either reaches the materials or labour schedules. Only the block's
+own closing total (*Total provisional sums*, *Provisional sums total …*) ends a parsed PS block,
+and that row is never a document total; a block that cannot be itemised falls back to the flat
+`provisional_sum` lump, shown the same way. The "Update this bill" assistant adds to the optional
+section by its `section_number`, can create one with `new_sections[].optional`, and can set a
+per-section uplift on either kind. A Builder Pack working state saved before the block was read
+gets it back on the next open (`addMissingProvisionalSections`), the user's own edits untouched.
 
 **Same layout every time.** Section titles from the model ("1. Substructure & Foundations",
 "SUBSTRUCTURE", "Substructure") normalise to one canonical name (`canonicalSectionName`,

@@ -37,6 +37,13 @@ const FREE_OFFER = {
 };
 
 const MAX_PACKAGES = { max: { monthly: 59, yearly: 590 }, max_visualiser: { monthly: 79, yearly: 790 } };
+// The free trial on every MAX package — the same length the Plans page and the
+// Stripe payment links use (server/maxPlans.js), so the assistant never offers
+// a trial that checkout does not give.
+const MAX_TRIAL_DAYS = require('./maxPlans').trialDays();
+const MAX_TRIAL_NOTE = MAX_TRIAL_DAYS > 0
+  ? ` Every MAX package starts with a ${MAX_TRIAL_DAYS}-day free trial: Stripe takes the card at checkout but charges nothing until the trial ends, and cancelling from the Plans page before then means paying nothing.`
+  : '';
 
 const SYSTEM_PROMPT = `You are the AI QS assistant on theaiqs.co.uk, the public website of AI QS (TheAIQS Ltd), an AI-powered quantity surveying service. The company is UK-based and prices projects worldwide.
 
@@ -65,7 +72,7 @@ MAX — THE AI ESTIMATOR (new)
 - The Visualiser: take a photo of the room, say what the customer wants, and it paints the finished room onto the photo — new tiles, a new bath, the walls done — as a before-and-after, in the app and in the report. Marked as an AI concept, not to scale.
 - Talk to MAX: dictate the job or a site note with the mic (the iPhone's own speech recognition in the app); MAX answers in writing.
 - The app is on the App Store (iPhone) and Google Play.
-- MAX PACKAGES (quote these exactly): AI QS MAX is £${MAX_PACKAGES.max.monthly} a month or £${MAX_PACKAGES.max.yearly} a year; AI QS MAX + Visualiser is £${MAX_PACKAGES.max_visualiser.monthly} a month or £${MAX_PACKAGES.max_visualiser.yearly} a year. Paying yearly is two months free. Cancel any time. They are bought from the Plans page inside the portal after creating a free account. The BOQ prices below are separate from the MAX packages: a MAX package does not include BOQs from drawings, and BOQ credits do not include MAX.
+- MAX PACKAGES (quote these exactly): AI QS MAX is £${MAX_PACKAGES.max.monthly} a month or £${MAX_PACKAGES.max.yearly} a year; AI QS MAX + Visualiser is £${MAX_PACKAGES.max_visualiser.monthly} a month or £${MAX_PACKAGES.max_visualiser.yearly} a year. Paying yearly is two months free.${MAX_TRIAL_NOTE} Cancel any time. They are bought from the Plans page inside the portal after creating a free account. The BOQ prices below are separate from the MAX packages: a MAX package does not include BOQs from drawings, and BOQ credits do not include MAX.
 
 PRICING (quote these exactly, never invent a figure)
 - Single BOQ, pay as you go: £${PRICING.single.price} per BOQ. Chatting and measurements are free — you only pay when documents are generated.
@@ -192,4 +199,4 @@ function sanitiseHistory(raw) {
 const FALLBACK_REPLY =
   'Sorry — I could not reach the assistant just then. Send your drawings through the Send Drawings page and we will come straight back to you, or email hello@crmwizardai.com.';
 
-module.exports = { SYSTEM_PROMPT, PRICING, PACK_SIZES, FREE_OFFER, sanitiseHistory, marketNote, FALLBACK_REPLY, MAX_MESSAGE_CHARS, MAX_TURNS, MAX_TOTAL_CHARS };
+module.exports = { SYSTEM_PROMPT, MAX_TRIAL_DAYS, PRICING, PACK_SIZES, FREE_OFFER, sanitiseHistory, marketNote, FALLBACK_REPLY, MAX_MESSAGE_CHARS, MAX_TURNS, MAX_TOTAL_CHARS };

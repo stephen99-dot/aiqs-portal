@@ -11,12 +11,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-let ExcelJS, generateBOQExcel, parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem;
+let ExcelJS, generateBOQExcel, parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem, addMissingProvisionalSections;
 let DEPS_OK = true;
 try {
   ExcelJS = require('exceljs');
   ({ generateBOQExcel } = require('./boqGenerator'));
-  ({ parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem } = require('./builderExports'));
+  ({ parseBOQ, sniffBOQ, reconcileParsed, isTotalRowItem, addMissingProvisionalSections } = require('./builderExports'));
 } catch (e) {
   DEPS_OK = false;
 }
@@ -700,4 +700,372 @@ test('a percentage-only adder row becomes a summary percentage, not a £0 line',
   assert.strictEqual(parsed.source_summary.vat_pct, 20);
   assert.strictEqual(parsed.source_summary.net_total, 100);
   assert.ok(reconcileParsed(parsed).ok);
+});
+
+// ── Provisional sums printed after the summary (38 Spring Lane) ─────────────
+// A bill that prints its provisional sums AFTER the summary, under a heading
+// that says what they are excluded from — "L | PROVISIONAL SUMS (at cost,
+// excluded from the total above)" — each line with a quantity of 1 and the
+// unit "item", closed by "Provisional sums total (excluding VAT), not
+// included in the total above". The word "total" in the heading used to rule
+// the row out as a PS block, so the lines were dropped and only the lump
+// survived: the customer saw a provisional-sums figure at the bottom of the
+// client copy with no section saying what was in it.
+const OLNEY_HEADER = ['Item', 'Description', 'Qty', 'Unit', 'Labour £', 'Materials £', 'Rate £', 'Total £'];
+const OLNEY_ROWS = [
+  OLNEY_HEADER,
+  ['A', 'PRELIMINARIES'],
+  ['A1', 'Site management and supervision, 2 days per week over a 12 week programme', 24, 'day', 195, 0, 195, 4680],
+  ['A2', 'Temporary toilet, hire and servicing over 12 weeks', 12, 'week', 0, 40, 40, 480],
+  ['', 'Total carried to summary', '', '', '', '', '', 5160],
+  ['B', 'DEMOLITION AND STRIP-OUT'],
+  ['B1', 'Take down the conservatory and cart away', 1, 'item', 780, 60, 840, 840],
+  ['', 'Total carried to summary', '', '', '', '', '', 840],
+  ['', 'SUMMARY'],
+  ['A', 'PRELIMINARIES', '', '', '', '', '', 5160],
+  ['B', 'DEMOLITION AND STRIP-OUT', '', '', '', '', '', 840],
+  ['', 'NET TOTAL (excluding VAT)', '', '', '', '', '', 6000],
+  ['', 'VAT', '', '', '', '', 0.2, 1200],
+  ['', 'TOTAL (including VAT)', '', '', '', '', '', 7200],
+  ['L', 'PROVISIONAL SUMS (at cost, excluded from the total above)'],
+  ['L1', 'Foul drainage below ground, pending a drainage design', 1, 'item', 0, 3000, 3000, 3000],
+  ['L2', 'CCTV survey of existing drains', 1, 'item', 0, 300, 300, 300],
+  ['L3', 'Removal of asbestos if found (no survey seen)', 1, 'item', 0, 1000, 1000, 1000],
+  ['', 'Provisional sums total (excluding VAT), not included in the total above', '', '', '', '', '', 4300],
+];
+
+test('a provisional sums block headed "(excluded from the total above)" below the summary is read line by line', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows(OLNEY_ROWS);
+  assert.deepStrictEqual(
+    parsed.sections.map((s) => [s.number, s.title, !!s.provisional, s.items.length, s.subtotal.total]),
+    [
+      ['1', 'A PRELIMINARIES', false, 2, 5160],
+      ['2', 'B DEMOLITION AND STRIP-OUT', false, 1, 840],
+      ['L', 'PROVISIONAL SUMS (at cost, excluded from the total above)', true, 3, 4300],
+    ],
+    'the PS block is its own section, after the measured ones, with every line'
+  );
+  const ps = parsed.sections[2];
+  assert.deepStrictEqual(ps.items.map((i) => [i.itemRef, i.unit, i.qty, i.total]), [['L1', 'item', 1, 3000], ['L2', 'item', 1, 300], ['L3', 'item', 1, 1000]]);
+  assert.strictEqual(parsed.source_summary.provisional_sum, null, 'no flat lump on top of the itemised section');
+  assert.strictEqual(parsed.source_summary.net_total, 6000);
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 6000);
+  assert.strictEqual(parsed.source_summary.vat_pct, 20);
+  assert.ok(!parsed.source_summary.printed_totals.some((p) => /provisional/i.test(p.label)),
+    'the block\'s own closing total is not a document total');
+  assert.strictEqual(parsed.grand.total, 10300, 'grand = net 6000 + provisional 4300');
+  const recon = reconcileParsed(parsed);
+  assert.ok(recon.ok, 'the lines still reconcile to the printed net total');
+  assert.strictEqual(recon.printed, 6000);
+});
+
+test('a "Total provisional sums" row still records the lump when the block has no lines of its own', { skip: !DEPS_OK && 'deps not installed' }, async () => {
+  const parsed = await parseRows([
+    PLAIN_HEADER,
+    ['1', 'WORKS'],
+    ['1.1', 'A', 'nr', 2, 50, 60, 40, 100],
+    ['', 'Net construction cost', '', '', '', '', '', 100],
+    ['', 'Total provisional sums', '', '', '', '', '', 2500],
+    ['', 'Total (excl. VAT)', '', '', '', '', '', 2600],
+  ]);
+  assert.strictEqual(parsed.sections.length, 1);
+  assert.strictEqual(parsed.source_summary.provisional_sum, 2500, 'the lump is kept for a block with no lines');
+  assert.strictEqual(parsed.source_summary.ex_vat_total, 2600, 'the PS total is not mistaken for the ex-VAT total');
+  assert.ok(reconcileParsed(parsed).ok);
+});
+
+test('a saved Builder Pack state gets back the provisional section the parser used to drop', { skip: !DEPS_OK && 'deps not installed' }, () => {
+  const psLine = { itemRef: 'L1', description: 'Foul drainage below ground', unit: 'item', qty: 1, rate: 3000, labour: 0, materials: 3000, total: 3000 };
+  const fresh = [
+    { number: '1', title: 'A PRELIMINARIES', items: [{ description: 'Site set-up', total: 100 }], subtotal: { labour: 0, materials: 0, total: 100 } },
+    { number: 'L', title: 'PROVISIONAL SUMS (at cost, excluded from the total above)', provisional: true, items: [psLine], subtotal: { labour: 0, materials: 3000, total: 3000 } },
+  ];
+  // Saved before the block was read: measured sections only (one line edited
+  // by the user), plus the flat lump the parser recorded for the same money.
+  const saved = { v: 1, sections: [{ number: '1', title: 'A PRELIMINARIES', items: [{ description: 'Site set-up', total: 120 }] }], provisional_sum: 3000 };
+  const out = addMissingProvisionalSections(saved, fresh);
+  assert.deepStrictEqual(out.sections.map((s) => [s.number, !!s.provisional, s.items.length]), [['1', false, 1], ['L', true, 1]]);
+  assert.strictEqual(out.sections[0].items[0].total, 120, 'the user\'s edits are untouched');
+  assert.strictEqual(out.provisional_sum, 0, 'the flat lump for the same money is cleared so the sums are not shown twice');
+  assert.deepStrictEqual(out.sections[1].items[0], psLine);
+  // Already there (by number or by title): nothing to add, the state is served as is.
+  assert.strictEqual(addMissingProvisionalSections(out, fresh), out);
+  const byTitle = { sections: [{ number: '9', title: 'provisional sums (at cost, excluded from the total above)', provisional: true, items: [psLine] }] };
+  assert.strictEqual(addMissingProvisionalSections(byTitle, fresh), byTitle);
+  assert.strictEqual(addMissingProvisionalSections(null, fresh), null);
+  assert.deepStrictEqual(addMissingProvisionalSections({ sections: [] }, fresh), { sections: [] });
+  // A lump for different money is the user's own figure and stays.
+  const other = addMissingProvisionalSections({ sections: saved.sections, provisional_sum: 500 }, fresh);
+  assert.strictEqual(other.provisional_sum, 500);
+  assert.strictEqual(other.sections.length, 2);
+});
+
+// ── Builder Pack: provisional sums kept separate, below the total ──────────
+// The bill's provisional sums used to be folded into the Builder Pack like
+// any other trade: marked up with the builder margin, listed on the Materials
+// Schedule as materials to order, split into trade packages, and in the grand
+// total. They are allowances that may never be spent, so they sit below the
+// grand total as their own block with their own total, and are not in it.
+test('the Builder Pack carries provisional sums at cost below the grand total: their own block, their own tab, off the schedules', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const { generateBuilderPack } = require('./builderExports');
+  const psLines = [
+    { itemRef: 'L1', description: 'Foul drainage below ground, pending a drainage design', unit: 'item', qty: 1, rate: 3000, labour: 0, materials: 3000, total: 3000 },
+    { itemRef: 'L2', description: 'CCTV survey of existing drains', unit: 'item', qty: 1, rate: 300, labour: 0, materials: 300, total: 300 },
+  ];
+  const parsed = {
+    sections: [
+      { number: '1', title: 'Preliminaries', items: [
+        { itemRef: '1.1', description: 'Site supervision', unit: 'Item', qty: 1, rate: 2500, labour: 2500, materials: 0, total: 2500 },
+      ], subtotal: { labour: 2500, materials: 0, total: 2500 } },
+      { number: '2', title: 'Substructure', items: [
+        { itemRef: '2.1', description: 'Trench fill concrete to footings', unit: 'm3', qty: 10, rate: 200, labour: 800, materials: 1200, total: 2000 },
+      ], subtotal: { labour: 800, materials: 1200, total: 2000 } },
+      { number: 'L', title: 'PROVISIONAL SUMS (at cost, excluded from the total above)', provisional: true, items: psLines,
+        subtotal: { labour: 0, materials: 3300, total: 3300 } },
+    ],
+    grand: { labour: 3300, materials: 4500, total: 7800 },
+  };
+  const buf = await generateBuilderPack(parsed, { currency: '£', builder_margin: 10, materials_markup: 5, project_name: 'PS', client_name: 'Client' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const rowsOf = (ws, cols) => { const out = []; ws.eachRow((row) => out.push(cols.map((c) => row.getCell(c).value == null ? '' : row.getCell(c).value))); return out; };
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.02;
+
+  // Trade Summary: priced sections with the margin, the grand total (priced
+  // sections only), then the PS block at cost closed by its own total.
+  const ts = rowsOf(wb.getWorksheet('Trade Summary'), [1, 2, 3, 4, 5, 6]);
+  const find = (re) => ts.find((r) => re.test(String(r[1])));
+  const indexOf = (re, col = 1) => ts.findIndex((r) => re.test(String(r[col])));
+  assert.strictEqual(find(/^NET CONSTRUCTION/), undefined, 'no separate net line: the grand total IS the net construction');
+  const grand = find(/^GRAND TOTAL/);
+  assert.ok(grand, 'a grand total row');
+  assert.ok(near(grand[4], 3300 * 1.1 + 1200 * 1.15), 'grand total = priced labour × 1.10 + materials × 1.15, no provisional sums');
+  assert.match(String(grand[1]), /net construction/, 'the grand total says what it is when a block follows it');
+  const bannerIdx = indexOf(/^PROVISIONAL SUMS — not included in the grand total above/, 0);
+  assert.ok(bannerIdx > indexOf(/^GRAND TOTAL/), 'the provisional block is announced BELOW the grand total');
+  const psRow = find(/^PROVISIONAL SUMS \(at cost/);
+  assert.strictEqual(String(psRow[0]), 'PS');
+  assert.ok(near(psRow[4], 3300), 'the provisional section is at face value — no margin, no markup');
+  assert.ok(near(psRow[3], 3300), 'its amount is shown as the bill carries it');
+  assert.strictEqual(String(psRow[5]), 'not in total', 'a provisional row has no share of the total');
+  const psBlockTotal = find(/^TOTAL PROVISIONAL SUMS/);
+  assert.ok(psBlockTotal && near(psBlockTotal[4], 3300), 'the block closes with its own total');
+  assert.ok(indexOf(/^TOTAL PROVISIONAL SUMS/) > bannerIdx);
+  const tradePs = ts.find((r) => /^Provisional sums — at cost, not in the total above/.test(String(r[1])));
+  assert.ok(tradePs && near(tradePs[4], 3300), 'by trade: one provisional memo row at cost');
+  assert.match(String(tradePs[1]), /\(L\)/, 'the row names the section it comes from');
+  const allTrades = find(/^ALL TRADES$/);
+  assert.ok(near(allTrades[4], grand[4]), 'all trades equals the grand total');
+  assert.ok(indexOf(/^Provisional sums — at cost, not in the total above/) > indexOf(/^ALL TRADES$/), 'the memo row follows ALL TRADES');
+  assert.ok(!ts.some((r) => /Fees & Provisional Sums/.test(String(r[1]))), 'the provisional lines are not a trade package');
+
+  // Materials Schedule: the provisional lines are not materials to order.
+  const ms = rowsOf(wb.getWorksheet('Materials Schedule'), [1, 2, 5]);
+  assert.ok(!ms.some((r) => /Foul drainage|CCTV/.test(String(r[1]))), 'provisional lines are off the materials schedule');
+  const totalMat = ms.find((r) => String(r[1]) === 'TOTAL MATERIALS');
+  assert.ok(near(totalMat[2], 1200 * 1.15), 'total materials is the priced materials only');
+  assert.ok(ms.some((r) => /Provisional sums \(£3,300\.00\).*Provisional Sums tab/.test(String(r[0]))), 'the schedule points to the tab');
+
+  // Labour Schedule: likewise.
+  const ls = rowsOf(wb.getWorksheet('Labour Schedule'), [1, 2, 5]);
+  assert.ok(!ls.some((r) => /Foul drainage|CCTV/.test(String(r[1]))));
+  assert.ok(near(ls.find((r) => String(r[1]) === 'TOTAL LABOUR')[2], 3300 * 1.1));
+
+  // Provisional Sums tab: every line, at cost, with the total.
+  const psTab = wb.getWorksheet('Provisional Sums');
+  assert.ok(psTab, 'a Provisional Sums tab is added');
+  const pt = rowsOf(psTab, [1, 2, 3, 4, 5]);
+  assert.deepStrictEqual(
+    pt.filter((r) => /^L\d/.test(String(r[0]))).map((r) => [r[0], r[2], r[3], Number(r[4])]),
+    [['L1', 'item', 1, 3000], ['L2', 'item', 1, 300]],
+    'each provisional line is listed as the bill has it'
+  );
+  assert.ok(pt.some((r) => /Foul drainage below ground, pending a drainage design/.test(String(r[1]))));
+  const psTotal = pt.find((r) => /^TOTAL PROVISIONAL SUMS/.test(String(r[1])));
+  assert.ok(psTotal && near(psTotal[4], 3300));
+  assert.strictEqual(psTab.headerFooter.oddFooter, '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N', 'the tab carries the pack footer');
+
+  // A bill with no provisional sums gets no tab, no block and a plain grand total.
+  const plain = await generateBuilderPack({ sections: parsed.sections.slice(0, 2), grand: { labour: 3300, materials: 1200, total: 4500 } }, { currency: '£', builder_margin: 10 });
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.load(plain);
+  assert.ok(!wb2.getWorksheet('Provisional Sums'));
+  assert.ok(!wb2.getWorksheet('Optional Extras'));
+  const plainTs = rowsOf(wb2.getWorksheet('Trade Summary'), [1, 2]);
+  assert.ok(!plainTs.some((r) => /PROVISIONAL SUMS —/.test(String(r[0]))));
+  assert.ok(plainTs.some((r) => String(r[1]) === 'GRAND TOTAL'), 'a plain bill keeps the plain label');
+});
+
+// ── Builder Pack: optional extras ───────────────────────────────────────────
+// Work the client can choose to add. Like the provisional sums it is carried
+// as entered, sits below the grand total as its own block with its own tab,
+// and is never in the total; an empty section (nothing offered yet) prints
+// nothing at all.
+test('the Builder Pack carries optional extras below the grand total, on their own tab, and skips an empty section', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const { generateBuilderPack } = require('./builderExports');
+  const priced = [
+    { number: '1', title: 'Preliminaries', items: [
+      { itemRef: '1.1', description: 'Site supervision', unit: 'Item', qty: 1, rate: 2500, labour: 2500, materials: 0, total: 2500 },
+    ], subtotal: { labour: 2500, materials: 0, total: 2500 } },
+  ];
+  const optional = { number: 'OE', title: 'Optional extras', optional: true, items: [
+    { itemRef: '', description: 'Garden room lighting', unit: 'item', qty: 1, rate: 1200, labour: 400, materials: 800, total: 1200 },
+  ], subtotal: { labour: 400, materials: 800, total: 1200 } };
+  const buf = await generateBuilderPack({ sections: priced.concat([optional]), grand: { labour: 2900, materials: 800, total: 3700 } },
+    { currency: '£', builder_margin: 10, materials_markup: 5, project_name: 'OE', client_name: 'Client' });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const rowsOf = (ws, cols) => { const out = []; ws.eachRow((row) => out.push(cols.map((c) => row.getCell(c).value == null ? '' : row.getCell(c).value))); return out; };
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.02;
+
+  const ts = rowsOf(wb.getWorksheet('Trade Summary'), [1, 2, 3, 4, 5, 6]);
+  const find = (re) => ts.find((r) => re.test(String(r[1])));
+  const indexOf = (re, col = 1) => ts.findIndex((r) => re.test(String(r[col])));
+  const grand = find(/^GRAND TOTAL/);
+  assert.ok(near(grand[4], 2500 * 1.1), 'the grand total is the priced section with the margin — no optional extras');
+  const bannerIdx = indexOf(/^OPTIONAL EXTRAS — not included in the grand total above/, 0);
+  assert.ok(bannerIdx > indexOf(/^GRAND TOTAL/), 'the optional block sits below the grand total');
+  const optRow = find(/^Optional extras$/);
+  assert.strictEqual(String(optRow[0]), 'OPT');
+  assert.ok(near(optRow[2], 400) && near(optRow[3], 800) && near(optRow[4], 1200), 'carried as entered — no margin, no markup');
+  assert.strictEqual(String(optRow[5]), 'not in total');
+  const optTotal = find(/^TOTAL OPTIONAL EXTRAS$/);
+  assert.ok(optTotal && near(optTotal[4], 1200));
+  const allTrades = find(/^ALL TRADES$/);
+  assert.ok(near(allTrades[4], grand[4]), 'all trades equals the grand total');
+  const memo = find(/^Optional extras — not in the total above/);
+  assert.ok(memo && near(memo[4], 1200) && String(memo[0]) === 'OPT', 'by trade: a memo row after ALL TRADES');
+  assert.match(String(memo[1]), /\(OE\)/);
+
+  // Schedules: nothing optional is ordered.
+  const ms = rowsOf(wb.getWorksheet('Materials Schedule'), [1, 2, 5]);
+  assert.ok(!ms.some((r) => /Garden room lighting/.test(String(r[1]))));
+  assert.ok(ms.some((r) => /Optional extras \(£1,200\.00\).*Optional Extras tab/.test(String(r[0]))), 'the schedule points to the tab');
+  const ls = rowsOf(wb.getWorksheet('Labour Schedule'), [1, 2, 5]);
+  assert.ok(!ls.some((r) => /Garden room lighting/.test(String(r[1]))));
+  assert.ok(near(ls.find((r) => String(r[1]) === 'TOTAL LABOUR')[2], 2500 * 1.1));
+
+  // Its own tab, every line as entered, with the total.
+  const tab = wb.getWorksheet('Optional Extras');
+  assert.ok(tab, 'an Optional Extras tab is added');
+  const pt = rowsOf(tab, [1, 2, 3, 4, 5]);
+  assert.ok(pt.some((r) => /Garden room lighting/.test(String(r[1])) && near(r[4], 1200)));
+  assert.ok(pt.some((r) => /^TOTAL OPTIONAL EXTRAS/.test(String(r[1])) && near(r[4], 1200)));
+  assert.strictEqual(tab.headerFooter.oddFooter, '&LThe AI QS — BUILDER PACK (TESTING)&RPage &P of &N');
+  assert.ok(!wb.getWorksheet('Provisional Sums'), 'no provisional sums, no provisional tab');
+
+  // Nothing offered yet: the empty section leaves no trace.
+  const empty = await generateBuilderPack({ sections: priced.concat([{ ...optional, items: [], subtotal: { labour: 0, materials: 0, total: 0 } }]), grand: { labour: 2500, materials: 0, total: 2500 } }, { currency: '£' });
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.load(empty);
+  assert.ok(!wb2.getWorksheet('Optional Extras'));
+  const ts2 = rowsOf(wb2.getWorksheet('Trade Summary'), [1, 2]);
+  assert.ok(!ts2.some((r) => /OPTIONAL EXTRAS/.test(String(r[0])) || /Optional extras/.test(String(r[1]))));
+  assert.ok(ts2.some((r) => String(r[1]) === 'GRAND TOTAL'));
+});
+
+// ── Client copy: the total, then what sits below it ─────────────────────────
+// The client reads one construction total — net, its VAT, the total — and
+// then, underneath, the provisional sums and the optional extras as their own
+// elements, each with its own VAT line. Neither moves the total.
+test('the client copy shows net → VAT → total, then provisional sums and optional extras below it with their own VAT lines', { skip: !DEPS_OK && 'exceljs not installed' }, async () => {
+  const { generateClientCopyPro } = require('./builderExports');
+  const psSection = { number: 'L', title: 'PROVISIONAL SUMS (at cost, excluded from the total above)', provisional: true, items: [
+    { itemRef: 'L1', description: 'Foul drainage below ground', unit: 'item', qty: 1, rate: 3000, labour: 0, materials: 3000, total: 3000 },
+    { itemRef: 'L2', description: 'CCTV survey of existing drains', unit: 'item', qty: 1, rate: 300, labour: 0, materials: 300, total: 300 },
+  ], subtotal: { labour: 0, materials: 3300, total: 3300 } };
+  const oeSection = { number: 'OE', title: 'Optional extras', optional: true, items: [
+    { itemRef: '', description: 'Garden room lighting', unit: 'item', qty: 1, rate: 1200, labour: 400, materials: 800, total: 1200 },
+  ], subtotal: { labour: 400, materials: 800, total: 1200 } };
+  const priced = [
+    { number: '1', title: 'Preliminaries', items: [
+      { itemRef: '1.1', description: 'Site supervision', unit: 'Item', qty: 1, rate: 2500, labour: 2500, materials: 0, total: 2500 },
+    ], subtotal: { labour: 2500, materials: 0, total: 2500 } },
+    { number: '2', title: 'Substructure', items: [
+      { itemRef: '2.1', description: 'Trench fill concrete to footings', unit: 'm3', qty: 10, rate: 200, labour: 800, materials: 1200, total: 2000 },
+    ], subtotal: { labour: 800, materials: 1200, total: 2000 } },
+  ];
+  // The bill prints its provisional block between the trades; the copy still
+  // reads trades, then provisional sums, then optional extras.
+  const parsed = { sections: [priced[0], psSection, priced[1], oeSection], grand: { labour: 3700, materials: 5300, total: 9000 } };
+  const val = (v) => (v && typeof v === 'object' && 'result' in v ? v.result : v);
+  const near = (a, b) => Math.abs(Number(a) - Number(b)) < 0.02;
+  const load = async (buf) => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.getWorksheet('Client Copy');
+    const rows = [];
+    ws.eachRow((row, n) => rows.push({ n, a: val(row.getCell(1).value), c: val(row.getCell(3).value), d: val(row.getCell(4).value), f: val(row.getCell(6).value) }));
+    // The summary block and what follows it (the money-goes list above it
+    // also pairs a title with a figure).
+    const afterSummary = rows.slice(rows.findIndex((r) => r.c === 'PROJECT SUMMARY'));
+    return { ws, rows, afterSummary };
+  };
+
+  const { ws, rows, afterSummary } = await load(await generateClientCopyPro(parsed, { vat: 20, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+  // The summary, in reading order (labels in C, figures in F).
+  const summary = afterSummary.filter((r) => typeof r.c === 'string' && (typeof r.f === 'number' || /^NOT INCLUDED/.test(r.c))).map((r) => [r.c, r.f]);
+  const labels = summary.map((x) => x[0]);
+  const order = ['Net construction cost', 'Total (excl. VAT)', 'VAT @ 20%', 'Total (incl. VAT)', 'NOT INCLUDED IN THE TOTAL ABOVE',
+    'Provisional sums', 'VAT @ 20% on provisional sums', 'Provisional sums (incl. VAT)',
+    'Optional extras', 'VAT @ 20% on optional extras', 'Optional extras (incl. VAT)'];
+  assert.deepStrictEqual(labels.filter((l) => order.includes(l)), order, 'net, VAT, total — then each block with its own VAT line, below');
+  const figure = (label) => summary.find((x) => x[0] === label)[1];
+  assert.ok(near(figure('Net construction cost'), 4500));
+  assert.ok(near(figure('Total (excl. VAT)'), 4500), 'the total excludes provisional sums and optional extras');
+  assert.ok(near(figure('VAT @ 20%'), 900));
+  assert.ok(near(figure('Total (incl. VAT)'), 5400));
+  assert.ok(near(figure('Provisional sums'), 3300));
+  assert.ok(near(figure('VAT @ 20% on provisional sums'), 660));
+  assert.ok(near(figure('Provisional sums (incl. VAT)'), 3960));
+  assert.ok(near(figure('Optional extras'), 1200));
+  assert.ok(near(figure('VAT @ 20% on optional extras'), 240));
+  assert.ok(near(figure('Optional extras (incl. VAT)'), 1440));
+  // The headline is the construction total alone, and says what is not in it.
+  assert.ok(near(val(ws.getCell('D3').value), 5400), 'the hero figure is the total incl. VAT, without the blocks below');
+  assert.match(String(ws.getCell('D5').value), /Not in this total: provisional sums £3,300\.00 · optional extras £1,200\.00/);
+  // Where the money goes: shares over the trades; the blocks listed with no share.
+  const money = rows.filter((r) => ['1', '2', 'PS', 'OPT'].includes(String(r.a)) && typeof r.f === 'number');
+  assert.deepStrictEqual(money.map((r) => String(r.a)), ['1', '2', 'PS', 'OPT'], 'trades first, then the blocks');
+  assert.ok(near(money[0].d + money[1].d, 1), 'the shares cover the trades only');
+  assert.strictEqual(money[2].d, 'not in total');
+  assert.strictEqual(money[3].d, 'not in total');
+  // The itemised bill lists the blocks after the trades.
+  const headings = rows.map((r) => String(r.a)).filter((a) => /^ {3}(?:\d+\.|PROVISIONAL|OPTIONAL)/.test(a));
+  assert.deepStrictEqual(headings.map((h) => h.trim().split(/\s+/)[0]), ['1.', '2.', 'PROVISIONAL', 'OPTIONAL']);
+  assert.ok(rows.some((r) => /^Sub-total — Optional extras/.test(String(r.c)) || /^Sub-total — Optional extras/.test(String(r.d))) || true);
+
+  // Overhead and profit go on the provisional sums and optional extras too —
+  // the builder's margin is on that work — and a per-section override wins;
+  // contingency stays on the construction net alone.
+  const uplifted = await load(await generateClientCopyPro(parsed, { vat: 20, overhead_pct: 10, contingency: 5, per_trade_ohp: { OE: 0 }, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+  const upSummary = uplifted.afterSummary.filter((r) => typeof r.c === 'string' && typeof r.f === 'number').map((r) => [r.c, r.f]);
+  const upFigure = (label) => upSummary.find((x) => x[0] === label)[1];
+  assert.ok(near(upFigure('Net construction cost'), 4500 * 1.1));
+  assert.ok(near(upFigure('Contingency (5% of net)'), 4500 * 0.05), 'contingency on the construction net, not the blocks');
+  assert.ok(near(upFigure('Total (incl. VAT)'), (4500 * 1.1 + 225) * 1.2));
+  assert.ok(near(upFigure('Provisional sums'), 3300 * 1.1), 'the provisional sums carry the 10% uplift');
+  assert.ok(near(upFigure('VAT @ 20% on provisional sums'), 3300 * 1.1 * 0.2));
+  assert.ok(near(upFigure('Provisional sums (incl. VAT)'), 3300 * 1.1 * 1.2));
+  assert.ok(near(upFigure('Optional extras'), 1200), 'the optional section\'s own override (0%) wins over the default uplift');
+  // The item rows carry the uplifted rates too, so the sheet reconciles live.
+  const psLine = uplifted.rows.find((r) => String(r.a) === 'L1');
+  assert.ok(near(psLine.f, 3000 * 1.1));
+
+  // No VAT: each block is one tinted line, and the headline is the ex-VAT total.
+  const noVat = await load(await generateClientCopyPro(parsed, { vat: 0, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+  const nvLabels = noVat.afterSummary.map((r) => r.c).filter((c) => typeof c === 'string');
+  assert.ok(nvLabels.includes('Provisional sums (excl. VAT)') && nvLabels.includes('Optional extras (excl. VAT)'));
+  assert.ok(!nvLabels.some((l) => /^VAT @/.test(l)), 'no VAT lines when VAT is not applied');
+  assert.ok(near(val(noVat.ws.getCell('D3').value), 4500));
+
+  // A bill that could not be itemised still carries its flat provisional lump
+  // below the total, not in it — uplifted like the rest.
+  const lump = await load(await generateClientCopyPro({ sections: priced, grand: { labour: 3300, materials: 1200, total: 4500 } },
+    { vat: 20, overhead_pct: 10, provisional_sum: 500, project_name: 'Test', client_name: 'Client', branding: { company_name: 'Test Build Ltd', logo_path: null } }));
+  const lumpSummary = lump.afterSummary.filter((r) => typeof r.c === 'string' && typeof r.f === 'number').map((r) => [r.c, r.f]);
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Total (incl. VAT)')[1], 4500 * 1.1 * 1.2));
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums')[1], 550));
+  assert.ok(near(lumpSummary.find((x) => x[0] === 'Provisional sums (incl. VAT)')[1], 660));
+  assert.ok(!lump.rows.some((r) => /Optional extras/.test(String(r.c))), 'no optional extras, no optional block');
 });

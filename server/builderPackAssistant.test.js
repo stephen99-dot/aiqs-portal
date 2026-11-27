@@ -162,13 +162,14 @@ test('trade_markup maps onto per-section uplift overrides and merges with existi
   assert.ok(v.warnings.some((w) => /no section on this bill is Roofing/.test(w)));
 });
 
-test('section_uplift sets or clears one section by number, and refuses provisional sections', () => {
+test('section_uplift sets or clears one section by number, provisional sections included', () => {
   const sections = SECTIONS.concat([{ number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] }]);
   const controls = { ...CONTROLS, per_trade_ohp: { '1': 41, '2': 10 } };
   const v = validateAndPreview({ summary: 'x', controls: { section_uplift: { '1': 30, '2': null, '9': 5, '42': 1 } } }, PROJECT, sections, controls);
   assert.equal(v.ok, true);
-  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 30 });
-  assert.ok(v.warnings.some((w) => /section 9 is provisional/.test(w)));
+  // A provisional section takes the uplift like any other, so it can carry its own.
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { '1': 30, '9': 5 });
+  assert.ok(!v.warnings.some((w) => /section 9/.test(w)));
   assert.ok(v.warnings.some((w) => /unknown section number 42/.test(w)));
 });
 
@@ -203,18 +204,58 @@ test('an uplift-only proposal shows the client copy moving while the net stays p
   assert.match(v.proposal.client_note, /Client copy total excl\. VAT \(VAT @ 20% on top\)/);
 });
 
-test('client copy total honours prelims, day rate, contingency, provisional sections and rounding like the page', () => {
+test('client copy total honours prelims, day rate, contingency and rounding like the page, with provisional sums and optional extras kept below it', () => {
   const { clientCopyExVat } = require('./builderPackAssistantRoutes')._test;
-  const sections = SECTIONS.concat([{ number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] }]);
+  const sections = SECTIONS.concat([
+    { number: '9', title: 'Provisional Sums', provisional: true, items: [{ description: 'PS', labour: 0, materials: 0, total: 500 }] },
+    { number: 'OE', title: 'Optional extras', optional: true, items: [{ description: 'Garden room lighting', labour: 400, materials: 800, total: 1200 }] },
+  ]);
   const r = clientCopyExVat(sections, {
     overhead_pct: 10, profit_pct: 0, contingency_pct: 5, vat_pct: 0, provisional_sum: 999, // lump ignored: a provisional section exists
     per_trade_ohp: { '2': 0 }, prelims_mode: 'flat', prelims_amount: 1000, day_rate_on: true, day_rate: { days: 2, rate_per_day: 300 }, rounding: 10,
   });
   const prelimsBase = 2200 + 19000, elecBase = 2450;
   const netConstruction = Math.round((prelimsBase * 1.10) / 10) * 10 + Math.round((elecBase * 1.0) / 10) * 10;
-  const expected = netConstruction + 1000 + 600 + 500 + (prelimsBase + elecBase) * 0.05;
+  // Neither the provisional sums nor the optional extras are in the total.
+  const expected = netConstruction + 1000 + 600 + (prelimsBase + elecBase) * 0.05;
   assert.ok(Math.abs(r.ex_vat - expected) < 0.02, `${r.ex_vat} vs ${expected}`);
+  // Both take the overhead and profit uplift like the priced sections.
+  assert.equal(r.provisional, 550, 'the itemised provisional sums with the 10% uplift, reported separately');
+  assert.equal(r.optional, 1320, 'the optional extras with the 10% uplift, reported separately');
+  // Only a bill with no itemised provisional section falls back to the flat lump — uplifted too.
+  assert.equal(clientCopyExVat(SECTIONS, { provisional_sum: 999 }).provisional, 999);
+  assert.equal(clientCopyExVat(SECTIONS, { provisional_sum: 1000, overhead_pct: 10 }).provisional, 1100);
+  // A per-section override on the provisional section wins over the default uplift.
+  assert.equal(clientCopyExVat(sections, { overhead_pct: 10, per_trade_ohp: { '9': 0 } }).provisional, 500);
   assert.equal(clientCopyExVat([], {}), null);
+});
+
+// Optional extras: a section the client can choose to add. The assistant can
+// create one, add to the page's standing one, and never uplifts it.
+test('optional extras: a new optional section is flagged, it can take its own uplift, and the snapshot names it', () => {
+  const sections = SECTIONS.concat([{ number: 'OE', title: 'Optional extras', optional: true, items: [] }]);
+  const v = validateAndPreview({
+    summary: 'Offer the lighting as an optional extra',
+    new_lines: [{ section_number: 'OE', description: 'Garden room lighting', unit: 'item', qty: 1, labour: 400, materials: 800 }],
+    new_sections: [{ title: 'Optional landscaping', optional: true, items: [{ description: 'Turf the rear lawn', unit: 'm2', qty: 40, total: 900 }] }],
+    controls: { section_uplift: { OE: 10 } },
+  }, PROJECT, sections, CONTROLS);
+  assert.equal(v.ok, true);
+  assert.equal(v.proposal.new_lines[0].s, 2, 'the new line lands in the Optional extras section');
+  assert.equal(v.proposal.new_sections[0].optional, true);
+  assert.equal(v.proposal.new_sections[0].provisional, false);
+  assert.ok(v.proposal.changes.some((c) => /Optional landscaping.*optional extras \(below the total\)/.test(c.label)));
+  // The optional section takes the uplift like any other, so it can carry its own.
+  assert.deepEqual(v.proposal.controls.per_trade_ohp, { OE: 10 });
+  assert.ok(!v.warnings.some((w) => /section OE/.test(w)));
+  // The total the client sees is unmoved by optional work; the note says so.
+  assert.equal(v.proposal.client_after, v.proposal.client_before);
+  assert.match(v.proposal.client_note, /Provisional sums and optional extras sit below it/);
+
+  const snap = snapshotForPrompt(PROJECT, sections, CONTROLS);
+  assert.match(snap, /Section OE: Optional extras \(OPTIONAL EXTRAS — work the client can choose to add; shown below the total, not in it; takes the overhead and profit uplift\) — no lines yet/);
+  const withLine = sections.map((s) => (s.number === 'OE' ? { ...s, items: [{ description: 'Lighting', labour: 400, materials: 800, total: 1200 }] } : s));
+  assert.match(snapshotForPrompt(PROJECT, withLine, CONTROLS), /Shown BELOW that total and not in it, each with its own VAT line: provisional sums £0, optional extras £1200\./);
 });
 
 test('the snapshot carries computed section subtotals and the client copy total', () => {

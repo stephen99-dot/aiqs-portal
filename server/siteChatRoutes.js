@@ -41,7 +41,10 @@ router.post('/site-chat', async (req, res) => {
 
   // The shared prompt is cached on its own; the per-visitor country note goes
   // after the cache breakpoint so every visitor still reads the prompt from cache.
-  const note = marketNote(req.body && req.body.market);
+  // While the Black Friday sale runs its prices go in the same way, and the
+  // free first job is paused (server/blackFriday.js).
+  const extras = [require('./blackFriday').chatNote(), marketNote(req.body && req.body.market)].filter(Boolean);
+  const note = extras.join('\n\n');
   const system = note
     ? [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: note }]
     : SYSTEM_PROMPT;

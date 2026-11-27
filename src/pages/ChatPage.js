@@ -25,6 +25,8 @@ import {
 } from '../components/Icons';
 import { currencySymbol } from '../utils/money';
 import { gbp } from '../utils/planPrice';
+import { useBlackFriday } from '../utils/blackFriday';
+import { BlackFridayDealList } from '../components/BlackFriday';
 
 // AI Chat no longer prices work: pricing is MAX's job (the AI QS MAX package)
 // and the QS team's (Submit Drawings). The server refuses a price, cost,
@@ -271,6 +273,7 @@ function FileCard({ f, c, dark }) {
 export default function ChatPage() {
   const { mode, t } = useTheme();
   const { user } = useAuth();
+  const blackFriday = useBlackFriday(user);
   const dark = mode === 'dark';
   const mobile = useIsMobile(768);
 
@@ -1212,7 +1215,9 @@ export default function ChatPage() {
             {msg.paymentRequired && (
               <div style={{ marginTop:14, padding:16, borderRadius:10, background:c.warnBg, border:`1px solid ${c.warnBorder}` }}>
                 <div style={{ fontSize:13, fontWeight:600, color:c.text, marginBottom:4 }}>{msg.paymentRequired.message || 'Generate your BOQ documents'}</div>
-                {canShowPurchases() ? (
+                {canShowPurchases() && blackFriday ? (
+                <div style={{ marginTop:12 }}><BlackFridayDealList sale={blackFriday} /></div>
+                ) : canShowPurchases() ? (
                 <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:12 }}>
                   <a href={withUserRef("https://buy.stripe.com/fZu3cvebKenS2go4XW73G0g", user)} target="_blank" rel="noopener noreferrer"
                     style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 18px', borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#D97706)', color:'#0A0F1C', textDecoration:'none', fontSize:13, fontWeight:700 }}>

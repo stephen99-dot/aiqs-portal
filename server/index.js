@@ -118,6 +118,9 @@ app.use('/api/public/variations', estimatorVariationRoutes.publicRouter);
 // A1: public quote acceptance — unauthenticated by design (tokened /q/<token>
 // links), rate-limited inside the router.
 app.use('/api/public/quotes', quotePublicRoutes);
+// The website's MAX buttons and the page after checkout (billingRoutes.js).
+// Mounted before the site chat, whose rate limit covers all of /api/public.
+app.use('/api/public/max', require('./billingRoutes').publicRouter);
 // The chat widget on the marketing site (theaiqs.co.uk). Unauthenticated by
 // design — a stranger asking a question before they sign up — and rate-limited
 // per IP inside the router.
@@ -131,6 +134,8 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/payment-schedules', paymentScheduleRoutes);
 // Native Xero connection — one-button OAuth2, pushes invoices straight in.
 app.use('/api/xero', require('./xeroRoutes'));
+// Connect your email — builders send client mail from their own Gmail / Outlook.
+app.use('/api/email-connection', require('./emailConnectionRoutes'));
 // Wave 5: Documents & Compliance — fillable templates -> branded PDF.
 app.use('/api/documents', documentsRoutes);
 // AI Project Manager — deterministic alerts engine (Part A) + LLM-grounded Q&A (Part B).
@@ -160,6 +165,10 @@ app.use('/api/surveys', require('./roomSurveyRoutes'));
 // resume, customer portal. Buying is a Stripe Payment Link; the webhook above
 // writes the plan onto the account. See maxPlans.js and billingRoutes.js.
 app.use('/api/billing', require('./billingRoutes'));
+// Black Friday 2026: the deals and a Stripe Checkout stamped with the credits.
+app.use('/api/black-friday', require('./blackFriday').router);
+// …and for the website, where the visitor isn't signed in.
+app.use('/api/public/black-friday', require('./blackFriday').publicRouter);
 // Accounts that had early access before the packages existed keep the
 // Visualiser as a grant (one-off; an admin can take it off per account).
 try { require('./maxPlans').backfillVisualiserGrants(); } catch (e) { console.warn('[MAX plans] backfill:', e.message); }

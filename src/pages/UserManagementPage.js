@@ -1089,8 +1089,10 @@ function UserActionPanel({ user, isDark, onUpdate, onClose, openRates }) {
             {user.role !== 'admin' && (
               <div style={{ fontSize: 12, color: planLive ? '#16A34A' : muted, margin: '6px 0 2px', lineHeight: 1.45, fontWeight: planLive ? 600 : 400 }}>
                 {planLive
-                  ? (PLAN_NAMES[user.max_plan] || user.max_plan) + ' — paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly')
-                    + (user.max_plan_cancels_at ? ', cancelled, ends ' + fmtDay(user.max_plan_cancels_at) : user.max_plan_renews_at ? ', renews ' + fmtDay(user.max_plan_renews_at) : '')
+                  ? (PLAN_NAMES[user.max_plan] || user.max_plan) + (user.max_plan_status === 'trialing'
+                      ? ' — free trial' + (user.max_plan_renews_at ? ' until ' + fmtDay(user.max_plan_renews_at) : '') + ', then ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly')
+                      : ' — paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly'))
+                    + (user.max_plan_cancels_at ? ', cancelled, ends ' + fmtDay(user.max_plan_cancels_at) : user.max_plan_renews_at && user.max_plan_status !== 'trialing' ? ', renews ' + fmtDay(user.max_plan_renews_at) : '')
                     + (user.max_plan_status === 'past_due' ? ' — payment overdue' : '') + '.'
                   : user.max_plan_status === 'canceled' ? 'Their MAX package has ended.' : 'No paid MAX package.'}
               </div>
@@ -1629,9 +1631,9 @@ export default function UserManagementPage({ theme }) {
                             {user.role==='admin'?'Admin':(user.plan||'starter')}
                           </span>
                           {user.role !== 'admin' && user.max_plan && ['active', 'trialing', 'past_due'].includes(user.max_plan_status || 'active') && (
-                            <span title={(user.max_plan === 'max_visualiser' ? 'AI QS MAX + Visualiser' : 'AI QS MAX') + ', paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly') + (user.max_plan_cancels_at ? ' — cancelled' : '')}
+                            <span title={(user.max_plan === 'max_visualiser' ? 'AI QS MAX + Visualiser' : 'AI QS MAX') + (user.max_plan_status === 'trialing' ? ', free trial' : ', paid ' + (user.max_plan_interval === 'year' ? 'yearly' : 'monthly')) + (user.max_plan_cancels_at ? ' — cancelled' : '')}
                               style={{marginLeft:6,padding:'3px 9px',borderRadius:6,fontSize:10,fontWeight:700,textTransform:'uppercase',background:'rgba(245,158,11,0.12)',color:'#D97706',whiteSpace:'nowrap'}}>
-                              {user.max_plan === 'max_visualiser' ? 'MAX+V' : 'MAX'}{user.max_plan_interval === 'year' ? ' · yr' : ''}{user.max_plan_cancels_at ? ' · ending' : ''}
+                              {user.max_plan === 'max_visualiser' ? 'MAX+V' : 'MAX'}{user.max_plan_interval === 'year' ? ' · yr' : ''}{user.max_plan_status === 'trialing' ? ' · trial' : ''}{user.max_plan_cancels_at ? ' · ending' : ''}
                             </span>
                           )}
                         </td>

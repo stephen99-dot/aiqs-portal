@@ -24,7 +24,7 @@ delete process.env.MAX_ROLLOUT;
 // ── A pretend Stripe ────────────────────────────────────────────────────────
 // Subscriptions by id, customers by id; the webhook and the billing routes
 // only ever retrieve, list and update.
-const stripeState = { subs: {}, customers: {}, prices: [], updates: [] };
+const stripeState = { subs: {}, customers: {}, prices: [], updates: [], sessions: {} };
 function price(id, amount, interval) { return { id, unit_amount: amount, currency: 'gbp', recurring: { interval }, active: true, type: 'recurring' }; }
 stripeState.prices = [price('p_max_m', 5900, 'month'), price('p_max_y', 59000, 'year'), price('p_vis_m', 7900, 'month'), price('p_vis_y', 79000, 'year'), price('p_other', 19900, 'month')];
 function sub(id, priceObj, extra) {
@@ -47,6 +47,7 @@ const fakeStripe = {
     list: async ({ email }) => ({ data: Object.values(stripeState.customers).filter((c) => c.email === email) }),
   },
   prices: { list: async () => ({ data: stripeState.prices }) },
+  checkout: { sessions: { retrieve: async (id) => { if (!stripeState.sessions[id]) throw new Error('No such checkout.session: ' + id); return stripeState.sessions[id]; } } },
   billingPortal: { sessions: { create: async ({ customer, return_url }) => ({ url: 'https://billing.stripe.test/' + customer + '?back=' + encodeURIComponent(return_url) }) } },
 };
 const stripePath = require.resolve('stripe');
@@ -62,6 +63,7 @@ const webhook = require('./stripe-webhook');
 const app = express();
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), webhook);
 app.use(express.json());
+app.use('/api/public/max', require('./billingRoutes').publicRouter);
 app.use('/api', require('./routes'));
 app.use('/api/max', require('./maxRoutes'));
 app.use('/api/billing', require('./billingRoutes'));
@@ -92,6 +94,21 @@ function req(method, url, token, body) {
     r.on('error', reject); if (data) r.write(data); r.end();
   });
 }
+// A GET that does not follow redirects, for the website's "start" links.
+function raw(pathname) {
+  return new Promise((resolve, reject) => {
+    http.get({ port: PORT, path: pathname }, (res) => { res.resume(); resolve({ status: res.statusCode, location: res.headers.location }); }).on('error', reject);
+  });
+}
+// Emails sent while fn runs (routes.sendEmail is looked up at send time).
+async function capturingEmail(fn) {
+  const routes = require('./routes');
+  const real = routes.sendEmail;
+  const sent = [];
+  routes.sendEmail = async (m) => { sent.push(m); };
+  try { await fn(); await new Promise((r) => setImmediate(r)); } finally { routes.sendEmail = real; }
+  return sent;
+}
 const event = (type, object) => req('POST', '/stripe/webhook', null, { id: 'evt_' + Math.random().toString(36).slice(2), type, data: { object } });
 
 test.after(() => { server.close(); try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* tmp */ } });
@@ -107,12 +124,15 @@ test('a Stripe price is matched to a plan by amount and interval, or by the conf
   assert.equal(P.planForPrice({ ...price('x', 5900, 'month'), currency: 'eur' }), null, 'only GBP');
   assert.equal(P.planForPrice(price('x', 19900, 'month')), null, 'Office in a Box is not a MAX plan');
   assert.equal(P.planForSubscription(sub('s', price('x', 5900, 'month'))).plan, 'max');
-  // Configured ids win, and then amounts are ignored.
+  // Configured ids win whatever the amount; a price made later in the Stripe
+  // dashboard (a trial set up there, say) is still matched on its amount.
   process.env.STRIPE_MAX_PRICE_IDS = 'price_m1, price_m2';
   process.env.STRIPE_MAX_VISUALISER_PRICE_IDS = 'price_v1,price_v2';
   try {
     assert.deepEqual(P.planForPrice({ id: 'price_v2', unit_amount: 1, currency: 'usd', recurring: { interval: 'year' } }), { plan: 'max_visualiser', interval: 'year' });
-    assert.equal(P.planForPrice(price('x', 5900, 'month')), null);
+    assert.deepEqual(P.planForPrice(price('price_new_max_m', 5900, 'month')), { plan: 'max', interval: 'month' });
+    assert.deepEqual(P.planForPrice(price('price_new_vis_m', 7900, 'month')), { plan: 'max_visualiser', interval: 'month' });
+    assert.equal(P.planForPrice(price('price_other', 19900, 'month')), null, 'still nothing else');
     assert.equal(Object.keys(P.configuredPriceIds()).length, 4);
   } finally { delete process.env.STRIPE_MAX_PRICE_IDS; delete process.env.STRIPE_MAX_VISUALISER_PRICE_IDS; }
   // The catalogue is what the website sells.
@@ -346,4 +366,157 @@ test('a package bought under an email before the account existed attaches when t
   const match = await require('./billingRoutes').attachByEmail(row('d'));
   assert.deepEqual([match.plan, match.interval, row('d').max_plan, row('d').max_subscription_id], ['max_visualiser', 'month', 'max_visualiser', 'sub_dana']);
   assert.equal(await require('./billingRoutes').attachByEmail(row('d')), null, 'nothing to do the second time');
+});
+
+// ── The free trial ───────────────────────────────────────────────────────────
+
+test('the free trial: its length, a trial checkout, the email, the Plans page and the counts', async () => {
+  rollout.setMode('admin', 'adm');
+  // The length: 7 days unless MAX_TRIAL_DAYS says otherwise; nonsense is ignored.
+  delete process.env.MAX_TRIAL_DAYS;
+  assert.equal(P.trialDays(), 7);
+  for (const [v, want] of [['14', 14], ['0', 0], ['', 7], ['seven', 7], ['-3', 7], ['2.5', 7]]) {
+    process.env.MAX_TRIAL_DAYS = v;
+    assert.equal(P.trialDays(), want, 'MAX_TRIAL_DAYS=' + JSON.stringify(v));
+  }
+  delete process.env.MAX_TRIAL_DAYS;
+
+  // Eve starts the trial on MAX yearly: on straight away, nothing paid, and
+  // the date the first £590 is taken is the day the trial ends.
+  const trialEnd = 1764806400; // 4 December 2025
+  db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES ('e', 'eve@t.t', 'x', 'Eve Evans', 'Co', 'client', 'GB')").run();
+  const tokenE = generateToken({ id: 'e', email: 'eve@t.t', role: 'client' });
+  stripeState.customers.cus_5 = { id: 'cus_5', email: 'eve@t.t' };
+  stripeState.subs.sub_eve = sub('sub_eve', stripeState.prices.find((x) => x.id === 'p_max_y') || price('p_max_y', 59000, 'year'), { customer: 'cus_5', status: 'trialing', trial_end: trialEnd, current_period_end: trialEnd });
+  let r;
+  const sent = await capturingEmail(async () => {
+    r = await event('checkout.session.completed', { id: 'cs_trial', mode: 'subscription', subscription: 'sub_eve', client_reference_id: 'e', customer_details: { email: 'eve@t.t' }, amount_total: 0, currency: 'gbp' });
+  });
+  assert.equal(r.status, 200);
+  const e = row('e');
+  assert.deepEqual([e.max_plan, e.max_plan_status, e.max_plan_interval, e.max_plan_renews_at], ['max', 'trialing', 'year', '2025-12-04T00:00:00.000Z']);
+  assert.equal(P.entitlements(e).max, true, 'MAX is on during the trial');
+  const mail = sent.find((m) => m.to === 'eve@t.t');
+  assert.ok(mail, 'the "unlocked" email went out');
+  assert.match(mail.subject, /free trial of AI QS MAX has started/i);
+  assert.match(mail.html, /Congratulations, Eve &#8212; MAX is unlocked/);
+  assert.match(mail.html, /Free until<\/td>[\s\S]*?4 December 2025/);
+  assert.match(mail.html, /£590 a year \(two months free\), from 4 December 2025/);
+  assert.match(mail.html, /email-icons\/max-unlocked-hero\.png/);
+  assert.match(mail.html, /email-icons\/max-ask\.png/);
+  assert.doesNotMatch(mail.html, /max-visualiser\.png/, 'plain MAX: no Visualiser line');
+  assert.doesNotMatch(mail.html, /Amount paid/, 'no "£0.00 paid" line on a trial');
+  assert.equal(sent.filter((m) => m.to === 'eve@t.t').length, 1, 'one email, not two');
+  assert.ok(db.prepare("SELECT COUNT(*) AS c FROM activity_log WHERE event_type = 'max_plan_started' AND user_id = 'e' AND title LIKE '%free trial until 2025-12-04%'").get().c >= 1);
+
+  // The Plans page knows the trial length and that Eve is on one.
+  r = await req('GET', '/billing/max', tokenE);
+  assert.equal(r.body.trial_days, 7);
+  assert.deepEqual([r.body.current.plan, r.body.current.status, r.body.current.renews_at], ['max', 'trialing', '2025-12-04T00:00:00.000Z']);
+
+  // A subscription event without the period end still has the trial's end.
+  const noPeriod = { ...stripeState.subs.sub_eve };
+  delete noPeriod.current_period_end;
+  assert.equal(P.fromStripe(noPeriod).renews_at, '2025-12-04T00:00:00.000Z');
+  assert.equal(P.fromStripe(noPeriod).trial_ends_at, '2025-12-04T00:00:00.000Z');
+  assert.equal(P.fromStripe({ ...stripeState.subs.sub_eve, status: 'active' }).trial_ends_at, null);
+
+  // The admin counts show who is on a trial.
+  r = await req('GET', '/max/settings', tokenAdmin);
+  assert.equal(r.body.plans.subscribers.trialing, 1);
+
+  // The trial ends and the first payment goes through: an ordinary yearly plan.
+  stripeState.subs.sub_eve = { ...stripeState.subs.sub_eve, status: 'active', current_period_end: trialEnd + 365 * 86400 };
+  await event('customer.subscription.updated', stripeState.subs.sub_eve);
+  assert.deepEqual([row('e').max_plan_status, row('e').max_plan_renews_at], ['active', '2026-12-04T00:00:00.000Z']);
+  r = await req('GET', '/max/settings', tokenAdmin);
+  assert.equal(r.body.plans.subscribers.trialing, 0);
+
+  // Eve checks out again on the website while subscribed: Stripe now bills two
+  // subscriptions, so the admin is told.
+  stripeState.subs.sub_eve2 = sub('sub_eve2', price('p_max_m', 5900, 'month'), { customer: 'cus_5', status: 'trialing', trial_end: trialEnd, current_period_end: trialEnd });
+  await capturingEmail(() => event('checkout.session.completed', { id: 'cs_again', mode: 'subscription', subscription: 'sub_eve2', customer_details: { email: 'eve@t.t' }, amount_total: 0, currency: 'gbp' }));
+  assert.equal(row('e').max_subscription_id, 'sub_eve2');
+  assert.ok(db.prepare("SELECT COUNT(*) AS c FROM notifications WHERE type = 'max_duplicate' AND detail LIKE '%sub_eve%'").get().c >= 1, 'the admin hears about the second subscription');
+  delete stripeState.subs.sub_eve;
+  delete stripeState.subs.sub_eve2;
+});
+
+test('the website: straight to Stripe, and a buyer with no account is asked to create one', async () => {
+  rollout.setMode('admin', 'adm');
+  // The website's buttons go straight to that plan's payment link…
+  process.env.MAX_PAYMENT_LINK_YEARLY = 'https://buy.stripe.test/max-y';
+  let r = await raw('/api/public/max/start?plan=max&interval=year');
+  assert.deepEqual([r.status, r.location], [302, 'https://buy.stripe.test/max-y']);
+  // …and to the Plans page in the portal when a link is not set up.
+  r = await raw('/api/public/max/start?plan=max_visualiser&interval=month');
+  assert.equal(r.status, 302);
+  assert.match(r.location, /\/register\?next=%2Fupgrade%3Fplan%3Dmax_visualiser%26interval%3Dmonth$/);
+  r = await raw('/api/public/max/start?plan=gold&interval=week');
+  assert.match(r.location, /plan%3Dmax%26interval%3Dmonth$/, 'nonsense falls back to MAX monthly');
+  delete process.env.MAX_PAYMENT_LINK_YEARLY;
+
+  // Fay starts a MAX + Visualiser trial on the website. She has no account.
+  const trialEnd = 1764806400;
+  stripeState.customers.cus_6 = { id: 'cus_6', email: 'fay@gmail.com' };
+  stripeState.subs.sub_fay = sub('sub_fay', price('p_vis_m', 7900, 'month'), { customer: 'cus_6', status: 'trialing', trial_end: trialEnd, current_period_end: trialEnd });
+  const session = { id: 'cs_test_fay0000000001', mode: 'subscription', subscription: 'sub_fay', customer_details: { email: 'Fay@Gmail.com', name: 'Fay Fisher' }, amount_total: 0, currency: 'gbp', created: Math.floor(Date.now() / 1000) };
+  stripeState.sessions[session.id] = session;
+  const sent = await capturingEmail(() => event('checkout.session.completed', session));
+  const mail = sent.find((m) => m.to === 'fay@gmail.com');
+  assert.ok(mail, 'she is emailed');
+  assert.match(mail.subject, /create your AI QS account/i);
+  assert.match(mail.html, /Thanks, Fay! Your free trial has started/);
+  assert.ok(mail.html.includes('/register?email=fay%40gmail.com&amp;from=max&amp;next=%2Fpayment-success%3Fplan%3Dmax'), 'the button signs her up with that email');
+  assert.match(mail.html, /email-icons\/max-account-hero\.png/);
+  assert.match(mail.html, /email-icons\/max-visualiser\.png/, 'the Visualiser is in her plan');
+  assert.match(mail.html, /£79 a month, from 4 December 2025/);
+  assert.ok(db.prepare("SELECT COUNT(*) AS c FROM notifications WHERE type = 'max_no_account' AND detail LIKE '%Fay@Gmail.com%'").get().c >= 1, 'the admin hears about it');
+  assert.equal(db.prepare("SELECT COUNT(*) AS c FROM users WHERE email = 'fay@gmail.com'").get().c, 0);
+
+  // The page after checkout knows who she is and that she needs an account.
+  r = await req('GET', '/public/max/checkout?session_id=' + session.id);
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.body.email, r.body.has_account, r.body.plan, r.body.status, r.body.trial_ends_at], ['fay@gmail.com', false, 'max_visualiser', 'trialing', '2025-12-04T00:00:00.000Z']);
+  r = await req('GET', '/public/max/checkout?session_id=nonsense');
+  assert.equal(r.status, 400);
+  r = await req('GET', '/public/max/checkout?session_id=cs_test_unknown00000000');
+  assert.equal(r.status, 404);
+  stripeState.sessions.cs_test_old0000000001 = { ...session, id: 'cs_test_old0000000001', created: Math.floor(Date.now() / 1000) - 30 * 86400 };
+  r = await req('GET', '/public/max/checkout?session_id=cs_test_old0000000001');
+  assert.equal(r.status, 404, 'an old checkout says nothing');
+
+  // She creates her account with that email: the trial switches on by itself.
+  r = await req('POST', '/auth/register', null, { email: 'fay@gmail.com', password: 'long-enough-1', fullName: 'Fay Fisher' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const fay = () => db.prepare("SELECT * FROM users WHERE email = 'fay@gmail.com'").get();
+  for (let i = 0; i < 50 && !fay().max_plan; i++) await new Promise((res) => setTimeout(res, 20));
+  assert.deepEqual([fay().max_plan, fay().max_plan_status, fay().max_subscription_id], ['max_visualiser', 'trialing', 'sub_fay']);
+  r = await req('GET', '/public/max/checkout?session_id=' + session.id);
+  assert.equal(r.body.has_account, true, 'now the page says "log in"');
+  delete stripeState.subs.sub_fay;
+});
+
+test('a MAX price made after the ids were pinned still switches the plan on; an unknown price is flagged', async () => {
+  // As on 23 Nov 2026: the four original prices pinned on Render, the payment
+  // links moved onto new prices when the trial was set up in Stripe.
+  process.env.STRIPE_MAX_PRICE_IDS = 'price_old_m,price_old_y';
+  process.env.STRIPE_MAX_VISUALISER_PRICE_IDS = 'price_old_vm,price_old_vy';
+  try {
+    db.prepare("INSERT INTO users (id, email, password_hash, full_name, company, role, country) VALUES ('g', 'gus@gmail.com', 'x', 'Gus Grant', 'Co', 'client', 'GB')").run();
+    stripeState.customers.cus_7 = { id: 'cus_7', email: 'gus@gmail.com' };
+    stripeState.subs.sub_gus = sub('sub_gus', price('price_1Udr20EOVz3JQx7AMo2bksU9', 5900, 'month'), { customer: 'cus_7', status: 'trialing', trial_end: 1764806400, current_period_end: 1764806400 });
+    const sent = await capturingEmail(() => event('checkout.session.completed', { id: 'cs_gus', mode: 'subscription', subscription: 'sub_gus', customer_details: { email: 'gus@gmail.com' }, amount_total: 0, currency: 'gbp' }));
+    assert.deepEqual([row('g').max_plan, row('g').max_plan_status, row('g').max_subscription_id], ['max', 'trialing', 'sub_gus']);
+    assert.ok(sent.some((m) => m.to === 'gus@gmail.com' && /free trial of AI QS MAX/.test(m.subject)), 'he gets the "unlocked" email');
+
+    // A subscription at a price nothing knows: nothing switches on, and the admin is told.
+    stripeState.subs.sub_odd = sub('sub_odd', price('price_odd', 4500, 'month'), { customer: 'cus_7' });
+    await capturingEmail(() => event('checkout.session.completed', { id: 'cs_odd', mode: 'subscription', subscription: 'sub_odd', customer_details: { email: 'gus@gmail.com' }, amount_total: 4500, currency: 'gbp' }));
+    assert.equal(row('g').max_subscription_id, 'sub_gus');
+    assert.ok(db.prepare("SELECT COUNT(*) AS c FROM notifications WHERE type = 'checkout_unmatched' AND detail LIKE '%price_odd%' AND detail LIKE '%GBP 45.00 a month%'").get().c >= 1);
+  } finally {
+    delete process.env.STRIPE_MAX_PRICE_IDS; delete process.env.STRIPE_MAX_VISUALISER_PRICE_IDS;
+    delete stripeState.subs.sub_gus; delete stripeState.subs.sub_odd;
+  }
 });

@@ -3,6 +3,7 @@ import { apiFetch, getToken, resolveUrl } from '../utils/api';
 import { CheckIcon } from '../components/Icons';
 import { Button, Card, Banner, Field, Input, Textarea, PageHeader, Skeleton, SkeletonCard } from '../ui';
 import ClientCopySheet from '../components/ClientCopySheet';
+import EmailSenderCard from '../components/EmailSenderCard';
 
 /**
  * Branding settings — applied automatically to every Client Copy / Findings
@@ -208,7 +209,7 @@ export default function BrandingPage() {
     <div className="page" style={{ maxWidth: 1280, paddingBottom: 60 }}>
       <PageHeader
         title="Branding"
-        subtitle="Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate."
+        subtitle="Your logo and brand colours, applied automatically to every Client Copy and Findings document you generate, and the email address your quotes are sent from."
       />
 
       {error && (
@@ -227,6 +228,9 @@ export default function BrandingPage() {
       <div className="ui-split ui-split--side-first" style={{ '--split-side': 'minmax(360px, 460px)', gap: 18 }}>
         {/* Settings */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Which address client emails come from */}
+          <EmailSenderCard />
+
           {/* Logo */}
           <Card>
             <Card.Header title="Logo" />
@@ -468,13 +472,14 @@ const SAMPLE_ROWS = [
 const SAMPLE_NET = SAMPLE_ROWS.reduce((a, r) => a + r.subtotal, 0);
 const SAMPLE_PROVISIONAL = 2500;
 const SAMPLE_CONTINGENCY = SAMPLE_NET * 0.05;
-const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_PROVISIONAL + SAMPLE_CONTINGENCY;
+const SAMPLE_EX_VAT = SAMPLE_NET + SAMPLE_CONTINGENCY;
 const SAMPLE_VAT = SAMPLE_EX_VAT * 0.2;
 const SAMPLE_SUMMARY = [
   { key: 'net', label: 'Net construction cost', value: SAMPLE_NET },
-  { key: 'provisional', label: 'Provisional sums', value: SAMPLE_PROVISIONAL },
   { key: 'contingency', label: 'Contingency (5% of net)', value: SAMPLE_CONTINGENCY },
 ];
+// Provisional sums sit below the total with their own VAT line, not in it.
+const SAMPLE_EXTRAS = [{ key: 'provisional', label: 'Provisional sums', value: SAMPLE_PROVISIONAL }];
 
 function DocPreview({ branding, logoUrl }) {
   return (
@@ -485,6 +490,7 @@ function DocPreview({ branding, logoUrl }) {
       clientName="Mr & Mrs A. Okafor"
       sym="£" rows={SAMPLE_ROWS} summaryLines={SAMPLE_SUMMARY}
       exVat={SAMPLE_EX_VAT} vat={20} vatVal={SAMPLE_VAT} inclVat={SAMPLE_EX_VAT + SAMPLE_VAT}
+      extras={SAMPLE_EXTRAS}
       ohpApplied
     />
   );

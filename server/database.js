@@ -830,6 +830,24 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_mail_log_user ON mail_log(user_id, created_at);
 
+  -- Connect your email (server/emailConnection.js): a builder's own Gmail or
+  -- Outlook mailbox, used instead of the shared SMTP account for the mail they
+  -- send to their clients. One per builder. Tokens are sealed (AES-256-GCM).
+  CREATE TABLE IF NOT EXISTS email_connections (
+    user_id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,                  -- 'google' | 'microsoft'
+    email TEXT NOT NULL,                     -- the mailbox mail is sent from
+    refresh_token TEXT NOT NULL,
+    access_token TEXT,
+    token_expiry INTEGER,                    -- ms since epoch
+    status TEXT NOT NULL DEFAULT 'active',   -- 'active' | 'needs_reconnect'
+    last_error TEXT,
+    last_sent_at DATETIME,
+    connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   -- A1 (Office in a Box): questions a client asks from the public quote page.
   -- Read by the owner from the quote editor; read_at flips when viewed.
   CREATE TABLE IF NOT EXISTS quote_messages (
@@ -1166,6 +1184,9 @@ const migrations = [
   { column: 'source', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN source TEXT" },
   { column: 'location', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN location TEXT" },
   { column: 'max_meta', table: 'quotes', sql: "ALTER TABLE quotes ADD COLUMN max_meta TEXT" },
+  // Which route a mail_log send took: 'google' / 'microsoft' (the builder's
+  // connected mailbox) or 'shared' (the AI QS SMTP account). See mailer.js.
+  { column: 'sent_via', table: 'mail_log', sql: "ALTER TABLE mail_log ADD COLUMN sent_via TEXT" },
 ];
 
 for (const { column, table, sql } of migrations) {

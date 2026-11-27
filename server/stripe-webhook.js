@@ -3,6 +3,7 @@ const { recordPendingCredit } = require('./pendingCredits');
 // The MAX packages (£59 MAX, £79 MAX + Visualiser): which Stripe price is
 // which plan, and the plan columns on the user row.
 const maxPlans = require('./maxPlans');
+const maxEmails = require('./maxEmails');
 
 // Price ID to plan mapping
 const PRICE_TO_PLAN = {
@@ -169,14 +170,9 @@ function logMaxPlanEvent(user, eventType, text) {
     require('./activityRoutes').logActivity({ event_type: eventType, title: (user.full_name || user.email) + ' — ' + text, user_id: user.id, user_name: user.full_name, user_email: user.email });
   } catch (e) { /* audit only */ }
 }
-function maxPlanDetailLines(sub) {
-  const plan = maxPlans.PLANS[sub.plan];
-  const lines = [plan.visualiser
-    ? 'MAX, Scan a room, LiDAR scanning, survey reports and the finished-room Visualiser are now unlocked on your account.'
-    : 'MAX, Scan a room, LiDAR scanning and survey reports are now unlocked on your account.'];
-  if (sub.interval === 'year') lines.push('Paid yearly — two months free. It renews in twelve months.');
-  else lines.push('Paid monthly. Cancel any time from the Plans page in your account.');
-  return lines;
+// An admin bell notification, never allowed to break the webhook.
+function notifyAdminSafe(n) {
+  try { const { notifyAdmin } = require('./routes'); if (typeof notifyAdmin === 'function') notifyAdmin(n); } catch (e) { /* notification only */ }
 }
 async function findUserForOfficeSub(subscription, stripeSecret) {
   let user = db.prepare('SELECT * FROM users WHERE office_subscription_id = ?').get(subscription.id);
@@ -359,19 +355,29 @@ async function handleCheckoutComplete(session, stripeSecret) {
     const maxSub = maxPlans.fromStripe(subscription);
     if (maxSub) {
       const user = resolveCheckoutUser(session, customerEmail);
+      const planName = maxPlans.PLANS[maxSub.plan].name;
+      const trial = maxSub.status === 'trialing';
+      const how = (maxSub.interval === 'year' ? 'yearly' : 'monthly') + (trial ? ', free trial until ' + String(maxSub.trial_ends_at || maxSub.renews_at || '').slice(0, 10) : '');
       if (user) {
+        // Bought from the website while already subscribed: Stripe now bills
+        // two subscriptions. The newest one goes on the account; tell the admin
+        // so the older one can be cancelled.
+        const earlier = maxPlans.isSubscribed(user) && user.max_subscription_id && user.max_subscription_id !== subscription.id ? user.max_subscription_id : null;
         maxPlans.activate(user, maxSub);
-        logMaxPlanEvent(user, 'max_plan_started', maxPlans.PLANS[maxSub.plan].name + ' started (' + (maxSub.interval === 'year' ? 'yearly' : 'monthly') + ')');
-        sendPurchaseEmail({
-          email: user.email,
-          name: user.full_name,
-          packageName: maxPlans.PLANS[maxSub.plan].name,
-          detailLines: maxPlanDetailLines(maxSub),
-          amountTotal: session.amount_total,
-          currency: session.currency,
-        });
+        logMaxPlanEvent(user, 'max_plan_started', planName + ' started (' + how + ')');
+        if (earlier) {
+          console.warn(`[Stripe] ${user.email} started ${subscription.id} while ${earlier} was still live — two MAX subscriptions at Stripe`);
+          notifyAdminSafe({ type: 'max_duplicate', title: `Two MAX subscriptions: ${user.full_name || user.email}`, detail: `${user.email} checked out again while already subscribed. New: ${subscription.id}. Earlier (still billing at Stripe): ${earlier} — cancel one in Stripe.`, icon: 'alert' });
+        }
+        maxEmails.sendStarted({ user, sub: maxSub });
+      } else {
+        // Bought on the website with an email that has no account. The
+        // subscription waits at Stripe under that email and attaches when an
+        // account is created with it (billingRoutes.attachByEmail at sign-up).
+        console.log(`[Stripe] ${planName} started (${subscription.id}) by ${customerEmail} with no portal account yet — sent the create-account email`);
+        maxEmails.sendCreateAccount({ email: customerEmail, name: session.customer_details && session.customer_details.name, sub: maxSub });
+        notifyAdminSafe({ type: 'max_no_account', title: `${planName} started — no account yet`, detail: `${customerEmail} (${how}). They have been emailed a link to create their account; MAX switches on when they do.`, icon: 'user-plus' });
       }
-      else console.error(`[Stripe] MAX package paid (${subscription.id}) but no portal user matched (client_reference_id=${session.client_reference_id || 'none'}, email=${customerEmail || 'none'})`);
       return;
     }
 
@@ -393,7 +399,12 @@ async function handleCheckoutComplete(session, stripeSecret) {
         currency: session.currency,
       });
     } else {
-      console.error(`[Stripe] Unknown price ID: ${priceId} — customer: ${customerEmail}, amount: ${session.amount_total}. Add this price to PRICE_TO_PLAN in stripe-webhook.js`);
+      // Nothing was switched on for someone who has just checked out — say so
+      // where it will be seen, not only in the log.
+      const price = subscription.items.data[0] && subscription.items.data[0].price;
+      const what = price ? `${String(price.currency || '').toUpperCase()} ${(Number(price.unit_amount) / 100).toFixed(2)}${price.recurring ? ' a ' + price.recurring.interval : ''}` : 'unknown amount';
+      console.error(`[Stripe] Subscription checkout ${session.id} from ${customerEmail}: price ${priceId} (${what}) is not MAX, Office in a Box or a legacy plan — nothing switched on`);
+      notifyAdminSafe({ type: 'checkout_unmatched', title: `Checkout not switched on: ${customerEmail}`, detail: `${customerEmail} started a subscription (${subscription.id}, price ${priceId}, ${what}) that the portal does not recognise, so nothing was switched on for them. Check the price in Stripe.`, icon: 'alert' });
     }
   }
 
@@ -460,6 +471,10 @@ function handleInvoicePaymentComplete(session) {
 // on top at checkout). Overridable via STRIPE_BOQ_PACKS env var as JSON,
 // e.g. '{"15000":1,"34900":5,"58000":10}'.
 function resolvePackCredits(session) {
+  // A checkout this server created (the Black Friday deals) says exactly how
+  // many credits it is for — trust that before the amount, which can collide:
+  // the sale's 10 jobs for £349 is the same amount as the normal 5-pack.
+  const stamped = require('./blackFriday').creditsFromMetadata(session);
   // Pence -> BOQ credits. Keep in step with the live pack prices:
   //   £150 single = 1, £349 five-pack = 5, £580 ten-pack = 10, £980 twenty-pack = 20.
   // The £79/£99/£300 entries are legacy/subscriber prices kept for back-compat.
@@ -472,6 +487,7 @@ function resolvePackCredits(session) {
       console.error('[Stripe] Bad STRIPE_BOQ_PACKS JSON, using defaults:', e.message);
     }
   }
+  if (stamped) return { credits: stamped, PACKS };
   const credits = PACKS[session.amount_total] || (session.amount_subtotal ? PACKS[session.amount_subtotal] : 0) || 0;
   return { credits, PACKS };
 }
@@ -543,7 +559,8 @@ function grantPackCredits(session, customerEmail) {
   // Both sides of the sale get told. The BUYER gets the branded purchase
   // confirmation; the ADMIN inbox gets the sale notification with the
   // resulting balance. Fire-and-forget — never blocks the webhook.
-  const packName = credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`;
+  const packName = (credits === 1 ? 'BOQ Credit Pack (1 credit)' : `BOQ Credit Pack (${credits} credits)`)
+    + (session.metadata && session.metadata.promo === require('./blackFriday').PROMO ? ' — Black Friday' : '');
   sendPurchaseEmail({
     email: user.email,
     name: user.full_name,

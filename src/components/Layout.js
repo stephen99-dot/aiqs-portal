@@ -15,6 +15,7 @@ import MaxPanel from './max/MaxPanel';
 import LearnWelcome from './learn/LearnWelcome';
 import { openMax } from '../utils/max';
 import TrustpilotPopup from './TrustpilotPopup';
+import BlackFridayPopup from './BlackFriday';
 import { CountryPromptModal, CountrySettingsModal, useCountries } from './CountryPicker';
 import DeleteAccountModal from './DeleteAccountModal';
 import { selectionChanged } from '../native/haptics';
@@ -437,6 +438,11 @@ export default function Layout() {
 
       {/* Trustpilot review ask — every non-admin user, once. */}
       {!isAdmin && <TrustpilotPopup />}
+
+      {/* Black Friday 2026 scratch card — by itself once a day on the
+          dashboard while the sale runs; ?deals=1 opens it anywhere (admins
+          too, to see it). Nothing outside the sale or inside the iOS app. */}
+      <BlackFridayPopup />
 
       {/* MAX has arrived — what it does and the plans, once per account
           (admins see it with ?launch=1 on any page). */}

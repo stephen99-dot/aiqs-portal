@@ -10,9 +10,11 @@ import { CheckIcon, SparklesIcon, ImageIcon, ExternalLinkIcon, AlertTriangleIcon
 
 // ═══ Plans — the MAX packages ═════════════════════════════════════════════════
 // Two tiers from the server (server/maxPlans.js): AI QS MAX at £59 a month and
-// MAX + Visualiser at £79, each two months free paid yearly. Buying is a
-// Stripe Payment Link stamped with the account; the webhook switches the plan
-// on and /payment-success?plan=max brings the builder back here.
+// MAX + Visualiser at £79, each two months free paid yearly, and each starting
+// with a free trial (trial_days from the server; the trial itself is on the
+// Payment Links). Buying is a Stripe Payment Link stamped with the account;
+// the webhook switches the plan on and /payment-success?plan=max brings the
+// builder back here.
 //
 // With a plan already on the account the page is where it is managed:
 // add or drop the Visualiser, go yearly, cancel at the period end, undo
@@ -55,6 +57,8 @@ export default function UpgradePage() {
 
   const cur = data && data.current;
   const subscribed = !!(cur && cur.source === 'subscription' && cur.plan);
+  const trialing = subscribed && cur.status === 'trialing';
+  const trialDays = (data && data.trial_days) || 0;
   const plans = (data && data.plans) || [];
   const links = (data && data.links) || {};
 
@@ -78,6 +82,7 @@ export default function UpgradePage() {
   const intervalKey = yearly ? 'year' : 'month';
   const priceOf = (p) => (yearly ? p.yearly_gbp : p.monthly_gbp);
   const planName = (k) => (plans.find((p) => p.key === k) || {}).name || k;
+  const planPrice = (k, interval) => gbp((plans.find((p) => p.key === k) || {})[interval === 'year' ? 'yearly_gbp' : 'monthly_gbp']) + (interval === 'year' ? ' a year' : ' a month');
 
   return (
     <div className="page plans">
@@ -92,11 +97,15 @@ export default function UpgradePage() {
           <div className="plans__current-text">
             {subscribed ? (
               <>
-                <div className="plans__current-title">{cur.plan_name} <Badge tone="success" size="sm">On</Badge> {cur.status === 'past_due' && <Badge tone="warning" size="sm">Payment due</Badge>}</div>
+                <div className="plans__current-title">{cur.plan_name} <Badge tone="success" size="sm">On</Badge> {trialing && <Badge tone="info" size="sm">Free trial</Badge>} {cur.status === 'past_due' && <Badge tone="warning" size="sm">Payment due</Badge>}</div>
                 <div className="plans__current-sub">
                   {cur.cancels_at
-                    ? 'Cancelled — everything stays on until ' + fmtDate(cur.cancels_at) + '.'
-                    : 'Paid ' + (cur.interval === 'year' ? 'yearly' : 'monthly') + (cur.renews_at ? ', renews on ' + fmtDate(cur.renews_at) : '') + '.'}
+                    ? (trialing
+                      ? 'Cancelled — your free trial carries on until ' + fmtDate(cur.cancels_at) + ' and nothing is charged.'
+                      : 'Cancelled — everything stays on until ' + fmtDate(cur.cancels_at) + '.')
+                    : trialing
+                      ? 'Free trial' + (cur.renews_at ? ' until ' + fmtDate(cur.renews_at) : '') + '.' + (sell ? ' Then ' + planPrice(cur.plan, cur.interval) + ', taken on that day unless you cancel before.' : '')
+                      : 'Paid ' + (cur.interval === 'year' ? 'yearly' : 'monthly') + (cur.renews_at ? ', renews on ' + fmtDate(cur.renews_at) : '') + '.'}
                   {cur.status === 'past_due' && ' The last payment did not go through — update the card from Manage billing.'}
                   {cur.renders && cur.renders.enabled && !cur.renders.unlimited && ' ' + cur.renders.remaining + ' of ' + cur.renders.monthly + ' finished-room renders left this month.'}
                 </div>
@@ -173,12 +182,18 @@ export default function UpgradePage() {
                     </Button>
                   ) : link ? (
                     <a className={'ui-btn ui-btn--md ui-btn--full ' + (featured ? 'ui-btn--primary' : 'ui-btn--secondary')} href={withUserRef(link, user)}>
-                      {p.visualiser ? <ImageIcon size={15} color="currentColor" /> : <SparklesIcon size={15} color="currentColor" />} Choose {p.short || p.name}
+                      {p.visualiser ? <ImageIcon size={15} color="currentColor" /> : <SparklesIcon size={15} color="currentColor" />} {trialDays ? 'Start your ' + trialDays + '-day free trial' : 'Choose ' + (p.short || p.name)}
                     </a>
                   ) : (
                     <Button variant="secondary" full disabled title="Not available to buy online yet">Coming soon</Button>
                   )}
-                  {!subscribed && link && <div className="plan__fine">Secure checkout by Stripe. Cancel any time from this page.</div>}
+                  {!subscribed && link && (
+                    <div className="plan__fine">
+                      {trialDays
+                        ? trialDays + ' days free, then ' + gbp(priceOf(p)) + (yearly ? ' a year' : ' a month') + '. Cancel before the trial ends and you pay nothing.'
+                        : 'Secure checkout by Stripe. Cancel any time from this page.'}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -193,6 +208,7 @@ export default function UpgradePage() {
 
       {sell && (
         <div className="plans__faq">
+          {trialDays > 0 && !subscribed && <div><strong>Free trial.</strong> Every plan starts with {trialDays} days free. Stripe takes your card at checkout but charges nothing until the trial ends — cancel from this page before then and you pay nothing.</div>}
           <div><strong>Two months free paid yearly.</strong> {gbp(590)} a year for MAX and {gbp(790)} for MAX + Visualiser — twelve months for the price of ten.</div>
           <div><strong>Switching.</strong> Add or drop the Visualiser, or go yearly, whenever you like. Stripe charges or credits the difference for the rest of the period.</div>
           <div><strong>Cancelling.</strong> Cancel from this page. Everything stays on until the end of the period you have paid for, and your surveys and estimates are kept.</div>
@@ -204,7 +220,10 @@ export default function UpgradePage() {
         <Modal title={'Switch to ' + planName(confirm.plan) + (confirm.interval === 'year' ? ', yearly' : ', monthly')} onClose={() => setConfirm(null)}
           footer={<><Button variant="secondary" onClick={() => setConfirm(null)}>Not now</Button><Button onClick={() => act('change', confirm, 'Done — your plan is now ' + planName(confirm.plan) + '.')} busyLabel="Switching…">Switch plan</Button></>}>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.55 }}>
-            Your plan becomes <strong>{planName(confirm.plan)}</strong> at <strong>{gbp((plans.find((p) => p.key === confirm.plan) || {})[confirm.interval === 'year' ? 'yearly_gbp' : 'monthly_gbp'])}</strong> {confirm.interval === 'year' ? 'a year' : 'a month'}, starting now. Stripe works out the difference for the rest of your current period and charges or credits it on your next invoice.
+            Your plan becomes <strong>{planName(confirm.plan)}</strong> at <strong>{planPrice(confirm.plan, confirm.interval)}</strong>, starting now.{' '}
+            {trialing
+              ? <>Your free trial carries on — nothing is charged until <strong>{fmtDate(cur.renews_at) || 'it ends'}</strong>, when the first payment is {planPrice(confirm.plan, confirm.interval)}.</>
+              : 'Stripe works out the difference for the rest of your current period and charges or credits it on your next invoice.'}
           </p>
         </Modal>
       )}
@@ -212,7 +231,7 @@ export default function UpgradePage() {
         <Modal title="Cancel your plan?" onClose={() => setConfirm(null)}
           footer={<><Button variant="secondary" onClick={() => setConfirm(null)}>Keep my plan</Button><Button variant="danger" onClick={() => act('cancel', null, 'Cancelled. Everything stays on until the end of the paid period.')} busyLabel="Cancelling…">Cancel at period end</Button></>}>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.55 }}>
-            MAX{cur && cur.visualiser ? ', the Visualiser' : ''}, Scan a room and LiDAR scanning stay on until <strong>{fmtDate(cur && cur.renews_at) || 'the end of the paid period'}</strong>, then switch off. Nothing is charged after that. Your surveys, estimates and photos are kept, and you can come back any time.
+            MAX{cur && cur.visualiser ? ', the Visualiser' : ''}, Scan a room and LiDAR scanning stay on until <strong>{fmtDate(cur && cur.renews_at) || 'the end of the paid period'}</strong>, then switch off. {trialing ? 'Your free trial ends then and you are not charged at all.' : 'Nothing is charged after that.'} Your surveys, estimates and photos are kept, and you can come back any time.
           </p>
         </Modal>
       )}
