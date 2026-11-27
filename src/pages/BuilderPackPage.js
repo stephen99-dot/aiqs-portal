@@ -2128,7 +2128,7 @@ function BuilderPreview({ rows, tradeRows = [], totals, base, provisional = 0, o
 // with sample figures, and it mirrors the XLSX layout line for line. The
 // client never sees an OH&P column — the margin is baked into the rates —
 // so the preview doesn't show one either.
-function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, extras = [], ohpApplied, branding, logoUrl, projectName, projectType }) {
+function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, extras = [], ohpApplied, detail = 'full', branding, logoUrl, projectName, projectType }) {
   return (
     <>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Client copy preview</h2>
@@ -2141,6 +2141,7 @@ function ClientPreview({ rows, sym, summaryLines, exVat, vat, vatVal, inclVat, e
         projectName={projectName} projectType={projectType}
         sym={sym} rows={rows} summaryLines={summaryLines}
         exVat={exVat} vat={vat} vatVal={vatVal} inclVat={inclVat} extras={extras} ohpApplied={ohpApplied}
+        detail={detail}
       />
     </>
   );
