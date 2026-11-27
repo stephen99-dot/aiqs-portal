@@ -127,9 +127,14 @@ const jobsText = (n) => (n === 1 ? '1 job' : n + ' jobs');
 // email, and afterwards /done sends them to log in or create the account under
 // it — the webhook has already put the credits on it, or holds them until the
 // account exists (pending_credits).
+// Named like the normal packs ("BOQ Credit Pack (10 credits)"), so checkout,
+// the receipt, the invoice and the purchase email all read the same.
+const packName = (n) => 'BOQ Credit Pack (' + n + (n === 1 ? ' credit' : ' credits') + ') — Black Friday';
+
 async function createCheckout(deal, { user = null } = {}) {
   const metadata = { promo: PROMO, deal: deal.key, boq_credits: String(deal.jobs), source: user ? 'portal' : 'website' };
   if (user) metadata.user_id = user.id;
+  const description = jobsText(deal.jobs) + ' (BOQ credit' + (deal.jobs === 1 ? '' : 's') + ') for your AI QS account. Was £' + deal.was + ', save £' + (deal.was - deal.price) + '.';
   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
@@ -139,12 +144,21 @@ async function createCheckout(deal, { user = null } = {}) {
       price_data: {
         currency: 'gbp',
         unit_amount: deal.price * 100,
-        product_data: {
-          name: 'AI QS — ' + jobsText(deal.jobs) + ' (Black Friday)',
-          description: jobsText(deal.jobs) + ' (BOQ credit' + (deal.jobs === 1 ? '' : 's') + ') for your AI QS account. Was £' + deal.was + ', save £' + (deal.was - deal.price) + '.',
-        },
+        product_data: { name: packName(deal.jobs), description },
       },
     }],
+    // What a trade buyer needs for their books: the billing address, the
+    // company name and VAT number (Stripe's "I'm purchasing as a business"
+    // tick box), a Stripe customer record, and a paid invoice afterwards. The
+    // invoice has no subscription, so the webhook's invoice.paid handler
+    // leaves it alone; the credits come from checkout.session.completed.
+    billing_address_collection: 'required',
+    tax_id_collection: { enabled: true },
+    customer_creation: 'always',
+    invoice_creation: {
+      enabled: true,
+      invoice_data: { description: packName(deal.jobs) + ': ' + description, metadata, footer: 'The AI QS — theaiqs.co.uk' },
+    },
     metadata,
     payment_intent_data: { metadata },
     success_url: user ? portalUrl() + '/payment-success?credits=1' : portalUrl() + '/api/public/black-friday/done?session_id={CHECKOUT_SESSION_ID}',
