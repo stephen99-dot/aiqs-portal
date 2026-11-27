@@ -30,7 +30,7 @@ const num = { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
 
 export default function ClientCopySheet({
   branding, logoUrl, projectName, projectType, clientName,
-  sym = '£', rows = [], summaryLines = [], exVat = 0, vat = 0, vatVal = 0, inclVat = 0, ohpApplied = true,
+  sym = '£', rows = [], summaryLines = [], exVat = 0, vat = 0, vatVal = 0, inclVat = 0, ohpApplied = true, detail = 'full',
 }) {
   const b = branding || {};
   const primary = safeHex(b.primary_colour, DEFAULT_PRIMARY);
@@ -87,7 +87,7 @@ export default function ClientCopySheet({
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-            <div style={{ ...label, color: accentTxt, fontSize: 10 }}>Bill of Quantities · Client copy</div>
+            <div style={{ ...label, color: accentTxt, fontSize: 10 }}>{detail === 'sections' ? 'Priced summary' : 'Bill of Quantities'} · Client copy</div>
             <div style={{
               fontFamily: displayFont, fontSize: titleFontPx(title), fontWeight: displayWeight, letterSpacing: '-0.01em', lineHeight: 1.12,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
@@ -115,7 +115,7 @@ export default function ClientCopySheet({
         <div style={{ minWidth: 0 }}>
           <div style={label}>Prepared for</div>
           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clientName || 'Your client'}</div>
-          <div style={{ fontSize: 11, color: MUTED }}>{itemCount} item{itemCount === 1 ? '' : 's'} in {rows.length} trade{rows.length === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: 11, color: MUTED }}>{detail === 'sections' ? rows.length + ' section' + (rows.length === 1 ? '' : 's') + ', priced as totals' : itemCount + ' item' + (itemCount === 1 ? '' : 's') + ' in ' + rows.length + ' trade' + (rows.length === 1 ? '' : 's')}</div>
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={label}>Prepared by</div>

@@ -1209,20 +1209,32 @@ router.post('/projects/:projectId/client-quote', authMiddleware, async (req, res
     const lines = [];
     let originalNet = 0; // pre-uplift construction net — contingency/prelims-% basis
     const hasProvSection = parsed.sections.some((s) => s.provisional);
+    // detail 'sections': one priced line per section, nothing underneath — the
+    // same totals as the full breakdown, so the bottom line never moves.
+    const sectionsOnly = b.detail === 'sections';
     for (const s of parsed.sections) {
       const sectionLabel = (s.number ? s.number + ' — ' : '') + (s.title || 'Section');
       const factor = s.provisional ? 1 : factorFor(s.number);
+      let secTotal = 0; let secLabour = 0; let secMaterials = 0;
       for (const it of s.items) {
         if (!(it.description || '').trim()) continue;
         const base = ((num(it.labour)) + (num(it.materials))) || num(it.total);
         if (!s.provisional) originalNet += base;
         const lineTotal = s.provisional ? num(it.total) : roundMoney(base * factor);
         const qty = num(it.qty) > 0 ? num(it.qty) : 1;
+        if (sectionsOnly) { secTotal += lineTotal; secLabour += num(it.labour); secMaterials += num(it.materials); continue; }
         lines.push({
           section: sectionLabel + (s.provisional ? ' (provisional, excl. OH&P)' : ''),
           item: it.itemRef || '', description: it.description, unit: it.unit || 'item',
           qty, rate: round2(lineTotal / qty), labour: num(it.labour), materials: num(it.materials),
           line_total: round2(lineTotal),
+        });
+      }
+      if (sectionsOnly && secTotal !== 0) {
+        lines.push({
+          section: sectionLabel + (s.provisional ? ' (provisional, excl. OH&P)' : ''),
+          item: s.number ? String(s.number) : '', description: 'All work in this section, as described in the bill of quantities', unit: 'item',
+          qty: 1, rate: round2(secTotal), labour: round2(secLabour), materials: round2(secMaterials), line_total: round2(secTotal),
         });
       }
     }

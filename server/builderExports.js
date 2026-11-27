@@ -1622,6 +1622,10 @@ async function generateClientCopyPro(parsed, opts = {}) {
     : null;
   const projectName = opts.project_name || 'Project';
   const clientName = opts.client_name || 'Client';
+  // detail: 'full' prints every line with its quantity and rate; 'sections'
+  // prints one priced row per section and nothing underneath it. The maths
+  // is identical either way — only what is written to the sheet changes.
+  const sectionsOnly = opts.detail === 'sections';
 
   function roundMoney(v) {
     // rounding 0 = penny-accurate: keep full precision so the summed totals
@@ -1819,7 +1823,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
   ws.mergeCells('D' + r + ':F' + r);
   fillRange(r, 3, 5, PRIMARY);
   const eyebrow = ws.getCell('A' + r);
-  eyebrow.value = 'BILL OF QUANTITIES  ·  CLIENT COPY';
+  eyebrow.value = sectionsOnly ? 'PRICED SUMMARY  ·  CLIENT COPY' : 'BILL OF QUANTITIES  ·  CLIENT COPY';
   eyebrow.font = { name: headingFont, size: 9, bold: true, color: { argb: ACCENT_TEXT } };
   eyebrow.alignment = { horizontal: 'left', vertical: 'bottom', indent: 1 };
   const hero = ws.getCell('D' + r);
@@ -1891,7 +1895,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
   r++;
   ws.getRow(r).height = 16;
   ws.mergeCells('A' + r + ':B' + r); ws.mergeCells('C' + r + ':E' + r);
-  metaValue('A' + r, preItemCount + ' items in ' + preSections.length + (preSections.length === 1 ? ' trade' : ' trades'), { size: 9, muted: true });
+  metaValue('A' + r, sectionsOnly
+    ? preSections.length + (preSections.length === 1 ? ' section' : ' sections') + ', priced as totals'
+    : preItemCount + ' items in ' + preSections.length + (preSections.length === 1 ? ' trade' : ' trades'), { size: 9, muted: true });
   metaValue('C' + r, companyAddress || docTpl.cleanText(branding.footer_text) || '', { size: 9, muted: true });
   for (let c = 0; c < 6; c++) ws.getCell(cols[c] + r).border = hairBottom;
   r++;
@@ -1969,7 +1975,9 @@ async function generateClientCopyPro(parsed, opts = {}) {
 
   // ── Itemised bill ──
   const hdr = ws.getRow(r);
-  hdr.values = ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
+  hdr.values = sectionsOnly
+    ? ['', 'Section', '', '', '', 'Total (' + currency + ')']
+    : ['Item', 'Description', 'Unit', 'Qty', 'Rate (' + currency + ')', 'Total (' + currency + ')'];
   for (let c = 1; c <= 6; c++) {
     const cell = hdr.getCell(c);
     if (style.template === 'modern') {
@@ -2023,6 +2031,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
       const upliftedTotal = roundMoney(baseLineTotal * sectionFactor);
       sectionTotal += upliftedTotal;
       const upliftedRate = it.qty > 0 ? upliftedTotal / it.qty : (it.rate || 0) * sectionFactor;
+      if (sectionsOnly) continue;   // counted, not printed
 
       const row = ws.getRow(r);
       row.getCell(1).value = sanitizeXmlText(it.itemRef || '');
@@ -2056,7 +2065,7 @@ async function generateClientCopyPro(parsed, opts = {}) {
 
     // Section subtotal — a live SUM over the section's line totals.
     const sub = ws.getRow(r);
-    sub.getCell(2).value = 'Sub-total — ' + sanitizeXmlText(s.title);
+    sub.getCell(2).value = sectionsOnly ? sanitizeXmlText(s.title) + ' — all work in this section, as described' : 'Sub-total — ' + sanitizeXmlText(s.title);
     sub.getCell(6).value = r > itemRowStart
       ? { formula: 'SUM(F' + itemRowStart + ':F' + (r - 1) + ')', result: sectionTotal }
       : sectionTotal;
