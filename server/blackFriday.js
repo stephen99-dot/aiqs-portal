@@ -6,6 +6,8 @@
 //                                    offered them (not admins or Unlimited)
 //   POST /api/black-friday/checkout  { deal } → a Stripe Checkout URL for that
 //                                    deal, stamped with this account
+//   GET  /api/public/black-friday/start|done   the same for the website, where
+//                                    the visitor isn't signed in (see below)
 //
 // The deals are BOQ credits ("jobs") at sale prices:
 //
@@ -118,6 +120,40 @@ router.get('/', (req, res) => {
   });
 });
 
+const jobsText = (n) => (n === 1 ? '1 job' : n + ' jobs');
+
+// A Stripe Checkout Session for one deal. Signed in (`user`): stamped with the
+// account, back to the portal. From the website (no user): Stripe asks for the
+// email, and afterwards /done sends them to log in or create the account under
+// it — the webhook has already put the credits on it, or holds them until the
+// account exists (pending_credits).
+async function createCheckout(deal, { user = null } = {}) {
+  const metadata = { promo: PROMO, deal: deal.key, boq_credits: String(deal.jobs), source: user ? 'portal' : 'website' };
+  if (user) metadata.user_id = user.id;
+  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    ...(user ? { client_reference_id: user.id, customer_email: user.email || undefined } : {}),
+    line_items: [{
+      quantity: 1,
+      price_data: {
+        currency: 'gbp',
+        unit_amount: deal.price * 100,
+        product_data: {
+          name: 'AI QS — ' + jobsText(deal.jobs) + ' (Black Friday)',
+          description: jobsText(deal.jobs) + ' (BOQ credit' + (deal.jobs === 1 ? '' : 's') + ') for your AI QS account. Was £' + deal.was + ', save £' + (deal.was - deal.price) + '.',
+        },
+      },
+    }],
+    metadata,
+    payment_intent_data: { metadata },
+    success_url: user ? portalUrl() + '/payment-success?credits=1' : portalUrl() + '/api/public/black-friday/done?session_id={CHECKOUT_SESSION_ID}',
+    cancel_url: user ? portalUrl() + '/dashboard?deals=1' : websiteUrl() + '/#pricing',
+  });
+  console.log(`[BlackFriday] Checkout ${session.id} opened ${user ? 'for ' + user.email : 'from the website'}: ${deal.key} (${jobsText(deal.jobs)}, £${deal.price})`);
+  return session;
+}
+
 router.post('/checkout', rateLimit({ windowMs: 60_000, max: 10 }), async (req, res) => {
   if (!isActive()) return res.status(410).json({ error: 'The Black Friday sale has ended.' });
   const deal = dealFor(String((req.body && req.body.deal) || ''));
@@ -127,31 +163,8 @@ router.post('/checkout', rateLimit({ windowMs: 60_000, max: 10 }), async (req, r
   const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'Account not found.' });
 
-  const jobsText = deal.jobs === 1 ? '1 job' : deal.jobs + ' jobs';
-  const metadata = { promo: PROMO, deal: deal.key, boq_credits: String(deal.jobs), user_id: user.id };
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      client_reference_id: user.id,
-      customer_email: user.email || undefined,
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: 'gbp',
-          unit_amount: deal.price * 100,
-          product_data: {
-            name: 'AI QS — ' + jobsText + ' (Black Friday)',
-            description: jobsText + ' (BOQ credit' + (deal.jobs === 1 ? '' : 's') + ') for your AI QS account. Was £' + deal.was + ', save £' + (deal.was - deal.price) + '.',
-          },
-        },
-      }],
-      metadata,
-      payment_intent_data: { metadata },
-      success_url: portalUrl() + '/payment-success?credits=1',
-      cancel_url: portalUrl() + '/dashboard?deals=1',
-    });
-    console.log(`[BlackFriday] Checkout ${session.id} opened for ${user.email}: ${deal.key} (${jobsText}, £${deal.price})`);
+    const session = await createCheckout(deal, { user });
     res.json({ url: session.url });
   } catch (err) {
     console.error('[BlackFriday] checkout error:', err && err.message);
@@ -159,4 +172,82 @@ router.post('/checkout', rateLimit({ windowMs: 60_000, max: 10 }), async (req, r
   }
 });
 
-module.exports = { PROMO, DEALS, saleWindow, isActive, dealFor, publicDeals, creditsFromMetadata, router };
+// ── Public: the website (theaiqs.co.uk), mounted at /api/public/black-friday ──
+//
+//   GET /start?deal=bf_10        straight to Stripe Checkout for that deal; once
+//                                the sale is over (or for a deal that doesn't
+//                                exist) back to the website's prices instead
+//   GET /done?session_id=cs_…    Stripe's return: log in, or create the account
+//                                with the email they paid with — then
+//                                /payment-success shows the new credits
+function websiteUrl() {
+  return String(process.env.WEBSITE_URL || 'https://theaiqs.co.uk').replace(/\/+$/, '');
+}
+
+const publicRouter = express.Router();
+publicRouter.use(rateLimit({ windowMs: 60_000, max: 30 }));
+
+publicRouter.get('/start', async (req, res) => {
+  const deal = dealFor(String(req.query.deal || ''));
+  if (!deal || !isActive() || !process.env.STRIPE_SECRET_KEY) return res.redirect(302, websiteUrl() + '/#pricing');
+  try {
+    const session = await createCheckout(deal);
+    res.redirect(303, session.url);
+  } catch (err) {
+    console.error('[BlackFriday] website checkout error:', err && err.message);
+    res.status(502).type('html').send(
+      '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Checkout unavailable</title>'
+      + '<body style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:15vh auto;padding:0 20px;line-height:1.6;color:#111">'
+      + '<h1 style="font-size:22px">The checkout didn’t open</h1><p>Nothing has been charged. Please go back and try again in a moment, or email '
+      + '<a href="mailto:hello@theaiqs.co.uk">hello@theaiqs.co.uk</a> and we’ll sort it out.</p>'
+      + '<p><a href="' + websiteUrl() + '/#pricing">Back to the Black Friday deals</a></p></body>'
+    );
+  }
+});
+
+const SESSION_MAX_AGE_S = 7 * 24 * 3600;
+publicRouter.get('/done', async (req, res) => {
+  const next = '/payment-success?credits=1';
+  const to = (page, email, extra) => portalUrl() + page + '?' + new URLSearchParams({ ...(email ? { email } : {}), ...(extra || {}), next }).toString();
+  const id = String(req.query.session_id || '');
+  if (!/^cs_(test|live)_[A-Za-z0-9]{10,}$/.test(id) || !process.env.STRIPE_SECRET_KEY) return res.redirect(302, to('/login'));
+  try {
+    const session = await require('stripe')(process.env.STRIPE_SECRET_KEY).checkout.sessions.retrieve(id);
+    if (!session || !session.metadata || session.metadata.promo !== PROMO) return res.redirect(302, to('/login'));
+    if (session.created && Date.now() / 1000 - session.created > SESSION_MAX_AGE_S) return res.redirect(302, to('/login'));
+    const email = String((session.customer_details && session.customer_details.email) || session.customer_email || '').trim().toLowerCase();
+    const account = email ? db.prepare('SELECT id FROM users WHERE email = ?').get(email) : null;
+    if (account || !email) return res.redirect(302, to('/login', email));
+    return res.redirect(302, to('/register', email, { from: 'blackfriday' }));
+  } catch (err) {
+    console.warn('[BlackFriday] return lookup failed:', err && err.message);
+    return res.redirect(302, to('/login'));
+  }
+});
+
+// ── The website's chat assistant, while the sale runs ───────────────────────
+// Added to its instructions (siteChatRoutes) so it quotes the sale prices and
+// doesn't offer the free first job, which is paused until the sale ends.
+function endsText() {
+  const end = new Date(saleWindow().endsAt);
+  const tz = 'Europe/London';
+  const time = end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+  const atMidnight = time === '00:00';
+  const day = new Date(end.getTime() - (atMidnight ? 1 : 0)).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
+  return (atMidnight ? 'midnight' : time) + ' on ' + day + ' (UK time)';
+}
+
+function chatNote() {
+  if (!isActive()) return '';
+  return [
+    'BLACK FRIDAY SALE — on now, until ' + endsText() + '. Until then this replaces THE OFFER and the BOQ PRICING above:',
+    '- The free first job is paused during the sale. Do not offer it. If someone asks, say it comes back after the sale, and that the 1-job deal at £99 is the cheapest way to try us now.',
+    '- A "job" is one BOQ (one BOQ credit). Sale prices, quote these exactly:',
+    ...publicDeals().map((d) => '  ' + jobsText(d.jobs) + ': £' + d.price + ', was £' + d.was + ' (save £' + d.save + (d.jobs > 1 ? ', £' + d.per_job.toFixed(2) + ' per BOQ' : '') + ').'),
+    '- The headline is 10 jobs for the price of 5. New customers, existing customers and credit top-ups all qualify. Credits never expire.',
+    '- They buy from the Black Friday deals on this website: a secure Stripe checkout with no account needed first, then they log in or create their account with the same email and the credits are on it. Existing customers can also buy inside the portal.',
+    '- Any local-currency prices in a VISITOR note are these sale prices converted; the charge itself is in pounds.',
+  ].join('\n');
+}
+
+module.exports = { PROMO, DEALS, saleWindow, isActive, dealFor, publicDeals, creditsFromMetadata, chatNote, endsText, router, publicRouter };
